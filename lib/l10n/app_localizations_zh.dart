@@ -5806,6 +5806,405 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get paramTypeJsonHint => '例如: ';
+
+  @override
+  String get ankiPageTitle => 'Anki闪卡';
+
+  @override
+  String get ankiStatsTooltip => '学习统计';
+
+  @override
+  String get ankiBrowseCardsTooltip => '浏览卡片';
+
+  @override
+  String get ankiSyncTooltip => 'AnkiWeb 同步';
+
+  @override
+  String get ankiNewDeckTooltip => '新建牌组';
+
+  @override
+  String ankiDeckLoadError(String error) {
+    return '加载失败: $error';
+  }
+
+  @override
+  String get ankiEmptyDecksTitle => '还没有牌组';
+
+  @override
+  String get ankiEmptyDecksDescription => '创建一个牌组开始学习';
+
+  @override
+  String get ankiNewDeckTitle => '新建牌组';
+
+  @override
+  String get ankiDeckNameHint => '牌组名称';
+
+  @override
+  String get ankiCreateDeck => '创建';
+
+  @override
+  String get ankiRenameDeck => '重命名';
+
+  @override
+  String get ankiConfirm => '确定';
+
+  @override
+  String get ankiDeleteDeckTitle => '删除牌组';
+
+  @override
+  String ankiDeleteDeckConfirmation(String deckName) {
+    return '确定删除“$deckName”及其所有卡片吗？';
+  }
+
+  @override
+  String get ankiAddCardTitle => '添加卡片';
+
+  @override
+  String get ankiNoteTypeLabel => '笔记类型';
+
+  @override
+  String ankiClozeTextHint(String clozeSyntax) {
+    return '正文 (用 $clozeSyntax 标记挖空)';
+  }
+
+  @override
+  String get ankiFrontQuestionHint => '正面 (问题)';
+
+  @override
+  String get ankiBackExtraLabel => '背面/额外';
+
+  @override
+  String get ankiTagsLabel => '标签 (空格分隔)';
+
+  @override
+  String get ankiTagsHint => '例如: 数学 物理';
+
+  @override
+  String get ankiAdd => '添加';
+
+  @override
+  String get ankiStatNew => '新';
+
+  @override
+  String get ankiStatLearning => '学';
+
+  @override
+  String get ankiStatReview => '复习';
+
+  @override
+  String get ankiAddCardAction => '添加卡片';
+
+  @override
+  String get ankiRenameAction => '重命名';
+
+  @override
+  String get ankiDeleteAction => '删除';
+
+  @override
+  String get ankiNoCardContent => '(无内容)';
+
+  @override
+  String get ankiStudy => '学习';
+
+  @override
+  String get ankiWhiteboardTooltip => '白板';
+
+  @override
+  String get ankiFrontLabel => '正面';
+
+  @override
+  String get ankiBackLabel => '背面';
+
+  @override
+  String get ankiShowAnswer => '显示答案';
+
+  @override
+  String get ankiRatingAgain => '忘记';
+
+  @override
+  String get ankiRatingHard => '困难';
+
+  @override
+  String get ankiRatingGood => '良好';
+
+  @override
+  String get ankiRatingEasy => '简单';
+
+  @override
+  String get ankiNoCardsToStudy => '当前没有待学习的卡片';
+
+  @override
+  String get ankiNoCardsHint => '你可以添加新卡片或稍后再来';
+
+  @override
+  String get ankiBack => '返回';
+
+  @override
+  String get ankiSyncPageTitle => 'Anki 同步';
+
+  @override
+  String get ankiSyncChooseMode => '选择同步方式';
+
+  @override
+  String get ankiSyncModeHelp => '登录状态按服务分别保存。切换方式不会合并或覆盖数据。';
+
+  @override
+  String get ankiSyncSelfHostedMode => '自建服务器';
+
+  @override
+  String get ankiSyncServerAddress => '服务器地址';
+
+  @override
+  String get ankiSyncServerHelp =>
+      '自建远程服务器需使用 HTTPS；本机地址可使用 HTTP。服务器需支持 Anki sync v10，证书验证默认开启。';
+
+  @override
+  String get ankiSyncCustomCaTitle => '自定义 CA 证书（可选）';
+
+  @override
+  String get ankiSyncCustomCaHelp => '仅在服务器使用自签名证书时填写';
+
+  @override
+  String get ankiSyncOfficialHelp =>
+      '使用官方 AnkiWeb 同步服务。密码只在登录时发送，不会保存在 Stroom。';
+
+  @override
+  String ankiSyncConnected(String service) {
+    return '已连接 $service';
+  }
+
+  @override
+  String ankiSyncNotConnected(String service) {
+    return '未连接 $service';
+  }
+
+  @override
+  String ankiSyncLoginForService(String service) {
+    return '登录$service';
+  }
+
+  @override
+  String get ankiSyncCheckServerStatus => '检查服务器状态';
+
+  @override
+  String get ankiSyncLogout => '登出';
+
+  @override
+  String get ankiSyncBothWays => '双向同步';
+
+  @override
+  String get ankiSyncOverwriteServer => '用本地数据覆盖服务器';
+
+  @override
+  String get ankiSyncReplaceLocal => '用服务器数据替换本地';
+
+  @override
+  String get ankiSyncHelp =>
+      '双向同步会合并 collection 的增量变更并传输媒体文件；结构戳不一致时，请选择完整上传或下载。完整下载失败会尝试恢复原 collection 和媒体目录。';
+
+  @override
+  String get ankiSyncStatusRestored => '已恢复安全保存的登录状态';
+
+  @override
+  String get ankiSyncStatusReadSavedSessionFailed => '无法读取已保存的登录状态，请重新登录';
+
+  @override
+  String get ankiSyncInvalidServerUrl =>
+      '服务器地址须为 HTTPS URL；仅本机 loopback 地址可使用 HTTP，且不能包含用户名、密码或 query 参数';
+
+  @override
+  String ankiSyncStatusSettingsNotSaved(String error) {
+    return '设置未保存：$error';
+  }
+
+  @override
+  String get ankiSyncStatusServerAddressChanged => '服务器地址已更改，请重新登录后继续';
+
+  @override
+  String get ankiSyncStatusVerifyingLogin => '正在验证登录…';
+
+  @override
+  String get ankiSyncStatusLoginSuccess => '登录成功。密码未保存，同步密钥已加密保存。';
+
+  @override
+  String get ankiSyncStatusLoginSuccessNoSave =>
+      '登录成功，但无法安全保存同步密钥；关闭页面后需要重新登录。';
+
+  @override
+  String ankiSyncStatusLoginFailed(String error) {
+    return '登录失败：$error';
+  }
+
+  @override
+  String get ankiSyncLoginAnkiWeb => '登录 AnkiWeb';
+
+  @override
+  String get ankiSyncLoginSelfHosted => '登录自建服务器';
+
+  @override
+  String get ankiSyncEmailOrUsername => '邮箱 / 用户名';
+
+  @override
+  String get ankiSyncEmailOrUsernameRequired => '请输入邮箱或用户名';
+
+  @override
+  String get ankiSyncPassword => '密码';
+
+  @override
+  String get ankiSyncPasswordRequired => '请输入密码';
+
+  @override
+  String get ankiSyncLogin => '登录';
+
+  @override
+  String get ankiSyncStatusPreparingServerSettings => '正在准备服务器设置…';
+
+  @override
+  String get ankiSyncStatusReadingCollection => '正在读取服务器 collection 状态…';
+
+  @override
+  String get ankiSyncStatusConnectedCollectionEmpty => '连接成功，服务器 collection 为空';
+
+  @override
+  String get ankiSyncStatusConnectedStatusRead => '连接成功，服务器状态已读取';
+
+  @override
+  String get ankiSyncStatusUpgradeClient => '此服务器要求升级同步客户端';
+
+  @override
+  String ankiSyncStatusCheckFailed(String error) {
+    return '状态检查失败：$error';
+  }
+
+  @override
+  String get ankiSyncStatusPreparingUpload => '正在准备上传设置…';
+
+  @override
+  String get ankiSyncOverwriteServerConfirmTitle => '用本地 collection 覆盖服务器？';
+
+  @override
+  String get ankiSyncOverwriteServerConfirmMessage =>
+      '服务器上的 collection 将被本地数据完整替换。Stroom 会先保留一份本地数据库备份。\n\n随后仍会按服务器媒体清单双向同步文件。';
+
+  @override
+  String get ankiSyncOverwriteServerAction => '覆盖服务器';
+
+  @override
+  String get ankiSyncStatusBackingUpUploading => '正在备份并上传 collection…';
+
+  @override
+  String ankiSyncStatusUploadComplete(
+    int uploaded,
+    int downloaded,
+    int deleted,
+    String backup,
+  ) {
+    return '服务器已接受本地 collection，媒体同步完成：上传 $uploaded 个，下载 $downloaded 个，删除 $deleted 个。$backup请重新检查服务器状态。';
+  }
+
+  @override
+  String ankiSyncStatusBackupPath(String path) {
+    return '\n本地备份：$path';
+  }
+
+  @override
+  String get ankiSyncStatusMediaSyncIncomplete =>
+      '服务器 collection 已替换，但媒体同步未完成：';
+
+  @override
+  String get ankiSyncStatusUploadFailed => '上传失败：';
+
+  @override
+  String get ankiSyncStatusPreparingDownload => '正在准备下载设置…';
+
+  @override
+  String get ankiSyncReplaceLocalConfirmTitle => '用服务器 collection 替换本地？';
+
+  @override
+  String get ankiSyncReplaceLocalConfirmMessage =>
+      '本地 collection 将被服务器数据替换。Stroom 会先保留一份本地数据库备份。\n\n随后会用服务器媒体替换本地媒体并下载缺失文件。若任一步失败或应用中途退出，Stroom 会在下次打开牌组前恢复本地 collection 和媒体。';
+
+  @override
+  String get ankiSyncReplaceLocalAction => '替换本地数据';
+
+  @override
+  String get ankiSyncStatusDownloadingValidating => '正在下载并验证 collection…';
+
+  @override
+  String ankiSyncStatusDownloadComplete(
+    int downloaded,
+    int uploaded,
+    int deleted,
+    String backup,
+  ) {
+    return '本地 collection 已替换，SQLite 检查通过；媒体同步完成：下载 $downloaded 个，上传 $uploaded 个，删除 $deleted 个。$backup请重新检查服务器状态。';
+  }
+
+  @override
+  String ankiSyncStatusDownloadFailed(String error) {
+    return '下载失败：$error';
+  }
+
+  @override
+  String get ankiSyncStatusPreparingSync => '正在准备同步…';
+
+  @override
+  String get ankiSyncStatusMergingChanges => '正在合并 collection 变更…';
+
+  @override
+  String get ankiSyncStatusMergeCompleteSyncMedia =>
+      'Collection 增量合并完成，正在同步媒体文件…';
+
+  @override
+  String ankiSyncStatusChangedNotes(int notes, int cards, int reviews) {
+    return '新增/更新 $notes 个笔记、$cards 张卡片、$reviews 条复习记录';
+  }
+
+  @override
+  String get ankiSyncStatusNoCollectionChanges => 'collection 没有待合并变更';
+
+  @override
+  String ankiSyncStatusTwoWayComplete(
+    String collection,
+    int uploaded,
+    int downloaded,
+    int deleted,
+  ) {
+    return '双向同步完成：$collection；媒体上传 $uploaded 个、下载 $downloaded 个、删除 $deleted 个。';
+  }
+
+  @override
+  String get ankiSyncStatusCollectionMergedMediaIncomplete =>
+      'Collection 已合并，但媒体同步未完成：';
+
+  @override
+  String get ankiSyncStatusSyncIncomplete => '同步未完成：';
+
+  @override
+  String get ankiSyncStatusClearingLogin => '正在清除登录状态…';
+
+  @override
+  String get ankiSyncStatusLoggedOut => '已登出，安全存储中的同步密钥已删除';
+
+  @override
+  String get ankiSyncStatusClearLoginFailed => '无法清除已保存的登录状态';
+
+  @override
+  String get ankiSyncStatusOperationIncomplete => '操作未完成，请检查安全存储、网络和服务器地址';
+
+  @override
+  String get ankiSyncUnknown => '未知';
+
+  @override
+  String get ankiSyncServerCollectionEmpty => '服务器 collection 为空';
+
+  @override
+  String get ankiSyncServerCollectionAvailable => '服务器 collection 可用';
+
+  @override
+  String ankiSyncSchemaStatus(int schema, int usn, String modified) {
+    return '结构版本戳 $schema · USN $usn · 修改时间 $modified';
+  }
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).
@@ -11609,4 +12008,403 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get paramTypeJsonHint => '例如: ';
+
+  @override
+  String get ankiPageTitle => 'Anki闪卡';
+
+  @override
+  String get ankiStatsTooltip => '学习统计';
+
+  @override
+  String get ankiBrowseCardsTooltip => '浏览卡片';
+
+  @override
+  String get ankiSyncTooltip => 'AnkiWeb 同步';
+
+  @override
+  String get ankiNewDeckTooltip => '新建牌组';
+
+  @override
+  String ankiDeckLoadError(String error) {
+    return '加载失败: $error';
+  }
+
+  @override
+  String get ankiEmptyDecksTitle => '还没有牌组';
+
+  @override
+  String get ankiEmptyDecksDescription => '创建一个牌组开始学习';
+
+  @override
+  String get ankiNewDeckTitle => '新建牌组';
+
+  @override
+  String get ankiDeckNameHint => '牌组名称';
+
+  @override
+  String get ankiCreateDeck => '创建';
+
+  @override
+  String get ankiRenameDeck => '重命名';
+
+  @override
+  String get ankiConfirm => '确定';
+
+  @override
+  String get ankiDeleteDeckTitle => '删除牌组';
+
+  @override
+  String ankiDeleteDeckConfirmation(String deckName) {
+    return '确定删除“$deckName”及其所有卡片吗？';
+  }
+
+  @override
+  String get ankiAddCardTitle => '添加卡片';
+
+  @override
+  String get ankiNoteTypeLabel => '笔记类型';
+
+  @override
+  String ankiClozeTextHint(String clozeSyntax) {
+    return '正文 (用 $clozeSyntax 标记挖空)';
+  }
+
+  @override
+  String get ankiFrontQuestionHint => '正面 (问题)';
+
+  @override
+  String get ankiBackExtraLabel => '背面/额外';
+
+  @override
+  String get ankiTagsLabel => '标签 (空格分隔)';
+
+  @override
+  String get ankiTagsHint => '例如: 数学 物理';
+
+  @override
+  String get ankiAdd => '添加';
+
+  @override
+  String get ankiStatNew => '新';
+
+  @override
+  String get ankiStatLearning => '学';
+
+  @override
+  String get ankiStatReview => '复习';
+
+  @override
+  String get ankiAddCardAction => '添加卡片';
+
+  @override
+  String get ankiRenameAction => '重命名';
+
+  @override
+  String get ankiDeleteAction => '删除';
+
+  @override
+  String get ankiNoCardContent => '(无内容)';
+
+  @override
+  String get ankiStudy => '学习';
+
+  @override
+  String get ankiWhiteboardTooltip => '白板';
+
+  @override
+  String get ankiFrontLabel => '正面';
+
+  @override
+  String get ankiBackLabel => '背面';
+
+  @override
+  String get ankiShowAnswer => '显示答案';
+
+  @override
+  String get ankiRatingAgain => '忘记';
+
+  @override
+  String get ankiRatingHard => '困难';
+
+  @override
+  String get ankiRatingGood => '良好';
+
+  @override
+  String get ankiRatingEasy => '简单';
+
+  @override
+  String get ankiNoCardsToStudy => '当前没有待学习的卡片';
+
+  @override
+  String get ankiNoCardsHint => '你可以添加新卡片或稍后再来';
+
+  @override
+  String get ankiBack => '返回';
+
+  @override
+  String get ankiSyncPageTitle => 'Anki 同步';
+
+  @override
+  String get ankiSyncChooseMode => '选择同步方式';
+
+  @override
+  String get ankiSyncModeHelp => '登录状态按服务分别保存。切换方式不会合并或覆盖数据。';
+
+  @override
+  String get ankiSyncSelfHostedMode => '自建服务器';
+
+  @override
+  String get ankiSyncServerAddress => '服务器地址';
+
+  @override
+  String get ankiSyncServerHelp =>
+      '自建远程服务器需使用 HTTPS；本机地址可使用 HTTP。服务器需支持 Anki sync v10，证书验证默认开启。';
+
+  @override
+  String get ankiSyncCustomCaTitle => '自定义 CA 证书（可选）';
+
+  @override
+  String get ankiSyncCustomCaHelp => '仅在服务器使用自签名证书时填写';
+
+  @override
+  String get ankiSyncOfficialHelp =>
+      '使用官方 AnkiWeb 同步服务。密码只在登录时发送，不会保存在 Stroom。';
+
+  @override
+  String ankiSyncConnected(String service) {
+    return '已连接 $service';
+  }
+
+  @override
+  String ankiSyncNotConnected(String service) {
+    return '未连接 $service';
+  }
+
+  @override
+  String ankiSyncLoginForService(String service) {
+    return '登录$service';
+  }
+
+  @override
+  String get ankiSyncCheckServerStatus => '检查服务器状态';
+
+  @override
+  String get ankiSyncLogout => '登出';
+
+  @override
+  String get ankiSyncBothWays => '双向同步';
+
+  @override
+  String get ankiSyncOverwriteServer => '用本地数据覆盖服务器';
+
+  @override
+  String get ankiSyncReplaceLocal => '用服务器数据替换本地';
+
+  @override
+  String get ankiSyncHelp =>
+      '双向同步会合并 collection 的增量变更并传输媒体文件；结构戳不一致时，请选择完整上传或下载。完整下载失败会尝试恢复原 collection 和媒体目录。';
+
+  @override
+  String get ankiSyncStatusRestored => '已恢复安全保存的登录状态';
+
+  @override
+  String get ankiSyncStatusReadSavedSessionFailed => '无法读取已保存的登录状态，请重新登录';
+
+  @override
+  String get ankiSyncInvalidServerUrl =>
+      '服务器地址须为 HTTPS URL；仅本机 loopback 地址可使用 HTTP，且不能包含用户名、密码或 query 参数';
+
+  @override
+  String ankiSyncStatusSettingsNotSaved(String error) {
+    return '设置未保存：$error';
+  }
+
+  @override
+  String get ankiSyncStatusServerAddressChanged => '服务器地址已更改，请重新登录后继续';
+
+  @override
+  String get ankiSyncStatusVerifyingLogin => '正在验证登录…';
+
+  @override
+  String get ankiSyncStatusLoginSuccess => '登录成功。密码未保存，同步密钥已加密保存。';
+
+  @override
+  String get ankiSyncStatusLoginSuccessNoSave =>
+      '登录成功，但无法安全保存同步密钥；关闭页面后需要重新登录。';
+
+  @override
+  String ankiSyncStatusLoginFailed(String error) {
+    return '登录失败：$error';
+  }
+
+  @override
+  String get ankiSyncLoginAnkiWeb => '登录 AnkiWeb';
+
+  @override
+  String get ankiSyncLoginSelfHosted => '登录自建服务器';
+
+  @override
+  String get ankiSyncEmailOrUsername => '邮箱 / 用户名';
+
+  @override
+  String get ankiSyncEmailOrUsernameRequired => '请输入邮箱或用户名';
+
+  @override
+  String get ankiSyncPassword => '密码';
+
+  @override
+  String get ankiSyncPasswordRequired => '请输入密码';
+
+  @override
+  String get ankiSyncLogin => '登录';
+
+  @override
+  String get ankiSyncStatusPreparingServerSettings => '正在准备服务器设置…';
+
+  @override
+  String get ankiSyncStatusReadingCollection => '正在读取服务器 collection 状态…';
+
+  @override
+  String get ankiSyncStatusConnectedCollectionEmpty => '连接成功，服务器 collection 为空';
+
+  @override
+  String get ankiSyncStatusConnectedStatusRead => '连接成功，服务器状态已读取';
+
+  @override
+  String get ankiSyncStatusUpgradeClient => '此服务器要求升级同步客户端';
+
+  @override
+  String ankiSyncStatusCheckFailed(String error) {
+    return '状态检查失败：$error';
+  }
+
+  @override
+  String get ankiSyncStatusPreparingUpload => '正在准备上传设置…';
+
+  @override
+  String get ankiSyncOverwriteServerConfirmTitle => '用本地 collection 覆盖服务器？';
+
+  @override
+  String get ankiSyncOverwriteServerConfirmMessage =>
+      '服务器上的 collection 将被本地数据完整替换。Stroom 会先保留一份本地数据库备份。\n\n随后仍会按服务器媒体清单双向同步文件。';
+
+  @override
+  String get ankiSyncOverwriteServerAction => '覆盖服务器';
+
+  @override
+  String get ankiSyncStatusBackingUpUploading => '正在备份并上传 collection…';
+
+  @override
+  String ankiSyncStatusUploadComplete(
+    int uploaded,
+    int downloaded,
+    int deleted,
+    String backup,
+  ) {
+    return '服务器已接受本地 collection，媒体同步完成：上传 $uploaded 个，下载 $downloaded 个，删除 $deleted 个。$backup请重新检查服务器状态。';
+  }
+
+  @override
+  String ankiSyncStatusBackupPath(String path) {
+    return '\n本地备份：$path';
+  }
+
+  @override
+  String get ankiSyncStatusMediaSyncIncomplete =>
+      '服务器 collection 已替换，但媒体同步未完成：';
+
+  @override
+  String get ankiSyncStatusUploadFailed => '上传失败：';
+
+  @override
+  String get ankiSyncStatusPreparingDownload => '正在准备下载设置…';
+
+  @override
+  String get ankiSyncReplaceLocalConfirmTitle => '用服务器 collection 替换本地？';
+
+  @override
+  String get ankiSyncReplaceLocalConfirmMessage =>
+      '本地 collection 将被服务器数据替换。Stroom 会先保留一份本地数据库备份。\n\n随后会用服务器媒体替换本地媒体并下载缺失文件。若任一步失败或应用中途退出，Stroom 会在下次打开牌组前恢复本地 collection 和媒体。';
+
+  @override
+  String get ankiSyncReplaceLocalAction => '替换本地数据';
+
+  @override
+  String get ankiSyncStatusDownloadingValidating => '正在下载并验证 collection…';
+
+  @override
+  String ankiSyncStatusDownloadComplete(
+    int downloaded,
+    int uploaded,
+    int deleted,
+    String backup,
+  ) {
+    return '本地 collection 已替换，SQLite 检查通过；媒体同步完成：下载 $downloaded 个，上传 $uploaded 个，删除 $deleted 个。$backup请重新检查服务器状态。';
+  }
+
+  @override
+  String ankiSyncStatusDownloadFailed(String error) {
+    return '下载失败：$error';
+  }
+
+  @override
+  String get ankiSyncStatusPreparingSync => '正在准备同步…';
+
+  @override
+  String get ankiSyncStatusMergingChanges => '正在合并 collection 变更…';
+
+  @override
+  String get ankiSyncStatusMergeCompleteSyncMedia =>
+      'Collection 增量合并完成，正在同步媒体文件…';
+
+  @override
+  String ankiSyncStatusChangedNotes(int notes, int cards, int reviews) {
+    return '新增/更新 $notes 个笔记、$cards 张卡片、$reviews 条复习记录';
+  }
+
+  @override
+  String get ankiSyncStatusNoCollectionChanges => 'collection 没有待合并变更';
+
+  @override
+  String ankiSyncStatusTwoWayComplete(
+    String collection,
+    int uploaded,
+    int downloaded,
+    int deleted,
+  ) {
+    return '双向同步完成：$collection；媒体上传 $uploaded 个、下载 $downloaded 个、删除 $deleted 个。';
+  }
+
+  @override
+  String get ankiSyncStatusCollectionMergedMediaIncomplete =>
+      'Collection 已合并，但媒体同步未完成：';
+
+  @override
+  String get ankiSyncStatusSyncIncomplete => '同步未完成：';
+
+  @override
+  String get ankiSyncStatusClearingLogin => '正在清除登录状态…';
+
+  @override
+  String get ankiSyncStatusLoggedOut => '已登出，安全存储中的同步密钥已删除';
+
+  @override
+  String get ankiSyncStatusClearLoginFailed => '无法清除已保存的登录状态';
+
+  @override
+  String get ankiSyncStatusOperationIncomplete => '操作未完成，请检查安全存储、网络和服务器地址';
+
+  @override
+  String get ankiSyncUnknown => '未知';
+
+  @override
+  String get ankiSyncServerCollectionEmpty => '服务器 collection 为空';
+
+  @override
+  String get ankiSyncServerCollectionAvailable => '服务器 collection 可用';
+
+  @override
+  String ankiSyncSchemaStatus(int schema, int usn, String modified) {
+    return '结构版本戳 $schema · USN $usn · 修改时间 $modified';
+  }
 }

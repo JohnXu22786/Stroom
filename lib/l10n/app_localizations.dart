@@ -10362,6 +10362,705 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'e.g. '**
   String get paramTypeJsonHint;
+
+  /// No description provided for @ankiPageTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Anki flashcards'**
+  String get ankiPageTitle;
+
+  /// No description provided for @ankiStatsTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Study statistics'**
+  String get ankiStatsTooltip;
+
+  /// No description provided for @ankiBrowseCardsTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Browse cards'**
+  String get ankiBrowseCardsTooltip;
+
+  /// No description provided for @ankiSyncTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'AnkiWeb sync'**
+  String get ankiSyncTooltip;
+
+  /// No description provided for @ankiNewDeckTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'New deck'**
+  String get ankiNewDeckTooltip;
+
+  /// No description provided for @ankiDeckLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to load decks: {error}'**
+  String ankiDeckLoadError(String error);
+
+  /// No description provided for @ankiEmptyDecksTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'No decks yet'**
+  String get ankiEmptyDecksTitle;
+
+  /// No description provided for @ankiEmptyDecksDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Create a deck to start studying'**
+  String get ankiEmptyDecksDescription;
+
+  /// No description provided for @ankiNewDeckTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'New deck'**
+  String get ankiNewDeckTitle;
+
+  /// No description provided for @ankiDeckNameHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Deck name'**
+  String get ankiDeckNameHint;
+
+  /// No description provided for @ankiCreateDeck.
+  ///
+  /// In en, this message translates to:
+  /// **'Create'**
+  String get ankiCreateDeck;
+
+  /// No description provided for @ankiRenameDeck.
+  ///
+  /// In en, this message translates to:
+  /// **'Rename deck'**
+  String get ankiRenameDeck;
+
+  /// No description provided for @ankiConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'OK'**
+  String get ankiConfirm;
+
+  /// No description provided for @ankiDeleteDeckTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete deck'**
+  String get ankiDeleteDeckTitle;
+
+  /// No description provided for @ankiDeleteDeckConfirmation.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete “{deckName}” and all its cards?'**
+  String ankiDeleteDeckConfirmation(String deckName);
+
+  /// No description provided for @ankiAddCardTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Add card'**
+  String get ankiAddCardTitle;
+
+  /// No description provided for @ankiNoteTypeLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Note type'**
+  String get ankiNoteTypeLabel;
+
+  /// No description provided for @ankiClozeTextHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Text (mark deletions with {clozeSyntax})'**
+  String ankiClozeTextHint(String clozeSyntax);
+
+  /// No description provided for @ankiFrontQuestionHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Front (question)'**
+  String get ankiFrontQuestionHint;
+
+  /// No description provided for @ankiBackExtraLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Back / extra'**
+  String get ankiBackExtraLabel;
+
+  /// No description provided for @ankiTagsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Tags (separated by spaces)'**
+  String get ankiTagsLabel;
+
+  /// No description provided for @ankiTagsHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Example: math physics'**
+  String get ankiTagsHint;
+
+  /// No description provided for @ankiAdd.
+  ///
+  /// In en, this message translates to:
+  /// **'Add'**
+  String get ankiAdd;
+
+  /// No description provided for @ankiStatNew.
+  ///
+  /// In en, this message translates to:
+  /// **'New'**
+  String get ankiStatNew;
+
+  /// No description provided for @ankiStatLearning.
+  ///
+  /// In en, this message translates to:
+  /// **'Learning'**
+  String get ankiStatLearning;
+
+  /// No description provided for @ankiStatReview.
+  ///
+  /// In en, this message translates to:
+  /// **'Review'**
+  String get ankiStatReview;
+
+  /// No description provided for @ankiAddCardAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Add card'**
+  String get ankiAddCardAction;
+
+  /// No description provided for @ankiRenameAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Rename'**
+  String get ankiRenameAction;
+
+  /// No description provided for @ankiDeleteAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get ankiDeleteAction;
+
+  /// No description provided for @ankiNoCardContent.
+  ///
+  /// In en, this message translates to:
+  /// **'No card content'**
+  String get ankiNoCardContent;
+
+  /// No description provided for @ankiStudy.
+  ///
+  /// In en, this message translates to:
+  /// **'Study'**
+  String get ankiStudy;
+
+  /// No description provided for @ankiWhiteboardTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Whiteboard'**
+  String get ankiWhiteboardTooltip;
+
+  /// No description provided for @ankiFrontLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Front'**
+  String get ankiFrontLabel;
+
+  /// No description provided for @ankiBackLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Back'**
+  String get ankiBackLabel;
+
+  /// No description provided for @ankiShowAnswer.
+  ///
+  /// In en, this message translates to:
+  /// **'Show answer'**
+  String get ankiShowAnswer;
+
+  /// No description provided for @ankiRatingAgain.
+  ///
+  /// In en, this message translates to:
+  /// **'Again'**
+  String get ankiRatingAgain;
+
+  /// No description provided for @ankiRatingHard.
+  ///
+  /// In en, this message translates to:
+  /// **'Hard'**
+  String get ankiRatingHard;
+
+  /// No description provided for @ankiRatingGood.
+  ///
+  /// In en, this message translates to:
+  /// **'Good'**
+  String get ankiRatingGood;
+
+  /// No description provided for @ankiRatingEasy.
+  ///
+  /// In en, this message translates to:
+  /// **'Easy'**
+  String get ankiRatingEasy;
+
+  /// No description provided for @ankiNoCardsToStudy.
+  ///
+  /// In en, this message translates to:
+  /// **'No cards to study right now'**
+  String get ankiNoCardsToStudy;
+
+  /// No description provided for @ankiNoCardsHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Add new cards or come back later'**
+  String get ankiNoCardsHint;
+
+  /// No description provided for @ankiBack.
+  ///
+  /// In en, this message translates to:
+  /// **'Back'**
+  String get ankiBack;
+
+  /// No description provided for @ankiSyncPageTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Anki sync'**
+  String get ankiSyncPageTitle;
+
+  /// No description provided for @ankiSyncChooseMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a sync mode'**
+  String get ankiSyncChooseMode;
+
+  /// No description provided for @ankiSyncModeHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Login status is stored separately for each service. Switching modes does not merge or overwrite data.'**
+  String get ankiSyncModeHelp;
+
+  /// No description provided for @ankiSyncSelfHostedMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Self-hosted server'**
+  String get ankiSyncSelfHostedMode;
+
+  /// No description provided for @ankiSyncServerAddress.
+  ///
+  /// In en, this message translates to:
+  /// **'Server address'**
+  String get ankiSyncServerAddress;
+
+  /// No description provided for @ankiSyncServerHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Remote self-hosted servers must use HTTPS; HTTP is allowed for local addresses. The server must support Anki sync v10, and certificate verification is enabled by default.'**
+  String get ankiSyncServerHelp;
+
+  /// No description provided for @ankiSyncCustomCaTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom CA certificate (optional)'**
+  String get ankiSyncCustomCaTitle;
+
+  /// No description provided for @ankiSyncCustomCaHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Only enter this when the server uses a self-signed certificate'**
+  String get ankiSyncCustomCaHelp;
+
+  /// No description provided for @ankiSyncOfficialHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Use the official AnkiWeb sync service. Your password is sent only when logging in and is not stored in Stroom.'**
+  String get ankiSyncOfficialHelp;
+
+  /// No description provided for @ankiSyncConnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Connected to {service}'**
+  String ankiSyncConnected(String service);
+
+  /// No description provided for @ankiSyncNotConnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Not connected to {service}'**
+  String ankiSyncNotConnected(String service);
+
+  /// No description provided for @ankiSyncLoginForService.
+  ///
+  /// In en, this message translates to:
+  /// **'Log in to {service}'**
+  String ankiSyncLoginForService(String service);
+
+  /// No description provided for @ankiSyncCheckServerStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Check server status'**
+  String get ankiSyncCheckServerStatus;
+
+  /// No description provided for @ankiSyncLogout.
+  ///
+  /// In en, this message translates to:
+  /// **'Log out'**
+  String get ankiSyncLogout;
+
+  /// No description provided for @ankiSyncBothWays.
+  ///
+  /// In en, this message translates to:
+  /// **'Two-way sync'**
+  String get ankiSyncBothWays;
+
+  /// No description provided for @ankiSyncOverwriteServer.
+  ///
+  /// In en, this message translates to:
+  /// **'Replace server data with local data'**
+  String get ankiSyncOverwriteServer;
+
+  /// No description provided for @ankiSyncReplaceLocal.
+  ///
+  /// In en, this message translates to:
+  /// **'Replace local data with server data'**
+  String get ankiSyncReplaceLocal;
+
+  /// No description provided for @ankiSyncHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Two-way sync merges incremental collection changes and transfers media files. If the schema version differs, choose a full upload or download. A failed full download will try to restore the original collection and media directory.'**
+  String get ankiSyncHelp;
+
+  /// No description provided for @ankiSyncStatusRestored.
+  ///
+  /// In en, this message translates to:
+  /// **'Restored the securely saved login session'**
+  String get ankiSyncStatusRestored;
+
+  /// No description provided for @ankiSyncStatusReadSavedSessionFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not read the saved login session. Please log in again.'**
+  String get ankiSyncStatusReadSavedSessionFailed;
+
+  /// No description provided for @ankiSyncInvalidServerUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Server address must be an HTTPS URL. HTTP is allowed only for a local loopback address. User information and query parameters are not allowed.'**
+  String get ankiSyncInvalidServerUrl;
+
+  /// No description provided for @ankiSyncStatusSettingsNotSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Settings not saved: {error}'**
+  String ankiSyncStatusSettingsNotSaved(String error);
+
+  /// No description provided for @ankiSyncStatusServerAddressChanged.
+  ///
+  /// In en, this message translates to:
+  /// **'Server address changed. Please log in again to continue.'**
+  String get ankiSyncStatusServerAddressChanged;
+
+  /// No description provided for @ankiSyncStatusVerifyingLogin.
+  ///
+  /// In en, this message translates to:
+  /// **'Verifying login…'**
+  String get ankiSyncStatusVerifyingLogin;
+
+  /// No description provided for @ankiSyncStatusLoginSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Login successful. Your password was not saved; the sync key was encrypted and saved.'**
+  String get ankiSyncStatusLoginSuccess;
+
+  /// No description provided for @ankiSyncStatusLoginSuccessNoSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Login successful, but the sync key could not be stored securely. You will need to log in again after closing this page.'**
+  String get ankiSyncStatusLoginSuccessNoSave;
+
+  /// No description provided for @ankiSyncStatusLoginFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Login failed: {error}'**
+  String ankiSyncStatusLoginFailed(String error);
+
+  /// No description provided for @ankiSyncLoginAnkiWeb.
+  ///
+  /// In en, this message translates to:
+  /// **'Log in to AnkiWeb'**
+  String get ankiSyncLoginAnkiWeb;
+
+  /// No description provided for @ankiSyncLoginSelfHosted.
+  ///
+  /// In en, this message translates to:
+  /// **'Log in to self-hosted server'**
+  String get ankiSyncLoginSelfHosted;
+
+  /// No description provided for @ankiSyncEmailOrUsername.
+  ///
+  /// In en, this message translates to:
+  /// **'Email / username'**
+  String get ankiSyncEmailOrUsername;
+
+  /// No description provided for @ankiSyncEmailOrUsernameRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter an email or username'**
+  String get ankiSyncEmailOrUsernameRequired;
+
+  /// No description provided for @ankiSyncPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Password'**
+  String get ankiSyncPassword;
+
+  /// No description provided for @ankiSyncPasswordRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a password'**
+  String get ankiSyncPasswordRequired;
+
+  /// No description provided for @ankiSyncLogin.
+  ///
+  /// In en, this message translates to:
+  /// **'Log in'**
+  String get ankiSyncLogin;
+
+  /// No description provided for @ankiSyncStatusPreparingServerSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing server settings…'**
+  String get ankiSyncStatusPreparingServerSettings;
+
+  /// No description provided for @ankiSyncStatusReadingCollection.
+  ///
+  /// In en, this message translates to:
+  /// **'Reading server collection status…'**
+  String get ankiSyncStatusReadingCollection;
+
+  /// No description provided for @ankiSyncStatusConnectedCollectionEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'Connected. The server collection is empty.'**
+  String get ankiSyncStatusConnectedCollectionEmpty;
+
+  /// No description provided for @ankiSyncStatusConnectedStatusRead.
+  ///
+  /// In en, this message translates to:
+  /// **'Connected. Server status was read.'**
+  String get ankiSyncStatusConnectedStatusRead;
+
+  /// No description provided for @ankiSyncStatusUpgradeClient.
+  ///
+  /// In en, this message translates to:
+  /// **'This server requires a newer sync client.'**
+  String get ankiSyncStatusUpgradeClient;
+
+  /// No description provided for @ankiSyncStatusCheckFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Status check failed: {error}'**
+  String ankiSyncStatusCheckFailed(String error);
+
+  /// No description provided for @ankiSyncStatusPreparingUpload.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing upload settings…'**
+  String get ankiSyncStatusPreparingUpload;
+
+  /// No description provided for @ankiSyncOverwriteServerConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Replace the server collection with the local one?'**
+  String get ankiSyncOverwriteServerConfirmTitle;
+
+  /// No description provided for @ankiSyncOverwriteServerConfirmMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'The server collection will be fully replaced with local data. Stroom will first keep a backup of the local database.\n\nMedia files will still be synchronized in both directions according to the server media list.'**
+  String get ankiSyncOverwriteServerConfirmMessage;
+
+  /// No description provided for @ankiSyncOverwriteServerAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Replace server collection'**
+  String get ankiSyncOverwriteServerAction;
+
+  /// No description provided for @ankiSyncStatusBackingUpUploading.
+  ///
+  /// In en, this message translates to:
+  /// **'Backing up and uploading collection…'**
+  String get ankiSyncStatusBackingUpUploading;
+
+  /// No description provided for @ankiSyncStatusUploadComplete.
+  ///
+  /// In en, this message translates to:
+  /// **'The server accepted the local collection. Media sync completed: uploaded {uploaded} files, downloaded {downloaded}, deleted {deleted}.{backup} Please check server status again.'**
+  String ankiSyncStatusUploadComplete(
+    int uploaded,
+    int downloaded,
+    int deleted,
+    String backup,
+  );
+
+  /// No description provided for @ankiSyncStatusBackupPath.
+  ///
+  /// In en, this message translates to:
+  /// **'\nLocal backup: {path}'**
+  String ankiSyncStatusBackupPath(String path);
+
+  /// No description provided for @ankiSyncStatusMediaSyncIncomplete.
+  ///
+  /// In en, this message translates to:
+  /// **'The server collection was replaced, but media sync did not finish: '**
+  String get ankiSyncStatusMediaSyncIncomplete;
+
+  /// No description provided for @ankiSyncStatusUploadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Upload failed: '**
+  String get ankiSyncStatusUploadFailed;
+
+  /// No description provided for @ankiSyncStatusPreparingDownload.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing download settings…'**
+  String get ankiSyncStatusPreparingDownload;
+
+  /// No description provided for @ankiSyncReplaceLocalConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Replace the local collection with the server one?'**
+  String get ankiSyncReplaceLocalConfirmTitle;
+
+  /// No description provided for @ankiSyncReplaceLocalConfirmMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'The local collection will be replaced with server data. Stroom will first keep a backup of the local database.\n\nServer media will replace local media and missing files will be downloaded. If any step fails or the app exits in the middle, Stroom will restore the local collection and media before opening the decks next time.'**
+  String get ankiSyncReplaceLocalConfirmMessage;
+
+  /// No description provided for @ankiSyncReplaceLocalAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Replace local data'**
+  String get ankiSyncReplaceLocalAction;
+
+  /// No description provided for @ankiSyncStatusDownloadingValidating.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading and validating collection…'**
+  String get ankiSyncStatusDownloadingValidating;
+
+  /// No description provided for @ankiSyncStatusDownloadComplete.
+  ///
+  /// In en, this message translates to:
+  /// **'The local collection was replaced and passed the SQLite check. Media sync completed: downloaded {downloaded} files, uploaded {uploaded}, deleted {deleted}.{backup} Please check server status again.'**
+  String ankiSyncStatusDownloadComplete(
+    int downloaded,
+    int uploaded,
+    int deleted,
+    String backup,
+  );
+
+  /// No description provided for @ankiSyncStatusDownloadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Download failed: {error}'**
+  String ankiSyncStatusDownloadFailed(String error);
+
+  /// No description provided for @ankiSyncStatusPreparingSync.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing sync…'**
+  String get ankiSyncStatusPreparingSync;
+
+  /// No description provided for @ankiSyncStatusMergingChanges.
+  ///
+  /// In en, this message translates to:
+  /// **'Merging collection changes…'**
+  String get ankiSyncStatusMergingChanges;
+
+  /// No description provided for @ankiSyncStatusMergeCompleteSyncMedia.
+  ///
+  /// In en, this message translates to:
+  /// **'Collection changes merged. Syncing media files…'**
+  String get ankiSyncStatusMergeCompleteSyncMedia;
+
+  /// No description provided for @ankiSyncStatusChangedNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'{notes} notes, {cards} cards, and {reviews} review records added or updated'**
+  String ankiSyncStatusChangedNotes(int notes, int cards, int reviews);
+
+  /// No description provided for @ankiSyncStatusNoCollectionChanges.
+  ///
+  /// In en, this message translates to:
+  /// **'No collection changes to merge'**
+  String get ankiSyncStatusNoCollectionChanges;
+
+  /// No description provided for @ankiSyncStatusTwoWayComplete.
+  ///
+  /// In en, this message translates to:
+  /// **'Two-way sync complete: {collection}; media uploaded {uploaded}, downloaded {downloaded}, deleted {deleted}.'**
+  String ankiSyncStatusTwoWayComplete(
+    String collection,
+    int uploaded,
+    int downloaded,
+    int deleted,
+  );
+
+  /// No description provided for @ankiSyncStatusCollectionMergedMediaIncomplete.
+  ///
+  /// In en, this message translates to:
+  /// **'Collection changes were merged, but media sync did not finish: '**
+  String get ankiSyncStatusCollectionMergedMediaIncomplete;
+
+  /// No description provided for @ankiSyncStatusSyncIncomplete.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync did not finish: '**
+  String get ankiSyncStatusSyncIncomplete;
+
+  /// No description provided for @ankiSyncStatusClearingLogin.
+  ///
+  /// In en, this message translates to:
+  /// **'Clearing login session…'**
+  String get ankiSyncStatusClearingLogin;
+
+  /// No description provided for @ankiSyncStatusLoggedOut.
+  ///
+  /// In en, this message translates to:
+  /// **'Logged out. The sync key was deleted from secure storage.'**
+  String get ankiSyncStatusLoggedOut;
+
+  /// No description provided for @ankiSyncStatusClearLoginFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not clear the saved login session'**
+  String get ankiSyncStatusClearLoginFailed;
+
+  /// No description provided for @ankiSyncStatusOperationIncomplete.
+  ///
+  /// In en, this message translates to:
+  /// **'Operation did not finish. Check secure storage, network, and server address.'**
+  String get ankiSyncStatusOperationIncomplete;
+
+  /// No description provided for @ankiSyncUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown'**
+  String get ankiSyncUnknown;
+
+  /// No description provided for @ankiSyncServerCollectionEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'Server collection is empty'**
+  String get ankiSyncServerCollectionEmpty;
+
+  /// No description provided for @ankiSyncServerCollectionAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Server collection is available'**
+  String get ankiSyncServerCollectionAvailable;
+
+  /// No description provided for @ankiSyncSchemaStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Schema version {schema} · USN {usn} · Modified {modified}'**
+  String ankiSyncSchemaStatus(int schema, int usn, String modified);
 }
 
 class _AppLocalizationsDelegate

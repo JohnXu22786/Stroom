@@ -6087,6 +6087,425 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get paramTypeJsonHint => 'e.g. ';
+
+  @override
+  String get ankiPageTitle => 'Anki flashcards';
+
+  @override
+  String get ankiStatsTooltip => 'Study statistics';
+
+  @override
+  String get ankiBrowseCardsTooltip => 'Browse cards';
+
+  @override
+  String get ankiSyncTooltip => 'AnkiWeb sync';
+
+  @override
+  String get ankiNewDeckTooltip => 'New deck';
+
+  @override
+  String ankiDeckLoadError(String error) {
+    return 'Failed to load decks: $error';
+  }
+
+  @override
+  String get ankiEmptyDecksTitle => 'No decks yet';
+
+  @override
+  String get ankiEmptyDecksDescription => 'Create a deck to start studying';
+
+  @override
+  String get ankiNewDeckTitle => 'New deck';
+
+  @override
+  String get ankiDeckNameHint => 'Deck name';
+
+  @override
+  String get ankiCreateDeck => 'Create';
+
+  @override
+  String get ankiRenameDeck => 'Rename deck';
+
+  @override
+  String get ankiConfirm => 'OK';
+
+  @override
+  String get ankiDeleteDeckTitle => 'Delete deck';
+
+  @override
+  String ankiDeleteDeckConfirmation(String deckName) {
+    return 'Delete “$deckName” and all its cards?';
+  }
+
+  @override
+  String get ankiAddCardTitle => 'Add card';
+
+  @override
+  String get ankiNoteTypeLabel => 'Note type';
+
+  @override
+  String ankiClozeTextHint(String clozeSyntax) {
+    return 'Text (mark deletions with $clozeSyntax)';
+  }
+
+  @override
+  String get ankiFrontQuestionHint => 'Front (question)';
+
+  @override
+  String get ankiBackExtraLabel => 'Back / extra';
+
+  @override
+  String get ankiTagsLabel => 'Tags (separated by spaces)';
+
+  @override
+  String get ankiTagsHint => 'Example: math physics';
+
+  @override
+  String get ankiAdd => 'Add';
+
+  @override
+  String get ankiStatNew => 'New';
+
+  @override
+  String get ankiStatLearning => 'Learning';
+
+  @override
+  String get ankiStatReview => 'Review';
+
+  @override
+  String get ankiAddCardAction => 'Add card';
+
+  @override
+  String get ankiRenameAction => 'Rename';
+
+  @override
+  String get ankiDeleteAction => 'Delete';
+
+  @override
+  String get ankiNoCardContent => 'No card content';
+
+  @override
+  String get ankiStudy => 'Study';
+
+  @override
+  String get ankiWhiteboardTooltip => 'Whiteboard';
+
+  @override
+  String get ankiFrontLabel => 'Front';
+
+  @override
+  String get ankiBackLabel => 'Back';
+
+  @override
+  String get ankiShowAnswer => 'Show answer';
+
+  @override
+  String get ankiRatingAgain => 'Again';
+
+  @override
+  String get ankiRatingHard => 'Hard';
+
+  @override
+  String get ankiRatingGood => 'Good';
+
+  @override
+  String get ankiRatingEasy => 'Easy';
+
+  @override
+  String get ankiNoCardsToStudy => 'No cards to study right now';
+
+  @override
+  String get ankiNoCardsHint => 'Add new cards or come back later';
+
+  @override
+  String get ankiBack => 'Back';
+
+  @override
+  String get ankiSyncPageTitle => 'Anki sync';
+
+  @override
+  String get ankiSyncChooseMode => 'Choose a sync mode';
+
+  @override
+  String get ankiSyncModeHelp =>
+      'Login status is stored separately for each service. Switching modes does not merge or overwrite data.';
+
+  @override
+  String get ankiSyncSelfHostedMode => 'Self-hosted server';
+
+  @override
+  String get ankiSyncServerAddress => 'Server address';
+
+  @override
+  String get ankiSyncServerHelp =>
+      'Remote self-hosted servers must use HTTPS; HTTP is allowed for local addresses. The server must support Anki sync v10, and certificate verification is enabled by default.';
+
+  @override
+  String get ankiSyncCustomCaTitle => 'Custom CA certificate (optional)';
+
+  @override
+  String get ankiSyncCustomCaHelp =>
+      'Only enter this when the server uses a self-signed certificate';
+
+  @override
+  String get ankiSyncOfficialHelp =>
+      'Use the official AnkiWeb sync service. Your password is sent only when logging in and is not stored in Stroom.';
+
+  @override
+  String ankiSyncConnected(String service) {
+    return 'Connected to $service';
+  }
+
+  @override
+  String ankiSyncNotConnected(String service) {
+    return 'Not connected to $service';
+  }
+
+  @override
+  String ankiSyncLoginForService(String service) {
+    return 'Log in to $service';
+  }
+
+  @override
+  String get ankiSyncCheckServerStatus => 'Check server status';
+
+  @override
+  String get ankiSyncLogout => 'Log out';
+
+  @override
+  String get ankiSyncBothWays => 'Two-way sync';
+
+  @override
+  String get ankiSyncOverwriteServer => 'Replace server data with local data';
+
+  @override
+  String get ankiSyncReplaceLocal => 'Replace local data with server data';
+
+  @override
+  String get ankiSyncHelp =>
+      'Two-way sync merges incremental collection changes and transfers media files. If the schema version differs, choose a full upload or download. A failed full download will try to restore the original collection and media directory.';
+
+  @override
+  String get ankiSyncStatusRestored =>
+      'Restored the securely saved login session';
+
+  @override
+  String get ankiSyncStatusReadSavedSessionFailed =>
+      'Could not read the saved login session. Please log in again.';
+
+  @override
+  String get ankiSyncInvalidServerUrl =>
+      'Server address must be an HTTPS URL. HTTP is allowed only for a local loopback address. User information and query parameters are not allowed.';
+
+  @override
+  String ankiSyncStatusSettingsNotSaved(String error) {
+    return 'Settings not saved: $error';
+  }
+
+  @override
+  String get ankiSyncStatusServerAddressChanged =>
+      'Server address changed. Please log in again to continue.';
+
+  @override
+  String get ankiSyncStatusVerifyingLogin => 'Verifying login…';
+
+  @override
+  String get ankiSyncStatusLoginSuccess =>
+      'Login successful. Your password was not saved; the sync key was encrypted and saved.';
+
+  @override
+  String get ankiSyncStatusLoginSuccessNoSave =>
+      'Login successful, but the sync key could not be stored securely. You will need to log in again after closing this page.';
+
+  @override
+  String ankiSyncStatusLoginFailed(String error) {
+    return 'Login failed: $error';
+  }
+
+  @override
+  String get ankiSyncLoginAnkiWeb => 'Log in to AnkiWeb';
+
+  @override
+  String get ankiSyncLoginSelfHosted => 'Log in to self-hosted server';
+
+  @override
+  String get ankiSyncEmailOrUsername => 'Email / username';
+
+  @override
+  String get ankiSyncEmailOrUsernameRequired => 'Enter an email or username';
+
+  @override
+  String get ankiSyncPassword => 'Password';
+
+  @override
+  String get ankiSyncPasswordRequired => 'Enter a password';
+
+  @override
+  String get ankiSyncLogin => 'Log in';
+
+  @override
+  String get ankiSyncStatusPreparingServerSettings =>
+      'Preparing server settings…';
+
+  @override
+  String get ankiSyncStatusReadingCollection =>
+      'Reading server collection status…';
+
+  @override
+  String get ankiSyncStatusConnectedCollectionEmpty =>
+      'Connected. The server collection is empty.';
+
+  @override
+  String get ankiSyncStatusConnectedStatusRead =>
+      'Connected. Server status was read.';
+
+  @override
+  String get ankiSyncStatusUpgradeClient =>
+      'This server requires a newer sync client.';
+
+  @override
+  String ankiSyncStatusCheckFailed(String error) {
+    return 'Status check failed: $error';
+  }
+
+  @override
+  String get ankiSyncStatusPreparingUpload => 'Preparing upload settings…';
+
+  @override
+  String get ankiSyncOverwriteServerConfirmTitle =>
+      'Replace the server collection with the local one?';
+
+  @override
+  String get ankiSyncOverwriteServerConfirmMessage =>
+      'The server collection will be fully replaced with local data. Stroom will first keep a backup of the local database.\n\nMedia files will still be synchronized in both directions according to the server media list.';
+
+  @override
+  String get ankiSyncOverwriteServerAction => 'Replace server collection';
+
+  @override
+  String get ankiSyncStatusBackingUpUploading =>
+      'Backing up and uploading collection…';
+
+  @override
+  String ankiSyncStatusUploadComplete(
+    int uploaded,
+    int downloaded,
+    int deleted,
+    String backup,
+  ) {
+    return 'The server accepted the local collection. Media sync completed: uploaded $uploaded files, downloaded $downloaded, deleted $deleted.$backup Please check server status again.';
+  }
+
+  @override
+  String ankiSyncStatusBackupPath(String path) {
+    return '\nLocal backup: $path';
+  }
+
+  @override
+  String get ankiSyncStatusMediaSyncIncomplete =>
+      'The server collection was replaced, but media sync did not finish: ';
+
+  @override
+  String get ankiSyncStatusUploadFailed => 'Upload failed: ';
+
+  @override
+  String get ankiSyncStatusPreparingDownload => 'Preparing download settings…';
+
+  @override
+  String get ankiSyncReplaceLocalConfirmTitle =>
+      'Replace the local collection with the server one?';
+
+  @override
+  String get ankiSyncReplaceLocalConfirmMessage =>
+      'The local collection will be replaced with server data. Stroom will first keep a backup of the local database.\n\nServer media will replace local media and missing files will be downloaded. If any step fails or the app exits in the middle, Stroom will restore the local collection and media before opening the decks next time.';
+
+  @override
+  String get ankiSyncReplaceLocalAction => 'Replace local data';
+
+  @override
+  String get ankiSyncStatusDownloadingValidating =>
+      'Downloading and validating collection…';
+
+  @override
+  String ankiSyncStatusDownloadComplete(
+    int downloaded,
+    int uploaded,
+    int deleted,
+    String backup,
+  ) {
+    return 'The local collection was replaced and passed the SQLite check. Media sync completed: downloaded $downloaded files, uploaded $uploaded, deleted $deleted.$backup Please check server status again.';
+  }
+
+  @override
+  String ankiSyncStatusDownloadFailed(String error) {
+    return 'Download failed: $error';
+  }
+
+  @override
+  String get ankiSyncStatusPreparingSync => 'Preparing sync…';
+
+  @override
+  String get ankiSyncStatusMergingChanges => 'Merging collection changes…';
+
+  @override
+  String get ankiSyncStatusMergeCompleteSyncMedia =>
+      'Collection changes merged. Syncing media files…';
+
+  @override
+  String ankiSyncStatusChangedNotes(int notes, int cards, int reviews) {
+    return '$notes notes, $cards cards, and $reviews review records added or updated';
+  }
+
+  @override
+  String get ankiSyncStatusNoCollectionChanges =>
+      'No collection changes to merge';
+
+  @override
+  String ankiSyncStatusTwoWayComplete(
+    String collection,
+    int uploaded,
+    int downloaded,
+    int deleted,
+  ) {
+    return 'Two-way sync complete: $collection; media uploaded $uploaded, downloaded $downloaded, deleted $deleted.';
+  }
+
+  @override
+  String get ankiSyncStatusCollectionMergedMediaIncomplete =>
+      'Collection changes were merged, but media sync did not finish: ';
+
+  @override
+  String get ankiSyncStatusSyncIncomplete => 'Sync did not finish: ';
+
+  @override
+  String get ankiSyncStatusClearingLogin => 'Clearing login session…';
+
+  @override
+  String get ankiSyncStatusLoggedOut =>
+      'Logged out. The sync key was deleted from secure storage.';
+
+  @override
+  String get ankiSyncStatusClearLoginFailed =>
+      'Could not clear the saved login session';
+
+  @override
+  String get ankiSyncStatusOperationIncomplete =>
+      'Operation did not finish. Check secure storage, network, and server address.';
+
+  @override
+  String get ankiSyncUnknown => 'Unknown';
+
+  @override
+  String get ankiSyncServerCollectionEmpty => 'Server collection is empty';
+
+  @override
+  String get ankiSyncServerCollectionAvailable =>
+      'Server collection is available';
+
+  @override
+  String ankiSyncSchemaStatus(int schema, int usn, String modified) {
+    return 'Schema version $schema · USN $usn · Modified $modified';
+  }
 }
 
 /// The translations for English, as used in the United States (`en_US`).
@@ -12171,4 +12590,423 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get paramTypeJsonHint => 'e.g. ';
+
+  @override
+  String get ankiPageTitle => 'Anki flashcards';
+
+  @override
+  String get ankiStatsTooltip => 'Study statistics';
+
+  @override
+  String get ankiBrowseCardsTooltip => 'Browse cards';
+
+  @override
+  String get ankiSyncTooltip => 'AnkiWeb sync';
+
+  @override
+  String get ankiNewDeckTooltip => 'New deck';
+
+  @override
+  String ankiDeckLoadError(String error) {
+    return 'Failed to load decks: $error';
+  }
+
+  @override
+  String get ankiEmptyDecksTitle => 'No decks yet';
+
+  @override
+  String get ankiEmptyDecksDescription => 'Create a deck to start studying';
+
+  @override
+  String get ankiNewDeckTitle => 'New deck';
+
+  @override
+  String get ankiDeckNameHint => 'Deck name';
+
+  @override
+  String get ankiCreateDeck => 'Create';
+
+  @override
+  String get ankiRenameDeck => 'Rename deck';
+
+  @override
+  String get ankiConfirm => 'OK';
+
+  @override
+  String get ankiDeleteDeckTitle => 'Delete deck';
+
+  @override
+  String ankiDeleteDeckConfirmation(String deckName) {
+    return 'Delete “$deckName” and all its cards?';
+  }
+
+  @override
+  String get ankiAddCardTitle => 'Add card';
+
+  @override
+  String get ankiNoteTypeLabel => 'Note type';
+
+  @override
+  String ankiClozeTextHint(String clozeSyntax) {
+    return 'Text (mark deletions with $clozeSyntax)';
+  }
+
+  @override
+  String get ankiFrontQuestionHint => 'Front (question)';
+
+  @override
+  String get ankiBackExtraLabel => 'Back / extra';
+
+  @override
+  String get ankiTagsLabel => 'Tags (separated by spaces)';
+
+  @override
+  String get ankiTagsHint => 'Example: math physics';
+
+  @override
+  String get ankiAdd => 'Add';
+
+  @override
+  String get ankiStatNew => 'New';
+
+  @override
+  String get ankiStatLearning => 'Learning';
+
+  @override
+  String get ankiStatReview => 'Review';
+
+  @override
+  String get ankiAddCardAction => 'Add card';
+
+  @override
+  String get ankiRenameAction => 'Rename';
+
+  @override
+  String get ankiDeleteAction => 'Delete';
+
+  @override
+  String get ankiNoCardContent => 'No card content';
+
+  @override
+  String get ankiStudy => 'Study';
+
+  @override
+  String get ankiWhiteboardTooltip => 'Whiteboard';
+
+  @override
+  String get ankiFrontLabel => 'Front';
+
+  @override
+  String get ankiBackLabel => 'Back';
+
+  @override
+  String get ankiShowAnswer => 'Show answer';
+
+  @override
+  String get ankiRatingAgain => 'Again';
+
+  @override
+  String get ankiRatingHard => 'Hard';
+
+  @override
+  String get ankiRatingGood => 'Good';
+
+  @override
+  String get ankiRatingEasy => 'Easy';
+
+  @override
+  String get ankiNoCardsToStudy => 'No cards to study right now';
+
+  @override
+  String get ankiNoCardsHint => 'Add new cards or come back later';
+
+  @override
+  String get ankiBack => 'Back';
+
+  @override
+  String get ankiSyncPageTitle => 'Anki sync';
+
+  @override
+  String get ankiSyncChooseMode => 'Choose a sync mode';
+
+  @override
+  String get ankiSyncModeHelp =>
+      'Login status is stored separately for each service. Switching modes does not merge or overwrite data.';
+
+  @override
+  String get ankiSyncSelfHostedMode => 'Self-hosted server';
+
+  @override
+  String get ankiSyncServerAddress => 'Server address';
+
+  @override
+  String get ankiSyncServerHelp =>
+      'Remote self-hosted servers must use HTTPS; HTTP is allowed for local addresses. The server must support Anki sync v10, and certificate verification is enabled by default.';
+
+  @override
+  String get ankiSyncCustomCaTitle => 'Custom CA certificate (optional)';
+
+  @override
+  String get ankiSyncCustomCaHelp =>
+      'Only enter this when the server uses a self-signed certificate';
+
+  @override
+  String get ankiSyncOfficialHelp =>
+      'Use the official AnkiWeb sync service. Your password is sent only when logging in and is not stored in Stroom.';
+
+  @override
+  String ankiSyncConnected(String service) {
+    return 'Connected to $service';
+  }
+
+  @override
+  String ankiSyncNotConnected(String service) {
+    return 'Not connected to $service';
+  }
+
+  @override
+  String ankiSyncLoginForService(String service) {
+    return 'Log in to $service';
+  }
+
+  @override
+  String get ankiSyncCheckServerStatus => 'Check server status';
+
+  @override
+  String get ankiSyncLogout => 'Log out';
+
+  @override
+  String get ankiSyncBothWays => 'Two-way sync';
+
+  @override
+  String get ankiSyncOverwriteServer => 'Replace server data with local data';
+
+  @override
+  String get ankiSyncReplaceLocal => 'Replace local data with server data';
+
+  @override
+  String get ankiSyncHelp =>
+      'Two-way sync merges incremental collection changes and transfers media files. If the schema version differs, choose a full upload or download. A failed full download will try to restore the original collection and media directory.';
+
+  @override
+  String get ankiSyncStatusRestored =>
+      'Restored the securely saved login session';
+
+  @override
+  String get ankiSyncStatusReadSavedSessionFailed =>
+      'Could not read the saved login session. Please log in again.';
+
+  @override
+  String get ankiSyncInvalidServerUrl =>
+      'Server address must be an HTTPS URL. HTTP is allowed only for a local loopback address. User information and query parameters are not allowed.';
+
+  @override
+  String ankiSyncStatusSettingsNotSaved(String error) {
+    return 'Settings not saved: $error';
+  }
+
+  @override
+  String get ankiSyncStatusServerAddressChanged =>
+      'Server address changed. Please log in again to continue.';
+
+  @override
+  String get ankiSyncStatusVerifyingLogin => 'Verifying login…';
+
+  @override
+  String get ankiSyncStatusLoginSuccess =>
+      'Login successful. Your password was not saved; the sync key was encrypted and saved.';
+
+  @override
+  String get ankiSyncStatusLoginSuccessNoSave =>
+      'Login successful, but the sync key could not be stored securely. You will need to log in again after closing this page.';
+
+  @override
+  String ankiSyncStatusLoginFailed(String error) {
+    return 'Login failed: $error';
+  }
+
+  @override
+  String get ankiSyncLoginAnkiWeb => 'Log in to AnkiWeb';
+
+  @override
+  String get ankiSyncLoginSelfHosted => 'Log in to self-hosted server';
+
+  @override
+  String get ankiSyncEmailOrUsername => 'Email / username';
+
+  @override
+  String get ankiSyncEmailOrUsernameRequired => 'Enter an email or username';
+
+  @override
+  String get ankiSyncPassword => 'Password';
+
+  @override
+  String get ankiSyncPasswordRequired => 'Enter a password';
+
+  @override
+  String get ankiSyncLogin => 'Log in';
+
+  @override
+  String get ankiSyncStatusPreparingServerSettings =>
+      'Preparing server settings…';
+
+  @override
+  String get ankiSyncStatusReadingCollection =>
+      'Reading server collection status…';
+
+  @override
+  String get ankiSyncStatusConnectedCollectionEmpty =>
+      'Connected. The server collection is empty.';
+
+  @override
+  String get ankiSyncStatusConnectedStatusRead =>
+      'Connected. Server status was read.';
+
+  @override
+  String get ankiSyncStatusUpgradeClient =>
+      'This server requires a newer sync client.';
+
+  @override
+  String ankiSyncStatusCheckFailed(String error) {
+    return 'Status check failed: $error';
+  }
+
+  @override
+  String get ankiSyncStatusPreparingUpload => 'Preparing upload settings…';
+
+  @override
+  String get ankiSyncOverwriteServerConfirmTitle =>
+      'Replace the server collection with the local one?';
+
+  @override
+  String get ankiSyncOverwriteServerConfirmMessage =>
+      'The server collection will be fully replaced with local data. Stroom will first keep a backup of the local database.\n\nMedia files will still be synchronized in both directions according to the server media list.';
+
+  @override
+  String get ankiSyncOverwriteServerAction => 'Replace server collection';
+
+  @override
+  String get ankiSyncStatusBackingUpUploading =>
+      'Backing up and uploading collection…';
+
+  @override
+  String ankiSyncStatusUploadComplete(
+    int uploaded,
+    int downloaded,
+    int deleted,
+    String backup,
+  ) {
+    return 'The server accepted the local collection. Media sync completed: uploaded $uploaded files, downloaded $downloaded, deleted $deleted.$backup Please check server status again.';
+  }
+
+  @override
+  String ankiSyncStatusBackupPath(String path) {
+    return '\nLocal backup: $path';
+  }
+
+  @override
+  String get ankiSyncStatusMediaSyncIncomplete =>
+      'The server collection was replaced, but media sync did not finish: ';
+
+  @override
+  String get ankiSyncStatusUploadFailed => 'Upload failed: ';
+
+  @override
+  String get ankiSyncStatusPreparingDownload => 'Preparing download settings…';
+
+  @override
+  String get ankiSyncReplaceLocalConfirmTitle =>
+      'Replace the local collection with the server one?';
+
+  @override
+  String get ankiSyncReplaceLocalConfirmMessage =>
+      'The local collection will be replaced with server data. Stroom will first keep a backup of the local database.\n\nServer media will replace local media and missing files will be downloaded. If any step fails or the app exits in the middle, Stroom will restore the local collection and media before opening the decks next time.';
+
+  @override
+  String get ankiSyncReplaceLocalAction => 'Replace local data';
+
+  @override
+  String get ankiSyncStatusDownloadingValidating =>
+      'Downloading and validating collection…';
+
+  @override
+  String ankiSyncStatusDownloadComplete(
+    int downloaded,
+    int uploaded,
+    int deleted,
+    String backup,
+  ) {
+    return 'The local collection was replaced and passed the SQLite check. Media sync completed: downloaded $downloaded files, uploaded $uploaded, deleted $deleted.$backup Please check server status again.';
+  }
+
+  @override
+  String ankiSyncStatusDownloadFailed(String error) {
+    return 'Download failed: $error';
+  }
+
+  @override
+  String get ankiSyncStatusPreparingSync => 'Preparing sync…';
+
+  @override
+  String get ankiSyncStatusMergingChanges => 'Merging collection changes…';
+
+  @override
+  String get ankiSyncStatusMergeCompleteSyncMedia =>
+      'Collection changes merged. Syncing media files…';
+
+  @override
+  String ankiSyncStatusChangedNotes(int notes, int cards, int reviews) {
+    return '$notes notes, $cards cards, and $reviews review records added or updated';
+  }
+
+  @override
+  String get ankiSyncStatusNoCollectionChanges =>
+      'No collection changes to merge';
+
+  @override
+  String ankiSyncStatusTwoWayComplete(
+    String collection,
+    int uploaded,
+    int downloaded,
+    int deleted,
+  ) {
+    return 'Two-way sync complete: $collection; media uploaded $uploaded, downloaded $downloaded, deleted $deleted.';
+  }
+
+  @override
+  String get ankiSyncStatusCollectionMergedMediaIncomplete =>
+      'Collection changes were merged, but media sync did not finish: ';
+
+  @override
+  String get ankiSyncStatusSyncIncomplete => 'Sync did not finish: ';
+
+  @override
+  String get ankiSyncStatusClearingLogin => 'Clearing login session…';
+
+  @override
+  String get ankiSyncStatusLoggedOut =>
+      'Logged out. The sync key was deleted from secure storage.';
+
+  @override
+  String get ankiSyncStatusClearLoginFailed =>
+      'Could not clear the saved login session';
+
+  @override
+  String get ankiSyncStatusOperationIncomplete =>
+      'Operation did not finish. Check secure storage, network, and server address.';
+
+  @override
+  String get ankiSyncUnknown => 'Unknown';
+
+  @override
+  String get ankiSyncServerCollectionEmpty => 'Server collection is empty';
+
+  @override
+  String get ankiSyncServerCollectionAvailable =>
+      'Server collection is available';
+
+  @override
+  String ankiSyncSchemaStatus(int schema, int usn, String modified) {
+    return 'Schema version $schema · USN $usn · Modified $modified';
+  }
 }

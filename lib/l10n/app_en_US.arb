@@ -3273,5 +3273,270 @@
   "paramTypeJsonHint": "e.g. ",
   "@paramTypeJsonHint": {
     "placeholders": {}
+  },
+  "ankiPageTitle": "Anki flashcards",
+  "ankiStatsTooltip": "Study statistics",
+  "ankiBrowseCardsTooltip": "Browse cards",
+  "ankiSyncTooltip": "AnkiWeb sync",
+  "ankiNewDeckTooltip": "New deck",
+  "ankiDeckLoadError": "Failed to load decks: {error}",
+  "@ankiDeckLoadError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "ankiEmptyDecksTitle": "No decks yet",
+  "ankiEmptyDecksDescription": "Create a deck to start studying",
+  "ankiNewDeckTitle": "New deck",
+  "ankiDeckNameHint": "Deck name",
+  "ankiCreateDeck": "Create",
+  "ankiRenameDeck": "Rename deck",
+  "ankiConfirm": "OK",
+  "ankiDeleteDeckTitle": "Delete deck",
+  "ankiDeleteDeckConfirmation": "Delete “{deckName}” and all its cards?",
+  "@ankiDeleteDeckConfirmation": {
+    "placeholders": {
+      "deckName": {
+        "type": "String"
+      }
+    }
+  },
+  "ankiAddCardTitle": "Add card",
+  "ankiNoteTypeLabel": "Note type",
+  "ankiClozeTextHint": "Text (mark deletions with {clozeSyntax})",
+  "@ankiClozeTextHint": {
+    "placeholders": {
+      "clozeSyntax": {
+        "type": "String"
+      }
+    }
+  },
+  "ankiFrontQuestionHint": "Front (question)",
+  "ankiBackExtraLabel": "Back / extra",
+  "ankiTagsLabel": "Tags (separated by spaces)",
+  "ankiTagsHint": "Example: math physics",
+  "ankiAdd": "Add",
+  "ankiStatNew": "New",
+  "ankiStatLearning": "Learning",
+  "ankiStatReview": "Review",
+  "ankiAddCardAction": "Add card",
+  "ankiRenameAction": "Rename",
+  "ankiDeleteAction": "Delete",
+  "ankiNoCardContent": "No card content",
+  "ankiStudy": "Study",
+  "ankiWhiteboardTooltip": "Whiteboard",
+  "ankiFrontLabel": "Front",
+  "ankiBackLabel": "Back",
+  "ankiShowAnswer": "Show answer",
+  "ankiRatingAgain": "Again",
+  "ankiRatingHard": "Hard",
+  "ankiRatingGood": "Good",
+  "ankiRatingEasy": "Easy",
+  "ankiNoCardsToStudy": "No cards to study right now",
+  "ankiNoCardsHint": "Add new cards or come back later",
+  "ankiBack": "Back",
+  "ankiSyncPageTitle": "Anki sync",
+  "ankiSyncChooseMode": "Choose a sync mode",
+  "ankiSyncModeHelp": "Login status is stored separately for each service. Switching modes does not merge or overwrite data.",
+  "ankiSyncSelfHostedMode": "Self-hosted server",
+  "ankiSyncServerAddress": "Server address",
+  "ankiSyncServerHelp": "Remote self-hosted servers must use HTTPS; HTTP is allowed for local addresses. The server must support Anki sync v10, and certificate verification is enabled by default.",
+  "ankiSyncCustomCaTitle": "Custom CA certificate (optional)",
+  "ankiSyncCustomCaHelp": "Only enter this when the server uses a self-signed certificate",
+  "ankiSyncOfficialHelp": "Use the official AnkiWeb sync service. Your password is sent only when logging in and is not stored in Stroom.",
+  "ankiSyncConnected": "Connected to {service}",
+  "@ankiSyncConnected": {
+    "placeholders": {
+      "service": {
+        "type": "String"
+      }
+    }
+  },
+  "ankiSyncNotConnected": "Not connected to {service}",
+  "@ankiSyncNotConnected": {
+    "placeholders": {
+      "service": {
+        "type": "String"
+      }
+    }
+  },
+  "ankiSyncLoginForService": "Log in to {service}",
+  "@ankiSyncLoginForService": {
+    "placeholders": {
+      "service": {
+        "type": "String"
+      }
+    }
+  },
+  "ankiSyncCheckServerStatus": "Check server status",
+  "ankiSyncLogout": "Log out",
+  "ankiSyncBothWays": "Two-way sync",
+  "ankiSyncOverwriteServer": "Replace server data with local data",
+  "ankiSyncReplaceLocal": "Replace local data with server data",
+  "ankiSyncHelp": "Two-way sync merges incremental collection changes and transfers media files. If the schema version differs, choose a full upload or download. A failed full download will try to restore the original collection and media directory.",
+  "ankiSyncStatusRestored": "Restored the securely saved login session",
+  "ankiSyncStatusReadSavedSessionFailed": "Could not read the saved login session. Please log in again.",
+  "ankiSyncInvalidServerUrl": "Server address must be an HTTPS URL. HTTP is allowed only for a local loopback address. User information and query parameters are not allowed.",
+  "ankiSyncStatusSettingsNotSaved": "Settings not saved: {error}",
+  "@ankiSyncStatusSettingsNotSaved": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "ankiSyncStatusServerAddressChanged": "Server address changed. Please log in again to continue.",
+  "ankiSyncStatusVerifyingLogin": "Verifying login…",
+  "ankiSyncStatusLoginSuccess": "Login successful. Your password was not saved; the sync key was encrypted and saved.",
+  "ankiSyncStatusLoginSuccessNoSave": "Login successful, but the sync key could not be stored securely. You will need to log in again after closing this page.",
+  "ankiSyncStatusLoginFailed": "Login failed: {error}",
+  "@ankiSyncStatusLoginFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "ankiSyncLoginAnkiWeb": "Log in to AnkiWeb",
+  "ankiSyncLoginSelfHosted": "Log in to self-hosted server",
+  "ankiSyncEmailOrUsername": "Email / username",
+  "ankiSyncEmailOrUsernameRequired": "Enter an email or username",
+  "ankiSyncPassword": "Password",
+  "ankiSyncPasswordRequired": "Enter a password",
+  "ankiSyncLogin": "Log in",
+  "ankiSyncStatusPreparingServerSettings": "Preparing server settings…",
+  "ankiSyncStatusReadingCollection": "Reading server collection status…",
+  "ankiSyncStatusConnectedCollectionEmpty": "Connected. The server collection is empty.",
+  "ankiSyncStatusConnectedStatusRead": "Connected. Server status was read.",
+  "ankiSyncStatusUpgradeClient": "This server requires a newer sync client.",
+  "ankiSyncStatusCheckFailed": "Status check failed: {error}",
+  "@ankiSyncStatusCheckFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "ankiSyncStatusPreparingUpload": "Preparing upload settings…",
+  "ankiSyncOverwriteServerConfirmTitle": "Replace the server collection with the local one?",
+  "ankiSyncOverwriteServerConfirmMessage": "The server collection will be fully replaced with local data. Stroom will first keep a backup of the local database.\n\nMedia files will still be synchronized in both directions according to the server media list.",
+  "ankiSyncOverwriteServerAction": "Replace server collection",
+  "ankiSyncStatusBackingUpUploading": "Backing up and uploading collection…",
+  "ankiSyncStatusUploadComplete": "The server accepted the local collection. Media sync completed: uploaded {uploaded} files, downloaded {downloaded}, deleted {deleted}.{backup} Please check server status again.",
+  "@ankiSyncStatusUploadComplete": {
+    "placeholders": {
+      "uploaded": {
+        "type": "int"
+      },
+      "downloaded": {
+        "type": "int"
+      },
+      "deleted": {
+        "type": "int"
+      },
+      "backup": {
+        "type": "String"
+      }
+    }
+  },
+  "ankiSyncStatusBackupPath": "\nLocal backup: {path}",
+  "@ankiSyncStatusBackupPath": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "ankiSyncStatusMediaSyncIncomplete": "The server collection was replaced, but media sync did not finish: ",
+  "ankiSyncStatusUploadFailed": "Upload failed: ",
+  "ankiSyncStatusPreparingDownload": "Preparing download settings…",
+  "ankiSyncReplaceLocalConfirmTitle": "Replace the local collection with the server one?",
+  "ankiSyncReplaceLocalConfirmMessage": "The local collection will be replaced with server data. Stroom will first keep a backup of the local database.\n\nServer media will replace local media and missing files will be downloaded. If any step fails or the app exits in the middle, Stroom will restore the local collection and media before opening the decks next time.",
+  "ankiSyncReplaceLocalAction": "Replace local data",
+  "ankiSyncStatusDownloadingValidating": "Downloading and validating collection…",
+  "ankiSyncStatusDownloadComplete": "The local collection was replaced and passed the SQLite check. Media sync completed: downloaded {downloaded} files, uploaded {uploaded}, deleted {deleted}.{backup} Please check server status again.",
+  "@ankiSyncStatusDownloadComplete": {
+    "placeholders": {
+      "downloaded": {
+        "type": "int"
+      },
+      "uploaded": {
+        "type": "int"
+      },
+      "deleted": {
+        "type": "int"
+      },
+      "backup": {
+        "type": "String"
+      }
+    }
+  },
+  "ankiSyncStatusDownloadFailed": "Download failed: {error}",
+  "@ankiSyncStatusDownloadFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "ankiSyncStatusPreparingSync": "Preparing sync…",
+  "ankiSyncStatusMergingChanges": "Merging collection changes…",
+  "ankiSyncStatusMergeCompleteSyncMedia": "Collection changes merged. Syncing media files…",
+  "ankiSyncStatusChangedNotes": "{notes} notes, {cards} cards, and {reviews} review records added or updated",
+  "@ankiSyncStatusChangedNotes": {
+    "placeholders": {
+      "notes": {
+        "type": "int"
+      },
+      "cards": {
+        "type": "int"
+      },
+      "reviews": {
+        "type": "int"
+      }
+    }
+  },
+  "ankiSyncStatusNoCollectionChanges": "No collection changes to merge",
+  "ankiSyncStatusTwoWayComplete": "Two-way sync complete: {collection}; media uploaded {uploaded}, downloaded {downloaded}, deleted {deleted}.",
+  "@ankiSyncStatusTwoWayComplete": {
+    "placeholders": {
+      "collection": {
+        "type": "String"
+      },
+      "uploaded": {
+        "type": "int"
+      },
+      "downloaded": {
+        "type": "int"
+      },
+      "deleted": {
+        "type": "int"
+      }
+    }
+  },
+  "ankiSyncStatusCollectionMergedMediaIncomplete": "Collection changes were merged, but media sync did not finish: ",
+  "ankiSyncStatusSyncIncomplete": "Sync did not finish: ",
+  "ankiSyncStatusClearingLogin": "Clearing login session…",
+  "ankiSyncStatusLoggedOut": "Logged out. The sync key was deleted from secure storage.",
+  "ankiSyncStatusClearLoginFailed": "Could not clear the saved login session",
+  "ankiSyncStatusOperationIncomplete": "Operation did not finish. Check secure storage, network, and server address.",
+  "ankiSyncUnknown": "Unknown",
+  "ankiSyncServerCollectionEmpty": "Server collection is empty",
+  "ankiSyncServerCollectionAvailable": "Server collection is available",
+  "ankiSyncSchemaStatus": "Schema version {schema} · USN {usn} · Modified {modified}",
+  "@ankiSyncSchemaStatus": {
+    "placeholders": {
+      "schema": {
+        "type": "int"
+      },
+      "usn": {
+        "type": "int"
+      },
+      "modified": {
+        "type": "String"
+      }
+    }
   }
 }
