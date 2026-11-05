@@ -214,6 +214,14 @@ extension _ChatPageBubblesExt on _ChatPageState {
               canReuseSealedText ? '$messageId:${s.chunkIndex}' : null;
           final cached =
               cacheKey == null ? null : _streamingMarkdownCache[cacheKey];
+          final streamingFenceInfoCache = isStreaming &&
+                  messageId == _streamingMsgId &&
+                  s.chunkIndex != null
+              ? _streamingFenceInfoCaches.putIfAbsent(
+                  '$messageId:${s.chunkIndex}',
+                  StreamingFenceInfoCache.new,
+                )
+              : null;
           if (cached != null &&
               identical(cached.text, s.text) &&
               cached.isDark == isDark &&
@@ -234,6 +242,7 @@ extension _ChatPageBubblesExt on _ChatPageState {
                         streamingMsgId: _streamingMsgId,
                         messageId: messageId,
                         streamingText: s.text,
+                        streamingFenceInfoCache: streamingFenceInfoCache,
                       ),
                       markdownGenerator: buildSearchMarkdownGenerator(
                         query: _searchQuery,
@@ -257,6 +266,7 @@ extension _ChatPageBubblesExt on _ChatPageState {
                         streamingMsgId: _streamingMsgId,
                         messageId: messageId,
                         streamingText: s.text,
+                        streamingFenceInfoCache: streamingFenceInfoCache,
                       ),
                       markdownGenerator: markdownGenerator,
                     ),
@@ -363,12 +373,19 @@ extension _ChatPageBubblesExt on _ChatPageState {
     // the message text as streamingText for the same fence-completion
     // check, so a closed block in a streaming message is never treated as
     // still being generated.
+    final streamingFenceInfoCache = isStreaming && _streamingMsgId == message.id
+        ? _streamingFenceInfoCaches.putIfAbsent(
+            '${message.id}:fallback',
+            StreamingFenceInfoCache.new,
+          )
+        : null;
     final markdownConfig = buildMessageMarkdownConfig(
       isDark: isDark,
       conversationIsStreaming: isStreaming,
       streamingMsgId: _streamingMsgId,
       messageId: message.id,
       streamingText: message.text,
+      streamingFenceInfoCache: streamingFenceInfoCache,
     );
 
     return Container(

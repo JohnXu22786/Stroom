@@ -212,6 +212,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// widget instance lets unchanged Markdown sections keep their parsed tree
   /// while the final section continues to grow.
   final Map<String, _CachedStreamingMarkdown> _streamingMarkdownCache = {};
+  final Map<String, StreamingFenceInfoCache> _streamingFenceInfoCaches = {};
   final Map<String, List<String>> _livePlainTextFragments = {};
 
   String? _streamingMsgId;

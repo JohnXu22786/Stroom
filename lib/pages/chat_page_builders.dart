@@ -382,12 +382,17 @@ extension _ChatPageBuildersExt on _ChatPageState {
       // markdown config applies (mermaid blocks show "正在生成..." while
       // the reply is still being produced — only while their fence is
       // still open; closed blocks render immediately).
+      final streamingFenceInfoCache = _streamingFenceInfoCaches.putIfAbsent(
+        '${message.id}:textstream',
+        StreamingFenceInfoCache.new,
+      );
       final config = buildMessageMarkdownConfig(
         isDark: isDark,
         conversationIsStreaming: isStreaming,
         streamingMsgId: streamingMsgId,
         messageId: message.id,
         streamingText: streamingFullReply,
+        streamingFenceInfoCache: streamingFenceInfoCache,
       );
       return Padding(
         padding: const EdgeInsets.all(12),
