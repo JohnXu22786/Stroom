@@ -308,6 +308,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
   int _currentMatchIndex = 0;
   final TextEditingController _searchTextController = TextEditingController();
   final Map<String, GlobalKey> _messageKeys = {};
+  final ValueNotifier<int> _streamingBubbleRevision = ValueNotifier(0);
 
   /// In-flight search navigation (may be loading older paginated messages).
   /// Serializes rapid up/down taps so a newer tap waits for the previous
@@ -429,6 +430,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
     _chatScrollController.removeListener(_onChatScroll);
     _chatScrollController.dispose();
     _overlayMetricsTick.dispose();
+    _streamingBubbleRevision.dispose();
     super.dispose();
   }
 
@@ -493,8 +495,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
     final activeId = ref.watch(activeConversationIdProvider);
     final streamingConvs = ref.watch(streamingConversationsProvider);
     final isStreaming = activeId != null && streamingConvs.contains(activeId);
-    final streamingFullReply =
-        activeId != null ? ref.watch(streamingFullReplyProvider(activeId)) : '';
     final streamingMsgId =
         activeId != null ? ref.watch(streamingMsgIdProvider(activeId)) : null;
 
@@ -585,7 +585,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
                               _buildChatWidget(
                                 isDark: isDark,
                                 isStreaming: isStreaming,
-                                streamingFullReply: streamingFullReply,
                                 streamingMsgId: streamingMsgId,
                                 activeId: activeId,
                                 controller: controller,

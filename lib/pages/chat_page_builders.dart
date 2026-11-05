@@ -5,7 +5,6 @@ extension _ChatPageBuildersExt on _ChatPageState {
   Widget _buildChatWidget({
     required bool isDark,
     required bool isStreaming,
-    required String streamingFullReply,
     required String? streamingMsgId,
     required String? activeId,
     required InMemoryChatController controller,
@@ -72,7 +71,7 @@ extension _ChatPageBuildersExt on _ChatPageState {
             textMessageBuilder: (context, message, index,
                     {required bool isSentByMe,
                     MessageGroupStatus? groupStatus}) =>
-                _buildTextMessage(
+                _buildStreamingMessage(
               context,
               message,
               index,
@@ -81,24 +80,84 @@ extension _ChatPageBuildersExt on _ChatPageState {
               isDark: isDark,
               isStreaming: isStreaming,
               activeId: activeId,
+              controller: controller,
             ),
             textStreamMessageBuilder: (context, message, index,
                     {required bool isSentByMe,
                     MessageGroupStatus? groupStatus}) =>
-                _buildTextStreamMessage(
+                _buildStreamingMessage(
               context,
               message,
               index,
               isSentByMe: isSentByMe,
               groupStatus: groupStatus,
-              isStreaming: isStreaming,
-              streamingFullReply: streamingFullReply,
-              streamingMsgId: streamingMsgId,
               isDark: isDark,
+              isStreaming: isStreaming,
+              activeId: activeId,
+              controller: controller,
             ),
           ),
         ),
       ),
+    );
+  }
+
+  /// Keeps live updates inside the active message's subtree. ChatAnimatedList
+  /// updates its indexed message data without rebuilding that item.
+  Widget _buildStreamingMessage(
+    BuildContext context,
+    Message initialMessage,
+    int index, {
+    required bool isSentByMe,
+    MessageGroupStatus? groupStatus,
+    required bool isDark,
+    required bool isStreaming,
+    required String? activeId,
+    required InMemoryChatController controller,
+  }) {
+    Widget buildMessage(Message message) {
+      if (message is TextMessage) {
+        return _buildTextMessage(
+          context,
+          message,
+          index,
+          isSentByMe: isSentByMe,
+          groupStatus: groupStatus,
+          isDark: isDark,
+          isStreaming: isStreaming,
+          activeId: activeId,
+        );
+      }
+      if (message is TextStreamMessage) {
+        return _buildTextStreamMessage(
+          context,
+          message,
+          index,
+          isSentByMe: isSentByMe,
+          groupStatus: groupStatus,
+          isStreaming: isStreaming,
+          activeId: activeId,
+          streamingMsgId: _streamingMsgId,
+          isDark: isDark,
+        );
+      }
+      return const SizedBox.shrink();
+    }
+
+    // The provider-backed ID can lag the local ID when the placeholder is
+    // inserted, so use page state to attach the notifier on its first build.
+    if (initialMessage.id != _streamingMsgId) {
+      return buildMessage(initialMessage);
+    }
+    return ValueListenableBuilder<int>(
+      valueListenable: _streamingBubbleRevision,
+      builder: (context, _, __) {
+        final latestMessage = controller.messages
+                .where((message) => message.id == initialMessage.id)
+                .firstOrNull ??
+            initialMessage;
+        return buildMessage(latestMessage);
+      },
     );
   }
 
@@ -304,15 +363,17 @@ extension _ChatPageBuildersExt on _ChatPageState {
     required bool isSentByMe,
     MessageGroupStatus? groupStatus,
     required bool isStreaming,
-    required String streamingFullReply,
+    required String? activeId,
     required String? streamingMsgId,
     required bool isDark,
   }) {
     // If the message has accumulated content (e.g.,
     // after page restoration from background streaming),
     // render it as regular text instead of a spinner.
-    // Uses captured [streamingFullReply] from build()
-    // which is updated reactively via ref.watch.
+    // Read the latest reply when this message item is rebuilt. The active
+    // bubble's notifier triggers that rebuild without rebuilding the page.
+    final streamingFullReply =
+        activeId == null ? '' : ref.read(streamingFullReplyProvider(activeId));
     if (streamingFullReply.isNotEmpty && message.id == streamingMsgId) {
       // This is the message currently being generated, so the streaming
       // markdown config applies (mermaid blocks show "正在生成..." while
