@@ -1424,6 +1424,30 @@ bool _legacyOcrHasDocumentationCredentialEchoAcrossLineBreak(
   ).hasMatch(text);
 }
 
+bool _legacyOcrHasPasswordCredentialEchoAcrossLineBreak(
+  String text,
+  Iterable<String> credentialValues,
+) {
+  for (final value in credentialValues) {
+    final ellipsis = RegExp(r'\.\.\.|…').firstMatch(value);
+    if (ellipsis == null || value.substring(ellipsis.end).isNotEmpty) continue;
+    final prefix =
+        value.substring(0, ellipsis.start).trim().split(RegExp(r'\s+')).last;
+    if (prefix.toLowerCase() != 'password') continue;
+    if (RegExp(
+      '(^|[^a-zA-Z0-9])${RegExp.escape(prefix)}'
+      r'[\r\n]+[ \t]*'
+      r'(?=(?=(?:[0-9]*[a-zA-Z]){4})'
+      r'(?=(?:[a-zA-Z]*[0-9]){4})'
+      r'[a-zA-Z0-9]{10,}(?=$|[^a-zA-Z0-9]))',
+      caseSensitive: false,
+    ).hasMatch(text)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 const _legacyOcrNaturalCarefulInstructionActions = {
   'add',
   'analyze',
@@ -3379,7 +3403,29 @@ Map<String, dynamic>? _retryDataFromTaskMap(
                 credentialValues,
               )) {
             final safeLegacyInstruction = _legacyOcrInstructionContent(request);
-            if (safeLegacyInstruction == null) {
+            final redactedPasswordEcho =
+                _legacyOcrHasPasswordCredentialEchoAcrossLineBreak(
+              instructionContent,
+              credentialValues,
+            )
+                    ? _legacyOcrRedactMaskedCredentialEchoes(
+                        instructionContent,
+                        credentialValues,
+                      )
+                    : null;
+            if (safeLegacyInstruction == null &&
+                redactedPasswordEcho != null &&
+                redactedPasswordEcho != instructionContent &&
+                !_legacyOcrTextContainsCredential(
+                  redactedPasswordEcho,
+                  credentialValues,
+                ) &&
+                !_legacyOcrTextContainsMaskedCredential(
+                  redactedPasswordEcho,
+                  credentialValues,
+                )) {
+              retryData['instructionContent'] = redactedPasswordEcho;
+            } else if (safeLegacyInstruction == null) {
               retryData.remove('instructionContent');
             } else {
               retryData['instructionContent'] = safeLegacyInstruction;
