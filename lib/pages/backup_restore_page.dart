@@ -68,12 +68,11 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
 
   Future<void> _onExport() async {
     if (_isExporting) return;
-    final strings = _strings;
     if (!_hasSelection) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(strings.backupRestoreSelectBackupCategory),
+            content: Text(_strings.backupRestoreSelectBackupCategory),
             backgroundColor: Colors.orange,
           ),
         );
@@ -85,9 +84,6 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
     setState(() => _isExporting = true);
     try {
       // 显示不可关闭的进度弹窗
-      final progressNotifier = ValueNotifier<String>(
-        strings.backupRestorePreparingData,
-      );
       final progressValue = ValueNotifier<double?>(null);
 
       showDialog<void>(
@@ -96,7 +92,9 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
         builder: (ctx) => PopScope(
           canPop: false,
           child: AlertDialog(
-            title: Text(strings.backupRestoreExportingBackup),
+            title: Text(
+              AppLocalizations.of(ctx)!.backupRestoreExportingBackup,
+            ),
             content: Row(
               children: [
                 ValueListenableBuilder<double?>(
@@ -121,9 +119,14 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                 ),
                 const SizedBox(width: 16),
                 Expanded(
-                  child: ValueListenableBuilder<String>(
-                    valueListenable: progressNotifier,
-                    builder: (_, msg, __) => Text(msg),
+                  child: ValueListenableBuilder<double?>(
+                    valueListenable: progressValue,
+                    builder: (progressContext, progress, __) => Text(
+                      _exportProgressLabel(
+                        AppLocalizations.of(progressContext)!,
+                        progress,
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -139,27 +142,6 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
         context,
         onProgress: (progress) {
           progressValue.value = progress;
-          if (progress < 0.05) {
-            progressNotifier.value = strings.backupRestoreCollectingDatabase;
-          } else if (progress < 0.15) {
-            progressNotifier.value = strings.backupRestoreProcessingSettings;
-          } else if (progress < 0.35) {
-            progressNotifier.value = strings.backupRestoreAddingTasks;
-          } else if (progress < 0.5) {
-            progressNotifier.value = strings.backupRestoreAddingPictures;
-          } else if (progress < 0.65) {
-            progressNotifier.value = strings.backupRestoreAddingAudio;
-          } else if (progress < 0.75) {
-            progressNotifier.value = strings.backupRestoreAddingVideo;
-          } else if (progress < 0.8) {
-            progressNotifier.value = strings.backupRestoreAddingText;
-          } else if (progress < 0.85) {
-            progressNotifier.value = strings.backupRestoreAddingChat;
-          } else if (progress < 1.0) {
-            progressNotifier.value = strings.backupRestoreCompressing;
-          } else {
-            progressNotifier.value = strings.backupRestoreCompleted;
-          }
         },
         selection: selection,
       );
@@ -169,6 +151,20 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
       }
       if (mounted) setState(() => _isExporting = false);
     }
+  }
+
+  String _exportProgressLabel(AppLocalizations strings, double? progress) {
+    if (progress == null) return strings.backupRestorePreparingData;
+    if (progress < 0.05) return strings.backupRestoreCollectingDatabase;
+    if (progress < 0.15) return strings.backupRestoreProcessingSettings;
+    if (progress < 0.35) return strings.backupRestoreAddingTasks;
+    if (progress < 0.5) return strings.backupRestoreAddingPictures;
+    if (progress < 0.65) return strings.backupRestoreAddingAudio;
+    if (progress < 0.75) return strings.backupRestoreAddingVideo;
+    if (progress < 0.8) return strings.backupRestoreAddingText;
+    if (progress < 0.85) return strings.backupRestoreAddingChat;
+    if (progress < 1.0) return strings.backupRestoreCompressing;
+    return strings.backupRestoreCompleted;
   }
 
   Future<void> _onImport() async {
