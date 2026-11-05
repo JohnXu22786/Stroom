@@ -1449,6 +1449,10 @@ bool _isStreamingMermaidTailWithInfo(
   if (fenceInfo.isCached) {
     final tailSource = fenceInfo.tailSource;
     if (tailSource != null) {
+      if (mermaidFenceIndex != null &&
+          mermaidFenceIndex != fenceInfo.mermaidFenceIndex) {
+        return false;
+      }
       final normalizedTailSource = fenceInfo.normalizedTailSource;
       final hasMermaidFenceIndex = mermaidFenceIndex != null &&
           mermaidFenceIndex == fenceInfo.mermaidFenceIndex;
