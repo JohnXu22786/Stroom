@@ -328,7 +328,9 @@ extension _ChatPageMessagesExt on _ChatPageState {
       // the next save.
       _resolveEnabledToolsForActiveConversation();
       if (messages.isEmpty) {
-        if (conv == null && _isInitialChatLoadPending) return;
+        if (conv == null && _isInitialChatLoadPending && convs.isEmpty) {
+          return;
+        }
         _clearConversationView();
         if (_isInitialChatLoadPending && isCurrentLoad()) {
           setState(() => _isInitialChatLoadPending = false);
