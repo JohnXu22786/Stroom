@@ -47,7 +47,6 @@ Future<Uint8List> _createEnginePng() async {
   return byteData!.buffer.asUint8List();
 }
 
-
 Widget _localizedMaterialApp({required Widget home}) => MaterialApp(
   locale: const Locale('zh', 'CN'),
   localizationsDelegates: const [
@@ -69,8 +68,7 @@ void main() {
   });
 
   group('GalleryViewerPage - loading with real image files', () {
-    testWidgets(
-        'renders pages from disk and preloads/swipes to the next '
+    testWidgets('renders pages from disk and preloads/swipes to the next '
         'page without crashing', (tester) async {
       // 预加载/字节缓存/占位符路径需要真实的文件存在（无文件时只会
       // 走到错误占位，覆盖不到新逻辑）
@@ -93,12 +91,11 @@ void main() {
         format: 'png',
       );
 
-      await tester.pumpWidget(_localizedMaterialApp(
-        home: GalleryViewerPage(
-          images: [recordA, recordB],
-          initialIndex: 0,
+      await tester.pumpWidget(
+        _localizedMaterialApp(
+          home: GalleryViewerPage(images: [recordA, recordB], initialIndex: 0),
         ),
-      ));
+      );
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
 
@@ -117,8 +114,7 @@ void main() {
       expect(find.text('second.png'), findsOneWidget);
     });
 
-    testWidgets(
-        'shows a loading spinner, not the cached thumbnail, while the '
+    testWidgets('shows a loading spinner, not the cached thumbnail, while the '
         'full image is still loading', (tester) async {
       final png = await tester.runAsync(_createEnginePng);
       final record = _makeRecord(
@@ -138,9 +134,11 @@ void main() {
       final thumb = await ImageThumbnailLoader.loadThumbnail(record);
       expect(thumb, isNotNull);
 
-      await tester.pumpWidget(_localizedMaterialApp(
-        home: GalleryViewerPage(images: [record], initialIndex: 0),
-      ));
+      await tester.pumpWidget(
+        _localizedMaterialApp(
+          home: GalleryViewerPage(images: [record], initialIndex: 0),
+        ),
+      );
 
       // 全图尚未加载完成：必须显示转圈动画，而不是缩略图占位。
       // （缩略图占位是 Image.memory —— 回归此行为就等于把
@@ -170,14 +168,18 @@ void main() {
     testWidgets('dialog shows correct options for quick edit save', (
       tester,
     ) async {
-      await tester.pumpWidget(_localizedMaterialApp(
-        home: Builder(builder: (context) {
-          return ElevatedButton(
-            onPressed: () => showImageSaveDialog(context),
-            child: const Text('保存'),
-          );
-        }),
-      ));
+      await tester.pumpWidget(
+        _localizedMaterialApp(
+          home: Builder(
+            builder: (context) {
+              return ElevatedButton(
+                onPressed: () => showImageSaveDialog(context),
+                child: const Text('保存'),
+              );
+            },
+          ),
+        ),
+      );
 
       await tester.tap(find.text('保存'));
       await tester.pumpAndSettle();
@@ -192,16 +194,20 @@ void main() {
     testWidgets('overwrite returns SaveAction.overwrite', (tester) async {
       SaveAction? result;
 
-      await tester.pumpWidget(_localizedMaterialApp(
-        home: Builder(builder: (context) {
-          return ElevatedButton(
-            onPressed: () async {
-              result = await showImageSaveDialog(context);
+      await tester.pumpWidget(
+        _localizedMaterialApp(
+          home: Builder(
+            builder: (context) {
+              return ElevatedButton(
+                onPressed: () async {
+                  result = await showImageSaveDialog(context);
+                },
+                child: const Text('保存'),
+              );
             },
-            child: const Text('保存'),
-          );
-        }),
-      ));
+          ),
+        ),
+      );
 
       await tester.tap(find.text('保存'));
       await tester.pumpAndSettle();
@@ -215,16 +221,20 @@ void main() {
     testWidgets('save-as returns SaveAction.saveAs', (tester) async {
       SaveAction? result;
 
-      await tester.pumpWidget(_localizedMaterialApp(
-        home: Builder(builder: (context) {
-          return ElevatedButton(
-            onPressed: () async {
-              result = await showImageSaveDialog(context);
+      await tester.pumpWidget(
+        _localizedMaterialApp(
+          home: Builder(
+            builder: (context) {
+              return ElevatedButton(
+                onPressed: () async {
+                  result = await showImageSaveDialog(context);
+                },
+                child: const Text('保存'),
+              );
             },
-            child: const Text('保存'),
-          );
-        }),
-      ));
+          ),
+        ),
+      );
 
       await tester.tap(find.text('保存'));
       await tester.pumpAndSettle();
@@ -238,16 +248,20 @@ void main() {
     testWidgets('cancel returns SaveAction.cancel', (tester) async {
       SaveAction? result;
 
-      await tester.pumpWidget(_localizedMaterialApp(
-        home: Builder(builder: (context) {
-          return ElevatedButton(
-            onPressed: () async {
-              result = await showImageSaveDialog(context);
+      await tester.pumpWidget(
+        _localizedMaterialApp(
+          home: Builder(
+            builder: (context) {
+              return ElevatedButton(
+                onPressed: () async {
+                  result = await showImageSaveDialog(context);
+                },
+                child: const Text('保存'),
+              );
             },
-            child: const Text('保存'),
-          );
-        }),
-      ));
+          ),
+        ),
+      );
 
       await tester.tap(find.text('保存'));
       await tester.pumpAndSettle();
