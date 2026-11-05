@@ -120,12 +120,9 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
         // 用显式错误标志而非文本前缀判断：模型正常回复以"错误:"开头
         // 时不应被误标为错误消息。
         final isError = hadStreamError || wasCancelled;
-        final blocks = legacyToBlocks(
-          reasoningSections: state.reasoningSections,
-          textChunks: state.textChunks,
-          toolCalls: state.accumulatedToolCalls,
-          toolCallRoundStarts: state.toolCallRoundStarts,
-        );
+        // Text, reasoning and tool blocks are derived from canonical fields
+        // when displayed. Keep only errors, which have no equivalent there.
+        final blocks = <MessageBlock>[];
         if (wasCancelled) {
           blocks.add(const ErrorBlock(message: '用户中断了输出'));
         } else if (hadStreamError &&
@@ -135,17 +132,11 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
             message: formatChatErrorMessage(streamError),
           ));
         }
-        // reasoningContent 用全量累计（sections 拼接）：ReasoningSectionEndEvent
-        // 会重置 reasoningBuffer，后者只含最后一轮——OpenAI 协议历史重建
-        // 回放 reasoning_content 时，中间轮推理会丢失（深度推理模型
-        // 上下文质量下降）。sections 是权威存储，二者不同源。
-        final fullReasoning = state.reasoningSections.join('\n');
         final msg = ChatMessage(
           role: 'assistant',
           content: state.fullReply,
           id: state.streamingMsgId ?? '',
           isError: isError,
-          reasoningContent: fullReasoning.isNotEmpty ? fullReasoning : null,
           rawRequest: rawRequestCapture,
           rawResponse: rawResponseCapture,
           toolCalls: state.accumulatedToolCalls.isNotEmpty
@@ -159,7 +150,7 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
               : null,
           toolCallRoundStarts: state.toolCallRoundStarts.isNotEmpty
               ? List<int>.from(state.toolCallRoundStarts)
-              : null,
+              : (state.accumulatedToolCalls.isNotEmpty ? [0] : null),
           blocks: blocks,
         );
         state.history.add(msg);

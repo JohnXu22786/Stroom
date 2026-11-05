@@ -38,14 +38,10 @@ extension _ChatStreamManagerPersistExt on ChatStreamManager {
       )) {
         final exists = partialHistory.any((m) => m.id == s.streamingMsgId);
         if (!exists) {
-          // reasoningContent 用全量累计（sections 拼接），与 finalize
-          // 的消息构造保持一致（reasoningBuffer 只含最后一轮）。
-          final fullReasoning = s.reasoningSections.join('\n');
           partialHistory.add(ChatMessage(
             role: 'assistant',
             content: s.fullReply,
             id: s.streamingMsgId ?? '',
-            reasoningContent: fullReasoning.isNotEmpty ? fullReasoning : null,
             toolCalls: s.accumulatedToolCalls.isNotEmpty
                 ? List<ToolCallData>.from(s.accumulatedToolCalls)
                 : null,
@@ -57,7 +53,7 @@ extension _ChatStreamManagerPersistExt on ChatStreamManager {
                 : null,
             toolCallRoundStarts: s.toolCallRoundStarts.isNotEmpty
                 ? List<int>.from(s.toolCallRoundStarts)
-                : null,
+                : (s.accumulatedToolCalls.isNotEmpty ? [0] : null),
           ));
         }
       }

@@ -289,35 +289,91 @@ class ChatMessage {
     return null;
   }
 
-  Map<String, dynamic> toMap() => {
-        'id': id,
-        'role': role,
+  static bool _matchesJoinedSections(
+    List<String>? sections,
+    String value, {
+    String separator = '',
+    bool skipEmptySections = false,
+  }) {
+    if (sections == null) return false;
+    var expectedLength = 0;
+    var sectionCount = 0;
+    for (final section in sections) {
+      if (skipEmptySections && section.isEmpty) continue;
+      expectedLength += section.length;
+      sectionCount++;
+    }
+    if (sectionCount == 0) return false;
+    if (sectionCount > 1) {
+      expectedLength += separator.length * (sectionCount - 1);
+    }
+    if (expectedLength != value.length) return false;
+
+    var offset = 0;
+    var emittedSections = 0;
+    for (final section in sections) {
+      if (skipEmptySections && section.isEmpty) continue;
+      if (emittedSections > 0) {
+        if (!value.startsWith(separator, offset)) return false;
+        offset += separator.length;
+      }
+      if (!value.startsWith(section, offset)) return false;
+      offset += section.length;
+      emittedSections++;
+    }
+    return true;
+  }
+
+  Map<String, dynamic> toMap() {
+    final hasCanonicalSections = (toolCallRoundStarts?.isNotEmpty ?? false) ||
+        ((toolCalls == null || toolCalls!.isEmpty) &&
+            !(blocks?.any((block) => block is ToolCallBlock) ?? false) &&
+            ((reasoningSections?.isNotEmpty ?? false) ||
+                (textSections?.isNotEmpty ?? false)));
+    final errorBlocks = hasCanonicalSections
+        ? blocks?.whereType<ErrorBlock>().toList()
+        : blocks;
+    return {
+      'id': id,
+      'role': role,
+      if (!_matchesJoinedSections(
+        textSections,
+        content,
+        skipEmptySections:
+            toolCallRoundStarts == null || toolCallRoundStarts!.isEmpty,
+      ))
         'content': content,
-        'createdAt': createdAt.toIso8601String(),
-        'attachments': attachments.map((a) => a.toMap()).toList(),
-        if (isStreaming) 'isStreaming': true,
-        if (isError) 'isError': true,
-        if (reasoningContent != null) 'reasoningContent': reasoningContent,
-        // Sanitize raw maps to ensure JSON-serializable output.
-        // This prevents non-serializable types (Dio ResponseBody, DateTime,
-        // custom objects, etc.) from silently breaking conversation persistence.
-        if (rawRequest != null) 'rawRequest': _sanitizeRawMap(rawRequest),
-        if (rawResponse != null) 'rawResponse': _sanitizeRawMap(rawResponse),
-        // Persist tool calls if present and non-empty.
-        if (toolCalls != null && toolCalls!.isNotEmpty)
-          'toolCalls': toolCalls!.map((tc) => tc.toMap()).toList(),
-        // Persist reasoning sections if present and non-empty.
-        if (reasoningSections != null && reasoningSections!.isNotEmpty)
-          'reasoningSections': reasoningSections!.toList(),
-        // Persist per-round text sections if present and non-empty.
-        if (textSections != null && textSections!.isNotEmpty)
-          'textSections': textSections!.toList(),
-        // Persist round boundary indices for multi-tool grouping.
-        if (toolCallRoundStarts != null && toolCallRoundStarts!.isNotEmpty)
-          'toolCallRoundStarts': toolCallRoundStarts!.toList(),
-        if (blocks != null && blocks!.isNotEmpty)
-          'blocks': blocks!.map((b) => b.toMap()).toList(),
-      };
+      'createdAt': createdAt.toIso8601String(),
+      'attachments': attachments.map((a) => a.toMap()).toList(),
+      if (isStreaming) 'isStreaming': true,
+      if (isError) 'isError': true,
+      if (reasoningContent != null &&
+          !_matchesJoinedSections(reasoningSections, reasoningContent,
+              separator: '\n',
+              skipEmptySections: toolCallRoundStarts == null ||
+                  toolCallRoundStarts!.isEmpty))
+        'reasoningContent': reasoningContent,
+      // Sanitize raw maps to ensure JSON-serializable output.
+      // This prevents non-serializable types (Dio ResponseBody, DateTime,
+      // custom objects, etc.) from silently breaking conversation persistence.
+      if (rawRequest != null) 'rawRequest': _sanitizeRawMap(rawRequest),
+      if (rawResponse != null) 'rawResponse': _sanitizeRawMap(rawResponse),
+      // Persist tool calls if present and non-empty.
+      if (toolCalls != null && toolCalls!.isNotEmpty)
+        'toolCalls': toolCalls!.map((tc) => tc.toMap()).toList(),
+      // Persist reasoning sections if present and non-empty.
+      if (reasoningSections != null && reasoningSections!.isNotEmpty)
+        'reasoningSections': reasoningSections!.toList(),
+      // Persist per-round text sections if present and non-empty.
+      if (textSections != null && textSections!.isNotEmpty)
+        'textSections': textSections!.toList(),
+      // Persist round boundary indices for multi-tool grouping.
+      if (toolCallRoundStarts != null && toolCallRoundStarts!.isNotEmpty)
+        'toolCallRoundStarts': toolCallRoundStarts!.toList(),
+      if (errorBlocks != null && errorBlocks.isNotEmpty)
+        'blocks': errorBlocks.map((b) => b.toMap()).toList(),
+    };
+  }
 
   factory ChatMessage.fromMap(Map<String, dynamic> map) {
     final roleRaw = map['role'];
@@ -414,7 +470,9 @@ class ChatMessage {
       role: roleStr,
       // 防御：content 非 String（损坏数据）时回退空串，
       // 不抛 TypeError 丢弃整条消息（与其他字段防御风格一致）
-      content: map['content'] is String ? map['content'] as String : '',
+      content: map['content'] is String
+          ? map['content'] as String
+          : (textSections?.join() ?? ''),
       createdAt: createdAt,
       attachments: attachments,
       isStreaming: map['isStreaming'] is bool ? map['isStreaming'] : false,
@@ -423,7 +481,7 @@ class ChatMessage {
       // discard the entire message while recovering the rest of the history.
       reasoningContent: map['reasoningContent'] is String
           ? map['reasoningContent'] as String
-          : null,
+          : (reasoningSections?.join('\n')),
       // Use safe casting so non-Map rawRequest/rawResponse values don't throw
       // a TypeError, which would skip the ENTIRE message in Conversation.fromMap.
       rawRequest: safeCastToMap(map['rawRequest']),

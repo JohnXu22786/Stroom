@@ -377,10 +377,12 @@ extension _ChatPageMessagesExt on _ChatPageState {
           toolCalls: msg.toolCalls ?? [],
           toolCallRoundStarts: msg.toolCallRoundStarts ?? [],
         );
-        if (msg.toolCallRoundStarts != null) {
-          rebuiltBlocks.addAll(msg.blocks?.whereType<ErrorBlock>() ?? const []);
-        }
-        final blocks = (msg.toolCallRoundStarts != null)
+        rebuiltBlocks.addAll(msg.blocks?.whereType<ErrorBlock>() ?? const []);
+        final hasCanonicalFields = msg.toolCallRoundStarts != null ||
+            ((msg.toolCalls == null || msg.toolCalls!.isEmpty) &&
+                !(msg.blocks?.any((block) => block is ToolCallBlock) ?? false) &&
+                (msg.reasoningSections != null || msg.textSections != null));
+        final blocks = hasCanonicalFields
             ? rebuiltBlocks
             : (msg.blocks ?? rebuiltBlocks);
         final segments = blocksToSegments(blocks);
