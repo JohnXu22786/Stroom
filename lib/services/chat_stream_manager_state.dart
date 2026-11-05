@@ -100,7 +100,7 @@ class _ConversationStreamState {
     _closedLinkLabelAtLineStart = false;
     _linkScannerAtLineStart = true;
     _linkScannerLineSpaces = 0;
-    _lineStartDigits.clear();
+    _lineStartHasDigits = false;
     _atLineStart = true;
     _pendingOrderedListMarker = false;
     _scanOrderedListMarkers(value);
@@ -145,7 +145,7 @@ class _ConversationStreamState {
   final StringBuffer _pendingTextDelta = StringBuffer();
   bool _currentChunkHasMarkdownSyntax = false;
   int _textUpdateSequence = 0;
-  final StringBuffer _lineStartDigits = StringBuffer();
+  bool _lineStartHasDigits = false;
   bool _atLineStart = true;
   bool _pendingOrderedListMarker = false;
   String _markdownSyntaxCarry = '';
@@ -155,7 +155,7 @@ class _ConversationStreamState {
   int? _inlineDelimiterLeftCodeUnit;
   int? _lastScannedCodeUnit;
   int _consecutiveBackslashes = 0;
-  final Map<int, List<int>> _openInlineDelimiters = {};
+  final Map<int, int> _openInlineDelimiters = {};
   bool _openLinkLabel = false;
   bool _closedLinkLabel = false;
   bool _openLinkLabelAtLineStart = false;
@@ -289,7 +289,9 @@ class _ConversationStreamState {
     final leftIsWord = _isWordCodeUnit(_inlineDelimiterLeftCodeUnit);
     final underscoreInsideWord = delimiter == 95 && leftIsWord;
     if (opensDelimiter && !nextIsWhitespace && !underscoreInsideWord) {
-      _openInlineDelimiters.putIfAbsent(delimiter, () => []).add(length);
+      // Only the latest opener for each delimiter can be closed next. Once
+      // a match is found, the section is routed through Markdown.
+      _openInlineDelimiters[delimiter] = length;
     }
     _pendingInlineDelimiter = null;
     _pendingInlineDelimiterLength = 0;
@@ -311,15 +313,11 @@ class _ConversationStreamState {
     final left = _inlineDelimiterLeftCodeUnit;
     final leftIsWhitespace =
         left == 9 || left == 10 || left == 13 || left == 32;
-    final openRuns = _openInlineDelimiters[delimiter];
     if (leftIsWhitespace ||
-        openRuns == null ||
-        openRuns.isEmpty ||
-        openRuns.last != _pendingInlineDelimiterLength) {
+        _openInlineDelimiters[delimiter] != _pendingInlineDelimiterLength) {
       return false;
     }
-    openRuns.removeLast();
-    if (openRuns.isEmpty) _openInlineDelimiters.remove(delimiter);
+    _openInlineDelimiters.remove(delimiter);
     _consumedInlineDelimiterWasMarkdown = true;
     _pendingInlineDelimiter = null;
     _pendingInlineDelimiterLength = 0;
@@ -337,7 +335,7 @@ class _ConversationStreamState {
     for (final codeUnit in text.codeUnits) {
       if (codeUnit == 10) {
         _atLineStart = true;
-        _lineStartDigits.clear();
+        _lineStartHasDigits = false;
         _pendingOrderedListMarker = false;
         continue;
       }
@@ -350,12 +348,12 @@ class _ConversationStreamState {
         continue;
       }
       if (!_atLineStart) continue;
-      if (codeUnit == 32 && _lineStartDigits.isEmpty) continue;
+      if (codeUnit == 32 && !_lineStartHasDigits) continue;
       if (codeUnit >= 48 && codeUnit <= 57) {
-        _lineStartDigits.writeCharCode(codeUnit);
+        _lineStartHasDigits = true;
         continue;
       }
-      if ((codeUnit == 46 || codeUnit == 41) && _lineStartDigits.isNotEmpty) {
+      if ((codeUnit == 46 || codeUnit == 41) && _lineStartHasDigits) {
         _pendingOrderedListMarker = true;
         continue;
       }
@@ -368,7 +366,7 @@ class _ConversationStreamState {
     _currentTextChunk = StringBuffer();
     _pendingTextDelta.clear();
     _currentChunkHasMarkdownSyntax = false;
-    _lineStartDigits.clear();
+    _lineStartHasDigits = false;
     _atLineStart = true;
     _pendingOrderedListMarker = false;
     _markdownSyntaxCarry = '';
