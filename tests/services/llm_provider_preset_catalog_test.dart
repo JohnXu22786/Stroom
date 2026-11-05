@@ -78,7 +78,8 @@ void main() {
     );
   });
 
-  test('g4f.space presets use source URLs, Bearer keys, and model fallbacks', () {
+  test('g4f.space presets use source URLs, Bearer keys, and model fallbacks',
+      () {
     const expected = {
       'g4f-gemini': (
         'https://g4f.space/api/gemini/v1/chat/completions',
@@ -93,7 +94,11 @@ void main() {
       'g4f-nvidia': (
         'https://g4f.space/api/nvidia/v1/chat/completions',
         'https://g4f.space/api/nvidia/v1/models',
-        ['nvidia/nemotron-3-nano-30b-a3b', 'z-ai/glm-5.2', 'minimaxai/minimax-m2.7'],
+        [
+          'nvidia/nemotron-3-nano-30b-a3b',
+          'z-ai/glm-5.2',
+          'minimaxai/minimax-m2.7'
+        ],
       ),
       'g4f-ollama': (
         'https://g4f.space/api/ollama/v1/chat/completions',
@@ -4475,7 +4480,11 @@ void main() {
       ..httpClientAdapter = _FunctionalAdapter((options) async {
         requests.add(options);
         return ResponseBody.fromString(
-          jsonEncode({'data': [{'id': 'discovered-${requests.length}'}]}),
+          jsonEncode({
+            'data': [
+              {'id': 'discovered-${requests.length}'}
+            ]
+          }),
           200,
           headers: const {
             Headers.contentTypeHeader: ['application/json'],
