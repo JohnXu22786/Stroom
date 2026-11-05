@@ -5684,7 +5684,7 @@ void main() {
     test(
       'legacy OCR instruction migration preserves a Calculate prompt after redacting an echoed Authorization credential',
       () {
-        const apiKey = 'calculate-receipt-total-key-7391';
+        const apiKey = 'opaque-user-calculate-receipt-total-7391';
         const instruction = 'Calculate the receipt total using $apiKey';
         final task = BackgroundTask.fromMap({
           'id': 'legacy-ocr-calculate-instruction-auth-echo',
@@ -5694,7 +5694,7 @@ void main() {
           'createdAt': DateTime(2025, 1, 1).toIso8601String(),
           'rawRequest': {
             'url': 'https://api.example.com/v1/chat/completions',
-            'headers': {'Authorization': 'Bearer $apiKey'},
+            'headers': {'Authorization': 'Bearer opaque-user-…'},
             'body': {
               'model': 'vision-model',
               'messages': [
@@ -5725,7 +5725,7 @@ void main() {
     test(
       'legacy OCR instruction migration drops a bare Calculate action after credential redaction',
       () {
-        const apiKey = 'calculate-bare-action-key-7391';
+        const apiKey = 'opaque-user-calculate-bare-action-7391';
         final task = BackgroundTask.fromMap({
           'id': 'legacy-ocr-calculate-bare-action-auth-echo',
           'type': 'ocr',
@@ -5734,7 +5734,7 @@ void main() {
           'createdAt': DateTime(2025, 1, 1).toIso8601String(),
           'rawRequest': {
             'url': 'https://api.example.com/v1/chat/completions',
-            'headers': {'Authorization': 'Bearer $apiKey'},
+            'headers': {'Authorization': 'Bearer opaque-user-…'},
             'body': {
               'model': 'vision-model',
               'messages': [
@@ -5752,7 +5752,7 @@ void main() {
 
         expect(
           OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
-          isNull,
+          isEmpty,
         );
         expect(persisted, isNot(contains(apiKey)));
       },
