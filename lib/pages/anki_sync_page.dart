@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 
 import '../anki/database/anki_database.dart';
 import '../anki/providers/anki_provider.dart';
@@ -89,7 +90,9 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
       setState(() {
         _hostKey = key;
         _remoteMeta = null;
-        _status = key == null ? '' : '已恢复安全保存的登录状态';
+        _status = key == null
+            ? ''
+            : AppLocalizations.of(context)!.ankiSyncStatusRestored;
         _loadedIdentity = config.secureStorageKey;
         _restoring = false;
       });
@@ -104,7 +107,8 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
       }
       setState(() {
         _hostKey = null;
-        _status = '无法读取已保存的登录状态，请重新登录';
+        _status =
+            AppLocalizations.of(context)!.ankiSyncStatusReadSavedSessionFailed;
         _loadedIdentity = config.secureStorageKey;
         _restoring = false;
       });
@@ -144,8 +148,8 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
         (parsedUrl.scheme == 'http' && !_isLoopbackHost(parsedUrl.host)) ||
         parsedUrl.userInfo.isNotEmpty ||
         parsedUrl.hasQuery) {
-      throw const AnkiSyncException(
-        '服务器地址须为 HTTPS URL；仅本机 loopback 地址可使用 HTTP，且不能包含用户名、密码或 query 参数',
+      throw AnkiSyncException(
+        AppLocalizations.of(context)!.ankiSyncInvalidServerUrl,
       );
     }
     final oldIdentity = config.secureStorageKey;
@@ -175,14 +179,17 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
     try {
       await _saveSelfHostedSettings();
     } catch (error) {
-      if (mounted) setState(() => _status = '设置未保存：${_safeMessage(error)}');
+      if (mounted)
+        setState(() => _status = AppLocalizations.of(context)!
+            .ankiSyncStatusSettingsNotSaved(_safeMessage(context, error)));
       return null;
     }
     if (!mounted) return null;
     final updated = ref.read(ankiSyncProvider);
     if (_hostKey == null || _loadedIdentity != updated.secureStorageKey) {
       if (mounted) {
-        setState(() => _status = '服务器地址已更改，请重新登录后继续');
+        setState(() => _status =
+            AppLocalizations.of(context)!.ankiSyncStatusServerAddressChanged);
       }
       return null;
     }
@@ -196,7 +203,7 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
         if (!mounted) return;
         config = ref.read(ankiSyncProvider);
       } catch (error) {
-        if (mounted) setState(() => _status = _safeMessage(error));
+        if (mounted) setState(() => _status = _safeMessage(context, error));
         return;
       }
     }
@@ -205,7 +212,7 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
     if (!mounted || credentials == null) return;
     setState(() {
       _busy = true;
-      _status = '正在验证登录…';
+      _status = AppLocalizations.of(context)!.ankiSyncStatusVerifyingLogin;
       _hostKey = null;
       _remoteMeta = null;
     });
@@ -228,12 +235,13 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
         _hostKey = key;
         _loadedIdentity = config.secureStorageKey;
         _status = persisted
-            ? '登录成功。密码未保存，同步密钥已加密保存。'
-            : '登录成功，但无法安全保存同步密钥；关闭页面后需要重新登录。';
+            ? AppLocalizations.of(context)!.ankiSyncStatusLoginSuccess
+            : AppLocalizations.of(context)!.ankiSyncStatusLoginSuccessNoSave;
       });
     } catch (error) {
       if (!mounted) return;
-      setState(() => _status = '登录失败：${_safeMessage(error)}');
+      setState(() => _status = AppLocalizations.of(context)!
+          .ankiSyncStatusLoginFailed(_safeMessage(context, error)));
     } finally {
       _closeClientIfDisposed();
       if (mounted) setState(() => _busy = false);
@@ -260,7 +268,9 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
         context: context,
         builder: (dialogContext) => AlertDialog(
           title: Text(
-            mode == AnkiSyncMode.ankiWeb ? '登录 AnkiWeb' : '登录自建服务器',
+            mode == AnkiSyncMode.ankiWeb
+                ? AppLocalizations.of(dialogContext)!.ankiSyncLoginAnkiWeb
+                : AppLocalizations.of(dialogContext)!.ankiSyncLoginSelfHosted,
           ),
           content: Form(
             key: formKey,
@@ -270,24 +280,29 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
                 TextFormField(
                   autofocus: true,
                   keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(
-                    labelText: '邮箱 / 用户名',
+                  decoration: InputDecoration(
+                    labelText: AppLocalizations.of(dialogContext)!
+                        .ankiSyncEmailOrUsername,
                     prefixIcon: Icon(Icons.person_outline),
                   ),
                   validator: (value) => value == null || value.trim().isEmpty
-                      ? '请输入邮箱或用户名'
+                      ? AppLocalizations.of(dialogContext)!
+                          .ankiSyncEmailOrUsernameRequired
                       : null,
                   onSaved: (value) => username = value ?? '',
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
                   obscureText: true,
-                  decoration: const InputDecoration(
-                    labelText: '密码',
+                  decoration: InputDecoration(
+                    labelText:
+                        AppLocalizations.of(dialogContext)!.ankiSyncPassword,
                     prefixIcon: Icon(Icons.lock_outline),
                   ),
-                  validator: (value) =>
-                      value == null || value.isEmpty ? '请输入密码' : null,
+                  validator: (value) => value == null || value.isEmpty
+                      ? AppLocalizations.of(dialogContext)!
+                          .ankiSyncPasswordRequired
+                      : null,
                   onSaved: (value) => password = value ?? '',
                   onFieldSubmitted: (_) => submit(dialogContext),
                 ),
@@ -297,11 +312,11 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('取消'),
+              child: Text(AppLocalizations.of(dialogContext)!.actionCancel),
             ),
             FilledButton(
               onPressed: () => submit(dialogContext),
-              child: const Text('登录'),
+              child: Text(AppLocalizations.of(dialogContext)!.ankiSyncLogin),
             ),
           ],
         ),
@@ -315,14 +330,15 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
     if (_busy) return;
     setState(() {
       _busy = true;
-      _status = '正在准备服务器设置…';
+      _status =
+          AppLocalizations.of(context)!.ankiSyncStatusPreparingServerSettings;
     });
     try {
       final actionConfig = await _prepareActionConfig(config);
       if (!mounted || actionConfig == null) return;
       config = actionConfig;
       setState(() {
-        _status = '正在读取服务器 collection 状态…';
+        _status = AppLocalizations.of(context)!.ankiSyncStatusReadingCollection;
         _remoteMeta = null;
       });
       final meta = await _clientFor(config).checkStatus();
@@ -330,12 +346,19 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
       setState(() {
         _remoteMeta = meta;
         _status = meta.shouldContinue
-            ? (meta.isEmpty ? '连接成功，服务器 collection 为空' : '连接成功，服务器状态已读取')
-            : (meta.message.isEmpty ? '此服务器要求升级同步客户端' : meta.message);
+            ? (meta.isEmpty
+                ? AppLocalizations.of(context)!
+                    .ankiSyncStatusConnectedCollectionEmpty
+                : AppLocalizations.of(context)!
+                    .ankiSyncStatusConnectedStatusRead)
+            : (meta.message.isEmpty
+                ? AppLocalizations.of(context)!.ankiSyncStatusUpgradeClient
+                : meta.message);
       });
     } catch (error) {
       if (!mounted) return;
-      setState(() => _status = '状态检查失败：${_safeMessage(error)}');
+      setState(() => _status = AppLocalizations.of(context)!
+          .ankiSyncStatusCheckFailed(_safeMessage(context, error)));
     } finally {
       _closeClientIfDisposed();
       if (mounted) setState(() => _busy = false);
@@ -347,7 +370,7 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
     final container = ProviderScope.containerOf(context, listen: false);
     setState(() {
       _busy = true;
-      _status = '正在准备上传设置…';
+      _status = AppLocalizations.of(context)!.ankiSyncStatusPreparingUpload;
     });
     String backupPath = '';
     var collectionUploaded = false;
@@ -358,14 +381,16 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
       config = actionConfig;
       if (_remoteMeta == null || !_remoteMeta!.shouldContinue) return;
       final confirmed = await _confirmDestructiveAction(
-        title: '用本地 collection 覆盖服务器？',
-        message: '服务器上的 collection 将被本地数据完整替换。Stroom 会先保留一份本地数据库备份。'
-            '\n\n随后仍会按服务器媒体清单双向同步文件。',
-        action: '覆盖服务器',
+        title:
+            AppLocalizations.of(context)!.ankiSyncOverwriteServerConfirmTitle,
+        message:
+            AppLocalizations.of(context)!.ankiSyncOverwriteServerConfirmMessage,
+        action: AppLocalizations.of(context)!.ankiSyncOverwriteServerAction,
       );
       if (confirmed != true) return;
       transferStarted = true;
-      setState(() => _status = '正在备份并上传 collection…');
+      setState(() => _status =
+          AppLocalizations.of(context)!.ankiSyncStatusBackingUpUploading);
       await AnkiDatabase.closeOpenedInstance();
       final client = _clientFor(config);
       backupPath = await AnkiCollectionTransfer.uploadLocalCollection(client);
@@ -374,16 +399,23 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
       if (!mounted) return;
       setState(() {
         _remoteMeta = null;
-        _status = '服务器已接受本地 collection，媒体同步完成：上传 ${media.uploadedFiles} 个，'
-            '下载 ${media.downloadedFiles} 个，删除 ${media.deletedFiles} 个。'
-            '${backupPath.isEmpty ? '' : '\n本地备份：${p.basename(backupPath)}'}'
-            '\n请重新检查服务器状态。';
+        _status = AppLocalizations.of(context)!.ankiSyncStatusUploadComplete(
+          media.uploadedFiles,
+          media.downloadedFiles,
+          media.deletedFiles,
+          backupPath.isEmpty
+              ? ''
+              : AppLocalizations.of(context)!.ankiSyncStatusBackupPath(
+                  p.basename(backupPath),
+                ),
+        );
       });
     } catch (error) {
       if (!mounted) return;
-      final prefix =
-          collectionUploaded ? '服务器 collection 已替换，但媒体同步未完成：' : '上传失败：';
-      setState(() => _status = '$prefix${_safeMessage(error)}');
+      final prefix = collectionUploaded
+          ? AppLocalizations.of(context)!.ankiSyncStatusMediaSyncIncomplete
+          : AppLocalizations.of(context)!.ankiSyncStatusUploadFailed;
+      setState(() => _status = '$prefix${_safeMessage(context, error)}');
     } finally {
       if (transferStarted) _invalidateAnkiDatabase(container);
       _closeClientIfDisposed();
@@ -396,7 +428,7 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
     final container = ProviderScope.containerOf(context, listen: false);
     setState(() {
       _busy = true;
-      _status = '正在准备下载设置…';
+      _status = AppLocalizations.of(context)!.ankiSyncStatusPreparingDownload;
     });
     var backupPath = '';
     AnkiMediaDownloadReset? mediaReset;
@@ -409,15 +441,15 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
       final meta = _remoteMeta;
       if (meta == null || !meta.shouldContinue || meta.isEmpty) return;
       final confirmed = await _confirmDestructiveAction(
-        title: '用服务器 collection 替换本地？',
-        message: '本地 collection 将被服务器数据替换。Stroom 会先保留一份本地数据库备份。'
-            '\n\n随后会用服务器媒体替换本地媒体并下载缺失文件。'
-            '若任一步失败或应用中途退出，Stroom 会在下次打开牌组前恢复本地 collection 和媒体。',
-        action: '替换本地数据',
+        title: AppLocalizations.of(context)!.ankiSyncReplaceLocalConfirmTitle,
+        message:
+            AppLocalizations.of(context)!.ankiSyncReplaceLocalConfirmMessage,
+        action: AppLocalizations.of(context)!.ankiSyncReplaceLocalAction,
       );
       if (confirmed != true) return;
       transferStarted = true;
-      setState(() => _status = '正在下载并验证 collection…');
+      setState(() => _status =
+          AppLocalizations.of(context)!.ankiSyncStatusDownloadingValidating);
       final client = _clientFor(config);
       await AnkiDatabase.closeOpenedInstance();
       recovery = await AnkiFullDownloadRecovery.begin(
@@ -439,11 +471,16 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
       if (!mounted) return;
       setState(() {
         _remoteMeta = null;
-        _status =
-            '本地 collection 已替换，SQLite 检查通过；媒体同步完成：下载 ${media.downloadedFiles} 个，'
-            '上传 ${media.uploadedFiles} 个，删除 ${media.deletedFiles} 个。'
-            '${backupPath.isEmpty ? '' : '\n本地备份：${p.basename(backupPath)}'}'
-            '\n请重新检查服务器状态。';
+        _status = AppLocalizations.of(context)!.ankiSyncStatusDownloadComplete(
+          media.downloadedFiles,
+          media.uploadedFiles,
+          media.deletedFiles,
+          backupPath.isEmpty
+              ? ''
+              : AppLocalizations.of(context)!.ankiSyncStatusBackupPath(
+                  p.basename(backupPath),
+                ),
+        );
       });
     } catch (error) {
       try {
@@ -452,7 +489,8 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
         // The durable journal retries rollback before the next collection open.
       }
       if (!mounted) return;
-      setState(() => _status = '下载失败：${_safeMessage(error)}');
+      setState(() => _status = AppLocalizations.of(context)!
+          .ankiSyncStatusDownloadFailed(_safeMessage(context, error)));
     } finally {
       if (transferStarted) _invalidateAnkiDatabase(container);
       _closeClientIfDisposed();
@@ -465,14 +503,16 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
     final container = ProviderScope.containerOf(context, listen: false);
     setState(() {
       _busy = true;
-      _status = '正在准备同步…';
+      _status = AppLocalizations.of(context)!.ankiSyncStatusPreparingSync;
     });
     var collectionComplete = false;
     try {
       final actionConfig = await _prepareActionConfig(config);
       if (!mounted || actionConfig == null) return;
       config = actionConfig;
-      if (mounted) setState(() => _status = '正在合并 collection 变更…');
+      if (mounted)
+        setState(() => _status =
+            AppLocalizations.of(context)!.ankiSyncStatusMergingChanges);
       final client = _clientFor(config);
       final database = await container.read(ankiDatabaseProvider.future);
       final collectionResult = await AnkiIncrementalSync.sync(database, client);
@@ -481,24 +521,34 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
       // even if the subsequent media phase fails.
       container.read(ankiRefreshProvider.notifier).refresh();
       if (mounted) {
-        setState(() => _status = 'Collection 增量合并完成，正在同步媒体文件…');
+        setState(() => _status =
+            AppLocalizations.of(context)!.ankiSyncStatusMergeCompleteSyncMedia);
       }
       final mediaResult = await AnkiMediaSync.sync(client, database: database);
       if (!mounted) return;
       setState(() {
         _remoteMeta = null;
         final collectionText = collectionResult.collectionChanged
-            ? '新增/更新 ${collectionResult.changedNotes} 个笔记、'
-                '${collectionResult.changedCards} 张卡片、'
-                '${collectionResult.changedReviews} 条复习记录'
-            : 'collection 没有待合并变更';
-        _status = '双向同步完成：$collectionText；媒体上传 ${mediaResult.uploadedFiles} 个、'
-            '下载 ${mediaResult.downloadedFiles} 个、删除 ${mediaResult.deletedFiles} 个。';
+            ? AppLocalizations.of(context)!.ankiSyncStatusChangedNotes(
+                collectionResult.changedNotes,
+                collectionResult.changedCards,
+                collectionResult.changedReviews,
+              )
+            : AppLocalizations.of(context)!.ankiSyncStatusNoCollectionChanges;
+        _status = AppLocalizations.of(context)!.ankiSyncStatusTwoWayComplete(
+          collectionText,
+          mediaResult.uploadedFiles,
+          mediaResult.downloadedFiles,
+          mediaResult.deletedFiles,
+        );
       });
     } catch (error) {
       if (!mounted) return;
-      final prefix = collectionComplete ? 'Collection 已合并，但媒体同步未完成：' : '同步未完成：';
-      setState(() => _status = '$prefix${_safeMessage(error)}');
+      final prefix = collectionComplete
+          ? AppLocalizations.of(context)!
+              .ankiSyncStatusCollectionMergedMediaIncomplete
+          : AppLocalizations.of(context)!.ankiSyncStatusSyncIncomplete;
+      setState(() => _status = '$prefix${_safeMessage(context, error)}');
     } finally {
       _closeClientIfDisposed();
       if (mounted) setState(() => _busy = false);
@@ -518,7 +568,7 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('取消'),
+              child: Text(AppLocalizations.of(dialogContext)!.actionCancel),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(dialogContext, true),
@@ -532,7 +582,7 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
     if (_busy) return;
     setState(() {
       _busy = true;
-      _status = '正在清除登录状态…';
+      _status = AppLocalizations.of(context)!.ankiSyncStatusClearingLogin;
     });
     try {
       await ref
@@ -544,10 +594,12 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
       setState(() {
         _hostKey = null;
         _remoteMeta = null;
-        _status = '已登出，安全存储中的同步密钥已删除';
+        _status = AppLocalizations.of(context)!.ankiSyncStatusLoggedOut;
       });
     } catch (_) {
-      if (mounted) setState(() => _status = '无法清除已保存的登录状态');
+      if (mounted)
+        setState(() => _status =
+            AppLocalizations.of(context)!.ankiSyncStatusClearLoginFailed);
     } finally {
       _closeClientIfDisposed();
       if (mounted) setState(() => _busy = false);
@@ -571,11 +623,12 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
     _closeClientWhenIdle = false;
   }
 
-  String _safeMessage(Object error) => error is AnkiSyncException
-      ? error.message
-      : error is AnkiSyncFullTransferRequired
+  String _safeMessage(BuildContext context, Object error) =>
+      error is AnkiSyncException
           ? error.message
-          : '操作未完成，请检查安全存储、网络和服务器地址';
+          : error is AnkiSyncFullTransferRequired
+              ? error.message
+              : AppLocalizations.of(context)!.ankiSyncStatusOperationIncomplete;
 
   @override
   Widget build(BuildContext context) {
@@ -589,10 +642,13 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
     _restoreSessionWhenReady(config);
 
     final isLoggedIn = _hostKey != null;
-    final title = config.mode == AnkiSyncMode.ankiWeb ? 'AnkiWeb' : '自建同步服务器';
+    final l10n = AppLocalizations.of(context)!;
+    final title = config.mode == AnkiSyncMode.ankiWeb
+        ? 'AnkiWeb'
+        : l10n.ankiSyncSelfHostedMode;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Anki 同步')),
+      appBar: AppBar(title: Text(l10n.ankiSyncPageTitle)),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
         children: [
@@ -614,12 +670,12 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '选择同步方式',
+                      l10n.ankiSyncChooseMode,
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      '登录状态按服务分别保存。切换方式不会合并或覆盖数据。',
+                      l10n.ankiSyncModeHelp,
                       style: Theme.of(context)
                           .textTheme
                           .bodyMedium
@@ -632,7 +688,7 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
           ),
           const SizedBox(height: 22),
           SegmentedButton<AnkiSyncMode>(
-            segments: const [
+            segments: [
               ButtonSegment(
                 value: AnkiSyncMode.ankiWeb,
                 icon: Icon(Icons.cloud_outlined),
@@ -641,7 +697,7 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
               ButtonSegment(
                 value: AnkiSyncMode.selfHosted,
                 icon: Icon(Icons.dns_outlined),
-                label: Text('自建服务器'),
+                label: Text(l10n.ankiSyncSelfHostedMode),
               ),
             ],
             selected: {config.mode},
@@ -655,7 +711,8 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('服务器地址', style: Theme.of(context).textTheme.titleSmall),
+                  Text(l10n.ankiSyncServerAddress,
+                      style: Theme.of(context).textTheme.titleSmall),
                   const SizedBox(height: 8),
                   TextField(
                     controller: _urlController,
@@ -668,7 +725,9 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
                       } catch (error) {
                         if (mounted) {
                           setState(
-                            () => _status = '设置未保存：${_safeMessage(error)}',
+                            () => _status = AppLocalizations.of(context)!
+                                .ankiSyncStatusSettingsNotSaved(
+                                    _safeMessage(context, error)),
                           );
                         }
                       }
@@ -682,8 +741,7 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    '自建远程服务器需使用 HTTPS；本机地址可使用 HTTP。'
-                    '服务器需支持 Anki sync v10，证书验证默认开启。',
+                    l10n.ankiSyncServerHelp,
                     style: Theme.of(context)
                         .textTheme
                         .bodySmall
@@ -695,8 +753,8 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
                     child: ExpansionTile(
                       tilePadding: EdgeInsets.zero,
                       childrenPadding: EdgeInsets.zero,
-                      title: const Text('自定义 CA 证书（可选）'),
-                      subtitle: const Text('仅在服务器使用自签名证书时填写'),
+                      title: Text(l10n.ankiSyncCustomCaTitle),
+                      subtitle: Text(l10n.ankiSyncCustomCaHelp),
                       children: [
                         TextField(
                           controller: _certificateController,
@@ -723,7 +781,7 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
           ] else ...[
             const SizedBox(height: 16),
             Text(
-              '使用官方 AnkiWeb 同步服务。密码只在登录时发送，不会保存在 Stroom。',
+              l10n.ankiSyncOfficialHelp,
               style: Theme.of(context)
                   .textTheme
                   .bodyMedium
@@ -748,7 +806,9 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        isLoggedIn ? '已连接 $title' : '未连接 $title',
+                        isLoggedIn
+                            ? l10n.ankiSyncConnected(title)
+                            : l10n.ankiSyncNotConnected(title),
                         style: Theme.of(context).textTheme.titleSmall,
                       ),
                       if (_status.isNotEmpty) ...[
@@ -784,18 +844,18 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
                       ? () => _login(config)
                       : null,
                   icon: const Icon(Icons.login),
-                  label: Text('登录$title'),
+                  label: Text(l10n.ankiSyncLoginForService(title)),
                 )
               else ...[
                 FilledButton.icon(
                   onPressed: !_busy ? () => _checkStatus(config) : null,
                   icon: const Icon(Icons.fact_check_outlined),
-                  label: const Text('检查服务器状态'),
+                  label: Text(l10n.ankiSyncCheckServerStatus),
                 ),
                 OutlinedButton.icon(
                   onPressed: !_busy ? () => _logout(config) : null,
                   icon: const Icon(Icons.logout),
-                  label: const Text('登出'),
+                  label: Text(l10n.ankiSyncLogout),
                 ),
               ],
             ],
@@ -812,18 +872,18 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
                   FilledButton.icon(
                     onPressed: !_busy ? () => _syncBothWays(config) : null,
                     icon: const Icon(Icons.sync_rounded),
-                    label: const Text('双向同步'),
+                    label: Text(l10n.ankiSyncBothWays),
                   ),
                   FilledButton.tonalIcon(
                     onPressed: !_busy ? () => _upload(config) : null,
                     icon: const Icon(Icons.cloud_upload_outlined),
-                    label: const Text('用本地数据覆盖服务器'),
+                    label: Text(l10n.ankiSyncOverwriteServer),
                   ),
                   if (!_remoteMeta!.isEmpty)
                     OutlinedButton.icon(
                       onPressed: !_busy ? () => _download(config) : null,
                       icon: const Icon(Icons.cloud_download_outlined),
-                      label: const Text('用服务器数据替换本地'),
+                      label: Text(l10n.ankiSyncReplaceLocal),
                     ),
                 ],
               ),
@@ -831,8 +891,7 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
           ],
           const SizedBox(height: 20),
           Text(
-            '双向同步会合并 collection 的增量变更并传输媒体文件；结构戳不一致时，请选择完整上传或下载。'
-            '完整下载失败会尝试恢复原 collection 和媒体目录。',
+            l10n.ankiSyncHelp,
             style: Theme.of(context)
                 .textTheme
                 .bodySmall
@@ -877,7 +936,7 @@ class _RemoteStatus extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final modified = meta.modified <= 0
-        ? '未知'
+        ? AppLocalizations.of(context)!.ankiSyncUnknown
         : DateTime.fromMillisecondsSinceEpoch(meta.modified * 1000)
             .toLocal()
             .toString()
@@ -894,14 +953,19 @@ class _RemoteStatus extends StatelessWidget {
               ),
               const SizedBox(width: 10),
               Text(
-                meta.isEmpty ? '服务器 collection 为空' : '服务器 collection 可用',
+                meta.isEmpty
+                    ? AppLocalizations.of(context)!
+                        .ankiSyncServerCollectionEmpty
+                    : AppLocalizations.of(context)!
+                        .ankiSyncServerCollectionAvailable,
                 style: Theme.of(context).textTheme.titleSmall,
               ),
             ],
           ),
           const SizedBox(height: 8),
           Text(
-            '结构版本戳 ${meta.schema} · USN ${meta.usn} · 修改时间 $modified',
+            AppLocalizations.of(context)!
+                .ankiSyncSchemaStatus(meta.schema, meta.usn, modified),
             style: Theme.of(context)
                 .textTheme
                 .bodySmall
