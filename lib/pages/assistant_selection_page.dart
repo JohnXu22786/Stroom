@@ -82,8 +82,7 @@ class AssistantSelectionPage extends ConsumerWidget {
       ),
       body: isLoading
           ? TickerMode(
-              enabled: TickerMode.of(context) &&
-                  ChatTabVisibility.of(context),
+              enabled: TickerMode.of(context) && ChatTabVisibility.of(context),
               child: const Center(child: CircularProgressIndicator()),
             )
           : assistants.isEmpty

@@ -229,8 +229,7 @@ extension _ChatPageBuildersExt on _ChatPageState {
   Widget _buildLoadMoreIndicator() {
     if (!_isLoadingMore) return const SizedBox.shrink();
     return TickerMode(
-      enabled: TickerMode.of(context) &&
-          ChatTabVisibility.of(context),
+      enabled: TickerMode.of(context) && ChatTabVisibility.of(context),
       child: const Padding(
         key: ValueKey('chat-load-more-indicator'),
         padding: EdgeInsets.symmetric(vertical: 12),
@@ -468,8 +467,7 @@ extension _ChatPageBuildersExt on _ChatPageState {
       );
     }
     return TickerMode(
-      enabled: TickerMode.of(context) &&
-          ChatTabVisibility.of(context),
+      enabled: TickerMode.of(context) && ChatTabVisibility.of(context),
       child: const Padding(
         padding: EdgeInsets.all(12),
         child: SizedBox(
