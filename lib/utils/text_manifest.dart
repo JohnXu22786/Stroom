@@ -42,8 +42,8 @@ class TextRecord
     required this.size,
     this.folder = '',
     this.textLength = 0,
-  })  : modifiedAt = modifiedAt ?? createdAt,
-        id = id ?? 'txt_${const Uuid().v4()}';
+  }) : modifiedAt = modifiedAt ?? createdAt,
+       id = id ?? 'txt_${const Uuid().v4()}';
 
   /// 实体文件存储名
   String get storageFileName => '$hash.txt';
@@ -51,16 +51,16 @@ class TextRecord
   String get storagePath => '$hash.txt';
 
   Map<String, dynamic> toMap() => {
-        'id': id,
-        'name': name,
-        'hash': hash,
-        'format': format,
-        'createdAt': createdAt.toIso8601String(),
-        'modifiedAt': modifiedAt.toIso8601String(),
-        'size': size,
-        'folder': folder,
-        'textLength': textLength,
-      };
+    'id': id,
+    'name': name,
+    'hash': hash,
+    'format': format,
+    'createdAt': createdAt.toIso8601String(),
+    'modifiedAt': modifiedAt.toIso8601String(),
+    'size': size,
+    'folder': folder,
+    'textLength': textLength,
+  };
 
   factory TextRecord.fromMap(Map<String, dynamic> map) {
     final createdAt = map['createdAt'] != null
@@ -84,42 +84,42 @@ class TextRecord
 
   @override
   TextRecord copyWithName(String name) => TextRecord(
-        id: id,
-        name: name,
-        hash: hash,
-        format: format,
-        createdAt: createdAt,
-        modifiedAt: modifiedAt,
-        size: size,
-        folder: folder,
-        textLength: textLength,
-      );
+    id: id,
+    name: name,
+    hash: hash,
+    format: format,
+    createdAt: createdAt,
+    modifiedAt: modifiedAt,
+    size: size,
+    folder: folder,
+    textLength: textLength,
+  );
 
   /// 修改文件格式（重命名时通过下拉框切换扩展名）
   TextRecord copyWithFormat(String format) => TextRecord(
-        id: id,
-        name: name,
-        hash: hash,
-        format: format,
-        createdAt: createdAt,
-        modifiedAt: modifiedAt,
-        size: size,
-        folder: folder,
-        textLength: textLength,
-      );
+    id: id,
+    name: name,
+    hash: hash,
+    format: format,
+    createdAt: createdAt,
+    modifiedAt: modifiedAt,
+    size: size,
+    folder: folder,
+    textLength: textLength,
+  );
 
   @override
   TextRecord copyWithFolder(String folder) => TextRecord(
-        id: id,
-        name: name,
-        hash: hash,
-        format: format,
-        createdAt: createdAt,
-        modifiedAt: modifiedAt,
-        size: size,
-        folder: folder,
-        textLength: textLength,
-      );
+    id: id,
+    name: name,
+    hash: hash,
+    format: format,
+    createdAt: createdAt,
+    modifiedAt: modifiedAt,
+    size: size,
+    folder: folder,
+    textLength: textLength,
+  );
 
   TextRecord copyWith({
     String? name,
@@ -127,18 +127,17 @@ class TextRecord
     int? size,
     int? textLength,
     DateTime? modifiedAt,
-  }) =>
-      TextRecord(
-        id: id,
-        name: name ?? this.name,
-        hash: hash,
-        format: format,
-        createdAt: createdAt,
-        modifiedAt: modifiedAt ?? this.modifiedAt,
-        size: size ?? this.size,
-        folder: folder ?? this.folder,
-        textLength: textLength ?? this.textLength,
-      );
+  }) => TextRecord(
+    id: id,
+    name: name ?? this.name,
+    hash: hash,
+    format: format,
+    createdAt: createdAt,
+    modifiedAt: modifiedAt ?? this.modifiedAt,
+    size: size ?? this.size,
+    folder: folder ?? this.folder,
+    textLength: textLength ?? this.textLength,
+  );
 }
 
 /// 计算文本数据的 MD5 哈希值
@@ -164,13 +163,46 @@ class TextManifest {
 
   static Future<List<TextRecord>> loadRecords() => _ops.loadRecords();
   static Future<void> addRecord(TextRecord record) => _ops.addRecord(record);
+  static Future<String> addRecordWithContent(
+    TextRecord record,
+    Uint8List contentBytes,
+  ) => _ops.addTextRecordWithContent(record, contentBytes);
   static Future<void> deleteRecord(String id) => _ops.deleteRecord(id);
   static Future<void> deleteRecords(List<String> ids) =>
       _ops.deleteRecords(ids);
+  static Future<R> withSerializedTextRead<R>(Future<R> Function() read) =>
+      _ops.withSerializedTextRead(read);
   static Future<void> updateRecord(TextRecord updated) =>
       _ops.updateRecord(updated);
+  static Future<bool> updateRecordIfHash(
+    String id,
+    String expectedHash,
+    Map<String, dynamic> expectedMetadata,
+    TextRecord updated,
+  ) => _ops.updateTextRecordIfHash(id, expectedHash, expectedMetadata, updated);
+  static Future<bool> updateRecordIfHashWithContent(
+    String id,
+    String expectedHash,
+    Map<String, dynamic> expectedMetadata,
+    TextRecord updated,
+    Uint8List contentBytes,
+  ) => _ops.updateTextRecordIfHashWithContent(
+    id,
+    expectedHash,
+    expectedMetadata,
+    updated,
+    contentBytes,
+  );
   static Future<void> renameRecord(String id, String newName) =>
       _ops.renameRecord(id, newName);
+  static Future<bool> renameRecordWithFormat(
+    String id,
+    String newName,
+    String format,
+  ) => _ops.updateTextRecordMetadata(
+    id,
+    (record) => record.copyWithName(newName).copyWithFormat(format),
+  );
   static Future<void> moveRecord(String id, String targetFolder) =>
       _ops.moveRecord(id, targetFolder);
 
@@ -194,6 +226,14 @@ class TextManifest {
     return utf8.decode(bytes);
   }
 
+  /// Reads and decodes text only when the stored byte size is within the cap.
+  static Future<String?> readTextLimited(String fileName, int maxBytes) async {
+    final bytes = await _ops.readFileLimited(fileName, maxBytes);
+    if (bytes == null) return null;
+    if (bytes.isEmpty) return '';
+    return utf8.decode(bytes);
+  }
+
   // Folder management
   static Future<Set<String>> getAllFolders() => _ops.getAllFolders();
   static Future<void> addFolder(String name) => _ops.addFolder(name);
@@ -207,15 +247,18 @@ class TextManifest {
       FolderPathUtils.getFolderBaseName(folderPath);
   static String getParentFolderPath(String folderPath) =>
       FolderPathUtils.getParentFolderPath(folderPath);
-  static List<String> getChildFolderPaths(String parentPath,
-          [List<String>? allPaths]) =>
+  static List<String> getChildFolderPaths(
+    String parentPath, [
+    List<String>? allPaths,
+  ]) =>
       FolderPathUtils.getChildFolderPaths(parentPath, allPaths?.toSet() ?? {});
   static String? validateFolderName(String name) =>
       FolderPathUtils.validateFolderName(name);
 
   /// Get descendant folder paths using the manifest's internal state.
   static Future<List<String>> getAllDescendantFolderPaths(
-      String parentPath) async {
+    String parentPath,
+  ) async {
     final allPaths = await _ops.getAllFolders();
     return FolderPathUtils.getAllDescendantFolderPaths(parentPath, allPaths);
   }

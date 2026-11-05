@@ -35,9 +35,9 @@ class TextCreatePageState extends State<TextCreatePage> {
     final content = _contentController.text;
 
     if (title.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请输入标题')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('请输入标题')));
       return;
     }
 
@@ -46,18 +46,18 @@ class TextCreatePageState extends State<TextCreatePage> {
     try {
       final bytes = Uint8List.fromList(utf8.encode(content));
       final hash = computeTextHash(bytes);
-      final storageFileName = '$hash.txt';
-
-      await TextManifest.writeText(storageFileName, content);
-      await TextManifest.addRecord(TextRecord(
-        name: title,
-        hash: hash,
-        format: _selectedFormat,
-        createdAt: DateTime.now(),
-        size: bytes.length,
-        folder: widget.initialFolder,
-        textLength: content.length,
-      ));
+      await TextManifest.addRecordWithContent(
+        TextRecord(
+          name: title,
+          hash: hash,
+          format: _selectedFormat,
+          createdAt: DateTime.now(),
+          size: bytes.length,
+          folder: widget.initialFolder,
+          textLength: content.length,
+        ),
+        bytes,
+      );
 
       if (mounted) {
         setState(() => _isSaving = false);
@@ -67,10 +67,7 @@ class TextCreatePageState extends State<TextCreatePage> {
       if (mounted) {
         setState(() => _isSaving = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('保存失败: $e'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text('保存失败: $e'), backgroundColor: Colors.red),
         );
       }
     }
@@ -118,8 +115,10 @@ class TextCreatePageState extends State<TextCreatePage> {
                     decoration: const InputDecoration(
                       labelText: '格式',
                       border: OutlineInputBorder(),
-                      contentPadding:
-                          EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 14,
+                      ),
                     ),
                     items: kTextFileFormats
                         .map((f) => DropdownMenuItem(value: f, child: Text(f)))

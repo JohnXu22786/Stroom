@@ -125,7 +125,7 @@ class _ConnectivityTestDialogState extends State<ConnectivityTestDialog> {
                   alignLabelWithHint: true,
                   border: OutlineInputBorder(),
                   helperText:
-                      '修改后可直接运行或保存。MCP 使用只读 tools/list；搜索工具可改 query/count；Todo 默认只读。',
+                      '修改后可直接运行或保存。MCP 使用只读 tools/list；搜索工具可改 query/count；Todo 默认只读；文本空间测试不会修改文档。',
                 ),
                 onChanged: (_) => setState(() {
                   _isSaved = false;
@@ -144,11 +144,16 @@ class _ConnectivityTestDialogState extends State<ConnectivityTestDialog> {
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    Icon(Icons.check_circle_outline,
-                        size: 16, color: colorScheme.primary),
+                    Icon(
+                      Icons.check_circle_outline,
+                      size: 16,
+                      color: colorScheme.primary,
+                    ),
                     const SizedBox(width: 6),
-                    Text('测试内容已保存',
-                        style: TextStyle(color: colorScheme.primary)),
+                    Text(
+                      '测试内容已保存',
+                      style: TextStyle(color: colorScheme.primary),
+                    ),
                   ],
                 ),
               ],
@@ -165,8 +170,9 @@ class _ConnectivityTestDialogState extends State<ConnectivityTestDialog> {
       ),
       actions: [
         TextButton(
-          onPressed:
-              _isRunning || _isSaving ? null : () => Navigator.pop(context),
+          onPressed: _isRunning || _isSaving
+              ? null
+              : () => Navigator.pop(context),
           child: const Text('关闭'),
         ),
         OutlinedButton.icon(

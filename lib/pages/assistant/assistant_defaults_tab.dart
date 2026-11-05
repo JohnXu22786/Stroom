@@ -16,6 +16,7 @@ import '../../services/chat_service.dart';
 import '../../services/context_manager.dart' show kToolOutputMaxChars;
 import '../../services/http_tool_service.dart';
 import '../../services/todo_tool_service.dart';
+import '../../services/text_storage_tool_service.dart';
 import '../../services/web_search_service.dart';
 import '../../utils/model_order.dart' show applySavedOrder;
 
@@ -160,13 +161,14 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
             ...HttpToolService.toolDefinitions,
             ...TodoToolService.toolDefinitions,
             ...WebSearchService.toolDefinitions,
+            ...TextStorageToolService.toolDefinitions,
           ];
     final seen = <String>{};
     final tools = <ToolDefinition>[];
-    for (final t in filterMcpSearchToolDefinitions(
-      [...builtins, ...adapter.mcpToolDefinitions],
-      mcpEnabled: isMcpMasterSwitchEnabled(entriesState),
-    )) {
+    for (final t in filterMcpSearchToolDefinitions([
+      ...builtins,
+      ...adapter.mcpToolDefinitions,
+    ], mcpEnabled: isMcpMasterSwitchEnabled(entriesState))) {
       if (!disabledNames.contains(t.name) && seen.add(t.name)) tools.add(t);
     }
     return tools;
@@ -188,10 +190,9 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
     // 顺序（model_order，与聊天页/供应商页共享），已保存的名字按保存顺序
     // 前置，未保存的新模型按配置添加顺序追加在末尾——而不是默认的
     // 配置添加顺序。
-    final displayNames = applySavedOrder(
-      [for (final m in models) m.displayName],
-      _savedModelOrder,
-    );
+    final displayNames = applySavedOrder([
+      for (final m in models) m.displayName,
+    ], _savedModelOrder);
     final orderedModels = [
       for (final name in displayNames)
         models.firstWhere((m) => m.displayName == name),
@@ -204,8 +205,9 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
     // 注意从**配置**推导（而非 adapter 的占位列表）：总开关关闭时 adapter
     // 已清空占位工具；内置搜索工具名则由常量保留。
     final validMcpToolNames = <String>{};
-    final mcpEntry =
-        entriesState.entries.where((e) => e.type == 'mcp').firstOrNull;
+    final mcpEntry = entriesState.entries
+        .where((e) => e.type == 'mcp')
+        .firstOrNull;
     validMcpToolNames.addAll(
       mcpPlaceholderToolNamesByConfigId(
         mcpEntry?.configs ?? const <ProviderConfigItem>[],
@@ -264,7 +266,9 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
                       '已存在的话题保留各自的模型与工具设置，不受影响。'
                       '工具结果截断应用于该助手的全部话题。',
                       style: TextStyle(
-                          fontSize: 12, color: cs.onTertiaryContainer),
+                        fontSize: 12,
+                        color: cs.onTertiaryContainer,
+                      ),
                     ),
                   ),
                 ],
@@ -286,8 +290,9 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
                 } else {
                   // 把完整模型（含绝对身份）传给对话框，保存时同时
                   // 记录显示名与模型ID+供应商名。
-                  final model =
-                      models.where((m) => m.displayName == value).firstOrNull;
+                  final model = models
+                      .where((m) => m.displayName == value)
+                      .firstOrNull;
                   widget.onDefaultModelChanged(model);
                 }
               },
@@ -314,8 +319,10 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
                       padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
                       child: Text(
                         '暂无可用模型，请在设置中配置 LLM 供应商',
-                        style:
-                            TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: cs.onSurfaceVariant,
+                        ),
                       ),
                     )
                   else
@@ -377,8 +384,10 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
                     padding: const EdgeInsets.symmetric(vertical: 8),
                     child: Text(
                       '暂无可用工具',
-                      style:
-                          TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: cs.onSurfaceVariant,
+                      ),
                     ),
                   )
                 : Column(
@@ -457,10 +466,7 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
                     widget.enableMaxToolOutputChars
                         ? '超长结果截断至 ${widget.maxToolOutputChars} 字符'
                         : '不截断，完整发送（仍受 50KB 存储上限约束）',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: cs.onSurfaceVariant,
-                    ),
+                    style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
                   ),
                   value: widget.enableMaxToolOutputChars,
                   activeThumbColor: cs.primary,
@@ -474,8 +480,9 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
                       decoration: InputDecoration(
                         labelText: '最大字符数',
                         // 明确"字符"单位：避免用户按 token/字节理解。
-                        helperText:
-                            _lengthError == null ? '单位：字符（不是 token）' : null,
+                        helperText: _lengthError == null
+                            ? '单位：字符（不是 token）'
+                            : null,
                         errorText: _lengthError,
                         hintText: '默认 $kToolOutputMaxChars',
                         border: const OutlineInputBorder(),
@@ -484,16 +491,16 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
                       keyboardType: TextInputType.number,
                       onChanged: (v) {
                         final n = int.tryParse(v);
-                        final inRange = n != null &&
+                        final inRange =
+                            n != null &&
                             n >= ChatService.kToolOutputMaxCharsMin &&
                             n <= ChatService.kToolOutputMaxCharsMax;
                         setState(() {
                           // 长度 < 3 的输入（如 "1"、"12"）可能是合法值的
                           // 中间态（合法值至少 3 位，如 "120"），不报错；
                           // 完整输入越界时就地提示有效范围。
-                          _lengthError = (v.isNotEmpty &&
-                                  !inRange &&
-                                  v.length >= 3)
+                          _lengthError =
+                              (v.isNotEmpty && !inRange && v.length >= 3)
                               ? '有效范围：${ChatService.kToolOutputMaxCharsMin}~${ChatService.kToolOutputMaxCharsMax} 字符'
                               : null;
                         });
@@ -528,8 +535,11 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.visibility_outlined,
-                          size: 16, color: cs.secondary),
+                      Icon(
+                        Icons.visibility_outlined,
+                        size: 16,
+                        color: cs.secondary,
+                      ),
                       const SizedBox(width: 8),
                       Text(
                         '新建话题效果',
@@ -542,20 +552,17 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  _SummaryRow(
-                    label: '模型',
-                    value: effectiveModelName ?? '暂不设置',
-                  ),
+                  _SummaryRow(label: '模型', value: effectiveModelName ?? '暂不设置'),
                   const SizedBox(height: 6),
                   _SummaryRow(
                     label: '工具',
                     value: tools.isEmpty
                         ? '暂无可用工具'
                         : isToolsConfigured
-                            // 只统计当前仍存在的工具，避免已失效的工具名
-                            // 使摘要数量与上方开关不一致。
-                            ? '已启用 ${effectiveToolNames.intersection(allToolNames).length} / ${tools.length}'
-                            : '全部自动启用（未配置）',
+                        // 只统计当前仍存在的工具，避免已失效的工具名
+                        // 使摘要数量与上方开关不一致。
+                        ? '已启用 ${effectiveToolNames.intersection(allToolNames).length} / ${tools.length}'
+                        : '全部自动启用（未配置）',
                   ),
                 ],
               ),
@@ -645,9 +652,7 @@ class _SectionCard extends StatelessWidget {
                     const SizedBox(width: 8),
                     // Expanded + Wrap：按钮占满标题行剩余空间，右对齐；
                     // 空间不足时按钮换行，避免 RenderFlex 溢出。
-                    Expanded(
-                      child: trailing!,
-                    ),
+                    Expanded(child: trailing!),
                   ],
                 ],
               ),
@@ -673,10 +678,7 @@ class _SummaryRow extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     return Row(
       children: [
-        Text(
-          label,
-          style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
-        ),
+        Text(label, style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
         const SizedBox(width: 12),
         Expanded(
           child: Text(

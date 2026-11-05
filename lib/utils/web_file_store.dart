@@ -110,16 +110,21 @@ class WebFileStore {
     if (value is ByteBuffer) {
       final result = Uint8List.view(value);
       debugPrint(
-          'WebFileStore _toUint8List: $key → ByteBuffer (${result.length} 字节)');
+        'WebFileStore _toUint8List: $key → ByteBuffer (${result.length} 字节)',
+      );
       return result;
     }
 
     // Int8List → 转 Uint8List (视图共享)
     if (value is Int8List) {
-      final result =
-          Uint8List.view(value.buffer, value.offsetInBytes, value.length);
+      final result = Uint8List.view(
+        value.buffer,
+        value.offsetInBytes,
+        value.length,
+      );
       debugPrint(
-          'WebFileStore _toUint8List: $key → Int8List -> Uint8List (${result.length} 字节)');
+        'WebFileStore _toUint8List: $key → Int8List -> Uint8List (${result.length} 字节)',
+      );
       return result;
     }
 
@@ -127,9 +132,13 @@ class WebFileStore {
     // → 取其底层 buffer 的字节视图
     if (value is TypedData) {
       final result = Uint8List.view(
-          value.buffer, value.offsetInBytes, value.lengthInBytes);
+        value.buffer,
+        value.offsetInBytes,
+        value.lengthInBytes,
+      );
       debugPrint(
-          'WebFileStore _toUint8List: $key → ${value.runtimeType} -> Uint8List (${result.length} 字节)');
+        'WebFileStore _toUint8List: $key → ${value.runtimeType} -> Uint8List (${result.length} 字节)',
+      );
       return result;
     }
 
@@ -137,13 +146,15 @@ class WebFileStore {
     if (value is List<int>) {
       final result = Uint8List.fromList(value);
       debugPrint(
-          'WebFileStore _toUint8List: $key → List<int> (${result.length} 字节)');
+        'WebFileStore _toUint8List: $key → List<int> (${result.length} 字节)',
+      );
       return result;
     }
 
     // 兜底：toString 留日志
     debugPrint(
-        'WebFileStore _toUint8List: $key → 无法转换的类型 ${value.runtimeType}');
+      'WebFileStore _toUint8List: $key → 无法转换的类型 ${value.runtimeType}',
+    );
     return null;
   }
 
@@ -166,9 +177,52 @@ class WebFileStore {
     final converted = _toUint8List(result, key);
     if (converted == null) {
       debugPrint(
-          'WebFileStore 读取 $key → 原始类型: ${result.runtimeType} (值: $result)');
+        'WebFileStore 读取 $key → 原始类型: ${result.runtimeType} (值: $result)',
+      );
     }
     return converted;
+  }
+
+  /// Reads a stored value only when its byte length is within [maxBytes].
+  static Future<Uint8List?> readLimited(String key, int maxBytes) async {
+    if (_testMode) {
+      final value = _inMemoryStore[key];
+      if (value == null) return null;
+      if (value.lengthInBytes > maxBytes) {
+        throw StoredFileSizeLimitExceeded(maxBytes);
+      }
+      return Uint8List.fromList(value);
+    }
+
+    final db = await _database;
+    final txn = db.transaction('files', idbModeReadOnly);
+    final value = await txn.objectStore('files').getObject(key);
+    await txn.completed;
+    if (value == null) return null;
+
+    final length = _storedValueLength(value);
+    if (length != null && length > maxBytes) {
+      throw StoredFileSizeLimitExceeded(maxBytes);
+    }
+    final converted = _toUint8List(value, key);
+    if (converted != null && converted.lengthInBytes > maxBytes) {
+      throw StoredFileSizeLimitExceeded(maxBytes);
+    }
+    return converted;
+  }
+
+  static int? _storedValueLength(dynamic value) {
+    if (value is Uint8List) return value.lengthInBytes;
+    if (value is ByteBuffer) return value.lengthInBytes;
+    if (value is TypedData) return value.lengthInBytes;
+    if (value is List<int>) return value.length;
+    try {
+      final length = (value as dynamic).size;
+      if (length is num) return length.toInt();
+    } catch (_) {
+      // Unknown IndexedDB values are handled by the regular conversion path.
+    }
+    return null;
   }
 
   /// 删除文件
@@ -210,9 +264,8 @@ class WebFileStore {
     final db = await _database;
     final txn = db.transaction('files', idbModeReadOnly);
     final keys = <String>[];
-    await for (final cwv in txn.objectStore('files').openCursor(
-          autoAdvance: true,
-        )) {
+    await for (final cwv
+        in txn.objectStore('files').openCursor(autoAdvance: true)) {
       final key = cwv.key;
       if (key is String && key.startsWith(prefix)) keys.add(key);
     }
@@ -231,7 +284,9 @@ class WebFileStore {
   /// Deletes files under [prefix], except keys still referenced by another
   /// data category.
   static Future<void> deleteByPrefixExcept(
-      String prefix, Set<String> preservedKeys) async {
+    String prefix,
+    Set<String> preservedKeys,
+  ) async {
     bool shouldDelete(String key) =>
         key.startsWith(prefix) && !preservedKeys.contains(key);
 
@@ -249,4 +304,10 @@ class WebFileStore {
     }
     await txn.completed;
   }
+}
+
+class StoredFileSizeLimitExceeded implements Exception {
+  final int maxBytes;
+
+  const StoredFileSizeLimitExceeded(this.maxBytes);
 }

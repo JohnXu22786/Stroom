@@ -178,8 +178,11 @@ class MermaidRenderWidget extends StatefulWidget {
   ///
   /// This is the single source of truth for the Mermaid HTML/JS template.
   /// Both [MermaidRenderWidget] and [MermaidChartPage] use this method.
-  static String buildMermaidHtml(String mermaidCode,
-      {bool withJsGestures = true, String? inlineMermaidJs}) {
+  static String buildMermaidHtml(
+    String mermaidCode, {
+    bool withJsGestures = true,
+    String? inlineMermaidJs,
+  }) {
     final escaped = _escapeMermaidCode(mermaidCode);
     final loader = _buildMermaidLoader(inlineMermaidJs);
     final skeleton = _buildMermaidSkeleton(withJsGestures, loader);
@@ -220,7 +223,8 @@ class MermaidRenderWidget extends StatefulWidget {
       // script tag early (</script) or start an HTML comment (<!--) inside
       // the inlined code.
       final encoded = jsonEncode(inlineMermaidJs).replaceAll('<', r'\u003C');
-      final loader = '''
+      final loader =
+          '''
     (function loadMermaid() {
       var hint = document.getElementById('loading-hint');
       var script = document.createElement('script');
@@ -276,8 +280,10 @@ class MermaidRenderWidget extends StatefulWidget {
       return cached;
     }
     final skeleton = _mermaidHtmlTemplate
-        .replaceFirst('GESTURE_SCRIPT_PLACEHOLDER',
-            withJsGestures ? _mermaidGestureJs : '')
+        .replaceFirst(
+          'GESTURE_SCRIPT_PLACEHOLDER',
+          withJsGestures ? _mermaidGestureJs : '',
+        )
         .replaceFirst('MERMAID_LOADER_PLACEHOLDER', loader);
     _cachedSkeletonLoaderJs = loader;
     _cachedSkeletonWithGestures = withJsGestures;
@@ -806,8 +812,10 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     _webViewCreationFallbackTimer?.cancel();
     _webViewCreationFallbackTimer = Timer(const Duration(seconds: 12), () {
       if (mounted && _webViewController == null && _errorMessage == null) {
-        debugPrint('[MermaidRenderWidget] WebView was not created within '
-            '12s, showing an error');
+        debugPrint(
+          '[MermaidRenderWidget] WebView was not created within '
+          '12s, showing an error',
+        );
         setState(() => _errorMessage = '图表渲染引擎初始化失败，请重试');
       }
     });
@@ -823,8 +831,10 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     _readyFallbackTimer?.cancel();
     _readyFallbackTimer = Timer(const Duration(seconds: 3), () {
       if (mounted && !_isReady && _errorMessage == null) {
-        debugPrint('[MermaidRenderWidget] onLoadStop did not fire within 3s, '
-            'force-ending the loading state');
+        debugPrint(
+          '[MermaidRenderWidget] onLoadStop did not fire within 3s, '
+          'force-ending the loading state',
+        );
         setState(() => _isReady = true);
       }
     });
@@ -844,8 +854,10 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       // No ready-fallback is armed: the iframe manages its own loading
       // state (the template hides its hint the moment the diagram renders).
       ctrl.loadUrl(
-          urlRequest: URLRequest(
-              url: WebUri(MermaidRenderWidget.buildWebAssetUrl(code))));
+        urlRequest: URLRequest(
+          url: WebUri(MermaidRenderWidget.buildWebAssetUrl(code)),
+        ),
+      );
       return;
     }
 
@@ -864,14 +876,12 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     // the JS mouse handlers act as a fallback (e.g. mobile platforms where
     // the platform view receives events directly). Sharing one template
     // keeps zoom anchoring and auto-fit behavior identical everywhere.
-    final html = MermaidRenderWidget.buildMermaidHtml(code,
-        inlineMermaidJs: _inlineMermaidJs);
-    _armReadyFallback();
-    ctrl.loadData(
-      data: html,
-      mimeType: 'text/html',
-      encoding: 'utf8',
+    final html = MermaidRenderWidget.buildMermaidHtml(
+      code,
+      inlineMermaidJs: _inlineMermaidJs,
     );
+    _armReadyFallback();
+    ctrl.loadData(data: html, mimeType: 'text/html', encoding: 'utf8');
   }
 
   void _retry() {
@@ -1093,27 +1103,30 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                   // ScaleGestureRecognizer handles pan + pinch zoom.
                   // It enters the gesture arena via the team, so it
                   // automatically accepts when the immediate recognizer wins.
-                  ScaleGestureRecognizer: GestureRecognizerFactoryWithHandlers<
-                      ScaleGestureRecognizer>(
-                    () {
-                      final recognizer = ScaleGestureRecognizer()..team = team;
-                      // Set ScaleGestureRecognizer as the team captain so
-                      // that when ImmediateMermaidGestureRecognizer wins the
-                      // parent arena via the team, the
-                      // ScaleGestureRecognizer's acceptGesture is called
-                      // (instead of being rejected). Without a captain, the
-                      // team would accept the immediately-resolved recognizer
-                      // and reject the ScaleGestureRecognizer, breaking
-                      // pan/zoom entirely.
-                      team.captain = recognizer;
-                      return recognizer;
-                    },
-                    (instance) {
-                      instance.onStart = _onScaleStart;
-                      instance.onUpdate = _onScaleUpdate;
-                      instance.onEnd = (_) {};
-                    },
-                  ),
+                  ScaleGestureRecognizer:
+                      GestureRecognizerFactoryWithHandlers<
+                        ScaleGestureRecognizer
+                      >(
+                        () {
+                          final recognizer = ScaleGestureRecognizer()
+                            ..team = team;
+                          // Set ScaleGestureRecognizer as the team captain so
+                          // that when ImmediateMermaidGestureRecognizer wins the
+                          // parent arena via the team, the
+                          // ScaleGestureRecognizer's acceptGesture is called
+                          // (instead of being rejected). Without a captain, the
+                          // team would accept the immediately-resolved recognizer
+                          // and reject the ScaleGestureRecognizer, breaking
+                          // pan/zoom entirely.
+                          team.captain = recognizer;
+                          return recognizer;
+                        },
+                        (instance) {
+                          instance.onStart = _onScaleStart;
+                          instance.onUpdate = _onScaleUpdate;
+                          instance.onEnd = (_) {};
+                        },
+                      ),
                   // ImmediateMermaidGestureRecognizer: wins the gesture arena
                   // on the very first PointerMoveEvent (any direction).
                   // Defined after ScaleGestureRecognizer so it enters the
@@ -1121,10 +1134,11 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                   // 'possible' state before the team resolves.
                   ImmediateMermaidGestureRecognizer:
                       GestureRecognizerFactoryWithHandlers<
-                          ImmediateMermaidGestureRecognizer>(
-                    () => ImmediateMermaidGestureRecognizer()..team = team,
-                    (instance) {},
-                  ),
+                        ImmediateMermaidGestureRecognizer
+                      >(
+                        () => ImmediateMermaidGestureRecognizer()..team = team,
+                        (instance) {},
+                      ),
                 },
                 behavior: HitTestBehavior.opaque,
                 child: Container(color: Colors.transparent),
@@ -1167,7 +1181,8 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     }
 
     await ctrl.evaluateJavascript(
-      source: 'window.setZoom(window.zoomLevel + $delta, '
+      source:
+          'window.setZoom(window.zoomLevel + $delta, '
           "document.getElementById('viewport').clientWidth / 2, "
           "document.getElementById('viewport').clientHeight / 2)",
     );
@@ -1178,10 +1193,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   }
 
   void _openFullScreen() {
-    showMermaidPreviewDialog(
-      context: context,
-      mermaidCode: widget.mermaidCode,
-    );
+    showMermaidPreviewDialog(context: context, mermaidCode: widget.mermaidCode);
   }
 
   // ---------------------------------------------------------------------------
@@ -1197,9 +1209,9 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     final content = widget.mermaidCode.trim();
     if (content.isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Mermaid 代码为空，无法保存')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Mermaid 代码为空，无法保存')));
       }
       _isSaving = false;
       return;
@@ -1243,9 +1255,9 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
 
     if (userFileName.isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('文件名不能为空')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('文件名不能为空')));
       }
       _isSaving = false;
       return;
@@ -1254,28 +1266,30 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     try {
       final bytes = Uint8List.fromList(utf8.encode(content));
       final hash = computeTextHash(bytes);
-      final storageFileName = '$hash.txt';
 
       // Ensure unique filename in the selected folder
       final records = await TextManifest.loadRecords();
       String finalName = userFileName;
       int counter = 2;
-      while (records
-          .any((r) => r.name == finalName && r.folder == selectedFolder)) {
+      while (records.any(
+        (r) => r.name == finalName && r.folder == selectedFolder,
+      )) {
         finalName = '$userFileName ($counter)';
         counter++;
       }
 
-      await TextManifest.writeText(storageFileName, content);
-      await TextManifest.addRecord(TextRecord(
-        name: finalName,
-        hash: hash,
-        format: 'mmd',
-        createdAt: DateTime.now(),
-        size: bytes.length,
-        folder: selectedFolder,
-        textLength: content.length,
-      ));
+      await TextManifest.addRecordWithContent(
+        TextRecord(
+          name: finalName,
+          hash: hash,
+          format: 'mmd',
+          createdAt: DateTime.now(),
+          size: bytes.length,
+          folder: selectedFolder,
+          textLength: content.length,
+        ),
+        bytes,
+      );
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1291,10 +1305,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('保存失败: $e'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text('保存失败: $e'), backgroundColor: Colors.red),
         );
       }
       _isSaving = false;
@@ -1322,8 +1333,10 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     }
     // Same shared template as the fullscreen dialog, with the bundled
     // mermaid.js inlined (offline rendering, no CDN request).
-    return _initialHtml ??= MermaidRenderWidget.buildMermaidHtml(code,
-        inlineMermaidJs: _inlineMermaidJs);
+    return _initialHtml ??= MermaidRenderWidget.buildMermaidHtml(
+      code,
+      inlineMermaidJs: _inlineMermaidJs,
+    );
   }
 
   @override
@@ -1393,17 +1406,11 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
         cs: cs,
         child: Stack(
           children: [
-            Positioned.fill(
-              child: _buildLoadingIndicator(cs, '正在准备渲染引擎...'),
-            ),
+            Positioned.fill(child: _buildLoadingIndicator(cs, '正在准备渲染引擎...')),
             // Zoom controls overlay — visible even during loading when
             // showZoomControls is true.
             if (widget.showZoomControls)
-              Positioned(
-                top: 4,
-                right: 4,
-                child: _buildZoomControls(cs),
-              ),
+              Positioned(top: 4, right: 4, child: _buildZoomControls(cs)),
           ],
         ),
       );
@@ -1466,8 +1473,9 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                     handlerName: 'onMermaidError',
                     callback: (args) {
                       if (mounted) {
-                        final msg =
-                            args.isNotEmpty ? args[0].toString() : '未知错误';
+                        final msg = args.isNotEmpty
+                            ? args[0].toString()
+                            : '未知错误';
                         setState(() => _errorMessage = msg);
                       }
                     },
@@ -1495,7 +1503,8 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                   );
                 } catch (e) {
                   debugPrint(
-                      '[MermaidRenderWidget] JS handler bridge unavailable: $e');
+                    '[MermaidRenderWidget] JS handler bridge unavailable: $e',
+                  );
                 }
               },
               onLoadStop: (ctrl, url) {
@@ -1537,11 +1546,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
           // Button row (top right) — only show when widget.showToolbar is true
           // and the WebView is ready with no error.
           if (widget.showToolbar && !showLoading && !showErrorOverlay)
-            Positioned(
-              top: 4,
-              right: 4,
-              child: _buildButtonRow(cs),
-            ),
+            Positioned(top: 4, right: 4, child: _buildButtonRow(cs)),
 
           // Zoom controls overlay — shown independently of showToolbar.
           // When showToolbar is also true and the widget is ready, the
@@ -1549,11 +1554,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
           // we skip to avoid duplication.
           if (widget.showZoomControls &&
               (!widget.showToolbar || showLoading || showErrorOverlay))
-            Positioned(
-              top: 4,
-              right: 4,
-              child: _buildZoomControls(cs),
-            ),
+            Positioned(top: 4, right: 4, child: _buildZoomControls(cs)),
         ],
       ),
     );
@@ -1574,14 +1575,15 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   /// only the block-specific "查看图表" toggle is passed as an action
   /// button (it sits right of the common buttons).
   Widget _buildSourceCodeView(
-      ColorScheme cs, bool isDark, double? effectiveHeight) {
+    ColorScheme cs,
+    bool isDark,
+    double? effectiveHeight,
+  ) {
     return CodeBlockSourceView(
       code: widget.mermaidCode,
       language: 'mermaid',
       height: effectiveHeight,
-      actionButtons: [
-        _buildSrcCodeActionButton(),
-      ],
+      actionButtons: [_buildSrcCodeActionButton()],
     );
   }
 
@@ -1632,11 +1634,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
             label: '缩小',
             onTap: _zoomOut,
           ),
-          _buildActionButton(
-            icon: Icons.zoom_in,
-            label: '放大',
-            onTap: _zoomIn,
-          ),
+          _buildActionButton(icon: Icons.zoom_in, label: '放大', onTap: _zoomIn),
 
           // ---- Common buttons (right-aligned, fixed order) ----
           _buildActionButton(
@@ -1644,11 +1642,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
             label: '全屏',
             onTap: _openFullScreen,
           ),
-          _buildActionButton(
-            icon: Icons.save,
-            label: '保存',
-            onTap: _saveAsMmd,
-          ),
+          _buildActionButton(icon: Icons.save, label: '保存', onTap: _saveAsMmd),
           _buildActionButton(
             icon: Icons.code,
             label: '查看源码',
@@ -1695,11 +1689,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
             label: '缩小',
             onTap: _zoomOut,
           ),
-          _buildActionButton(
-            icon: Icons.zoom_in,
-            label: '放大',
-            onTap: _zoomIn,
-          ),
+          _buildActionButton(icon: Icons.zoom_in, label: '放大', onTap: _zoomIn),
         ],
       ),
     );
@@ -1732,17 +1722,11 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          CircularProgressIndicator(
-            strokeWidth: 2,
-            color: cs.primary,
-          ),
+          CircularProgressIndicator(strokeWidth: 2, color: cs.primary),
           const SizedBox(height: 8),
           Text(
             text,
-            style: TextStyle(
-              fontSize: 12,
-              color: cs.onSurfaceVariant,
-            ),
+            style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
           ),
         ],
       ),
@@ -1753,10 +1737,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     return Center(
       child: Text(
         'No Mermaid code to render',
-        style: TextStyle(
-          fontSize: 13,
-          color: cs.onSurfaceVariant,
-        ),
+        style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
       ),
     );
   }
@@ -1782,10 +1763,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
             Text(
               message,
               textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 11,
-                color: cs.onSurfaceVariant,
-              ),
+              style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
               maxLines: 4,
               overflow: TextOverflow.ellipsis,
             ),

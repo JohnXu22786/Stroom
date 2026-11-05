@@ -37,8 +37,13 @@ class _ModelOption {
   final String host;
   final String apiKey;
   final Map<String, dynamic> providerTypeConfig;
-  const _ModelOption(this.model, this.providerName, this.host, this.apiKey,
-      this.providerTypeConfig);
+  const _ModelOption(
+    this.model,
+    this.providerName,
+    this.host,
+    this.apiKey,
+    this.providerTypeConfig,
+  );
 }
 
 /// Collect all available models with their source provider info from ALL
@@ -137,22 +142,22 @@ class _AsrPageState extends ConsumerState<AsrPage> {
         // URL-mode entry: restore the link (no bytes).
         final url = audioData['url'];
         if (url is String && url.isNotEmpty) {
-          _selectedAudios.add(SelectedAudio(
-            bytes: Uint8List(0),
-            name: url,
-            format: 'url',
-          ));
+          _selectedAudios.add(
+            SelectedAudio(bytes: Uint8List(0), name: url, format: 'url'),
+          );
           continue;
         }
         final bytesStr = audioData['bytes'] as String?;
         if (bytesStr != null) {
           try {
             final bytes = base64Decode(bytesStr);
-            _selectedAudios.add(SelectedAudio(
-              bytes: bytes,
-              name: audioData['name'] as String? ?? 'audio',
-              format: audioData['format'] as String? ?? 'wav',
-            ));
+            _selectedAudios.add(
+              SelectedAudio(
+                bytes: bytes,
+                name: audioData['name'] as String? ?? 'audio',
+                format: audioData['format'] as String? ?? 'wav',
+              ),
+            );
           } catch (e) {
             debugPrint('Failed to decode retry audio: $e');
           }
@@ -231,9 +236,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
           decoration: BoxDecoration(
             color: cs.errorContainer.withValues(alpha: 0.3),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: cs.error.withValues(alpha: 0.3),
-            ),
+            border: Border.all(color: cs.error.withValues(alpha: 0.3)),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: Row(
@@ -274,10 +277,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   foregroundColor: cs.error,
                 ),
-                child: const Text(
-                  '去配置',
-                  style: TextStyle(fontSize: 12),
-                ),
+                child: const Text('去配置', style: TextStyle(fontSize: 12)),
               ),
             ],
           ),
@@ -311,8 +311,11 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                 borderRadius: BorderRadius.circular(8),
               ),
               // 机器人图标，与对话页面输入框的模型标识一致（同 OCR 页面）
-              child:
-                  Icon(Icons.smart_toy_outlined, size: 16, color: cs.primary),
+              child: Icon(
+                Icons.smart_toy_outlined,
+                size: 16,
+                color: cs.primary,
+              ),
             ),
             const SizedBox(width: 10),
             Text(
@@ -517,8 +520,8 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                       onPressed: _isProcessing
                           ? null
                           : _getCurrentUploadMethod() == AudioUploadMethod.url
-                              ? _showUrlInputDialog
-                              : _showAudioSourceSheet,
+                          ? _showUrlInputDialog
+                          : _showAudioSourceSheet,
                       icon: const Icon(Icons.refresh, size: 18),
                       label: const Text('重新选择'),
                     ),
@@ -588,8 +591,9 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                     ),
                     IconButton(
                       icon: Icon(Icons.close, size: 16, color: cs.error),
-                      onPressed:
-                          _isProcessing ? null : () => _removeAudio(index),
+                      onPressed: _isProcessing
+                          ? null
+                          : () => _removeAudio(index),
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
                     ),
@@ -864,8 +868,9 @@ class _AsrPageState extends ConsumerState<AsrPage> {
   static String _urlDisplayName(String url) {
     try {
       final uri = Uri.parse(url);
-      final segments =
-          uri.pathSegments.where((s) => s.isNotEmpty).toList(growable: false);
+      final segments = uri.pathSegments
+          .where((s) => s.isNotEmpty)
+          .toList(growable: false);
       final name = segments.isNotEmpty ? segments.last : uri.host;
       return name.length <= 40 ? name : name.substring(0, 40);
     } catch (_) {
@@ -886,19 +891,17 @@ class _AsrPageState extends ConsumerState<AsrPage> {
     // duplicate text records).
     if (_selectedAudios.any((a) => a.isUrl && a.name == url)) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('该链接已在列表中')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('该链接已在列表中')));
       }
       return;
     }
     if (mounted) {
       setState(() {
-        _selectedAudios.add(SelectedAudio(
-          bytes: Uint8List(0),
-          name: url,
-          format: 'url',
-        ));
+        _selectedAudios.add(
+          SelectedAudio(bytes: Uint8List(0), name: url, format: 'url'),
+        );
         _errorMessage = null;
         _transcriptionResult = null;
       });
@@ -1146,8 +1149,9 @@ class _AsrPageState extends ConsumerState<AsrPage> {
       apiKey: selectedOption.apiKey,
       model: selectedOption.model.modelId,
       typeConfig: tc,
-      customParams:
-          selectedOption.model.customParams.map((p) => p.copy()).toList(),
+      customParams: selectedOption.model.customParams
+          .map((p) => p.copy())
+          .toList(),
       uploadMethod: uploadMethod,
       maxFileSizeBytes: maxFileSizeBytes,
       preprocessing: preprocessing,
@@ -1211,18 +1215,24 @@ class _AsrPageState extends ConsumerState<AsrPage> {
     final saveFolder = _saveFolder;
     for (final entry in taskEntries) {
       unawaited(
-          _computeAsrRetryData(entry, modelIndex, saveFolder, bgNotifier));
+        _computeAsrRetryData(entry, modelIndex, saveFolder, bgNotifier),
+      );
     }
 
     // Step 4: Execute tasks in sequence one-by-one (auto-chain) immediately.
     try {
       await _executeTaskChain(
-          taskEntries, effectiveConfig, bgNotifier, textNotifier);
+        taskEntries,
+        effectiveConfig,
+        bgNotifier,
+        textNotifier,
+      );
     } catch (e) {
       debugPrint('[ASR] _executeTaskChain failed: $e');
       for (final entry in taskEntries) {
-        final task =
-            bgNotifier.state.where((t) => t.id == entry.taskId).firstOrNull;
+        final task = bgNotifier.state
+            .where((t) => t.id == entry.taskId)
+            .firstOrNull;
         if (task != null &&
             (task.status == TaskStatus.waiting ||
                 task.status == TaskStatus.running)) {
@@ -1279,8 +1289,11 @@ class _AsrPageState extends ConsumerState<AsrPage> {
       // Fall back to main-thread computation.
       debugPrint('[ASR] Isolate.run failed, falling back to main thread: $e');
       try {
-        final retryData =
-            _buildAsrRetryData(entry.audio, modelIndex, saveFolder);
+        final retryData = _buildAsrRetryData(
+          entry.audio,
+          modelIndex,
+          saveFolder,
+        );
         bgNotifier.setRetryData(entry.taskId, retryData);
       } catch (retryError) {
         debugPrint('[ASR] Failed to compute retryData: $retryError');
@@ -1333,8 +1346,10 @@ class _AsrPageState extends ConsumerState<AsrPage> {
         bgNotifier.updateStep(taskId, 3, completed: true);
         bgNotifier.updateStep(taskId, 4, running: true);
 
-        final filePath =
-            await _saveTranscriptionResult(result.text, title: entry.title);
+        final filePath = await _saveTranscriptionResult(
+          result.text,
+          title: entry.title,
+        );
 
         bgNotifier.updateStep(taskId, 4, completed: true);
         bgNotifier.completeTask(taskId, downloadedFilePath: filePath);
@@ -1357,10 +1372,12 @@ class _AsrPageState extends ConsumerState<AsrPage> {
           if (service.lastResponseData != null)
             'data': service.lastResponseData,
         };
-        bgNotifier.failTask(taskId,
-            error: '音频转写失败: $e',
-            rawRequest: rawRequest,
-            rawResponse: rawResponse);
+        bgNotifier.failTask(
+          taskId,
+          error: '音频转写失败: $e',
+          rawRequest: rawRequest,
+          rawResponse: rawResponse,
+        );
       }
       // Continue to next task in the for loop regardless of success/failure
     }
@@ -1373,12 +1390,10 @@ class _AsrPageState extends ConsumerState<AsrPage> {
 
     final bytes = Uint8List.fromList(utf8.encode(text));
     final hash = computeTextHash(bytes);
-    final storageFileName = '$hash.txt';
-
-    final filePath = await TextManifest.writeText(storageFileName, text);
-    await TextManifest.addRecord(
+    final filePath = await TextManifest.addRecordWithContent(
       TextRecord(
-        name: title ??
+        name:
+            title ??
             'ASR_${now.year}${_pad(now.month)}${_pad(now.day)}${_pad(now.hour)}${_pad(now.minute)}${_pad(now.second)}',
         hash: hash,
         format: 'txt',
@@ -1387,6 +1402,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
         folder: _saveFolder,
         textLength: text.length,
       ),
+      bytes,
     );
     return filePath;
   }
@@ -1622,10 +1638,7 @@ class _UrlInputDialogState extends State<_UrlInputDialog> {
           onPressed: () => Navigator.pop(context),
           child: const Text('取消'),
         ),
-        FilledButton(
-          onPressed: _submit,
-          child: const Text('添加'),
-        ),
+        FilledButton(onPressed: _submit, child: const Text('添加')),
       ],
     );
   }

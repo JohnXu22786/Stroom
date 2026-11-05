@@ -16,6 +16,7 @@ import 'chat_service.dart';
 import 'http_tool_service.dart';
 import 'mcp_client.dart';
 import 'todo_tool_service.dart';
+import 'text_storage_tool_service.dart';
 import 'web_search_service.dart';
 
 part 'chat_adapter_mcp.dart';
@@ -34,8 +35,9 @@ const kMcpSearchToolNames = <String>{
 
 bool isMcpMasterSwitchEnabled(ProviderEntriesState entriesState) {
   if (!entriesState.isLoaded) return false;
-  final mcpEntry =
-      entriesState.entries.where((entry) => entry.type == 'mcp').firstOrNull;
+  final mcpEntry = entriesState.entries
+      .where((entry) => entry.type == 'mcp')
+      .firstOrNull;
   return mcpEntry?.enabled ?? true;
 }
 
@@ -200,8 +202,9 @@ class ChatAdapter {
     final modelEffort = findEffortParam(config.reasoningParams);
     var merged = mergeReasoningParams(providerParams, config.reasoningParams);
     if (modelEffort != null) {
-      merged =
-          merged.where((p) => !p.isEffortParam || p == modelEffort).toList();
+      merged = merged
+          .where((p) => !p.isEffortParam || p == modelEffort)
+          .toList();
     }
     final providerNames = providerParams
         .map((p) => p.paramName.trim())
@@ -213,7 +216,8 @@ class ChatAdapter {
         .toSet();
     return merged.map((p) {
       final name = p.paramName.trim();
-      final isProviderOrigin = name.isNotEmpty &&
+      final isProviderOrigin =
+          name.isNotEmpty &&
           providerNames.contains(name) &&
           !modelNames.contains(name);
       return isProviderOrigin ? p.copy() : p;
@@ -256,22 +260,25 @@ class ChatAdapter {
       if (selected == null) return null;
       final config = selected.config;
       final model = selected.model;
-      final endpointType =
-          effectiveEndpointType(model.endpointType, config.endpointType);
+      final endpointType = effectiveEndpointType(
+        model.endpointType,
+        config.endpointType,
+      );
       return _activeServices.putIfAbsent(
-          convId,
-          () => _buildService(
-                createChatProviderFromConfig(
-                  providerName: config.providerName,
-                  baseUrl: config.host,
-                  apiKey: config.key,
-                  endpointType: endpointType,
-                ),
-                model,
-                config,
-                endpointType,
-                assistant: assistant,
-              ));
+        convId,
+        () => _buildService(
+          createChatProviderFromConfig(
+            providerName: config.providerName,
+            baseUrl: config.host,
+            apiKey: config.key,
+            endpointType: endpointType,
+          ),
+          model,
+          config,
+          endpointType,
+          assistant: assistant,
+        ),
+      );
     }
     if (assistant != null && entriesState != null) {
       // The assistant editor stores the default model as a DISPLAY name
@@ -402,8 +409,9 @@ class ChatAdapter {
     String? providerName,
     String? modelDisplayName,
   }) {
-    final llmEntry =
-        entriesState.entries.where((e) => e.type == 'llm').firstOrNull;
+    final llmEntry = entriesState.entries
+        .where((e) => e.type == 'llm')
+        .firstOrNull;
     if (llmEntry == null) return null;
 
     final hasProvider = providerName != null && providerName.isNotEmpty;
@@ -474,20 +482,17 @@ class ChatAdapter {
     ChatService? svc;
     if (resolved != null) {
       final (config, modelConfig) = resolved;
-      final endpointType =
-          effectiveEndpointType(modelConfig.endpointType, config.endpointType);
+      final endpointType = effectiveEndpointType(
+        modelConfig.endpointType,
+        config.endpointType,
+      );
       final provider = createChatProviderFromConfig(
         providerName: config.providerName,
         baseUrl: config.host,
         apiKey: config.key,
         endpointType: endpointType,
       );
-      svc = _buildTransientService(
-        provider,
-        modelConfig,
-        config,
-        endpointType,
-      );
+      svc = _buildTransientService(provider, modelConfig, config, endpointType);
     } else {
       svc = createTransientService();
     }
@@ -574,8 +579,9 @@ class ChatAdapter {
 
   /// 从 ProviderEntriesState 读取 LLM 配置并初始化 ChatService
   void configure(ProviderEntriesState entriesState) {
-    final llmEntry =
-        entriesState.entries.where((e) => e.type == 'llm').firstOrNull;
+    final llmEntry = entriesState.entries
+        .where((e) => e.type == 'llm')
+        .firstOrNull;
     if (llmEntry == null || llmEntry.configs.isEmpty) {
       debugPrint('ChatAdapter.configure: no LLM entry or configs');
       _cachedProvider = null;
@@ -608,8 +614,10 @@ class ChatAdapter {
       currentModelIndex = -1;
       return;
     }
-    final endpointType =
-        effectiveEndpointType(modelConfig.endpointType, config.endpointType);
+    final endpointType = effectiveEndpointType(
+      modelConfig.endpointType,
+      config.endpointType,
+    );
     debugPrint(
       'ChatAdapter.configure: host=${config.host} model=${modelConfig.modelId} '
       'endpoint=$endpointType',
@@ -636,8 +644,9 @@ class ChatAdapter {
     int configIndex,
     int modelIndex,
   ) {
-    final llmEntry =
-        entriesState.entries.where((e) => e.type == 'llm').firstOrNull;
+    final llmEntry = entriesState.entries
+        .where((e) => e.type == 'llm')
+        .firstOrNull;
     if (llmEntry == null ||
         configIndex < 0 ||
         configIndex >= llmEntry.configs.length) {
@@ -674,8 +683,10 @@ class ChatAdapter {
       return;
     }
     final modelConfig = config.models[modelIndex];
-    final endpointType =
-        effectiveEndpointType(modelConfig.endpointType, config.endpointType);
+    final endpointType = effectiveEndpointType(
+      modelConfig.endpointType,
+      config.endpointType,
+    );
     debugPrint(
       'ChatAdapter.selectModel: using config[$configIndex] '
       'host=${config.host} model=${modelConfig.modelId} endpoint=$endpointType',
@@ -737,9 +748,7 @@ class ChatAdapter {
     return [
       ...filterMcpSearchToolDefinitions(
         ChatService.getRegisteredToolDefinitions()
-            .where(
-              (tool) => !_disabledMcpToolNames.contains(tool.name),
-            )
+            .where((tool) => !_disabledMcpToolNames.contains(tool.name))
             .toList(),
         mcpEnabled: _mcpMasterSwitchEnabled,
       ),
@@ -783,8 +792,9 @@ class ChatAdapter {
     Map<String, String> reasoningParamValues = const {},
     String convId = '',
   }) {
-    final svc =
-        convId.isNotEmpty ? getOrCreateService(convId) : currentChatService;
+    final svc = convId.isNotEmpty
+        ? getOrCreateService(convId)
+        : currentChatService;
     if (svc == null) {
       return Stream.error('请先配置聊天供应商');
     }
@@ -812,8 +822,11 @@ class ChatAdapter {
     ProviderEntriesState? entriesState,
   }) {
     final svc = convId.isNotEmpty
-        ? getOrCreateService(convId,
-            assistant: assistant, entriesState: entriesState)
+        ? getOrCreateService(
+            convId,
+            assistant: assistant,
+            entriesState: entriesState,
+          )
         : currentChatService;
     if (svc == null) {
       return Stream.error('请先配置聊天供应商');
@@ -909,8 +922,9 @@ String? perConversationModelToRestore({
 /// （[selectModel] / [_resolveModelRefPair] 都会跳过），不应出现在
 /// 可选列表与设置面板中，否则显示与真实请求行为不一致。
 List<AvailableModel> availableLlmModels(ProviderEntriesState entriesState) {
-  final llmEntry =
-      entriesState.entries.where((e) => e.type == 'llm').firstOrNull;
+  final llmEntry = entriesState.entries
+      .where((e) => e.type == 'llm')
+      .firstOrNull;
   if (llmEntry == null || llmEntry.configs.isEmpty) return const [];
 
   final result = <AvailableModel>[];

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -49,6 +50,9 @@ class ManifestDatabase {
 
   /// Web 端数据缓存（全量 JSON）
   static Map<String, dynamic>? _webData;
+
+  /// Serializes JSON-backed text record mutations and their full-store saves.
+  static Future<void> _textRecordMutationQueue = Future<void>.value();
 
   /// Web 端数据在 WebFileStore 中的 key
   static const String _webStoreKey = 'manifest_database_data';
@@ -157,8 +161,10 @@ class ManifestDatabase {
               'ALTER TABLE audio_records ADD COLUMN duration INTEGER NOT NULL DEFAULT 0',
             );
           } catch (_) {
-            await AppLogService.warning('ManifestDatabase',
-                '_initDatabase v2: ALTER TABLE audio_records ADD COLUMN duration failed (column may already exist)');
+            await AppLogService.warning(
+              'ManifestDatabase',
+              '_initDatabase v2: ALTER TABLE audio_records ADD COLUMN duration failed (column may already exist)',
+            );
           }
         }
         if (oldVersion < 3) {
@@ -176,8 +182,10 @@ class ManifestDatabase {
               )
             ''');
           } catch (_) {
-            await AppLogService.warning('ManifestDatabase',
-                '_initDatabase v3: CREATE TABLE text_records failed (table may already exist)');
+            await AppLogService.warning(
+              'ManifestDatabase',
+              '_initDatabase v3: CREATE TABLE text_records failed (table may already exist)',
+            );
           }
         }
         if (oldVersion < 4) {
@@ -229,15 +237,19 @@ class ManifestDatabase {
               );
             }
           } catch (_) {
-            await AppLogService.warning('ManifestDatabase',
-                '_initDatabase v4: migration of legacy folders to per-type tables failed');
+            await AppLogService.warning(
+              'ManifestDatabase',
+              '_initDatabase v4: migration of legacy folders to per-type tables failed',
+            );
           }
           // 删除旧版共享 folders 表（v2 格式不再使用）
           try {
             await db.execute('DROP TABLE IF EXISTS ${ManifestTables.folders}');
           } catch (_) {
-            await AppLogService.warning('ManifestDatabase',
-                '_initDatabase v4: DROP TABLE ${ManifestTables.folders} failed');
+            await AppLogService.warning(
+              'ManifestDatabase',
+              '_initDatabase v4: DROP TABLE ${ManifestTables.folders} failed',
+            );
           }
         }
         if (oldVersion < 5) {
@@ -256,8 +268,11 @@ class ManifestDatabase {
               final cols = await db.rawQuery('PRAGMA table_info($table)');
               hasColumn = cols.any((c) => c['name'] == 'modified_at');
             } catch (e) {
-              await AppLogService.error('ManifestDatabase',
-                  '_initDatabase v5: table_info failed for $table', e);
+              await AppLogService.error(
+                'ManifestDatabase',
+                '_initDatabase v5: table_info failed for $table',
+                e,
+              );
               continue;
             }
             if (!hasColumn) {
@@ -268,9 +283,10 @@ class ManifestDatabase {
               } catch (e) {
                 // 列添加失败时记录真实原因；不继续回填（后续读写会显式报错）
                 await AppLogService.error(
-                    'ManifestDatabase',
-                    '_initDatabase v5: ADD COLUMN modified_at failed for $table',
-                    e);
+                  'ManifestDatabase',
+                  '_initDatabase v5: ADD COLUMN modified_at failed for $table',
+                  e,
+                );
                 continue;
               }
             }
@@ -280,9 +296,10 @@ class ManifestDatabase {
               );
             } catch (e) {
               await AppLogService.error(
-                  'ManifestDatabase',
-                  '_initDatabase v5: backfill modified_at failed for $table',
-                  e);
+                'ManifestDatabase',
+                '_initDatabase v5: backfill modified_at failed for $table',
+                e,
+              );
             }
           }
         }
@@ -307,7 +324,7 @@ class ManifestDatabase {
         'wmv',
         'm4v',
         '3gp',
-        'gif'
+        'gif',
       ];
       final placeholders = videoFormats.map((_) => '?').join(',');
       final rows = await db.query(
@@ -378,7 +395,7 @@ class ManifestDatabase {
       'wmv',
       'm4v',
       '3gp',
-      'gif'
+      'gif',
     };
     final toMigrate = <Map<String, dynamic>>[];
     final remaining = <Map<String, dynamic>>[];
@@ -456,11 +473,14 @@ class ManifestDatabase {
       // Database not available (e.g. in test mode without enableTestMode).
       // The migration will be handled by onUpgrade when the DB is
       // actually initialized.
-      await AppLogService.warning('ManifestDatabase',
-          'migrateLegacyFoldersToPerType: DB not available, skipping: $e');
+      await AppLogService.warning(
+        'ManifestDatabase',
+        'migrateLegacyFoldersToPerType: DB not available, skipping: $e',
+      );
       debugPrint(
-          '[ManifestDatabase] migrateLegacyFoldersToPerType: DB not available, '
-          'skipping: $e');
+        '[ManifestDatabase] migrateLegacyFoldersToPerType: DB not available, '
+        'skipping: $e',
+      );
       return;
     }
     try {
@@ -476,8 +496,9 @@ class ManifestDatabase {
           for (final row in rows) {
             final path = row['path'] as String;
             for (final ft in targetFolderTables) {
-              await db.insert(ft, {'path': path},
-                  conflictAlgorithm: ConflictAlgorithm.ignore);
+              await db.insert(ft, {
+                'path': path,
+              }, conflictAlgorithm: ConflictAlgorithm.ignore);
             }
           }
         }
@@ -487,9 +508,12 @@ class ManifestDatabase {
       }
     } catch (e) {
       await AppLogService.error(
-          'ManifestDatabase', 'migrateLegacyFoldersToPerType SQLite error: $e');
+        'ManifestDatabase',
+        'migrateLegacyFoldersToPerType SQLite error: $e',
+      );
       debugPrint(
-          '[ManifestDatabase] migrateLegacyFoldersToPerType SQLite error: $e');
+        '[ManifestDatabase] migrateLegacyFoldersToPerType SQLite error: $e',
+      );
       rethrow;
     }
   }
@@ -662,8 +686,17 @@ class ManifestDatabase {
     } catch (e, st) {
       debugPrint('ManifestDatabase._saveWebData error: $e');
       await AppLogService.error(
-          'ManifestDatabase', '_saveWebData failed', e, st);
+        'ManifestDatabase',
+        '_saveWebData failed',
+        e,
+        st,
+      );
     }
+  }
+
+  static Future<void> _saveWebDataOrThrow() async {
+    if (_webData == null) return;
+    await WebFileStore.write(_webStoreKey, utf8Encode(jsonEncode(_webData)));
   }
 
   // ==================================================================
@@ -683,7 +716,11 @@ class ManifestDatabase {
       return rows.map(dbRowToRecord).toList();
     } catch (e, stackTrace) {
       await AppLogService.error(
-          'ManifestDatabase', 'getAllImageRecords failed', e, stackTrace);
+        'ManifestDatabase',
+        'getAllImageRecords failed',
+        e,
+        stackTrace,
+      );
       rethrow;
     }
   }
@@ -706,14 +743,20 @@ class ManifestDatabase {
       );
     } catch (e, stackTrace) {
       await AppLogService.error(
-          'ManifestDatabase', 'insertImageRecord failed', e, stackTrace);
+        'ManifestDatabase',
+        'insertImageRecord failed',
+        e,
+        stackTrace,
+      );
       rethrow;
     }
   }
 
   /// 更新一条图片记录
   static Future<void> updateImageRecord(
-      String id, Map<String, dynamic> updates) async {
+    String id,
+    Map<String, dynamic> updates,
+  ) async {
     try {
       if (_useJsonStore) {
         final data = await _loadWebData();
@@ -733,8 +776,12 @@ class ManifestDatabase {
         whereArgs: [id],
       );
     } catch (e, stackTrace) {
-      await AppLogService.error('ManifestDatabase',
-          'updateImageRecord failed [id=$id]', e, stackTrace);
+      await AppLogService.error(
+        'ManifestDatabase',
+        'updateImageRecord failed [id=$id]',
+        e,
+        stackTrace,
+      );
       rethrow;
     }
   }
@@ -756,8 +803,12 @@ class ManifestDatabase {
         whereArgs: [id],
       );
     } catch (e, stackTrace) {
-      await AppLogService.error('ManifestDatabase',
-          'deleteImageRecord failed [id=$id]', e, stackTrace);
+      await AppLogService.error(
+        'ManifestDatabase',
+        'deleteImageRecord failed [id=$id]',
+        e,
+        stackTrace,
+      );
       rethrow;
     }
   }
@@ -782,7 +833,11 @@ class ManifestDatabase {
       );
     } catch (e, stackTrace) {
       await AppLogService.error(
-          'ManifestDatabase', 'deleteImageRecords failed', e, stackTrace);
+        'ManifestDatabase',
+        'deleteImageRecords failed',
+        e,
+        stackTrace,
+      );
       rethrow;
     }
   }
@@ -804,7 +859,11 @@ class ManifestDatabase {
       return rows.map(dbRowToRecord).toList();
     } catch (e, stackTrace) {
       await AppLogService.error(
-          'ManifestDatabase', 'getAllAudioRecords failed', e, stackTrace);
+        'ManifestDatabase',
+        'getAllAudioRecords failed',
+        e,
+        stackTrace,
+      );
       rethrow;
     }
   }
@@ -827,14 +886,20 @@ class ManifestDatabase {
       );
     } catch (e, stackTrace) {
       await AppLogService.error(
-          'ManifestDatabase', 'insertAudioRecord failed', e, stackTrace);
+        'ManifestDatabase',
+        'insertAudioRecord failed',
+        e,
+        stackTrace,
+      );
       rethrow;
     }
   }
 
   /// 更新一条音频记录
   static Future<void> updateAudioRecord(
-      String id, Map<String, dynamic> updates) async {
+    String id,
+    Map<String, dynamic> updates,
+  ) async {
     try {
       if (_useJsonStore) {
         final data = await _loadWebData();
@@ -854,8 +919,12 @@ class ManifestDatabase {
         whereArgs: [id],
       );
     } catch (e, stackTrace) {
-      await AppLogService.error('ManifestDatabase',
-          'updateAudioRecord failed [id=$id]', e, stackTrace);
+      await AppLogService.error(
+        'ManifestDatabase',
+        'updateAudioRecord failed [id=$id]',
+        e,
+        stackTrace,
+      );
       rethrow;
     }
   }
@@ -877,8 +946,12 @@ class ManifestDatabase {
         whereArgs: [id],
       );
     } catch (e, stackTrace) {
-      await AppLogService.error('ManifestDatabase',
-          'deleteAudioRecord failed [id=$id]', e, stackTrace);
+      await AppLogService.error(
+        'ManifestDatabase',
+        'deleteAudioRecord failed [id=$id]',
+        e,
+        stackTrace,
+      );
       rethrow;
     }
   }
@@ -903,7 +976,11 @@ class ManifestDatabase {
       );
     } catch (e, stackTrace) {
       await AppLogService.error(
-          'ManifestDatabase', 'deleteAudioRecords failed', e, stackTrace);
+        'ManifestDatabase',
+        'deleteAudioRecords failed',
+        e,
+        stackTrace,
+      );
       rethrow;
     }
   }
@@ -925,7 +1002,11 @@ class ManifestDatabase {
       return rows.map(dbRowToRecord).toList();
     } catch (e, stackTrace) {
       await AppLogService.error(
-          'ManifestDatabase', 'getAllVideoRecords failed', e, stackTrace);
+        'ManifestDatabase',
+        'getAllVideoRecords failed',
+        e,
+        stackTrace,
+      );
       rethrow;
     }
   }
@@ -948,14 +1029,20 @@ class ManifestDatabase {
       );
     } catch (e, stackTrace) {
       await AppLogService.error(
-          'ManifestDatabase', 'insertVideoRecord failed', e, stackTrace);
+        'ManifestDatabase',
+        'insertVideoRecord failed',
+        e,
+        stackTrace,
+      );
       rethrow;
     }
   }
 
   /// 更新一条视频记录
   static Future<void> updateVideoRecord(
-      String id, Map<String, dynamic> updates) async {
+    String id,
+    Map<String, dynamic> updates,
+  ) async {
     try {
       if (_useJsonStore) {
         final data = await _loadWebData();
@@ -975,8 +1062,12 @@ class ManifestDatabase {
         whereArgs: [id],
       );
     } catch (e, stackTrace) {
-      await AppLogService.error('ManifestDatabase',
-          'updateVideoRecord failed [id=$id]', e, stackTrace);
+      await AppLogService.error(
+        'ManifestDatabase',
+        'updateVideoRecord failed [id=$id]',
+        e,
+        stackTrace,
+      );
       rethrow;
     }
   }
@@ -998,8 +1089,12 @@ class ManifestDatabase {
         whereArgs: [id],
       );
     } catch (e, stackTrace) {
-      await AppLogService.error('ManifestDatabase',
-          'deleteVideoRecord failed [id=$id]', e, stackTrace);
+      await AppLogService.error(
+        'ManifestDatabase',
+        'deleteVideoRecord failed [id=$id]',
+        e,
+        stackTrace,
+      );
       rethrow;
     }
   }
@@ -1024,7 +1119,11 @@ class ManifestDatabase {
       );
     } catch (e, stackTrace) {
       await AppLogService.error(
-          'ManifestDatabase', 'deleteVideoRecords failed', e, stackTrace);
+        'ManifestDatabase',
+        'deleteVideoRecords failed',
+        e,
+        stackTrace,
+      );
       rethrow;
     }
   }
@@ -1046,7 +1145,11 @@ class ManifestDatabase {
       return rows.map(dbRowToRecord).toList();
     } catch (e, stackTrace) {
       await AppLogService.error(
-          'ManifestDatabase', 'getAllTextRecords failed', e, stackTrace);
+        'ManifestDatabase',
+        'getAllTextRecords failed',
+        e,
+        stackTrace,
+      );
       rethrow;
     }
   }
@@ -1055,10 +1158,17 @@ class ManifestDatabase {
   static Future<void> insertTextRecord(Map<String, dynamic> record) async {
     try {
       if (_useJsonStore) {
-        final data = await _loadWebData();
-        final list = data[ManifestTables.textRecords] as List<dynamic>? ?? [];
-        list.add(record);
-        await _saveWebData();
+        await _serializeTextRecordMutation(() async {
+          final data = await _loadWebData();
+          final list = data[ManifestTables.textRecords] as List<dynamic>? ?? [];
+          list.add(record);
+          try {
+            await _saveWebDataOrThrow();
+          } catch (_) {
+            list.remove(record);
+            rethrow;
+          }
+        });
         return;
       }
       final db = await database;
@@ -1069,23 +1179,40 @@ class ManifestDatabase {
       );
     } catch (e, stackTrace) {
       await AppLogService.error(
-          'ManifestDatabase', 'insertTextRecord failed', e, stackTrace);
+        'ManifestDatabase',
+        'insertTextRecord failed',
+        e,
+        stackTrace,
+      );
       rethrow;
     }
   }
 
   /// 更新一条文本记录
   static Future<void> updateTextRecord(
-      String id, Map<String, dynamic> updates) async {
+    String id,
+    Map<String, dynamic> updates,
+  ) async {
     try {
       if (_useJsonStore) {
-        final data = await _loadWebData();
-        final list = data[ManifestTables.textRecords] as List<dynamic>? ?? [];
-        final index = list.indexWhere((r) => (r as Map)['id'] == id);
-        if (index != -1) {
-          (list[index] as Map<String, dynamic>).addAll(updates);
-          await _saveWebData();
-        }
+        await _serializeTextRecordMutation(() async {
+          final data = await _loadWebData();
+          final list = data[ManifestTables.textRecords] as List<dynamic>? ?? [];
+          final index = list.indexWhere((r) => (r as Map)['id'] == id);
+          if (index != -1) {
+            final record = list[index] as Map<String, dynamic>;
+            final original = Map<String, dynamic>.from(record);
+            record.addAll(updates);
+            try {
+              await _saveWebDataOrThrow();
+            } catch (_) {
+              record
+                ..clear()
+                ..addAll(original);
+              rethrow;
+            }
+          }
+        });
         return;
       }
       final db = await database;
@@ -1096,9 +1223,87 @@ class ManifestDatabase {
         whereArgs: [id],
       );
     } catch (e, stackTrace) {
-      await AppLogService.error('ManifestDatabase',
-          'updateTextRecord failed [id=$id]', e, stackTrace);
+      await AppLogService.error(
+        'ManifestDatabase',
+        'updateTextRecord failed [id=$id]',
+        e,
+        stackTrace,
+      );
       rethrow;
+    }
+  }
+
+  /// Update a text record only if its content hash still matches the caller's
+  /// snapshot. Returns false when another edit already changed the record.
+  static Future<bool> updateTextRecordIfHash(
+    String id,
+    String expectedHash,
+    Map<String, dynamic> expectedMetadata,
+    Map<String, dynamic> updates,
+  ) async {
+    try {
+      if (_useJsonStore) {
+        return await _serializeTextRecordMutation(() async {
+          final data = await _loadWebData();
+          final list = data[ManifestTables.textRecords] as List<dynamic>? ?? [];
+          final index = list.indexWhere((row) => (row as Map)['id'] == id);
+          if (index == -1) return false;
+          final record = list[index] as Map<String, dynamic>;
+          if (record['hash'] != expectedHash) return false;
+          if (record['name'] != expectedMetadata['name'] ||
+              (record['format'] ?? 'txt') != expectedMetadata['format'] ||
+              (record['folder'] ?? '') != expectedMetadata['folder']) {
+            return false;
+          }
+          final original = Map<String, dynamic>.from(record);
+          record.addAll(updates);
+          try {
+            await _saveWebDataOrThrow();
+          } catch (_) {
+            record
+              ..clear()
+              ..addAll(original);
+            rethrow;
+          }
+          return true;
+        });
+      }
+      final db = await database;
+      final changed = await db.update(
+        ManifestTables.textRecords,
+        recordToDbRow(updates),
+        where: 'id = ? AND hash = ? AND name = ? AND format = ? AND folder = ?',
+        whereArgs: [
+          id,
+          expectedHash,
+          expectedMetadata['name'],
+          expectedMetadata['format'],
+          expectedMetadata['folder'],
+        ],
+      );
+      return changed == 1;
+    } catch (e, stackTrace) {
+      await AppLogService.error(
+        'ManifestDatabase',
+        'updateTextRecordIfHash failed [id=$id]',
+        e,
+        stackTrace,
+      );
+      rethrow;
+    }
+  }
+
+  static Future<T> _serializeTextRecordMutation<T>(
+    Future<T> Function() operation,
+  ) async {
+    final previous = _textRecordMutationQueue;
+    final release = Completer<void>();
+    _textRecordMutationQueue = release.future;
+    await previous;
+    try {
+      return await operation();
+    } finally {
+      release.complete();
     }
   }
 
@@ -1106,10 +1311,22 @@ class ManifestDatabase {
   static Future<void> deleteTextRecord(String id) async {
     try {
       if (_useJsonStore) {
-        final data = await _loadWebData();
-        final list = data[ManifestTables.textRecords] as List<dynamic>? ?? [];
-        list.removeWhere((r) => (r as Map)['id'] == id);
-        await _saveWebData();
+        await _serializeTextRecordMutation(() async {
+          final data = await _loadWebData();
+          final list = data[ManifestTables.textRecords] as List<dynamic>? ?? [];
+          final original = List<Map<String, dynamic>>.from(
+            list.cast<Map<String, dynamic>>(),
+          );
+          list.removeWhere((r) => (r as Map)['id'] == id);
+          try {
+            await _saveWebDataOrThrow();
+          } catch (_) {
+            list
+              ..clear()
+              ..addAll(original);
+            rethrow;
+          }
+        });
         return;
       }
       final db = await database;
@@ -1119,8 +1336,12 @@ class ManifestDatabase {
         whereArgs: [id],
       );
     } catch (e, stackTrace) {
-      await AppLogService.error('ManifestDatabase',
-          'deleteTextRecord failed [id=$id]', e, stackTrace);
+      await AppLogService.error(
+        'ManifestDatabase',
+        'deleteTextRecord failed [id=$id]',
+        e,
+        stackTrace,
+      );
       rethrow;
     }
   }
@@ -1129,11 +1350,23 @@ class ManifestDatabase {
   static Future<void> deleteTextRecords(List<String> ids) async {
     try {
       if (_useJsonStore) {
-        final data = await _loadWebData();
-        final list = data[ManifestTables.textRecords] as List<dynamic>? ?? [];
-        final idSet = ids.toSet();
-        list.removeWhere((r) => idSet.contains((r as Map)['id']));
-        await _saveWebData();
+        await _serializeTextRecordMutation(() async {
+          final data = await _loadWebData();
+          final list = data[ManifestTables.textRecords] as List<dynamic>? ?? [];
+          final original = List<Map<String, dynamic>>.from(
+            list.cast<Map<String, dynamic>>(),
+          );
+          final idSet = ids.toSet();
+          list.removeWhere((r) => idSet.contains((r as Map)['id']));
+          try {
+            await _saveWebDataOrThrow();
+          } catch (_) {
+            list
+              ..clear()
+              ..addAll(original);
+            rethrow;
+          }
+        });
         return;
       }
       final db = await database;
@@ -1145,7 +1378,11 @@ class ManifestDatabase {
       );
     } catch (e, stackTrace) {
       await AppLogService.error(
-          'ManifestDatabase', 'deleteTextRecords failed', e, stackTrace);
+        'ManifestDatabase',
+        'deleteTextRecords failed',
+        e,
+        stackTrace,
+      );
       rethrow;
     }
   }
@@ -1190,7 +1427,11 @@ class ManifestDatabase {
       return all.toList();
     } catch (e, stackTrace) {
       await AppLogService.error(
-          'ManifestDatabase', 'getAllFolders failed', e, stackTrace);
+        'ManifestDatabase',
+        'getAllFolders failed',
+        e,
+        stackTrace,
+      );
       rethrow;
     }
   }
@@ -1214,14 +1455,16 @@ class ManifestDatabase {
         return;
       }
       final db = await database;
-      await db.insert(
-        folderTable,
-        {'path': path},
-        conflictAlgorithm: ConflictAlgorithm.ignore,
-      );
+      await db.insert(folderTable, {
+        'path': path,
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
     } catch (e, stackTrace) {
-      await AppLogService.error('ManifestDatabase',
-          'insertFolder failed [path=$path]', e, stackTrace);
+      await AppLogService.error(
+        'ManifestDatabase',
+        'insertFolder failed [path=$path]',
+        e,
+        stackTrace,
+      );
       rethrow;
     }
   }
@@ -1243,14 +1486,14 @@ class ManifestDatabase {
         return;
       }
       final db = await database;
-      await db.delete(
-        folderTable,
-        where: 'path = ?',
-        whereArgs: [path],
-      );
+      await db.delete(folderTable, where: 'path = ?', whereArgs: [path]);
     } catch (e, stackTrace) {
-      await AppLogService.error('ManifestDatabase',
-          'deleteFolder failed [path=$path]', e, stackTrace);
+      await AppLogService.error(
+        'ManifestDatabase',
+        'deleteFolder failed [path=$path]',
+        e,
+        stackTrace,
+      );
       rethrow;
     }
   }
@@ -1284,7 +1527,11 @@ class ManifestDatabase {
       }
     } catch (e, stackTrace) {
       await AppLogService.error(
-          'ManifestDatabase', 'clearRecords failed', e, stackTrace);
+        'ManifestDatabase',
+        'clearRecords failed',
+        e,
+        stackTrace,
+      );
       rethrow;
     }
   }
@@ -1309,7 +1556,11 @@ class ManifestDatabase {
       }
     } catch (e, stackTrace) {
       await AppLogService.error(
-          'ManifestDatabase', 'clearFolders failed', e, stackTrace);
+        'ManifestDatabase',
+        'clearFolders failed',
+        e,
+        stackTrace,
+      );
       rethrow;
     }
   }
@@ -1335,7 +1586,11 @@ class ManifestDatabase {
       }
     } catch (e, stackTrace) {
       await AppLogService.error(
-          'ManifestDatabase', 'clearAllData failed', e, stackTrace);
+        'ManifestDatabase',
+        'clearAllData failed',
+        e,
+        stackTrace,
+      );
       rethrow;
     }
   }

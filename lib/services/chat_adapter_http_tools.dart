@@ -13,21 +13,24 @@ extension ChatAdapterHttpToolsExt on ChatAdapter {
       if (!_mcpMasterSwitchEnabled) ...kMcpSearchToolNames,
     };
     ChatService.setDisabledToolNames(_disabledMcpToolNames);
-    final mcpEntry =
-        entriesState.entries.where((e) => e.type == 'mcp').firstOrNull;
+    final mcpEntry = entriesState.entries
+        .where((e) => e.type == 'mcp')
+        .firstOrNull;
 
     String? braveApiKey, bochaApiKey, queritApiKey, searxngUrl, searxngApiKey;
 
     if (mcpEntry != null && mcpEntry.configs.isNotEmpty) {
       for (final config in mcpEntry.configs) {
-        final typeConfig =
-            config.models.isNotEmpty ? config.models[0].typeConfig : null;
+        final typeConfig = config.models.isNotEmpty
+            ? config.models[0].typeConfig
+            : null;
 
         // Collect API keys from HTTP tool configs
         final isHttpTool = typeConfig?['isHttpTool'] as bool? ?? false;
         if (isHttpTool) {
           debugPrint(
-              'BuiltinTools: collecting API key for "${config.providerName}"');
+            'BuiltinTools: collecting API key for "${config.providerName}"',
+          );
           _collectHttpToolApiKey(
             config.providerName,
             typeConfig,
@@ -116,7 +119,8 @@ extension ChatAdapterHttpToolsExt on ChatAdapter {
       ChatService.registerTool(def, handler);
     }
     debugPrint(
-        'Registered ${HttpToolService.toolDefinitions.length} HTTP tools');
+      'Registered ${HttpToolService.toolDefinitions.length} HTTP tools',
+    );
 
     // Register Todo tool (todowrite — 读写一体)
     for (final def in TodoToolService.toolDefinitions) {
@@ -132,7 +136,8 @@ extension ChatAdapterHttpToolsExt on ChatAdapter {
       ChatService.registerTool(def, handler);
     }
     debugPrint(
-        'Registered ${TodoToolService.toolDefinitions.length} Todo tools');
+      'Registered ${TodoToolService.toolDefinitions.length} Todo tools',
+    );
 
     // Register Web Search tool (web_search - Google/Bing/Baidu)
     for (final def in WebSearchService.toolDefinitions) {
@@ -148,6 +153,17 @@ extension ChatAdapterHttpToolsExt on ChatAdapter {
       ChatService.registerTool(def, handler);
     }
     debugPrint(
-        'Registered ${WebSearchService.toolDefinitions.length} Web Search tools');
+      'Registered ${WebSearchService.toolDefinitions.length} Web Search tools',
+    );
+
+    // Register Stroom's manifest-backed text-space tools.
+    for (final def in TextStorageToolService.toolDefinitions) {
+      Future<String> handler(Map<String, dynamic> args) =>
+          TextStorageToolService.handleTool(def.name, args);
+      ChatService.registerTool(def, handler);
+    }
+    debugPrint(
+      'Registered ${TextStorageToolService.toolDefinitions.length} Stroom space tools',
+    );
   }
 }
