@@ -20,7 +20,23 @@ class WebFileStore {
   static bool _testMode = false;
   static final Map<String, Uint8List> _inMemoryStore = {};
   static Future<void> _testMutationQueue = Future<void>.value();
+  static int _pendingTestMutations = 0;
   static Object? _nextTestTransformError;
+
+  static Future<T> _serializeTestMutation<T>(T Function() operation) async {
+    final shouldWait = _pendingTestMutations > 0;
+    final previous = _testMutationQueue;
+    final release = Completer<void>();
+    _testMutationQueue = release.future;
+    _pendingTestMutations++;
+    if (shouldWait) await previous;
+    try {
+      return operation();
+    } finally {
+      _pendingTestMutations--;
+      release.complete();
+    }
+  }
 
   /// Enable in-memory test mode — all operations use a [Map] instead of
   /// IndexedDB.  Call before any read/write/delete/exists in tests.
@@ -28,6 +44,7 @@ class WebFileStore {
     _testMode = true;
     _inMemoryStore.clear();
     _testMutationQueue = Future<void>.value();
+    _pendingTestMutations = 0;
     _nextTestTransformError = null;
   }
 
@@ -36,6 +53,7 @@ class WebFileStore {
     _testMode = false;
     _inMemoryStore.clear();
     _testMutationQueue = Future<void>.value();
+    _pendingTestMutations = 0;
     _nextTestTransformError = null;
   }
 
@@ -116,11 +134,7 @@ class WebFileStore {
     Uint8List? Function(Uint8List? current) transform,
   ) async {
     if (_testMode) {
-      final previous = _testMutationQueue;
-      final release = Completer<void>();
-      _testMutationQueue = release.future;
-      await previous;
-      try {
+      return _serializeTestMutation(() {
         final current = _inMemoryStore[key];
         final updated = transform(
           current == null ? null : Uint8List.fromList(current),
@@ -132,9 +146,7 @@ class WebFileStore {
           _inMemoryStore[key] = Uint8List.fromList(updated);
         }
         return updated;
-      } finally {
-        release.complete();
-      }
+      });
     }
 
     final db = await _database;
@@ -165,11 +177,7 @@ class WebFileStore {
     required Uint8List? Function(Uint8List? current) transform,
   }) async {
     if (_testMode) {
-      final previous = _testMutationQueue;
-      final release = Completer<void>();
-      _testMutationQueue = release.future;
-      await previous;
-      try {
+      return _serializeTestMutation(() {
         final current = _inMemoryStore[transformKey];
         final updated = transform(
           current == null ? null : Uint8List.fromList(current),
@@ -181,9 +189,7 @@ class WebFileStore {
         _inMemoryStore[writeKey] = Uint8List.fromList(writeData);
         _inMemoryStore[transformKey] = Uint8List.fromList(updated);
         return updated;
-      } finally {
-        release.complete();
-      }
+      });
     }
 
     final db = await _database;
@@ -220,19 +226,13 @@ class WebFileStore {
     required bool Function(Uint8List? value) shouldDelete,
   }) async {
     if (_testMode) {
-      final previous = _testMutationQueue;
-      final release = Completer<void>();
-      _testMutationQueue = release.future;
-      await previous;
-      try {
+      return _serializeTestMutation(() {
         final stored = _inMemoryStore[readKey];
         final current = stored == null ? null : Uint8List.fromList(stored);
         if (!shouldDelete(current)) return false;
         _inMemoryStore.remove(deleteKey);
         return true;
-      } finally {
-        release.complete();
-      }
+      });
     }
 
     final db = await _database;

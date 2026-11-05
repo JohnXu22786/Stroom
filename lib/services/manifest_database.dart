@@ -504,12 +504,9 @@ class ManifestDatabase {
           for (final row in rows) {
             final path = row['path'] as String;
             for (final ft in targetFolderTables) {
-              await db.insert(
-                  ft,
-                  {
-                    'path': path,
-                  },
-                  conflictAlgorithm: ConflictAlgorithm.ignore);
+              await db.insert(ft, {
+                'path': path,
+              }, conflictAlgorithm: ConflictAlgorithm.ignore);
             }
           }
         }
@@ -1189,8 +1186,9 @@ class ManifestDatabase {
   }) async {
     try {
       if (_useJsonStore) {
-        final data =
-            forceRefresh ? await _readPersistedWebData() : await _loadWebData();
+        final data = forceRefresh
+            ? await _readPersistedWebData()
+            : await _loadWebData();
         final list = data[ManifestTables.textRecords] as List<dynamic>? ?? [];
         return list.cast<Map<String, dynamic>>();
       }
@@ -1249,27 +1247,24 @@ class ManifestDatabase {
       throw StateError('Atomic web text writes require the JSON store.');
     }
     try {
-      await _serializeTextRecordMutation(() async {
-        final updated = await WebFileStore.transformAndWrite(
-          transformKey: _webStoreKey,
-          writeKey: contentKey,
-          writeData: contentBytes,
-          transform: (raw) {
-            final data = raw == null || raw.isEmpty
-                ? emptyWebData()
-                : jsonDecode(utf8Decode(raw)) as Map<String, dynamic>;
-            final list =
-                data[ManifestTables.textRecords] as List<dynamic>? ?? [];
-            list.add(record);
-            data[ManifestTables.textRecords] = list;
-            return utf8Encode(jsonEncode(data));
-          },
-        );
-        if (updated == null) {
-          throw StateError('Atomic text record insertion was not committed.');
-        }
-        _webData = null;
-      });
+      final updated = await WebFileStore.transformAndWrite(
+        transformKey: _webStoreKey,
+        writeKey: contentKey,
+        writeData: contentBytes,
+        transform: (raw) {
+          final data = raw == null || raw.isEmpty
+              ? emptyWebData()
+              : jsonDecode(utf8Decode(raw)) as Map<String, dynamic>;
+          final list = data[ManifestTables.textRecords] as List<dynamic>? ?? [];
+          list.add(record);
+          data[ManifestTables.textRecords] = list;
+          return utf8Encode(jsonEncode(data));
+        },
+      );
+      if (updated == null) {
+        throw StateError('Atomic text record insertion was not committed.');
+      }
+      _webData = null;
     } catch (e, stackTrace) {
       await AppLogService.error(
         'ManifestDatabase',
@@ -1471,9 +1466,7 @@ class ManifestDatabase {
   }
 
   /// Deletes a text record and returns the row that was actually persisted.
-  static Future<Map<String, dynamic>?> deleteTextRecordAndGet(
-    String id,
-  ) async {
+  static Future<Map<String, dynamic>?> deleteTextRecordAndGet(String id) async {
     final deleted = <Map<String, dynamic>>[];
     try {
       if (_useJsonStore) {
@@ -1647,9 +1640,7 @@ class ManifestDatabase {
         final db = await database;
         await db.transaction((txn) async {
           final rows = await txn.query(ManifestTables.textRecords);
-          deleted.addAll(
-            rows.where(matches).map(Map<String, dynamic>.from),
-          );
+          deleted.addAll(rows.where(matches).map(Map<String, dynamic>.from));
           final deletedIds = deleted.map((row) => row['id']).toList();
           if (deletedIds.isNotEmpty) {
             final placeholders = deletedIds.map((_) => '?').join(',');
@@ -1687,8 +1678,9 @@ class ManifestDatabase {
   }) async {
     try {
       if (_useJsonStore) {
-        final data =
-            forceRefresh ? await _readPersistedWebData() : await _loadWebData();
+        final data = forceRefresh
+            ? await _readPersistedWebData()
+            : await _loadWebData();
         if (recordTable != null) {
           final folderTable = ManifestTables.folderTableFor(recordTable);
           final list = data[folderTable] as List<dynamic>? ?? [];
@@ -1754,12 +1746,9 @@ class ManifestDatabase {
         return;
       }
       final db = await database;
-      await db.insert(
-          folderTable,
-          {
-            'path': path,
-          },
-          conflictAlgorithm: ConflictAlgorithm.ignore);
+      await db.insert(folderTable, {
+        'path': path,
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
     } catch (e, stackTrace) {
       await AppLogService.error(
         'ManifestDatabase',
