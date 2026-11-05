@@ -980,11 +980,32 @@ def _strip_latex_markup(value: str) -> str:
     def has_binary_operator(operand: str) -> bool:
         return re.search(r"\S\s*[-−+*/·×=<>≤≥]\s*\S", operand) is not None
 
+    def is_fully_parenthesized(operand: str) -> bool:
+        if not operand.startswith("(") or not operand.endswith(")"):
+            return False
+
+        depth = 0
+        index = 0
+        while index < len(operand):
+            if operand[index] == "\\":
+                index += 2
+                continue
+            if operand[index] == "(":
+                depth += 1
+            elif operand[index] == ")":
+                depth -= 1
+                if depth < 0:
+                    return False
+                if depth == 0:
+                    return index == len(operand) - 1
+            index += 1
+        return False
+
     def fraction_text(numerator: str, denominator: str) -> str:
         def group_if_compound(operand: str) -> str:
             operand = operand.strip()
-            if has_binary_operator(operand) and not (
-                operand.startswith("(") and operand.endswith(")")
+            if has_binary_operator(operand) and not is_fully_parenthesized(
+                operand
             ):
                 return f"({operand})"
             return operand
@@ -1066,8 +1087,8 @@ def _strip_latex_markup(value: str) -> str:
 
             operand, end_index = operand_group
             operand = replace_roots(replace_fractions(operand)).strip()
-            if has_binary_operator(operand) and not (
-                operand.startswith("(") and operand.endswith(")")
+            if has_binary_operator(operand) and not is_fully_parenthesized(
+                operand
             ):
                 operand = f"({operand})"
             output.append(f"{root_symbol}{operand}")
