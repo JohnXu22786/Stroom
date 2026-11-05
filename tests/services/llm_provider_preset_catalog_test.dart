@@ -56,7 +56,10 @@ void main() {
       'LongCat-2.0',
     );
     expect(
-      findLlmOpenAiProviderPreset('longcat')!.fallbackModels.single.capabilities,
+      findLlmOpenAiProviderPreset('longcat')!
+          .fallbackModels
+          .single
+          .capabilities,
       {'contextLength': 1048576},
     );
     for (final id in [
@@ -261,8 +264,7 @@ void main() {
         'llmgateway': 'https://api.llmgateway.io/v1/chat/completions',
         'logfare': 'https://logfare.ai/v1/chat/completions',
         'longcat': 'https://api.longcat.chat/openai/v1/chat/completions',
-        'lyceum':
-            'https://api.lyceum.technology/openai/v1/chat/completions',
+        'lyceum': 'https://api.lyceum.technology/openai/v1/chat/completions',
         'meganova-ai': 'https://api.meganova.ai/v1/chat/completions',
         'mixlayer': 'https://models.mixlayer.ai/v1/chat/completions',
         'mnn-ai': 'https://api.mnnai.ru/v1/chat/completions',
