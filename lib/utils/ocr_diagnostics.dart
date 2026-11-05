@@ -127,6 +127,14 @@ class OcrDiagnosticSnapshot {
 
   static List<String> _credentialValuesFromBody(dynamic rawBody) {
     final values = <String>{};
+    var body = rawBody;
+    if (body is String) {
+      try {
+        body = jsonDecode(body);
+      } on FormatException {
+        return const [];
+      }
+    }
 
     void collect(dynamic value, {bool credentialField = false}) {
       if (credentialField && value is String) {
@@ -149,7 +157,7 @@ class OcrDiagnosticSnapshot {
       }
     }
 
-    collect(rawBody);
+    collect(body);
     return values.toList(growable: false);
   }
 

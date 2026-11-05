@@ -2202,6 +2202,52 @@ void main() {
         );
       });
 
+      test(
+        'error diagnostics exclude credentials in JSON string response bodies',
+        () async {
+          const safeRequestId = 'req-safe-after-string-response-97';
+          final echoedRequestId = 'req-${List.filled(146, 'x').join()}';
+          final credential =
+              '${List.filled(2300, 'a').join()}$echoedRequestId-${List.filled(80, 'b').join()}';
+          final service = OcrService(
+            config: const OcrConfig(
+              model: 'gpt-4o',
+              apiKey: '',
+              host: 'https://api.test.com/v1',
+            ),
+            dio: Dio()
+              ..interceptors.add(
+                _InterceptorWithCallback(
+                  callback: (options, handler) => handler.reject(
+                    DioException(
+                      requestOptions: options,
+                      type: DioExceptionType.badResponse,
+                      response: Response(
+                        requestOptions: options,
+                        statusCode: 401,
+                        data: jsonEncode({'api_key': credential}),
+                        headers: Headers.fromMap({
+                          'x-request-id': [echoedRequestId, safeRequestId],
+                        }),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          );
+
+          await expectLater(
+            service.recognize(imageBytes: Uint8List.fromList([1, 2, 3])),
+            throwsA(isA<Exception>()),
+          );
+
+          final diagnostics = jsonEncode(service.diagnosticResponse());
+          expect(service.diagnosticResponse()['requestId'], safeRequestId);
+          expect(diagnostics, isNot(contains(credential)));
+          expect(diagnostics, isNot(contains(echoedRequestId)));
+        },
+      );
+
       test('recognize captures non-map response body in diagnostics', () async {
         const responseBody = 'unexpected OCR response body';
         final service = OcrService(
@@ -2462,40 +2508,41 @@ void main() {
           );
           final firstRequestStarted = Completer<void>();
           final finishFirstRequest = Completer<void>();
-          final dio = Dio()..interceptors.add(
-            _InterceptorWithCallback(
-              callback: (options, handler) {
-                final body = options.data as Map;
-                final isFirstRequest = body['api_key'] == firstCredential;
-                final credential =
-                    isFirstRequest ? firstCredential : secondCredential;
-                final response = Response(
-                  requestOptions: options,
-                  statusCode: 200,
-                  data: {
-                    'request_id': credential,
-                    'id': safeRequestId,
-                    'choices': [
-                      {
-                        'message': {'content': 'recognized'},
-                      },
-                    ],
-                  },
-                  headers: Headers.fromMap({
-                    'x-request-id': [credential, safeRequestId],
-                  }),
-                );
-                if (isFirstRequest) {
-                  firstRequestStarted.complete();
-                  finishFirstRequest.future.then(
-                    (_) => handler.resolve(response),
+          final dio = Dio()
+            ..interceptors.add(
+              _InterceptorWithCallback(
+                callback: (options, handler) {
+                  final body = options.data as Map;
+                  final isFirstRequest = body['api_key'] == firstCredential;
+                  final credential =
+                      isFirstRequest ? firstCredential : secondCredential;
+                  final response = Response(
+                    requestOptions: options,
+                    statusCode: 200,
+                    data: {
+                      'request_id': credential,
+                      'id': safeRequestId,
+                      'choices': [
+                        {
+                          'message': {'content': 'recognized'},
+                        },
+                      ],
+                    },
+                    headers: Headers.fromMap({
+                      'x-request-id': [credential, safeRequestId],
+                    }),
                   );
-                } else {
-                  handler.resolve(response);
-                }
-              },
-            ),
-          );
+                  if (isFirstRequest) {
+                    firstRequestStarted.complete();
+                    finishFirstRequest.future.then(
+                      (_) => handler.resolve(response),
+                    );
+                  } else {
+                    handler.resolve(response);
+                  }
+                },
+              ),
+            );
           final service = OcrService(
             config: _testOcrConfig.copyWith(customParams: [customParam]),
             dio: dio,
@@ -2585,6 +2632,75 @@ void main() {
           expect(diagnostics, isNot(contains(credential)));
         }
       });
+
+      test(
+        'diagnostics exclude credentials added to request data by Dio interceptors',
+        () async {
+          const safeRequestId = 'req-safe-after-interceptor-body-95';
+          final echoedRequestId = 'req-${List.filled(146, 'x').join()}';
+          final credential =
+              '${List.filled(2300, 'a').join()}$echoedRequestId-${List.filled(80, 'b').join()}';
+          for (final isError in [false, true]) {
+            final dio = Dio()
+              ..interceptors.add(
+                _InterceptorWithCallback(
+                  callback: (options, handler) {
+                    (options.data as Map)['api_key'] = credential;
+                    final response = Response(
+                      requestOptions: options,
+                      statusCode: isError ? 401 : 200,
+                      data: {
+                        'request_id': echoedRequestId,
+                        'id': safeRequestId,
+                        'choices': [
+                          {
+                            'message': {'content': 'recognized'},
+                          },
+                        ],
+                      },
+                    );
+                    if (isError) {
+                      handler.reject(
+                        DioException(
+                          requestOptions: options,
+                          response: response,
+                          type: DioExceptionType.badResponse,
+                        ),
+                      );
+                    } else {
+                      handler.resolve(response);
+                    }
+                  },
+                ),
+              );
+            final service = OcrService(
+              config: const OcrConfig(
+                model: 'gpt-4o',
+                apiKey: '',
+                host: 'https://api.test.com/v1',
+              ),
+              dio: dio,
+            );
+
+            final recognize = service.recognize(
+              imageBytes: Uint8List.fromList([1, 2, 3]),
+            );
+            if (isError) {
+              await expectLater(recognize, throwsA(isA<Exception>()));
+            } else {
+              await recognize;
+            }
+
+            final diagnostics = jsonEncode({
+              'request': service.diagnosticRequest,
+              'response': service.diagnosticResponse(),
+            });
+            expect(service.diagnosticResponse()['requestId'], safeRequestId);
+            expect(diagnostics, isNot(contains(credential)));
+            expect(diagnostics, isNot(contains(echoedRequestId)));
+          }
+        },
+      );
 
       test(
         'success diagnostics omit image signatures in provider metadata',

@@ -164,6 +164,7 @@ class OcrService {
 
   /// The last HTTP response status code.
   int? lastResponseStatusCode;
+  int? _lastDiagnosticStatusCode;
 
   int? _lastDurationMs;
   int _lastImageCount = 0;
@@ -233,13 +234,13 @@ class OcrService {
         imageCount: _lastImageCount,
         imageBytes: _lastImageBytes,
         durationMs: _lastDurationMs,
-        requestId: _lastRequestId,
+        requestId: null,
         excludedValues: _diagnosticCredentialValues,
       );
 
   Map<String, dynamic> diagnosticResponse({Object? error}) =>
       OcrDiagnosticSnapshot.response(
-        statusCode: lastResponseStatusCode,
+        statusCode: _lastDiagnosticStatusCode,
         finishReason: _lastFinishReason,
         durationMs: _lastDurationMs,
         requestId: _lastRequestId,
@@ -401,6 +402,9 @@ class OcrService {
       // Capture response diagnostics
       final responseCredentialValues = {
         ...requestCredentialValues,
+        ...OcrDiagnosticSnapshot.credentialValuesFromRequest({
+          'body': response.requestOptions.data,
+        }),
         ..._credentialValuesFromHeaders(response.requestOptions.headers),
         ...OcrDiagnosticSnapshot.credentialValuesFromHeaders(
           response.headers.map,
@@ -410,6 +414,10 @@ class OcrService {
         }),
       }.toList(growable: false);
       lastResponseStatusCode = response.statusCode;
+      _lastDiagnosticStatusCode = OcrDiagnosticSnapshot.sanitizeResponse(
+        {'statusCode': response.statusCode},
+        excludedValues: [config.apiKey, ...responseCredentialValues],
+      )?['statusCode'] as int?;
       lastResponseData = response.data is Map
           ? Map<String, dynamic>.from(response.data as Map)
           : <String, dynamic>{'raw': '${response.data}'};
@@ -517,6 +525,9 @@ class OcrService {
       // Capture response diagnostics
       final responseCredentialValues = {
         ...requestCredentialValues,
+        ...OcrDiagnosticSnapshot.credentialValuesFromRequest({
+          'body': response.requestOptions.data,
+        }),
         ..._credentialValuesFromHeaders(response.requestOptions.headers),
         ...OcrDiagnosticSnapshot.credentialValuesFromHeaders(
           response.headers.map,
@@ -526,6 +537,10 @@ class OcrService {
         }),
       }.toList(growable: false);
       lastResponseStatusCode = response.statusCode;
+      _lastDiagnosticStatusCode = OcrDiagnosticSnapshot.sanitizeResponse(
+        {'statusCode': response.statusCode},
+        excludedValues: [config.apiKey, ...responseCredentialValues],
+      )?['statusCode'] as int?;
       lastResponseData = response.data is Map
           ? Map<String, dynamic>.from(response.data as Map)
           : <String, dynamic>{'raw': '${response.data}'};
@@ -590,6 +605,7 @@ class OcrService {
     };
     lastResponseData = null;
     lastResponseStatusCode = null;
+    _lastDiagnosticStatusCode = null;
     lastResponseHeaders = null;
     return requestCredentialValues;
   }
@@ -656,6 +672,9 @@ class OcrService {
   }) {
     final responseCredentialValues = {
       ...requestCredentialValues,
+      ...OcrDiagnosticSnapshot.credentialValuesFromRequest({
+        'body': e.requestOptions.data,
+      }),
       ..._credentialValuesFromHeaders(e.requestOptions.headers),
       ...OcrDiagnosticSnapshot.credentialValuesFromHeaders(
         e.response?.headers.map,
@@ -672,6 +691,10 @@ class OcrService {
       lastResponseData = null;
     }
     lastResponseStatusCode = e.response?.statusCode;
+    _lastDiagnosticStatusCode = OcrDiagnosticSnapshot.sanitizeResponse(
+      {'statusCode': e.response?.statusCode},
+      excludedValues: [config.apiKey, ...responseCredentialValues],
+    )?['statusCode'] as int?;
     lastResponseHeaders = e.response?.headers.map;
     _lastRequestId = OcrDiagnosticSnapshot.requestIdFromHeaders(
           e.response?.headers.map,
