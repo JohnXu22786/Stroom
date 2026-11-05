@@ -68,7 +68,7 @@ jobs:
       - name: Install Linux WebView dependencies
         run: |
           apt-get update -y
-          apt-get install -y ca-certificates curl git jq unzip xz-utils zstd xvfb clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libmpv-dev libayatana-appindicator3-dev libwpewebkit-2.0-dev libwpebackend-fdo-1.0-dev libepoxy-dev libsecret-1-dev
+          apt-get install -y ca-certificates curl git jq unzip xz-utils zstd xvfb clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libmpv-dev libayatana-appindicator3-dev libwpewebkit-2.0-dev libwpebackend-fdo-1.0-dev libepoxy-dev libsecret-1-dev libc++1-19
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
