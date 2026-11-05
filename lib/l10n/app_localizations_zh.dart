@@ -1545,6 +1545,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chatPreviewLoadFailed => '加载失败';
 
   @override
+  String get albumPickerLoadFailed => '加载应用内相册失败';
+
+  @override
   String get chatHtmlPreview => 'HTML 预览';
 
   @override
@@ -9799,6 +9802,9 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get chatPreviewLoadFailed => '加载失败';
+
+  @override
+  String get albumPickerLoadFailed => '加载应用内相册失败';
 
   @override
   String get chatHtmlPreview => 'HTML 预览';

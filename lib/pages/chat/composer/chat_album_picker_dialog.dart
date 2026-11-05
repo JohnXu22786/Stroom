@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:stroom/providers/image_provider.dart';
 import 'package:stroom/utils/folder_path_utils.dart';
@@ -55,6 +56,7 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
   List<ImageRecord> _records = [];
   Set<String> _folders = {};
   bool _loading = true;
+  bool _loadFailed = false;
   String _currentFolder = '';
 
   // 多选状态: key = recordId, value = (fileName, bytes)
@@ -120,13 +122,25 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
           _records = List<ImageRecord>.from(records);
           _folders = Set<String>.from(folders);
           _loading = false;
+          _loadFailed = false;
         });
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _loading = false);
+        setState(() {
+          _loading = false;
+          _loadFailed = true;
+        });
       }
     }
+  }
+
+  Future<void> _retryLoadData() async {
+    setState(() {
+      _loading = true;
+      _loadFailed = false;
+    });
+    await _loadData();
   }
 
   bool get _isRoot => _currentFolder.isEmpty;
@@ -253,7 +267,7 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
   }
 
   Future<void> _confirmSelection() async {
-    if (_confirmingSelection) return;
+    if (_confirmingSelection || _loading || _loadFailed) return;
     setState(() {
       _confirmingSelection = true;
       _confirmationFailedRead = false;
@@ -364,7 +378,9 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
                 ),
                 child: FilledButton.icon(
                   key: const Key('album_picker_confirm_btn'),
-                  onPressed: _confirmingSelection ? null : _confirmSelection,
+                  onPressed: _confirmingSelection || _loading || _loadFailed
+                      ? null
+                      : _confirmSelection,
                   icon: const Icon(Icons.check, size: 18),
                   label: Text(hasSelection ? '确定 ($_selectionCount)' : '确定'),
                 ),
@@ -379,6 +395,24 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
   Widget _buildContent(ColorScheme cs) {
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_loadFailed) {
+      final l10n = AppLocalizations.of(context)!;
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(l10n.albumPickerLoadFailed),
+            const SizedBox(height: 8),
+            TextButton(
+              key: const Key('album_picker_retry_btn'),
+              onPressed: _retryLoadData,
+              child: Text(l10n.actionRetry),
+            ),
+          ],
+        ),
+      );
     }
 
     final subFolders = _subFolders;
