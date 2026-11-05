@@ -5,9 +5,9 @@ This isolated prototype exercises the upstream `nodejs-mobile` v18.20.4 Android 
 The Android and iOS Simulator CI workflows check:
 
 1. Node runtime version and the unmodified Node Mobile UTF-8 module-loading failure (RangeError: Index out of range).
-3. A separately loaded, committed UTF-8 compatibility shim, followed by a clean `npm ci` into an app-private fixture directory from the checked-in manifest and lockfile. The manifest uses a real npm `overrides` entry pinning transitive `fast-uri` to 3.1.0.
-4. Runtime verification of the installed override, TypeScript-to-JavaScript transpilation with Sucrase, and execution of the result.
-5. MCP `initialize`, `tools/list`, and `tools/call` using the SDK's linked in-memory client/server transport.
+2. A separately loaded, committed UTF-8 compatibility shim, followed by a clean `npm ci` into an app-private fixture directory from the checked-in manifest and lockfile. The manifest uses a real npm `overrides` entry pinning transitive `fast-uri` to 3.1.0.
+3. Runtime verification of the installed override, TypeScript-to-JavaScript transpilation with Sucrase, and execution of the result.
+4. MCP `initialize`, `tools/list`, and `tools/call` using the SDK's linked in-memory client/server transport.
 
 The MCP test runs both endpoints in the same embedded Node process. It does **not** test a separately spawned MCP server or Stroom's host transport.
 
