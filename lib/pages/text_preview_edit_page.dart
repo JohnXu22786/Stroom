@@ -462,33 +462,33 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
                 ),
               )
             : widget.file.format == 'md'
-            ? SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: MarkdownWidget(
-                  data: _contentController.text,
-                  markdownGenerator: markdownGenerator,
-                  config: buildMarkdownConfig(
-                    isDark: Theme.of(context).brightness == Brightness.dark,
+                ? SingleChildScrollView(
+                    padding: const EdgeInsets.all(16),
+                    child: MarkdownWidget(
+                      data: _contentController.text,
+                      markdownGenerator: markdownGenerator,
+                      config: buildMarkdownConfig(
+                        isDark: Theme.of(context).brightness == Brightness.dark,
+                      ),
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                    ),
+                  )
+                : SingleChildScrollView(
+                    padding: const EdgeInsets.all(16),
+                    // 用 SelectionArea 而不是 SelectableText：SelectableText 在
+                    // 桌面平台注册全方向的 TapAndPanGestureRecognizer（接受触摸
+                    // 指针），快速拖动时会在手势竞技场中胜过外层滚动视图，导致
+                    // 在文本上/末尾空行（空白区域）拖动时变成文本选择而不是
+                    // 滚动。SelectionArea 对触摸指针只注册水平拖拽识别器，垂直
+                    // 拖动交给外层滚动视图；鼠标拖动仍可选中文本。
+                    child: SelectionArea(
+                      child: Text(
+                        _contentController.text,
+                        style: TextStyle(fontSize: _fontSize, height: 1.5),
+                      ),
+                    ),
                   ),
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                ),
-              )
-            : SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                // 用 SelectionArea 而不是 SelectableText：SelectableText 在
-                // 桌面平台注册全方向的 TapAndPanGestureRecognizer（接受触摸
-                // 指针），快速拖动时会在手势竞技场中胜过外层滚动视图，导致
-                // 在文本上/末尾空行（空白区域）拖动时变成文本选择而不是
-                // 滚动。SelectionArea 对触摸指针只注册水平拖拽识别器，垂直
-                // 拖动交给外层滚动视图；鼠标拖动仍可选中文本。
-                child: SelectionArea(
-                  child: Text(
-                    _contentController.text,
-                    style: TextStyle(fontSize: _fontSize, height: 1.5),
-                  ),
-                ),
-              ),
       ),
     );
   }

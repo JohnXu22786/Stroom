@@ -13,17 +13,15 @@ extension ChatAdapterHttpToolsExt on ChatAdapter {
       if (!_mcpMasterSwitchEnabled) ...kMcpSearchToolNames,
     };
     ChatService.setDisabledToolNames(_disabledMcpToolNames);
-    final mcpEntry = entriesState.entries
-        .where((e) => e.type == 'mcp')
-        .firstOrNull;
+    final mcpEntry =
+        entriesState.entries.where((e) => e.type == 'mcp').firstOrNull;
 
     String? braveApiKey, bochaApiKey, queritApiKey, searxngUrl, searxngApiKey;
 
     if (mcpEntry != null && mcpEntry.configs.isNotEmpty) {
       for (final config in mcpEntry.configs) {
-        final typeConfig = config.models.isNotEmpty
-            ? config.models[0].typeConfig
-            : null;
+        final typeConfig =
+            config.models.isNotEmpty ? config.models[0].typeConfig : null;
 
         // Collect API keys from HTTP tool configs
         final isHttpTool = typeConfig?['isHttpTool'] as bool? ?? false;

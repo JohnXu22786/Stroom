@@ -170,9 +170,8 @@ class _ConnectivityTestDialogState extends State<ConnectivityTestDialog> {
       ),
       actions: [
         TextButton(
-          onPressed: _isRunning || _isSaving
-              ? null
-              : () => Navigator.pop(context),
+          onPressed:
+              _isRunning || _isSaving ? null : () => Navigator.pop(context),
           child: const Text('关闭'),
         ),
         OutlinedButton.icon(

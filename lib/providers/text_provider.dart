@@ -10,8 +10,8 @@ import '../utils/text_manifest.dart';
 
 final textRecordsProvider =
     StateNotifierProvider<TextRecordsNotifier, List<TextRecord>>(
-      (ref) => TextRecordsNotifier(),
-    );
+  (ref) => TextRecordsNotifier(),
+);
 
 // ============================================================================
 // 文件夹列表
@@ -19,8 +19,8 @@ final textRecordsProvider =
 
 final textFolderListProvider =
     StateNotifierProvider<TextFolderListNotifier, Set<String>>(
-      (ref) => TextFolderListNotifier(),
-    );
+  (ref) => TextFolderListNotifier(),
+);
 
 // ============================================================================
 // 视图模式（false = 列表，true = 缩略图/网格）
@@ -148,9 +148,8 @@ class TextRecordsNotifier extends StateNotifier<List<TextRecord>> {
     TextManifest.invalidateCache();
     final parentPath = TextManifest.getParentFolderPath(oldName);
     final newNameTrimmed = newName.trim();
-    final newPath = parentPath.isEmpty
-        ? newNameTrimmed
-        : '$parentPath/$newNameTrimmed';
+    final newPath =
+        parentPath.isEmpty ? newNameTrimmed : '$parentPath/$newNameTrimmed';
 
     // 空源 / 非法名 / 无操作重命名（新路径与原路径相同）或自嵌套重命名：
     // 直接返回，否则 removeFolderFromCache 会把记录误移到根目录
@@ -199,12 +198,11 @@ class TextRecordsNotifier extends StateNotifier<List<TextRecord>> {
     final baseName = TextManifest.getFolderBaseName(sourceName);
     // 规范化目标父路径（去首尾空白与尾部斜杠），'' 表示根目录
     final targetParentClean = targetParent.trim().replaceAll(
-      RegExp(r'/+$'),
-      '',
-    );
-    final newPath = targetParentClean.isEmpty
-        ? baseName
-        : '$targetParentClean/$baseName';
+          RegExp(r'/+$'),
+          '',
+        );
+    final newPath =
+        targetParentClean.isEmpty ? baseName : '$targetParentClean/$baseName';
 
     // 防止空源 / 纯空白目标 / 无操作移动（目标为当前位置）或移动到
     // 自身/子文件夹：否则 removeFolderFromCache 会把记录误移到根目录，
@@ -265,12 +263,11 @@ class TextRecordsNotifier extends StateNotifier<List<TextRecord>> {
     final baseName = TextManifest.getFolderBaseName(sourceName);
     // 规范化目标父路径（去首尾空白与尾部斜杠），'' 表示根目录
     final targetParentClean = targetParent.trim().replaceAll(
-      RegExp(r'/+$'),
-      '',
-    );
-    final newPath = targetParentClean.isEmpty
-        ? baseName
-        : '$targetParentClean/$baseName';
+          RegExp(r'/+$'),
+          '',
+        );
+    final newPath =
+        targetParentClean.isEmpty ? baseName : '$targetParentClean/$baseName';
 
     // 防止空源 / 纯空白目标 / 复制到自身/子文件夹（或原地复制），
     // 避免文件夹内出现重复记录与自我嵌套

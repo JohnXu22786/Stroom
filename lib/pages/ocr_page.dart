@@ -195,8 +195,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       final content = data['instructionContent'] as String?;
       _pendingRetryInstructionContent =
           (content != null && content.trim().isNotEmpty)
-          ? content.trim()
-          : null;
+              ? content.trim()
+              : null;
       unawaited(_resolvePendingRetryInstruction());
     }
   }
@@ -475,9 +475,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     // index itself is kept until [_resolvePendingRetryInstruction] lands.
     final pending = _pendingRetryInstructionIndex;
     final rawIndex = pending ?? _selectedInstructionIndex;
-    final clamped = (rawIndex >= 0 && rawIndex < instructions.length)
-        ? rawIndex
-        : -1;
+    final clamped =
+        (rawIndex >= 0 && rawIndex < instructions.length) ? rawIndex : -1;
     if (pending == null && clamped != _selectedInstructionIndex) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) setState(() => _selectedInstructionIndex = clamped);
@@ -695,9 +694,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           final int rowCount = itemCount == 0
               ? 0
               : (itemCount + crossAxisCount - 1) ~/ crossAxisCount;
-          final double totalHeight = rowCount > 0
-              ? rowCount * itemSize + (rowCount - 1) * spacing
-              : 0;
+          final double totalHeight =
+              rowCount > 0 ? rowCount * itemSize + (rowCount - 1) * spacing : 0;
 
           return SingleChildScrollView(
             child: SizedBox(
@@ -1095,9 +1093,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
               width: double.infinity,
               height: 48,
               child: FilledButton.icon(
-                onPressed: _selectedImages.isEmpty || _isProcessing
-                    ? null
-                    : _startOcr,
+                onPressed:
+                    _selectedImages.isEmpty || _isProcessing ? null : _startOcr,
                 icon: _isProcessing
                     ? const SizedBox(
                         width: 18,
@@ -1501,9 +1498,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       apiKey: selectedOption.apiKey,
       model: selectedOption.model.modelId,
       typeConfig: Map<String, dynamic>.from(selectedOption.model.typeConfig),
-      customParams: selectedOption.model.customParams
-          .map((p) => p.copy())
-          .toList(),
+      customParams:
+          selectedOption.model.customParams.map((p) => p.copy()).toList(),
     );
 
     // A retry instruction restore may still be pending (the generic list
@@ -1566,8 +1562,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     // Carries the selected instruction's content so the retry restore can
     // match by content — an index could land on a different instruction
     // if the generic list changed between the failure and the retry.
-    final instructionContent =
-        (_selectedInstructionIndex >= 0 &&
+    final instructionContent = (_selectedInstructionIndex >= 0 &&
             _selectedInstructionIndex < instructions.length)
         ? instructions[_selectedInstructionIndex].content
         : null;
@@ -1690,9 +1685,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           imageFormat: img.format,
         );
       } else {
-        final batchInput = _selectedImages
-            .map((img) => (img.bytes, img.format))
-            .toList();
+        final batchInput =
+            _selectedImages.map((img) => (img.bytes, img.format)).toList();
         result = await service.recognizeBatch(imageBytesList: batchInput);
       }
 
@@ -1781,8 +1775,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     final hash = computeTextHash(bytes);
     final filePath = await TextManifest.addRecordWithContent(
       TextRecord(
-        name:
-            title ??
+        name: title ??
             'OCR_${now.year}${_pad(now.month)}${_pad(now.day)}${_pad(now.hour)}${_pad(now.minute)}${_pad(now.second)}',
         hash: hash,
         format: 'txt',

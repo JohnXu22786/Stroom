@@ -496,9 +496,12 @@ class ManifestDatabase {
           for (final row in rows) {
             final path = row['path'] as String;
             for (final ft in targetFolderTables) {
-              await db.insert(ft, {
-                'path': path,
-              }, conflictAlgorithm: ConflictAlgorithm.ignore);
+              await db.insert(
+                  ft,
+                  {
+                    'path': path,
+                  },
+                  conflictAlgorithm: ConflictAlgorithm.ignore);
             }
           }
         }
@@ -1455,9 +1458,12 @@ class ManifestDatabase {
         return;
       }
       final db = await database;
-      await db.insert(folderTable, {
-        'path': path,
-      }, conflictAlgorithm: ConflictAlgorithm.ignore);
+      await db.insert(
+          folderTable,
+          {
+            'path': path,
+          },
+          conflictAlgorithm: ConflictAlgorithm.ignore);
     } catch (e, stackTrace) {
       await AppLogService.error(
         'ManifestDatabase',

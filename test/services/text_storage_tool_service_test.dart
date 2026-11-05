@@ -26,51 +26,42 @@ void main() {
   });
 
   test('creates, lists, searches, and reads a text-space document', () async {
-    final created =
-        jsonDecode(
-              await TextStorageToolService.handleTool('stroom_space_write', {
-                'name': 'Lecture Notes',
-                'content':
-                    'Photosynthesis converts light into chemical energy.',
-                'format': 'md',
-                'folder': 'Biology/Week 1',
-              }),
-            )
-            as Map<String, dynamic>;
+    final created = jsonDecode(
+      await TextStorageToolService.handleTool('stroom_space_write', {
+        'name': 'Lecture Notes',
+        'content': 'Photosynthesis converts light into chemical energy.',
+        'format': 'md',
+        'folder': 'Biology/Week 1',
+      }),
+    ) as Map<String, dynamic>;
 
     expect(created['status'], 'created');
     expect(created['folder'], 'Biology/Week 1');
 
-    final listed =
-        jsonDecode(
-              await TextStorageToolService.handleTool('stroom_space_list', {
-                'folder': 'Biology',
-              }),
-            )
-            as Map<String, dynamic>;
+    final listed = jsonDecode(
+      await TextStorageToolService.handleTool('stroom_space_list', {
+        'folder': 'Biology',
+      }),
+    ) as Map<String, dynamic>;
     expect(listed['count'], 1);
     expect((listed['documents'] as List).single['id'], created['id']);
 
-    final searched =
-        jsonDecode(
-              await TextStorageToolService.handleTool('stroom_space_search', {
-                'query': 'chemical energy',
-              }),
-            )
-            as Map<String, dynamic>;
+    final searched = jsonDecode(
+      await TextStorageToolService.handleTool('stroom_space_search', {
+        'query': 'chemical energy',
+      }),
+    ) as Map<String, dynamic>;
     expect(searched['count'], 1);
     expect(
       (searched['results'] as List).single['snippet'],
       contains('chemical energy'),
     );
 
-    final read =
-        jsonDecode(
-              await TextStorageToolService.handleTool('stroom_space_read', {
-                'record_id': created['id'],
-              }),
-            )
-            as Map<String, dynamic>;
+    final read = jsonDecode(
+      await TextStorageToolService.handleTool('stroom_space_read', {
+        'record_id': created['id'],
+      }),
+    ) as Map<String, dynamic>;
     expect(
       read['content'],
       'Photosynthesis converts light into chemical energy.',
@@ -82,15 +73,13 @@ void main() {
   test(
     'normalizes a matching filename extension and rejects mismatches',
     () async {
-      final normalized =
-          jsonDecode(
-                await TextStorageToolService.handleTool('stroom_space_write', {
-                  'name': 'Lesson.md',
-                  'content': 'Notes',
-                  'format': 'md',
-                }),
-              )
-              as Map<String, dynamic>;
+      final normalized = jsonDecode(
+        await TextStorageToolService.handleTool('stroom_space_write', {
+          'name': 'Lesson.md',
+          'content': 'Notes',
+          'format': 'md',
+        }),
+      ) as Map<String, dynamic>;
       expect(normalized['name'], 'Lesson');
 
       final mismatched = await TextStorageToolService.handleTool(
@@ -105,14 +94,12 @@ void main() {
   test(
     'rejects unsafe folders and stale replacement without altering content',
     () async {
-      final created =
-          jsonDecode(
-                await TextStorageToolService.handleTool('stroom_space_write', {
-                  'name': 'Notes',
-                  'content': 'Original text',
-                }),
-              )
-              as Map<String, dynamic>;
+      final created = jsonDecode(
+        await TextStorageToolService.handleTool('stroom_space_write', {
+          'name': 'Notes',
+          'content': 'Original text',
+        }),
+      ) as Map<String, dynamic>;
 
       final unsafe = await TextStorageToolService.handleTool(
         'stroom_space_write',
@@ -123,21 +110,19 @@ void main() {
 
       final stale =
           await TextStorageToolService.handleTool('stroom_space_write', {
-            'record_id': created['id'],
-            'expected_hash': 'stale-hash',
-            'expected_metadata_hash': created['metadata_hash'],
-            'name': 'Notes',
-            'content': 'Overwritten text',
-          });
+        'record_id': created['id'],
+        'expected_hash': 'stale-hash',
+        'expected_metadata_hash': created['metadata_hash'],
+        'name': 'Notes',
+        'content': 'Overwritten text',
+      });
       expect(stale, startsWith('错误:'));
 
-      final read =
-          jsonDecode(
-                await TextStorageToolService.handleTool('stroom_space_read', {
-                  'record_id': created['id'],
-                }),
-              )
-              as Map<String, dynamic>;
+      final read = jsonDecode(
+        await TextStorageToolService.handleTool('stroom_space_read', {
+          'record_id': created['id'],
+        }),
+      ) as Map<String, dynamic>;
       expect(read['content'], 'Original text');
     },
   );
@@ -155,78 +140,66 @@ void main() {
   });
 
   test('replaces a document only with its current hash', () async {
-    final created =
-        jsonDecode(
-              await TextStorageToolService.handleTool('stroom_space_write', {
-                'name': 'Draft',
-                'content': 'First version',
-              }),
-            )
-            as Map<String, dynamic>;
+    final created = jsonDecode(
+      await TextStorageToolService.handleTool('stroom_space_write', {
+        'name': 'Draft',
+        'content': 'First version',
+      }),
+    ) as Map<String, dynamic>;
 
-    final updated =
-        jsonDecode(
-              await TextStorageToolService.handleTool('stroom_space_write', {
-                'record_id': created['id'],
-                'expected_hash': created['hash'],
-                'expected_metadata_hash': created['metadata_hash'],
-                'name': 'Draft',
-                'content': 'Second version',
-              }),
-            )
-            as Map<String, dynamic>;
+    final updated = jsonDecode(
+      await TextStorageToolService.handleTool('stroom_space_write', {
+        'record_id': created['id'],
+        'expected_hash': created['hash'],
+        'expected_metadata_hash': created['metadata_hash'],
+        'name': 'Draft',
+        'content': 'Second version',
+      }),
+    ) as Map<String, dynamic>;
     expect(updated['status'], 'updated');
     expect(updated['hash'], isNot(created['hash']));
 
-    final read =
-        jsonDecode(
-              await TextStorageToolService.handleTool('stroom_space_read', {
-                'record_id': created['id'],
-              }),
-            )
-            as Map<String, dynamic>;
+    final read = jsonDecode(
+      await TextStorageToolService.handleTool('stroom_space_read', {
+        'record_id': created['id'],
+      }),
+    ) as Map<String, dynamic>;
     expect(read['content'], 'Second version');
   });
 
   test('preserves format and folder when omitted on replacement', () async {
-    final created =
-        jsonDecode(
-              await TextStorageToolService.handleTool('stroom_space_write', {
-                'name': 'Class Notes',
-                'content': 'Original text',
-                'format': 'txt',
-                'folder': 'Biology/Week 1',
-              }),
-            )
-            as Map<String, dynamic>;
+    final created = jsonDecode(
+      await TextStorageToolService.handleTool('stroom_space_write', {
+        'name': 'Class Notes',
+        'content': 'Original text',
+        'format': 'txt',
+        'folder': 'Biology/Week 1',
+      }),
+    ) as Map<String, dynamic>;
 
-    final updated =
-        jsonDecode(
-              await TextStorageToolService.handleTool('stroom_space_write', {
-                'record_id': created['id'],
-                'expected_hash': created['hash'],
-                'expected_metadata_hash': created['metadata_hash'],
-                'name': 'Class Notes Updated',
-                'content': 'Updated text',
-              }),
-            )
-            as Map<String, dynamic>;
+    final updated = jsonDecode(
+      await TextStorageToolService.handleTool('stroom_space_write', {
+        'record_id': created['id'],
+        'expected_hash': created['hash'],
+        'expected_metadata_hash': created['metadata_hash'],
+        'name': 'Class Notes Updated',
+        'content': 'Updated text',
+      }),
+    ) as Map<String, dynamic>;
 
     expect(updated['format'], 'txt');
     expect(updated['folder'], 'Biology/Week 1');
   });
 
   test('rejects a stale text editor save after a tool replacement', () async {
-    final created =
-        jsonDecode(
-              await TextStorageToolService.handleTool('stroom_space_write', {
-                'name': 'Shared Draft',
-                'content': 'Original text',
-                'format': 'txt',
-                'folder': 'Class Notes',
-              }),
-            )
-            as Map<String, dynamic>;
+    final created = jsonDecode(
+      await TextStorageToolService.handleTool('stroom_space_write', {
+        'name': 'Shared Draft',
+        'content': 'Original text',
+        'format': 'txt',
+        'folder': 'Class Notes',
+      }),
+    ) as Map<String, dynamic>;
     final originalRecord = (await TextManifest.loadRecords()).single;
     await TextStorageToolService.handleTool('stroom_space_write', {
       'record_id': created['id'],
@@ -259,27 +232,23 @@ void main() {
     );
 
     expect(saved, isFalse);
-    final read =
-        jsonDecode(
-              await TextStorageToolService.handleTool('stroom_space_read', {
-                'record_id': created['id'],
-              }),
-            )
-            as Map<String, dynamic>;
+    final read = jsonDecode(
+      await TextStorageToolService.handleTool('stroom_space_read', {
+        'record_id': created['id'],
+      }),
+    ) as Map<String, dynamic>;
     expect(read['content'], 'Agent replacement');
   });
 
   test(
     'reclaims replaced content only after its last record reference',
     () async {
-      final created =
-          jsonDecode(
-                await TextStorageToolService.handleTool('stroom_space_write', {
-                  'name': 'Shared Old Content',
-                  'content': 'Shared original',
-                }),
-              )
-              as Map<String, dynamic>;
+      final created = jsonDecode(
+        await TextStorageToolService.handleTool('stroom_space_write', {
+          'name': 'Shared Old Content',
+          'content': 'Shared original',
+        }),
+      ) as Map<String, dynamic>;
       final duplicate = TextRecord(
         name: 'Old Content Copy',
         hash: created['hash'] as String,
@@ -290,17 +259,15 @@ void main() {
       );
       await TextManifest.addRecord(duplicate);
 
-      final updated =
-          jsonDecode(
-                await TextStorageToolService.handleTool('stroom_space_write', {
-                  'record_id': created['id'],
-                  'expected_hash': created['hash'],
-                  'expected_metadata_hash': created['metadata_hash'],
-                  'name': 'Shared Old Content',
-                  'content': 'Replacement content',
-                }),
-              )
-              as Map<String, dynamic>;
+      final updated = jsonDecode(
+        await TextStorageToolService.handleTool('stroom_space_write', {
+          'record_id': created['id'],
+          'expected_hash': created['hash'],
+          'expected_metadata_hash': created['metadata_hash'],
+          'name': 'Shared Old Content',
+          'content': 'Replacement content',
+        }),
+      ) as Map<String, dynamic>;
 
       expect(
         await TextManifest.readText('${created['hash']}.txt'),
@@ -318,14 +285,12 @@ void main() {
   test(
     'cleans an unreferenced file after a rejected conditional update',
     () async {
-      final created =
-          jsonDecode(
-                await TextStorageToolService.handleTool('stroom_space_write', {
-                  'name': 'Conditional Target',
-                  'content': 'Current content',
-                }),
-              )
-              as Map<String, dynamic>;
+      final created = jsonDecode(
+        await TextStorageToolService.handleTool('stroom_space_write', {
+          'name': 'Conditional Target',
+          'content': 'Current content',
+        }),
+      ) as Map<String, dynamic>;
       const rejectedContent = 'Rejected content';
       final rejectedBytes = Uint8List.fromList(utf8.encode(rejectedContent));
       final rejectedHash = computeTextHash(rejectedBytes);
@@ -482,11 +447,15 @@ void main() {
     );
 
     await expectLater(
-      TextManifest.updateRecordIfHash(original.id, original.hash, {
-        'name': original.name,
-        'format': original.format,
-        'folder': '',
-      }, updated),
+      TextManifest.updateRecordIfHash(
+          original.id,
+          original.hash,
+          {
+            'name': original.name,
+            'format': original.format,
+            'folder': '',
+          },
+          updated),
       throwsArgumentError,
     );
 
@@ -494,35 +463,31 @@ void main() {
   });
 
   test('rejects a replacement after the document metadata changes', () async {
-    final created =
-        jsonDecode(
-              await TextStorageToolService.handleTool('stroom_space_write', {
-                'name': 'Original Name',
-                'content': 'Original content',
-                'folder': 'Class Notes',
-              }),
-            )
-            as Map<String, dynamic>;
+    final created = jsonDecode(
+      await TextStorageToolService.handleTool('stroom_space_write', {
+        'name': 'Original Name',
+        'content': 'Original content',
+        'folder': 'Class Notes',
+      }),
+    ) as Map<String, dynamic>;
     await TextManifest.renameRecord(created['id'] as String, 'Renamed');
 
     final result =
         await TextStorageToolService.handleTool('stroom_space_write', {
-          'record_id': created['id'],
-          'expected_hash': created['hash'],
-          'expected_metadata_hash': created['metadata_hash'],
-          'name': 'Original Name',
-          'content': 'Agent replacement',
-          'folder': 'Class Notes',
-        });
+      'record_id': created['id'],
+      'expected_hash': created['hash'],
+      'expected_metadata_hash': created['metadata_hash'],
+      'name': 'Original Name',
+      'content': 'Agent replacement',
+      'folder': 'Class Notes',
+    });
 
     expect(result, contains('名称、格式或文件夹'));
-    final read =
-        jsonDecode(
-              await TextStorageToolService.handleTool('stroom_space_read', {
-                'record_id': created['id'],
-              }),
-            )
-            as Map<String, dynamic>;
+    final read = jsonDecode(
+      await TextStorageToolService.handleTool('stroom_space_read', {
+        'record_id': created['id'],
+      }),
+    ) as Map<String, dynamic>;
     expect(read['content'], 'Original content');
     expect(read['name'], 'Renamed');
   });
@@ -530,14 +495,12 @@ void main() {
   test(
     'allows only one of two concurrent replacements with the same hash',
     () async {
-      final created =
-          jsonDecode(
-                await TextStorageToolService.handleTool('stroom_space_write', {
-                  'name': 'Concurrent Draft',
-                  'content': 'Shared starting version',
-                }),
-              )
-              as Map<String, dynamic>;
+      final created = jsonDecode(
+        await TextStorageToolService.handleTool('stroom_space_write', {
+          'name': 'Concurrent Draft',
+          'content': 'Shared starting version',
+        }),
+      ) as Map<String, dynamic>;
 
       final results = await Future.wait([
         TextStorageToolService.handleTool('stroom_space_write', {
@@ -558,13 +521,11 @@ void main() {
 
       expect(results.where((result) => result.startsWith('错误:')).length, 1);
       expect(results.where((result) => result.startsWith('{')).length, 1);
-      final read =
-          jsonDecode(
-                await TextStorageToolService.handleTool('stroom_space_read', {
-                  'record_id': created['id'],
-                }),
-              )
-              as Map<String, dynamic>;
+      final read = jsonDecode(
+        await TextStorageToolService.handleTool('stroom_space_read', {
+          'record_id': created['id'],
+        }),
+      ) as Map<String, dynamic>;
       expect([
         'First replacement',
         'Second replacement',
@@ -576,42 +537,36 @@ void main() {
   test(
     'serializes replacement content creation with deletion of its shared reference',
     () async {
-      final shared =
-          jsonDecode(
-                await TextStorageToolService.handleTool('stroom_space_write', {
-                  'name': 'Shared Copy',
-                  'content': 'New shared content',
-                }),
-              )
-              as Map<String, dynamic>;
-      final target =
-          jsonDecode(
-                await TextStorageToolService.handleTool('stroom_space_write', {
-                  'name': 'To Replace',
-                  'content': 'Old content',
-                }),
-              )
-              as Map<String, dynamic>;
+      final shared = jsonDecode(
+        await TextStorageToolService.handleTool('stroom_space_write', {
+          'name': 'Shared Copy',
+          'content': 'New shared content',
+        }),
+      ) as Map<String, dynamic>;
+      final target = jsonDecode(
+        await TextStorageToolService.handleTool('stroom_space_write', {
+          'name': 'To Replace',
+          'content': 'Old content',
+        }),
+      ) as Map<String, dynamic>;
 
       final replacement =
           TextStorageToolService.handleTool('stroom_space_write', {
-            'record_id': target['id'],
-            'expected_hash': target['hash'],
-            'expected_metadata_hash': target['metadata_hash'],
-            'name': 'To Replace',
-            'content': 'New shared content',
-          });
+        'record_id': target['id'],
+        'expected_hash': target['hash'],
+        'expected_metadata_hash': target['metadata_hash'],
+        'name': 'To Replace',
+        'content': 'New shared content',
+      });
       final deletion = TextManifest.deleteRecord(shared['id'] as String);
 
       expect(await replacement, contains('"status":"updated"'));
       await deletion;
-      final read =
-          jsonDecode(
-                await TextStorageToolService.handleTool('stroom_space_read', {
-                  'record_id': target['id'],
-                }),
-              )
-              as Map<String, dynamic>;
+      final read = jsonDecode(
+        await TextStorageToolService.handleTool('stroom_space_read', {
+          'record_id': target['id'],
+        }),
+      ) as Map<String, dynamic>;
       expect(read['content'], 'New shared content');
       expect(
         await TextManifest.readText('${read['hash']}.txt'),
@@ -621,14 +576,12 @@ void main() {
   );
 
   test('keeps a read snapshot available while a replacement waits', () async {
-    final created =
-        jsonDecode(
-              await TextStorageToolService.handleTool('stroom_space_write', {
-                'name': 'Read race',
-                'content': 'Snapshot body',
-              }),
-            )
-            as Map<String, dynamic>;
+    final created = jsonDecode(
+      await TextStorageToolService.handleTool('stroom_space_write', {
+        'name': 'Read race',
+        'content': 'Snapshot body',
+      }),
+    ) as Map<String, dynamic>;
     final readStarted = Completer<void>();
     final releaseRead = Completer<void>();
     final pendingRead = TextManifest.withSerializedTextRead(() async {
@@ -642,15 +595,15 @@ void main() {
     var replacementCompleted = false;
     final replacement =
         TextStorageToolService.handleTool('stroom_space_write', {
-          'record_id': created['id'],
-          'expected_hash': created['hash'],
-          'expected_metadata_hash': created['metadata_hash'],
-          'name': 'Read race',
-          'content': 'Replacement body',
-        }).then((result) {
-          replacementCompleted = true;
-          return result;
-        });
+      'record_id': created['id'],
+      'expected_hash': created['hash'],
+      'expected_metadata_hash': created['metadata_hash'],
+      'name': 'Read race',
+      'content': 'Replacement body',
+    }).then((result) {
+      replacementCompleted = true;
+      return result;
+    });
     await Future<void>.delayed(Duration.zero);
     expect(replacementCompleted, isFalse);
 
@@ -699,35 +652,31 @@ void main() {
         'content': 'Shared replacement content',
         'folder': 'To Delete',
       });
-      final target =
-          jsonDecode(
-                await TextStorageToolService.handleTool('stroom_space_write', {
-                  'name': 'Root Document',
-                  'content': 'Original content',
-                }),
-              )
-              as Map<String, dynamic>;
+      final target = jsonDecode(
+        await TextStorageToolService.handleTool('stroom_space_write', {
+          'name': 'Root Document',
+          'content': 'Original content',
+        }),
+      ) as Map<String, dynamic>;
 
       final replacement =
           TextStorageToolService.handleTool('stroom_space_write', {
-            'record_id': target['id'],
-            'expected_hash': target['hash'],
-            'expected_metadata_hash': target['metadata_hash'],
-            'name': 'Root Document',
-            'content': 'Shared replacement content',
-          });
+        'record_id': target['id'],
+        'expected_hash': target['hash'],
+        'expected_metadata_hash': target['metadata_hash'],
+        'name': 'Root Document',
+        'content': 'Shared replacement content',
+      });
       final removal = TextManifest.removeFolder('To Delete');
 
       expect(await replacement, contains('"status":"updated"'));
       await removal;
 
-      final read =
-          jsonDecode(
-                await TextStorageToolService.handleTool('stroom_space_read', {
-                  'record_id': target['id'],
-                }),
-              )
-              as Map<String, dynamic>;
+      final read = jsonDecode(
+        await TextStorageToolService.handleTool('stroom_space_read', {
+          'record_id': target['id'],
+        }),
+      ) as Map<String, dynamic>;
       expect(read['content'], 'Shared replacement content');
       expect(
         await TextManifest.readText('${read['hash']}.txt'),
@@ -739,24 +688,22 @@ void main() {
   test(
     'serializes moving folder contents to root with content replacement',
     () async {
-      final target =
-          jsonDecode(
-                await TextStorageToolService.handleTool('stroom_space_write', {
-                  'name': 'Folder Draft',
-                  'content': 'Original content',
-                  'folder': 'To Move',
-                }),
-              )
-              as Map<String, dynamic>;
+      final target = jsonDecode(
+        await TextStorageToolService.handleTool('stroom_space_write', {
+          'name': 'Folder Draft',
+          'content': 'Original content',
+          'folder': 'To Move',
+        }),
+      ) as Map<String, dynamic>;
 
       final replacement =
           TextStorageToolService.handleTool('stroom_space_write', {
-            'record_id': target['id'],
-            'expected_hash': target['hash'],
-            'expected_metadata_hash': target['metadata_hash'],
-            'name': 'Folder Draft',
-            'content': 'Replacement content',
-          });
+        'record_id': target['id'],
+        'expected_hash': target['hash'],
+        'expected_metadata_hash': target['metadata_hash'],
+        'name': 'Folder Draft',
+        'content': 'Replacement content',
+      });
       final moveToRoot = TextManifest.removeFolderFromCache('To Move');
       await Future.wait([replacement, moveToRoot]);
 
@@ -767,16 +714,14 @@ void main() {
   );
 
   test('format changes preserve a newer content replacement', () async {
-    final created =
-        jsonDecode(
-              await TextStorageToolService.handleTool('stroom_space_write', {
-                'name': 'Format Draft',
-                'content': 'Original content',
-                'format': 'md',
-                'folder': 'Class Notes',
-              }),
-            )
-            as Map<String, dynamic>;
+    final created = jsonDecode(
+      await TextStorageToolService.handleTool('stroom_space_write', {
+        'name': 'Format Draft',
+        'content': 'Original content',
+        'format': 'md',
+        'folder': 'Class Notes',
+      }),
+    ) as Map<String, dynamic>;
     await TextStorageToolService.handleTool('stroom_space_write', {
       'record_id': created['id'],
       'expected_hash': created['hash'],
@@ -926,11 +871,15 @@ void main() {
       );
 
       await Future.wait([
-        TextManifest.updateRecordIfHash(original.id, original.hash, {
-          'name': original.name,
-          'format': original.format,
-          'folder': '',
-        }, replacement),
+        TextManifest.updateRecordIfHash(
+            original.id,
+            original.hash,
+            {
+              'name': original.name,
+              'format': original.format,
+              'folder': '',
+            },
+            replacement),
         TextManifest.renameRecord(original.id, 'Renamed'),
       ]);
 
@@ -1132,13 +1081,11 @@ void main() {
     });
     expect(read, contains('超过 1048576 字节'));
 
-    final search =
-        jsonDecode(
-              await TextStorageToolService.handleTool('stroom_space_search', {
-                'query': 'not-present',
-              }),
-            )
-            as Map<String, dynamic>;
+    final search = jsonDecode(
+      await TextStorageToolService.handleTool('stroom_space_search', {
+        'query': 'not-present',
+      }),
+    ) as Map<String, dynamic>;
     expect(search['content_search_skipped_oversized'], 1);
     expect(search['count'], 0);
   });
@@ -1159,13 +1106,11 @@ void main() {
       await TextManifest.addRecord(record);
     }
 
-    final result =
-        jsonDecode(
-              await TextStorageToolService.handleTool('stroom_space_search', {
-                'query': 'not-present',
-              }),
-            )
-            as Map<String, dynamic>;
+    final result = jsonDecode(
+      await TextStorageToolService.handleTool('stroom_space_search', {
+        'query': 'not-present',
+      }),
+    ) as Map<String, dynamic>;
 
     expect(result['content_search_truncated'], isTrue);
     expect(result['scanned'], 2);
@@ -1194,13 +1139,11 @@ void main() {
       );
       expect(read, contains('超过 1048576 字节'));
 
-      final search =
-          jsonDecode(
-                await TextStorageToolService.handleTool('stroom_space_search', {
-                  'query': 'xxxxxxxx',
-                }),
-              )
-              as Map<String, dynamic>;
+      final search = jsonDecode(
+        await TextStorageToolService.handleTool('stroom_space_search', {
+          'query': 'xxxxxxxx',
+        }),
+      ) as Map<String, dynamic>;
       expect(search['content_search_skipped_oversized'], 1);
       expect(search['count'], 0);
     },
@@ -1208,22 +1151,18 @@ void main() {
 
   test('bounds search query and snippet lengths', () async {
     final query = 'x' * 256;
-    final created =
-        jsonDecode(
-              await TextStorageToolService.handleTool('stroom_space_write', {
-                'name': 'Long Note',
-                'content': '${'a' * 1000}$query${'b' * 1000}',
-              }),
-            )
-            as Map<String, dynamic>;
+    final created = jsonDecode(
+      await TextStorageToolService.handleTool('stroom_space_write', {
+        'name': 'Long Note',
+        'content': '${'a' * 1000}$query${'b' * 1000}',
+      }),
+    ) as Map<String, dynamic>;
 
-    final result =
-        jsonDecode(
-              await TextStorageToolService.handleTool('stroom_space_search', {
-                'query': query,
-              }),
-            )
-            as Map<String, dynamic>;
+    final result = jsonDecode(
+      await TextStorageToolService.handleTool('stroom_space_search', {
+        'query': query,
+      }),
+    ) as Map<String, dynamic>;
     final snippet = (result['results'] as List).single['snippet'] as String;
     expect(snippet.length, lessThanOrEqualTo(512));
     expect(snippet, contains(query));

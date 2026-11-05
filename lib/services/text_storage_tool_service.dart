@@ -152,13 +152,12 @@ class TextStorageToolService {
     if (folderResult.error != null) return '错误: ${folderResult.error}。';
     final limit = _boundedInt(args['limit'], _defaultListLimit, _maxListLimit);
     final records = await TextManifest.loadRecords();
-    final matching =
-        records
-            .where(
-              (record) => _withinFolder(record.folder, folderResult.folder),
-            )
-            .toList()
-          ..sort((a, b) => b.modifiedAt.compareTo(a.modifiedAt));
+    final matching = records
+        .where(
+          (record) => _withinFolder(record.folder, folderResult.folder),
+        )
+        .toList()
+      ..sort((a, b) => b.modifiedAt.compareTo(a.modifiedAt));
     final items = matching.take(limit).map(_recordMetadata).toList();
     return jsonEncode({
       'documents': items,
@@ -188,13 +187,12 @@ class TextStorageToolService {
     );
     final searchContent = args['search_content'] != false;
     final needle = query.trim().toLowerCase();
-    final records =
-        (await TextManifest.loadRecords())
-            .where(
-              (record) => _withinFolder(record.folder, folderResult.folder),
-            )
-            .toList()
-          ..sort((a, b) => b.modifiedAt.compareTo(a.modifiedAt));
+    final records = (await TextManifest.loadRecords())
+        .where(
+          (record) => _withinFolder(record.folder, folderResult.folder),
+        )
+        .toList()
+      ..sort((a, b) => b.modifiedAt.compareTo(a.modifiedAt));
     final results = <Map<String, dynamic>>[];
     var scanned = 0;
     var contentSearchSkippedOversized = 0;
@@ -426,29 +424,28 @@ class TextStorageToolService {
   }
 
   static Map<String, dynamic> _recordMetadata(TextRecord record) => {
-    'id': record.id,
-    'name': record.name,
-    'format': record.format,
-    'folder': record.folder,
-    'size': record.size,
-    'text_length': record.textLength,
-    'modified_at': record.modifiedAt.toIso8601String(),
-    'metadata_hash': _metadataHash(record),
-  };
+        'id': record.id,
+        'name': record.name,
+        'format': record.format,
+        'folder': record.folder,
+        'size': record.size,
+        'text_length': record.textLength,
+        'modified_at': record.modifiedAt.toIso8601String(),
+        'metadata_hash': _metadataHash(record),
+      };
 
   static String _metadataHash(TextRecord record) => computeTextHash(
-    Uint8List.fromList(
-      utf8.encode(jsonEncode([record.name, record.format, record.folder])),
-    ),
-  );
+        Uint8List.fromList(
+          utf8.encode(jsonEncode([record.name, record.format, record.folder])),
+        ),
+      );
 
   static String? _findSnippet(String content, String needle) {
     final index = content.toLowerCase().indexOf(needle);
     if (index < 0) return null;
     var start = (index - 100).clamp(0, content.length).toInt();
-    var end = (start + _maxSearchSnippetLength)
-        .clamp(0, content.length)
-        .toInt();
+    var end =
+        (start + _maxSearchSnippetLength).clamp(0, content.length).toInt();
     final matchEnd = index + needle.length;
     if (end < matchEnd) {
       end = matchEnd;

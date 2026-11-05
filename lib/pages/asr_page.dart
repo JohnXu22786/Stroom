@@ -520,8 +520,8 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                       onPressed: _isProcessing
                           ? null
                           : _getCurrentUploadMethod() == AudioUploadMethod.url
-                          ? _showUrlInputDialog
-                          : _showAudioSourceSheet,
+                              ? _showUrlInputDialog
+                              : _showAudioSourceSheet,
                       icon: const Icon(Icons.refresh, size: 18),
                       label: const Text('重新选择'),
                     ),
@@ -591,9 +591,8 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                     ),
                     IconButton(
                       icon: Icon(Icons.close, size: 16, color: cs.error),
-                      onPressed: _isProcessing
-                          ? null
-                          : () => _removeAudio(index),
+                      onPressed:
+                          _isProcessing ? null : () => _removeAudio(index),
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
                     ),
@@ -868,9 +867,8 @@ class _AsrPageState extends ConsumerState<AsrPage> {
   static String _urlDisplayName(String url) {
     try {
       final uri = Uri.parse(url);
-      final segments = uri.pathSegments
-          .where((s) => s.isNotEmpty)
-          .toList(growable: false);
+      final segments =
+          uri.pathSegments.where((s) => s.isNotEmpty).toList(growable: false);
       final name = segments.isNotEmpty ? segments.last : uri.host;
       return name.length <= 40 ? name : name.substring(0, 40);
     } catch (_) {
@@ -1149,9 +1147,8 @@ class _AsrPageState extends ConsumerState<AsrPage> {
       apiKey: selectedOption.apiKey,
       model: selectedOption.model.modelId,
       typeConfig: tc,
-      customParams: selectedOption.model.customParams
-          .map((p) => p.copy())
-          .toList(),
+      customParams:
+          selectedOption.model.customParams.map((p) => p.copy()).toList(),
       uploadMethod: uploadMethod,
       maxFileSizeBytes: maxFileSizeBytes,
       preprocessing: preprocessing,
@@ -1230,9 +1227,8 @@ class _AsrPageState extends ConsumerState<AsrPage> {
     } catch (e) {
       debugPrint('[ASR] _executeTaskChain failed: $e');
       for (final entry in taskEntries) {
-        final task = bgNotifier.state
-            .where((t) => t.id == entry.taskId)
-            .firstOrNull;
+        final task =
+            bgNotifier.state.where((t) => t.id == entry.taskId).firstOrNull;
         if (task != null &&
             (task.status == TaskStatus.waiting ||
                 task.status == TaskStatus.running)) {
@@ -1392,8 +1388,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
     final hash = computeTextHash(bytes);
     final filePath = await TextManifest.addRecordWithContent(
       TextRecord(
-        name:
-            title ??
+        name: title ??
             'ASR_${now.year}${_pad(now.month)}${_pad(now.day)}${_pad(now.hour)}${_pad(now.minute)}${_pad(now.second)}',
         hash: hash,
         format: 'txt',

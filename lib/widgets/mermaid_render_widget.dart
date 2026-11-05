@@ -223,8 +223,7 @@ class MermaidRenderWidget extends StatefulWidget {
       // script tag early (</script) or start an HTML comment (<!--) inside
       // the inlined code.
       final encoded = jsonEncode(inlineMermaidJs).replaceAll('<', r'\u003C');
-      final loader =
-          '''
+      final loader = '''
     (function loadMermaid() {
       var hint = document.getElementById('loading-hint');
       var script = document.createElement('script');
@@ -1103,30 +1102,27 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                   // ScaleGestureRecognizer handles pan + pinch zoom.
                   // It enters the gesture arena via the team, so it
                   // automatically accepts when the immediate recognizer wins.
-                  ScaleGestureRecognizer:
-                      GestureRecognizerFactoryWithHandlers<
-                        ScaleGestureRecognizer
-                      >(
-                        () {
-                          final recognizer = ScaleGestureRecognizer()
-                            ..team = team;
-                          // Set ScaleGestureRecognizer as the team captain so
-                          // that when ImmediateMermaidGestureRecognizer wins the
-                          // parent arena via the team, the
-                          // ScaleGestureRecognizer's acceptGesture is called
-                          // (instead of being rejected). Without a captain, the
-                          // team would accept the immediately-resolved recognizer
-                          // and reject the ScaleGestureRecognizer, breaking
-                          // pan/zoom entirely.
-                          team.captain = recognizer;
-                          return recognizer;
-                        },
-                        (instance) {
-                          instance.onStart = _onScaleStart;
-                          instance.onUpdate = _onScaleUpdate;
-                          instance.onEnd = (_) {};
-                        },
-                      ),
+                  ScaleGestureRecognizer: GestureRecognizerFactoryWithHandlers<
+                      ScaleGestureRecognizer>(
+                    () {
+                      final recognizer = ScaleGestureRecognizer()..team = team;
+                      // Set ScaleGestureRecognizer as the team captain so
+                      // that when ImmediateMermaidGestureRecognizer wins the
+                      // parent arena via the team, the
+                      // ScaleGestureRecognizer's acceptGesture is called
+                      // (instead of being rejected). Without a captain, the
+                      // team would accept the immediately-resolved recognizer
+                      // and reject the ScaleGestureRecognizer, breaking
+                      // pan/zoom entirely.
+                      team.captain = recognizer;
+                      return recognizer;
+                    },
+                    (instance) {
+                      instance.onStart = _onScaleStart;
+                      instance.onUpdate = _onScaleUpdate;
+                      instance.onEnd = (_) {};
+                    },
+                  ),
                   // ImmediateMermaidGestureRecognizer: wins the gesture arena
                   // on the very first PointerMoveEvent (any direction).
                   // Defined after ScaleGestureRecognizer so it enters the
@@ -1134,11 +1130,10 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                   // 'possible' state before the team resolves.
                   ImmediateMermaidGestureRecognizer:
                       GestureRecognizerFactoryWithHandlers<
-                        ImmediateMermaidGestureRecognizer
-                      >(
-                        () => ImmediateMermaidGestureRecognizer()..team = team,
-                        (instance) {},
-                      ),
+                          ImmediateMermaidGestureRecognizer>(
+                    () => ImmediateMermaidGestureRecognizer()..team = team,
+                    (instance) {},
+                  ),
                 },
                 behavior: HitTestBehavior.opaque,
                 child: Container(color: Colors.transparent),
@@ -1181,8 +1176,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     }
 
     await ctrl.evaluateJavascript(
-      source:
-          'window.setZoom(window.zoomLevel + $delta, '
+      source: 'window.setZoom(window.zoomLevel + $delta, '
           "document.getElementById('viewport').clientWidth / 2, "
           "document.getElementById('viewport').clientHeight / 2)",
     );
@@ -1473,9 +1467,8 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                     handlerName: 'onMermaidError',
                     callback: (args) {
                       if (mounted) {
-                        final msg = args.isNotEmpty
-                            ? args[0].toString()
-                            : '未知错误';
+                        final msg =
+                            args.isNotEmpty ? args[0].toString() : '未知错误';
                         setState(() => _errorMessage = msg);
                       }
                     },
