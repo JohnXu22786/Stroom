@@ -13,6 +13,15 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
     required Object? streamError,
     required ChatService? snappedChatService,
   }) async {
+    // Timer cancellation prevents future callbacks but does not wait for a
+    // partial write already in progress. Let it finish before building the
+    // full-history snapshot so the two large saves do not overlap.
+    try {
+      await state._periodicPersistFuture;
+    } catch (e) {
+      debugPrint('[ChatStreamManager] 等待定期持久化失败: $e');
+    }
+
     // Capture request/response raw data from the ChatService instance
     // that was active when this stream started (snapped above). Using
     // the snapped reference is critical: adapter.currentChatService may
