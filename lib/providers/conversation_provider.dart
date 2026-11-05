@@ -512,6 +512,11 @@ final conversationsProvider =
   return notifier;
 });
 
+/// Completes after conversations have been read from persistence.
+final conversationsInitialLoadProvider = FutureProvider<void>((ref) async {
+  await ref.watch(conversationsProvider.notifier).ready;
+});
+
 class ConversationsNotifier extends StateNotifier<List<Conversation>> {
   final Ref _ref;
   List<dynamic> _unparsedConversationRecords = [];
