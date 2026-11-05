@@ -12,6 +12,7 @@ import 'package:stroom/services/llm_account_migration_service.dart';
 import 'package:stroom/ai_gateway/ai_gateway.dart';
 import 'package:stroom/src/ai_gateway/ai_gateway_facade.dart';
 import 'package:stroom/services/llm_connector_service.dart';
+import 'package:stroom/services/cloudflare_workers_ai_connector.dart';
 import 'package:stroom/services/llm_credential_store.dart';
 import 'package:stroom/services/llm_model_group_provider.dart';
 import 'package:stroom/services/llm_oauth_token_client.dart';
@@ -23,6 +24,76 @@ const _devinCliTestExecutableSha256 =
     'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 
 void main() {
+  testWidgets(
+      'Cloudflare Workers AI keeps token secure and account ID separate', (
+    tester,
+  ) async {
+    final credentials = _MemoryCredentialStore();
+    final preferences = _MemoryPreferences();
+    final service = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: credentials,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('添加账号'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first, 'Workers AI');
+
+    final connectorField = find.byType(DropdownButtonFormField<String>).first;
+    await tester.ensureVisible(connectorField);
+    tester
+        .widget<DropdownButtonFormField<String>>(connectorField)
+        .onChanged!('cloudflare-ai');
+    await tester.pumpAndSettle();
+
+    Future<void> enterField(String label, String value) async {
+      final field = find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && widget.decoration?.labelText == label,
+      );
+      await tester.ensureVisible(field);
+      await tester.enterText(field, value);
+    }
+
+    await enterField('Cloudflare Account ID', 'account-123');
+    await enterField('Cloudflare API Token', 'synthetic-cloudflare-token');
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField &&
+            widget.decoration?.labelText == '上游模型与能力' &&
+            widget.readOnly,
+      ),
+      findsOneWidget,
+    );
+    await tester.ensureVisible(find.text('保存').last);
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+
+    final saved = (await service.listAccounts()).single;
+    expect(saved.connectorType, 'cloudflare-ai');
+    expect(saved.authType, 'api_key');
+    expect(saved.endpointConfig['cloudflareAccountId'], 'account-123');
+    expect(saved.endpointConfig.toString(),
+        isNot(contains('synthetic-cloudflare-token')));
+    expect(
+        await service.readCredential(saved.id), 'synthetic-cloudflare-token');
+    expect(
+      preferences.values.values.join(),
+      isNot(contains('synthetic-cloudflare-token')),
+    );
+    expect(
+      saved.models.map((model) => model.upstreamModelId).toList(),
+      kCloudflareWorkersAiModelIds,
+    );
+    expect(saved.models.first.capabilities, {'contextLength': 15000});
+  });
+
   testWidgets('Azure account saves endpoint settings and secure API key', (
     tester,
   ) async {
