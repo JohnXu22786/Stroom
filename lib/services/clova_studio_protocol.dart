@@ -6,7 +6,6 @@
 library;
 
 import 'dart:convert';
-import 'dart:io';
 
 const String kClovaStudioProtocolId = 'clova.studio.chat';
 const String kClovaStudioBaseUrl =
@@ -44,11 +43,10 @@ class ClovaStudioProtocol {
 
   /// Converts the application's Chat Completions-shaped neutral request into
   /// CLOVA v3's native camelCase request body.
-  static Future<Map<String, dynamic>> buildRequest(
+  static Map<String, dynamic> buildRequest(
     String modelId,
-    Map<String, dynamic> body, {
-    Future<List<InternetAddress>> Function(String host)? lookupHost,
-  }) async {
+    Map<String, dynamic> body,
+  ) {
     if (!kClovaStudioModelIds.contains(modelId)) {
       throw ArgumentError.value(modelId, 'modelId');
     }
@@ -81,7 +79,6 @@ class ClovaStudioProtocol {
       ...rawMessages,
     ];
     final imagesSupported = modelId == 'HCX-005';
-    final resolveHost = lookupHost ?? InternetAddress.lookup;
     var imageCount = 0;
     final messages = <Map<String, dynamic>>[];
     for (final raw in sourceMessages) {
@@ -98,10 +95,9 @@ class ClovaStudioProtocol {
           'CLOVA message role or tool shape is unsupported.',
         );
       }
-      final content = await _contentParts(
+      final content = _contentParts(
         message['content'],
         imagesSupported: imagesSupported,
-        lookupHost: resolveHost,
         onImage: () => imageCount++,
       );
       if (imageCount > 5 ||
@@ -145,12 +141,11 @@ class ClovaStudioProtocol {
     return request;
   }
 
-  static Future<List<Map<String, dynamic>>> _contentParts(
+  static List<Map<String, dynamic>> _contentParts(
     Object? content, {
     required bool imagesSupported,
-    required Future<List<InternetAddress>> Function(String host) lookupHost,
     required void Function() onImage,
-  }) async {
+  }) {
     if (content is String) {
       return [
         {'type': 'text', 'text': content},
@@ -180,27 +175,21 @@ class ClovaStudioProtocol {
         throw UnsupportedError('CLOVA image URL is invalid.');
       }
       onImage();
-      if (url.startsWith('data:')) {
-        if (!RegExp(
-          r'^data:image/[a-z0-9.+-]+;base64,[A-Za-z0-9+/]*={0,2}$',
-          caseSensitive: false,
-        ).hasMatch(url)) {
-          throw UnsupportedError('CLOVA image data URI is invalid.');
-        }
-        parts.add({
-          'type': 'image_url',
-          'dataUri': {'data': url},
-        });
-      } else {
-        final uri = Uri.tryParse(url);
-        if (uri == null || !await _isPublicHttpsUri(uri, lookupHost)) {
-          throw UnsupportedError('CLOVA only accepts public HTTPS image URLs.');
-        }
-        parts.add({
-          'type': 'image_url',
-          'imageUrl': {'url': url},
-        });
+      if (!url.startsWith('data:')) {
+        throw UnsupportedError(
+          'CLOVA image URLs must be inline base64 data URIs; remote image URLs are not supported.',
+        );
       }
+      if (!RegExp(
+        r'^data:image/[a-z0-9.+-]+;base64,[A-Za-z0-9+/]*={0,2}$',
+        caseSensitive: false,
+      ).hasMatch(url)) {
+        throw UnsupportedError('CLOVA image data URI is invalid.');
+      }
+      parts.add({
+        'type': 'image_url',
+        'dataUri': {'data': url},
+      });
     }
     return parts.isEmpty
         ? [
@@ -216,89 +205,6 @@ class ClovaStudioProtocol {
     return const {'none', 'low', 'medium', 'high'}.contains(value)
         ? value
         : null;
-  }
-
-  static Future<bool> _isPublicHttpsUri(
-    Uri uri,
-    Future<List<InternetAddress>> Function(String host) lookupHost,
-  ) async {
-    if (uri.scheme != 'https' ||
-        uri.host.isEmpty ||
-        uri.userInfo.isNotEmpty ||
-        (uri.hasPort && uri.port != 443)) {
-      return false;
-    }
-    final host = uri.host.toLowerCase();
-    final address = InternetAddress.tryParse(host);
-    if (address != null) return _isPublicIpAddress(address);
-    if (RegExp(r'^[0-9.]+$').hasMatch(host) ||
-        !host.contains('.') ||
-        host.endsWith('.') ||
-        const {
-          'localhost',
-          'local',
-          'internal',
-          'test',
-          'invalid',
-          'example',
-        }.any((suffix) => host == suffix || host.endsWith('.$suffix'))) {
-      return false;
-    }
-    try {
-      final addresses = await lookupHost(host);
-      return addresses.isNotEmpty && addresses.every(_isPublicIpAddress);
-    } on SocketException {
-      return false;
-    }
-  }
-
-  static bool _isPublicIpAddress(InternetAddress address) {
-    final bytes = address.rawAddress;
-    if (address.type == InternetAddressType.IPv4) {
-      final a = bytes[0];
-      final b = bytes[1];
-      final c = bytes[2];
-      return !(a == 0 ||
-          a == 10 ||
-          a == 127 ||
-          (a == 100 && b >= 64 && b <= 127) ||
-          (a == 169 && b == 254) ||
-          (a == 172 && b >= 16 && b <= 31) ||
-          (a == 192 && (b == 168 || b == 0 && (c == 0 || c == 2))) ||
-          (a == 192 && b == 88 && c == 99) ||
-          (a == 198 && (b == 18 || b == 19 || b == 51 && c == 100)) ||
-          (a == 203 && b == 0 && c == 113) ||
-          a >= 224);
-    }
-    final isIpv4Mapped =
-        bytes.take(10).every((byte) => byte == 0) &&
-        bytes[10] == 255 &&
-        bytes[11] == 255;
-    if (isIpv4Mapped) {
-      return _isPublicIpAddress(
-        InternetAddress.fromRawAddress(bytes.sublist(12)),
-      );
-    }
-    final isIpv4Compatible = bytes.take(12).every((byte) => byte == 0);
-    final isGlobalUnicast = (bytes[0] & 0xe0) == 0x20;
-    final isIetfProtocolAssignment =
-        bytes[0] == 0x20 && bytes[1] == 0x01 && (bytes[2] & 0xfe) == 0;
-    final isSixToFour = bytes[0] == 0x20 && bytes[1] == 0x02;
-    final isDocumentation =
-        bytes[0] == 0x3f && bytes[1] == 0xff && (bytes[2] & 0xf0) == 0;
-    return isGlobalUnicast &&
-        !(isIpv4Compatible ||
-            isIetfProtocolAssignment ||
-            isSixToFour ||
-            isDocumentation ||
-            bytes.take(15).every((byte) => byte == 0) && bytes[15] == 1 ||
-            (bytes[0] & 0xfe) == 0xfc ||
-            (bytes[0] == 0xfe && (bytes[1] & 0xc0) >= 0x80) ||
-            (bytes[0] == 0x20 &&
-                bytes[1] == 0x01 &&
-                bytes[2] == 0x0d &&
-                bytes[3] == 0xb8) ||
-            bytes[0] == 0xff);
   }
 }
 

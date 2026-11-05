@@ -1089,7 +1089,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     }
     final body = request.body;
     if (protocolId == kClovaStudioProtocolId) {
-      return await ClovaStudioProtocol.buildRequest(
+      return ClovaStudioProtocol.buildRequest(
         upstreamModelId,
         Map<String, dynamic>.from(body as Map),
       );
