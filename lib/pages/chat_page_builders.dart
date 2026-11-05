@@ -372,6 +372,9 @@ extension _ChatPageBuildersExt on _ChatPageState {
     // render it as regular text instead of a spinner.
     // Read the latest reply when this message item is rebuilt. The active
     // bubble's notifier triggers that rebuild without rebuilding the page.
+    // The legacy full-reply provider remains a fallback for old direct
+    // writers. Manager-driven streams render from live segments and do not
+    // keep a second growing full-text provider value.
     final streamingFullReply =
         activeId == null ? '' : ref.read(streamingFullReplyProvider(activeId));
     if (streamingFullReply.isNotEmpty && message.id == streamingMsgId) {

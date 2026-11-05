@@ -537,8 +537,8 @@ extension _ChatPageMessagesExt on _ChatPageState {
         // yet if periodic persist hasn't run), so restore it now as a
         // live Message.text so it renders through the normal textMessageBuilder
         // (gray bubble + segments) instead of textStreamMessageBuilder (raw
-        // white-background Markdown). Streaming listeners will continue to
-        // update it via _updateStreamingMessage.
+        // white-background Markdown). Streaming listeners update segments
+        // without copying the full reply into the controller message.
         final inCtrl =
             _controller?.messages.any((m) => m.id == savedStreamingMsgId) ??
                 false;

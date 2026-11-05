@@ -12,6 +12,9 @@ extension _ChatPageListenersExt on _ChatPageState {
   /// automatically re-register on the new conversation's families.
   /// No _isStreamingForCurrentConv guard needed — families prevent cross-contamination.
   void _registerStreamingListeners(String convId) {
+    // Keep legacy direct provider writes working for older callers. Normal
+    // manager updates arrive through textSections below, the single live text
+    // representation.
     ref.listen(streamingFullReplyProvider(convId), (String? prev, String next) {
       if (!mounted || next.isEmpty || next == prev) return;
       final msgId = _streamingMsgId ?? ref.read(streamingMsgIdProvider(convId));
@@ -71,11 +74,21 @@ extension _ChatPageListenersExt on _ChatPageState {
       if (!mounted || next.isEmpty || identical(prev, next)) return;
       final msgId = _streamingMsgId ?? ref.read(streamingMsgIdProvider(convId));
       if (msgId == null) return;
+      if (!next.any((section) => section.isNotEmpty)) {
+        // Empty text chunks are published at tool-round boundaries. Keep the
+        // TextStream placeholder so tool-only rounds render through their
+        // live segments without prematurely switching bubble builders.
+        _isReasoningCompletedForMsg[msgId] = true;
+        _rebuildLiveSegments(msgId);
+        return;
+      }
       _isReasoningCompletedForMsg[msgId] = true;
+      // Switch the placeholder to the normal assistant bubble without
+      // copying the growing reply into the chat controller. Text is rendered
+      // from the live segments below.
+      _updateStreamingMessage(msgId, '');
       _rebuildLiveSegments(msgId);
-      // Text updates are followed by streamingFullReplyProvider, whose
-      // controller update refreshes this bubble. Other segment changes are
-      // refreshed by their corresponding reasoning/tool listener.
+      // Other segment changes are refreshed by their reasoning/tool listener.
     });
   }
 
@@ -311,10 +324,10 @@ extension _ChatPageListenersExt on _ChatPageState {
   }
 
   /// Updates the streaming message placeholder in the controller with the
-  /// latest accumulated text from [streamingFullReplyProvider].
-  /// Called by [build]'s listener on provider changes.
+  /// latest accumulated text. Called by the canonical text-section listener,
+  /// or by the legacy full-reply listener for older direct provider writers.
   void _updateStreamingMessage(String msgId, String content) {
-    if (!mounted || content.isEmpty) return;
+    if (!mounted) return;
     final placeholder = _controller?.messages
         .where(
           (m) => m.id == msgId,

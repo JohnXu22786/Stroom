@@ -578,10 +578,12 @@ class ChatStreamManager {
         // 保留已经流出的正文或思考内容，并把错误作为独立尾部块显示。
         final errorText = formatChatErrorMessage(e);
         final partial = state.fullReply;
-        if (partial.isEmpty) state.fullReply = errorText;
+        if (partial.isEmpty) {
+          state.fullReply = errorText;
+          state.hasSyntheticErrorReply = true;
+        }
         _pushToProvider(convId, streamingTextSectionsProvider,
             List<String>.from(state.textChunks));
-        _pushToProvider(convId, streamingFullReplyProvider, state.fullReply);
         state.toolCalls.clear();
         _pushToProvider(convId, streamingToolCallsProvider, <ToolCallData>[]);
       }
@@ -591,12 +593,8 @@ class ChatStreamManager {
       state.persistTimer = null;
 
       // Final throttle flush: push the last text to the UI.
-      // Set textSections first (no listener) so that when
-      // fullReply fires its listener and reads streamingTextSectionsProvider
-      // inside _rebuildLiveSegments, it sees the already-updated value.
       _pushToProvider(convId, streamingTextSectionsProvider,
           List<String>.from(state.textChunks));
-      _pushToProvider(convId, streamingFullReplyProvider, state.fullReply);
     }
 
     return _completeStream(

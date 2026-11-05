@@ -106,6 +106,8 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
       debugPrint('[ChatStreamManager] 中断工具标记失败: $e');
     }
 
+    final textChunks =
+        state.hasSyntheticErrorReply ? <String>[] : state.textChunks;
     try {
       // 纯工具轮取消时 fullReply 为空但 accumulatedToolCalls 非空：
       // 仍要持久化 assistant 消息，否则中断标记（[工具执行被中断]）
@@ -122,14 +124,14 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
         final isError = hadStreamError || wasCancelled;
         final blocks = legacyToBlocks(
           reasoningSections: state.reasoningSections,
-          textChunks: state.textChunks,
+          textChunks: textChunks,
           toolCalls: state.accumulatedToolCalls,
           toolCallRoundStarts: state.toolCallRoundStarts,
         );
         if (wasCancelled) {
           blocks.add(const ErrorBlock(message: '用户中断了输出'));
         } else if (hadStreamError &&
-            (state.textChunks.any((chunk) => chunk.isNotEmpty) ||
+            (textChunks.any((chunk) => chunk.isNotEmpty) ||
                 state.reasoningSections.any((section) => section.isNotEmpty))) {
           blocks.add(ErrorBlock(
             message: formatChatErrorMessage(streamError),
@@ -148,8 +150,8 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
           reasoningSections: state.reasoningSections.isNotEmpty
               ? List<String>.from(state.reasoningSections)
               : null,
-          textSections: state.textChunks.any((c) => c.isNotEmpty)
-              ? List<String>.from(state.textChunks)
+          textSections: textChunks.any((c) => c.isNotEmpty)
+              ? List<String>.from(textChunks)
               : null,
           toolCallRoundStarts: state.toolCallRoundStarts.isNotEmpty
               ? List<int>.from(state.toolCallRoundStarts)
@@ -206,12 +208,12 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
         fullReply: state.fullReply,
         reasoningBuffer: state.reasoningBuffer,
         reasoningSections: List.from(state.reasoningSections),
-        textSections: List.from(state.textChunks),
+        textSections: List.from(textChunks),
         toolCalls: List.from(state.accumulatedToolCalls),
         toolCallRoundStarts: List.from(state.toolCallRoundStarts),
         blocks: legacyToBlocks(
           reasoningSections: state.reasoningSections,
-          textChunks: state.textChunks,
+          textChunks: textChunks,
           toolCalls: state.accumulatedToolCalls,
           toolCallRoundStarts: state.toolCallRoundStarts,
         ),

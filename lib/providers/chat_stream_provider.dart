@@ -6,8 +6,9 @@ import '../models/tool_call.dart';
 final streamingMsgIdProvider =
     StateProvider.family<String?, String>((ref, convId) => null);
 
-/// The full accumulated reply text during streaming. Persists across page
-/// lifecycle so the partial result is visible when returning to the page.
+/// Legacy full-reply slot retained for callers that still seed stream state
+/// directly. Production streaming keeps text only in
+/// [streamingTextSectionsProvider] and derives the full reply when rendering.
 final streamingFullReplyProvider =
     StateProvider.family<String, String>((ref, convId) => '');
 

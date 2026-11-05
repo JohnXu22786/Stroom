@@ -13,7 +13,6 @@ extension _ChatStreamManagerProvidersExt on ChatStreamManager {
   void _pushStateToProviders(_ConversationStreamState s) {
     _setProvider(isStreamingProvider(s.convId), true);
     _setProvider(streamingMsgIdProvider(s.convId), s.streamingMsgId);
-    _setProvider(streamingFullReplyProvider(s.convId), s.fullReply);
     _setProvider(
         streamingHasFirstTokenProvider(s.convId), s.hasReceivedFirstToken);
     _setProvider(streamingReasoningProvider(s.convId), s.reasoningBuffer);
