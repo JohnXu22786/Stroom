@@ -2003,18 +2003,18 @@ class LlmAccountConnectorService {
             // remote or unsupported image representations fail explicitly.
             'cursor' => const {'chat': true, 'streaming': true, 'vision': true},
             'clova-studio' => {
-              'chat': true,
-              'streaming': true,
-              if (connector.modelCatalog[index] == 'HCX-005') 'vision': true,
-              if (connector.modelCatalog[index] == 'HCX-007') 'reasoning': true,
-              'contextLength': connector.modelCatalog[index] == 'HCX-DASH-002'
-                  ? 32000
-                  : 128000,
-              'maxOutputTokens': connector.modelCatalog[index] == 'HCX-007'
-                  ? 32768
-                  : 4096,
-              'supportedApiProtocols': [kClovaStudioProtocolId],
-            },
+                'chat': true,
+                'streaming': true,
+                if (connector.modelCatalog[index] == 'HCX-005') 'vision': true,
+                if (connector.modelCatalog[index] == 'HCX-007')
+                  'reasoning': true,
+                'contextLength': connector.modelCatalog[index] == 'HCX-DASH-002'
+                    ? 32000
+                    : 128000,
+                'maxOutputTokens':
+                    connector.modelCatalog[index] == 'HCX-007' ? 32768 : 4096,
+                'supportedApiProtocols': [kClovaStudioProtocolId],
+              },
             'codebuddy-cn' ||
             'codebuddy-intl' =>
               _staticTencentModelCapabilities(

@@ -2501,24 +2501,30 @@ void main() {
       () {
         const protocolId = 'clova.studio.chat';
         final state = AiGatewayProtocolStreamState();
-        final token = AiGatewayProtocolStreamBridge.mapEvents(protocolId, {
-          '_eventType': 'token',
-          'message': {'thinkingContent': 'trace', 'content': 'answer'},
-        }, state: state);
+        final token = AiGatewayProtocolStreamBridge.mapEvents(
+            protocolId,
+            {
+              '_eventType': 'token',
+              'message': {'thinkingContent': 'trace', 'content': 'answer'},
+            },
+            state: state);
         expect(token.map((event) => (event.kind, event.delta)), [
           (AiGatewayProtocolStreamEventKind.reasoningDelta, 'trace'),
           (AiGatewayProtocolStreamEventKind.textDelta, 'answer'),
         ]);
 
-        final result = AiGatewayProtocolStreamBridge.mapEvents(protocolId, {
-          '_eventType': 'result',
-          'result': {
-            'message': {'thinkingContent': 'trace', 'content': 'answer'},
-            'inputLength': 3,
-            'outputLength': 2,
-            'stopReason': 'length',
-          },
-        }, state: state);
+        final result = AiGatewayProtocolStreamBridge.mapEvents(
+            protocolId,
+            {
+              '_eventType': 'result',
+              'result': {
+                'message': {'thinkingContent': 'trace', 'content': 'answer'},
+                'inputLength': 3,
+                'outputLength': 2,
+                'stopReason': 'length',
+              },
+            },
+            state: state);
         expect(
           result.where(
             (event) =>

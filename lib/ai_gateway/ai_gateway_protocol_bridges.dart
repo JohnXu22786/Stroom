@@ -112,18 +112,18 @@ abstract final class AiGatewayProtocolStreamBridge {
         AiGatewayProtocolStreamEventKind kind, {
         String? delta,
         Map<String, dynamic>? usage,
-      }) => AiGatewayProtocolStreamEvent(
-        kind: kind,
-        type: type,
-        raw: raw,
-        delta: delta,
-        usage: usage == null ? null : Map.unmodifiable(usage),
-      );
+      }) =>
+          AiGatewayProtocolStreamEvent(
+            kind: kind,
+            type: type,
+            raw: raw,
+            delta: delta,
+            usage: usage == null ? null : Map.unmodifiable(usage),
+          );
       final status = _objectMap(event['status']);
       if (type == 'error' ||
           event['error'] is Map ||
-          status['code'] != null &&
-              status['code'].toString() != '20000') {
+          status['code'] != null && status['code'].toString() != '20000') {
         return [make(AiGatewayProtocolStreamEventKind.error)];
       }
       if (type == 'token') {
@@ -164,7 +164,8 @@ abstract final class AiGatewayProtocolStreamBridge {
             make(AiGatewayProtocolStreamEventKind.textDelta, delta: text),
           );
         }
-        final thinking = message['thinkingContent'] ?? result['thinkingContent'];
+        final thinking =
+            message['thinkingContent'] ?? result['thinkingContent'];
         if (state?.clovaReasoningSeen != true &&
             thinking is String &&
             thinking.isNotEmpty) {
@@ -180,8 +181,7 @@ abstract final class AiGatewayProtocolStreamBridge {
         final inputTokens = usage['promptTokens'] ?? result['inputLength'];
         final outputTokens =
             usage['completionTokens'] ?? result['outputLength'];
-        final totalTokens =
-            usage['totalTokens'] ??
+        final totalTokens = usage['totalTokens'] ??
             (inputTokens is num && outputTokens is num
                 ? inputTokens + outputTokens
                 : null);

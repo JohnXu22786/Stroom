@@ -59,8 +59,7 @@ class ClovaStudioProtocol {
       throw ArgumentError.value(rawMessages, 'messages');
     }
     final system = body['system'];
-    final hasSystemMessage =
-        system is String &&
+    final hasSystemMessage = system is String &&
         rawMessages.whereType<Map>().any((message) {
           if (message['role'] != 'system') return false;
           final content = message['content'];
@@ -296,9 +295,8 @@ class ClovaStudioSseAccumulator {
       return const ClovaStudioStreamEvent();
     }
     final result = data['result'] is Map ? data['result'] as Map : data;
-    final message = result['message'] is Map
-        ? result['message'] as Map
-        : const {};
+    final message =
+        result['message'] is Map ? result['message'] as Map : const {};
     final snapshot = message['content'] ?? result['content'];
     final terminalText = _text.isEmpty && snapshot is String ? snapshot : null;
     if (terminalText != null) _text = terminalText;
@@ -311,8 +309,7 @@ class ClovaStudioSseAccumulator {
     final usage = result['usage'] is Map ? result['usage'] as Map : const {};
     final inputTokens = usage['promptTokens'] ?? result['inputLength'];
     final outputTokens = usage['completionTokens'] ?? result['outputLength'];
-    final totalTokens =
-        usage['totalTokens'] ??
+    final totalTokens = usage['totalTokens'] ??
         (inputTokens is num && outputTokens is num
             ? inputTokens + outputTokens
             : null);
