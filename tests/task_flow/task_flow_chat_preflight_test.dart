@@ -376,40 +376,35 @@ void main() {
   );
 
   test(
-    'CheaperInference Responses model remains selectable in Task Flow',
+    'GigaChat model remains selectable in Task Flow',
     () async {
       final account = LlmAccount(
-        id: 'cheaperinference-account',
+        id: 'gigachat-account',
         connectorType: 'openai-compatibility',
         authType: 'api_key',
-        displayName: 'CheaperInference',
+        displayName: 'GigaChat',
         status: LlmAccountStatus.ready,
         endpointConfig: const {
-          'providerPresetId': 'cheaperinference',
+          'providerPresetId': 'gigachat',
           'apiProtocol': 'openai.chat_completions',
         },
         models: const [
           LlmUpstreamModel(
-            id: 'gpt-5.4-local',
-            upstreamModelId: 'gpt-5.4',
-            displayName: 'GPT-5.4',
-            capabilities: {
-              'chat': true,
-              'streaming': true,
-              'tools': true,
-            },
-            config: {'apiProtocolOverride': 'openai.responses'},
+            id: 'gigachat-max-local',
+            upstreamModelId: 'GigaChat-2-Max',
+            displayName: 'GigaChat 2 Max',
+            capabilities: {'chat': true, 'streaming': true},
           ),
         ],
       );
       final group = LlmModelGroup(
-        id: 'cheaperinference-task-flow-group',
-        displayName: 'CheaperInference',
+        id: 'gigachat-task-flow-group',
+        displayName: 'GigaChat',
         members: const [
           LlmModelGroupMember(
-            accountId: 'cheaperinference-account',
-            localModelId: 'gpt-5.4-local',
-            upstreamModelId: 'gpt-5.4',
+            accountId: 'gigachat-account',
+            localModelId: 'gigachat-max-local',
+            upstreamModelId: 'GigaChat-2-Max',
           ),
         ],
       );
@@ -424,15 +419,16 @@ void main() {
       );
       final assistant = Assistant(
         id: 'assistant',
-        name: 'CheaperInference assistant',
+        name: 'GigaChat assistant',
         prompt: 'Help',
         defaultModelId: config.models.single.modelId,
         defaultProviderName: config.providerName,
       );
 
       expect(config.apiProtocol, 'openai.chat_completions');
-      expect(config.models.single.apiProtocolOverride, 'openai.responses');
-      expect(flowChatEndpointType(assistant, providers), 'openai.responses');
+      expect(config.models.single.apiProtocolOverride, isNull);
+      expect(flowChatEndpointType(assistant, providers),
+          'openai.chat_completions');
       await validateTaskFlow(
         chatFlow(IOType.text),
         [FlowRunInput(text: 'hello')],
