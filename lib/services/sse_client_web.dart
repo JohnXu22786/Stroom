@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:html' as html;
 
 import 'package:dio/dio.dart';
+import 'package:stroom/services/sse_client_web_error.dart';
 
 /// SSE 事件帧：事件名 + 数据。
 ///
@@ -34,27 +35,12 @@ Map<String, List<String>> _readXhrHeaders(html.HttpRequest xhr) {
 }
 
 DioException _xhrFailure(html.HttpRequest xhr, String url) {
-  final requestOptions = RequestOptions(path: url);
-  final statusCode = xhr.status;
-  if (statusCode != null && statusCode >= 400) {
-    return DioException(
-      requestOptions: requestOptions,
-      response: Response(
-        requestOptions: requestOptions,
-        data: xhr.responseText,
-        statusCode: statusCode,
-        statusMessage: xhr.statusText,
-        headers: Headers.fromMap(_readXhrHeaders(xhr)),
-      ),
-      type: DioExceptionType.badResponse,
-    );
-  }
-  return DioException(
-    requestOptions: requestOptions,
-    message: statusCode != null && statusCode != 0
-        ? '网络请求失败 (HTTP $statusCode${(xhr.statusText ?? '').isNotEmpty ? ': ${xhr.statusText}' : ''})'
-        : '网络请求失败: 无法连接到服务器',
-    type: DioExceptionType.connectionError,
+  return createSseClientWebFailure(
+    url: url,
+    statusCode: xhr.status,
+    statusText: xhr.statusText,
+    responseBody: xhr.responseText,
+    responseHeaders: _readXhrHeaders(xhr),
   );
 }
 
