@@ -84,6 +84,26 @@ class _ConversationStreamState {
   set fullReply(String value) {
     _completedTextChunks.clear();
     _currentTextChunk = StringBuffer(value);
+    _pendingTextDelta.clear();
+    _currentChunkHasMarkdownSyntax = _containsMarkdownSyntax(value);
+    _markdownSyntaxCarry = '';
+    _pendingInlineDelimiter = null;
+    _pendingInlineDelimiterLength = 0;
+    _inlineDelimiterLeftCodeUnit = null;
+    _lastScannedCodeUnit = null;
+    _consecutiveBackslashes = 0;
+    _openInlineDelimiters.clear();
+    _openLinkLabel = false;
+    _closedLinkLabel = false;
+    _openLinkLabelAtLineStart = false;
+    _closedLinkLabelAtLineStart = false;
+    _linkScannerAtLineStart = true;
+    _linkScannerLineSpaces = 0;
+    _lineStartDigits.clear();
+    _atLineStart = true;
+    _pendingOrderedListMarker = false;
+    _scanOrderedListMarkers(value);
+    _currentChunkHasMarkdownSyntax |= _scanInlineMarkdown(value);
   }
 
   final StringBuffer _reasoningBuffer = StringBuffer();
@@ -121,11 +141,236 @@ class _ConversationStreamState {
     ]);
   }
 
-  void appendText(String text) => _currentTextChunk.write(text);
+  final StringBuffer _pendingTextDelta = StringBuffer();
+  bool _currentChunkHasMarkdownSyntax = false;
+  int _textUpdateSequence = 0;
+  final StringBuffer _lineStartDigits = StringBuffer();
+  bool _atLineStart = true;
+  bool _pendingOrderedListMarker = false;
+  String _markdownSyntaxCarry = '';
+  int? _pendingInlineDelimiter;
+  int _pendingInlineDelimiterLength = 0;
+  int? _inlineDelimiterLeftCodeUnit;
+  int? _lastScannedCodeUnit;
+  int _consecutiveBackslashes = 0;
+  final Map<int, List<int>> _openInlineDelimiters = {};
+  bool _openLinkLabel = false;
+  bool _closedLinkLabel = false;
+  bool _openLinkLabelAtLineStart = false;
+  bool _closedLinkLabelAtLineStart = false;
+  bool _linkScannerAtLineStart = true;
+  int _linkScannerLineSpaces = 0;
+
+  bool get currentChunkHasMarkdownSyntax => _currentChunkHasMarkdownSyntax;
+  int get currentTextChunkIndex => _completedTextChunks.length;
+
+  int get nextTextUpdateSequence => _textUpdateSequence++;
+
+  String takeTextDelta() {
+    final delta = _pendingTextDelta.toString();
+    _pendingTextDelta.clear();
+    return delta;
+  }
+
+  void appendText(String text) {
+    _currentTextChunk.write(text);
+    _pendingTextDelta.write(text);
+    final syntaxProbe = '$_markdownSyntaxCarry$text';
+    if (!_currentChunkHasMarkdownSyntax &&
+        (_containsMarkdownSyntax(syntaxProbe) || _scanInlineMarkdown(text))) {
+      _currentChunkHasMarkdownSyntax = true;
+    }
+    _markdownSyntaxCarry = syntaxProbe.length <= 32
+        ? syntaxProbe
+        : syntaxProbe.substring(syntaxProbe.length - 32);
+    if (!_currentChunkHasMarkdownSyntax) _scanOrderedListMarkers(text);
+  }
+
+  bool _containsMarkdownSyntax(String text) =>
+      RegExp(r'(?m)^\s{0,3}(?:`{3,}|~{3,}|#{1,6}\s|>|[-+*]\s)')
+          .hasMatch(text) ||
+      RegExp(r'(?m)^(?: {4,}|\t)\S').hasMatch(text) ||
+      RegExp(r'(?m)^\s{0,3}(?:\*(?:\s*\*){2,}|-(?:\s*-){2,}|_(?:\s*_){2,})\s*$')
+          .hasMatch(text) ||
+      RegExp(r'(?m)^\s{0,3}=+\s*$').hasMatch(text) ||
+      RegExp(r'(?m)^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?\s*$')
+          .hasMatch(text) ||
+      RegExp(r'\|\s*:?-{3,}:?\s*\|').hasMatch(text) ||
+      RegExp(r'\\(?:\(|\[|begin\{(?:equation|align|gather)\})')
+          .hasMatch(text) ||
+      RegExp(r'(?<!\w)(https?://|www\.)\S+').hasMatch(text) ||
+      RegExp(r'&(?:[A-Za-z][A-Za-z0-9]+|#\d+);').hasMatch(text) ||
+      RegExp(r'<[/?!]?[A-Za-z][^>]*>').hasMatch(text) ||
+      RegExp(r'\b\w+://\S+').hasMatch(text);
+
+  bool _scanInlineMarkdown(String text) {
+    for (final codeUnit in text.codeUnits) {
+      final isDelimiter = codeUnit == 42 || // *
+          codeUnit == 95 || // _
+          codeUnit == 96 || // `
+          codeUnit == 126 || // ~
+          codeUnit == 36; // $
+      if (isDelimiter && !_consecutiveBackslashes.isOdd) {
+        if (_pendingInlineDelimiter == codeUnit) {
+          _pendingInlineDelimiterLength++;
+        } else {
+          if (_finishInlineDelimiterRun(codeUnit)) return true;
+          _pendingInlineDelimiter = codeUnit;
+          _pendingInlineDelimiterLength = 1;
+          _inlineDelimiterLeftCodeUnit = _lastScannedCodeUnit;
+        }
+      } else {
+        if (_finishInlineDelimiterRun(codeUnit)) return true;
+        if (_closedLinkLabel) {
+          if (codeUnit == 40 || codeUnit == 91) return true; // ( or [
+          if (codeUnit == 58 && _closedLinkLabelAtLineStart) return true; // :
+          _closedLinkLabel = false;
+          _closedLinkLabelAtLineStart = false;
+        }
+        if (codeUnit == 91) {
+          _openLinkLabel = true;
+          _openLinkLabelAtLineStart =
+              _linkScannerAtLineStart && _linkScannerLineSpaces <= 3;
+        } else if (codeUnit == 93 && _openLinkLabel) {
+          _openLinkLabel = false;
+          _closedLinkLabel = true;
+          _closedLinkLabelAtLineStart = _openLinkLabelAtLineStart;
+          _openLinkLabelAtLineStart = false;
+        } else if (codeUnit == 10) {
+          _openLinkLabel = false;
+          _closedLinkLabel = false;
+          _openLinkLabelAtLineStart = false;
+          _closedLinkLabelAtLineStart = false;
+        }
+        if (codeUnit == 10) {
+          _linkScannerAtLineStart = true;
+          _linkScannerLineSpaces = 0;
+        } else if (_linkScannerAtLineStart && codeUnit == 32) {
+          _linkScannerLineSpaces++;
+        } else {
+          _linkScannerAtLineStart = false;
+        }
+      }
+      _consecutiveBackslashes =
+          codeUnit == 92 ? _consecutiveBackslashes + 1 : 0;
+      _lastScannedCodeUnit = codeUnit;
+    }
+    return _hasClosingInlineDelimiter();
+  }
+
+  bool _finishInlineDelimiterRun(int nextCodeUnit) {
+    if (_pendingInlineDelimiter == null) return false;
+    if (_consumeClosingInlineDelimiter()) {
+      return _consumedInlineDelimiterWasMarkdown;
+    }
+
+    final delimiter = _pendingInlineDelimiter!;
+    final length = _pendingInlineDelimiterLength;
+    final opensDelimiter = delimiter == 96 || delimiter == 36
+        ? length >= 1
+        : delimiter == 126
+            ? length >= 2
+            : length >= 1;
+    final nextIsWhitespace = nextCodeUnit == 9 || nextCodeUnit == 10 ||
+        nextCodeUnit == 13 || nextCodeUnit == 32;
+    final leftIsWord = _isWordCodeUnit(_inlineDelimiterLeftCodeUnit);
+    final underscoreInsideWord = delimiter == 95 && leftIsWord;
+    if (opensDelimiter && !nextIsWhitespace && !underscoreInsideWord) {
+      _openInlineDelimiters
+          .putIfAbsent(delimiter, () => [])
+          .add(length);
+    }
+    _pendingInlineDelimiter = null;
+    _pendingInlineDelimiterLength = 0;
+    _inlineDelimiterLeftCodeUnit = null;
+    return false;
+  }
+
+  bool _hasClosingInlineDelimiter() {
+    return _consumeClosingInlineDelimiter() &&
+        _consumedInlineDelimiterWasMarkdown;
+  }
+
+  bool _consumedInlineDelimiterWasMarkdown = false;
+
+  bool _consumeClosingInlineDelimiter() {
+    _consumedInlineDelimiterWasMarkdown = false;
+    final delimiter = _pendingInlineDelimiter;
+    if (delimiter == null) return false;
+    final left = _inlineDelimiterLeftCodeUnit;
+    final leftIsWhitespace = left == 9 || left == 10 || left == 13 || left == 32;
+    final openRuns = _openInlineDelimiters[delimiter];
+    if (leftIsWhitespace || openRuns == null || openRuns.isEmpty ||
+        openRuns.last != _pendingInlineDelimiterLength) {
+      return false;
+    }
+    openRuns.removeLast();
+    if (openRuns.isEmpty) _openInlineDelimiters.remove(delimiter);
+    _consumedInlineDelimiterWasMarkdown = true;
+    _pendingInlineDelimiter = null;
+    _pendingInlineDelimiterLength = 0;
+    _inlineDelimiterLeftCodeUnit = null;
+    return true;
+  }
+
+  bool _isWordCodeUnit(int? codeUnit) =>
+      codeUnit != null &&
+      ((codeUnit >= 48 && codeUnit <= 57) ||
+          (codeUnit >= 65 && codeUnit <= 90) ||
+          (codeUnit >= 97 && codeUnit <= 122));
+
+  void _scanOrderedListMarkers(String text) {
+    for (final codeUnit in text.codeUnits) {
+      if (codeUnit == 10) {
+        _atLineStart = true;
+        _lineStartDigits.clear();
+        _pendingOrderedListMarker = false;
+        continue;
+      }
+      if (_pendingOrderedListMarker) {
+        if (codeUnit == 32 || codeUnit == 9) {
+          _currentChunkHasMarkdownSyntax = true;
+        }
+        _pendingOrderedListMarker = false;
+        _atLineStart = false;
+        continue;
+      }
+      if (!_atLineStart) continue;
+      if (codeUnit == 32 && _lineStartDigits.isEmpty) continue;
+      if (codeUnit >= 48 && codeUnit <= 57) {
+        _lineStartDigits.writeCharCode(codeUnit);
+        continue;
+      }
+      if ((codeUnit == 46 || codeUnit == 41) &&
+          _lineStartDigits.isNotEmpty) {
+        _pendingOrderedListMarker = true;
+        continue;
+      }
+      _atLineStart = false;
+    }
+  }
 
   void startTextChunk() {
     _completedTextChunks.add(_currentTextChunk.toString());
     _currentTextChunk = StringBuffer();
+    _pendingTextDelta.clear();
+    _currentChunkHasMarkdownSyntax = false;
+    _lineStartDigits.clear();
+    _atLineStart = true;
+    _pendingOrderedListMarker = false;
+    _markdownSyntaxCarry = '';
+    _pendingInlineDelimiter = null;
+    _pendingInlineDelimiterLength = 0;
+    _inlineDelimiterLeftCodeUnit = null;
+    _lastScannedCodeUnit = null;
+    _consecutiveBackslashes = 0;
+    _openInlineDelimiters.clear();
+    _openLinkLabel = false;
+    _closedLinkLabel = false;
+    _openLinkLabelAtLineStart = false;
+    _closedLinkLabelAtLineStart = false;
+    _linkScannerAtLineStart = true;
+    _linkScannerLineSpaces = 0;
   }
 
   bool get currentTextChunkIsNotEmpty =>

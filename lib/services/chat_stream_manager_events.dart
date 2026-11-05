@@ -17,11 +17,21 @@ extension _ChatStreamManagerEventsExt on ChatStreamManager {
         if (now.difference(state.lastTextUpdate) >=
             ChatStreamManager._textThrottle) {
           state.lastTextUpdate = now;
-          // Text sections are the sole live text provider. The page derives
-          // its controller message from these ranges instead of retaining a
-          // second full-reply snapshot in another provider.
+          final hasMarkdownSyntax = state.currentChunkHasMarkdownSyntax;
+          if (hasMarkdownSyntax) {
+            _pushToProvider(
+                convId, streamingTextSectionsProvider, state.textChunks);
+          }
           _pushToProvider(
-              convId, streamingTextSectionsProvider, state.textChunks);
+            convId,
+            streamingTextAppendProvider,
+            StreamingTextAppend(
+              sequence: state.nextTextUpdateSequence,
+              chunkIndex: state.currentTextChunkIndex,
+              text: state.takeTextDelta(),
+              hasMarkdownSyntax: hasMarkdownSyntax,
+            ),
+          );
         }
 
       case ReasoningEvent e:

@@ -73,6 +73,8 @@ extension _ChatPageStreamingExt on _ChatPageState {
     if (manager != null && convId != null && msgId != null) {
       _streamingMarkdownCache
           .removeWhere((key, _) => key.startsWith('$msgId:'));
+      _livePlainTextFragments
+          .removeWhere((key, _) => key.startsWith('$msgId:'));
       manager.detachStreamPage(
         convId,
         msgId,
@@ -273,6 +275,7 @@ extension _ChatPageStreamingExt on _ChatPageState {
             [];
         ref.read(streamingToolCallsProvider(convId).notifier).state = [];
         ref.read(streamingTextSectionsProvider(convId).notifier).state = [''];
+        ref.read(streamingTextAppendProvider(convId).notifier).state = null;
         ref.read(streamingToolCallRoundStartsProvider(convId).notifier).state =
             [];
       }
@@ -540,6 +543,8 @@ extension _ChatPageStreamingExt on _ChatPageState {
         _chatSegments.remove(aiMsgId);
         _streamingMarkdownCache
             .removeWhere((key, _) => key.startsWith('$aiMsgId:'));
+        _livePlainTextFragments
+            .removeWhere((key, _) => key.startsWith('$aiMsgId:'));
         _reasoningContents.remove(aiMsgId);
         _isReasoningCompletedForMsg.remove(aiMsgId);
       }
@@ -550,6 +555,8 @@ extension _ChatPageStreamingExt on _ChatPageState {
   /// Builds the final [_chatSegments] entry for a completed assistant message.
   void _buildFinalSegments(ChatMessage msg) {
     _streamingMarkdownCache
+        .removeWhere((key, _) => key.startsWith('${msg.id}:'));
+    _livePlainTextFragments
         .removeWhere((key, _) => key.startsWith('${msg.id}:'));
     final rebuiltBlocks = legacyToBlocks(
       reasoningSections: msg.reasoningSections ?? [],
@@ -669,6 +676,7 @@ extension _ChatPageStreamingExt on _ChatPageState {
             [];
         ref.read(streamingToolCallsProvider(convId).notifier).state = [];
         ref.read(streamingTextSectionsProvider(convId).notifier).state = [''];
+        ref.read(streamingTextAppendProvider(convId).notifier).state = null;
         ref.read(streamingToolCallRoundStartsProvider(convId).notifier).state =
             [];
       }

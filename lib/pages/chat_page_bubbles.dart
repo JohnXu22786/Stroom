@@ -192,6 +192,20 @@ extension _ChatPageBubblesExt on _ChatPageState {
     for (final seg in mergeConsecutiveTextSegments(segments)) {
       switch (seg) {
         case TextSegment s:
+          if (s.liveTextFragments != null) {
+            widgets.add(Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: SelectableText.rich(
+                TextSpan(
+                  children: s.liveTextFragments!
+                      .map((fragment) => TextSpan(text: fragment))
+                      .toList(growable: false),
+                ),
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ));
+            continue;
+          }
           final canReuseSealedText = !hasSearchMatch &&
               streamingConvId != null &&
               s.chunkIndex != null &&

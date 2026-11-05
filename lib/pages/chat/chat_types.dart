@@ -13,7 +13,11 @@ class TextSegment extends MessageSegment {
   /// Completed sections keep this identity across live segment rebuilds.
   final int? chunkIndex;
 
-  TextSegment(this.text, {this.chunkIndex});
+  /// Immutable deltas used for live plain-text rendering. Keeping the pieces
+  /// separate avoids joining and reparsing the entire growing section.
+  final List<String>? liveTextFragments;
+
+  TextSegment(this.text, {this.chunkIndex, this.liveTextFragments});
 }
 
 class ErrorSegment extends MessageSegment {

@@ -12,6 +12,55 @@ extension _ChatPageListenersExt on _ChatPageState {
   /// automatically re-register on the new conversation's families.
   /// No _isStreamingForCurrentConv guard needed — families prevent cross-contamination.
   void _registerStreamingListeners(String convId) {
+    ref.listen(streamingTextAppendProvider(convId),
+        (StreamingTextAppend? prev, StreamingTextAppend? next) {
+      if (!mounted || next == null || next.hasMarkdownSyntax) return;
+      final msgId = _streamingMsgId ?? ref.read(streamingMsgIdProvider(convId));
+      if (msgId == null) return;
+      final existingSegments = _chatSegments[msgId] ?? const [];
+      final existingText = existingSegments
+          .whereType<TextSegment>()
+          .where((segment) => segment.chunkIndex == next.chunkIndex)
+          .lastOrNull;
+      final fragments = _livePlainTextFragments.putIfAbsent(
+        '$msgId:${next.chunkIndex}',
+        () => existingText != null && existingText.liveTextFragments == null
+            ? <String>[existingText.text]
+            : <String>[],
+      );
+      if (next.text.isNotEmpty) fragments.add(next.text);
+      final segments = existingSegments;
+      final existingIndex = segments.lastIndexWhere(
+        (segment) =>
+            segment is TextSegment &&
+            segment.chunkIndex == next.chunkIndex,
+      );
+      final updated = List<MessageSegment>.of(segments);
+      final segment = TextSegment(
+        '',
+        chunkIndex: next.chunkIndex,
+        liveTextFragments: fragments,
+      );
+      if (existingIndex >= 0) {
+        updated[existingIndex] = segment;
+      } else {
+        updated.add(segment);
+      }
+      _chatSegments[msgId] = updated;
+      if (!(_isReasoningCompletedForMsg[msgId] ?? false)) {
+        _isReasoningCompletedForMsg[msgId] = true;
+        _updateStreamingMessage(msgId, '');
+        _rebuildLiveSegments(msgId);
+        final rebuilt =
+            List<MessageSegment>.of(_chatSegments[msgId] ?? const []);
+        rebuilt.removeWhere((item) => item is TextSegment &&
+            item.chunkIndex == next.chunkIndex);
+        rebuilt.add(segment);
+        _chatSegments[msgId] = rebuilt;
+      }
+      _refreshStreamingBubble(msgId);
+    });
+
     // Keep legacy direct provider writes working for older callers. Normal
     // manager updates arrive through textSections below, the single live text
     // representation.
@@ -74,6 +123,8 @@ extension _ChatPageListenersExt on _ChatPageState {
       if (!mounted || next.isEmpty || identical(prev, next)) return;
       final msgId = _streamingMsgId ?? ref.read(streamingMsgIdProvider(convId));
       if (msgId == null) return;
+      _livePlainTextFragments
+          .removeWhere((key, _) => key.startsWith('$msgId:'));
       if (!next.any((section) => section.isNotEmpty)) {
         // Empty text chunks are published at tool-round boundaries. Keep the
         // TextStream placeholder so tool-only rounds render through their
