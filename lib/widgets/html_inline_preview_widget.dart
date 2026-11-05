@@ -90,10 +90,19 @@ class HtmlInlinePreviewWidget extends StatefulWidget {
   addEventListener('unhandledrejection', fail);
   addEventListener('load', schedule);
   addEventListener('resize', schedule);
+  document.addEventListener('load', schedule, true);
+  let resizeObserver;
+  let resizeObserverBody;
+  const observeBody = () => {
+    const body = document.body;
+    if (!resizeObserver || !body || resizeObserverBody === body) return;
+    resizeObserverBody = body;
+    resizeObserver.observe(body);
+  };
   if (window.ResizeObserver) {
-    const observer = new ResizeObserver(schedule);
-    observer.observe(document.documentElement);
-    if (document.body) observer.observe(document.body);
+    resizeObserver = new ResizeObserver(schedule);
+    resizeObserver.observe(document.documentElement);
+    observeBody();
   }
   if (window.MutationObserver) {
     new MutationObserver(schedule).observe(document.documentElement, {
@@ -101,8 +110,12 @@ class HtmlInlinePreviewWidget extends StatefulWidget {
     });
   }
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', schedule, { once: true });
+    document.addEventListener('DOMContentLoaded', () => {
+      observeBody();
+      schedule();
+    }, { once: true });
   } else {
+    observeBody();
     schedule();
   }
 })();

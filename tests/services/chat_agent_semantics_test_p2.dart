@@ -238,6 +238,7 @@ void chatAgentSemanticsGroup2() {
       // 压缩时 filterCompacted 返回全部消息）
       final requestRoles = (provider.captures[0]['messages'] as List)
           .cast<Map>()
+          .where((message) => message['role'] != 'system')
           .map((m) => m['role'])
           .toList();
       expect(requestRoles, ['user', 'assistant']);

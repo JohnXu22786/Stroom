@@ -6,6 +6,24 @@ import 'package:stroom/widgets/html_inline_preview_widget.dart';
 
 void main() {
   group('HtmlInlinePreviewWidget document and sandbox', () {
+    test('remeasures after body creation and late external resource loads', () {
+      final document = HtmlInlinePreviewWidget.buildPreviewDocument(
+        '<img src="https://example.test/late.png">',
+        token: 'late-resource',
+      );
+      final frame = html_parser.parse(document).querySelector('iframe')!;
+      final preview = html_parser.parse(frame.attributes['srcdoc']!);
+      final script = preview.querySelector('[data-stroom-preview-monitor]')!;
+
+      expect(script.text, contains('const observeBody = () =>'));
+      expect(script.text, contains('resizeObserver.observe(body)'));
+      expect(
+        script.text,
+        contains("document.addEventListener('load', schedule, true)"),
+      );
+      expect(script.text, contains('DOMContentLoaded'));
+    });
+
     testWidgets('open visual fence stays inert while content streams',
         (tester) async {
       await tester.pumpWidget(
