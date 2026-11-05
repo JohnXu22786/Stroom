@@ -39,6 +39,9 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
         if (headers != null) rawRequestCapture['headers'] = headers;
         if (reqBody != null) rawRequestCapture['body'] = reqBody;
       }
+      if (rawRequestCapture != null) {
+        rawRequestCapture = ChatMessage.compactRawRequest(rawRequestCapture);
+      }
       final respData = snappedChatService?.lastResponseData;
       final statusCode = snappedChatService?.lastResponseStatusCode;
       final respHeaders = snappedChatService?.lastResponseHeaders;

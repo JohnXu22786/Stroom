@@ -214,11 +214,15 @@ class ChatMessage {
   /// corruption (the "flash crash + half-broken history" bug).
   ///
   /// The sanitized copy is returned; the original map is NOT modified.
-  static Map<String, dynamic>? _sanitizeRawMap(Map<String, dynamic>? raw) {
+  static Map<String, dynamic>? _sanitizeRawMap(
+    Map<String, dynamic>? raw, {
+    bool compactRequest = false,
+  }) {
     if (raw == null) return null;
     try {
       final result = <String, dynamic>{};
-      for (final entry in raw.entries) {
+      final serializableRaw = compactRequest ? compactRawRequest(raw) : raw;
+      for (final entry in serializableRaw.entries) {
         // First make the value JSON-serializable (strip non-encodable types).
         final typed = _sanitizeJsonValue(entry.value);
         // Then strip large base64 content so the on-disk payload stays small.
@@ -244,6 +248,67 @@ class ChatMessage {
       // rather than letting a partial/serialization-error corrupt the save.
       return null;
     }
+  }
+
+  /// Compact historical chat content in a captured request before retaining it
+  /// with a message. Raw requests are diagnostics only; chat history is restored
+  /// from the protocol-neutral message list, so older request messages can be
+  /// represented by a marker while the current user input remains inspectable.
+  static Map<String, dynamic> compactRawRequest(Map<String, dynamic> raw) {
+    final body = raw['body'];
+    if (body is! Map) return Map<String, dynamic>.from(raw);
+    final messages = body['messages'];
+    if (messages is! List) return Map<String, dynamic>.from(raw);
+
+    // Tool loops append protocol messages after the original conversation.
+    // The newest user message without tool-result blocks is the current input
+    // (Anthropic encodes tool results as user messages too).
+    var currentUserMessage = -1;
+    for (var i = 0; i < messages.length; i++) {
+      final message = messages[i];
+      if (message is Map &&
+          message['role'] == 'user' &&
+          !_hasToolResult(message)) {
+        currentUserMessage = i;
+      }
+    }
+    if (currentUserMessage < 0) return Map<String, dynamic>.from(raw);
+
+    final compactMessages = <dynamic>[];
+    for (var i = 0; i < messages.length; i++) {
+      final message = messages[i];
+      if (message is! Map ||
+          i >= currentUserMessage ||
+          message['role'] == 'system' ||
+          (message['content'] == null &&
+              message['reasoning_content'] == null)) {
+        compactMessages.add(message);
+        continue;
+      }
+      final compactMessage = Map<String, dynamic>.from(message);
+      if (message['content'] != null) {
+        compactMessage['content'] = '[previous message content omitted]';
+      }
+      if (message['reasoning_content'] != null) {
+        compactMessage['reasoning_content'] =
+            '[previous message reasoning omitted]';
+      }
+      compactMessages.add(compactMessage);
+    }
+
+    return <String, dynamic>{
+      ...raw,
+      'body': <String, dynamic>{
+        ...Map<String, dynamic>.from(body),
+        'messages': compactMessages,
+      },
+    };
+  }
+
+  static bool _hasToolResult(Map message) {
+    final content = message['content'];
+    return content is List &&
+        content.any((part) => part is Map && part['type'] == 'tool_result');
   }
 
   /// Recursively sanitize a single value for JSON serialization.
@@ -287,6 +352,11 @@ class ChatMessage {
       }
     }
     return null;
+  }
+
+  static Map<String, dynamic>? _compactDeserializedRawRequest(dynamic value) {
+    final rawRequest = safeCastToMap(value);
+    return rawRequest == null ? null : compactRawRequest(rawRequest);
   }
 
   static bool _matchesJoinedSections(
@@ -357,7 +427,8 @@ class ChatMessage {
       // Sanitize raw maps to ensure JSON-serializable output.
       // This prevents non-serializable types (Dio ResponseBody, DateTime,
       // custom objects, etc.) from silently breaking conversation persistence.
-      if (rawRequest != null) 'rawRequest': _sanitizeRawMap(rawRequest),
+      if (rawRequest != null)
+        'rawRequest': _sanitizeRawMap(rawRequest, compactRequest: true),
       if (rawResponse != null) 'rawResponse': _sanitizeRawMap(rawResponse),
       // Persist tool calls if present and non-empty.
       if (toolCalls != null && toolCalls!.isNotEmpty)
@@ -485,7 +556,7 @@ class ChatMessage {
           : (reasoningSections?.join('\n')),
       // Use safe casting so non-Map rawRequest/rawResponse values don't throw
       // a TypeError, which would skip the ENTIRE message in Conversation.fromMap.
-      rawRequest: safeCastToMap(map['rawRequest']),
+      rawRequest: _compactDeserializedRawRequest(map['rawRequest']),
       rawResponse: safeCastToMap(map['rawResponse']),
       toolCalls: toolCalls,
       reasoningSections: reasoningSections,
