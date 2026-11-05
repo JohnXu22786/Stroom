@@ -119,6 +119,29 @@ void main() {
       }
     });
 
+    test('Vertex partner Claude model override wins within its supported route',
+        () {
+      expect(
+        builtinDefaultApiProtocolForConnector('vertex-partner'),
+        'openai.chat_completions',
+      );
+      const supported = {'anthropic.messages'};
+      expect(
+        resolveApiProtocol(
+          modelOverride: 'anthropic.messages',
+          supplierProtocol: 'openai.chat_completions',
+          builtinDefault: builtinDefaultApiProtocolForConnector(
+            'vertex-partner',
+          ),
+        ),
+        'anthropic.messages',
+      );
+      expect(
+        () => validateApiProtocolOverride('openai.responses', supported),
+        throwsArgumentError,
+      );
+    });
+
     test('OpenCode account mode does not select supplier or model protocol',
         () {
       for (final connector in ['opencode-go', 'opencode-zen']) {
@@ -356,6 +379,17 @@ void main() {
       expect(
         builtinDefaultApiProtocolForConnector('vertex'),
         'google.gemini.generate_content',
+      );
+      expect(
+        builtinDefaultApiProtocolForConnector('vertex-partner'),
+        'openai.chat_completions',
+      );
+      expect(
+        supportedApiProtocolsForSupplier(
+          'openai.chat_completions',
+          connectorType: 'vertex-partner',
+        ),
+        {'openai.chat_completions'},
       );
       expect(
         supportedApiProtocolsForSupplier(

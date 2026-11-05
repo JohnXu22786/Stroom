@@ -887,6 +887,32 @@ class LlmConnectorHttpClient {
             ),
           );
         }
+        if (stream &&
+            storedAccount.connectorType == 'vertex-partner' &&
+            modelId.toLowerCase().startsWith('claude-')) {
+          final responseData = response.data;
+          final rawResponse = responseData is ResponseBody
+              ? await _readResponseStream(responseData.stream)
+              : responseData is Stream<List<int>>
+                  ? await _readResponseStream(responseData)
+                  : responseData;
+          final decoded = _decodeResponseBody(rawResponse);
+          final sse = _vertexClaudeResponseSse(decoded);
+          final completed = Completer<LlmConnectorObservation>();
+          final chunks = _observeResponseStream(
+            storedAccount.connectorType,
+            Stream<List<int>>.value(Uint8List.fromList(utf8.encode(sse))),
+            headerObservation,
+            completed,
+          );
+          return LlmConnectorResponse(
+            statusCode: status,
+            headers: response.headers.map,
+            body: chunks,
+            observation: headerObservation,
+            completedObservation: completed.future,
+          );
+        }
         if (stream) {
           final responseBody = response.data;
           final source = responseBody is ResponseBody
@@ -1071,7 +1097,7 @@ class LlmConnectorHttpClient {
                     LlmOAuthProviderPolicy.forProvider(
                       account.connectorType,
                     ).supported)) ||
-            (account.connectorType == 'vertex' &&
+            ({'vertex', 'vertex-partner'}.contains(account.connectorType) &&
                 account.authType == 'service_account'));
   }
 
@@ -1239,7 +1265,7 @@ class LlmConnectorHttpClient {
               accessToken is String && accessToken.trim().startsWith('dca:')) &&
           (apiKey is! String || apiKey.trim().isEmpty);
     }
-    if (account.connectorType == 'vertex' &&
+    if ({'vertex', 'vertex-partner'}.contains(account.connectorType) &&
         account.authType == 'service_account') {
       final token = bundle['access_token'] ?? bundle['accessToken'];
       if (token is! String || token.trim().isEmpty) return true;
@@ -1540,6 +1566,104 @@ class LlmConnectorHttpClient {
       bytes.add(chunk);
     }
     return bytes.takeBytes();
+  }
+
+  static String _vertexClaudeResponseSse(Object? value) {
+    if (value is! Map) throw const LlmConnectorHttpException();
+    final response = Map<String, dynamic>.from(value);
+    final message = <String, dynamic>{
+      'id': response['id'] ?? 'msg_vertex',
+      'type': 'message',
+      'role': 'assistant',
+      'model': response['model'] ?? '',
+      'content': <Object>[],
+      'stop_reason': null,
+      'stop_sequence': null,
+      'usage': response['usage'] is Map ? response['usage'] : const {},
+    };
+    final events = <Map<String, dynamic>>[
+      {'type': 'message_start', 'message': message},
+    ];
+    final content = response['content'];
+    if (content is List) {
+      for (var index = 0; index < content.length; index++) {
+        final block = content[index];
+        if (block is! Map) continue;
+        switch (block['type']) {
+          case 'text':
+            final text = block['text'];
+            if (text is! String) continue;
+            events
+              ..add({
+                'type': 'content_block_start',
+                'index': index,
+                'content_block': {'type': 'text', 'text': ''},
+              })
+              ..add({
+                'type': 'content_block_delta',
+                'index': index,
+                'delta': {'type': 'text_delta', 'text': text},
+              })
+              ..add({'type': 'content_block_stop', 'index': index});
+          case 'thinking':
+            final thinking = block['thinking'];
+            if (thinking is! String) continue;
+            events
+              ..add({
+                'type': 'content_block_start',
+                'index': index,
+                'content_block': {'type': 'thinking', 'thinking': ''},
+              })
+              ..add({
+                'type': 'content_block_delta',
+                'index': index,
+                'delta': {'type': 'thinking_delta', 'thinking': thinking},
+              })
+              ..add({'type': 'content_block_stop', 'index': index});
+          case 'tool_use':
+            final id = block['id'];
+            final name = block['name'];
+            if (id is! String || name is! String) continue;
+            final input = block['input'];
+            events
+              ..add({
+                'type': 'content_block_start',
+                'index': index,
+                'content_block': {
+                  'type': 'tool_use',
+                  'id': id,
+                  'name': name,
+                  'input': <String, dynamic>{},
+                },
+              })
+              ..add({
+                'type': 'content_block_delta',
+                'index': index,
+                'delta': {
+                  'type': 'input_json_delta',
+                  'partial_json': jsonEncode(input ?? const {}),
+                },
+              })
+              ..add({'type': 'content_block_stop', 'index': index});
+        }
+      }
+    }
+    events
+      ..add({
+        'type': 'message_delta',
+        'delta': {
+          'stop_reason': response['stop_reason'] ?? 'end_turn',
+          'stop_sequence': response['stop_sequence'],
+        },
+        'usage': response['usage'] is Map
+            ? {'output_tokens': (response['usage'] as Map)['output_tokens']}
+            : const {},
+      })
+      ..add({'type': 'message_stop'});
+    return events
+        .map((event) =>
+            'event: ${event['type']}\ndata: ${jsonEncode(event)}\n\n')
+        .join();
   }
 
   static const _classificationHeaderNames = {

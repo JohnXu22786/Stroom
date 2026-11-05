@@ -859,6 +859,68 @@ void main() {
     },
   );
 
+  test('Vertex partner Claude models preflight with Anthropic Messages',
+      () async {
+    final account = LlmAccount(
+      id: 'vertex-partner-flow',
+      connectorType: 'vertex-partner',
+      authType: 'service_account',
+      displayName: 'Vertex AI Partners',
+      status: LlmAccountStatus.ready,
+      models: [
+        LlmUpstreamModel(
+          id: 'vertex-partner-claude-model',
+          upstreamModelId: 'claude-sonnet-4-5',
+          displayName: 'Claude Sonnet 4.5',
+          capabilities: const {
+            'streaming': true,
+            'supportedApiProtocols': ['anthropic.messages'],
+          },
+          config: const {
+            'apiProtocolOverride': 'anthropic.messages',
+            'targetFormat': 'claude',
+          },
+        ),
+      ],
+    );
+    final group = LlmModelGroup(
+      id: 'vertex-partner-flow-group',
+      displayName: 'Vertex partner group',
+      members: const [
+        LlmModelGroupMember(
+          accountId: 'vertex-partner-flow',
+          localModelId: 'vertex-partner-claude-model',
+          upstreamModelId: 'claude-sonnet-4-5',
+        ),
+      ],
+    );
+    final config = buildLlmModelGroupProviderConfigs(
+      accounts: [account],
+      groups: [group],
+    ).single;
+    final providers = ProviderEntriesState(
+      entries: [
+        ProviderEntry(name: 'LLM', type: 'llm', configs: [config]),
+      ],
+    );
+    final assistant = Assistant(
+      id: 'assistant',
+      name: 'Vertex partner assistant',
+      prompt: 'Help',
+      defaultModelId: config.models.single.modelId,
+      defaultProviderName: config.providerName,
+    );
+
+    expect(config.apiProtocol, 'openai.chat_completions');
+    expect(flowChatEndpointType(assistant, providers), 'anthropic.messages');
+    await validateTaskFlow(
+      chatFlow(IOType.text),
+      [FlowRunInput(text: 'hello')],
+      providers: providers,
+      assistants: [assistant],
+    );
+  });
+
   test(
     'xAI and Meta API keys plus Muse OAuth preflight through Responses',
     () async {

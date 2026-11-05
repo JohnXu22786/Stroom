@@ -71,6 +71,7 @@ String builtinDefaultApiProtocolForConnector(String? connectorType) =>
       'claude' => 'anthropic.messages',
       'clova-studio' => 'clova.studio.chat',
       'gemini' || 'aistudio' || 'vertex' => 'google.gemini.generate_content',
+      'vertex-partner' => 'openai.chat_completions',
       'gemini-interactions' => 'google.gemini.interactions',
       'amazon-q' => 'amazon-q.chat',
       'ollama' => 'ollama.chat',
@@ -151,6 +152,7 @@ Set<String> supportedApiProtocolsForSupplier(
     'clova-studio' => 'clova.studio.chat',
     'gemini' || 'aistudio' => 'google.gemini.generate_content',
     'gemini-interactions' => 'google.gemini.interactions',
+    'vertex-partner' => 'openai.chat_completions',
     'ollama' => 'ollama.chat',
     'xai' ||
     'grok-cli' ||

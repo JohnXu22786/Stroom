@@ -2300,7 +2300,8 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                     if (_connectorType == 'bedrock' &&
                         _region.text.trim().isEmpty) {
                       _region.text = 'us-east-1';
-                    } else if (_connectorType == 'vertex' &&
+                    } else if ({'vertex', 'vertex-partner'}
+                            .contains(_connectorType) &&
                         _region.text.trim().isEmpty) {
                       _region.text = 'us-central1';
                     }
@@ -2727,7 +2728,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                 ),
               ],
               if (_connectorType == 'bedrock' ||
-                  _connectorType == 'vertex') ...[
+                  {'vertex', 'vertex-partner'}.contains(_connectorType)) ...[
                 const SizedBox(height: 8),
                 TextField(
                   controller: _region,
@@ -2754,13 +2755,15 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                   onChanged: (_) => setState(() => _draftChanged = true),
                 ),
               ],
-              if (_connectorType == 'vertex') ...[
+              if ({'vertex', 'vertex-partner'}.contains(_connectorType)) ...[
                 const SizedBox(height: 8),
                 TextField(
                   controller: _projectId,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Google Cloud 项目 ID',
-                    helperText: '可留空以使用服务账号 JSON 中的 project_id。',
+                    helperText: _connectorType == 'vertex-partner'
+                        ? '伙伴模型需要项目 ID；服务账号可从 JSON 的 project_id 自动读取。'
+                        : '可留空以使用服务账号 JSON 中的 project_id。',
                   ),
                   onChanged: (_) => setState(() => _draftChanged = true),
                 ),
@@ -3065,14 +3068,18 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
       });
     } catch (_) {
       if (!mounted) return;
-      setState(() => _error = '模型目录读取失败，请检查账号认证和连接设置。');
+      setState(() => _error = _connectorType == 'vertex-partner'
+          ? 'Vertex AI Partners 需要有效的 Google Cloud 项目和有权限的服务账号；Express API Key 仅支持 Gemini。'
+          : '模型目录读取失败，请检查账号认证和连接设置。');
     }
   }
 
   void _saveSafely({bool reconnectOAuth = false}) {
     _save(reconnectOAuth: reconnectOAuth).catchError((_) {
       if (!mounted) return;
-      setState(() => _error = '保存账号失败，请检查连接设置后重试。');
+      setState(() => _error = _connectorType == 'vertex-partner'
+          ? 'Vertex AI Partners 需要有效项目 ID；服务账号可从 JSON 读取，API Key 必须绑定项目。'
+          : '保存账号失败，请检查连接设置后重试。');
     });
   }
 
@@ -3345,6 +3352,15 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
           for (final entry in existing.capabilities.entries)
             if (entry.value is! bool) entry.key: entry.value,
       };
+      if (_connectorType == 'vertex-partner') {
+        final isClaude = upstreamId.toLowerCase().startsWith('claude-');
+        capabilities
+          ..['chat'] = true
+          ..['streaming'] = true
+          ..['supportedApiProtocols'] = [
+            isClaude ? 'anthropic.messages' : 'openai.chat_completions',
+          ];
+      }
       if (_isAzureConnector) {
         capabilities
           ..['chat'] = true
@@ -3363,7 +3379,9 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
             ? 'true'
             : declaration.substring(separator + 1).trim().toLowerCase();
         if (capability == 'apiProtocolOverride') {
-          if (_connectorType != 'command-code') continue;
+          if (!{'command-code', 'vertex-partner'}.contains(_connectorType)) {
+            continue;
+          }
           final supportedProtocols =
               existing?.capabilities['supportedApiProtocols'];
           if (!kCustomHttpApiProtocols.contains(value) ||
@@ -3426,6 +3444,12 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
       }
       if (_isAzureConnector) {
         modelConfig['catalogSource'] = 'configured-azure-deployment';
+      }
+      if (_connectorType == 'vertex-partner' &&
+          upstreamId.toLowerCase().startsWith('claude-')) {
+        modelConfig
+          ..['apiProtocolOverride'] = 'anthropic.messages'
+          ..['apiProtocolOverrideSource'] = 'provider-preset-default';
       }
       if (_connectorType == 'command-code') {
         modelConfig.remove('apiProtocolOverride');
@@ -3629,7 +3653,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
     if (_connectorType == 'bedrock') {
       endpointConfig['region'] = _region.text.trim();
       endpointConfig.remove('location');
-    } else if (_connectorType == 'vertex') {
+    } else if ({'vertex', 'vertex-partner'}.contains(_connectorType)) {
       endpointConfig['location'] = _region.text.trim();
       endpointConfig.remove('region');
     } else if (_connectorType == 'qwen-cloud') {
@@ -3639,7 +3663,8 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
       endpointConfig.remove('region');
       endpointConfig.remove('location');
     }
-    if (_connectorType == 'vertex' && _projectId.text.trim().isNotEmpty) {
+    if ({'vertex', 'vertex-partner'}.contains(_connectorType) &&
+        _projectId.text.trim().isNotEmpty) {
       endpointConfig['projectId'] = _projectId.text.trim();
     } else {
       endpointConfig.remove('projectId');
