@@ -610,7 +610,7 @@ class ChatStreamManager {
     Future<void> Function(ChatMessage continuation) handler,
   ) {
     final activeState = _streams[convId];
-    if (activeState != null) {
+    if (activeState != null && !activeState.cancelledByUser) {
       activeState.onContinuation = handler;
     } else {
       _pendingContinuationHandlers[convId] = handler;

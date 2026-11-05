@@ -82,6 +82,57 @@ void chatStreamManagerGroup1() {
       manager.dispose();
     });
 
+    test('continuation handler survives stop followed by resend', () async {
+      final manager = ChatStreamManager();
+      final firstStreamGate = Completer<void>();
+      final networkFailure = DioException(
+        requestOptions: RequestOptions(path: '/chat'),
+        type: DioExceptionType.connectionError,
+      );
+      final provider = _MockProvider(
+        [
+          [],
+          [AIStreamEvent('partial answer')],
+        ],
+        waitForYield: firstStreamGate,
+      )..errorAfterYield = networkFailure;
+      manager.adapter.forceService(_makeChatService(provider));
+      final displayedContinuations = <ChatMessage>[];
+
+      final stoppedStream = manager.startStreaming(
+        text: 'Stop this turn',
+        convId: 'conv-stop-resend',
+        history: [_userMsg('Stop this turn')],
+      );
+      manager.cancel('conv-stop-resend');
+      manager.setContinuationHandler(
+        'conv-stop-resend',
+        (message) async => displayedContinuations.add(message),
+      );
+      firstStreamGate.complete();
+      await stoppedStream;
+
+      final result = await manager.startStreaming(
+        text: 'Try again',
+        convId: 'conv-stop-resend',
+        history: [_userMsg('Try again')],
+      );
+
+      expect(provider.callCount, 3);
+      expect(displayedContinuations, hasLength(1));
+      expect(displayedContinuations.single.role, 'user');
+      expect(
+        displayedContinuations.single.content,
+        'Continue if not finished.',
+      );
+      expect(
+          result.history.any((message) =>
+              message.role == 'user' &&
+              message.content == 'Continue if not finished.'),
+          isTrue);
+      manager.dispose();
+    });
+
     test('isStreamingFor returns true during streaming', () async {
       final manager = ChatStreamManager();
       final completer = Completer<void>();
