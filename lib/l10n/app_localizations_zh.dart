@@ -1813,6 +1813,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get taskFlowUiSomeFilesMissing => '部分文件不存在，已跳过';
 
   @override
+  String taskFlowUiSelectedFilesUnavailable(int count) {
+    return '有 $count 个已选文件无法找到或读取，请重新选择全部文件。';
+  }
+
+  @override
   String get taskFlowUiQueuedOne => '任务流已加入队列';
 
   @override
@@ -10062,6 +10067,11 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get taskFlowUiSomeFilesMissing => '部分文件不存在，已跳过';
+
+  @override
+  String taskFlowUiSelectedFilesUnavailable(int count) {
+    return '有 $count 个已选文件无法找到或读取，请重新选择全部文件。';
+  }
 
   @override
   String get taskFlowUiQueuedOne => '任务流已加入队列';
