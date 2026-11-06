@@ -145,6 +145,20 @@ jobs:
 
   # Native Zed keychain readers are compiled for each desktop OS. Keep these
   # checks in the manual/PR workflow so platform bridges cannot drift unbuilt.
+  macos-desktop-build:
+    name: macOS desktop build
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.9
+          cache: true
+          pub-cache: true
+      - run: flutter pub get
+      - name: Build macOS desktop application
+        run: flutter build macos --debug
+
   linux-desktop-build:
     name: Linux desktop build
     runs-on: ubuntu-latest
