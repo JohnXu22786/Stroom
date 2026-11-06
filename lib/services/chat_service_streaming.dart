@@ -359,8 +359,7 @@ extension ChatServiceStreamingExt on ChatService {
             await delivered.future;
             pendingRoundBoundary = null;
             roundContentForToolChain = takeCompletedToolCallRound?.call();
-            roundReasoningForToolChain =
-                takeCompletedToolCallReasoning?.call();
+            roundReasoningForToolChain = takeCompletedToolCallReasoning?.call();
             if (_isCancelledByUser || controller.isClosed) break;
           } else {
             controller.add(const ReasoningSectionEndEvent());
