@@ -6,6 +6,8 @@ const kCustomHttpApiProtocols = <String>{
   'anthropic.messages',
 };
 
+const kAntigravityProtocolId = 'google.antigravity.generate_content';
+
 /// Converts the v0.5/v0.6 endpoint selector values into stable protocol IDs.
 String apiProtocolFromLegacyEndpointType(String? endpointType) =>
     switch (endpointType) {
@@ -71,6 +73,7 @@ String builtinDefaultApiProtocolForConnector(String? connectorType) =>
       'claude' => 'anthropic.messages',
       'clova-studio' => 'clova.studio.chat',
       'gemini' || 'aistudio' || 'vertex' => 'google.gemini.generate_content',
+      'antigravity' => kAntigravityProtocolId,
       'vertex-partner' => 'openai.chat_completions',
       'gemini-interactions' => 'google.gemini.interactions',
       'amazon-q' => 'amazon-q.chat',
@@ -132,13 +135,20 @@ Set<String> supportedApiProtocolsForSupplier(
     'moonshot' || 'glm' || 'deepseek' || 'minimax' || 'qwen' => const {
         'openai.chat_completions'
       },
-    'codebuddy-cn' || 'codebuddy-intl' || 'workbuddy' || 'qoder' => const {
-        'openai.chat_completions'
-      },
+    'codebuddy-cn' ||
+    'codebuddy-intl' ||
+    'workbuddy' ||
+    'qoder' ||
+    'kilocode' ||
+    'trae' ||
+    'cloudflare-ai' ||
+    'aihorde' =>
+      const {'openai.chat_completions'},
     'gitlab-duo' => const {'openai.chat_completions'},
     'uncloseai' => const {'openai.chat_completions'},
     'cline' || 'clinepass' => const {'openai.chat_completions'},
     'github' || 'ghe-copilot' => kCustomHttpApiProtocols,
+    'antigravity' => const {kAntigravityProtocolId},
     'glm-cn' || 'minimax-cn' => const {'openai.chat_completions'},
     'kimi' ||
     'kimi-ai' ||
@@ -192,6 +202,7 @@ const apiProtocolLabels = <String, String>{
   'openai.chat_completions': 'OpenAI Chat Completions',
   'openai.responses': 'OpenAI Responses',
   'anthropic.messages': 'Anthropic Messages',
+  kAntigravityProtocolId: 'Google Antigravity Native',
   'devin.connect_rpc': 'Devin Connect-RPC',
   'devin.acp': 'Devin CLI ACP',
   'auggie.cli': 'Auggie CLI',

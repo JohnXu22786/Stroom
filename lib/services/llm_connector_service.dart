@@ -850,6 +850,7 @@ abstract final class LlmConnectorRegistry {
         'clova-studio' => 'clova.studio.chat',
         'oneminai' => kOneMinAiProtocolId,
         'amazon-q' => 'amazon-q.chat',
+        'antigravity' => 'google.antigravity.generate_content',
         'xai' ||
         'grok-cli' ||
         'xai-oauth' ||

@@ -24,6 +24,322 @@ import '../fixtures/vertex_service_account.dart';
 
 void main() {
   test(
+    'admits audited connector pairs exactly as their supplier protocols allow',
+    () {
+      const expected = {
+        'openai.chat_completions': {
+          'github',
+          'ghe-copilot',
+          'gitlab-duo',
+          'codebuddy-cn',
+          'codebuddy-intl',
+          'workbuddy',
+          'openference',
+          'openference-api',
+          'cline',
+          'clinepass',
+          'trae',
+          'cloudflare-ai',
+          'aihorde',
+          'kilocode',
+          'qoder',
+          'opencode-go',
+          'opencode-zen',
+          'kimi-coding',
+          'vertex-partner',
+        },
+        'openai.responses': {
+          'github',
+          'ghe-copilot',
+          'grok-cli',
+          'xai-oauth',
+          'openference',
+          'openference-api',
+          'opencode-go',
+          'opencode-zen',
+          'kimi-coding',
+        },
+        'anthropic.messages': {
+          'github',
+          'ghe-copilot',
+          'opencode-go',
+          'opencode-zen',
+          'kimi-coding',
+        },
+        'google.antigravity.generate_content': {'antigravity'},
+      };
+
+      for (final entry in expected.entries) {
+        expect(
+          llmRoutedChatSupportedConnectorTypes(entry.key),
+          containsAll(entry.value),
+          reason: entry.key,
+        );
+      }
+      const auditedConnectors = {
+        'github',
+        'ghe-copilot',
+        'gitlab-duo',
+        'codebuddy-cn',
+        'codebuddy-intl',
+        'workbuddy',
+        'openference',
+        'openference-api',
+        'cline',
+        'clinepass',
+        'trae',
+        'cloudflare-ai',
+        'aihorde',
+        'kilocode',
+        'qoder',
+        'grok-cli',
+        'xai-oauth',
+        'opencode-go',
+        'opencode-zen',
+        'kimi-coding',
+        'vertex-partner',
+        'antigravity',
+      };
+      for (final protocol in expected.keys) {
+        for (final connector in auditedConnectors) {
+          final declaredProtocols = supportedApiProtocolsForSupplier(
+            builtinDefaultApiProtocolForConnector(connector),
+            connectorType: connector,
+          );
+          final routeSupports = llmRoutedChatSupportedConnectorTypes(
+            protocol,
+          ).contains(connector);
+          expect(
+            routeSupports,
+            declaredProtocols.contains(protocol),
+            reason: '$connector with $protocol',
+          );
+          expect(routeSupports, expected[protocol]!.contains(connector));
+        }
+      }
+      for (final protocol in const [
+        'openai.responses',
+        'anthropic.messages',
+        'google.gemini.generate_content',
+      ]) {
+        expect(
+          llmRoutedChatSupportedConnectorTypes(protocol),
+          isNot(contains('gitlab-duo')),
+          reason: 'GitLab Duo does not implement $protocol',
+        );
+      }
+      expect(
+        llmRoutedChatSupportedConnectorTypes('openai.responses'),
+        isNot(contains('cloudflare-ai')),
+      );
+      expect(
+        llmRoutedChatSupportedConnectorTypes('openai.chat_completions'),
+        isNot(contains('antigravity')),
+      );
+      expect(
+        llmRoutedChatSupportedConnectorTypes('google.gemini.generate_content'),
+        isNot(contains('antigravity')),
+      );
+      expect(
+        llmRoutedChatSupportedConnectorTypes('unsupported.protocol'),
+        isEmpty,
+      );
+      expect(
+        llmRoutedChatSupportedConnectorTypesForModelOverride(null),
+        containsAll({'antigravity', 'gitlab-duo', 'cloudflare-ai'}),
+      );
+      expect(
+        LlmConnectorRegistry.chatAdapterEndpointType('antigravity'),
+        kAntigravityProtocolId,
+      );
+      expect(
+        LlmConnectorRegistry.chatAdapterEndpointType('gitlab-duo'),
+        'openai',
+      );
+      final antiAccount = AiGatewayAccount(
+        id: 'antigravity-route',
+        connectorType: 'antigravity',
+        authType: 'oauth',
+        displayName: 'Antigravity',
+        models: [
+          AiGatewayUpstreamModel(
+            id: 'anti-model',
+            upstreamModelId: 'claude-sonnet-4-5',
+            displayName: 'Claude Sonnet',
+          ),
+        ],
+      );
+      expect(
+        llmRoutedChatProtocolForAccountModel(
+          account: antiAccount,
+          upstreamModelId: 'claude-sonnet-4-5',
+          endpointType: kAntigravityProtocolId,
+        ),
+        kAntigravityProtocolId,
+      );
+      expect(
+        () => llmRoutedChatProtocolForAccountModel(
+          account: antiAccount,
+          upstreamModelId: 'claude-sonnet-4-5',
+          endpointType: kAntigravityProtocolId,
+          apiProtocolOverride: 'google.gemini.generate_content',
+        ),
+        throwsStateError,
+      );
+      final accounts = [
+        LlmAccount(
+          id: 'antigravity-group',
+          connectorType: 'antigravity',
+          authType: 'oauth',
+          displayName: 'Antigravity',
+          models: const [
+            LlmUpstreamModel(
+              id: 'anti-model',
+              upstreamModelId: 'claude-sonnet-4-5',
+              displayName: 'Claude Sonnet',
+              capabilities: {'chat': true},
+            ),
+          ],
+        ),
+        LlmAccount(
+          id: 'gitlab-duo-group',
+          connectorType: 'gitlab-duo',
+          authType: 'pat',
+          displayName: 'GitLab Duo',
+          models: const [
+            LlmUpstreamModel(
+              id: 'duo-model',
+              upstreamModelId: 'duo-chat',
+              displayName: 'Duo Chat',
+              capabilities: {'chat': true},
+            ),
+          ],
+        ),
+      ];
+      final groups = [
+        LlmModelGroup(
+          id: 'antigravity-group',
+          displayName: 'Antigravity',
+          members: const [
+            LlmModelGroupMember(
+              accountId: 'antigravity-group',
+              localModelId: 'antigravity-model',
+              upstreamModelId: 'claude-sonnet-4-5',
+            ),
+          ],
+        ),
+        LlmModelGroup(
+          id: 'gitlab-duo-group',
+          displayName: 'GitLab Duo',
+          members: const [
+            LlmModelGroupMember(
+              accountId: 'gitlab-duo-group',
+              localModelId: 'duo-model',
+              upstreamModelId: 'duo-chat',
+            ),
+          ],
+        ),
+      ];
+      final taskFlowConfigs = buildLlmModelGroupProviderConfigs(
+        accounts: accounts,
+        groups: groups,
+      );
+      expect(taskFlowConfigs.map((config) => config.apiProtocol), [
+        kAntigravityProtocolId,
+        'openai.chat_completions',
+      ]);
+    },
+  );
+
+  test(
+    'routes Antigravity through its native protocol with Gemini request bodies',
+    () async {
+      const accountId = 'antigravity-provider-route';
+      const groupId = 'antigravity-provider-group';
+      const localModelId = 'antigravity-provider-model';
+      const upstreamModelId = 'claude-sonnet-4-5';
+      final preferences = _MemoryPreferences();
+      final accounts = LlmAccountConnectorService(
+        preferences: preferences,
+        credentialStore: _MemoryCredentialStore(),
+      );
+      await accounts.saveAccount(
+        LlmAccount(
+          id: accountId,
+          connectorType: 'antigravity',
+          authType: 'oauth',
+          displayName: 'Antigravity',
+          status: LlmAccountStatus.ready,
+          models: const [
+            LlmUpstreamModel(
+              id: 'antigravity-model',
+              upstreamModelId: upstreamModelId,
+              displayName: 'Claude Sonnet',
+              capabilities: {'chat': true},
+            ),
+          ],
+        ),
+        secret: jsonEncode({'access_token': 'test-access-token'}),
+      );
+      await accounts.saveModelGroup(
+        LlmModelGroup(
+          id: groupId,
+          displayName: 'Antigravity',
+          members: [
+            LlmModelGroupMember(
+              accountId: accountId,
+              localModelId: localModelId,
+              upstreamModelId: upstreamModelId,
+            ),
+          ],
+        ),
+      );
+      final connector = _FakeConnectorClient(
+        accounts,
+        responseBody: {
+          'candidates': [
+            {
+              'content': {
+                'parts': [
+                  {'text': 'Antigravity reply'},
+                ],
+              },
+            },
+          ],
+        },
+      );
+      final provider = LlmRoutedChatProvider(
+        runtime: Future.value(
+          LlmChatRoutingRuntime(
+            accountService: accounts,
+            routingService: LlmRoutingService(
+              accountService: accounts,
+              stateStore: LlmRoutingStateStore(preferences: preferences),
+              concurrency: LlmConcurrencyReservations(),
+            ),
+            connectorClient: connector,
+          ),
+        ),
+        groupId: groupId,
+        localModelId: localModelId,
+        endpointType: kAntigravityProtocolId,
+        apiProtocol: kAntigravityProtocolId,
+      );
+
+      expect(
+        await provider.chat(const [
+          {'role': 'user', 'content': 'hello'},
+        ]),
+        'Antigravity reply',
+      );
+      expect(connector.requestedAccountIds, [accountId]);
+      expect(connector.lastNativeFormat, isNull);
+      expect(connector.requestBody, contains('contents'));
+      expect(connector.requestBody, isNot(contains('messages')));
+    },
+  );
+
+  test(
     'streams a Realtime model through the shared routed chat provider',
     () async {
       final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
