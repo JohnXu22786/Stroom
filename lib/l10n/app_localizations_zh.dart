@@ -9026,6 +9026,98 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get providerPresetSearxngApiKeyHint =>
       '请设置 SearXNG 实例 URL（如 http://your-instance:8080）；API Key 可选。';
+
+  @override
+  String ttsErrorSynthesisFailed(String details) {
+    return 'TTS 合成失败：$details';
+  }
+
+  @override
+  String ttsErrorOriginalError(String details) {
+    return '\n原始错误：$details';
+  }
+
+  @override
+  String get ttsErrorNetworkConnectionTimeout => '网络连接超时，请检查网络或 API 地址。';
+
+  @override
+  String get ttsErrorServerResponseTimeout => '服务器响应超时，请稍后重试。';
+
+  @override
+  String ttsErrorConnectionFailed(String details) {
+    return '无法连接到服务器（$details）';
+  }
+
+  @override
+  String ttsErrorWebConnectionGuidance(String details) {
+    return '无法连接到服务器。Web 端常见原因：CORS 跨域限制或 API 地址不正确。$details';
+  }
+
+  @override
+  String ttsErrorApiResponse(String body, String status) {
+    return 'API 返回错误 (HTTP $status$body)';
+  }
+
+  @override
+  String ttsErrorConnectTimeout(String details) {
+    return '连接超时，请检查网络$details';
+  }
+
+  @override
+  String ttsErrorReceiveTimeout(String details) {
+    return '接收超时，服务器响应过慢$details';
+  }
+
+  @override
+  String ttsErrorInvalidApiKey(String body, String details, String status) {
+    return 'API 密钥无效或权限不足 (HTTP $status): $body$details';
+  }
+
+  @override
+  String ttsErrorTooManyRequests(String details, String status) {
+    return '请求过于频繁，请稍后重试 (HTTP $status)$details';
+  }
+
+  @override
+  String ttsErrorEndpointNotFound(String body, String details, String status) {
+    return 'API 端点不存在 (HTTP $status): $body\n请检查 API 基础 URL 设置是否正确$details';
+  }
+
+  @override
+  String ttsErrorServerInternal(String body, String details, String status) {
+    return '服务器内部错误 (HTTP $status): $body$details';
+  }
+
+  @override
+  String ttsErrorServerResponse(String body, String details, String status) {
+    return '服务器返回错误 (HTTP $status): $body$details';
+  }
+
+  @override
+  String ttsErrorRequestCancelled(String details) {
+    return '请求已取消$details';
+  }
+
+  @override
+  String ttsErrorWebNetworkGuidance(String details) {
+    return '无法连接到服务器。Web 端常见原因：CORS 跨域限制或 API 地址不正确。请检查供应商配置中的 API 地址是否正确，以及服务器是否允许跨域请求。$details';
+  }
+
+  @override
+  String ttsErrorNetwork(String details) {
+    return '网络错误：$details';
+  }
+
+  @override
+  String get ttsErrorUnknownNetwork => '未知网络错误';
+
+  @override
+  String get ttsErrorNoResponseBody => '无响应体';
+
+  @override
+  String ttsErrorStreamingSynthesisFailed(String details) {
+    return '流式合成失败：$details';
+  }
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).
@@ -18049,4 +18141,96 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   @override
   String get providerPresetSearxngApiKeyHint =>
       '请设置 SearXNG 实例 URL（如 http://your-instance:8080）；API Key 可选。';
+
+  @override
+  String ttsErrorSynthesisFailed(String details) {
+    return 'TTS 合成失败：$details';
+  }
+
+  @override
+  String ttsErrorOriginalError(String details) {
+    return '\n原始错误：$details';
+  }
+
+  @override
+  String get ttsErrorNetworkConnectionTimeout => '网络连接超时，请检查网络或 API 地址。';
+
+  @override
+  String get ttsErrorServerResponseTimeout => '服务器响应超时，请稍后重试。';
+
+  @override
+  String ttsErrorConnectionFailed(String details) {
+    return '无法连接到服务器（$details）';
+  }
+
+  @override
+  String ttsErrorWebConnectionGuidance(String details) {
+    return '无法连接到服务器。Web 端常见原因：CORS 跨域限制或 API 地址不正确。$details';
+  }
+
+  @override
+  String ttsErrorApiResponse(String body, String status) {
+    return 'API 返回错误 (HTTP $status$body)';
+  }
+
+  @override
+  String ttsErrorConnectTimeout(String details) {
+    return '连接超时，请检查网络$details';
+  }
+
+  @override
+  String ttsErrorReceiveTimeout(String details) {
+    return '接收超时，服务器响应过慢$details';
+  }
+
+  @override
+  String ttsErrorInvalidApiKey(String body, String details, String status) {
+    return 'API 密钥无效或权限不足 (HTTP $status): $body$details';
+  }
+
+  @override
+  String ttsErrorTooManyRequests(String details, String status) {
+    return '请求过于频繁，请稍后重试 (HTTP $status)$details';
+  }
+
+  @override
+  String ttsErrorEndpointNotFound(String body, String details, String status) {
+    return 'API 端点不存在 (HTTP $status): $body\n请检查 API 基础 URL 设置是否正确$details';
+  }
+
+  @override
+  String ttsErrorServerInternal(String body, String details, String status) {
+    return '服务器内部错误 (HTTP $status): $body$details';
+  }
+
+  @override
+  String ttsErrorServerResponse(String body, String details, String status) {
+    return '服务器返回错误 (HTTP $status): $body$details';
+  }
+
+  @override
+  String ttsErrorRequestCancelled(String details) {
+    return '请求已取消$details';
+  }
+
+  @override
+  String ttsErrorWebNetworkGuidance(String details) {
+    return '无法连接到服务器。Web 端常见原因：CORS 跨域限制或 API 地址不正确。请检查供应商配置中的 API 地址是否正确，以及服务器是否允许跨域请求。$details';
+  }
+
+  @override
+  String ttsErrorNetwork(String details) {
+    return '网络错误：$details';
+  }
+
+  @override
+  String get ttsErrorUnknownNetwork => '未知网络错误';
+
+  @override
+  String get ttsErrorNoResponseBody => '无响应体';
+
+  @override
+  String ttsErrorStreamingSynthesisFailed(String details) {
+    return '流式合成失败：$details';
+  }
 }

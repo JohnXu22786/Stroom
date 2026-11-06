@@ -1,8 +1,11 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:dio/dio.dart';
 import 'provider_config.dart';
 import 'chat_api_provider.dart';
+import '../l10n/app_localizations.dart';
+import 'locale_provider.dart';
 
 import '../utils/audio_utils.dart';
 import '../utils/http_timeout.dart';
@@ -63,11 +66,15 @@ abstract class BaseTTSProvider {
 /// 根据 ProviderConfigItem 创建 TTS provider 实例
 ///
 /// 所有供应商统一走 CustomTTSProvider，不依赖字符串猜测类型。
-BaseTTSProvider createProviderFromConfig(ProviderConfigItem config) {
+BaseTTSProvider createProviderFromConfig(
+  ProviderConfigItem config, {
+  Locale? locale,
+}) {
   return CustomTTSProvider(
     baseUrl: config.host,
     apiKey: config.key,
     name: config.providerName,
+    locale: locale,
   );
 }
 
@@ -79,15 +86,18 @@ class CustomTTSProvider extends BaseTTSProvider {
   final String _apiKey;
   final String _baseUrl;
   final String _name;
+  final Locale? _locale;
   final Dio _dio;
 
   CustomTTSProvider({
     required String baseUrl,
     String apiKey = '',
     String name = 'custom',
+    Locale? locale,
   })  : _baseUrl = baseUrl,
         _apiKey = apiKey,
         _name = name,
+        _locale = locale,
         _dio = Dio(BaseOptions(
           baseUrl: '',
           headers: {
@@ -196,7 +206,8 @@ class CustomTTSProvider extends BaseTTSProvider {
         }
       }
       throw SynthesisException(
-        '合成失败: ${_parseDioError(e)}',
+        appLocalizationsForLocale(_locale)
+            .ttsErrorSynthesisFailed(_parseDioError(e)),
         requestBody: requestBodyStr,
         responseBody: responseBodyStr,
       );
@@ -233,13 +244,17 @@ class CustomTTSProvider extends BaseTTSProvider {
   }
 
   String _parseDioError(DioException e) {
-    final String origMsg = e.message ?? '';
-    final String extra = origMsg.isNotEmpty ? '\n原始错误: $origMsg' : '';
+    final strings = appLocalizationsForLocale(_locale);
+    final String origMsg = e.type == DioExceptionType.cancel
+        ? e.error?.toString() ?? e.message ?? ''
+        : e.message ?? '';
+    final String extra =
+        origMsg.isNotEmpty ? strings.ttsErrorOriginalError(origMsg) : '';
     switch (e.type) {
       case DioExceptionType.connectionTimeout:
-        return '连接超时，请检查网络$extra';
+        return strings.ttsErrorConnectTimeout(extra);
       case DioExceptionType.receiveTimeout:
-        return '接收超时，服务器响应过慢$extra';
+        return strings.ttsErrorReceiveTimeout(extra);
       case DioExceptionType.badResponse:
         final statusCode = e.response?.statusCode;
         final body = e.response?.data;
@@ -251,26 +266,47 @@ class CustomTTSProvider extends BaseTTSProvider {
             bodyStr = body.toString();
           }
         } else {
-          bodyStr = body?.toString() ?? '无响应体';
+          bodyStr = body?.toString() ?? strings.ttsErrorNoResponseBody;
         }
         if (statusCode == 401 || statusCode == 403) {
-          return 'API密钥无效或权限不足 (HTTP $statusCode): $bodyStr$extra';
+          return strings.ttsErrorInvalidApiKey(
+            bodyStr,
+            extra,
+            statusCode?.toString() ?? 'null',
+          );
         }
-        if (statusCode == 429) return '请求过于频繁，请稍后重试 (HTTP $statusCode)$extra';
+        if (statusCode == 429) {
+          return strings.ttsErrorTooManyRequests(
+            extra,
+            statusCode?.toString() ?? 'null',
+          );
+        }
         if (statusCode == 404) {
-          return 'API端点不存在 (HTTP 404): $bodyStr\n请检查API基础URL设置是否正确$extra';
+          return strings.ttsErrorEndpointNotFound(
+            bodyStr,
+            extra,
+            statusCode?.toString() ?? 'null',
+          );
         }
         if (statusCode == 500) {
-          return '服务器内部错误 (HTTP $statusCode): $bodyStr$extra';
+          return strings.ttsErrorServerInternal(
+            bodyStr,
+            extra,
+            statusCode?.toString() ?? 'null',
+          );
         }
-        return '服务器返回错误 (HTTP $statusCode): $bodyStr$extra';
+        return strings.ttsErrorServerResponse(
+          bodyStr,
+          extra,
+          statusCode?.toString() ?? 'null',
+        );
       case DioExceptionType.cancel:
-        return '请求已取消$extra';
+        return strings.ttsErrorRequestCancelled(extra);
       default:
         if (e.type == DioExceptionType.connectionError && kIsWeb) {
-          return '无法连接到服务器。Web端常见原因：CORS跨域限制或API地址不正确。请检查：1) 供应商配置中的API地址是否正确 2) 服务器是否允许跨域请求$extra';
+          return strings.ttsErrorWebNetworkGuidance(extra);
         }
-        return '网络错误: ${e.message}';
+        return strings.ttsErrorNetwork(e.message ?? '');
     }
   }
 }

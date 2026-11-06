@@ -15875,6 +15875,126 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Set your SearXNG instance URL (for example, http://your-instance:8080); an API key is optional.'**
   String get providerPresetSearxngApiKeyHint;
+
+  /// No description provided for @ttsErrorSynthesisFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'TTS synthesis failed: {details}'**
+  String ttsErrorSynthesisFailed(String details);
+
+  /// No description provided for @ttsErrorOriginalError.
+  ///
+  /// In en, this message translates to:
+  /// **'\nOriginal error: {details}'**
+  String ttsErrorOriginalError(String details);
+
+  /// No description provided for @ttsErrorNetworkConnectionTimeout.
+  ///
+  /// In en, this message translates to:
+  /// **'Network connection timed out. Check your network or API address.'**
+  String get ttsErrorNetworkConnectionTimeout;
+
+  /// No description provided for @ttsErrorServerResponseTimeout.
+  ///
+  /// In en, this message translates to:
+  /// **'The server response timed out. Try again later.'**
+  String get ttsErrorServerResponseTimeout;
+
+  /// No description provided for @ttsErrorConnectionFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to connect to the server ({details})'**
+  String ttsErrorConnectionFailed(String details);
+
+  /// No description provided for @ttsErrorWebConnectionGuidance.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to connect to the server. Common causes in the web app: CORS restrictions or an incorrect API address. {details}'**
+  String ttsErrorWebConnectionGuidance(String details);
+
+  /// No description provided for @ttsErrorApiResponse.
+  ///
+  /// In en, this message translates to:
+  /// **'API returned an error (HTTP {status}{body})'**
+  String ttsErrorApiResponse(String body, String status);
+
+  /// No description provided for @ttsErrorConnectTimeout.
+  ///
+  /// In en, this message translates to:
+  /// **'Connection timed out. Check your network{details}'**
+  String ttsErrorConnectTimeout(String details);
+
+  /// No description provided for @ttsErrorReceiveTimeout.
+  ///
+  /// In en, this message translates to:
+  /// **'Receive timed out; the server is responding slowly{details}'**
+  String ttsErrorReceiveTimeout(String details);
+
+  /// No description provided for @ttsErrorInvalidApiKey.
+  ///
+  /// In en, this message translates to:
+  /// **'API key is invalid or permission denied (HTTP {status}): {body}{details}'**
+  String ttsErrorInvalidApiKey(String body, String details, String status);
+
+  /// No description provided for @ttsErrorTooManyRequests.
+  ///
+  /// In en, this message translates to:
+  /// **'Too many requests; try again later (HTTP {status}){details}'**
+  String ttsErrorTooManyRequests(String details, String status);
+
+  /// No description provided for @ttsErrorEndpointNotFound.
+  ///
+  /// In en, this message translates to:
+  /// **'API endpoint not found (HTTP {status}): {body}\nCheck that the API base URL is correct{details}'**
+  String ttsErrorEndpointNotFound(String body, String details, String status);
+
+  /// No description provided for @ttsErrorServerInternal.
+  ///
+  /// In en, this message translates to:
+  /// **'Internal server error (HTTP {status}): {body}{details}'**
+  String ttsErrorServerInternal(String body, String details, String status);
+
+  /// No description provided for @ttsErrorServerResponse.
+  ///
+  /// In en, this message translates to:
+  /// **'Server returned an error (HTTP {status}): {body}{details}'**
+  String ttsErrorServerResponse(String body, String details, String status);
+
+  /// No description provided for @ttsErrorRequestCancelled.
+  ///
+  /// In en, this message translates to:
+  /// **'Request cancelled{details}'**
+  String ttsErrorRequestCancelled(String details);
+
+  /// No description provided for @ttsErrorWebNetworkGuidance.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to connect to the server. Common causes in the web app: CORS restrictions or an incorrect API address. Check that the provider API address is correct and that the server allows cross-origin requests.{details}'**
+  String ttsErrorWebNetworkGuidance(String details);
+
+  /// No description provided for @ttsErrorNetwork.
+  ///
+  /// In en, this message translates to:
+  /// **'Network error: {details}'**
+  String ttsErrorNetwork(String details);
+
+  /// No description provided for @ttsErrorUnknownNetwork.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown network error'**
+  String get ttsErrorUnknownNetwork;
+
+  /// No description provided for @ttsErrorNoResponseBody.
+  ///
+  /// In en, this message translates to:
+  /// **'No response body'**
+  String get ttsErrorNoResponseBody;
+
+  /// No description provided for @ttsErrorStreamingSynthesisFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Streaming synthesis failed: {details}'**
+  String ttsErrorStreamingSynthesisFailed(String details);
 }
 
 class _AppLocalizationsDelegate

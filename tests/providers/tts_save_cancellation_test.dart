@@ -5,11 +5,17 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:dio/dio.dart';
+import 'package:flutter/widgets.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/providers/provider_config.dart';
+import 'package:stroom/providers/locale_provider.dart';
+import 'package:stroom/providers/tts_provider.dart';
+import 'package:stroom/providers/tts_state_provider.dart';
 import 'package:stroom/providers/task_provider.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/services/storage_service.dart';
@@ -84,6 +90,126 @@ void main() {
     }
     fail('Save did not settle to the expected state');
   }
+
+  test('task failure framing follows the selected app locale', () async {
+    await container.read(localeProvider.notifier).setLocaleCode('zh_CN');
+    notifier.debugSynthesize = (_, __, ___) async {
+      throw DioException(
+        requestOptions: RequestOptions(path: '/speech'),
+        type: DioExceptionType.connectionTimeout,
+      );
+    };
+
+    final timeoutId = notifier.addTask(
+      title: 'Timeout speech',
+      text: 'Synthesized user text',
+      providerConfig: providerConfig,
+      modelConfig: modelConfig,
+    );
+    final timeoutTask = await waitForStatus(timeoutId, TaskStatus.failed);
+    expect(timeoutTask.error, '网络连接超时，请检查网络或 API 地址。');
+
+    notifier.debugSynthesize = (_, __, ___) async {
+      throw DioException(
+        requestOptions: RequestOptions(path: '/speech'),
+        response: Response(
+          requestOptions: RequestOptions(path: '/speech'),
+          statusCode: 429,
+          data: 'provider response body',
+        ),
+        type: DioExceptionType.badResponse,
+        message: 'raw status diagnostic',
+      );
+    };
+    final statusId = notifier.addTask(
+      title: 'Rejected speech',
+      text: 'Keep this user text unchanged',
+      providerConfig: providerConfig,
+      modelConfig: modelConfig,
+    );
+    final statusTask = await waitForStatus(statusId, TaskStatus.failed);
+    expect(
+      statusTask.error,
+      'API 返回错误 (HTTP 429: provider response body)\n'
+      '原始错误：raw status diagnostic',
+    );
+    expect(statusTask.originalResponse, 'provider response body');
+
+    await container.read(localeProvider.notifier).setLocaleCode('en_US');
+    notifier.debugSynthesize = (_, __, ___) async {
+      throw DioException(
+        requestOptions: RequestOptions(path: '/speech'),
+        type: DioExceptionType.connectionTimeout,
+      );
+    };
+    final englishId = notifier.addTask(
+      title: 'English timeout',
+      text: 'English user text',
+      providerConfig: providerConfig,
+      modelConfig: modelConfig,
+    );
+    final englishTask = await waitForStatus(englishId, TaskStatus.failed);
+    expect(
+      englishTask.error,
+      'Network connection timed out. Check your network or API address.',
+    );
+  });
+
+  test('TTS provider localizes API and cancellation failure framing', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    server.listen((request) async {
+      request.response
+        ..statusCode = HttpStatus.tooManyRequests
+        ..write('provider response body');
+      await request.response.close();
+    });
+    final provider = CustomTTSProvider(
+      baseUrl: 'http://${server.address.address}:${server.port}/speech',
+      apiKey: 'test-key',
+      locale: const Locale('zh', 'CN'),
+    );
+    try {
+      await expectLater(
+        provider.synthesize('user text'),
+        throwsA(
+          isA<SynthesisException>()
+              .having((error) => error.message, 'message',
+                  'TTS 合成失败：请求过于频繁，请稍后重试 (HTTP 429)')
+              .having((error) => error.responseBody, 'responseBody',
+                  'provider response body'),
+        ),
+      );
+
+      await container.read(localeProvider.notifier).setLocaleCode('zh_CN');
+      await container.read(ttsStateProvider.notifier).synthesize(
+            'user text',
+            providerConfig: ProviderConfigItem(
+              providerName: 'test',
+              host: 'http://${server.address.address}:${server.port}/speech',
+              key: 'test-key',
+            ),
+            modelConfig: modelConfig,
+          );
+      expect(
+        container.read(ttsStateProvider).error,
+        'TTS 合成失败：请求过于频繁，请稍后重试 (HTTP 429)',
+      );
+
+      final cancelToken = CancelToken()..cancel('raw cancellation detail');
+      await expectLater(
+        provider.synthesize('user text', cancelToken: cancelToken),
+        throwsA(
+          isA<SynthesisException>().having(
+            (error) => error.message,
+            'message',
+            'TTS 合成失败：请求已取消\n原始错误：raw cancellation detail',
+          ),
+        ),
+      );
+    } finally {
+      await server.close(force: true);
+    }
+  });
 
   test('pausing during save removes audio, source text, and gallery record',
       () async {
