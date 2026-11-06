@@ -254,10 +254,13 @@ class _StartupAppState extends State<StartupApp>
                       message: _dataSafetyBlocked!,
                       onExit: _exitApp,
                     )
-                  : StartupPage(
-                      isWorking: _isWorking,
-                      statusMessage: _statusMessage,
-                      progressDetail: _progressDetail,
+                  : TickerMode(
+                      enabled: !_isFadingOut,
+                      child: StartupPage(
+                        isWorking: _isWorking,
+                        statusMessage: _statusMessage,
+                        progressDetail: _progressDetail,
+                      ),
                     ),
             ),
           ),
