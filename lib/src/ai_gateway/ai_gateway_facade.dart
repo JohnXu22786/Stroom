@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:async';
+import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -14,6 +15,7 @@ import '../../services/llm_account_migration_service.dart';
 import '../../services/llm_connector_service.dart';
 import '../../services/devin_cli_acp_service.dart';
 import '../../services/auggie_cli_service.dart';
+import '../../services/codex_app_server_service.dart';
 import '../../services/qoder_cli_service.dart';
 import '../../services/llm_connector_http_client.dart';
 import '../../services/llm_connector_model_catalog.dart';
@@ -76,6 +78,7 @@ class LlmChatRoutingRuntime implements AiGatewayFacade {
   final AiGatewayAccountManagement accountManagement;
   final DevinCliAcpService _devinCliAcp;
   final AuggieCliService _auggieCli;
+  final CodexAppServerService _codexAppServer;
   final QoderCliService _qoderCli;
   @override
   late final AiGatewayLocalCliAuthentication localCliAuthentication =
@@ -93,6 +96,7 @@ class LlmChatRoutingRuntime implements AiGatewayFacade {
   @override
   late final AiGatewayModelDiscovery modelDiscovery = _LlmGatewayModelDiscovery(
     _accountService,
+    _codexAppServer,
   );
   final LlmRoutingService _routingService;
   final LlmConnectorHttpClient _connectorClient;
@@ -102,6 +106,7 @@ class LlmChatRoutingRuntime implements AiGatewayFacade {
     _devinCliAcp,
     _qoderCli,
     _auggieCli,
+    _codexAppServer,
   );
 
   LlmChatRoutingRuntime({
@@ -113,11 +118,13 @@ class LlmChatRoutingRuntime implements AiGatewayFacade {
     DevinCliAcpService? devinCliAcpService,
     QoderCliService? qoderCliService,
     AuggieCliService? auggieCliService,
+    CodexAppServerService? codexAppServerService,
   })  : _accountService = accountService,
         _oauthDio = oauthDio,
         _oauthAuthorizationOverride = oauthAuthorization,
         _devinCliAcp = devinCliAcpService ?? DevinCliAcpService(),
         _auggieCli = auggieCliService ?? AuggieCliService(),
+        _codexAppServer = codexAppServerService ?? CodexAppServerService(),
         _qoderCli = qoderCliService ??
             QoderCliService(readCredential: accountService.readCredential),
         accountManagement = _LlmGatewayAccountManagement(accountService),
@@ -2333,11 +2340,35 @@ class _LlmGatewayProviderCatalog implements AiGatewayProviderCatalog {
 
 class _LlmGatewayModelDiscovery implements AiGatewayModelDiscovery {
   final LlmAccountConnectorService _accounts;
+  final CodexAppServerService _codexAppServer;
 
-  const _LlmGatewayModelDiscovery(this._accounts);
+  const _LlmGatewayModelDiscovery(this._accounts, this._codexAppServer);
 
   @override
   Future<void> testConnection(AiGatewayAccount account) async {
+    if (account.connectorType == 'codex-app-server') {
+      if (account.authType != 'none' || account.hasCredential) {
+        throw AiGatewayExecutionException(
+          kind: AiGatewayFailureKind.request,
+          code: 'unsupported_capability',
+        );
+      }
+      final result = await _codexAppServer.status();
+      if (result.status != CodexAppServerStatus.authenticated) {
+        throw AiGatewayExecutionException(
+          kind: switch (result.status) {
+            CodexAppServerStatus.signedOut =>
+              AiGatewayFailureKind.authenticationRequired,
+            CodexAppServerStatus.unavailable ||
+            CodexAppServerStatus.unknown =>
+              AiGatewayFailureKind.transportUnavailable,
+            CodexAppServerStatus.authenticated => AiGatewayFailureKind.request,
+          },
+          code: result.code,
+        );
+      }
+      return;
+    }
     if (account.connectorType != 'auggie' || account.authType != 'none') {
       throw AiGatewayExecutionException(
         kind: AiGatewayFailureKind.request,
@@ -2520,12 +2551,14 @@ class _LlmGatewayExecutor
   final DevinCliAcpService _devinCliAcp;
   final QoderCliService _qoderCli;
   final AuggieCliService _auggieCli;
+  final CodexAppServerService _codexAppServer;
 
   const _LlmGatewayExecutor(
     this._client,
     this._devinCliAcp,
     this._qoderCli,
     this._auggieCli,
+    this._codexAppServer,
   );
 
   @override
@@ -2584,6 +2617,59 @@ class _LlmGatewayExecutor
     Duration? sendTimeout,
     Duration? receiveTimeout,
   }) async {
+    if (account.connectorType == 'codex-app-server') {
+      if (account.authType != 'none' || account.hasCredential) {
+        throw AiGatewayExecutionException(
+          kind: AiGatewayFailureKind.request,
+          code: 'unsupported_capability',
+        );
+      }
+      try {
+        final response = await _codexAppServer.request(
+          body: body is Map ? Map<String, dynamic>.from(body) : const {},
+          modelId: modelId,
+          stream: stream,
+          cancelToken: cancelToken,
+        );
+        return AiGatewayResponse(
+          statusCode: response.statusCode,
+          headers: {
+            'content-type': [
+              stream ? 'text/event-stream; charset=utf-8' : 'application/json',
+            ],
+          },
+          body: response.body,
+        );
+      } on CodexAppServerUnsupportedRequest catch (error) {
+        throw AiGatewayExecutionException(
+          kind: AiGatewayFailureKind.request,
+          code: error.code == 'desktop_only'
+              ? 'codex_app_server_unavailable'
+              : 'codex_app_server_unsupported_request',
+        );
+      } on ProcessException catch (error) {
+        throw AiGatewayExecutionException(
+          kind: AiGatewayFailureKind.transportUnavailable,
+          code: error.errorCode == 2 || error.errorCode == -2
+              ? 'codex_cli_not_installed'
+              : 'codex_app_server_unavailable',
+        );
+      } on CodexAppServerRpcException catch (error) {
+        throw AiGatewayExecutionException(
+          kind: error.code == -32001
+              ? AiGatewayFailureKind.authenticationRequired
+              : AiGatewayFailureKind.request,
+          code: error.code == -32001
+              ? 'codex_cli_not_signed_in'
+              : 'codex_app_server_unavailable',
+        );
+      } catch (_) {
+        throw AiGatewayExecutionException(
+          kind: AiGatewayFailureKind.transportUnavailable,
+          code: 'codex_app_server_unavailable',
+        );
+      }
+    }
     if (account.connectorType == 'auggie') {
       try {
         final response = await _auggieCli.request(
@@ -2796,7 +2882,8 @@ LlmAccount _legacyAccount(AiGatewayAccount account, {String? credentialRef}) =>
       authType: account.authType,
       displayName: account.displayName,
       status: LlmAccountStatus.values.byName(account.status.name),
-      credentialRef: account.connectorType == 'auggie'
+      credentialRef: account.connectorType == 'auggie' ||
+              account.connectorType == 'codex-app-server'
           ? null
           : credentialRef ?? account.credentialRef,
       endpointConfig: account.endpointConfig,

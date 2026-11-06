@@ -38,6 +38,7 @@ Set<String> llmRoutedChatSupportedConnectorTypes(String endpointType) =>
           'openai-compatibility',
           'openai-api',
           'codex',
+          'codex-app-server',
           'xai',
           'meta',
           'muse-code',
@@ -144,6 +145,24 @@ String llmRoutedChatProtocolForAccountModel({
       throw StateError('Auggie CLI uses its built-in local route.');
     }
     return 'auggie.cli';
+  }
+  if (account.connectorType == 'codex-app-server') {
+    if (account.authType != 'none' || account.hasCredential) {
+      throw StateError('Codex App Server accounts do not store credentials.');
+    }
+    final model = account.models
+        .where((item) => item.upstreamModelId == upstreamModelId)
+        .firstOrNull;
+    final configured = apiProtocolOverride ??
+        model?.config['apiProtocolOverride'] ??
+        account.endpointConfig['apiProtocol'] ??
+        apiProtocol;
+    if (configured is String &&
+        configured.isNotEmpty &&
+        configured != 'openai.responses') {
+      throw StateError('Codex App Server supports only OpenAI Responses.');
+    }
+    return 'openai.responses';
   }
   // Cursor's source-owned transport is selected by account ownership. The
   // model's generic API protocol continues to govern other providers.

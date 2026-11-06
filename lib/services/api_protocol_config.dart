@@ -61,7 +61,7 @@ String firstNonEmptyProtocol(Iterable<String?> values) {
 
 String builtinDefaultApiProtocolForConnector(String? connectorType) =>
     switch (connectorType) {
-      'codex' => 'openai.responses',
+      'codex' || 'codex-app-server' => 'openai.responses',
       'xai' ||
       'grok-cli' ||
       'xai-oauth' ||
