@@ -237,6 +237,15 @@ class ChatService {
 
   Map<String, dynamic>? get lastRequestBody =>
       _lastRequestBody ?? _provider?.lastRequestBody;
+
+  /// Release the per-service request body after the stream manager has
+  /// copied it into the finalized message's rawRequest snapshot.
+  void releaseLastRequestBody(Map<String, dynamic>? requestBody) {
+    if (requestBody != null && identical(_lastRequestBody, requestBody)) {
+      _lastRequestBody = null;
+    }
+  }
+
   Map<String, dynamic>? get lastResponseData =>
       _lastResponseData ?? _provider?.lastResponseData;
   Map<String, String>? get lastRequestHeaders =>

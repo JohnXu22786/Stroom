@@ -825,6 +825,7 @@ class ChatAdapter {
     ProviderEntriesState? entriesState,
     void Function()? onToolCallIntent,
     void Function(String text)? onTextDelta,
+    void Function(Map<String, dynamic> body)? onRequestBody,
     String? Function()? takeCompletedToolCallRound,
     String? Function()? takeCompletedToolCallReasoning,
   }) {
@@ -846,6 +847,7 @@ class ChatAdapter {
       tools: tools,
       onToolCallIntent: onToolCallIntent,
       onTextDelta: onTextDelta,
+      onRequestBody: onRequestBody,
       takeCompletedToolCallRound: takeCompletedToolCallRound,
       takeCompletedToolCallReasoning: takeCompletedToolCallReasoning,
     );

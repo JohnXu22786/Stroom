@@ -66,6 +66,7 @@ class StreamResult {
 
 class _ConversationStreamState {
   final String convId;
+  Map<String, dynamic>? requestBodySnapshot;
   bool cancelledByUser = false;
   bool toolCallStarted = false;
   final Completer<void> cancellationSignal = Completer<void>();
