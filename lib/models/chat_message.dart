@@ -296,9 +296,11 @@ class ChatMessage {
         compactMessages.add(_compactGeneratedRawMessage(message));
         continue;
       }
-      if (i == currentUserMessage ||
-          (message['content'] == null &&
-              message['reasoning_content'] == null)) {
+      if (i == currentUserMessage) {
+        compactMessages.add(_compactCurrentRawUserMessage(message));
+        continue;
+      }
+      if (message['content'] == null && message['reasoning_content'] == null) {
         compactMessages.add(message);
         continue;
       }
@@ -321,6 +323,55 @@ class ChatMessage {
         'messages': compactMessages,
       },
     };
+  }
+
+  /// Keep the newest user text and attachment metadata in raw diagnostics while
+  /// dropping encoded attachment bytes from the in-memory copy retained on the
+  /// assistant message. The provider request body and canonical attachments are
+  /// separate objects and remain untouched.
+  static Map _compactCurrentRawUserMessage(Map message) {
+    final content = message['content'];
+    if (content is! List) return message;
+
+    final compactContent = content.map((part) {
+      if (part is! Map) return part;
+      switch (part['type']) {
+        case 'image_url':
+          return _compactRawPayloadInPart(part, 'image_url', 'url');
+        case 'input_audio':
+          return _compactRawPayloadInPart(part, 'input_audio', 'data');
+        case 'image':
+        case 'document':
+          final source = part['source'];
+          if (source is! Map || source['type'] != 'base64') return part;
+          return _compactRawPayloadInPart(part, 'source', 'data');
+        case 'file':
+          return _compactRawPayloadInPart(part, 'file', 'file_data');
+        default:
+          return part;
+      }
+    }).toList();
+    return <dynamic, dynamic>{...message, 'content': compactContent};
+  }
+
+  static Map _compactRawPayloadInPart(
+    Map part,
+    String containerKey,
+    String payloadKey,
+  ) {
+    final container = part[containerKey];
+    if (container is! Map) return part;
+    final payload = container[payloadKey];
+    if (payload is! String) return part;
+    // compactRawRequest also runs during serialization and deserialization.
+    // Keep the original size in the marker instead of counting that marker as
+    // a new data URI payload on each pass.
+    if (payload.contains('[base64 data:')) return part;
+    final compactContainer = <dynamic, dynamic>{
+      ...container,
+      payloadKey: DataSanitizer.sanitizeBase64String(payload),
+    };
+    return <dynamic, dynamic>{...part, containerKey: compactContainer};
   }
 
   /// Keep protocol metadata from tool-loop messages while dropping their
