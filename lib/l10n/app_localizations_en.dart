@@ -9434,6 +9434,78 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get desktopTrayQuitStroom => 'Quit Stroom';
+
+  @override
+  String get providerPresetExaDescription =>
+      'Search the web, extract page content, and support in-depth research through Exa MCP, with semantic and keyword search.';
+
+  @override
+  String get providerPresetExaApiKeyHint =>
+      'Get an API key from the Exa website.';
+
+  @override
+  String get providerPresetTavilyDescription =>
+      'An AI-native search engine for real-time web search optimized for large language models.';
+
+  @override
+  String get providerPresetTavilyApiKeyHint =>
+      'Get an API key from Tavily. It supports ?tavilyApiKey= or an Authorization: Bearer header.';
+
+  @override
+  String get providerPresetJinaDescription =>
+      'A multimodal AI service for extracting web content, generating embeddings, and retrieving search results.';
+
+  @override
+  String get providerPresetJinaApiKeyHint =>
+      'Get a Jina AI API key (Bearer token) from its website.';
+
+  @override
+  String get providerPresetFirecrawlDescription =>
+      'A web crawling and extraction service that turns pages into clean Markdown or structured data.';
+
+  @override
+  String get providerPresetFirecrawlApiKeyHint =>
+      'Get a Firecrawl API key, or try it without a key with the free tier limits.';
+
+  @override
+  String get providerPresetZhipuDescription =>
+      'Zhipu AI’s web reader MCP service for fetching and understanding web pages.';
+
+  @override
+  String get providerPresetZhipuApiKeyHint =>
+      'Get an API key (Bearer token) from the Zhipu AI Open Platform.';
+
+  @override
+  String get providerPresetBraveSearchDescription =>
+      'A privacy-focused independent search engine with high-quality web results.';
+
+  @override
+  String get providerPresetBraveSearchApiKeyHint =>
+      'Get an API key from the Brave Search website.';
+
+  @override
+  String get providerPresetBochaDescription =>
+      'Bocha AI web search provides intelligent search results for Chinese-language pages.';
+
+  @override
+  String get providerPresetBochaApiKeyHint =>
+      'Get an API key (Bearer token) from the Bocha AI Open Platform.';
+
+  @override
+  String get providerPresetQueritDescription =>
+      'Querit AI search offers intelligent search and content discovery.';
+
+  @override
+  String get providerPresetQueritApiKeyHint =>
+      'Get an API key (Bearer token) from the Querit website.';
+
+  @override
+  String get providerPresetSearxngDescription =>
+      'A self-hosted metasearch engine that aggregates search sources with a focus on privacy.';
+
+  @override
+  String get providerPresetSearxngApiKeyHint =>
+      'Set your SearXNG instance URL (for example, http://your-instance:8080); an API key is optional.';
 }
 
 /// The translations for English, as used in the United States (`en_US`).
@@ -18865,4 +18937,76 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get desktopTrayQuitStroom => 'Quit Stroom';
+
+  @override
+  String get providerPresetExaDescription =>
+      'Search the web, extract page content, and support in-depth research through Exa MCP, with semantic and keyword search.';
+
+  @override
+  String get providerPresetExaApiKeyHint =>
+      'Get an API key from the Exa website.';
+
+  @override
+  String get providerPresetTavilyDescription =>
+      'An AI-native search engine for real-time web search optimized for large language models.';
+
+  @override
+  String get providerPresetTavilyApiKeyHint =>
+      'Get an API key from Tavily. It supports ?tavilyApiKey= or an Authorization: Bearer header.';
+
+  @override
+  String get providerPresetJinaDescription =>
+      'A multimodal AI service for extracting web content, generating embeddings, and retrieving search results.';
+
+  @override
+  String get providerPresetJinaApiKeyHint =>
+      'Get a Jina AI API key (Bearer token) from its website.';
+
+  @override
+  String get providerPresetFirecrawlDescription =>
+      'A web crawling and extraction service that turns pages into clean Markdown or structured data.';
+
+  @override
+  String get providerPresetFirecrawlApiKeyHint =>
+      'Get a Firecrawl API key, or try it without a key with the free tier limits.';
+
+  @override
+  String get providerPresetZhipuDescription =>
+      'Zhipu AI’s web reader MCP service for fetching and understanding web pages.';
+
+  @override
+  String get providerPresetZhipuApiKeyHint =>
+      'Get an API key (Bearer token) from the Zhipu AI Open Platform.';
+
+  @override
+  String get providerPresetBraveSearchDescription =>
+      'A privacy-focused independent search engine with high-quality web results.';
+
+  @override
+  String get providerPresetBraveSearchApiKeyHint =>
+      'Get an API key from the Brave Search website.';
+
+  @override
+  String get providerPresetBochaDescription =>
+      'Bocha AI web search provides intelligent search results for Chinese-language pages.';
+
+  @override
+  String get providerPresetBochaApiKeyHint =>
+      'Get an API key (Bearer token) from the Bocha AI Open Platform.';
+
+  @override
+  String get providerPresetQueritDescription =>
+      'Querit AI search offers intelligent search and content discovery.';
+
+  @override
+  String get providerPresetQueritApiKeyHint =>
+      'Get an API key (Bearer token) from the Querit website.';
+
+  @override
+  String get providerPresetSearxngDescription =>
+      'A self-hosted metasearch engine that aggregates search sources with a focus on privacy.';
+
+  @override
+  String get providerPresetSearxngApiKeyHint =>
+      'Set your SearXNG instance URL (for example, http://your-instance:8080); an API key is optional.';
 }

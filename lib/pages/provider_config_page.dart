@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/tool_call.dart';
 import '../providers/provider_config.dart';
+import '../providers/provider_preset_localizations.dart';
 import '../services/connectivity_test_service.dart';
 import '../services/http_tool_service.dart';
 import '../services/todo_tool_service.dart';
@@ -594,8 +595,16 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
       leadIcon: leadIcon,
       iconColor: iconColor,
       subtitle: subtitle,
-      apiKeyHint: typeConfig?['apiKeyHint'] as String?,
-      mcpDescription: typeConfig?['description'] as String?,
+      apiKeyHint: localizedProviderPresetApiKeyHint(
+        AppLocalizations.of(context)!,
+        providerName,
+        typeConfig?['apiKeyHint'] as String?,
+      ),
+      mcpDescription: localizedProviderPresetDescription(
+        AppLocalizations.of(context)!,
+        providerName,
+        typeConfig?['description'] as String?,
+      ),
       dragHandle: ReorderableDragStartListener(
         index: groupIndex,
         child: const Icon(Icons.drag_handle, color: Colors.grey),
