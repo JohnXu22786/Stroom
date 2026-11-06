@@ -1038,9 +1038,26 @@ bool _legacyOcrHasCredentialUseContext(
   Match match,
   String prefix,
   String suffix,
+) =>
+    _legacyOcrHasCredentialUseContextAt(
+      text,
+      match.start,
+      match.end,
+      match.group(0)!,
+      prefix,
+      suffix,
+    );
+
+bool _legacyOcrHasCredentialUseContextAt(
+  String text,
+  int matchStart,
+  int matchEnd,
+  String matchedText,
+  String prefix,
+  String suffix,
 ) {
-  final before = text.substring(0, match.start).trimRight();
-  final after = text.substring(match.end).trimLeft();
+  final before = text.substring(0, matchStart).trimRight();
+  final after = text.substring(matchEnd).trimLeft();
   final actionVerb = RegExp(
     r'\b(use|using|send|provide|enter|supply|pass|set|read|extract|identify|recognize|transcribe)$',
     caseSensitive: false,
@@ -1071,14 +1088,13 @@ bool _legacyOcrHasCredentialUseContext(
       credentialHeaderTarget;
   final naturalWord =
       '$prefix$suffix'.replaceAll(RegExp(r'[^a-zA-Z]'), '').toLowerCase();
-  final matchedText = match.group(0)!;
   final matchedPrefix = RegExp(
     RegExp.escape(prefix),
     caseSensitive: false,
     unicode: true,
   ).firstMatch(matchedText);
   final absolutePrefixStart =
-      matchedPrefix == null ? -1 : match.start + matchedPrefix.start;
+      matchedPrefix == null ? -1 : matchStart + matchedPrefix.start;
   final maskPrefixIsEmbedded = absolutePrefixStart > 0 &&
       RegExp(
         r'[\p{L}\p{M}\p{N}_/+~-]',
@@ -2816,36 +2832,51 @@ String _legacyOcrRedactWhitespaceSplitMaskedOpenPrefixEchoes(
         value.substring(0, ellipsis.start).trim().split(RegExp(r'\s+')).last;
     if (prefix.isEmpty || prefix.length >= 8) continue;
 
-    for (var tokenCount = 1; tokenCount <= 4; tokenCount++) {
-      const token = r'[a-zA-Z0-9._/+~-]+';
-      final additionalTokens =
-          tokenCount == 1 ? '' : '(?:[ \\t\\r\\n]+$token){${tokenCount - 1}}';
-      final pattern = RegExp(
-        '(^|[^a-zA-Z0-9])'
-        '(${RegExp.escape(prefix)}[ \\t\\r\\n]+$token$additionalTokens)',
-        caseSensitive: false,
-      );
-      sanitized = sanitized.replaceAllMapped(pattern, (match) {
-        final echo = match.group(2)!;
-        final suffix =
-            echo.replaceAll(RegExp(r'\s+'), '').substring(prefix.length);
+    const token = r'[a-zA-Z0-9._/+~-]+';
+    final prefixPattern = RegExp(
+      '(^|[^a-zA-Z0-9])(${RegExp.escape(prefix)})'
+      '(?=[ \\t\\r\\n]+$token)',
+      caseSensitive: false,
+    );
+    final tokenPattern = RegExp(token);
+    final whitespacePattern = RegExp(r'[ \t\r\n]+');
+    for (final match in prefixPattern.allMatches(sanitized).toList().reversed) {
+      final boundary = match.group(1)!;
+      final prefixStart = match.start + boundary.length;
+      var cursor = prefixStart + prefix.length;
+      var suffix = '';
+      while (true) {
+        final whitespace = whitespacePattern.matchAsPrefix(sanitized, cursor);
+        if (whitespace == null) break;
+        final tokenMatch =
+            tokenPattern.matchAsPrefix(sanitized, whitespace.end);
+        if (tokenMatch == null) break;
+        suffix += tokenMatch.group(0)!;
+        final echoEnd = tokenMatch.end;
         final hasCredentialShape = suffix.length >= 5 &&
             (RegExp(r'[0-9_]').hasMatch(suffix) ||
-                (RegExp(r'[a-z]').hasMatch(suffix) &&
-                    RegExp(r'[A-Z]').hasMatch(suffix) &&
-                    !_legacyOcrHasNaturalWordContinuation(prefix, suffix)) ||
-                _legacyOcrHasUncommonAlphaContinuation(suffix));
+                _legacyOcrHasUncommonAlphaContinuation(suffix) ||
+                _legacyOcrHasLongConsonantRun(suffix) ||
+                _legacyOcrHasShortOpaqueAlphaKey('$prefix$suffix'));
         if (!hasCredentialShape ||
-            !_legacyOcrHasCredentialUseContext(
+            !_legacyOcrHasCredentialUseContextAt(
               sanitized,
-              match,
+              prefixStart,
+              echoEnd,
+              sanitized.substring(prefixStart, echoEnd),
               prefix,
               suffix,
             )) {
-          return match.group(0)!;
+          cursor = echoEnd;
+          continue;
         }
-        return '${match.group(1)}[redacted]';
-      });
+        sanitized = sanitized.replaceRange(
+          match.start,
+          echoEnd,
+          '$boundary[redacted]',
+        );
+        break;
+      }
     }
   }
   return sanitized;
