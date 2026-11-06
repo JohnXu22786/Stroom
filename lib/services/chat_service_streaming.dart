@@ -277,7 +277,6 @@ extension ChatServiceStreamingExt on ChatService {
                 _thinkingSignature = event.thinkingSignature!;
               }
               if (event.isReasoning) {
-                _reasoningBuffer.write(event.text);
                 roundReasoningBuffer.write(event.text);
                 // Emit reasoning text as ReasoningEvent so the UI
                 // can stream it in real-time to the reasoning panel.
