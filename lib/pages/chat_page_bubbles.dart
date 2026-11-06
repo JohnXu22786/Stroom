@@ -15,6 +15,9 @@ class _CachedStreamingMarkdown {
 }
 
 class _StreamingSearchOccurrenceCount {
+  static final _caseIgnorablePattern =
+      RegExp(r'^\p{Case_Ignorable}+$', unicode: true);
+
   String _query = '';
   int _textLength = 0;
   String _tail = '';
@@ -23,7 +26,7 @@ class _StreamingSearchOccurrenceCount {
   int _lowerTextLength = 0;
   int _liveRawTextLength = 0;
   bool _canAppendIncrementally = false;
-  bool _hasContextualLowercase = false;
+  bool _hasPendingFinalSigma = false;
   String? _unfinishedFenceChar;
   int _unfinishedFenceLength = 0;
   int _fenceLineStage = 0;
@@ -43,7 +46,7 @@ class _StreamingSearchOccurrenceCount {
     if (_unfinishedFenceChar != null &&
         text.length > _textLength &&
         lowerQuery.isNotEmpty &&
-        !_hasContextualLowercase) {
+        !_hasPendingFinalSigma) {
       if (_scanUnfinishedFence(text.substring(_textLength))) {
         _textLength = text.length;
         return _count;
@@ -84,29 +87,40 @@ class _StreamingSearchOccurrenceCount {
       liveTextLength += fragment.length;
     }
     if (liveTextLength < _liveRawTextLength) _reset(lowerQuery);
-    if (_hasContextualLowercase) {
+    // Fragment snapshots are append-only; a rebuild with no new source text
+    // cannot change contextual lowercase or the occurrence count.
+    if (liveTextLength == _liveRawTextLength) return _count;
+
+    final appendedLength = liveTextLength - _liveRawTextLength;
+    final appendedParts = <String>[];
+    var remaining = appendedLength;
+    for (var i = fragments.length - 1; i >= 0 && remaining > 0; i--) {
+      final fragment = fragments[i];
+      final take = fragment.length < remaining ? fragment.length : remaining;
+      appendedParts.add(fragment.substring(fragment.length - take));
+      remaining -= take;
+    }
+    final appended = appendedParts.reversed.join();
+    if (_hasPendingFinalSigma) {
+      if (lowerQuery.isNotEmpty &&
+          !appended.contains('\u03A3') &&
+          _caseIgnorablePattern.hasMatch(appended)) {
+        // Case-ignorable suffixes cannot settle the pending sigma. Count them
+        // incrementally and keep waiting for a boundary or a cased character.
+        _appendLowerText(appended.toLowerCase(), lowerQuery);
+        _liveRawTextLength = liveTextLength;
+        return _count;
+      }
       final text = fragments.join();
       final count = _recount(text, lowerQuery);
-      _hasContextualLowercase = true;
       _liveRawTextLength = liveTextLength;
       return count;
     }
 
-    final appendedLength = liveTextLength - _liveRawTextLength;
     if (appendedLength > 0 && lowerQuery.isNotEmpty) {
-      final appendedParts = <String>[];
-      var remaining = appendedLength;
-      for (var i = fragments.length - 1; i >= 0 && remaining > 0; i--) {
-        final fragment = fragments[i];
-        final take = fragment.length < remaining ? fragment.length : remaining;
-        appendedParts.add(fragment.substring(fragment.length - take));
-        remaining -= take;
-      }
-      final appended = appendedParts.reversed.join();
       if (appended.contains('\u03A3')) {
         final text = fragments.join();
         final count = _recount(text, lowerQuery);
-        _hasContextualLowercase = true;
         _liveRawTextLength = liveTextLength;
         return count;
       }
@@ -117,10 +131,13 @@ class _StreamingSearchOccurrenceCount {
   }
 
   int _recount(String text, String lowerQuery) {
-    _hasContextualLowercase = text.contains('\u03A3');
     final searchableText = stripSearchIrrelevantMarkdown(text);
     final lowerSearchableText = searchableText.toLowerCase();
-    _count = countOccurrences(searchableText, lowerQuery);
+    _hasPendingFinalSigma = _hasUnresolvedFinalSigma(
+      searchableText,
+      lowerSearchableText,
+    );
+    _count = 0;
     _nextSearchIndex = 0;
     _lowerTextLength = lowerSearchableText.length;
     _tail = '';
@@ -130,6 +147,7 @@ class _StreamingSearchOccurrenceCount {
         final index = lowerSearchableText.indexOf(lowerQuery, start);
         if (index == -1) break;
         _nextSearchIndex = index + lowerQuery.length;
+        _count++;
         start = _nextSearchIndex;
       }
     }
@@ -137,7 +155,7 @@ class _StreamingSearchOccurrenceCount {
     _textEndsWithCr = text.endsWith('\r');
     _setUnfinishedFenceState(text);
     _canAppendIncrementally = lowerQuery.isNotEmpty &&
-        !_hasContextualLowercase &&
+        !_hasPendingFinalSigma &&
         _unfinishedFenceChar == null;
     if (_canAppendIncrementally && lowerQuery.length > 1) {
       final tailLength = lowerQuery.length - 1;
@@ -148,6 +166,27 @@ class _StreamingSearchOccurrenceCount {
             );
     }
     return _count;
+  }
+
+  bool _hasUnresolvedFinalSigma(
+    String searchableText,
+    String lowerSearchableText,
+  ) {
+    final lastSigmaIndex = searchableText.lastIndexOf('\u03A3');
+    if (lastSigmaIndex == -1) return false;
+    final lowerSigmaIndex = searchableText
+        .substring(0, lastSigmaIndex)
+        .toLowerCase()
+        .length;
+    if (lowerSigmaIndex >= lowerSearchableText.length ||
+        lowerSearchableText.codeUnitAt(lowerSigmaIndex) != 0x03C2) {
+      return false;
+    }
+    // A later cased letter changes this sigma only when the current suffix
+    // contains no non-case-ignorable boundary. Probe that exact condition
+    // once after a recount; settled sigmas can then use the append path.
+    final lowerWithFollowingCased = (searchableText + 'A').toLowerCase();
+    return lowerWithFollowingCased.codeUnitAt(lowerSigmaIndex) == 0x03C3;
   }
 
   void _appendLowerText(String appended, String lowerQuery) {
@@ -179,7 +218,7 @@ class _StreamingSearchOccurrenceCount {
     _lowerTextLength = 0;
     _liveRawTextLength = 0;
     _canAppendIncrementally = false;
-    _hasContextualLowercase = false;
+    _hasPendingFinalSigma = false;
     _unfinishedFenceChar = null;
     _unfinishedFenceLength = 0;
     _resetFenceLineState();
