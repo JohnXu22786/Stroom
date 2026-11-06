@@ -8468,6 +8468,90 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get galleryExportVideoFolderArchiveFileName => '视频文件夹导出.zip';
+
+  @override
+  String get catCatchPageTitle => '下载网页资源';
+
+  @override
+  String get catCatchAddTask => '添加任务';
+
+  @override
+  String get catCatchOpenBrowser => '内置浏览器';
+
+  @override
+  String get catCatchEmptyState => '暂无下载任务';
+
+  @override
+  String get catCatchEmptyStateHint => '点击右上角 + 添加下载任务';
+
+  @override
+  String get catCatchInvalidCapturedUrl => '捕获的URL无效';
+
+  @override
+  String catCatchCapturedFromBrowser(String url) {
+    return '已从浏览器捕获：$url';
+  }
+
+  @override
+  String get catCatchEnterValidUrl => '请至少输入一个有效的URL';
+
+  @override
+  String get catCatchTaskAdded => '任务已添加';
+
+  @override
+  String catCatchTasksAdded(int count) {
+    return '已添加 $count 个任务';
+  }
+
+  @override
+  String get catCatchViewTaskList => '查看任务列表';
+
+  @override
+  String get catCatchUrlHint => '请输入视频/音频网页URL';
+
+  @override
+  String get catCatchDeleteTask => '删除此任务';
+
+  @override
+  String get catCatchHour => '时';
+
+  @override
+  String get catCatchMinute => '分';
+
+  @override
+  String get catCatchSecond => '秒';
+
+  @override
+  String get catCatchDurationPreview => '预览：';
+
+  @override
+  String get catCatchDurationFormat => '时:分:秒';
+
+  @override
+  String get catCatchDurationFilterHint => '可选：按时长筛选视频资源。留空则展示全部资源供选择';
+
+  @override
+  String get catCatchVideoSaveTo => '视频保存至';
+
+  @override
+  String get catCatchAudioSaveTo => '音频保存至';
+
+  @override
+  String catCatchTaskCount(int count) {
+    return '已添加 $count 个任务';
+  }
+
+  @override
+  String get catCatchStartAnalysis => '开始分析';
+
+  @override
+  String get catCatchVideoFolderTitle => '视频保存至文件夹';
+
+  @override
+  String get catCatchAudioFolderTitle => '音频保存至文件夹';
+
+  @override
+  String get catCatchRootFolder => '根目录';
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).
@@ -16933,4 +17017,88 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get galleryExportVideoFolderArchiveFileName => '视频文件夹导出.zip';
+
+  @override
+  String get catCatchPageTitle => '下载网页资源';
+
+  @override
+  String get catCatchAddTask => '添加任务';
+
+  @override
+  String get catCatchOpenBrowser => '内置浏览器';
+
+  @override
+  String get catCatchEmptyState => '暂无下载任务';
+
+  @override
+  String get catCatchEmptyStateHint => '点击右上角 + 添加下载任务';
+
+  @override
+  String get catCatchInvalidCapturedUrl => '捕获的URL无效';
+
+  @override
+  String catCatchCapturedFromBrowser(String url) {
+    return '已从浏览器捕获：$url';
+  }
+
+  @override
+  String get catCatchEnterValidUrl => '请至少输入一个有效的URL';
+
+  @override
+  String get catCatchTaskAdded => '任务已添加';
+
+  @override
+  String catCatchTasksAdded(int count) {
+    return '已添加 $count 个任务';
+  }
+
+  @override
+  String get catCatchViewTaskList => '查看任务列表';
+
+  @override
+  String get catCatchUrlHint => '请输入视频/音频网页URL';
+
+  @override
+  String get catCatchDeleteTask => '删除此任务';
+
+  @override
+  String get catCatchHour => '时';
+
+  @override
+  String get catCatchMinute => '分';
+
+  @override
+  String get catCatchSecond => '秒';
+
+  @override
+  String get catCatchDurationPreview => '预览：';
+
+  @override
+  String get catCatchDurationFormat => '时:分:秒';
+
+  @override
+  String get catCatchDurationFilterHint => '可选：按时长筛选视频资源。留空则展示全部资源供选择';
+
+  @override
+  String get catCatchVideoSaveTo => '视频保存至';
+
+  @override
+  String get catCatchAudioSaveTo => '音频保存至';
+
+  @override
+  String catCatchTaskCount(int count) {
+    return '已添加 $count 个任务';
+  }
+
+  @override
+  String get catCatchStartAnalysis => '开始分析';
+
+  @override
+  String get catCatchVideoFolderTitle => '视频保存至文件夹';
+
+  @override
+  String get catCatchAudioFolderTitle => '音频保存至文件夹';
+
+  @override
+  String get catCatchRootFolder => '根目录';
 }

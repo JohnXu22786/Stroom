@@ -1,17 +1,136 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/catcatch/widgets/draggable_floating_panel.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/browser_page.dart';
 import 'package:stroom/pages/catcatch_page.dart';
 import 'package:stroom/services/browser_cookie_service.dart';
 
+Widget _catCatchTestApp({
+  Locale locale = const Locale('zh', 'CN'),
+  required Widget home,
+}) {
+  return ProviderScope(
+    child: MaterialApp(
+      locale: locale,
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      home: home,
+    ),
+  );
+}
+
 void main() {
+  group('CatCatchPage localization', () {
+    testWidgets('page chrome, controls, and capture errors follow the locale', (
+      tester,
+    ) async {
+      for (final locale in [
+        const Locale('en', 'US'),
+        const Locale('zh', 'CN')
+      ]) {
+        await tester.pumpWidget(
+          _catCatchTestApp(
+            locale: locale,
+            home: CatCatchPage(
+              browserPageBuilder: (_) => Scaffold(
+                body: Builder(
+                  builder: (context) => TextButton(
+                    onPressed: () => Navigator.pop(context, 'not-a-url'),
+                    child: const Text('fake browser'),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+
+        final isEnglish = locale.languageCode == 'en';
+        expect(
+          find.text(isEnglish ? 'Web Resource Downloader' : '下载网页资源'),
+          findsOneWidget,
+        );
+        expect(
+          find.text(isEnglish ? 'No download tasks yet' : '暂无下载任务'),
+          findsOneWidget,
+        );
+        expect(
+          find.byTooltip(isEnglish ? 'Add task' : '添加任务'),
+          findsOneWidget,
+        );
+        expect(
+          find.byTooltip(isEnglish ? 'Built-in browser' : '内置浏览器'),
+          findsOneWidget,
+        );
+
+        await tester.tap(find.byTooltip(isEnglish ? 'Add task' : '添加任务'));
+        await tester.pump();
+        expect(
+          find.text(isEnglish ? 'Analyze' : '开始分析'),
+          findsOneWidget,
+        );
+        expect(
+          find.text(
+              isEnglish ? 'Enter a video/audio webpage URL' : '请输入视频/音频网页URL'),
+          findsOneWidget,
+        );
+        expect(
+          find.byTooltip(isEnglish ? 'Delete this task' : '删除此任务'),
+          findsOneWidget,
+        );
+        expect(
+          find.text(isEnglish ? 'Save video to' : '视频保存至'),
+          findsOneWidget,
+        );
+        expect(
+          find.text(isEnglish ? 'Root folder' : '根目录'),
+          findsNWidgets(2),
+        );
+        expect(
+          find.text(isEnglish ? 'Hours' : '时'),
+          findsOneWidget,
+        );
+        expect(
+          find.text(isEnglish ? 'Minutes' : '分'),
+          findsOneWidget,
+        );
+        expect(
+          find.text(isEnglish ? 'Seconds' : '秒'),
+          findsOneWidget,
+        );
+        expect(
+          find.text(isEnglish ? '1 task added' : '已添加 1 个任务'),
+          findsOneWidget,
+        );
+
+        await tester
+            .tap(find.byTooltip(isEnglish ? 'Built-in browser' : '内置浏览器'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('fake browser'));
+        await tester.pumpAndSettle();
+        expect(
+          find.text(isEnglish ? 'The captured URL is invalid' : '捕获的URL无效'),
+          findsOneWidget,
+        );
+
+        await tester.pumpWidget(const SizedBox.shrink());
+      }
+    });
+  });
+
   group('CatCatchPage - Multi-card & Bottom Bar', () {
     testWidgets('Empty state shown when no tasks', (tester) async {
       await tester.pumpWidget(
-        const ProviderScope(child: MaterialApp(home: CatCatchPage())),
+        _catCatchTestApp(home: const CatCatchPage()),
       );
       await tester.pump();
 
@@ -24,7 +143,7 @@ void main() {
       tester,
     ) async {
       await tester.pumpWidget(
-        const ProviderScope(child: MaterialApp(home: CatCatchPage())),
+        _catCatchTestApp(home: const CatCatchPage()),
       );
       await tester.pump();
 
@@ -55,7 +174,7 @@ void main() {
 
     testWidgets('Task card shows remove button', (tester) async {
       await tester.pumpWidget(
-        const ProviderScope(child: MaterialApp(home: CatCatchPage())),
+        _catCatchTestApp(home: const CatCatchPage()),
       );
       await tester.pump();
 
@@ -69,7 +188,7 @@ void main() {
 
     testWidgets('Remove button removes the task card', (tester) async {
       await tester.pumpWidget(
-        const ProviderScope(child: MaterialApp(home: CatCatchPage())),
+        _catCatchTestApp(home: const CatCatchPage()),
       );
       await tester.pump();
 
@@ -91,7 +210,7 @@ void main() {
 
     testWidgets('Can add multiple task cards', (tester) async {
       await tester.pumpWidget(
-        const ProviderScope(child: MaterialApp(home: CatCatchPage())),
+        _catCatchTestApp(home: const CatCatchPage()),
       );
       await tester.pump();
 
@@ -113,7 +232,7 @@ void main() {
 
     testWidgets('Task count shows in bottom bar', (tester) async {
       await tester.pumpWidget(
-        const ProviderScope(child: MaterialApp(home: CatCatchPage())),
+        _catCatchTestApp(home: const CatCatchPage()),
       );
       await tester.pump();
 
@@ -129,7 +248,7 @@ void main() {
 
     testWidgets('Removing a task updates the count', (tester) async {
       await tester.pumpWidget(
-        const ProviderScope(child: MaterialApp(home: CatCatchPage())),
+        _catCatchTestApp(home: const CatCatchPage()),
       );
       await tester.pump();
 
@@ -151,7 +270,7 @@ void main() {
 
     testWidgets('Removing last task shows empty state', (tester) async {
       await tester.pumpWidget(
-        const ProviderScope(child: MaterialApp(home: CatCatchPage())),
+        _catCatchTestApp(home: const CatCatchPage()),
       );
       await tester.pump();
 
@@ -171,7 +290,7 @@ void main() {
 
     testWidgets('Entering URL and duration shows preview', (tester) async {
       await tester.pumpWidget(
-        const ProviderScope(child: MaterialApp(home: CatCatchPage())),
+        _catCatchTestApp(home: const CatCatchPage()),
       );
       await tester.pump();
 
@@ -197,7 +316,7 @@ void main() {
 
     testWidgets('Start button is disabled when no valid URLs', (tester) async {
       await tester.pumpWidget(
-        const ProviderScope(child: MaterialApp(home: CatCatchPage())),
+        _catCatchTestApp(home: const CatCatchPage()),
       );
       await tester.pump();
 
@@ -215,7 +334,7 @@ void main() {
       tester,
     ) async {
       await tester.pumpWidget(
-        const ProviderScope(child: MaterialApp(home: CatCatchPage())),
+        _catCatchTestApp(home: const CatCatchPage()),
       );
       await tester.pump();
 
@@ -238,7 +357,7 @@ void main() {
       tester,
     ) async {
       await tester.pumpWidget(
-        const ProviderScope(child: MaterialApp(home: CatCatchPage())),
+        _catCatchTestApp(home: const CatCatchPage()),
       );
       await tester.pump();
 
@@ -267,7 +386,7 @@ void main() {
       tester,
     ) async {
       await tester.pumpWidget(
-        const ProviderScope(child: MaterialApp(home: CatCatchPage())),
+        _catCatchTestApp(home: const CatCatchPage()),
       );
       await tester.pump();
 
@@ -288,7 +407,7 @@ void main() {
       tester,
     ) async {
       await tester.pumpWidget(
-        const ProviderScope(child: MaterialApp(home: CatCatchPage())),
+        _catCatchTestApp(home: const CatCatchPage()),
       );
       await tester.pump();
 
@@ -310,7 +429,7 @@ void main() {
       tester,
     ) async {
       await tester.pumpWidget(
-        const ProviderScope(child: MaterialApp(home: CatCatchPage())),
+        _catCatchTestApp(home: const CatCatchPage()),
       );
       await tester.pump();
 
@@ -352,6 +471,7 @@ void main() {
 
     testWidgets('confirm capture returns the selected URL and pre-fills a task',
         (tester) async {
+      // ignore: invalid_use_of_visible_for_testing_member
       SharedPreferences.setMockInitialValues({});
       BrowserCookieService.enableTestMode();
       addTearDown(BrowserCookieService.disableTestMode);
@@ -359,6 +479,14 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
             home: CatCatchPage(
               browserPageBuilder: (_) => BrowserPage(
                 testBodyBuilder: (_, onConfirmCapture) => Scaffold(
@@ -398,6 +526,14 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
             home: CatCatchPage(
               browserPageBuilder: (_) => fakeBrowser(popResult: null),
             ),
@@ -423,6 +559,14 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
             home: CatCatchPage(
               browserPageBuilder: (_) => fakeBrowser(popResult: ''),
             ),
@@ -447,6 +591,14 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
             home: CatCatchPage(
               browserPageBuilder: (_) => fakeBrowser(popResult: 'not-a-url'),
             ),
