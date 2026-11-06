@@ -5,6 +5,105 @@ import 'package:stroom/ai_gateway/ai_gateway_protocol_bridges.dart';
 
 void main() {
   group('API protocol configuration', () {
+    test('audited connectors expose only implemented supplier APIs', () {
+      const expected = {
+        'github': {
+          'openai.chat_completions',
+          'openai.responses',
+          'anthropic.messages',
+        },
+        'ghe-copilot': {
+          'openai.chat_completions',
+          'openai.responses',
+          'anthropic.messages',
+        },
+        'gitlab-duo': {'openai.chat_completions'},
+        'codebuddy-cn': {'openai.chat_completions'},
+        'codebuddy-intl': {'openai.chat_completions'},
+        'workbuddy': {'openai.chat_completions'},
+        'openference': {'openai.chat_completions', 'openai.responses'},
+        'openference-api': {'openai.chat_completions', 'openai.responses'},
+        'cline': {'openai.chat_completions'},
+        'clinepass': {'openai.chat_completions'},
+        'trae': {'openai.chat_completions'},
+        'cloudflare-ai': {'openai.chat_completions'},
+        'aihorde': {'openai.chat_completions'},
+        'kilocode': {'openai.chat_completions'},
+        'qoder': {'openai.chat_completions'},
+        'opencode-go': {
+          'openai.chat_completions',
+          'openai.responses',
+          'anthropic.messages',
+        },
+        'opencode-zen': {
+          'openai.chat_completions',
+          'openai.responses',
+          'anthropic.messages',
+        },
+        'kimi-coding': {
+          'openai.chat_completions',
+          'openai.responses',
+          'anthropic.messages',
+        },
+        'vertex-partner': {'openai.chat_completions'},
+      };
+      for (final entry in expected.entries) {
+        expect(
+          supportedApiProtocolsForSupplier(
+            builtinDefaultApiProtocolForConnector(entry.key),
+            connectorType: entry.key,
+          ),
+          entry.value,
+          reason: entry.key,
+        );
+      }
+      expect(builtinDefaultApiProtocolForConnector('antigravity'),
+          kAntigravityProtocolId);
+      expect(
+        supportedApiProtocolsForSupplier(
+          kAntigravityProtocolId,
+          connectorType: 'antigravity',
+        ),
+        {kAntigravityProtocolId},
+      );
+      for (final unsupported in const [
+        'google.gemini.generate_content',
+        'openai.chat_completions',
+      ]) {
+        expect(
+          () => validateApiProtocolOverride(
+            unsupported,
+            supportedApiProtocolsForSupplier(
+              kAntigravityProtocolId,
+              connectorType: 'antigravity',
+            ),
+          ),
+          throwsArgumentError,
+          reason: unsupported,
+        );
+      }
+      expect(
+        () => validateApiProtocolOverride(
+          'openai.responses',
+          supportedApiProtocolsForSupplier(
+            'openai.chat_completions',
+            connectorType: 'gitlab-duo',
+          ),
+        ),
+        throwsArgumentError,
+      );
+      expect(
+        () => validateApiProtocolOverride(
+          'anthropic.messages',
+          supportedApiProtocolsForSupplier(
+            'openai.chat_completions',
+            connectorType: 'openference-api',
+          ),
+        ),
+        throwsArgumentError,
+      );
+    });
+
     test(
       'Codex defaults to Responses while OpenAI API keys stay Chat Completions',
       () {

@@ -19,6 +19,7 @@ import '../services/clova_studio_protocol.dart';
 
 Set<String> llmRoutedChatSupportedConnectorTypes(String endpointType) =>
     switch (endpointType) {
+      kAntigravityProtocolId => const {'antigravity'},
       'clova.studio.chat' => const {'clova-studio'},
       'amazon-q.chat' => const {'amazon-q'},
       'oneminai.chat' => const {'oneminai'},
@@ -33,6 +34,11 @@ Set<String> llmRoutedChatSupportedConnectorTypes(String endpointType) =>
           'qwen-cloud-token-plan',
           'command-code',
           'zed-hosted',
+          'github',
+          'ghe-copilot',
+          'opencode-go',
+          'opencode-zen',
+          'kimi-coding',
         },
       'openai.responses' => const {
           'openai-compatibility',
@@ -40,6 +46,8 @@ Set<String> llmRoutedChatSupportedConnectorTypes(String endpointType) =>
           'codex',
           'codex-app-server',
           'xai',
+          'grok-cli',
+          'xai-oauth',
           'meta',
           'muse-code',
           'kimi',
@@ -49,6 +57,13 @@ Set<String> llmRoutedChatSupportedConnectorTypes(String endpointType) =>
           'qwen-cloud-token-plan',
           'command-code',
           'zed-hosted',
+          'github',
+          'ghe-copilot',
+          'openference',
+          'openference-api',
+          'opencode-go',
+          'opencode-zen',
+          'kimi-coding',
         },
       'google.gemini.generate_content' => const {
           'gemini',
@@ -62,14 +77,31 @@ Set<String> llmRoutedChatSupportedConnectorTypes(String endpointType) =>
       'auggie.cli' => const {'auggie'},
       'zcode.cli' => const {'zcode-cli'},
       'ollama.chat' => const {'ollama'},
-      _ => const {
+      'openai' || 'openai.chat_completions' => const {
           'openai-compatibility',
           'openai-api',
+          'openference',
+          'openference-api',
           'azure-ai',
           'azure-openai',
           'aihorde',
           'uncloseai',
           'bedrock',
+          'github',
+          'ghe-copilot',
+          'gitlab-duo',
+          'codebuddy-cn',
+          'codebuddy-intl',
+          'workbuddy',
+          'cline',
+          'clinepass',
+          'trae',
+          'cloudflare-ai',
+          'kilocode',
+          'vertex-partner',
+          'opencode-go',
+          'opencode-zen',
+          'kimi-coding',
           'kimi',
           'kimi-ai',
           'kimi.ai',
@@ -87,6 +119,7 @@ Set<String> llmRoutedChatSupportedConnectorTypes(String endpointType) =>
           'command-code',
           'zed-hosted',
         },
+      _ => const {},
     };
 
 Set<String> llmRoutedChatSupportedConnectorTypesForModelOverride(
@@ -109,6 +142,7 @@ Set<String> llmRoutedChatSupportedConnectorTypesForModelOverride(
       'auggie.cli',
       'cursor.agent_connect_rpc',
       'amazon-q.chat',
+      kAntigravityProtocolId,
       'oneminai.chat',
     ])
       ...llmRoutedChatSupportedConnectorTypes(protocol),
@@ -127,6 +161,22 @@ String llmRoutedChatProtocolForAccountModel({
   String? apiProtocol,
   String? apiProtocolOverride,
 }) {
+  if (account.connectorType == 'antigravity') {
+    final model = account.models
+        .where((item) => item.upstreamModelId == upstreamModelId)
+        .firstOrNull;
+    final configured = apiProtocolOverride ??
+        model?.config['apiProtocolOverride'] ??
+        account.endpointConfig['apiProtocol'] ??
+        apiProtocol ??
+        apiProtocolFromLegacyEndpointType(endpointType);
+    if (configured is String &&
+        configured.isNotEmpty &&
+        configured != kAntigravityProtocolId) {
+      throw StateError('Antigravity uses its provider-native protocol.');
+    }
+    return kAntigravityProtocolId;
+  }
   if (account.connectorType == 'clova-studio') {
     return kClovaStudioProtocolId;
   }
@@ -1012,6 +1062,10 @@ class LlmRoutedChatProvider extends BaseChatProvider {
         _ => null,
       };
 
+  static bool _isGeminiGenerateContentProtocol(String protocolId) =>
+      protocolId == 'google.gemini.generate_content' ||
+      protocolId == kAntigravityProtocolId;
+
   static Set<String> _requiredCapabilities(
     List<Map<String, dynamic>> messages,
     List<Map<String, dynamic>>? tools, {
@@ -1121,7 +1175,9 @@ class LlmRoutedChatProvider extends BaseChatProvider {
             protocolId == 'cursor.agent_connect_rpc' ||
             protocolId == 'auggie.cli'
         ? 'openai.chat_completions'
-        : protocolId;
+        : protocolId == kAntigravityProtocolId
+            ? 'google.gemini.generate_content'
+            : protocolId;
     final bridge = AiGatewayProtocolBridges.forProtocol(requestProtocolId);
     if (bridge == null) {
       throw StateError('No internal protocol bridge for $protocolId.');
@@ -1368,7 +1424,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
               }
             }
             var geminiContentPartsHandled = false;
-            if (protocolId == 'google.gemini.generate_content' &&
+            if (_isGeminiGenerateContentProtocol(protocolId) &&
                 data['candidates'] is List) {
               for (final candidate
                   in (data['candidates'] as List).whereType<Map>().take(1)) {
@@ -1777,7 +1833,9 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     }
     final text = switch (protocolId) {
       'openai.responses' => _responsesText(data['output']),
-      'google.gemini.generate_content' => _geminiText(data['candidates']),
+      'google.gemini.generate_content' ||
+      kAntigravityProtocolId =>
+        _geminiText(data['candidates']),
       'google.gemini.interactions' => _interactionsText(data['outputs']),
       'ollama.chat' => (data['message'] as Map?)?['content'] as String?,
       _ => _openAiChatText(data['choices']),
@@ -1833,7 +1891,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
           .map((part) => _stringValue(part['text']) ?? '')
           .join();
     }
-    if (protocolId == 'google.gemini.generate_content') {
+    if (_isGeminiGenerateContentProtocol(protocolId)) {
       final candidates = data['candidates'];
       if (candidates is! List || candidates.isEmpty) return '';
       final content = _jsonMap(candidates.first)?['content'];
@@ -1917,7 +1975,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
         ],
       };
     }
-    if (protocolId == 'google.gemini.generate_content') {
+    if (_isGeminiGenerateContentProtocol(protocolId)) {
       final candidates = data['candidates'];
       final candidate = candidates is List && candidates.isNotEmpty
           ? _jsonMap(candidates.first)
@@ -1969,7 +2027,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
       final signature = _stringValue(thinkingBlocks.single['signature']);
       return signature == null ? const {} : {'__thinking__': signature};
     }
-    if (protocolId == 'google.gemini.generate_content') {
+    if (_isGeminiGenerateContentProtocol(protocolId)) {
       final candidates = data['candidates'];
       if (candidates is! List || candidates.isEmpty) return const {};
       final content = _jsonMap(candidates.first)?['content'];
@@ -2345,7 +2403,8 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     String protocolId,
   ) =>
       switch (protocolId) {
-        'google.gemini.generate_content' =>
+        'google.gemini.generate_content' ||
+        kAntigravityProtocolId =>
           _jsonMap(data['usageMetadata']) ?? const {},
         'google.gemini.interactions' => _jsonMap(data['usage']) ?? const {},
         'ollama.chat' => {
