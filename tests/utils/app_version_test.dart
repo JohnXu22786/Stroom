@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:archive/archive.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/utils/app_version.dart';
 
@@ -24,7 +25,7 @@ void main() {
     test('decodes zlib-compressed UTF-8 release notes', () {
       final notes = 'Stroom v0.5.2 更新内容';
       final compressed = base64Encode(
-        ZLibEncoder().convert(utf8.encode(notes)),
+        ZLibEncoder().encodeBytes(utf8.encode(notes)),
       );
 
       expect(decodeCompressedReleaseNotes(compressed), notes);
@@ -66,7 +67,7 @@ void main() {
   // --dart-define passed) they must fall back to safe empty defaults.
   test('build-info constants fall back to empty defaults without defines', () {
     expect(appReleaseTime, '');
-    expect(appReleaseNotesEncoded, '');
+    expect(appReleaseNotesLegacyEncoded, '');
     expect(appReleaseNotes, '');
     expect(appReleaseTimeFormatted, '');
   });

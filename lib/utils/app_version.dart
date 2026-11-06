@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:archive/archive.dart';
+
 /// 应用版本号（CD 构建时通过 --dart-define=APP_VERSION=... 注入，
 /// 即发布时的 release 版本号）。
 const String appVersion = String.fromEnvironment(
@@ -51,7 +53,7 @@ String decodeCompressedReleaseNotes(String encoded) {
   if (encoded.isEmpty) return '';
   try {
     final compressed = base64Decode(encoded);
-    return utf8.decode(ZLibDecoder().convert(compressed));
+    return utf8.decode(ZLibDecoder().decodeBytes(compressed));
   } catch (_) {
     return '';
   }
