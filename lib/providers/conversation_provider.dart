@@ -1,16 +1,20 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
+import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 import '../models/assistant.dart';
 import '../models/chat_message.dart';
+import '../models/tool_call.dart';
 import '../services/app_log_service.dart';
 import '../services/attachment_storage.dart';
+import '../services/storage_service.dart';
 import 'assistant_provider.dart';
 
 part 'conversation_notifier_persistence.dart';
@@ -593,6 +597,19 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
     }
     final expiredIds = expired.map((c) => c.id).toSet();
     state = state.where((c) => !expiredIds.contains(c.id)).toList();
+    try {
+      await _appendJournalBarrier({
+        'kind': 'conversationsDeleted',
+        'conversationIds': expired.map((conversation) => conversation.id).toList(),
+        'deletedAt': DateTime.now().toIso8601String(),
+      });
+    } catch (error) {
+      state = pinnedFirstStable([...expired, ...state]);
+      _syncTemporaryTimer();
+      debugPrint('Failed to record expired conversation deletion: $error');
+      return;
+    }
+    if (!mounted) return;
     if (expiredIds.contains(_ref.read(activeConversationIdProvider))) {
       _ref.read(activeConversationIdProvider.notifier).state = null;
     }

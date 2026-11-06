@@ -91,6 +91,13 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
       _markLatestAssistantMessageRead(previousActive);
     }
     state = pinnedFirstStable([conv, ...state]);
+    unawaited(_appendJournalBarrier({
+      'kind': 'conversationCreated',
+      'conversationId': conv.id,
+      'createdAt': now.toIso8601String(),
+    }).catchError((Object error) {
+      debugPrint('Failed to record conversation creation: $error');
+    }));
     if (activate) {
       _ref.read(activeConversationIdProvider.notifier).state = conv.id;
       _persistActiveId();
@@ -105,7 +112,22 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
   /// Deletes a conversation by [id]. If it was the active conversation, clears
   /// the active selection.
   Future<void> deleteConversation(String id) async {
+    final deleted = state.where((c) => c.id == id).toList();
+    if (deleted.isEmpty) return;
     state = state.where((c) => c.id != id).toList();
+    try {
+      await _appendJournalBarrier({
+        'kind': 'conversationDeleted',
+        'conversationId': id,
+        'deletedAt': DateTime.now().toIso8601String(),
+      });
+    } catch (error) {
+      state = pinnedFirstStable([...deleted, ...state]);
+      _syncTemporaryTimer();
+      debugPrint('Failed to record conversation deletion: $error');
+      return;
+    }
+    if (!mounted) return;
     if (_ref.read(activeConversationIdProvider) == id) {
       _ref.read(activeConversationIdProvider.notifier).state = null;
     }
@@ -124,6 +146,11 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
     _syncTemporaryTimer();
     bool saved;
     try {
+      await _appendJournalBarrier({
+        'kind': 'conversationDeleted',
+        'conversationId': id,
+        'deletedAt': DateTime.now().toIso8601String(),
+      });
       saved = await _persistNowChecked();
     } catch (error) {
       debugPrint('Failed to remove flow conversation: $error');
@@ -139,6 +166,14 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
           ...state.where((conversation) => conversation.id != id),
         ]);
         _syncTemporaryTimer();
+      }
+      try {
+        await _appendJournalBarrier({
+          'kind': 'conversationRestored',
+          'conversationId': id,
+        });
+      } catch (error) {
+        debugPrint('Failed to restore conversation checkpoint marker: $error');
       }
       return false;
     }
@@ -248,7 +283,22 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
   /// Deletes multiple conversations by [ids]. Also clears active if included.
   Future<void> batchDelete(List<String> ids) async {
     final idSet = ids.toSet();
+    final deleted = state.where((c) => idSet.contains(c.id)).toList();
+    if (deleted.isEmpty) return;
     state = state.where((c) => !idSet.contains(c.id)).toList();
+    try {
+      await _appendJournalBarrier({
+        'kind': 'conversationsDeleted',
+        'conversationIds': deleted.map((conversation) => conversation.id).toList(),
+        'deletedAt': DateTime.now().toIso8601String(),
+      });
+    } catch (error) {
+      state = pinnedFirstStable([...deleted, ...state]);
+      _syncTemporaryTimer();
+      debugPrint('Failed to record batch conversation deletion: $error');
+      return;
+    }
+    if (!mounted) return;
     if (idSet.contains(_ref.read(activeConversationIdProvider))) {
       _ref.read(activeConversationIdProvider.notifier).state = null;
     }
@@ -298,20 +348,61 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
   /// 延长临时对话的生命周期）。
   Future<void> updateMessages(String conversationId, List<ChatMessage> messages,
       {bool resetTemporaryCountdown = false}) async {
+    final current = state.where((c) => c.id == conversationId).firstOrNull;
+    if (current != null) {
+      final nextIds = messages.map((message) => message.id).toSet();
+      final removedIds = current.messages
+          .where((message) => !nextIds.contains(message.id))
+          .map((message) => message.id)
+          .toList();
+      if (removedIds.isNotEmpty) {
+        await _appendJournalBarrier({
+          'kind': 'messageDeleted',
+          'conversationId': conversationId,
+          'messageIds': removedIds,
+        });
+      }
+    }
+    if (!mounted) return;
     _replaceMessages(conversationId, messages,
         resetTemporaryCountdown: resetTemporaryCountdown);
     await _persistNow();
   }
 
-  /// Replaces a conversation's messages for a supersedable periodic stream
-  /// checkpoint. Consecutive checkpoints share one queued persistence task;
-  /// explicit writes remain ordering barriers in the normal persistence path.
+  /// Queues a supersedable periodic stream checkpoint journal entry.
+  /// Consecutive checkpoints share one queued persistence task; explicit
+  /// writes remain ordering barriers in the normal persistence path.
   Future<void> updateMessagesPeriodically(
-      String conversationId, List<ChatMessage> messages,
-      {bool resetTemporaryCountdown = false}) async {
-    _replaceMessages(conversationId, messages,
-        resetTemporaryCountdown: resetTemporaryCountdown);
-    await _persistStreamCheckpoint();
+      String conversationId,
+      {required Map<String, dynamic> checkpoint,
+      bool resetTemporaryCountdown = false}) async {
+    if (!state.any((conversation) => conversation.id == conversationId)) return;
+    final updatedAt = DateTime.now();
+    checkpoint['updatedAt'] = updatedAt.toIso8601String();
+    state = state.map((conversation) {
+      if (conversation.id != conversationId) return conversation;
+      conversation.updatedAt = updatedAt;
+      if (resetTemporaryCountdown && conversation.isTemporary) {
+        conversation.resetTemporaryExpiry(updatedAt);
+      }
+      return conversation;
+    }).toList();
+    final conversation = state
+        .where((conversation) => conversation.id == conversationId)
+        .firstOrNull;
+    if (conversation != null) {
+      checkpoint['conversationCreatedAt'] =
+          conversation.createdAt.toIso8601String();
+      checkpoint['isTemporary'] = conversation.isTemporary;
+      checkpoint['temporaryExpiresAt'] =
+          conversation.temporaryExpiresAt?.toIso8601String();
+      checkpoint['temporaryExpiryVersion'] =
+          conversation.temporaryExpiryVersion;
+      if (checkpoint['baseSnapshotPending'] == true) {
+        checkpoint['baseConversation'] = conversation.toMap();
+      }
+    }
+    await _persistStreamCheckpoint(checkpoint);
   }
 
   /// Confirm flow messages reached disk before sending or completing a step.

@@ -21,14 +21,11 @@ extension _ChatStreamManagerPersistExt on ChatStreamManager {
     // save has already run by now; don't overwrite it with partial data.
     if (s.persistTimer == null) return;
     if (s.cancelledByUser) return;
-    final textSections = s.textChunks;
     // 纯工具轮（无文本/推理但已有工具结果）也要持久化——并行执行时
     // 一轮的全部工具同时启动，崩溃会一次丢失所有工具卡片。
-    if (!ChatStreamManager.partialPersistHasContent(
-      textSections: textSections,
-      reasoningSections: s.reasoningSections,
-      hasAccumulatedToolCalls: s.accumulatedToolCalls.isNotEmpty,
-    )) {
+    if (!s.hasTextContent &&
+        !s.hasReasoningContent &&
+        s.accumulatedToolCalls.isEmpty) {
       return;
     }
     if (s._isPersisting) return;
@@ -40,44 +37,13 @@ extension _ChatStreamManagerPersistExt on ChatStreamManager {
       return;
     }
     try {
-      final partialHistory = List<ChatMessage>.from(s.history);
-      // 纯工具轮（无文本/推理但已有工具结果）也参与周期持久化：
-      // 工具执行中崩溃时部分工具卡片不丢失（取消路径的中断标记由
-      // finalize 补；硬崩溃场景下工具卡保持 running 状态——比整轮
-      // 丢失好，属既有崩溃恢复限制）。
-      if (ChatStreamManager.partialPersistHasContent(
-        textSections: textSections,
-        reasoningSections: s.reasoningSections,
-        hasAccumulatedToolCalls: s.accumulatedToolCalls.isNotEmpty,
-      )) {
-        final exists = partialHistory.any((m) => m.id == s.streamingMsgId);
-        if (!exists) {
-          partialHistory.add(ChatMessage(
-            role: 'assistant',
-            // The canonical text sections are persisted below; leave content
-            // empty so each periodic snapshot doesn't join the full reply.
-            content: '',
-            id: s.streamingMsgId ?? '',
-            toolCalls: s.accumulatedToolCalls.isNotEmpty
-                ? List<ToolCallData>.from(s.accumulatedToolCalls)
-                : null,
-            reasoningSections: s.reasoningSections.isNotEmpty
-                ? List<String>.from(s.reasoningSections)
-                : null,
-            textSections: textSections.any((c) => c.isNotEmpty)
-                ? List<String>.from(textSections)
-                : null,
-            toolCallRoundStarts: s.toolCallRoundStarts.isNotEmpty
-                ? List<int>.from(s.toolCallRoundStarts)
-                : (s.accumulatedToolCalls.isNotEmpty ? [0] : null),
-          ));
-        }
-      }
+      final checkpoint = s.streamCheckpointDelta();
       await ref.read(conversationsProvider.notifier).updateMessagesPeriodically(
             s.convId,
-            partialHistory,
+            checkpoint: checkpoint,
             resetTemporaryCountdown: true,
           );
+      s.markStreamCheckpointPersisted(checkpoint);
     } catch (e) {
       debugPrint('[ChatStreamManager] 定期持久化失败: $e');
     } finally {
