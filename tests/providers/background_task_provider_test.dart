@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:ui' show Locale;
 
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter/services.dart';
@@ -9,6 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/models/ocr_batch_execution.dart';
 import 'package:stroom/pages/ocr/ocr_retry_snapshot.dart';
 import 'package:stroom/providers/background_task_provider.dart';
@@ -250,6 +252,99 @@ void main() {
       expect(notifier.state[0].type, BackgroundTaskType.audioSeparation);
       expect(notifier.state[1].type, BackgroundTaskType.asr);
       expect(notifier.state[2].type, BackgroundTaskType.ocr);
+    });
+
+    test('background task labels refresh with the selected locale', () async {
+      var strings = lookupAppLocalizations(const Locale('zh', 'CN'));
+      final notifier = BackgroundTaskNotifier(
+        localizationsResolver: () => strings,
+      );
+      final id = notifier.addTask(
+        type: BackgroundTaskType.asr,
+        title: 'User supplied title',
+      );
+      notifier.updateStep(
+        id,
+        2,
+        running: true,
+        label: 'Transcribing (chunk 2/3)',
+      );
+      notifier.setResult(id, 'User transcript', isComplete: false);
+
+      expect(notifier.taskById(id)!.steps.first.label, '连接服务器');
+      strings = lookupAppLocalizations(const Locale('en', 'US'));
+      notifier.refreshLocalizations();
+
+      final task = notifier.taskById(id)!;
+      expect(task.steps.first.label, 'Connecting to server');
+      expect(task.steps[2].label, 'Transcribing (chunk 2/3)');
+      expect(task.id, id);
+      expect(task.title, 'User supplied title');
+      expect(task.result, 'User transcript');
+      expect(task.resultIsComplete, isFalse);
+
+      await notifier.pendingPersistence;
+      notifier.dispose();
+    });
+
+    test('stored ASR and OCR error wrappers localize without changing details',
+        () async {
+      var strings = lookupAppLocalizations(const Locale('zh', 'CN'));
+      final notifier = BackgroundTaskNotifier(
+        localizationsResolver: () => strings,
+      );
+      final asrId = notifier.addTask(
+        type: BackgroundTaskType.asr,
+        title: 'ASR',
+      );
+      notifier.failTask(asrId, error: '音频转写失败: HTTP 503 raw detail');
+      final ocrId = notifier.addTask(
+        type: BackgroundTaskType.ocr,
+        title: 'OCR',
+      );
+      notifier.failTask(
+        ocrId,
+        error: 'OCR结果不完整: Exception: OCR 返回了不完整结果（finish_reason=length）',
+      );
+
+      strings = lookupAppLocalizations(const Locale('en', 'US'));
+      notifier.refreshLocalizations();
+
+      expect(
+        notifier.taskById(asrId)!.error,
+        'Speech transcription failed: HTTP 503 raw detail',
+      );
+      expect(
+        notifier.taskById(ocrId)!.error,
+        'OCR result is incomplete: Exception: OCR returned an incomplete result (finish_reason=length)',
+      );
+
+      await notifier.pendingPersistence;
+      notifier.dispose();
+    });
+
+    test('localized OCR errors keep a localized hidden-details message',
+        () async {
+      final strings = lookupAppLocalizations(const Locale('en', 'US'));
+      final notifier = BackgroundTaskNotifier(
+        localizationsResolver: () => strings,
+      );
+      final id = notifier.addTask(
+        type: BackgroundTaskType.ocr,
+        title: 'OCR',
+      );
+      notifier.failTask(
+        id,
+        error: 'Saving OCR results failed: api_key=sk-proj-invalidcredential',
+      );
+
+      expect(
+        notifier.taskById(id)!.error,
+        'Saving OCR results failed: OCR error details were hidden',
+      );
+
+      await notifier.pendingPersistence;
+      notifier.dispose();
     });
 
     test(

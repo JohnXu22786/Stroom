@@ -2,9 +2,11 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:ui' show Locale;
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/models/tts_models.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/providers/background_task_provider.dart';
@@ -356,7 +358,19 @@ void main() {
   test('start is idempotent and snapshots each request chain', () async {
     final adapter = _ControlledAdapter(holdFirstResponse: true);
     final input = audio('captured.wav');
-    final run = scheduler(adapter, audios: [input]);
+    final englishStrings = lookupAppLocalizations(const Locale('en', 'US'));
+    final englishNotifier = BackgroundTaskNotifier(
+      localizationsResolver: () => englishStrings,
+    );
+    addTearDown(() async {
+      englishNotifier.dispose();
+      await englishNotifier.pendingPersistence;
+    });
+    final run = scheduler(
+      adapter,
+      audios: [input],
+      taskNotifier: englishNotifier,
+    );
     input.bytes[0] = 99;
     expect(run.audios.single.bytes.first, 1);
 
@@ -364,19 +378,25 @@ void main() {
     final second = run.start();
     await adapter.requestStarted.future.timeout(const Duration(seconds: 5));
     expect(run.taskIds, hasLength(1));
-    expect(notifier.state.single.title, 'ASR_captured.wav');
-    expect(notifier.state.single.status, TaskStatus.running);
-    expect(notifier.state.single.steps[2].status, BgStepStatus.running);
-    expect(notifier.state.single.steps[2].label, startsWith('转写中'));
-    expect(notifier.state.single.steps[2].label, contains('已完成片段'));
-    expect(notifier.state.single.steps[2].label, isNot(contains('%')));
+    expect(englishNotifier.state.single.title, 'ASR_captured.wav');
+    expect(englishNotifier.state.single.status, TaskStatus.running);
+    expect(englishNotifier.state.single.steps[2].status, BgStepStatus.running);
+    expect(
+      englishNotifier.state.single.steps[2].label,
+      startsWith(englishStrings.bgTaskAsrTranscribing('')),
+    );
+    expect(
+      englishNotifier.state.single.steps[2].label,
+      startsWith(englishStrings.bgTaskAsrCompletedChunks('1', '2', '')),
+    );
+    expect(englishNotifier.state.single.steps[2].label, isNot(contains('%')));
 
     adapter.releaseResponse.complete();
     await Future.wait([first, second]);
 
     expect(adapter.calls, hasLength(1));
-    expect(notifier.state.single.status, TaskStatus.completed);
-    expect(notifier.state.single.resultFolder, 'captured-folder');
+    expect(englishNotifier.state.single.status, TaskStatus.completed);
+    expect(englishNotifier.state.single.resultFolder, 'captured-folder');
     expect((await TextManifest.loadRecords()).single.folder, 'captured-folder');
     expect(retryFiles.files, isEmpty);
   });

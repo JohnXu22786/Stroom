@@ -4955,5 +4955,277 @@
         "type": "int"
       }
     }
-  }
+  },
+  "bgTaskCancelled": "已取消",
+  "bgTaskAsrError": "音频转写失败：{details}",
+  "@bgTaskAsrError": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "bgTaskAsrSaveError": "音频转写结果保存失败：{details}",
+  "@bgTaskAsrSaveError": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "bgTaskOcrError": "OCR识别失败：{details}",
+  "@bgTaskOcrError": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "bgTaskOcrSaveError": "OCR结果保存失败：{details}",
+  "@bgTaskOcrSaveError": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "bgTaskOcrIncompleteError": "OCR结果不完整：{details}",
+  "@bgTaskOcrIncompleteError": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "bgTaskOcrIncompleteFallback": "OCR 部分页面未完成",
+  "bgTaskProgressMetrics": " · 阶段 {phaseElapsedMs}ms · 请求 {completedRequests} · 已完成片段 {completedChunks}/{chunkCount}",
+  "@bgTaskProgressMetrics": {
+    "placeholders": {
+      "phaseElapsedMs": {
+        "type": "String"
+      },
+      "completedRequests": {
+        "type": "String"
+      },
+      "completedChunks": {
+        "type": "String"
+      },
+      "chunkCount": {
+        "type": "String"
+      }
+    }
+  },
+  "bgTaskAsrUploadProgress": "上传音频{chunk} {percent}% · {bytes} bytes{metrics}",
+  "@bgTaskAsrUploadProgress": {
+    "placeholders": {
+      "chunk": {
+        "type": "String"
+      },
+      "percent": {
+        "type": "String"
+      },
+      "bytes": {
+        "type": "String"
+      },
+      "metrics": {
+        "type": "String"
+      }
+    }
+  },
+  "bgTaskAsrUploadChunk": "上传音频{chunk}{metrics}",
+  "@bgTaskAsrUploadChunk": {
+    "placeholders": {
+      "chunk": {
+        "type": "String"
+      },
+      "metrics": {
+        "type": "String"
+      }
+    }
+  },
+  "bgTaskAsrChunk": "（片段 {index}/{count}）",
+  "@bgTaskAsrChunk": {
+    "placeholders": {
+      "index": {
+        "type": "String"
+      },
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "bgTaskAsrTranscribing": "转写中{metrics}",
+  "@bgTaskAsrTranscribing": {
+    "placeholders": {
+      "metrics": {
+        "type": "String"
+      }
+    }
+  },
+  "bgTaskAsrTranscribingChunk": "转写中（片段 {index}/{count}）{metrics}",
+  "@bgTaskAsrTranscribingChunk": {
+    "placeholders": {
+      "index": {
+        "type": "String"
+      },
+      "count": {
+        "type": "String"
+      },
+      "metrics": {
+        "type": "String"
+      }
+    }
+  },
+  "bgTaskAsrReceivingChunk": "转写中（接收片段 {index}/{count}）{metrics}",
+  "@bgTaskAsrReceivingChunk": {
+    "placeholders": {
+      "index": {
+        "type": "String"
+      },
+      "count": {
+        "type": "String"
+      },
+      "metrics": {
+        "type": "String"
+      }
+    }
+  },
+  "bgTaskAsrReceiveProgress": "接收结果 {percent}%{metrics}",
+  "@bgTaskAsrReceiveProgress": {
+    "placeholders": {
+      "percent": {
+        "type": "String"
+      },
+      "metrics": {
+        "type": "String"
+      }
+    }
+  },
+  "bgTaskAsrReceive": "接收结果",
+  "bgTaskAsrCompletedChunks": "转写中（已完成片段 {index}/{count}）{metrics}",
+  "@bgTaskAsrCompletedChunks": {
+    "placeholders": {
+      "index": {
+        "type": "String"
+      },
+      "count": {
+        "type": "String"
+      },
+      "metrics": {
+        "type": "String"
+      }
+    }
+  },
+  "bgTaskAsrChunkReturned": "转写中（片段 {index}/{count} 已返回）{metrics}",
+  "@bgTaskAsrChunkReturned": {
+    "placeholders": {
+      "index": {
+        "type": "String"
+      },
+      "count": {
+        "type": "String"
+      },
+      "metrics": {
+        "type": "String"
+      }
+    }
+  },
+  "bgTaskOcrUploadPageProgress": "第 {index}/{total} 张图片 {percent}%",
+  "@bgTaskOcrUploadPageProgress": {
+    "placeholders": {
+      "index": {
+        "type": "String"
+      },
+      "total": {
+        "type": "String"
+      },
+      "percent": {
+        "type": "String"
+      }
+    }
+  },
+  "bgTaskOcrUploadPagesProgress": "上传{details}",
+  "@bgTaskOcrUploadPagesProgress": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "bgTaskOcrUploadProgress": "上传图片 {percent}%",
+  "@bgTaskOcrUploadProgress": {
+    "placeholders": {
+      "percent": {
+        "type": "String"
+      }
+    }
+  },
+  "bgTaskAsrCheckpointUncertain": "ASR 分段恢复记录写入失败；当前请求结果可能不确定，任务已停止：{details}",
+  "@bgTaskAsrCheckpointUncertain": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "bgTaskAsrCheckpointNotSent": "ASR 分段恢复记录写入失败；该片段尚未发送，可修复本地存储后重试：{details}",
+  "@bgTaskAsrCheckpointNotSent": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "bgTaskAsrCheckpointCancelled": "ASR 取消前的分段状态写入失败；该片段仍按结果不确定处理：{details}",
+  "@bgTaskAsrCheckpointCancelled": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "bgTaskAsrRetryAudioSaveError": "无法保存 ASR 重试音频，任务未发送：{details}",
+  "@bgTaskAsrRetryAudioSaveError": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "bgTaskAsrBatchAudioSaveError": "批次中的其他音频无法保存，已取消发送",
+  "bgTaskOcrResultIncomplete": "OCR 返回了不完整结果（finish_reason={finishReason}）",
+  "@bgTaskOcrResultIncomplete": {
+    "placeholders": {
+      "finishReason": {
+        "type": "String"
+      }
+    }
+  },
+  "bgTaskOcrPagesIncomplete": "部分图片 OCR 未完成：{details}",
+  "@bgTaskOcrPagesIncomplete": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "bgTaskOcrPageIncomplete": "第 {index} 张图片结果不完整",
+  "@bgTaskOcrPageIncomplete": {
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
+  },
+  "bgTaskOcrPageFailed": "第 {index} 张图片识别失败",
+  "@bgTaskOcrPageFailed": {
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
+  },
+  "bgTaskOcrPageFailureSeparator": "；",
+  "bgTaskInterruptedOnRestart": "应用重启，已中断",
+  "bgTaskOcrErrorDetailsHidden": "OCR 错误详情已隐藏"
 }

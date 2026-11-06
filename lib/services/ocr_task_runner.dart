@@ -128,7 +128,7 @@ class OcrTaskRunner {
   }
 
   void cancel() {
-    _cancelToken.cancel('已取消');
+    _cancelToken.cancel(notifier.localizations.bgTaskCancelled);
     for (final service in _activeServices.toList()) {
       service.close(force: true);
     }
@@ -218,11 +218,19 @@ class OcrTaskRunner {
     if (uploadingPages.isNotEmpty) {
       final progress = uploadingPages.map((entry) {
         final percent = _perImageUploadPercent[entry.key] ?? 0;
-        return '第 ${entry.key + 1}/${_images.length} 张图片 $percent%';
-      }).join('，');
-      steps[1] = steps[1].copyWith(label: '上传' + progress);
+        return notifier.localizations.bgTaskOcrUploadPageProgress(
+          (entry.key + 1).toString(),
+          _images.length.toString(),
+          percent.toString(),
+        );
+      }).join(notifier.localizations.localeName.startsWith('zh') ? '，' : ', ');
+      steps[1] = steps[1].copyWith(
+        label: notifier.localizations.bgTaskOcrUploadPagesProgress(progress),
+      );
     } else {
-      steps[1] = steps[1].copyWith(label: '上传图片');
+      steps[1] = steps[1].copyWith(
+        label: notifier.localizations.bgStepUploadImage,
+      );
     }
     notifier.setSteps(taskId, steps);
   }
@@ -244,7 +252,12 @@ class OcrTaskRunner {
     if (_stage != 1) return;
     if (percent == _uploadPercent) return;
     _uploadPercent = percent;
-    notifier.updateStep(taskId, 1, running: true, label: '上传图片 $percent%');
+    notifier.updateStep(
+      taskId,
+      1,
+      running: true,
+      label: notifier.localizations.bgTaskOcrUploadProgress(percent.toString()),
+    );
   }
 
   Future<void> _run() async {
@@ -314,9 +327,9 @@ class OcrTaskRunner {
         taskSpecificFailure = incompleteMessage;
         throw Exception(
           incompleteMessage ??
-              'OCR 返回了不完整结果（finish_reason=' +
-                  (result.finishReason ?? 'unknown') +
-                  '）',
+              notifier.localizations.bgTaskOcrResultIncomplete(
+                result.finishReason ?? 'unknown',
+              ),
         );
       }
       final service = _diagnosticService ?? _service;
@@ -343,7 +356,7 @@ class OcrTaskRunner {
                     taskSpecificFailure,
                     excludedValues: [config.apiKey],
                   ) ??
-                  'OCR 部分页面未完成';
+                  notifier.localizations.bgTaskOcrIncompleteFallback;
           for (var i = 0; i < task.steps.length; i++) {
             if (!_ownsTaskGeneration) break;
             if (task.steps[i].running) {
@@ -357,21 +370,16 @@ class OcrTaskRunner {
               _diagnosticService ??
               _service;
           final result = task.result;
+          final strings = notifier.localizations;
           final errorMessage = result == null
-              ? 'OCR识别失败: $safeError'
+              ? strings.bgTaskOcrError(safeError)
               : task.resultIsComplete
-                  ? 'OCR结果保存失败: $safeError'
-                  : 'OCR结果不完整: $safeError';
-          final safeErrorMessage =
-              OcrDiagnosticSnapshot.sanitizeStoredTaskError(
-                    errorMessage,
-                    excludedValues: [config.apiKey],
-                  ) ??
-                  '';
+                  ? strings.bgTaskOcrSaveError(safeError)
+                  : strings.bgTaskOcrIncompleteError(safeError);
           if (!_ownsTaskGeneration) return;
           notifier.failTask(
             taskId,
-            error: safeErrorMessage,
+            error: errorMessage,
             rawRequest: service?.diagnosticRequest,
             rawResponse: service?.diagnosticResponse(error: error),
           );
@@ -429,7 +437,7 @@ class OcrTaskRunner {
           outcomes[index] = OcrPageOutcome(
             imageIndex: index,
             status: OcrPageOutcomeStatus.cancelled,
-            error: '已取消',
+            error: notifier.localizations.bgTaskCancelled,
           );
         }
       }
@@ -484,9 +492,9 @@ class OcrTaskRunner {
             text: result.text,
             error: result.isComplete
                 ? null
-                : 'OCR 返回了不完整结果（finish_reason=' +
-                    (result.finishReason ?? 'unknown') +
-                    '）',
+                : notifier.localizations.bgTaskOcrResultIncomplete(
+                    result.finishReason ?? 'unknown',
+                  ),
           );
         } catch (error) {
           if (_cancelToken.isCancelled) {
@@ -560,14 +568,15 @@ class OcrTaskRunner {
       }).join('\n\n');
 
   String _pageFailureMessage(List<OcrPageOutcome> outcomes) {
+    final strings = notifier.localizations;
     final failures = outcomes
         .where((outcome) => outcome.status != OcrPageOutcomeStatus.succeeded)
         .map((outcome) {
-      final label = '第 ' + (outcome.imageIndex + 1).toString() + ' 张图片';
-      final state =
-          outcome.status == OcrPageOutcomeStatus.incomplete ? '结果不完整' : '识别失败';
-      return label + state;
-    }).join('；');
-    return '部分图片 OCR 未完成：' + failures;
+      final index = (outcome.imageIndex + 1).toString();
+      return outcome.status == OcrPageOutcomeStatus.incomplete
+          ? strings.bgTaskOcrPageIncomplete(index)
+          : strings.bgTaskOcrPageFailed(index);
+    }).join(strings.bgTaskOcrPageFailureSeparator);
+    return strings.bgTaskOcrPagesIncomplete(failures);
   }
 }

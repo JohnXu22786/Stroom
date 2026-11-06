@@ -3,12 +3,14 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
+import 'dart:ui' show Locale;
 
 import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:uuid/uuid.dart';
 import 'package:path/path.dart' as p;
 
+import '../l10n/app_localizations.dart';
 import '../models/ocr_batch_execution.dart';
 import '../services/storage_service.dart';
 import '../services/notification_service.dart';
@@ -18,9 +20,13 @@ import '../services/ocr_retry_storage.dart';
 import '../pages/ocr/ocr_retry_snapshot.dart';
 import '../utils/atomic_file.dart';
 import '../utils/ocr_diagnostics.dart';
+import 'locale_provider.dart';
 import 'task_provider.dart';
 
 const _unrestoredTaskRecordMarker = {'_unrestoredTaskRecord': true};
+
+bool _isBackgroundTaskCancellationError(String? error) =>
+    error == '已取消' || error == 'Canceled';
 
 Map<String, dynamic> _unrestoredTaskRecord({
   required bool retryAudioOwnershipKnown,
@@ -315,6 +321,40 @@ enum BackgroundTaskType {
     }
   }
 
+  String localizedLabel(AppLocalizations strings) => switch (this) {
+        BackgroundTaskType.ocr => strings.unifiedTaskTypeOcr,
+        BackgroundTaskType.asr => strings.unifiedTaskTypeAsr,
+        BackgroundTaskType.audioSeparation =>
+          strings.unifiedTaskTypeAudioSeparation,
+        BackgroundTaskType.chat => strings.unifiedTaskTypeChat,
+      };
+
+  List<String> localizedStepLabels(AppLocalizations strings) => switch (this) {
+        BackgroundTaskType.ocr => [
+            strings.bgStepConnectServer,
+            strings.bgStepUploadImage,
+            strings.bgStepWaitRecognition,
+            strings.bgStepParseResult,
+            strings.bgStepSaveFile,
+          ],
+        BackgroundTaskType.asr => [
+            strings.bgStepConnectServer,
+            strings.bgStepUploadAudio,
+            strings.bgStepTranscribing,
+            strings.bgStepReceiveResult,
+            strings.bgStepSaveFile,
+          ],
+        BackgroundTaskType.audioSeparation => [
+            strings.bgStepSeparateAudio,
+            strings.bgStepSaveToFile,
+          ],
+        BackgroundTaskType.chat => [
+            strings.bgStepSendRequest,
+            strings.bgStepWaitReply,
+            strings.bgStepReceiveResult,
+          ],
+      };
+
   /// Steps appropriate for each task type (used for step chain display).
   List<String> get stepLabels {
     switch (this) {
@@ -340,6 +380,321 @@ enum BackgroundTaskType {
 
 /// Simplified step status enum (without progress quantification).
 enum BgStepStatus { pending, running, completed, failed, skipped }
+
+String _localizeStoredBackgroundStep(String label, AppLocalizations strings) {
+  final baseLabel = switch (label) {
+    '连接服务器' || 'Connecting to server' => strings.bgStepConnectServer,
+    '上传图片' || 'Uploading images' => strings.bgStepUploadImage,
+    '等待识别结果' || 'Waiting for recognition' => strings.bgStepWaitRecognition,
+    '解析结果' || 'Parsing result' => strings.bgStepParseResult,
+    '保存文件' || 'Saving file' => strings.bgStepSaveFile,
+    '上传音频' || 'Uploading audio' => strings.bgStepUploadAudio,
+    '转写中' || 'Transcribing' => strings.bgStepTranscribing,
+    '接收结果' || 'Receiving result' => strings.bgStepReceiveResult,
+    '分离音频' || 'Separating audio' => strings.bgStepSeparateAudio,
+    '保存到文件' || 'Saving to file' => strings.bgStepSaveToFile,
+    '发送请求' || 'Sending request' => strings.bgStepSendRequest,
+    '等待回复' || 'Waiting for reply' => strings.bgStepWaitReply,
+    _ => null,
+  };
+  if (baseLabel != null) return baseLabel;
+
+  final ocrPercent = RegExp(r'^上传图片 (\d+)%$').firstMatch(label);
+  if (ocrPercent != null) {
+    return strings.bgTaskOcrUploadProgress(ocrPercent.group(1)!);
+  }
+  final englishOcrPercent =
+      RegExp(r'^Uploading images (\d+)%$').firstMatch(label);
+  if (englishOcrPercent != null) {
+    return strings.bgTaskOcrUploadProgress(englishOcrPercent.group(1)!);
+  }
+  final ocrPages = RegExp(
+    r'第 (\d+)/(\d+) 张图片 (\d+)%|Image (\d+)/(\d+) (\d+)%',
+  ).allMatches(label);
+  if (ocrPages.isNotEmpty) {
+    final details = ocrPages
+        .map((match) => strings.bgTaskOcrUploadPageProgress(
+              match.group(1) ?? match.group(4)!,
+              match.group(2) ?? match.group(5)!,
+              match.group(3) ?? match.group(6)!,
+            ))
+        .join(strings.localeName.startsWith('zh') ? '，' : ', ');
+    return strings.bgTaskOcrUploadPagesProgress(details);
+  }
+
+  final metricMatch = RegExp(
+    r' · 阶段 (\d+)ms · 请求 (\d+) · 已完成片段 (\d+)/(\d+)$|'
+    r' · phase (\d+) ms · (\d+) requests · (\d+)/(\d+) chunks completed$',
+  ).firstMatch(label);
+  String metricValue(int localizedIndex, int englishIndex) =>
+      metricMatch?.group(localizedIndex) ?? metricMatch!.group(englishIndex)!;
+  final metrics = metricMatch == null
+      ? ''
+      : strings.bgTaskProgressMetrics(
+          metricValue(1, 5),
+          metricValue(2, 6),
+          metricValue(3, 7),
+          metricValue(4, 8),
+        );
+  final core =
+      metricMatch == null ? label : label.substring(0, metricMatch.start);
+  final upload = RegExp(
+    r'^上传音频(?:（片段 (\d+)/(\d+)）)?(?: (\d+)% · (\d+) bytes)?$|'
+    r'^Uploading audio(?: \(chunk (\d+)/(\d+)\))?(?: (\d+)% · (\d+) bytes)?$',
+  ).firstMatch(core);
+  if (upload != null) {
+    final chunkIndex = upload.group(1) ?? upload.group(5);
+    final chunkCount = upload.group(2) ?? upload.group(6);
+    final percent = upload.group(3) ?? upload.group(7);
+    final bytes = upload.group(4) ?? upload.group(8);
+    final chunk = chunkIndex == null
+        ? ''
+        : strings.bgTaskAsrChunk(chunkIndex, chunkCount!);
+    if (percent == null) {
+      return strings.bgTaskAsrUploadChunk(chunk, metrics);
+    }
+    return strings.bgTaskAsrUploadProgress(
+      chunk,
+      percent,
+      bytes!,
+      metrics,
+    );
+  }
+  final transcribing = RegExp(
+    r'^转写中(?:（片段 (\d+)/(\d+)）)?$|'
+    r'^Transcribing(?: \(chunk (\d+)/(\d+)\))?$',
+  ).firstMatch(core);
+  if (transcribing != null) {
+    final chunkIndex = transcribing.group(1) ?? transcribing.group(3);
+    final chunkCount = transcribing.group(2) ?? transcribing.group(4);
+    if (chunkIndex == null) {
+      return strings.bgTaskAsrTranscribing(metrics);
+    }
+    return strings.bgTaskAsrTranscribingChunk(
+      chunkIndex,
+      chunkCount!,
+      metrics,
+    );
+  }
+  final receivingChunk = RegExp(r'^转写中（接收片段 (\d+)/(\d+)）$|'
+          r'^Transcribing \(receiving chunk (\d+)/(\d+)\)$')
+      .firstMatch(core);
+  if (receivingChunk != null) {
+    return strings.bgTaskAsrReceivingChunk(
+      receivingChunk.group(1) ?? receivingChunk.group(3)!,
+      receivingChunk.group(2) ?? receivingChunk.group(4)!,
+      metrics,
+    );
+  }
+  final completedChunks = RegExp(r'^转写中（已完成片段 (\d+)/(\d+)）$|'
+          r'^Transcribing \((\d+)/(\d+) chunks completed\)$')
+      .firstMatch(core);
+  if (completedChunks != null) {
+    return strings.bgTaskAsrCompletedChunks(
+      completedChunks.group(1) ?? completedChunks.group(3)!,
+      completedChunks.group(2) ?? completedChunks.group(4)!,
+      metrics,
+    );
+  }
+  final returnedChunk = RegExp(r'^转写中（片段 (\d+)/(\d+) 已返回）$|'
+          r'^Transcribing \(chunk (\d+)/(\d+) returned\)$')
+      .firstMatch(core);
+  if (returnedChunk != null) {
+    return strings.bgTaskAsrChunkReturned(
+      returnedChunk.group(1) ?? returnedChunk.group(3)!,
+      returnedChunk.group(2) ?? returnedChunk.group(4)!,
+      metrics,
+    );
+  }
+  final received = RegExp(r'^接收结果(?: (\d+)%)?$|^Receiving result(?: (\d+)%)?$')
+      .firstMatch(core);
+  if (received != null) {
+    final percent = received.group(1) ?? received.group(2);
+    return percent == null
+        ? '${strings.bgTaskAsrReceive}$metrics'
+        : strings.bgTaskAsrReceiveProgress(percent, metrics);
+  }
+  return label;
+}
+
+String? _localizeStoredBackgroundError(
+  String? error,
+  AppLocalizations strings,
+) {
+  if (error == null) return null;
+  if (error == '已取消' || error == 'Canceled') return strings.bgTaskCancelled;
+  if (error == '应用重启，已中断' || error == 'Interrupted when the app restarted') {
+    return strings.bgTaskInterruptedOnRestart;
+  }
+  if (error == '批次中的其他音频无法保存，已取消发送' ||
+      error == 'Another audio file could not be saved; sending was canceled') {
+    return strings.bgTaskAsrBatchAudioSaveError;
+  }
+  for (final wrapper in ['Bad state: ', 'Exception: ']) {
+    if (!error.startsWith(wrapper)) continue;
+    final nested = _localizeStoredBackgroundError(
+      error.substring(wrapper.length),
+      strings,
+    );
+    if (nested != error.substring(wrapper.length)) return '$wrapper$nested';
+  }
+  final incompleteDetail = _localizeStoredOcrIncompleteDetail(error, strings);
+  if (incompleteDetail != error) return incompleteDetail;
+  for (final (prefix, localize) in <(String, String Function(String))>[
+    for (final prefix in [
+      '音频转写失败: ',
+      '音频转写失败：',
+      'Speech transcription failed: ',
+    ])
+      (prefix, strings.bgTaskAsrError),
+    for (final prefix in [
+      '音频转写结果保存失败: ',
+      '音频转写结果保存失败：',
+      'Saving speech transcription failed: ',
+    ])
+      (prefix, strings.bgTaskAsrSaveError),
+    for (final prefix in ['OCR识别失败: ', 'OCR识别失败：', 'OCR failed: '])
+      (prefix, strings.bgTaskOcrError),
+    for (final prefix in [
+      'OCR结果保存失败: ',
+      'OCR结果保存失败：',
+      'Saving OCR results failed: ',
+    ])
+      (prefix, strings.bgTaskOcrSaveError),
+    for (final prefix in [
+      '无法保存 ASR 重试音频，任务未发送: ',
+      '无法保存 ASR 重试音频，任务未发送：',
+      'Could not save ASR retry audio; the task was not sent: ',
+    ])
+      (prefix, strings.bgTaskAsrRetryAudioSaveError),
+    for (final prefix in [
+      'ASR 分段恢复记录写入失败；当前请求结果可能不确定，任务已停止: ',
+      'ASR 分段恢复记录写入失败；当前请求结果可能不确定，任务已停止：',
+      'ASR recovery checkpoint could not be saved; the request outcome is uncertain and the task was stopped: ',
+    ])
+      (prefix, strings.bgTaskAsrCheckpointUncertain),
+    for (final prefix in [
+      'ASR 分段恢复记录写入失败；该片段尚未发送，可修复本地存储后重试: ',
+      'ASR 分段恢复记录写入失败；该片段尚未发送，可修复本地存储后重试：',
+      'ASR recovery checkpoint could not be saved; this chunk was not sent and can be retried after fixing local storage: ',
+    ])
+      (prefix, strings.bgTaskAsrCheckpointNotSent),
+    for (final prefix in [
+      'ASR 取消前的分段状态写入失败；该片段仍按结果不确定处理: ',
+      'ASR 取消前的分段状态写入失败；该片段仍按结果不确定处理：',
+      'ASR chunk state could not be saved before cancellation; this chunk outcome remains uncertain: ',
+    ])
+      (prefix, strings.bgTaskAsrCheckpointCancelled),
+  ]) {
+    if (error.startsWith(prefix)) {
+      final detail = error.substring(prefix.length);
+      return localize(
+          _localizeStoredBackgroundError(detail, strings) ?? detail);
+    }
+  }
+  for (final prefix in [
+    'OCR结果不完整: ',
+    'OCR结果不完整：',
+    'OCR result is incomplete: ',
+  ]) {
+    if (!error.startsWith(prefix)) continue;
+    final details = _localizeStoredOcrIncompleteDetail(
+      error.substring(prefix.length),
+      strings,
+    );
+    return strings.bgTaskOcrIncompleteError(details);
+  }
+  return error;
+}
+
+String _localizeStoredOcrIncompleteDetail(
+  String detail,
+  AppLocalizations strings,
+) {
+  final summary = _localizeStoredOcrPageFailureSummary(detail, strings);
+  if (summary != null) return summary;
+  const exceptionPrefix = 'Exception: ';
+  if (detail.startsWith(exceptionPrefix)) {
+    final nested = _localizeStoredOcrIncompleteDetail(
+      detail.substring(exceptionPrefix.length),
+      strings,
+    );
+    if (nested != detail.substring(exceptionPrefix.length)) {
+      return '$exceptionPrefix$nested';
+    }
+  }
+  for (final prefix in [
+    'OCR 返回了不完整结果（finish_reason=',
+    'OCR returned an incomplete result (finish_reason=',
+  ]) {
+    if (!detail.startsWith(prefix)) continue;
+    final closing = prefix.startsWith('OCR 返回') ? '）' : ')';
+    if (!detail.endsWith(closing)) return detail;
+    final finishReason = detail.substring(prefix.length, detail.length - 1);
+    return strings.bgTaskOcrResultIncomplete(finishReason);
+  }
+  return detail;
+}
+
+String? _localizeStoredOcrPageFailureSummary(
+  String error,
+  AppLocalizations strings,
+) {
+  for (final prefix in [
+    '部分图片 OCR 未完成：',
+    'Some images were not fully recognized: ',
+  ]) {
+    if (!error.startsWith(prefix)) continue;
+    final details = error.substring(prefix.length);
+    final pageFailures = RegExp(
+      r'第 (\d+) 张图片(结果不完整|识别失败)|'
+      r'Image (\d+): (incomplete result|recognition failed)',
+    );
+    final matches = pageFailures.allMatches(details).toList();
+    final unmatched = details
+        .replaceAll(pageFailures, '')
+        .replaceAll(RegExp(r'[；，;, ]+'), '');
+    if (matches.isEmpty || unmatched.isNotEmpty) return error;
+    final localizedDetails = matches.map((match) {
+      final index = match.group(1) ?? match.group(3)!;
+      final incomplete =
+          match.group(2) == '结果不完整' || match.group(4) == 'incomplete result';
+      return incomplete
+          ? strings.bgTaskOcrPageIncomplete(index)
+          : strings.bgTaskOcrPageFailed(index);
+    }).join(strings.bgTaskOcrPageFailureSeparator);
+    return strings.bgTaskOcrPagesIncomplete(localizedDetails);
+  }
+  return null;
+}
+
+BackgroundTask _localizeRestoredBackgroundTask(
+  BackgroundTask task,
+  AppLocalizations strings,
+) {
+  final error = _localizeStoredBackgroundError(task.error, strings);
+  var changed = error != task.error;
+  final steps = task.steps.map((step) {
+    final label = _localizeStoredBackgroundStep(step.label, strings);
+    final stepError = _localizeStoredBackgroundError(step.error, strings);
+    if (label != step.label || stepError != step.error) changed = true;
+    return step.copyWith(label: label, error: stepError);
+  }).toList(growable: false);
+  final outcomes = task.ocrPageOutcomes.map((outcome) {
+    final outcomeError = _localizeStoredBackgroundError(outcome.error, strings);
+    if (outcomeError != outcome.error) changed = true;
+    return OcrPageOutcome(
+      imageIndex: outcome.imageIndex,
+      status: outcome.status,
+      text: outcome.text,
+      error: outcomeError,
+    );
+  }).toList(growable: false);
+  if (!changed) {
+    return task;
+  }
+  return task.copyWith(error: error, steps: steps, ocrPageOutcomes: outcomes);
+}
 
 /// A single step in a background task's step chain.
 /// No progress bar — just shows status: pending, running, completed, failed, or skipped.
@@ -493,6 +848,27 @@ String? _sanitizeOcrTaskError(
     ..._legacyOcrCredentialValues(rawRequest),
     ...additionalCredentialValues,
   }.toList();
+  if (error != null) {
+    for (final locale in [const Locale('en', 'US'), const Locale('zh', 'CN')]) {
+      final strings = lookupAppLocalizations(locale);
+      for (final prefix in [
+        strings.bgTaskOcrError(''),
+        strings.bgTaskOcrSaveError(''),
+        strings.bgTaskOcrIncompleteError(''),
+      ]) {
+        if (!error.startsWith(prefix)) continue;
+        final details = error.substring(prefix.length);
+        final safeDetails =
+            _legacyOcrTextContainsCredential(details, credentialValues)
+                ? strings.bgTaskOcrErrorDetailsHidden
+                : OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+                    details,
+                    excludedValues: credentialValues,
+                  );
+        return '$prefix${safeDetails ?? ''}';
+      }
+    }
+  }
   if (error != null &&
       _legacyOcrTextContainsMaskedCredential(error, credentialValues)) {
     return 'OCR 错误详情已隐藏';
@@ -3990,7 +4366,15 @@ class BackgroundTask {
 
 final backgroundTasksProvider =
     StateNotifierProvider<BackgroundTaskNotifier, List<BackgroundTask>>(
-  (ref) => BackgroundTaskNotifier(),
+  (ref) {
+    final notifier = BackgroundTaskNotifier(
+      localizationsResolver: () => appLocalizationsForLocale(
+        ref.read(localeProvider),
+      ),
+    );
+    ref.listen(localeProvider, (_, _) => notifier.refreshLocalizations());
+    return notifier;
+  },
 );
 
 class _TaskCancellationRegistration {
@@ -4007,6 +4391,26 @@ class _TaskCleanupRegistration {
 }
 
 class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
+  BackgroundTaskNotifier({AppLocalizations Function()? localizationsResolver})
+      : _localizationsResolver = localizationsResolver ??
+            (() => appLocalizationsForLocale(const Locale('zh'))),
+        super([]);
+
+  final AppLocalizations Function() _localizationsResolver;
+
+  AppLocalizations get localizations => _localizationsResolver();
+
+  void refreshLocalizations() {
+    final strings = localizations;
+    var changed = false;
+    final localizedTasks = state.map((task) {
+      final localized = _localizeRestoredBackgroundTask(task, strings);
+      if (!identical(localized, task)) changed = true;
+      return localized;
+    }).toList(growable: false);
+    if (changed) state = localizedTasks;
+  }
+
   final _uuid = const Uuid();
   final Map<String, _TaskCancellationRegistration> _cancellations = {};
   final Map<String, Map<Object, List<_TaskCleanupRegistration>>> _taskCleanups =
@@ -4262,7 +4666,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     if (!mounted || taskById(taskId)?.hasSameGenerationAs(task) != true) {
       return;
     }
-    failTask(taskId, error: '已取消');
+    failTask(taskId, error: localizations.bgTaskCancelled);
   }
 
   /// 测试专用：覆盖持久化目录。
@@ -4295,8 +4699,6 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   @visibleForTesting
   static Future<void> Function(String taskId)?
       debugBeforeLegacyAsrRetryMigration;
-
-  BackgroundTaskNotifier() : super([]);
 
   @override
   void dispose() {
@@ -4339,7 +4741,8 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     }
     _pendingRestoreTaskRemovals.remove(id);
     _pendingTaskRemovalReconciliations.remove(id);
-    final steps = type.stepLabels
+    final steps = type
+        .localizedStepLabels(localizations)
         .map((label) => BgTaskStep(label: label, status: BgStepStatus.pending))
         .toList();
     final task = BackgroundTask(
@@ -4443,7 +4846,8 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         task.type == BackgroundTaskType.ocr &&
         task.retryData != null &&
         (_pendingTaskRemovalReconciliations.containsKey(taskId) ||
-            (task.status == TaskStatus.waiting && task.error == '已取消'))) {
+            (task.status == TaskStatus.waiting &&
+                _isBackgroundTaskCancellationError(task.error)))) {
       // Cancellation callbacks and stale runners can report failure while
       // removal is in progress or after rollback. Keep the retry task's
       // cancellation outcome instead of notifying for a stale failure.
@@ -4924,7 +5328,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
           ? task.copyWith(
               status: TaskStatus.waiting,
               clearCompletedAt: true,
-              error: '已取消',
+              error: localizations.bgTaskCancelled,
               steps: task.steps
                   .map(
                     (step) => step.copyWith(
@@ -5072,7 +5476,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       final future = NotificationService().showTaskCompletionNotification(
         taskId: task.id,
         title: task.title,
-        typeLabel: task.type.label,
+        typeLabel: task.type.localizedLabel(localizations),
         success: status == TaskStatus.completed,
         error: error,
       );
@@ -7159,9 +7563,13 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
           );
         }
       }
+      task = _localizeRestoredBackgroundTask(task, localizations);
       restored.add(
         task.status == TaskStatus.running
-            ? task.copyWith(status: TaskStatus.failed, error: '应用重启，已中断')
+            ? task.copyWith(
+                status: TaskStatus.failed,
+                error: localizations.bgTaskInterruptedOnRestart,
+              )
             : task,
       );
     }

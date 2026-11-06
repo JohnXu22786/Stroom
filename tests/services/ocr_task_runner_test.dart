@@ -2,10 +2,12 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:ui' show Locale;
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/models/ocr_batch_execution.dart';
 import 'package:stroom/providers/background_task_provider.dart';
@@ -2071,6 +2073,50 @@ void main() {
     expect(notifier.state.single.steps[4].running, isTrue);
     writeGate!.complete();
     await running;
+  });
+
+  test('OCR app-authored error prefix preserves its sanitized detail',
+      () async {
+    final englishStrings = lookupAppLocalizations(const Locale('en', 'US'));
+    final englishNotifier = BackgroundTaskNotifier(
+      localizationsResolver: () => englishStrings,
+    );
+    final englishTaskId = englishNotifier.addTask(
+      type: BackgroundTaskType.ocr,
+      title: 'localized failure',
+    );
+    final englishRunner = OcrTaskRunner(
+      taskId: englishTaskId,
+      notifier: englishNotifier,
+      config: _config,
+      images: [(input, 'png')],
+      executionMode: OcrBatchMode.perImage,
+      initialPageOutcomes: const [
+        OcrPageOutcome(
+          imageIndex: 0,
+          status: OcrPageOutcomeStatus.succeeded,
+          text: '',
+        ),
+      ],
+      title: 'localized failure',
+      folder: 'captured folder',
+      onSaved: () {},
+      writeText: (name, text, {beforeCommit}) async =>
+          throw Exception('preserved storage detail'),
+    );
+
+    await englishRunner.run();
+
+    expect(
+      englishNotifier.state.single.error,
+      startsWith('Saving OCR results failed: '),
+    );
+    expect(
+      englishNotifier.state.single.error,
+      contains('OCR 处理失败'),
+    );
+    englishNotifier.dispose();
+    await englishNotifier.pendingPersistence;
   });
 
   for (final timeout in [
