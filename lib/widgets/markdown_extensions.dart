@@ -1184,13 +1184,12 @@ class StreamingFenceInfoCache {
             cached.fenceQuoteDepth == 0 &&
             cached.fenceListIndent == 0 &&
             cached.fenceInnerQuoteDepth == 0);
-    final markerCannotCloseFence =
-        cached.fenceChar != null &&
-            checkpoint.inFence &&
-            cached.fenceQuoteDepth == 0 &&
-            cached.fenceListIndent == 0 &&
-            cached.fenceInnerQuoteDepth == 0 &&
-            !_pendingLineCanCloseFence;
+    final markerCannotCloseFence = cached.fenceChar != null &&
+        checkpoint.inFence &&
+        cached.fenceQuoteDepth == 0 &&
+        cached.fenceListIndent == 0 &&
+        cached.fenceInnerQuoteDepth == 0 &&
+        !_pendingLineCanCloseFence;
     if ((!_mayContainFenceMarker('$_markerSuffix$normalizedAppended') ||
             markerCannotCloseFence) &&
         !normalizedAppended.contains('\n') &&
