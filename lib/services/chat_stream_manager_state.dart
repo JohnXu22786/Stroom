@@ -96,11 +96,13 @@ class _ConversationStreamState {
   // instead of copying the full reply for every update.
   final List<String> _completedTextChunks = [];
   StringBuffer _currentTextChunk = StringBuffer();
+  int _toolCallTextStartOffset = 0;
 
   String get fullReply => textChunks.join();
   set fullReply(String value) {
     _completedTextChunks.clear();
     _currentTextChunk = StringBuffer(value);
+    _toolCallTextStartOffset = 0;
     _pendingTextDelta.clear();
     _currentChunkHasMarkdownSyntax = _containsMarkdownSyntax(value);
     _markdownSyntaxCarry = '';
@@ -219,7 +221,15 @@ class _ConversationStreamState {
 
   String startTextChunkFromService() {
     _serviceStartedTextChunk = true;
-    return _completedServiceTextChunk = startTextChunk();
+    final completed = startTextChunk();
+    final start = _toolCallTextStartOffset.clamp(0, completed.length).toInt();
+    _completedServiceTextChunk = completed.substring(start);
+    _toolCallTextStartOffset = 0;
+    return completed;
+  }
+
+  void markToolCallTextBoundary() {
+    _toolCallTextStartOffset = _currentTextChunk.length;
   }
 
   String? takeCompletedToolCallRound() {
