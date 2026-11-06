@@ -706,3 +706,21 @@ class ChatMessage {
   @override
   String toString() => 'ChatMessage(id: $id, role: $role)';
 }
+
+/// Reuses section-backed message text while one API request is being prepared.
+///
+/// The cache is deliberately owned by the caller and cleared after request
+/// construction so finalized messages do not retain a second full-text copy.
+class RequestContentCache {
+  final Map<ChatMessage, String> _contentByMessage = {};
+
+  String contentFor(ChatMessage message) =>
+      _contentByMessage.putIfAbsent(message, () => message.content);
+
+  void retainOnly(Iterable<ChatMessage> messages) {
+    final retained = messages.toSet();
+    _contentByMessage.removeWhere((message, _) => !retained.contains(message));
+  }
+
+  void clear() => _contentByMessage.clear();
+}

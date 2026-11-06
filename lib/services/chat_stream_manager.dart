@@ -465,6 +465,7 @@ class ChatStreamManager {
     } else {
       requestHistory = historyForRequest;
     }
+    final requestContentCache = RequestContentCache();
 
     try {
       final compacted = await _compactIfNeeded(
@@ -472,6 +473,7 @@ class ChatStreamManager {
         convId: convId,
         tools: tools,
         requestHistory: requestHistory,
+        contentCache: requestContentCache,
       );
       // 压缩成功：tail 快照已更新，重新计算发送历史
       // （从新尾部起点起，头部被摘要替代）
@@ -497,6 +499,7 @@ class ChatStreamManager {
             requestHistory = postCompactionHistory.sublist(idx);
           }
         }
+        requestContentCache.retainOnly(requestHistory);
       }
       // 压缩期间用户取消：不发起主请求（空流走正常清理路径，
       // 结果标记为 cancelled）
@@ -519,6 +522,7 @@ class ChatStreamManager {
             : _adapter.sendStreamWithTools(
                 text,
                 history: streamHistory,
+                contentCache: requestContentCache,
                 reasoning: reasoning,
                 reasoningEffort: reasoningEffort,
                 reasoningParamValues: reasoningParamValues,
