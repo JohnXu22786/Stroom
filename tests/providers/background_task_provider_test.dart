@@ -13260,20 +13260,6 @@ void main() {
           );
           expect(jsonEncode(task.toMap()), contains(expectedInstruction));
         }
-        const credentialEcho = 'accommodQm9x7Lk2Vp6';
-        final credentialEchoTask = taskFor(
-          'legacy-ocr-accommod-credential-echo',
-          'Use credential $credentialEcho as the authorization value',
-          credentialPrefix: 'accommod',
-        );
-        final credentialEchoPersisted = jsonEncode(credentialEchoTask.toMap());
-        expect(
-          OcrRetrySnapshot.fromMap(
-            credentialEchoTask.retryData!,
-          ).instructionContent,
-          'Use credential [redacted] as the authorization value',
-        );
-        expect(credentialEchoPersisted, isNot(contains(credentialEcho)));
 
         const oneLetterNaturalPrompts = {
           'password': 'The passwords are saved securely.',
@@ -15438,6 +15424,46 @@ void main() {
         );
         expect(serializedRetryData['instructionContent'], prompt);
         expect(persisted, contains(jsonEncode(prompt)));
+      },
+    );
+
+    test(
+      'legacy OCR migration preserves accommodate and redacts a matching key echo',
+      () {
+        const credentialEcho = 'accommodQm9x7Lk2Vp6';
+        const safeInstruction = 'Please accommodate the requested crop';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-accommod-key-echo-next-to-safe-instruction',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer accommod…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': 'The note says $credentialEcho.'},
+                    {'type': 'text', 'text': safeInstruction},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+        final migratedInstruction = OcrRetrySnapshot.fromMap(
+          task.retryData!,
+        ).instructionContent!;
+
+        expect(migratedInstruction, contains(safeInstruction));
+        expect(persisted, contains(safeInstruction));
+        expect(migratedInstruction, isNot(contains(credentialEcho)));
+        expect(persisted, isNot(contains(credentialEcho)));
       },
     );
 
