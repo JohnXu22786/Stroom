@@ -7280,6 +7280,196 @@ void main() {
     );
 
     test(
+      'legacy OCR instruction migration redacts a whitespace-split short open-mask credential echo',
+      () {
+        const apiKey = 'abcQmXvPs123';
+        const instruction = 'Please use abc QmXvPs123 for the request';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-short-open-mask-whitespace-split-echo',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer abc…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+        final serializedRetryData = (jsonDecode(persisted)
+            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
+        final retryInstruction = OcrRetrySnapshot.fromMap(
+          task.retryData!,
+        ).instructionContent;
+
+        expect(retryInstruction, 'Please use [redacted] for the request');
+        expect(
+          serializedRetryData['instructionContent'],
+          'Please use [redacted] for the request',
+        );
+        expect(retryInstruction, isNot(contains(apiKey)));
+        expect(persisted, isNot(contains(apiKey)));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration redacts an open-mask echo split across many tokens',
+      () {
+        const apiKey = 'abcQmXvPs123';
+        const instruction = 'Please use abc Qm Xv Ps 1 23 for the request';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-short-open-mask-many-token-echo',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer abc…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+        final retryInstruction = OcrRetrySnapshot.fromMap(
+          task.retryData!,
+        ).instructionContent;
+
+        expect(retryInstruction, 'Please use [redacted] for the request');
+        expect(retryInstruction, isNot(contains(apiKey)));
+        expect(persisted, isNot(contains(apiKey)));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration preserves a capitalized natural word after a short mask prefix',
+      () {
+        const instruction = 'Please use abc Xylophone for the request';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-short-open-mask-natural-word',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer abc…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+        final retryInstruction = OcrRetrySnapshot.fromMap(
+          task.retryData!,
+        ).instructionContent;
+
+        expect(retryInstruction, instruction);
+        expect(persisted, contains(instruction));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration preserves a keyboard-sequence word after a short mask prefix',
+      () {
+        const instruction = 'Please use abc Qwerty for the request';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-short-open-mask-keyboard-word',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer abc…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+        final retryInstruction = OcrRetrySnapshot.fromMap(
+          task.retryData!,
+        ).instructionContent;
+
+        expect(retryInstruction, instruction);
+        expect(persisted, contains(instruction));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration redacts a numeric credential suffix that begins with a keyboard sequence',
+      () {
+        const instruction = 'Please use abc Qwerty123 for the request';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-short-open-mask-keyboard-numeric-secret',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer abc…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+        final retryInstruction = OcrRetrySnapshot.fromMap(
+          task.retryData!,
+        ).instructionContent;
+
+        expect(retryInstruction, 'Please use [redacted] for the request');
+        expect(persisted, isNot(contains('abcQwerty123')));
+      },
+    );
+
+    test(
       'legacy OCR instruction migration redacts a numeric opaque prefix echo split after its prefix',
       () {
         const apiKey = 'Qwrty12345';
