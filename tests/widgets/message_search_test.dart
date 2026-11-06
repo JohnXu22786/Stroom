@@ -170,10 +170,12 @@ void main() {
       final results = MessageSearchPage.searchMessageContents(convs, query);
 
       // conv1, msg-1: "Flutter是什么框架？" -> match at start=0, end=7
-      final conv1Result =
-          results.firstWhere((r) => r.conversation.id == 'conv-1');
-      final msg1Match =
-          conv1Result.matches.firstWhere((m) => m.message.id == 'msg-1');
+      final conv1Result = results.firstWhere(
+        (r) => r.conversation.id == 'conv-1',
+      );
+      final msg1Match = conv1Result.matches.firstWhere(
+        (m) => m.message.id == 'msg-1',
+      );
       expect(msg1Match.matchStart, 0);
       expect(msg1Match.matchEnd, 7);
     });
@@ -183,11 +185,7 @@ void main() {
         id: 'conv-multi',
         title: '重复测试',
         messages: [
-          ChatMessage(
-            id: 'msg-multi',
-            role: 'user',
-            content: 'test test test',
-          ),
+          ChatMessage(id: 'msg-multi', role: 'user', content: 'test test test'),
         ],
       );
 
@@ -208,13 +206,13 @@ void main() {
       final conv2 = Conversation(
         id: 'conv-b',
         title: 'B对话',
-        messages: [
-          ChatMessage(id: 'b1', role: 'user', content: 'apple'),
-        ],
+        messages: [ChatMessage(id: 'b1', role: 'user', content: 'apple')],
       );
 
-      final results =
-          MessageSearchPage.searchMessageContents([conv1, conv2], 'apple');
+      final results = MessageSearchPage.searchMessageContents([
+        conv1,
+        conv2,
+      ], 'apple');
       expect(results.length, 2);
       // conv-a has 2 matches (a1, a2), conv-b has 1 match (b1)
       expect(results[0].conversation.id, 'conv-a');
@@ -223,16 +221,19 @@ void main() {
   });
 
   group('MessageSearchPage - Widget', () {
-    testWidgets('localizes search chrome and preserves conversation content',
-        (tester) async {
+    testWidgets('localizes search chrome and preserves conversation content', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         createMessageSearchTestApp(locale: const Locale('en', 'US')),
       );
       await tester.pumpAndSettle();
 
       expect(find.text('Search Messages'), findsOneWidget);
-      expect(find.text('Type a keyword to search messages in all conversations'),
-          findsOneWidget);
+      expect(
+        find.text('Type a keyword to search messages in all conversations'),
+        findsOneWidget,
+      );
 
       await tester.enterText(find.byType(TextField), 'Flutter');
       await tester.pumpAndSettle();
@@ -242,8 +243,10 @@ void main() {
       final snippets = tester
           .widgetList<RichText>(find.byType(RichText))
           .map((richText) => richText.text.toPlainText());
-      expect(snippets.any((snippet) => snippet.contains('Flutter是什么框架？')),
-          isTrue);
+      expect(
+        snippets.any((snippet) => snippet.contains('Flutter是什么框架？')),
+        isTrue,
+      );
 
       await tester.pumpWidget(
         createMessageSearchTestApp(locale: const Locale('zh', 'CN')),
@@ -265,8 +268,9 @@ void main() {
       expect(find.text('未找到匹配的消息'), findsOneWidget);
     });
 
-    testWidgets('tapping search result returns data via Navigator.pop',
-        (tester) async {
+    testWidgets('tapping search result returns data via Navigator.pop', (
+      tester,
+    ) async {
       // Use a navigator observer to check the result
       Map<String, dynamic>? poppedResult;
 
@@ -356,7 +360,9 @@ void main() {
           expect(match.matchStart, greaterThanOrEqualTo(0));
           expect(match.matchEnd, greaterThan(match.matchStart));
           expect(
-              match.matchEnd, lessThanOrEqualTo(match.message.content.length));
+            match.matchEnd,
+            lessThanOrEqualTo(match.message.content.length),
+          );
         }
       }
     });
@@ -368,7 +374,10 @@ void main() {
       for (final result in results) {
         for (final match in result.matches) {
           final snippet = MessageSearchPage.getSnippet(
-              match.message.content, match.matchStart, match.matchEnd);
+            match.message.content,
+            match.matchStart,
+            match.matchEnd,
+          );
           expect(snippet, contains('Flutter'));
           expect(snippet.length, greaterThan(0));
         }

@@ -29,10 +29,7 @@ class SearchResult {
   final Conversation conversation;
   final List<SearchResultMatch> matches;
 
-  const SearchResult({
-    required this.conversation,
-    required this.matches,
-  });
+  const SearchResult({required this.conversation, required this.matches});
 
   int get matchCount => matches.length;
 }
@@ -74,11 +71,13 @@ class MessageSearchPage extends ConsumerStatefulWidget {
         while (true) {
           final idx = lowerContent.indexOf(lowerQuery, start);
           if (idx == -1) break;
-          matches.add(SearchResultMatch(
-            message: msg,
-            matchStart: idx,
-            matchEnd: idx + lowerQuery.length,
-          ));
+          matches.add(
+            SearchResultMatch(
+              message: msg,
+              matchStart: idx,
+              matchEnd: idx + lowerQuery.length,
+            ),
+          );
           start = idx + lowerQuery.length;
         }
       }
@@ -138,10 +137,8 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
   }
 
   void _onResultTapped(SearchResult result) {
-    Navigator.of(context).pop({
-      'conversationId': result.conversation.id,
-      'query': _query,
-    });
+    Navigator.of(context)
+        .pop({'conversationId': result.conversation.id, 'query': _query});
   }
 
   @override
@@ -185,8 +182,10 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
                       )
                     : null,
                 isDense: true,
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
@@ -199,8 +198,8 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
             child: _query.isEmpty
                 ? _buildInitialState(cs)
                 : _results.isEmpty
-                    ? _buildEmptyState(cs)
-                    : _buildResultsList(cs),
+                ? _buildEmptyState(cs)
+                : _buildResultsList(cs),
           ),
         ],
       ),
@@ -212,8 +211,11 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.manage_search,
-              size: 48, color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
+          Icon(
+            Icons.manage_search,
+            size: 48,
+            color: cs.onSurfaceVariant.withValues(alpha: 0.4),
+          ),
           const SizedBox(height: 12),
           Text(
             AppLocalizations.of(context)!.messageSearchInitialState,
@@ -229,8 +231,11 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.search_off,
-              size: 48, color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
+          Icon(
+            Icons.search_off,
+            size: 48,
+            color: cs.onSurfaceVariant.withValues(alpha: 0.4),
+          ),
           const SizedBox(height: 12),
           Text(
             AppLocalizations.of(context)!.messageSearchEmptyState,
@@ -263,8 +268,10 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
     // Build a preview of the first match
     const contextChars = 40;
     final firstMatch = result.matches.first;
-    final snippetStart = (firstMatch.matchStart - contextChars)
-        .clamp(0, firstMatch.message.content.length);
+    final snippetStart = (firstMatch.matchStart - contextChars).clamp(
+      0,
+      firstMatch.message.content.length,
+    );
     final snippet = MessageSearchPage.getSnippet(
       firstMatch.message.content,
       firstMatch.matchStart,
@@ -300,8 +307,10 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
                 ),
                 const SizedBox(width: 8),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: cs.primaryContainer,
                     borderRadius: BorderRadius.circular(10),
@@ -356,14 +365,16 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
     if (relativeStart > 0) {
       spans.add(TextSpan(text: snippet.substring(0, relativeStart)));
     }
-    spans.add(TextSpan(
-      text: snippet.substring(relativeStart, relativeStart + queryLen),
-      style: TextStyle(
-        backgroundColor: Colors.yellow,
-        color: Colors.black87,
-        fontWeight: FontWeight.bold,
+    spans.add(
+      TextSpan(
+        text: snippet.substring(relativeStart, relativeStart + queryLen),
+        style: TextStyle(
+          backgroundColor: Colors.yellow,
+          color: Colors.black87,
+          fontWeight: FontWeight.bold,
+        ),
       ),
-    ));
+    );
     if (relativeStart + queryLen < snippet.length) {
       spans.add(TextSpan(text: snippet.substring(relativeStart + queryLen)));
     }
