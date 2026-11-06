@@ -181,13 +181,10 @@ class CatCatchTask {
   // Keep ownership across immutable updates without persisting runtime state.
   final Object? _runtimeIdentity;
   Object get runtimeIdentity => _runtimeIdentity ?? this;
-  final Map<String, String> _runtimeBrowserCookieHeadersByHost;
+  final Map<String, String> _runtimeBrowserCookieHeadersByUrl;
 
   String? browserCookieHeaderForUrl(String url) {
-    final requestHost = Uri.tryParse(url)?.host;
-    return requestHost == null
-        ? null
-        : _runtimeBrowserCookieHeadersByHost[requestHost];
+    return _runtimeBrowserCookieHeadersByUrl[url];
   }
 
   final String id;
@@ -230,9 +227,9 @@ class CatCatchTask {
     this.metadata = const {},
     this.downloadedBytes = 0,
     Object? runtimeIdentity,
-    Map<String, String> runtimeBrowserCookieHeadersByHost = const {},
+    Map<String, String> runtimeBrowserCookieHeadersByUrl = const {},
   })  : _runtimeIdentity = runtimeIdentity,
-        _runtimeBrowserCookieHeadersByHost = runtimeBrowserCookieHeadersByHost;
+        _runtimeBrowserCookieHeadersByUrl = runtimeBrowserCookieHeadersByUrl;
 
   // ---------------------------------------------------------------------------
   // copyWith
@@ -259,7 +256,7 @@ class CatCatchTask {
     bool clearCompletedAt = false,
     bool clearDownloadedFilePath = false,
     bool clearSelectedMedia = false,
-    Map<String, String>? runtimeBrowserCookieHeadersByHost,
+    Map<String, String>? runtimeBrowserCookieHeadersByUrl,
     bool clearRuntimeBrowserCookieHeader = false,
   }) {
     final newStatus = status ?? this.status;
@@ -270,11 +267,11 @@ class CatCatchTask {
 
     return CatCatchTask(
       runtimeIdentity: runtimeIdentity,
-      runtimeBrowserCookieHeadersByHost: clearRuntimeBrowserCookieHeader
+      runtimeBrowserCookieHeadersByUrl: clearRuntimeBrowserCookieHeader
           ? const {}
-          : runtimeBrowserCookieHeadersByHost == null
-              ? _runtimeBrowserCookieHeadersByHost
-              : Map.unmodifiable(runtimeBrowserCookieHeadersByHost),
+          : runtimeBrowserCookieHeadersByUrl == null
+              ? _runtimeBrowserCookieHeadersByUrl
+              : Map.unmodifiable(runtimeBrowserCookieHeadersByUrl),
       id: id ?? this.id,
       url: url ?? this.url,
       expectedDurationSec: expectedDurationSec ?? this.expectedDurationSec,
@@ -302,16 +299,29 @@ class CatCatchTask {
   CatCatchTask? resumeAfterBrowserRecovery({
     required List<MediaResource> recoveredMedia,
     String? pageTitle,
-    Map<String, String> cookieHeadersByHost = const {},
+    Map<String, String> cookieHeadersByUrl = const {},
   }) {
     if (status != TaskStatus.paused ||
         metadata[webViewRecoveryRequiredKey] != 'true') {
       return null;
     }
     final media = <MediaResource>[];
-    final seen = <String>{};
-    for (final resource in [...detectedMedia, ...recoveredMedia]) {
-      if (seen.add(resource.url)) media.add(resource);
+    final mediaIndexByUrl = <String, int>{};
+    for (final resource in detectedMedia) {
+      if (mediaIndexByUrl.containsKey(resource.url)) continue;
+      mediaIndexByUrl[resource.url] = media.length;
+      media.add(resource);
+    }
+    for (final resource in recoveredMedia) {
+      final existingIndex = mediaIndexByUrl[resource.url];
+      if (existingIndex == null) {
+        mediaIndexByUrl[resource.url] = media.length;
+        media.add(resource);
+      } else {
+        // Browser recovery carries fresher MIME and initiator metadata for a
+        // URL that an earlier headless scan may have classified incompletely.
+        media[existingIndex] = resource;
+      }
     }
     if (media.isEmpty) return null;
 
@@ -332,7 +342,7 @@ class CatCatchTask {
       detectedMedia: media,
       metadata: nextMetadata,
       title: pageTitle?.trim().isNotEmpty == true ? pageTitle!.trim() : title,
-      runtimeBrowserCookieHeadersByHost: cookieHeadersByHost,
+      runtimeBrowserCookieHeadersByUrl: cookieHeadersByUrl,
       clearError: true,
     );
   }

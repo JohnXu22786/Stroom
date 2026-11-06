@@ -181,6 +181,21 @@ test('reports a source URL changed after its media element was scanned', () => {
   );
 });
 
+test('captures extensionless media URLs when an element provides a media MIME', () => {
+  const video = new FakeMedia('VIDEO', {
+    src: 'https://cdn.example/stream?quality=1080',
+  });
+  const {messages} = installHook([video]);
+
+  assert.deepEqual(messages, [{
+    url: 'https://cdn.example/stream?quality=1080',
+    method: 'GET',
+    initiator: 'https://page.example/watch',
+    mimeType: 'video/*',
+    requestHeaders: {},
+  }]);
+});
+
 test('reports a source added after its media element was scanned and keeps URL deduplication', () => {
   const initialSource = new FakeSource('https://cdn.example/initial.mp4');
   const video = new FakeMedia('VIDEO', {sources: [initialSource]});

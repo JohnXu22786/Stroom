@@ -43,6 +43,7 @@ Future<String> executeCatCatchBlock({
   @visibleForTesting void Function()? onFallbackRegistration,
   IOType? nextInputType,
   void Function(String taskId)? onManualWait,
+  bool Function(String taskId)? onManualActionInProgress,
   void Function(String taskId, List<MediaResource> candidates)?
       onManualWaitWithCandidates,
   void Function(IOType type)? onOutputType,
@@ -390,11 +391,13 @@ Future<String> executeCatCatchBlock({
       );
     }
     if (task.status == catcatch.TaskStatus.paused) {
-      execNotifier.updateSubTaskStatus(
-        execId,
-        flowSubTask.id,
-        TaskStatus.paused,
-      );
+      if (!(onManualActionInProgress?.call(taskId) ?? false)) {
+        execNotifier.updateSubTaskStatus(
+          execId,
+          flowSubTask.id,
+          TaskStatus.paused,
+        );
+      }
       continue;
     }
 

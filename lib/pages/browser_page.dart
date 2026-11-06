@@ -290,15 +290,17 @@ class BrowserPage extends StatefulWidget {
 class BrowserRecoveryResult {
   final List<String> mediaUrls;
   final Map<String, String> mimeTypesByUrl;
+  final Map<String, String> initiatorsByUrl;
   final String pageUrl;
   final String? pageTitle;
-  final Map<String, String> cookieHeadersByHost;
+  final Map<String, String> cookieHeadersByUrl;
 
   const BrowserRecoveryResult({
     required this.mediaUrls,
     required this.mimeTypesByUrl,
+    required this.initiatorsByUrl,
     required this.pageUrl,
-    required this.cookieHeadersByHost,
+    required this.cookieHeadersByUrl,
     this.pageTitle,
   });
 }
@@ -313,6 +315,7 @@ class _BrowserPageState extends State<BrowserPage> {
   Timer? _recoveryNavigationFallbackTimer;
   int _recoveryAttempt = 0;
   bool _recoveryCanContinue = false;
+  bool _recoveryContinuationInProgress = false;
   bool _recoveryRetriesPaused = false;
   bool _recoveryReloadAwaitingNavigation = false;
   String? _pendingMainFrameErrorUrl;
@@ -328,6 +331,7 @@ class _BrowserPageState extends State<BrowserPage> {
   /// URLs detected by the JS hook in the WebView.
   final List<String> _detectedUrls = [];
   final Map<String, String> _recoveryMimeTypesByUrl = {};
+  final Map<String, String> _recoveryInitiatorsByUrl = {};
 
   /// Whether the cat-catch hook has been injected for the current page.
   bool _catCatchHookInjected = false;
@@ -466,22 +470,32 @@ class _BrowserPageState extends State<BrowserPage> {
     _recoveryReloadAwaitingNavigation = false;
   }
 
-  Future<void> _continueRecovery() async {
+  Future<void> _continueRecovery({String? selectedMediaUrl}) async {
+    if (_recoveryContinuationInProgress) return;
+    setState(() => _recoveryContinuationInProgress = true);
     final controller = _webViewController;
     final pageUrl = _currentUrl.isEmpty ? widget.initialUrl : _currentUrl;
+    final detectedMediaUrls = List<String>.of(_detectedUrls);
+    final mediaUrls = selectedMediaUrl == null
+        ? detectedMediaUrls
+        : detectedMediaUrls.where((url) => url == selectedMediaUrl).toList();
+    final mimeTypesByUrl = Map<String, String>.of(_recoveryMimeTypesByUrl)
+      ..removeWhere((url, _) => !mediaUrls.contains(url));
+    final initiatorsByUrl = Map<String, String>.of(_recoveryInitiatorsByUrl)
+      ..removeWhere((url, _) => !mediaUrls.contains(url));
     String? title;
-    final cookieHeadersByHost = <String, String>{};
+    final cookieHeadersByUrl = <String, String>{};
     if (controller != null) {
       try {
         title = await controller.getTitle();
       } catch (_) {}
     }
-    for (final mediaUrl in _detectedUrls) {
+    for (final mediaUrl in mediaUrls) {
       final mediaUri = Uri.tryParse(mediaUrl);
       if (mediaUri == null ||
           !mediaUri.hasAuthority ||
           !{'http', 'https'}.contains(mediaUri.scheme) ||
-          cookieHeadersByHost.containsKey(mediaUri.host)) {
+          cookieHeadersByUrl.containsKey(mediaUrl)) {
         continue;
       }
       try {
@@ -489,7 +503,7 @@ class _BrowserPageState extends State<BrowserPage> {
           url: WebUri(mediaUrl),
         );
         if (cookies.isNotEmpty) {
-          cookieHeadersByHost[mediaUri.host] = cookies
+          cookieHeadersByUrl[mediaUrl] = cookies
               .map((cookie) => '${cookie.name}=${cookie.value}')
               .join('; ');
         }
@@ -501,11 +515,12 @@ class _BrowserPageState extends State<BrowserPage> {
     Navigator.pop(
       context,
       BrowserRecoveryResult(
-        mediaUrls: List<String>.unmodifiable(_detectedUrls),
-        mimeTypesByUrl: Map.unmodifiable(_recoveryMimeTypesByUrl),
+        mediaUrls: List<String>.unmodifiable(mediaUrls),
+        mimeTypesByUrl: Map.unmodifiable(mimeTypesByUrl),
+        initiatorsByUrl: Map.unmodifiable(initiatorsByUrl),
         pageUrl: pageUrl,
         pageTitle: title,
-        cookieHeadersByHost: Map.unmodifiable(cookieHeadersByHost),
+        cookieHeadersByUrl: Map.unmodifiable(cookieHeadersByUrl),
       ),
     );
   }
@@ -589,6 +604,7 @@ class _BrowserPageState extends State<BrowserPage> {
       final url = data['url'] as String?;
       if (url == null || url.isEmpty) return;
       final mimeType = data['mimeType'] as String?;
+      final initiator = data['initiator'] as String?;
 
       debugPrint('[BrowserPage] CatCatch sniffed: $url');
       setState(() {
@@ -598,6 +614,9 @@ class _BrowserPageState extends State<BrowserPage> {
         }
         if (widget.recoveryMode && mimeType != null && mimeType.isNotEmpty) {
           _recoveryMimeTypesByUrl.putIfAbsent(url, () => mimeType);
+        }
+        if (widget.recoveryMode && initiator != null && initiator.isNotEmpty) {
+          _recoveryInitiatorsByUrl.putIfAbsent(url, () => initiator);
         }
         if (widget.recoveryMode) _recoveryCanContinue = true;
       });
@@ -612,11 +631,15 @@ class _BrowserPageState extends State<BrowserPage> {
 
   /// User tapped "Confirm Capture" on the floating panel.
   ///
-  /// Contract: the captured URL is handed back to the page that pushed this
-  /// one via `Navigator.pop(selectedUrl)`. The caller (catcatch_page) is
-  /// expected to await the push result and pre-fill the download form.
+  /// Recovery routes return a typed recovery result; normal browser routes
+  /// return the selected URL so their caller can pre-fill the download form.
   void _onConfirmCapture(String selectedUrl) {
     debugPrint('[BrowserPage] User confirmed capture: $selectedUrl');
+    if (widget.recoveryMode) {
+      _pauseRecoveryRetriesForUserAction();
+      unawaited(_continueRecovery(selectedMediaUrl: selectedUrl));
+      return;
+    }
     final navigator = Navigator.of(context);
     if (navigator.canPop()) {
       navigator.pop<String>(selectedUrl);
@@ -760,7 +783,9 @@ class _BrowserPageState extends State<BrowserPage> {
         actions: [
           if (widget.recoveryMode)
             TextButton.icon(
-              onPressed: _recoveryCanContinue && _detectedUrls.isNotEmpty
+              onPressed: _recoveryCanContinue &&
+                      _detectedUrls.isNotEmpty &&
+                      !_recoveryContinuationInProgress
                   ? _continueRecovery
                   : null,
               icon: const Icon(Icons.play_arrow),
@@ -979,13 +1004,14 @@ class _BrowserPageState extends State<BrowserPage> {
                   child: DraggableFloatingPanel(
                     key: const ValueKey('catcatch_panel'),
                     visible: true,
+                    confirmEnabled: !_recoveryContinuationInProgress,
                     detectionEpoch: _detectionEpoch,
                     detectedUrls: _detectedUrls,
                     onConfirmCapture: _onConfirmCapture,
                     onClose: () {
                       setState(() {
                         _catCatchPanelVisible = false;
-                        _detectedUrls.clear();
+                        if (!widget.recoveryMode) _detectedUrls.clear();
                       });
                     },
                     onDragUpdate: (delta) {

@@ -273,27 +273,24 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
     String id, {
     required List<String> mediaUrls,
     Map<String, String> mimeTypesByUrl = const {},
+    Map<String, String> initiatorsByUrl = const {},
     String? pageUrl,
     String? pageTitle,
-    Map<String, String> cookieHeadersByHost = const {},
+    Map<String, String> cookieHeadersByUrl = const {},
   }) {
     final index = state.lastIndexWhere((task) => task.id == id);
     if (index < 0) return;
     final task = state[index];
-    final resources = <MediaResource>[];
-    final seen = <String>{};
-    for (final url in mediaUrls) {
-      if (!url.startsWith('http') || !seen.add(url)) continue;
-      resources.add(recoveredBrowserMediaResource(
-        url: url,
-        initiator: pageUrl ?? task.url,
-        mimeType: mimeTypesByUrl[url],
-      ));
-    }
+    final resources = recoveredBrowserMediaResources(
+      mediaUrls: mediaUrls,
+      fallbackInitiator: pageUrl ?? task.url,
+      initiatorsByUrl: initiatorsByUrl,
+      mimeTypesByUrl: mimeTypesByUrl,
+    );
     final updated = task.resumeAfterBrowserRecovery(
       recoveredMedia: resources,
       pageTitle: pageTitle,
-      cookieHeadersByHost: cookieHeadersByHost,
+      cookieHeadersByUrl: cookieHeadersByUrl,
     );
     if (updated == null) return;
     state = [
@@ -1316,6 +1313,25 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
     }
     return File(p.join(catcatchDir.path, 'tasks.json'));
   }
+}
+
+List<MediaResource> recoveredBrowserMediaResources({
+  required List<String> mediaUrls,
+  required String fallbackInitiator,
+  Map<String, String> initiatorsByUrl = const {},
+  Map<String, String> mimeTypesByUrl = const {},
+}) {
+  final resources = <MediaResource>[];
+  final seen = <String>{};
+  for (final url in mediaUrls) {
+    if (!url.startsWith('http') || !seen.add(url)) continue;
+    resources.add(recoveredBrowserMediaResource(
+      url: url,
+      initiator: initiatorsByUrl[url] ?? fallbackInitiator,
+      mimeType: mimeTypesByUrl[url],
+    ));
+  }
+  return resources;
 }
 
 MediaResource recoveredBrowserMediaResource({

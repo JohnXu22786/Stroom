@@ -221,7 +221,12 @@ class TaskFlowExecutionService {
       return null;
     }
     return _notifier.executions.where((execution) {
-      return execution.status == FlowExecutionStatus.running &&
+      final isBrowserRecoveryContinuation = !selecting &&
+          awaitingBrowserRecovery &&
+          _manualCatCatchWaits[taskId] == execution.id &&
+          execution.status == FlowExecutionStatus.paused;
+      return (execution.status == FlowExecutionStatus.running ||
+              isBrowserRecoveryContinuation) &&
           _activeBlockTypes[execution.id] == BlockType.catcatch &&
           execution.subTasks.any((step) =>
               step.subTaskType == 'catcatch' &&
@@ -296,10 +301,31 @@ class TaskFlowExecutionService {
         }
         acquired = true;
       }
-      if (_manualCatCatchExecution(taskId, selecting)?.id != id ||
-          !_scheduler.holds(id)) {
+      final currentExecution = _manualCatCatchExecution(taskId, selecting);
+      if (currentExecution?.id != id || !_scheduler.holds(id)) {
         if (acquired) _scheduler.release(id);
         return false;
+      }
+      if (currentExecution!.status == FlowExecutionStatus.paused) {
+        // Browser recovery marks the CatCatch subtask paused while its live
+        // block runner waits for a manual Continue. Reopen that execution
+        // only after Continue has reacquired its scheduler slot.
+        _notifier.setExecutionStatus(id, FlowExecutionStatus.running);
+        final stepId = currentExecution.subTasks
+            .firstWhere((step) => step.subTaskId == taskId)
+            .id;
+        _notifier.updateSubTaskStatus(id, stepId, TaskStatus.running);
+        if (!await _notifier.persist()) {
+          _notifier.setExecutionStatus(id, FlowExecutionStatus.paused,
+              error: '继续状态无法保存');
+          _notifier.updateSubTaskStatus(id, stepId, TaskStatus.paused);
+          _scheduler.release(id);
+          return false;
+        }
+        action(_ref.read(catcatchTasksProvider.notifier));
+        _pauseGates.remove(id)?.complete();
+        _manualCatCatchWaits.remove(taskId);
+        return true;
       }
       action(_ref.read(catcatchTasksProvider.notifier));
       _manualCatCatchWaits.remove(taskId);
@@ -1323,6 +1349,8 @@ class TaskFlowExecutionService {
           durationSecOverride: inputDurationSec,
           nextInputType: nextInputType,
           onManualWait: (taskId) => _releaseManualCatCatchSlot(execId, taskId),
+          onManualActionInProgress: (taskId) =>
+              _manualCatCatchActions.contains(taskId),
           onManualWaitWithCandidates: (taskId, candidates) {
             catcatchNotifier.setFlowSelectionCandidates(taskId, candidates);
           },

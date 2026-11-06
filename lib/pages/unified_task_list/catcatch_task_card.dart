@@ -105,9 +105,10 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
               widget.task.id,
               mediaUrls: result.mediaUrls,
               mimeTypesByUrl: result.mimeTypesByUrl,
+              initiatorsByUrl: result.initiatorsByUrl,
               pageUrl: result.pageUrl,
               pageTitle: result.pageTitle,
-              cookieHeadersByHost: result.cookieHeadersByHost,
+              cookieHeadersByUrl: result.cookieHeadersByUrl,
             );
     if (widget.isFlowManaged) {
       await _performFlowAction(widget.task.id, false, action);

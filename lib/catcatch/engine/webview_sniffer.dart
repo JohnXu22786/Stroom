@@ -1,10 +1,28 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:dio/dio.dart' show CancelToken;
-import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import '../models/media_resource.dart';
 import 'sniffing_engine.dart';
+
+@visibleForTesting
+Future<void> completeAfterCleanupIfPending<T>({
+  required Completer<T> completer,
+  required Future<void> Function() cleanup,
+  required void Function() complete,
+}) async {
+  await cleanup();
+  if (!completer.isCompleted) complete();
+}
+
+@visibleForTesting
+class SingleFlightAsyncCleanup {
+  Future<void>? _future;
+
+  Future<void> run(Future<void> Function() cleanup) =>
+      _future ??= Future<void>.sync(cleanup);
+}
 
 class WebViewRecoveryRequiredException implements Exception {
   final List<MediaResource> existingResources;
@@ -77,6 +95,7 @@ class WebViewSniffer {
     final completer = Completer<(List<MediaResource>, String?)>();
     Timer? timeoutTimer;
     var disposed = false;
+    final webViewDisposal = SingleFlightAsyncCleanup();
     var resolvedUrl = url;
     String? capturedTitle;
 
@@ -103,6 +122,7 @@ class WebViewSniffer {
           final jsResult = await controller.evaluateJavascript(
             source: _sniffScript,
           );
+          if (disposed || completer.isCompleted) return;
 
           if (jsResult is List) {
             for (final item in jsResult) {
@@ -132,6 +152,7 @@ class WebViewSniffer {
               capturedTitle = titleResult.trim();
             }
           } catch (_) {}
+          if (disposed || completer.isCompleted) return;
 
           onProgress?.call('扫描完成，共发现 ${detectedUrls.length} 个资源', 90);
 
@@ -174,22 +195,24 @@ class WebViewSniffer {
       },
     );
 
-    Future<void> disposeHeadlessWebView() async {
-      if (disposed) return;
-      disposed = true;
-      try {
-        await headlessWebView.dispose();
-      } catch (e) {
-        debugPrint('[WebViewSniffer] WebView disposal failed: $e');
-      }
-    }
+    Future<void> disposeHeadlessWebView() => webViewDisposal.run(() async {
+          disposed = true;
+          try {
+            await headlessWebView.dispose();
+          } catch (e) {
+            debugPrint('[WebViewSniffer] WebView disposal failed: $e');
+          }
+        });
 
     try {
       cancelToken?.whenCancel.then((_) async {
         if (!completer.isCompleted) {
           debugPrint('[WebViewSniffer] Cancelled by user');
-          await disposeHeadlessWebView();
-          completer.complete((<MediaResource>[], null));
+          await completeAfterCleanupIfPending(
+            completer: completer,
+            cleanup: disposeHeadlessWebView,
+            complete: () => completer.complete((<MediaResource>[], null)),
+          );
         }
       });
 
@@ -212,14 +235,19 @@ class WebViewSniffer {
               isPlaylist: ['m3u8', 'm3u', 'mpd'].contains(ext),
             );
           }).toList();
-          await disposeHeadlessWebView();
-          if (resources.isNotEmpty) {
-            completer.complete((resources, capturedTitle));
-          } else {
-            completer.completeError(
-              TimeoutException('WebView media scan timed out', timeout),
-            );
-          }
+          await completeAfterCleanupIfPending(
+            completer: completer,
+            cleanup: disposeHeadlessWebView,
+            complete: () {
+              if (resources.isNotEmpty) {
+                completer.complete((resources, capturedTitle));
+              } else {
+                completer.completeError(
+                  TimeoutException('WebView media scan timed out', timeout),
+                );
+              }
+            },
+          );
         }
       });
 
