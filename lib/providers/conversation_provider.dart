@@ -529,6 +529,10 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
   /// or message save. The later deletion must be the last value on disk.
   Future<void> _persistQueue = Future<void>.value();
 
+  /// A single queued periodic stream save may be updated until an explicit
+  /// persistence operation establishes an ordering barrier.
+  _CoalescedStreamPersist? _coalescedStreamPersist;
+
   /// Resolves when saved conversations have been merged into memory. Producers
   /// using a deterministic ID must wait before replacing a prior attempt.
   Future<void> get ready => _initialLoad;

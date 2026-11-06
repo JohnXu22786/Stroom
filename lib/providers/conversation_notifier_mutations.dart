@@ -303,6 +303,17 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
     await _persistNow();
   }
 
+  /// Replaces a conversation's messages for a supersedable periodic stream
+  /// checkpoint. Consecutive checkpoints share one queued persistence task;
+  /// explicit writes remain ordering barriers in the normal persistence path.
+  Future<void> updateMessagesPeriodically(
+      String conversationId, List<ChatMessage> messages,
+      {bool resetTemporaryCountdown = false}) async {
+    _replaceMessages(conversationId, messages,
+        resetTemporaryCountdown: resetTemporaryCountdown);
+    await _persistStreamCheckpoint();
+  }
+
   /// Confirm flow messages reached disk before sending or completing a step.
   Future<bool> updateFlowMessagesChecked(
       String conversationId, List<ChatMessage> messages) async {
