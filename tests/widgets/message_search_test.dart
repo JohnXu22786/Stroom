@@ -224,11 +224,16 @@ void main() {
     testWidgets('localizes search chrome and preserves conversation content', (
       tester,
     ) async {
+      await tester.pumpWidget(createMessageSearchTestApp());
+      await tester.pumpAndSettle();
+
+      expect(find.text('全局消息搜索'), findsOneWidget);
+      expect(find.text('输入关键词搜索所有对话中的消息'), findsOneWidget);
+
       await tester.pumpWidget(
         createMessageSearchTestApp(locale: const Locale('en', 'US')),
       );
       await tester.pumpAndSettle();
-
       expect(find.text('Search Messages'), findsOneWidget);
       expect(
         find.text('Type a keyword to search messages in all conversations'),
@@ -247,13 +252,6 @@ void main() {
         snippets.any((snippet) => snippet.contains('Flutter是什么框架？')),
         isTrue,
       );
-
-      await tester.pumpWidget(
-        createMessageSearchTestApp(locale: const Locale('zh', 'CN')),
-      );
-      await tester.pumpAndSettle();
-      expect(find.text('全局消息搜索'), findsOneWidget);
-      expect(find.text('输入关键词搜索所有对话中的消息'), findsOneWidget);
     });
 
     testWidgets('shows no results state when no matches', (tester) async {
