@@ -382,6 +382,7 @@ class OcrTaskRunner {
             error: errorMessage,
             rawRequest: service?.diagnosticRequest,
             rawResponse: service?.diagnosticResponse(error: error),
+            ocrCredentialValuesForSanitization: [config.apiKey],
           );
         }
       }

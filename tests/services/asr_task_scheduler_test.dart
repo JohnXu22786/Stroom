@@ -362,6 +362,7 @@ void main() {
     final englishNotifier = BackgroundTaskNotifier(
       localizationsResolver: () => englishStrings,
     );
+    await englishNotifier.restoreFromPersistence();
     addTearDown(() async {
       englishNotifier.dispose();
       await englishNotifier.pendingPersistence;

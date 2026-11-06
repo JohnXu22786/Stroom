@@ -900,8 +900,8 @@ String _localizedOcrHiddenTaskError(
   Iterable<String> credentialValues,
 ) {
   for (final candidate in [
-    strings.bgTaskErrorDetailsHidden,
     strings.bgTaskOcrErrorDetailsHidden,
+    strings.bgTaskErrorDetailsHidden,
     '…',
   ]) {
     if (!_legacyOcrTextContainsCredential(candidate, credentialValues)) {
@@ -4872,6 +4872,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     String? error,
     Map<String, dynamic>? rawRequest,
     Map<String, dynamic>? rawResponse,
+    Iterable<String> ocrCredentialValuesForSanitization = const [],
   }) {
     final task = taskById(taskId);
     if (task != null &&
@@ -4891,6 +4892,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       error: error,
       rawRequest: rawRequest,
       rawResponse: rawResponse,
+      ocrCredentialValuesForSanitization: ocrCredentialValuesForSanitization,
     );
   }
 
@@ -4987,6 +4989,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     String taskId, {
     Map<String, dynamic>? rawRequest,
     Map<String, dynamic>? rawResponse,
+    Iterable<String> ocrCredentialValuesForSanitization = const [],
   }) {
     state = state.map((t) {
       if (t.id != taskId) return t;
@@ -5461,6 +5464,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     bool? resultSavedAsPartial,
     Map<String, dynamic>? rawRequest,
     Map<String, dynamic>? rawResponse,
+    Iterable<String> ocrCredentialValuesForSanitization = const [],
   }) {
     BackgroundTask? updatedTask;
     state = state.map((t) {
@@ -5474,6 +5478,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         resultSavedAsPartial: resultSavedAsPartial,
         rawRequest: rawRequest,
         rawResponse: rawResponse,
+        ocrCredentialValuesForSanitization: ocrCredentialValuesForSanitization,
         completedAt:
             status == TaskStatus.completed || status == TaskStatus.failed
                 ? DateTime.now()
