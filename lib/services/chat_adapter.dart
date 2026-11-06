@@ -814,6 +814,7 @@ class ChatAdapter {
   Stream<ChatEvent> sendStreamWithTools(
     String text, {
     required List<ChatMessage> history,
+    RequestContentCache? contentCache,
     bool reasoning = false,
     String reasoningEffort = 'medium',
     Map<String, String> reasoningParamValues = const {},
@@ -837,6 +838,7 @@ class ChatAdapter {
     return svc.sendStreamWithTools(
       text,
       history: history,
+      contentCache: contentCache,
       reasoning: reasoning,
       reasoningEffort: reasoningEffort,
       reasoningParamValues: reasoningParamValues,

@@ -23,6 +23,7 @@ extension _ChatStreamManagerCompactionExt on ChatStreamManager {
     required String convId,
     required List<ToolDefinition> tools,
     required List<ChatMessage> requestHistory,
+    required RequestContentCache contentCache,
   }) async {
     final ref = _ref;
     if (ref == null) return false;
@@ -61,6 +62,7 @@ extension _ChatStreamManagerCompactionExt on ChatStreamManager {
       requestHistory,
       assistantPrompt: _adapter.assistantPrompt,
       tools: tools,
+      contentCache: contentCache,
       // 与发送侧同一截断上限（字符数）：估算"实际会发送的内容"，
       // 关闭截断时 0 = 不截断，与协议层渲染一致。
       toolOutputMaxChars: ChatService.getEffectiveToolOutputMaxChars(
@@ -98,7 +100,12 @@ extension _ChatStreamManagerCompactionExt on ChatStreamManager {
     final head = state.history
         .sublist(headStart, tailStart)
         // 压缩转写剥离附件（媒体不进摘要请求）
-        .map((m) => m.attachments.isEmpty ? m : m.copyWith(attachments: []))
+        .map((m) => m.attachments.isEmpty
+            ? m
+            : m.copyWith(
+                content: contentCache.contentFor(m),
+                attachments: [],
+              ))
         .toList();
     final tail = state.history.sublist(tailStart);
     if (head.isEmpty) return false;
@@ -118,7 +125,7 @@ extension _ChatStreamManagerCompactionExt on ChatStreamManager {
       final role = m.role == 'user'
           ? strings.contextCompactionUserRole
           : strings.contextCompactionAssistantRole;
-      final content = m.content.trim();
+      final content = contentCache.contentFor(m).trim();
       if (content.isNotEmpty) {
         sb.writeln('$role: $content');
       }

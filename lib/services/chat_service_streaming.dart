@@ -133,6 +133,7 @@ extension ChatServiceStreamingExt on ChatService {
   Stream<ChatEvent> sendStreamWithTools(
     String userMessage, {
     required List<ChatMessage> history,
+    RequestContentCache? contentCache,
     bool reasoning = false,
     String reasoningEffort = 'medium',
     Map<String, String> reasoningParamValues = const {},
@@ -184,12 +185,18 @@ extension ChatServiceStreamingExt on ChatService {
         if (_isCancelledByUser) return;
         final toolOutputMaxChars =
             ChatService.getEffectiveToolOutputMaxChars(_assistantSettings);
-        final req = await _protocol.buildRequest(
-          history: history,
-          assistantPrompt: _assistantPrompt,
-          contextSummary: _contextSummary,
-          toolOutputMaxChars: toolOutputMaxChars,
-        );
+        late final ProtocolRequest req;
+        try {
+          req = await _protocol.buildRequest(
+            history: history,
+            assistantPrompt: _assistantPrompt,
+            contextSummary: _contextSummary,
+            toolOutputMaxChars: toolOutputMaxChars,
+            contentCache: contentCache,
+          );
+        } finally {
+          contentCache?.clear();
+        }
         var messages = req.messages;
         _lastRequestBody = {
           'model': _modelConfig?.modelId,
