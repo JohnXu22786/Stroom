@@ -31,7 +31,7 @@ class _ControlledAdapter implements HttpClientAdapter {
   Future<ResponseBody> fetch(RequestOptions options,
       Stream<Uint8List>? requestStream, Future<void>? cancelFuture) {
     calls++;
-    requested.complete(options);
+    if (!requested.isCompleted) requested.complete(options);
     // Deliberately permit a late response; the token must fence saving.
     return response.future;
   }
@@ -243,6 +243,26 @@ void main() {
     expect(persistedDiagnostics, isNot(contains('choices')));
     expect((await TextManifest.loadRecords()).single.folder, 'captured folder');
     expect(adapter.closed, isTrue);
+  });
+
+  test('reentrant run from notifier listener submits and saves only once',
+      () async {
+    var reentered = false;
+    Future<void>? reentrantRun;
+    notifier.addListener((_) {
+      if (reentered) return;
+      reentered = true;
+      reentrantRun = runner.run();
+    });
+
+    final running = runner.run();
+    await adapter.requested.future;
+    adapter.succeed();
+    await running;
+    await reentrantRun;
+
+    expect(adapter.calls, 1);
+    expect(saves, 1);
   });
 
   test(

@@ -2050,11 +2050,14 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   Future<void> _takePhotoWithSystemCamera() async {
     var importGeneration = _imageImportGeneration;
     var importPending = false;
-    var previousImportCommit = Future<void>.value();
-    Completer<void>? importCommit;
+    final previousImportCommit = _imageImportCommitTail;
+    final cameraCommit = Completer<void>();
+    _imageImportCommitTail = cameraCommit.future;
     try {
       final picker = ImagePicker();
       final mode = _imageImportMode;
+      _beginImageImport();
+      importPending = true;
       final file = await (widget.testCameraPicker?.call(
             maxWidth: mode.maxWidth,
             maxHeight: mode.maxHeight,
@@ -2072,12 +2075,6 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         return;
       }
 
-      previousImportCommit = _imageImportCommitTail;
-      final cameraCommit = Completer<void>();
-      importCommit = cameraCommit;
-      _imageImportCommitTail = cameraCommit.future;
-      _beginImageImport();
-      importPending = true;
       final bytes = await file.readAsBytes();
       if (!mounted || importGeneration != _imageImportGeneration) return;
       final payload = await _prepareImagePayload(bytes);
@@ -2112,8 +2109,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         );
       }
     } finally {
-      final commit = importCommit;
-      if (commit != null && !commit.isCompleted) commit.complete();
+      if (!cameraCommit.isCompleted) cameraCommit.complete();
       if (importPending) _finishImageImport();
     }
   }
@@ -2127,6 +2123,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     _imageImportCommitTail = galleryCommit.future;
     try {
       final mode = _imageImportMode;
+      _beginImageImport();
+      importPending = true;
       // 原生移动端打开应用内相册选择器，
       // 桌面端打开文件选择器并定位到系统"图片"目录
       final files = await (widget.testGalleryPicker?.call(
@@ -2149,8 +2147,6 @@ class _OcrPageState extends ConsumerState<OcrPage> {
 
       // Overlapping gallery selections share a generation so the later batch
       // cannot invalidate images still being read by the earlier batch.
-      _beginImageImport();
-      importPending = true;
       final newImages = <SelectedImage>[];
       String? firstError;
       Object? firstFileFailure;
@@ -2227,8 +2223,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   Future<void> _pickFromAppAlbum() async {
     var importGeneration = _imageImportGeneration;
     var importPending = false;
-    var previousImportCommit = Future<void>.value();
-    Completer<void>? importCommit;
+    final previousImportCommit = _imageImportCommitTail;
+    final albumCommit = Completer<void>();
+    _imageImportCommitTail = albumCommit.future;
     try {
       final result = await showAppAlbumPickerDialog(context);
       if (!mounted ||
@@ -2237,10 +2234,6 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           importGeneration != _imageImportGeneration) {
         return;
       }
-      previousImportCommit = _imageImportCommitTail;
-      final albumCommit = Completer<void>();
-      importCommit = albumCommit;
-      _imageImportCommitTail = albumCommit.future;
       _beginImageImport();
       importPending = true;
       await previousImportCommit;
@@ -2274,8 +2267,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                 .ocrChooseImageFailed(e.toString()))));
       }
     } finally {
-      final commit = importCommit;
-      if (commit != null && !commit.isCompleted) commit.complete();
+      if (!albumCommit.isCompleted) albumCommit.complete();
       if (importPending) _finishImageImport();
     }
   }
@@ -2674,6 +2666,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     if (modelOptions.isEmpty) {
       setState(() {
         _errorMessage = AppLocalizations.of(context)!.ocrConfigureProviderModel;
+        _clearOcrErrorDetails();
       });
       return;
     }

@@ -51,6 +51,9 @@ class DraggableFloatingPanel extends StatefulWidget {
   /// Whether the panel is visible. Shows when true, hides when false.
   final bool visible;
 
+  /// Whether confirming the selected URL is currently allowed.
+  final bool confirmEnabled;
+
   /// Bumped by the parent whenever the detected-URL list is reset for a new
   /// page. The panel drops its current selection when this changes, so a
   /// selection from the previous page can never capture a URL from the new
@@ -64,6 +67,7 @@ class DraggableFloatingPanel extends StatefulWidget {
     this.onClose,
     this.onDragUpdate,
     this.visible = true,
+    this.confirmEnabled = true,
     this.detectionEpoch = 0,
   });
 
@@ -461,7 +465,7 @@ class _DraggableFloatingPanelState extends State<DraggableFloatingPanel> {
           SizedBox(
             height: 28,
             child: FilledButton.icon(
-              onPressed: hasSelection
+              onPressed: hasSelection && widget.confirmEnabled
                   ? () {
                       widget.onConfirmCapture(
                         widget.detectedUrls[selectedIndex],

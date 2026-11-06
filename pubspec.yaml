@@ -1,7 +1,7 @@
 name: stroom
 description: A Flutter app combining FlClash UI architecture with camera functionality.
 publish_to: "none"
-version: 0.5.1
+version: 0.5.2
 
 environment:
   sdk: ">=3.13.7 <4.0.0"
@@ -120,9 +120,9 @@ dev_dependencies:
   sqflite_common_ffi: ^2.4.4
 
 dependency_overrides:
-  # Newer AVFoundation plugin releases use an isolation argument unavailable in
-  # the Xcode SDK used by the macOS and iOS release runners.
-  video_player_avfoundation: 2.12.0
+  # Newer releases use a Swift isolation argument unavailable in the Xcode SDK
+  # on the macOS release runners. Keep this range until those runners are updated.
+  video_player_avfoundation: ">=2.12.0 <2.12.2"
 
 flutter:
   config:

@@ -193,6 +193,56 @@ void main() {
   );
 
   testWidgets(
+    'the newest concurrent edit remains selected when the older write finishes first',
+    (tester) async {
+      final files = <File>[];
+      final writeGates = <Completer<void>>[];
+      final editedVersions = <Uint8List>[
+        Uint8List.fromList([10, 20, 30]),
+        Uint8List.fromList([40, 50, 60]),
+      ];
+      var editCount = 0;
+      var completedWriteCount = 0;
+      beforeAppAlbumPickerTempWriteForTesting = (file, bytes) async {
+        files.add(file);
+        final gate = Completer<void>();
+        writeGates.add(gate);
+        await gate.future;
+        await file.writeAsBytes(bytes);
+        completedWriteCount++;
+      };
+      appAlbumPickerEditImageForTesting =
+          (_, _) async => editedVersions[editCount++];
+
+      await openPickerWithSelectedImage(tester);
+      await tester.tap(find.byType(AlbumPreviewChip));
+      await tester.pump();
+      await tester.tap(find.byType(AlbumPreviewChip));
+      await tester.pump();
+      await _pumpUntil(tester, () => files.length == 2);
+
+      writeGates.first.complete();
+      await _pumpUntil(tester, () => completedWriteCount == 1);
+      writeGates.last.complete();
+      await _pumpUntil(tester, () => completedWriteCount == 2);
+
+      expect(
+        tester.widget<AlbumPreviewChip>(find.byType(AlbumPreviewChip)).bytes,
+        orderedEquals(editedVersions.last),
+      );
+
+      await tester.tap(
+        find.descendant(
+          of: find.widgetWithText(AppBar, '应用内相册'),
+          matching: find.byIcon(Icons.close),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await _pumpUntil(tester, () => files.every((file) => !file.existsSync()));
+    },
+  );
+
+  testWidgets(
     'concurrent edits of the same image use separate temp files',
     (tester) async {
       final files = <File>[];

@@ -13,6 +13,22 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
     required Object? streamError,
     required ChatService? snappedChatService,
   }) async {
+    // Deliver any sub-throttle reasoning tail before the stream state is
+    // cleared. Normal section-end events flush this same delta earlier.
+    final reasoningTail = state.takeReasoningAppend();
+    if (reasoningTail != null) {
+      _pushToProvider(convId, streamingReasoningAppendProvider, reasoningTail);
+    }
+
+    // Timer cancellation prevents future callbacks but does not wait for a
+    // partial write already in progress. Let it finish before building the
+    // full-history snapshot so the two large saves do not overlap.
+    try {
+      await state._periodicPersistFuture;
+    } catch (e) {
+      debugPrint('[ChatStreamManager] 等待定期持久化失败: $e');
+    }
+
     // Capture request/response raw data from the ChatService instance
     // that was active when this stream started (snapped above). Using
     // the snapped reference is critical: adapter.currentChatService may
@@ -21,7 +37,7 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
     Map<String, dynamic>? rawRequestCapture;
     Map<String, dynamic>? rawResponseCapture;
     try {
-      final reqBody = snappedChatService?.lastRequestBody;
+      final reqBody = state.requestBodySnapshot;
       final headers = snappedChatService?.lastRequestHeaders;
       final url = snappedChatService?.lastRequestUrl;
       if (reqBody != null || headers != null || url != null) {
@@ -30,6 +46,11 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
         if (headers != null) rawRequestCapture['headers'] = headers;
         if (reqBody != null) rawRequestCapture['body'] = reqBody;
       }
+      if (rawRequestCapture != null) {
+        rawRequestCapture = ChatMessage.compactRawRequest(rawRequestCapture);
+      }
+      snappedChatService?.releaseLastRequestBody(reqBody);
+      state.requestBodySnapshot = null;
       final respData = snappedChatService?.lastResponseData;
       final statusCode = snappedChatService?.lastResponseStatusCode;
       final respHeaders = snappedChatService?.lastResponseHeaders;
@@ -141,6 +162,8 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
         final msg = ChatMessage(
           role: 'assistant',
           content: fullReply,
+          contentFromTextSections: !state.hasSyntheticErrorReply &&
+              textChunks.any((chunk) => chunk.isNotEmpty),
           id: state.streamingMsgId ?? '',
           isError: isError,
           rawRequest: rawRequestCapture,
@@ -254,6 +277,7 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
       _setProvider(streamingMsgIdProvider(convId), null);
       _setProvider(streamingHasFirstTokenProvider(convId), false);
       _setProvider(streamingReasoningProvider(convId), '');
+      _setProvider(streamingReasoningAppendProvider(convId), null);
     }
 
     // Remove this conversation from the streaming set ONLY if no new

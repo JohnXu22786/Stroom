@@ -2254,6 +2254,12 @@ abstract class AppLocalizations {
   /// **'No tasks'**
   String get taskListEmpty;
 
+  /// No description provided for @chatAutoContinuePrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue if not finished.'**
+  String get chatAutoContinuePrompt;
+
   /// No description provided for @chatSearchCurrent.
   ///
   /// In en, this message translates to:
@@ -2782,6 +2788,12 @@ abstract class AppLocalizations {
   /// **'Preview failed to load'**
   String get chatPreviewLoadFailed;
 
+  /// No description provided for @albumPickerLoadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to load the app album'**
+  String get albumPickerLoadFailed;
+
   /// No description provided for @chatHtmlPreview.
   ///
   /// In en, this message translates to:
@@ -3273,6 +3285,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Some files are missing and were skipped'**
   String get taskFlowUiSomeFilesMissing;
+
+  /// No description provided for @taskFlowUiSelectedFilesUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to access {count} selected file(s). Please select all files again.'**
+  String taskFlowUiSelectedFilesUnavailable(int count);
 
   /// No description provided for @taskFlowUiQueuedOne.
   ///
@@ -4383,6 +4401,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Flow action failed: {error}'**
   String catcatchFlowActionFailed(Object error);
+
+  /// No description provided for @catcatchWebViewRecoveryGuidance.
+  ///
+  /// In en, this message translates to:
+  /// **'Automatic page scanning timed out. Sign in or configure a user script on this page; after media is detected, choose Continue flow.'**
+  String get catcatchWebViewRecoveryGuidance;
+
+  /// No description provided for @browserRecoveryContinue.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue flow'**
+  String get browserRecoveryContinue;
 
   /// No description provided for @catcatchSkipped.
   ///
@@ -14620,6 +14650,12 @@ abstract class AppLocalizations {
   /// **'Platform tutorials'**
   String get platformTutorialPageTitle;
 
+  /// No description provided for @browserRecoveryOpenPage.
+  ///
+  /// In en, this message translates to:
+  /// **'Open recovery page'**
+  String get browserRecoveryOpenPage;
+
   /// Media gallery and image editor interface copy.
   ///
   /// In en, this message translates to:
@@ -14925,6 +14961,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Invalid image index'**
   String get imageViewerInvalidIndex;
+
+  /// Suggested archive filename shown when exporting gallery media.
+  ///
+  /// In en, this message translates to:
+  /// **'image-export.zip'**
+  String get galleryExportImageArchiveFileName;
+
+  /// Suggested archive filename shown when exporting gallery media.
+  ///
+  /// In en, this message translates to:
+  /// **'video-export.zip'**
+  String get galleryExportVideoArchiveFileName;
+
+  /// Suggested archive filename shown when exporting a gallery folder.
+  ///
+  /// In en, this message translates to:
+  /// **'image-folder-export.zip'**
+  String get galleryExportImageFolderArchiveFileName;
+
+  /// Suggested archive filename shown when exporting a gallery folder.
+  ///
+  /// In en, this message translates to:
+  /// **'video-folder-export.zip'**
+  String get galleryExportVideoFolderArchiveFileName;
 }
 
 class _AppLocalizationsDelegate

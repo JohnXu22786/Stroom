@@ -520,6 +520,120 @@ void main() {
     );
   }
 
+  for (final gallery in [false, true]) {
+    testWidgets(
+      '${gallery ? "gallery" : "camera"} picker disables OCR until it returns',
+      (tester) async {
+        final pickerResult = gallery ? Completer<List<XFile>>() : null;
+        final cameraResult = gallery ? null : Completer<XFile?>();
+        await tester.pumpWidget(
+          _buildTestApp(
+            testImages: [_createValidOcrTestImage()],
+            testCameraPicker: ({maxWidth, maxHeight, imageQuality}) =>
+                cameraResult!.future,
+            testGalleryPicker: ({maxWidth, maxHeight, imageQuality}) =>
+                pickerResult!.future,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text(gallery ? '相册选择' : '拍照识别'));
+        await tester.pumpAndSettle();
+        if (gallery) {
+          await tester.tap(find.text('从系统相册选择'));
+        }
+        await tester.pump();
+
+        expect(find.text('正在导入图片...'), findsOneWidget);
+        expect(
+          tester
+              .widget<FilledButton>(
+                find.widgetWithText(FilledButton, '正在导入图片...'),
+              )
+              .onPressed,
+          isNull,
+        );
+
+        if (gallery) {
+          pickerResult!.complete([]);
+        } else {
+          cameraResult!.complete(null);
+        }
+        await tester.pumpAndSettle();
+
+        expect(
+          tester
+              .widget<FilledButton>(
+                find.widgetWithText(FilledButton, '开始识别'),
+              )
+              .onPressed,
+          isNotNull,
+          reason: 'cancelling a picker must clear its pending state',
+        );
+      },
+    );
+  }
+
+  testWidgets('camera picker errors clear the OCR import-pending state', (
+    tester,
+  ) async {
+    final cameraResult = Completer<XFile?>();
+    await tester.pumpWidget(
+      _buildTestApp(
+        testImages: [_createValidOcrTestImage()],
+        testCameraPicker: ({maxWidth, maxHeight, imageQuality}) =>
+            cameraResult.future,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('拍照识别'));
+    await tester.pump();
+    expect(find.text('正在导入图片...'), findsOneWidget);
+
+    cameraResult.completeError(StateError('picker failed'));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, '开始识别'))
+          .onPressed,
+      isNotNull,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('gallery picker errors clear the OCR import-pending state', (
+    tester,
+  ) async {
+    final galleryResult = Completer<List<XFile>>();
+    await tester.pumpWidget(
+      _buildTestApp(
+        testImages: [_createValidOcrTestImage()],
+        testGalleryPicker: ({maxWidth, maxHeight, imageQuality}) =>
+            galleryResult.future,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('相册选择'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('从系统相册选择'));
+    await tester.pump();
+    expect(find.text('正在导入图片...'), findsOneWidget);
+
+    galleryResult.completeError(StateError('picker failed'));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, '开始识别'))
+          .onPressed,
+      isNotNull,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('gallery keeps valid files when a later file read fails', (
     tester,
   ) async {
@@ -763,7 +877,7 @@ void main() {
   );
 
   testWidgets(
-    'camera choice accepted after gallery selection commits after the gallery',
+    'camera picker invoked first commits before a later gallery picker',
     (tester) async {
       final validBytes = _createValidOcrTestImage().bytes;
       final pendingCameraPicker = Completer<XFile?>();
@@ -786,18 +900,12 @@ void main() {
       await tester.tap(find.text('相册选择'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('从系统相册选择'));
-      await _pumpUntil(
-        tester,
-        () => find.text('已选 1 张图片').evaluate().isNotEmpty,
-      );
+      await tester.pump();
       expect(
-        tester
-            .widget<ImageGridItem>(
-              find.byKey(const ValueKey('ocr_grid_item_0')),
-            )
-            .image
-            .sourceName,
-        'gallery.png',
+        find.text('已选 1 张图片'),
+        findsNothing,
+        reason:
+            'the later gallery import must wait for the earlier camera slot',
       );
 
       pendingCameraPicker.complete(
@@ -815,7 +923,7 @@ void main() {
             )
             .image
             .sourceName,
-        'gallery.png',
+        isNull,
       );
       expect(
         tester
@@ -824,7 +932,7 @@ void main() {
             )
             .image
             .sourceName,
-        isNull,
+        'gallery.png',
       );
       expect(tester.takeException(), isNull);
     },
@@ -1377,6 +1485,41 @@ void main() {
       expect(find.textContaining('FormatException'), findsOneWidget);
       expect(find.textContaining('StateError'), findsNothing);
       expect(find.textContaining('test-key'), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('clears previous request details when no model is available', (
+      tester,
+    ) async {
+      final providerNotifier = ProviderEntriesNotifier()
+        ..state = ProviderEntriesState(
+          entries: [_createOcrEntry(withModels: true)],
+        );
+      await tester.pumpWidget(
+        _buildTestApp(
+          testProviderEntriesNotifier: providerNotifier,
+          testImages: [_createTestImage()],
+          testImagePayloadPreparer: (_) async {
+            throw StateError('request preparation failed');
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('开始识别'));
+      await _pumpUntil(
+        tester,
+        () => find.text('查看详细错误').evaluate().isNotEmpty,
+      );
+      expect(find.text('查看详细错误'), findsOneWidget);
+
+      providerNotifier.state = const ProviderEntriesState(entries: []);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('开始识别'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('请先在设置中配置 OCR 供应商和模型'), findsOneWidget);
+      expect(find.text('查看详细错误'), findsNothing);
       await tester.pumpWidget(const SizedBox.shrink());
     });
 
@@ -6306,6 +6449,15 @@ void main() {
       await tester.pumpWidget(_buildTestApp(testImages: images));
       await tester.pumpAndSettle();
 
+      final originalOrder = List.generate(
+        images.length,
+        (index) => tester
+            .widget<ImageGridItem>(
+              find.byKey(Key('ocr_grid_item_$index')),
+            )
+            .image,
+      );
+
       // Long-press item 0 to trigger drag
       final item0Center = tester.getCenter(
         find.byKey(const Key('ocr_grid_item_0')),
@@ -6320,17 +6472,23 @@ void main() {
       await gesture.moveTo(item1Center);
       await tester.pump(const Duration(milliseconds: 50));
 
-      // Cancel the drag (not drop — cancel leaves original order intact)
+      // Leave every DragTarget before lifting, so this is a canceled drag.
+      await gesture.moveTo(const Offset(-100, -100));
+      await tester.pump(const Duration(milliseconds: 50));
       await gesture.up();
       await tester.pumpAndSettle();
 
-      // All items should still be present and normal
-      expect(find.byKey(const Key('ocr_grid_item_0')), findsOneWidget);
-      expect(find.byKey(const Key('ocr_grid_item_1')), findsOneWidget);
-      expect(find.byKey(const Key('ocr_grid_item_2')), findsOneWidget);
+      // Cancellation must preserve image order and clear visible drag state.
+      for (var index = 0; index < originalOrder.length; index++) {
+        final item = tester.widget<ImageGridItem>(
+          find.byKey(Key('ocr_grid_item_$index')),
+        );
+        expect(item.image, same(originalOrder[index]));
+        expect(item.isDimmed, isFalse);
+        expect(item.isHoverTarget, isFalse);
+      }
 
       // Sort button still functional after drag cancel
-      // (proves no stale drag state)
       expect(find.byKey(const Key('ocr_sort_btn')), findsOneWidget);
     });
 

@@ -14,6 +14,33 @@ import 'package:stroom/pages/chat/composer/chat_album_picker_dialog.dart';
 import 'package:stroom/pages/extended_image_editor_page.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/image_manifest.dart';
+import 'package:stroom/providers/image_provider.dart';
+
+class _FailOnceImageRecordsNotifier extends ImageRecordsNotifier {
+  bool _failNext = true;
+
+  @override
+  Future<void> loadRecords() async {
+    if (_failNext) {
+      _failNext = false;
+      throw StateError('simulated records load failure');
+    }
+    await super.loadRecords();
+  }
+}
+
+class _FailOnceImageFolderListNotifier extends ImageFolderListNotifier {
+  bool _failNext = true;
+
+  @override
+  Future<void> loadFolders() async {
+    if (_failNext) {
+      _failNext = false;
+      throw StateError('simulated folders load failure');
+    }
+    await super.loadFolders();
+  }
+}
 
 /// Creates a small valid PNG (8x8 green) via the real engine.
 ///
@@ -81,6 +108,92 @@ void main() {
 
   tearDown(() {
     beforeAppAlbumPickerReadForTesting = null;
+  });
+
+  Future<
+      ({
+        List<MapEntry<String, Uint8List>>? Function() result,
+      })> openPickerWithLoadFailure(
+    WidgetTester tester, {
+    required bool failRecords,
+  }) async {
+    List<MapEntry<String, Uint8List>>? pickerResult;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          imageRecordsProvider.overrideWith(
+            (ref) => failRecords
+                ? _FailOnceImageRecordsNotifier()
+                : ImageRecordsNotifier(),
+          ),
+          imageFolderListProvider.overrideWith(
+            (ref) => failRecords
+                ? ImageFolderListNotifier()
+                : _FailOnceImageFolderListNotifier(),
+          ),
+        ],
+        child: MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () async {
+                pickerResult = await showAppAlbumPickerDialog(context);
+              },
+              child: const Text('Open Album'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Open Album'));
+    await tester.pump();
+    await _pumpUntil(
+      tester,
+      () =>
+          find.byKey(const Key('album_picker_retry_btn')).evaluate().isNotEmpty,
+    );
+    return (result: () => pickerResult);
+  }
+
+  group('AppAlbumPickerDialog initial load failures', () {
+    for (final failure in ['records', 'folders']) {
+      testWidgets(
+        '$failure load failure is distinct from an empty album and can retry',
+        (tester) async {
+          final picker = await openPickerWithLoadFailure(
+            tester,
+            failRecords: failure == 'records',
+          );
+
+          expect(find.text('加载应用内相册失败'), findsOneWidget);
+          expect(find.text('暂无图片'), findsNothing);
+          final confirm = tester.widget<FilledButton>(
+            find.byKey(const Key('album_picker_confirm_btn')),
+          );
+          expect(confirm.onPressed, isNull);
+
+          await tester.tap(find.byKey(const Key('album_picker_retry_btn')));
+          await _pumpUntil(
+            tester,
+            () => find.text('暂无图片').evaluate().isNotEmpty,
+          );
+          expect(
+            tester
+                .widget<FilledButton>(
+                  find.byKey(const Key('album_picker_confirm_btn')),
+                )
+                .onPressed,
+            isNotNull,
+          );
+
+          await tester.tap(find.byKey(const Key('album_picker_confirm_btn')));
+          await _pumpUntil(tester, () => picker.result() != null);
+          expect(picker.result(), isEmpty);
+        },
+      );
+    }
   });
 
   Future<

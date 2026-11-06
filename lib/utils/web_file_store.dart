@@ -6,6 +6,12 @@ import 'package:idb_shim/idb_shim.dart'
     show Database, idbModeReadOnly, idbModeReadWrite;
 import 'package:idb_shim/idb_browser.dart' show idbFactoryBrowser;
 
+class WebFileStoreReadLimitExceededException implements Exception {
+  const WebFileStoreReadLimitExceededException(this.maxBytes);
+
+  final int maxBytes;
+}
+
 /// Web 端使用 IndexedDB 存储二进制文件
 /// 突破 SharedPreferences 约 2MB 的存储上限
 ///
@@ -188,10 +194,24 @@ class WebFileStore {
     return null;
   }
 
+  static void _checkReadLimit(dynamic value, int? maxBytes) {
+    if (maxBytes == null) return;
+    final byteLength = switch (value) {
+      ByteBuffer buffer => buffer.lengthInBytes,
+      TypedData data => data.lengthInBytes,
+      List<int> bytes => bytes.length,
+      _ => null,
+    };
+    if (byteLength != null && byteLength > maxBytes) {
+      throw WebFileStoreReadLimitExceededException(maxBytes);
+    }
+  }
+
   /// 读取文件
-  static Future<Uint8List?> read(String key) async {
+  static Future<Uint8List?> read(String key, {int? maxBytes}) async {
     if (_testMode) {
       final val = _inMemoryStore[key];
+      _checkReadLimit(val, maxBytes);
       return val != null ? Uint8List.fromList(val) : null;
     }
     final db = await _database;
@@ -204,7 +224,9 @@ class WebFileStore {
       return null;
     }
 
+    _checkReadLimit(result, maxBytes);
     final converted = _toUint8List(result, key);
+    _checkReadLimit(converted, maxBytes);
     if (converted == null) {
       debugPrint(
           'WebFileStore 读取 $key → 原始类型: ${result.runtimeType} (值: $result)');

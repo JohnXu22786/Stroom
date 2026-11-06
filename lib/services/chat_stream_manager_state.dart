@@ -66,13 +66,23 @@ class StreamResult {
 
 class _ConversationStreamState {
   final String convId;
+  Map<String, dynamic>? requestBodySnapshot;
   bool cancelledByUser = false;
+  bool toolCallStarted = false;
+  final Completer<void> cancellationSignal = Completer<void>();
+
+  void cancelByUser() {
+    cancelledByUser = true;
+    if (!cancellationSignal.isCompleted) cancellationSignal.complete();
+  }
 
   /// Guards against overlapping periodic persist calls from the timer.
   bool _isPersisting = false;
+  Future<void>? _periodicPersistFuture;
   String? streamingMsgId;
   Future<bool> Function(ChatMessage continuation)? onContinuation;
-  ChatMessage? pendingContinuation;
+  final List<ChatMessage> pendingContinuations = [];
+  final Set<ChatMessage> deliveringContinuations = {};
   // The text sections are the canonical live representation. Completed
   // sections are immutable strings, and only the current section remains a
   // mutable buffer. This lets throttled snapshots reuse sealed sections
@@ -100,7 +110,7 @@ class _ConversationStreamState {
     _closedLinkLabelAtLineStart = false;
     _linkScannerAtLineStart = true;
     _linkScannerLineSpaces = 0;
-    _lineStartDigits.clear();
+    _lineStartHasDigits = false;
     _atLineStart = true;
     _pendingOrderedListMarker = false;
     _scanOrderedListMarkers(value);
@@ -108,12 +118,30 @@ class _ConversationStreamState {
   }
 
   final StringBuffer _reasoningBuffer = StringBuffer();
-  String get reasoningBuffer => _reasoningBuffer.toString();
-  List<String> _reasoningSections = [];
+  String? _reasoningBufferSnapshot;
+  String get _reasoningSnapshot =>
+      _reasoningBufferSnapshot ??= _reasoningBuffer.toString();
+  String get reasoningBuffer => _reasoningSnapshot;
+  final StringBuffer _pendingReasoningDelta = StringBuffer();
+  int _reasoningUpdateSequence = 0;
+  int get currentReasoningSectionIndex => _reasoningSections.length;
+
+  StreamingReasoningAppend? takeReasoningAppend() {
+    if (_pendingReasoningDelta.isEmpty) return null;
+    final append = StreamingReasoningAppend(
+      sequence: _reasoningUpdateSequence++,
+      sectionIndex: currentReasoningSectionIndex,
+      text: _pendingReasoningDelta.toString(),
+    );
+    _pendingReasoningDelta.clear();
+    return append;
+  }
+
+  final List<String> _reasoningSections = [];
   bool _reasoningSectionActive = false;
   List<String> get reasoningSections => [
         ..._reasoningSections,
-        if (_reasoningSectionActive) _reasoningBuffer.toString(),
+        if (_reasoningSectionActive) _reasoningSnapshot,
       ];
 
   void appendReasoning(String text) {
@@ -123,12 +151,16 @@ class _ConversationStreamState {
       _reasoningSections.removeLast();
     }
     _reasoningBuffer.write(text);
+    _pendingReasoningDelta.write(text);
+    _reasoningBufferSnapshot = null;
     _reasoningSectionActive = true;
   }
 
   void endReasoningSection() {
-    _reasoningSections = reasoningSections..add('');
+    if (_reasoningSectionActive) _reasoningSections.add(_reasoningSnapshot);
+    _reasoningSections.add('');
     _reasoningBuffer.clear();
+    _reasoningBufferSnapshot = null;
     _reasoningSectionActive = false;
   }
 
@@ -145,7 +177,7 @@ class _ConversationStreamState {
   final StringBuffer _pendingTextDelta = StringBuffer();
   bool _currentChunkHasMarkdownSyntax = false;
   int _textUpdateSequence = 0;
-  final StringBuffer _lineStartDigits = StringBuffer();
+  bool _lineStartHasDigits = false;
   bool _atLineStart = true;
   bool _pendingOrderedListMarker = false;
   String _markdownSyntaxCarry = '';
@@ -155,7 +187,7 @@ class _ConversationStreamState {
   int? _inlineDelimiterLeftCodeUnit;
   int? _lastScannedCodeUnit;
   int _consecutiveBackslashes = 0;
-  final Map<int, List<int>> _openInlineDelimiters = {};
+  final Map<int, int> _openInlineDelimiters = {};
   bool _openLinkLabel = false;
   bool _closedLinkLabel = false;
   bool _openLinkLabelAtLineStart = false;
@@ -172,6 +204,37 @@ class _ConversationStreamState {
     final delta = _pendingTextDelta.toString();
     _pendingTextDelta.clear();
     return delta;
+  }
+
+  bool _serviceStartedTextChunk = false;
+  String? _completedServiceTextChunk;
+  String? _completedToolCallReasoning;
+
+  String startTextChunkFromService() {
+    _serviceStartedTextChunk = true;
+    return _completedServiceTextChunk = startTextChunk();
+  }
+
+  String? takeCompletedToolCallRound() {
+    final completed = _completedServiceTextChunk;
+    _completedServiceTextChunk = null;
+    return completed;
+  }
+
+  String? takeCompletedToolCallReasoning() {
+    final completed = _completedToolCallReasoning;
+    _completedToolCallReasoning = null;
+    return completed;
+  }
+
+  void setCompletedToolCallReasoning(String reasoning) {
+    _completedToolCallReasoning = reasoning;
+  }
+
+  bool takeServiceStartedTextChunk() {
+    final started = _serviceStartedTextChunk;
+    _serviceStartedTextChunk = false;
+    return started;
   }
 
   void appendText(String text) {
@@ -195,24 +258,54 @@ class _ConversationStreamState {
     if (!_currentChunkHasMarkdownSyntax) _scanOrderedListMarkers(text);
   }
 
+  // Shared because this detector runs on each incoming text event.
+  static final RegExp _markdownBlockStart = RegExp(
+    r'^\s{0,3}(?:`{3,}|~{3,}|#{1,6}\s|>|[-+*]\s)',
+    multiLine: true,
+  );
+  static final RegExp _markdownIndentedLine = RegExp(
+    r'^(?: {4,}|\t)\S',
+    multiLine: true,
+  );
+  static final RegExp _markdownThematicBreak = RegExp(
+    r'^\s{0,3}(?:\*(?:\s*\*){2,}|-(?:\s*-){2,}|_(?:\s*_){2,})\s*$',
+    multiLine: true,
+  );
+  static final RegExp _markdownSetextHeading = RegExp(
+    r'^\s{0,3}=+\s*$',
+    multiLine: true,
+  );
+  static final RegExp _markdownTableDivider = RegExp(
+    r'^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?\s*$',
+    multiLine: true,
+  );
+  static final RegExp _markdownTableCellDivider = RegExp(
+    r'\|\s*:?-{3,}:?\s*\|',
+  );
+  static final RegExp _markdownMath = RegExp(
+    r'\\(?:\(|\[|begin\{(?:equation|align|gather)\})',
+  );
+  static final RegExp _markdownUrl = RegExp(
+    r'(?<!\w)(https?://|www\.)\S+',
+  );
+  static final RegExp _markdownHtmlEntity = RegExp(
+    r'&(?:[A-Za-z][A-Za-z0-9]+|#\d+);',
+  );
+  static final RegExp _markdownHtmlTag = RegExp(r'<[/?!]?[A-Za-z][^>]*>');
+  static final RegExp _markdownGenericUrl = RegExp(r'\b\w+://\S+');
+
   bool _containsMarkdownSyntax(String text) =>
-      RegExp(r'^\s{0,3}(?:`{3,}|~{3,}|#{1,6}\s|>|[-+*]\s)', multiLine: true)
-          .hasMatch(text) ||
-      RegExp(r'^(?: {4,}|\t)\S', multiLine: true).hasMatch(text) ||
-      RegExp(r'^\s{0,3}(?:\*(?:\s*\*){2,}|-(?:\s*-){2,}|_(?:\s*_){2,})\s*$',
-              multiLine: true)
-          .hasMatch(text) ||
-      RegExp(r'^\s{0,3}=+\s*$', multiLine: true).hasMatch(text) ||
-      RegExp(r'^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?\s*$',
-              multiLine: true)
-          .hasMatch(text) ||
-      RegExp(r'\|\s*:?-{3,}:?\s*\|').hasMatch(text) ||
-      RegExp(r'\\(?:\(|\[|begin\{(?:equation|align|gather)\})')
-          .hasMatch(text) ||
-      RegExp(r'(?<!\w)(https?://|www\.)\S+').hasMatch(text) ||
-      RegExp(r'&(?:[A-Za-z][A-Za-z0-9]+|#\d+);').hasMatch(text) ||
-      RegExp(r'<[/?!]?[A-Za-z][^>]*>').hasMatch(text) ||
-      RegExp(r'\b\w+://\S+').hasMatch(text);
+      _markdownBlockStart.hasMatch(text) ||
+      _markdownIndentedLine.hasMatch(text) ||
+      _markdownThematicBreak.hasMatch(text) ||
+      _markdownSetextHeading.hasMatch(text) ||
+      _markdownTableDivider.hasMatch(text) ||
+      _markdownTableCellDivider.hasMatch(text) ||
+      _markdownMath.hasMatch(text) ||
+      _markdownUrl.hasMatch(text) ||
+      _markdownHtmlEntity.hasMatch(text) ||
+      _markdownHtmlTag.hasMatch(text) ||
+      _markdownGenericUrl.hasMatch(text);
 
   bool _scanInlineMarkdown(String text) {
     for (final codeUnit in text.codeUnits) {
@@ -289,7 +382,9 @@ class _ConversationStreamState {
     final leftIsWord = _isWordCodeUnit(_inlineDelimiterLeftCodeUnit);
     final underscoreInsideWord = delimiter == 95 && leftIsWord;
     if (opensDelimiter && !nextIsWhitespace && !underscoreInsideWord) {
-      _openInlineDelimiters.putIfAbsent(delimiter, () => []).add(length);
+      // Only the latest opener for each delimiter can be closed next. Once
+      // a match is found, the section is routed through Markdown.
+      _openInlineDelimiters[delimiter] = length;
     }
     _pendingInlineDelimiter = null;
     _pendingInlineDelimiterLength = 0;
@@ -311,15 +406,11 @@ class _ConversationStreamState {
     final left = _inlineDelimiterLeftCodeUnit;
     final leftIsWhitespace =
         left == 9 || left == 10 || left == 13 || left == 32;
-    final openRuns = _openInlineDelimiters[delimiter];
     if (leftIsWhitespace ||
-        openRuns == null ||
-        openRuns.isEmpty ||
-        openRuns.last != _pendingInlineDelimiterLength) {
+        _openInlineDelimiters[delimiter] != _pendingInlineDelimiterLength) {
       return false;
     }
-    openRuns.removeLast();
-    if (openRuns.isEmpty) _openInlineDelimiters.remove(delimiter);
+    _openInlineDelimiters.remove(delimiter);
     _consumedInlineDelimiterWasMarkdown = true;
     _pendingInlineDelimiter = null;
     _pendingInlineDelimiterLength = 0;
@@ -337,7 +428,7 @@ class _ConversationStreamState {
     for (final codeUnit in text.codeUnits) {
       if (codeUnit == 10) {
         _atLineStart = true;
-        _lineStartDigits.clear();
+        _lineStartHasDigits = false;
         _pendingOrderedListMarker = false;
         continue;
       }
@@ -350,12 +441,12 @@ class _ConversationStreamState {
         continue;
       }
       if (!_atLineStart) continue;
-      if (codeUnit == 32 && _lineStartDigits.isEmpty) continue;
+      if (codeUnit == 32 && !_lineStartHasDigits) continue;
       if (codeUnit >= 48 && codeUnit <= 57) {
-        _lineStartDigits.writeCharCode(codeUnit);
+        _lineStartHasDigits = true;
         continue;
       }
-      if ((codeUnit == 46 || codeUnit == 41) && _lineStartDigits.isNotEmpty) {
+      if ((codeUnit == 46 || codeUnit == 41) && _lineStartHasDigits) {
         _pendingOrderedListMarker = true;
         continue;
       }
@@ -363,12 +454,13 @@ class _ConversationStreamState {
     }
   }
 
-  void startTextChunk() {
-    _completedTextChunks.add(_currentTextChunk.toString());
+  String startTextChunk() {
+    final completed = _currentTextChunk.toString();
+    _completedTextChunks.add(completed);
     _currentTextChunk = StringBuffer();
     _pendingTextDelta.clear();
     _currentChunkHasMarkdownSyntax = false;
-    _lineStartDigits.clear();
+    _lineStartHasDigits = false;
     _atLineStart = true;
     _pendingOrderedListMarker = false;
     _markdownSyntaxCarry = '';
@@ -385,6 +477,7 @@ class _ConversationStreamState {
     _closedLinkLabelAtLineStart = false;
     _linkScannerAtLineStart = true;
     _linkScannerLineSpaces = 0;
+    return completed;
   }
 
   bool get currentTextChunkIsNotEmpty => _currentTextChunk.length > 0;

@@ -23,6 +23,7 @@ extension _ChatStreamManagerCompactionExt on ChatStreamManager {
     required String convId,
     required List<ToolDefinition> tools,
     required List<ChatMessage> requestHistory,
+    required RequestContentCache contentCache,
   }) async {
     final ref = _ref;
     if (ref == null) return false;
@@ -61,6 +62,7 @@ extension _ChatStreamManagerCompactionExt on ChatStreamManager {
       requestHistory,
       assistantPrompt: _adapter.assistantPrompt,
       tools: tools,
+      contentCache: contentCache,
       // 与发送侧同一截断上限（字符数）：估算"实际会发送的内容"，
       // 关闭截断时 0 = 不截断，与协议层渲染一致。
       toolOutputMaxChars: ChatService.getEffectiveToolOutputMaxChars(
@@ -95,11 +97,9 @@ extension _ChatStreamManagerCompactionExt on ChatStreamManager {
       if (idx >= 0) headStart = idx;
     }
     if (headStart >= tailStart) return false; // 无新增可压缩内容
-    final head = state.history
-        .sublist(headStart, tailStart)
-        // 压缩转写剥离附件（媒体不进摘要请求）
-        .map((m) => m.attachments.isEmpty ? m : m.copyWith(attachments: []))
-        .toList();
+    // The summary prompt below reads only text/tool results; keep originals
+    // so attachment-bearing messages do not retain copied full text.
+    final head = state.history.sublist(headStart, tailStart);
     final tail = state.history.sublist(tailStart);
     if (head.isEmpty) return false;
 
@@ -118,7 +118,7 @@ extension _ChatStreamManagerCompactionExt on ChatStreamManager {
       final role = m.role == 'user'
           ? strings.contextCompactionUserRole
           : strings.contextCompactionAssistantRole;
-      final content = m.content.trim();
+      final content = contentCache.contentFor(m).trim();
       if (content.isNotEmpty) {
         sb.writeln('$role: $content');
       }
@@ -159,6 +159,10 @@ extension _ChatStreamManagerCompactionExt on ChatStreamManager {
       convId: convId,
     );
     if (requestSvc == null) return false;
+    // The compaction transcript now owns its assembled text. Drop cached
+    // copies for the summarized head before the network wait; keep the tail
+    // entries that the ensuing main request may reuse.
+    contentCache.retainOnly(tail);
     requestSvc.onUsageEvent =
         (usage, {required bool recordInput, double? costIncrement}) {
       _commitUsage(convId, usage,

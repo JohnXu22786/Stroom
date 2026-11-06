@@ -1607,6 +1607,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
   }) async {
     final paths = <String>[];
     final names = <String, String>{};
+    var unresolvedRecords = 0;
     // Multi-select path-only mode: no readFile — the dialog resolves each
     // record's path via onRecordsPicked without buffering the files.
     final result = await showMediaPickerDialog<T>(
@@ -1646,27 +1647,32 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
               if (name != null && name.isNotEmpty) {
                 names[path] = flowMediaRecordFileName(name, format ?? '');
               }
+            } else {
+              unresolvedRecords++;
             }
           }
         },
       ),
     );
 
-    if (result == null || paths.isEmpty || !mounted || _isStarting) return;
+    if (result == null || !mounted || _isStarting) return;
     // On web readFilePath returns a WebFileStore key, not a filesystem
     // path — skip the existence check there (dart:io File throws).
     final valid = paths.where((p) {
       if (kIsWeb) return true;
       return File(p).existsSync();
     }).toList();
-    if (valid.length != paths.length) {
+    final unavailableCount = unresolvedRecords + paths.length - valid.length;
+    if (unavailableCount > 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            AppLocalizations.of(context)!.taskFlowUiSomeFilesMissing,
+            AppLocalizations.of(context)!
+                .taskFlowUiSelectedFilesUnavailable(unavailableCount),
           ),
         ),
       );
+      return;
     }
     // Skip paths already selected — re-picking the same file must not
     // fan out a duplicate execution.

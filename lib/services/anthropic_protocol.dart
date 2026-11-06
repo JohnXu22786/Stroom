@@ -29,6 +29,7 @@ class AnthropicProtocol implements ChatProtocol {
     String? assistantPrompt,
     String? contextSummary,
     int? toolOutputMaxChars,
+    RequestContentCache? contentCache,
   }) async {
     final result = <Map<String, dynamic>>[];
     String? system;
@@ -43,22 +44,23 @@ class AnthropicProtocol implements ChatProtocol {
     }
 
     for (final msg in history) {
+      final messageContent = contentCache?.contentFor(msg) ?? msg.content;
       final toolCalls = msg.toolCalls;
       final hasToolCalls = toolCalls != null && toolCalls.isNotEmpty;
 
       if (msg.attachments.isEmpty && !hasToolCalls) {
-        result.add({'role': msg.role, 'content': msg.content});
+        result.add({'role': msg.role, 'content': messageContent});
         continue;
       }
 
       // 组装内容块（文本 + 附件；无附件时保持字符串形式）
       Object content;
       if (msg.attachments.isEmpty) {
-        content = msg.content;
+        content = messageContent;
       } else {
         final parts = <Map<String, dynamic>>[];
-        if (msg.content.isNotEmpty) {
-          parts.add({'type': 'text', 'text': msg.content});
+        if (messageContent.isNotEmpty) {
+          parts.add({'type': 'text', 'text': messageContent});
         }
         for (final att in msg.attachments) {
           // 'file' 是旧数据的遗留分类（composer 现只产出

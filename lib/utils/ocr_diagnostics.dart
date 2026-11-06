@@ -9,7 +9,6 @@ class OcrDiagnosticSnapshot {
 
   static const maxSerializedBytes = 2048;
   static const _maxTextLength = 160;
-  static const _maxCredentialValueLength = 512;
   static const _requestIdHeaders = {
     'x-request-id',
     'request-id',
@@ -76,6 +75,8 @@ class OcrDiagnosticSnapshot {
     caseSensitive: false,
   );
 
+  /// Extracted values may contain full secrets. Use them only as transient
+  /// sanitizer exclusions; never expose or persist the returned values.
   static List<String> credentialValuesFromUrl(dynamic rawUrl) {
     if (rawUrl is! String || rawUrl.isEmpty) return const [];
     final uri = Uri.tryParse(rawUrl);
@@ -126,6 +127,14 @@ class OcrDiagnosticSnapshot {
 
   static List<String> _credentialValuesFromBody(dynamic rawBody) {
     final values = <String>{};
+    var body = rawBody;
+    if (body is String) {
+      try {
+        body = jsonDecode(body);
+      } on FormatException {
+        return const [];
+      }
+    }
 
     void collect(dynamic value, {bool credentialField = false}) {
       if (credentialField && value is String) {
@@ -136,7 +145,7 @@ class OcrDiagnosticSnapshot {
           if (entry.key is String) {
             collect(
               entry.value,
-              credentialField:
+              credentialField: credentialField ||
                   _credentialQueryParameter.hasMatch(entry.key as String),
             );
           }
@@ -148,7 +157,7 @@ class OcrDiagnosticSnapshot {
       }
     }
 
-    collect(rawBody);
+    collect(body);
     return values.toList(growable: false);
   }
 
@@ -156,23 +165,18 @@ class OcrDiagnosticSnapshot {
     final value = rawValue.trim();
     if (value.isEmpty) return;
 
-    String bounded(String credential) =>
-        credential.length <= _maxCredentialValueLength
-            ? credential
-            : credential.substring(0, _maxTextLength);
-
-    values.add(bounded(value));
+    values.add(value);
     final token = RegExp(
       r'^(?:Bearer|Basic)\s+(.+)$',
       caseSensitive: false,
     ).firstMatch(value)?.group(1)?.trim();
-    if (token != null && token.isNotEmpty) values.add(bounded(token));
+    if (token != null && token.isNotEmpty) values.add(token);
   }
 
   static List<String> credentialValuesFromHeaders(dynamic rawHeaders) {
     if (rawHeaders is! Map) return const [];
     final credentialHeader = RegExp(
-      r'(?:authorization|auth.?token|(?:^|[-_.])token|api.?key|access.?key|subscription.?key|access.?token|refresh.?token|(?:private|secret).?key|(?:^|[-_.])secret(?:$|[-_.])|client.?secret|credentials?|password|cookie)',
+      r'(?:authorization|auth.?token|(?:^|[-_.])auth(?:$|[-_.])|(?:^|[-_.])token|api.?key|access.?key|subscription.?key|access.?token|refresh.?token|(?:private|secret).?key|(?:^|[-_.])secret(?:$|[-_.])|client.?secret|credentials?|password|cookie)',
       caseSensitive: false,
     );
     final values = <String>{};
@@ -703,15 +707,16 @@ class OcrDiagnosticSnapshot {
           ? value.clamp(0, 1 << 50).toInt()
           : null;
 
-  static bool _matchesCredentialPrefix(
+  static bool _matchesCredentialFragment(
     String value,
     Iterable<String> excludedValues,
   ) {
     final normalized = value.toLowerCase();
     return excludedValues.any((secret) {
       final normalizedSecret = secret.toLowerCase();
-      return normalizedSecret.length > normalized.length &&
-          normalizedSecret.startsWith(normalized);
+      return (normalizedSecret.length > normalized.length &&
+              normalizedSecret.startsWith(normalized)) ||
+          (normalized.length >= 8 && normalizedSecret.contains(normalized));
     });
   }
 
@@ -726,7 +731,7 @@ class OcrDiagnosticSnapshot {
     }
     if (RegExp(r'data:image/', caseSensitive: false).hasMatch(cleaned) ||
         _isShortEncodedImageBody(cleaned) ||
-        _matchesCredentialPrefix(cleaned, excludedValues) ||
+        _matchesCredentialFragment(cleaned, excludedValues) ||
         containsCredential(cleaned, excludedValues: excludedValues)) {
       return null;
     }

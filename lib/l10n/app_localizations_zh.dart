@@ -1243,6 +1243,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get taskListEmpty => '暂无任务';
 
   @override
+  String get chatAutoContinuePrompt => '如果还没完成，请继续。';
+
+  @override
   String get chatSearchCurrent => '搜索当前对话...';
 
   @override
@@ -1545,6 +1548,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chatPreviewLoadFailed => '加载失败';
 
   @override
+  String get albumPickerLoadFailed => '加载应用内相册失败';
+
+  @override
   String get chatHtmlPreview => 'HTML 预览';
 
   @override
@@ -1811,6 +1817,11 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get taskFlowUiSomeFilesMissing => '部分文件不存在，已跳过';
+
+  @override
+  String taskFlowUiSelectedFilesUnavailable(int count) {
+    return '有 $count 个已选文件无法找到或读取，请重新选择全部文件。';
+  }
 
   @override
   String get taskFlowUiQueuedOne => '任务流已加入队列';
@@ -2441,6 +2452,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String catcatchFlowActionFailed(Object error) {
     return '任务流操作失败：$error';
   }
+
+  @override
+  String get catcatchWebViewRecoveryGuidance =>
+      '自动获取网页资源连续超时。请在此页面登录或设置用户脚本；检测到媒体资源后，点击“继续流程”。';
+
+  @override
+  String get browserRecoveryContinue => '继续流程';
 
   @override
   String get catcatchSkipped => '已跳过（无需处理）';
@@ -8256,6 +8274,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get platformTutorialPageTitle => '平台教程';
 
   @override
+  String get browserRecoveryOpenPage => '打开恢复页面';
+
+  @override
   String galleryUnsupportedPreview(String format) {
     return '不支持预览 .$format 格式';
   }
@@ -8435,6 +8456,18 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get imageViewerInvalidIndex => '图片索引无效';
+
+  @override
+  String get galleryExportImageArchiveFileName => '图片导出.zip';
+
+  @override
+  String get galleryExportVideoArchiveFileName => '视频导出.zip';
+
+  @override
+  String get galleryExportImageFolderArchiveFileName => '图片文件夹导出.zip';
+
+  @override
+  String get galleryExportVideoFolderArchiveFileName => '视频文件夹导出.zip';
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).
@@ -9675,6 +9708,9 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get taskListEmpty => '暂无任务';
 
   @override
+  String get chatAutoContinuePrompt => '如果还没完成，请继续。';
+
+  @override
   String get chatSearchCurrent => '搜索当前对话...';
 
   @override
@@ -9977,6 +10013,9 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get chatPreviewLoadFailed => '加载失败';
 
   @override
+  String get albumPickerLoadFailed => '加载应用内相册失败';
+
+  @override
   String get chatHtmlPreview => 'HTML 预览';
 
   @override
@@ -10243,6 +10282,11 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get taskFlowUiSomeFilesMissing => '部分文件不存在，已跳过';
+
+  @override
+  String taskFlowUiSelectedFilesUnavailable(int count) {
+    return '有 $count 个已选文件无法找到或读取，请重新选择全部文件。';
+  }
 
   @override
   String get taskFlowUiQueuedOne => '任务流已加入队列';
@@ -10873,6 +10917,13 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String catcatchFlowActionFailed(Object error) {
     return '任务流操作失败：$error';
   }
+
+  @override
+  String get catcatchWebViewRecoveryGuidance =>
+      '自动获取网页资源连续超时。请在此页面登录或设置用户脚本；检测到媒体资源后，点击“继续流程”。';
+
+  @override
+  String get browserRecoveryContinue => '继续流程';
 
   @override
   String get catcatchSkipped => '已跳过（无需处理）';
@@ -16688,6 +16739,9 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get platformTutorialPageTitle => '平台教程';
 
   @override
+  String get browserRecoveryOpenPage => '打开恢复页面';
+
+  @override
   String galleryUnsupportedPreview(String format) {
     return '不支持预览 .$format 格式';
   }
@@ -16867,4 +16921,16 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get imageViewerInvalidIndex => '图片索引无效';
+
+  @override
+  String get galleryExportImageArchiveFileName => '图片导出.zip';
+
+  @override
+  String get galleryExportVideoArchiveFileName => '视频导出.zip';
+
+  @override
+  String get galleryExportImageFolderArchiveFileName => '图片文件夹导出.zip';
+
+  @override
+  String get galleryExportVideoFolderArchiveFileName => '视频文件夹导出.zip';
 }

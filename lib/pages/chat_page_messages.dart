@@ -41,7 +41,19 @@ extension _ChatPageMessagesExt on _ChatPageState {
     // Load conversation messages after restoring a background stream. This
     // lets the loader merge the manager's live history with the persisted
     // snapshot instead of briefly replacing it with stale data.
-    await _loadConversationMessages();
+    try {
+      await _loadConversationMessages();
+    } finally {
+      // If no conversation is active, the empty chat is ready. When an ID is
+      // active but its record is not available yet, keep loading visible until
+      // the conversations listener retries after provider hydration.
+      if (mounted) {
+        final activeId = ref.read(activeConversationIdProvider);
+        if (activeId == null || _loadedConversationId == activeId) {
+          setState(() => _isInitialChatLoadPending = false);
+        }
+      }
+    }
 
     // Then initialize MCP server placeholders (SSE / stdio) without any
     // network connection — MCP servers are lazy: they connect only when a
@@ -259,8 +271,10 @@ extension _ChatPageMessagesExt on _ChatPageState {
     final loadCompleter = Completer<void>();
     _messageLoadCompleter = loadCompleter;
     final loadGeneration = ++_conversationLoadGeneration;
+    String? loadingConversationId;
     try {
       final activeId = ref.read(activeConversationIdProvider);
+      loadingConversationId = activeId;
       bool isCurrentLoad() =>
           mounted &&
           loadGeneration == _conversationLoadGeneration &&
@@ -271,7 +285,12 @@ extension _ChatPageMessagesExt on _ChatPageState {
       if (activeId == null) {
         await AppLogService.warning(
             'ChatPage', '[STREAM-LOAD] activeConversationId is null, skip');
-        if (isCurrentLoad()) _clearConversationView();
+        if (isCurrentLoad()) {
+          _clearConversationView();
+          if (_isInitialChatLoadPending) {
+            setState(() => _isInitialChatLoadPending = false);
+          }
+        }
         return;
       }
       final conv = convs.where((c) => c.id == activeId).firstOrNull;
@@ -309,7 +328,13 @@ extension _ChatPageMessagesExt on _ChatPageState {
       // the next save.
       _resolveEnabledToolsForActiveConversation();
       if (messages.isEmpty) {
+        if (conv == null && _isInitialChatLoadPending && convs.isEmpty) {
+          return;
+        }
         _clearConversationView();
+        if (_isInitialChatLoadPending && isCurrentLoad()) {
+          setState(() => _isInitialChatLoadPending = false);
+        }
         return;
       }
 
@@ -559,10 +584,23 @@ extension _ChatPageMessagesExt on _ChatPageState {
         // its complete reasoning/tool/text segments after the controller swap.
         _rebuildLiveSegments(savedStreamingMsgId);
       }
-      if (mounted) setState(() {});
+      if (mounted) {
+        setState(() {
+          if (_isInitialChatLoadPending &&
+              ref.read(activeConversationIdProvider) == loadingConversationId) {
+            _isInitialChatLoadPending = false;
+          }
+        });
+      }
     } catch (e, s) {
       debugPrint('[ChatPage] _loadConversationMessages error: $e\n$s');
       await AppLogService.error('ChatPage', '加载对话消息失败', e, s);
+      if (mounted &&
+          loadingConversationId != null &&
+          ref.read(activeConversationIdProvider) == loadingConversationId &&
+          _isInitialChatLoadPending) {
+        setState(() => _isInitialChatLoadPending = false);
+      }
     } finally {
       _isLoadingMessages = false;
       if (identical(_messageLoadCompleter, loadCompleter)) {

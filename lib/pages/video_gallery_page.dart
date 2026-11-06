@@ -539,7 +539,7 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
       if (useArchive && exportedCount > 0) {
         final saved = await saveFileWithType(
           dialogTitle: strings.galleryExportVideoTitle,
-          fileName: '视频导出.zip',
+          fileName: strings.galleryExportVideoArchiveFileName,
           extensions: const ['zip'],
           bytes: encodeUserVisibleExportArchive(files: archiveFiles),
           initialDirectory: SystemPickDirectories.videos(),
@@ -637,7 +637,7 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
         // 且不显示「已导出 0 个文件」提示
         final saved = await saveFileWithType(
           dialogTitle: strings.galleryExportVideoFolderTitle,
-          fileName: '视频文件夹导出.zip',
+          fileName: strings.galleryExportVideoFolderArchiveFileName,
           extensions: const ['zip'],
           bytes: encodeUserVisibleExportArchive(
             files: archiveFiles,

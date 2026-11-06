@@ -23,7 +23,12 @@ import 'chat_protocol.dart' show rebuildToolResultText;
 import 'chat_service.dart' show ChatService;
 import 'context_manager.dart';
 import 'chat_retry_policy.dart'
-    show kAutoContinuationMessage, shouldAutoContinueStream;
+    show
+        TransportRetryPolicy,
+        isRetryableTransportFailure,
+        shouldAutoContinueStream,
+        waitForRetryOrCancellation;
+import '../l10n/app_localizations.dart' show appLocalizationsForLocale;
 
 // ============================================================================
 // ChatStreamManager — 对话流式请求管理器
@@ -60,6 +65,8 @@ part 'chat_stream_manager_finalize.dart';
 
 class ChatStreamManager {
   final Ref? _ref;
+  final TransportRetryPolicy _transportRetryPolicy;
+  final Future<void> Function(Duration duration)? _retryDelay;
   final ChatAdapter _adapter = ChatAdapter();
 
   // ── Per-conversation stream states ──
@@ -95,16 +102,29 @@ class ChatStreamManager {
   /// never disagree.
   @visibleForTesting
   static bool partialPersistHasContent({
-    required String fullReply,
+    List<String>? textSections,
+    String? fullReply,
     required List<String> reasoningSections,
     required bool hasAccumulatedToolCalls,
   }) {
-    return fullReply.isNotEmpty ||
+    return (textSections?.any((section) => section.isNotEmpty) ??
+            (fullReply?.isNotEmpty ?? false)) ||
         reasoningSections.any((s) => s.isNotEmpty) ||
         hasAccumulatedToolCalls;
   }
 
-  ChatStreamManager([this._ref]);
+  ChatStreamManager([this._ref])
+      : _transportRetryPolicy = const TransportRetryPolicy(),
+        _retryDelay = null;
+
+  @visibleForTesting
+  ChatStreamManager.withRetryPolicy({
+    Ref? ref,
+    TransportRetryPolicy transportRetryPolicy = const TransportRetryPolicy(),
+    Future<void> Function(Duration duration)? retryDelay,
+  })  : _ref = ref,
+        _transportRetryPolicy = transportRetryPolicy,
+        _retryDelay = retryDelay;
 
   // ── 公开 getter ──
 
@@ -148,6 +168,10 @@ class ChatStreamManager {
         ? List.unmodifiable(_streams[first]?.reasoningSections ?? [])
         : const [];
   }
+
+  /// Number of active-section characters waiting for the next throttled delta.
+  int pendingReasoningDeltaLengthFor(String convId) =>
+      _streams[convId]?._pendingReasoningDelta.length ?? 0;
 
   /// Tool calls for the first active conversation.
   List<ToolCallData> get toolCalls {
@@ -207,6 +231,7 @@ class ChatStreamManager {
     if (ref == null) return;
     ref.read(streamingFullReplyProvider(convId).notifier).state = '';
     ref.read(streamingReasoningProvider(convId).notifier).state = '';
+    ref.read(streamingReasoningAppendProvider(convId).notifier).state = null;
     ref.read(streamingReasoningSectionsProvider(convId).notifier).state = [];
     ref.read(streamingTextSectionsProvider(convId).notifier).state = [''];
     ref.read(streamingTextAppendProvider(convId).notifier).state = null;
@@ -440,6 +465,7 @@ class ChatStreamManager {
     } else {
       requestHistory = historyForRequest;
     }
+    final requestContentCache = RequestContentCache();
 
     try {
       final compacted = await _compactIfNeeded(
@@ -447,6 +473,7 @@ class ChatStreamManager {
         convId: convId,
         tools: tools,
         requestHistory: requestHistory,
+        contentCache: requestContentCache,
       );
       // 压缩成功：tail 快照已更新，重新计算发送历史
       // （从新尾部起点起，头部被摘要替代）
@@ -472,6 +499,7 @@ class ChatStreamManager {
             requestHistory = postCompactionHistory.sublist(idx);
           }
         }
+        requestContentCache.retainOnly(requestHistory);
       }
       // 压缩期间用户取消：不发起主请求（空流走正常清理路径，
       // 结果标记为 cancelled）
@@ -494,6 +522,7 @@ class ChatStreamManager {
             : _adapter.sendStreamWithTools(
                 text,
                 history: streamHistory,
+                contentCache: requestContentCache,
                 reasoning: reasoning,
                 reasoningEffort: reasoningEffort,
                 reasoningParamValues: reasoningParamValues,
@@ -503,6 +532,12 @@ class ChatStreamManager {
                 assistant: assistant,
                 entriesState:
                     entriesStateOverride ?? _ref?.read(providerEntriesProvider),
+                onToolCallIntent: () => state.toolCallStarted = true,
+                onTextDelta: state.appendText,
+                onRequestBody: (body) => state.requestBodySnapshot = body,
+                takeCompletedToolCallRound: state.takeCompletedToolCallRound,
+                takeCompletedToolCallReasoning:
+                    state.takeCompletedToolCallReasoning,
               );
 
     // Now safe to yield to event loop — all state is established and the
@@ -520,7 +555,8 @@ class ChatStreamManager {
       }
 
       var streamHistory = List<ChatMessage>.from(requestHistory);
-      var continuedAfterNetworkFailure = false;
+      var transportRetries = 0;
+      var replyLengthAtLastContinuation = 0;
       while (true) {
         try {
           await for (final event in createStream(streamHistory)) {
@@ -529,40 +565,64 @@ class ChatStreamManager {
           }
           break;
         } catch (e) {
-          if (continuedAfterNetworkFailure ||
-              state.cancelledByUser ||
-              !shouldAutoContinueStream(
-                error: e,
-                hasPartialOutput: state.fullReply.isNotEmpty,
-                hasToolHistory: state.toolCalls.isNotEmpty,
-              )) {
+          final hasPartialOutput = state.fullReply.isNotEmpty;
+          final hasVisibleReasoning = state.reasoningBuffer.isNotEmpty ||
+              state.reasoningSections.any((section) => section.isNotEmpty);
+          final canContinuePartial = shouldAutoContinueStream(
+            error: e,
+            hasPartialOutput: hasPartialOutput,
+            hasToolHistory: state.toolCalls.isNotEmpty || state.toolCallStarted,
+          );
+          if (state.cancelledByUser ||
+              state.toolCalls.isNotEmpty ||
+              state.toolCallStarted ||
+              hasVisibleReasoning ||
+              transportRetries >= _transportRetryPolicy.maxRetries ||
+              !isRetryableTransportFailure(e) ||
+              (hasPartialOutput && !canContinuePartial)) {
             rethrow;
           }
 
-          continuedAfterNetworkFailure = true;
-          final continuation = ChatMessage(
-            role: 'user',
-            content: kAutoContinuationMessage,
+          transportRetries++;
+          final wait = _transportRetryPolicy.delayForRetry(transportRetries);
+          await waitForRetryOrCancellation(
+            wait,
+            delay: _retryDelay,
+            cancellation: state.cancellationSignal.future,
           );
-          state.history.add(continuation);
-          state.historyOnSuccess?.add(continuation);
-          state.pendingContinuation = continuation;
-          try {
-            final handler = state.onContinuation;
-            if (handler != null) {
-              await _deliverContinuation(state, continuation, handler);
+          if (state.cancelledByUser) rethrow;
+
+          if (hasPartialOutput) {
+            final continuation = ChatMessage(
+              role: 'user',
+              content: appLocalizationsForLocale(_ref?.read(localeProvider))
+                  .chatAutoContinuePrompt,
+            );
+            state.history.add(continuation);
+            state.historyOnSuccess?.add(continuation);
+            state.pendingContinuations.add(continuation);
+            try {
+              final handler = state.onContinuation;
+              if (handler != null) {
+                await _deliverContinuation(state, continuation, handler);
+              }
+            } catch (callbackError) {
+              debugPrint(
+                  '[ChatStreamManager] continuation display callback failed: $callbackError');
             }
-          } catch (callbackError) {
-            debugPrint(
-                '[ChatStreamManager] continuation display callback failed: $callbackError');
+
+            final replyDelta = state.fullReply.substring(
+              replyLengthAtLastContinuation,
+            );
+            replyLengthAtLastContinuation = state.fullReply.length;
+            streamHistory = [
+              ...streamHistory,
+              ChatMessage(role: 'assistant', content: replyDelta),
+              continuation,
+            ];
           }
-          streamHistory = [
-            ...streamHistory,
-            ChatMessage(role: 'assistant', content: state.fullReply),
-            continuation,
-          ];
           debugPrint(
-              '[ChatStreamManager] network stream interrupted; continuing once, convId=$convId');
+              '[ChatStreamManager] network stream interrupted; retrying ($transportRetries/${_transportRetryPolicy.maxRetries}), convId=$convId');
         }
       }
     } catch (e, s) {
@@ -615,11 +675,10 @@ class ChatStreamManager {
     final activeState = _streams[convId];
     if (activeState != null && !activeState.cancelledByUser) {
       activeState.onContinuation = handler;
-      final pendingContinuation = activeState.pendingContinuation;
-      if (pendingContinuation != null) {
-        unawaited(
-          _deliverContinuation(activeState, pendingContinuation, handler),
-        );
+      for (final pending in List<ChatMessage>.from(
+        activeState.pendingContinuations,
+      )) {
+        unawaited(_deliverContinuation(activeState, pending, handler));
       }
     } else {
       _pendingContinuationHandlers[convId] = handler;
@@ -631,14 +690,27 @@ class ChatStreamManager {
     ChatMessage continuation,
     Future<bool> Function(ChatMessage continuation) handler,
   ) async {
+    if (!state.pendingContinuations.contains(continuation) ||
+        !state.deliveringContinuations.add(continuation)) {
+      return;
+    }
     try {
       final displayed = await handler(continuation);
-      if (displayed && identical(state.pendingContinuation, continuation)) {
-        state.pendingContinuation = null;
-      }
+      if (displayed) state.pendingContinuations.remove(continuation);
     } catch (callbackError) {
       debugPrint(
           '[ChatStreamManager] continuation display callback failed: $callbackError');
+    } finally {
+      state.deliveringContinuations.remove(continuation);
+      final replacementHandler = state.onContinuation;
+      if (!state.cancelledByUser &&
+          state.pendingContinuations.contains(continuation) &&
+          replacementHandler != null &&
+          !identical(replacementHandler, handler)) {
+        unawaited(
+          _deliverContinuation(state, continuation, replacementHandler),
+        );
+      }
     }
   }
 
@@ -647,13 +719,13 @@ class ChatStreamManager {
     if (convId != null) {
       final state = _streams[convId];
       if (state == null) return;
-      state.cancelledByUser = true;
+      state.cancelByUser();
       // Cancel only this conversation's HTTP request.
       _adapter.cancelService(convId);
     } else {
       if (_streams.isEmpty) return;
       for (final s in _streams.values) {
-        s.cancelledByUser = true;
+        s.cancelByUser();
       }
       // Cancel all services.
       _adapter.cancelAllServices();

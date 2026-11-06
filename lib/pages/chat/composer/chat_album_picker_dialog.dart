@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:stroom/providers/image_provider.dart';
 import 'package:stroom/utils/folder_path_utils.dart';
@@ -55,10 +56,12 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
   List<ImageRecord> _records = [];
   Set<String> _folders = {};
   bool _loading = true;
+  bool _loadFailed = false;
   String _currentFolder = '';
 
   // 多选状态: key = recordId, value = (fileName, bytes)
   final Map<String, MapEntry<String, Uint8List>> _selectedItems = {};
+  final Map<String, Object> _editAttempts = {};
   final List<String> _selectionOrder = [];
   final Map<String, Object> _pendingSelections = {};
   final Map<String, Future<void>> _pendingReads = {};
@@ -119,13 +122,25 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
           _records = List<ImageRecord>.from(records);
           _folders = Set<String>.from(folders);
           _loading = false;
+          _loadFailed = false;
         });
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _loading = false);
+        setState(() {
+          _loading = false;
+          _loadFailed = true;
+        });
       }
     }
+  }
+
+  Future<void> _retryLoadData() async {
+    setState(() {
+      _loading = true;
+      _loadFailed = false;
+    });
+    await _loadData();
   }
 
   bool get _isRoot => _currentFolder.isEmpty;
@@ -177,6 +192,7 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
     if (_selectedItems.containsKey(key)) {
       setState(() {
         _selectedItems.remove(key);
+        _editAttempts.remove(key);
         _selectionOrder.remove(key);
       });
       return;
@@ -241,6 +257,7 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
     _cleanupTempFiles();
     setState(() {
       _selectedItems.clear();
+      _editAttempts.clear();
       _selectionOrder.clear();
       _pendingSelections.clear();
       _pendingReads.clear();
@@ -250,7 +267,7 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
   }
 
   Future<void> _confirmSelection() async {
-    if (_confirmingSelection) return;
+    if (_confirmingSelection || _loading || _loadFailed) return;
     setState(() {
       _confirmingSelection = true;
       _confirmationFailedRead = false;
@@ -361,7 +378,9 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
                 ),
                 child: FilledButton.icon(
                   key: const Key('album_picker_confirm_btn'),
-                  onPressed: _confirmingSelection ? null : _confirmSelection,
+                  onPressed: _confirmingSelection || _loading || _loadFailed
+                      ? null
+                      : _confirmSelection,
                   icon: const Icon(Icons.check, size: 18),
                   label: Text(hasSelection ? '确定 ($_selectionCount)' : '确定'),
                 ),
@@ -376,6 +395,24 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
   Widget _buildContent(ColorScheme cs) {
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_loadFailed) {
+      final l10n = AppLocalizations.of(context)!;
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(l10n.albumPickerLoadFailed),
+            const SizedBox(height: 8),
+            TextButton(
+              key: const Key('album_picker_retry_btn'),
+              onPressed: _retryLoadData,
+              child: Text(l10n.actionRetry),
+            ),
+          ],
+        ),
+      );
     }
 
     final subFolders = _subFolders;
@@ -621,6 +658,7 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
                   onRemove: () {
                     setState(() {
                       _selectedItems.remove(mapEntry.key);
+                      _editAttempts.remove(mapEntry.key);
                       _selectionOrder.remove(mapEntry.key);
                     });
                   },
@@ -645,9 +683,12 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
     String fileName,
     Uint8List imageBytes,
   ) async {
+    late final Object editAttempt;
     final editForTesting = appAlbumPickerEditImageForTesting;
     final Uint8List? editedBytes;
     if (editForTesting != null) {
+      editAttempt = Object();
+      _editAttempts[recordKey] = editAttempt;
       editedBytes = await editForTesting(fileName, imageBytes);
     } else {
       // Show the fullscreen preview dialog with edit button
@@ -661,6 +702,8 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
 
       if (shouldEdit != true || !mounted) return;
 
+      editAttempt = Object();
+      _editAttempts[recordKey] = editAttempt;
       // User tapped edit — open quick editor
       editedBytes = await Navigator.push<Uint8List>(
         context,
@@ -710,12 +753,14 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
       // Temp file save is best-effort; we keep the bytes in memory
     }
 
-    // The picker may have been dismissed, or the item removed (and
-    // possibly re-added) while the temp save was in flight — only apply
-    // the edit if it is still the same entry.
+    // The picker may have been dismissed, the item removed, or a newer edit
+    // started while the temp save was in flight. Only apply the latest edit
+    // while its selected entry still exists.
     if (!mounted) return;
     final current = _selectedItems[recordKey];
-    if (current == null || !identical(current.value, imageBytes)) return;
+    if (current == null || !identical(_editAttempts[recordKey], editAttempt)) {
+      return;
+    }
 
     // Update the selected item in-memory with edited bytes
     setState(() {

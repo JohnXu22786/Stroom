@@ -228,14 +228,17 @@ extension _ChatPageBuildersExt on _ChatPageState {
   /// state cannot keep a phantom spinner visible either.
   Widget _buildLoadMoreIndicator() {
     if (!_isLoadingMore) return const SizedBox.shrink();
-    return const Padding(
-      key: ValueKey('chat-load-more-indicator'),
-      padding: EdgeInsets.symmetric(vertical: 12),
-      child: Center(
-        child: SizedBox(
-          width: 20,
-          height: 20,
-          child: CircularProgressIndicator(strokeWidth: 2),
+    return TickerMode(
+      enabled: TickerMode.of(context) && ChatTabVisibility.of(context),
+      child: const Padding(
+        key: ValueKey('chat-load-more-indicator'),
+        padding: EdgeInsets.symmetric(vertical: 12),
+        child: Center(
+          child: SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
         ),
       ),
     );
@@ -382,12 +385,17 @@ extension _ChatPageBuildersExt on _ChatPageState {
       // markdown config applies (mermaid blocks show "正在生成..." while
       // the reply is still being produced — only while their fence is
       // still open; closed blocks render immediately).
+      final streamingFenceInfoCache = _streamingFenceInfoCaches.putIfAbsent(
+        '${message.id}:textstream',
+        StreamingFenceInfoCache.new,
+      );
       final config = buildMessageMarkdownConfig(
         isDark: isDark,
         conversationIsStreaming: isStreaming,
         streamingMsgId: streamingMsgId,
         messageId: message.id,
         streamingText: streamingFullReply,
+        streamingFenceInfoCache: streamingFenceInfoCache,
       );
       return Padding(
         padding: const EdgeInsets.all(12),
@@ -458,13 +466,16 @@ extension _ChatPageBuildersExt on _ChatPageState {
         ),
       );
     }
-    return const Padding(
-      padding: EdgeInsets.all(12),
-      child: SizedBox(
-        width: 20,
-        height: 20,
-        child: CircularProgressIndicator(
-          strokeWidth: 2,
+    return TickerMode(
+      enabled: TickerMode.of(context) && ChatTabVisibility.of(context),
+      child: const Padding(
+        padding: EdgeInsets.all(12),
+        child: SizedBox(
+          width: 20,
+          height: 20,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+          ),
         ),
       ),
     );

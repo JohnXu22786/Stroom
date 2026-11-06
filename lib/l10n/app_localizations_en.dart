@@ -1325,6 +1325,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get taskListEmpty => 'No tasks';
 
   @override
+  String get chatAutoContinuePrompt => 'Continue if not finished.';
+
+  @override
   String get chatSearchCurrent => 'Search this conversation...';
 
   @override
@@ -1647,6 +1650,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatPreviewLoadFailed => 'Preview failed to load';
 
   @override
+  String get albumPickerLoadFailed => 'Unable to load the app album';
+
+  @override
   String get chatHtmlPreview => 'HTML preview';
 
   @override
@@ -1921,6 +1927,11 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get taskFlowUiSomeFilesMissing =>
       'Some files are missing and were skipped';
+
+  @override
+  String taskFlowUiSelectedFilesUnavailable(int count) {
+    return 'Unable to access $count selected file(s). Please select all files again.';
+  }
 
   @override
   String get taskFlowUiQueuedOne => 'Task flow added to the queue';
@@ -2577,6 +2588,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String catcatchFlowActionFailed(Object error) {
     return 'Flow action failed: $error';
   }
+
+  @override
+  String get catcatchWebViewRecoveryGuidance =>
+      'Automatic page scanning timed out. Sign in or configure a user script on this page; after media is detected, choose Continue flow.';
+
+  @override
+  String get browserRecoveryContinue => 'Continue flow';
 
   @override
   String get catcatchSkipped => 'Skipped (nothing to process)';
@@ -8692,6 +8710,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get platformTutorialPageTitle => 'Platform tutorials';
 
   @override
+  String get browserRecoveryOpenPage => 'Open recovery page';
+
+  @override
   String galleryUnsupportedPreview(String format) {
     return 'Preview is not supported for .$format files';
   }
@@ -8891,6 +8912,20 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get imageViewerInvalidIndex => 'Invalid image index';
+
+  @override
+  String get galleryExportImageArchiveFileName => 'image-export.zip';
+
+  @override
+  String get galleryExportVideoArchiveFileName => 'video-export.zip';
+
+  @override
+  String get galleryExportImageFolderArchiveFileName =>
+      'image-folder-export.zip';
+
+  @override
+  String get galleryExportVideoFolderArchiveFileName =>
+      'video-folder-export.zip';
 }
 
 /// The translations for English, as used in the United States (`en_US`).
@@ -10213,6 +10248,9 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String get taskListEmpty => 'No tasks';
 
   @override
+  String get chatAutoContinuePrompt => 'Continue if not finished.';
+
+  @override
   String get chatSearchCurrent => 'Search this conversation...';
 
   @override
@@ -10535,6 +10573,9 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String get chatPreviewLoadFailed => 'Preview failed to load';
 
   @override
+  String get albumPickerLoadFailed => 'Unable to load the app album';
+
+  @override
   String get chatHtmlPreview => 'HTML preview';
 
   @override
@@ -10809,6 +10850,11 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   @override
   String get taskFlowUiSomeFilesMissing =>
       'Some files are missing and were skipped';
+
+  @override
+  String taskFlowUiSelectedFilesUnavailable(int count) {
+    return 'Unable to access $count selected file(s). Please select all files again.';
+  }
 
   @override
   String get taskFlowUiQueuedOne => 'Task flow added to the queue';
@@ -11465,6 +11511,13 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String catcatchFlowActionFailed(Object error) {
     return 'Flow action failed: $error';
   }
+
+  @override
+  String get catcatchWebViewRecoveryGuidance =>
+      'Automatic page scanning timed out. Sign in or configure a user script on this page; after media is detected, choose Continue flow.';
+
+  @override
+  String get browserRecoveryContinue => 'Continue flow';
 
   @override
   String get catcatchSkipped => 'Skipped (nothing to process)';
@@ -17580,6 +17633,9 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String get platformTutorialPageTitle => 'Platform tutorials';
 
   @override
+  String get browserRecoveryOpenPage => 'Open recovery page';
+
+  @override
   String galleryUnsupportedPreview(String format) {
     return 'Preview is not supported for .$format files';
   }
@@ -17779,4 +17835,18 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get imageViewerInvalidIndex => 'Invalid image index';
+
+  @override
+  String get galleryExportImageArchiveFileName => 'image-export.zip';
+
+  @override
+  String get galleryExportVideoArchiveFileName => 'video-export.zip';
+
+  @override
+  String get galleryExportImageFolderArchiveFileName =>
+      'image-folder-export.zip';
+
+  @override
+  String get galleryExportVideoFolderArchiveFileName =>
+      'video-folder-export.zip';
 }

@@ -170,7 +170,12 @@ class _HomePageState extends ConsumerState<HomePage> {
               child: IndexedStack(
                 index: selectedPage.index,
                 children: AppPage.values.map((page) {
-                  return _buildPageContent(page);
+                  final content = _buildPageContent(page);
+                  if (page != AppPage.chat) return content;
+                  return ChatTabVisibility(
+                    isVisible: selectedPage == AppPage.chat,
+                    child: content,
+                  );
                 }).toList(),
               ),
             ),

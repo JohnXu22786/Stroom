@@ -1,8 +1,8 @@
-import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 
@@ -15,6 +15,7 @@ import '../../../utils/http_timeout.dart';
 import '../../../utils/ocr_image_payload.dart';
 import '../../../utils/ocr_diagnostics.dart';
 import '../../../utils/provider_models.dart';
+import '../../../utils/web_file_store.dart';
 import '../../models/flow_payload.dart';
 import '../../models/block_type_definition.dart';
 import '../../models/task_flow_execution.dart';
@@ -22,14 +23,6 @@ import '../../models/task_flow_definition.dart';
 import '../../models/task_flow_exception.dart';
 import '../../providers/task_flow_execution_provider.dart';
 import 'shared_helpers.dart';
-
-/// Approximate length of the JSON request body: the base64 data-URI is the
-/// dominant term (~1.33x the raw image bytes) plus a fixed envelope.
-int _encodedBodyLength(Uint8List imageBytes, String imageFormat) {
-  final b64 = base64Encode(imageBytes).length;
-  final dataUri = 'data:image/$imageFormat;base64,'.length + b64;
-  return dataUri + 512; // JSON envelope overhead (model, messages, etc.)
-}
 
 Future<Uint8List> _readInputBytesUpTo(File file, int maxBytes) async {
   final bytes = BytesBuilder(copy: false);
@@ -75,8 +68,19 @@ Future<String> executeOcrBlock({
   Uint8List imageBytes;
   String imageFormat;
   final file = File(input);
+  late final bool usesWebFileStore;
+  late final bool inputExists;
   try {
-    if (!await file.exists()) {
+    if (kIsWeb) {
+      usesWebFileStore = true;
+      inputExists = await WebFileStore.exists(input);
+    } else {
+      final existsInWebFileStore =
+          WebFileStore.isTestMode && await WebFileStore.exists(input);
+      usesWebFileStore = existsInWebFileStore;
+      inputExists = existsInWebFileStore || await file.exists();
+    }
+    if (!inputExists) {
       failSubTask(
         bgNotifier,
         taskId,
@@ -197,15 +201,38 @@ Future<String> executeOcrBlock({
   }
 
   try {
-    final inputLength = await file.length();
-    if (inputLength > maxInputBytes) {
-      throw oversizedInputException();
+    if (usesWebFileStore) {
+      final storedBytes =
+          await WebFileStore.read(input, maxBytes: maxInputBytes);
+      if (storedBytes == null) {
+        failSubTask(
+          bgNotifier,
+          taskId,
+          execNotifier,
+          execId,
+          flowSubTask.id,
+          '输入文件不存在: $input',
+        );
+        throw BlockExecutionException(
+          '输入文件不存在',
+          blockType: def.typeKey.name,
+          blockTitle: def.label,
+        );
+      }
+      imageBytes = storedBytes;
+    } else {
+      final inputLength = await file.length();
+      if (inputLength > maxInputBytes) {
+        throw oversizedInputException();
+      }
+      imageBytes =
+          await (readInputBytes ?? _readInputBytesUpTo)(file, maxInputBytes);
     }
-    imageBytes =
-        await (readInputBytes ?? _readInputBytesUpTo)(file, maxInputBytes);
     if (imageBytes.length > maxInputBytes) {
       throw oversizedInputException();
     }
+  } on WebFileStoreReadLimitExceededException {
+    throw oversizedInputException();
   } catch (e) {
     if (e is BlockExecutionException) rethrow;
     failSubTask(
@@ -267,7 +294,9 @@ Future<String> executeOcrBlock({
         dio: ocrDio,
         connectTimeout: connectTimeoutDefault,
         sendTimeout: sendTimeoutForBytes(
-          _encodedBodyLength(imageBytes, imageFormat),
+          sizeEstimator.encodedRequestSizeBytes(
+            imageBytesList: [(imageBytes, imageFormat)],
+          ),
         ),
         receiveTimeout: receiveTimeoutFallback,
       );

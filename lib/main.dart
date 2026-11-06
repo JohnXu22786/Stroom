@@ -196,6 +196,19 @@ void _initGlobalErrorHandling() {
   }
 }
 
+Widget _buildBootstrapLoadingScreen() {
+  return const MaterialApp(
+    home: Scaffold(
+      backgroundColor: Color(0xFF1E1E2E),
+      body: Center(
+        child: CircularProgressIndicator(
+          color: Color(0xFF89B4FA),
+        ),
+      ),
+    ),
+  );
+}
+
 Future<void> main() async {
   // 初始化全局错误处理（必须在 runApp 之前）
   _initGlobalErrorHandling();
@@ -204,18 +217,20 @@ Future<void> main() async {
     () async {
       try {
         WidgetsFlutterBinding.ensureInitialized();
+        // 桌面端：窗口管理器必须在 Flutter 首帧前拦截关闭事件。
+        // 在它完成后立即显示轻量加载页，再继续其余启动初始化。
+        if (DesktopAppService.isDesktopPlatform) {
+          await DesktopAppService.instance.initialize();
+        }
+        runApp(_buildBootstrapLoadingScreen());
         registerBundledAssetLicenses();
         await BrowserProfileService.applyPendingAction();
         await AppLogService.info('App', '应用启动: Stroom');
         registerVideoPlayer();
-        // 桌面端：在 runApp 之前初始化窗口管理器，
-        // 以便首帧后启用「关闭窗口 → 最小化到托盘」行为。
-        // 初始化失败不阻塞启动：窗口管理器不可用时降级为默认关闭行为。
+        // 桌面端同样初始化通知服务：窗口最小化/关闭后任务完成
+        // 通知需要走系统通知（in-app 横幅不可见）。
+        // initialize() 内部自带错误保护，失败不会阻塞启动。
         if (DesktopAppService.isDesktopPlatform) {
-          await DesktopAppService.instance.initialize();
-          // 桌面端同样初始化通知服务：窗口最小化/关闭后任务完成
-          // 通知需要走系统通知（in-app 横幅不可见）。
-          // initialize() 内部自带错误保护，失败不会阻塞启动。
           await NotificationService().initialize();
         }
         if (defaultTargetPlatform == TargetPlatform.android ||

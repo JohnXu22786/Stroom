@@ -456,7 +456,7 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
       if (useArchive && exportedCount > 0) {
         final saved = await saveFileWithType(
           dialogTitle: strings.galleryExportImageTitle,
-          fileName: '图片导出.zip',
+          fileName: strings.galleryExportImageArchiveFileName,
           extensions: const ['zip'],
           bytes: encodeUserVisibleExportArchive(files: archiveFiles),
           initialDirectory: SystemPickDirectories.pictures(),
@@ -555,7 +555,7 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
         // 且不显示「已导出 0 个文件」提示
         final saved = await saveFileWithType(
           dialogTitle: strings.galleryExportImageFolderTitle,
-          fileName: '图片文件夹导出.zip',
+          fileName: strings.galleryExportImageFolderArchiveFileName,
           extensions: const ['zip'],
           bytes: encodeUserVisibleExportArchive(
             files: archiveFiles,
