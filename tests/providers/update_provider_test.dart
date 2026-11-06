@@ -1153,6 +1153,7 @@ void main() {
 
     test('localizes APK install fallback in English and Simplified Chinese',
         () async {
+      TestWidgetsFlutterBinding.ensureInitialized();
       const channel = MethodChannel('com.johntsui.stroom/install');
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(channel, (call) async {
