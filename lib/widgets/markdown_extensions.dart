@@ -1190,8 +1190,11 @@ class StreamingFenceInfoCache {
         cached.fenceListIndent == 0 &&
         cached.fenceInnerQuoteDepth == 0 &&
         !_pendingLineCanCloseFence;
+    final pendingFencePrefixCanClose =
+        canReuseFenceState && _pendingLineCanCloseFence;
     if ((!_mayContainFenceMarker('$_markerSuffix$normalizedAppended') ||
-            markerCannotCloseFence) &&
+            markerCannotCloseFence ||
+            pendingFencePrefixCanClose) &&
         !normalizedAppended.contains('\n') &&
         !cached.trailingLineClosedFence &&
         canReuseFenceState) {
