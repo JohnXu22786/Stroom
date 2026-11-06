@@ -245,6 +245,7 @@ class ChatService {
       _lastRequestBody = null;
     }
   }
+
   Map<String, dynamic>? get lastResponseData =>
       _lastResponseData ?? _provider?.lastResponseData;
   Map<String, String>? get lastRequestHeaders =>
