@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../l10n/app_localizations.dart';
 import '../catcatch/engine/js_hook_script.dart';
+import '../catcatch/engine/webview_sniffer.dart' show WebViewSniffer;
 import '../catcatch/widgets/draggable_floating_panel.dart';
 import '../services/browser_cookie_service.dart';
 
@@ -269,6 +270,7 @@ class UserScript {
 
 class BrowserPage extends StatefulWidget {
   final String initialUrl;
+  final bool recoveryMode;
 
   /// Builds a test body with the real capture callback, without a native WebView.
   @visibleForTesting
@@ -277,11 +279,28 @@ class BrowserPage extends StatefulWidget {
   const BrowserPage({
     super.key,
     this.initialUrl = 'https://www.google.com',
+    this.recoveryMode = false,
     this.testBodyBuilder,
   });
 
   @override
   State<BrowserPage> createState() => _BrowserPageState();
+}
+
+class BrowserRecoveryResult {
+  final List<String> mediaUrls;
+  final Map<String, String> mimeTypesByUrl;
+  final String pageUrl;
+  final String? pageTitle;
+  final Map<String, String> cookieHeadersByHost;
+
+  const BrowserRecoveryResult({
+    required this.mediaUrls,
+    required this.mimeTypesByUrl,
+    required this.pageUrl,
+    required this.cookieHeadersByHost,
+    this.pageTitle,
+  });
 }
 
 class _BrowserPageState extends State<BrowserPage> {
@@ -290,6 +309,12 @@ class _BrowserPageState extends State<BrowserPage> {
   bool _isLoading = false;
   double _progress = 0;
   Timer? _mainFrameErrorTimer;
+  Timer? _recoveryTimeoutTimer;
+  Timer? _recoveryNavigationFallbackTimer;
+  int _recoveryAttempt = 0;
+  bool _recoveryCanContinue = false;
+  bool _recoveryRetriesPaused = false;
+  bool _recoveryReloadAwaitingNavigation = false;
   String? _pendingMainFrameErrorUrl;
   List<UserScript> _scripts = [];
 
@@ -302,6 +327,7 @@ class _BrowserPageState extends State<BrowserPage> {
 
   /// URLs detected by the JS hook in the WebView.
   final List<String> _detectedUrls = [];
+  final Map<String, String> _recoveryMimeTypesByUrl = {};
 
   /// Whether the cat-catch hook has been injected for the current page.
   bool _catCatchHookInjected = false;
@@ -375,12 +401,114 @@ class _BrowserPageState extends State<BrowserPage> {
   @override
   void dispose() {
     _cancelPendingMainFrameError();
+    _recoveryTimeoutTimer?.cancel();
+    _recoveryNavigationFallbackTimer?.cancel();
     _urlController.dispose();
 
-    // Queue the final preference decision after any in-flight toggle.
     unawaited(BrowserCookieService.handleBrowserClose());
 
     super.dispose();
+  }
+
+  void _startRecoveryTimeout({bool restartCurrentAttempt = false}) {
+    if (!widget.recoveryMode ||
+        _recoveryRetriesPaused ||
+        _recoveryTimeoutTimer != null ||
+        (!restartCurrentAttempt &&
+            _recoveryAttempt >= WebViewSniffer.headedRecoveryTimeouts.length) ||
+        (restartCurrentAttempt && _recoveryAttempt == 0)) {
+      return;
+    }
+    final attemptIndex = restartCurrentAttempt
+        ? _recoveryAttempt - 1
+        : _recoveryAttempt++;
+    final timeout = WebViewSniffer.headedRecoveryTimeouts[attemptIndex];
+    _recoveryTimeoutTimer = Timer(timeout, () async {
+      if (!mounted) return;
+      _recoveryTimeoutTimer = null;
+      if (_recoveryRetriesPaused) return;
+      if (_recoveryAttempt < WebViewSniffer.headedRecoveryTimeouts.length) {
+        _recoveryReloadAwaitingNavigation = true;
+        try {
+          await _webViewController?.reload();
+        } catch (e) {
+          debugPrint('[BrowserPage] recovery reload failed: $e');
+        }
+        // Give the platform a short window to report the new load. The normal
+        // timeout starts in onLoadStart; this fallback bounds reloads that do
+        // not produce a navigation callback. A late callback restarts the same
+        // attempt's full timeout from its actual start.
+        if (mounted && _recoveryReloadAwaitingNavigation) {
+          _recoveryNavigationFallbackTimer = Timer(
+            const Duration(seconds: 2),
+            () {
+              _recoveryNavigationFallbackTimer = null;
+              if (mounted &&
+                  !_recoveryRetriesPaused &&
+                  _recoveryReloadAwaitingNavigation) {
+                _startRecoveryTimeout();
+              }
+            },
+          );
+        }
+      } else {
+        setState(() => _recoveryCanContinue = true);
+      }
+    });
+  }
+
+  void _pauseRecoveryRetriesForUserAction() {
+    if (!widget.recoveryMode || _recoveryRetriesPaused) return;
+    _recoveryRetriesPaused = true;
+    _recoveryTimeoutTimer?.cancel();
+    _recoveryTimeoutTimer = null;
+    _recoveryNavigationFallbackTimer?.cancel();
+    _recoveryNavigationFallbackTimer = null;
+    _recoveryReloadAwaitingNavigation = false;
+  }
+
+  Future<void> _continueRecovery() async {
+    final controller = _webViewController;
+    final pageUrl = _currentUrl.isEmpty ? widget.initialUrl : _currentUrl;
+    String? title;
+    final cookieHeadersByHost = <String, String>{};
+    if (controller != null) {
+      try {
+        title = await controller.getTitle();
+      } catch (_) {}
+    }
+    for (final mediaUrl in _detectedUrls) {
+      final mediaUri = Uri.tryParse(mediaUrl);
+      if (mediaUri == null ||
+          !mediaUri.hasAuthority ||
+          !{'http', 'https'}.contains(mediaUri.scheme) ||
+          cookieHeadersByHost.containsKey(mediaUri.host)) {
+        continue;
+      }
+      try {
+        final cookies = await CookieManager.instance().getCookies(
+          url: WebUri(mediaUrl),
+        );
+        if (cookies.isNotEmpty) {
+          cookieHeadersByHost[mediaUri.host] = cookies
+              .map((cookie) => '${cookie.name}=${cookie.value}')
+              .join('; ');
+        }
+      } catch (e) {
+        debugPrint('[BrowserPage] recovery cookie read failed: $e');
+      }
+    }
+    if (!mounted) return;
+    Navigator.pop(
+      context,
+      BrowserRecoveryResult(
+        mediaUrls: List<String>.unmodifiable(_detectedUrls),
+        mimeTypesByUrl: Map.unmodifiable(_recoveryMimeTypesByUrl),
+        pageUrl: pageUrl,
+        pageTitle: title,
+        cookieHeadersByHost: Map.unmodifiable(cookieHeadersByHost),
+      ),
+    );
   }
 
   Future<void> _loadScripts() async {
@@ -461,6 +589,7 @@ class _BrowserPageState extends State<BrowserPage> {
       final data = jsonDecode(message) as Map<String, dynamic>;
       final url = data['url'] as String?;
       if (url == null || url.isEmpty) return;
+      final mimeType = data['mimeType'] as String?;
 
       debugPrint('[BrowserPage] CatCatch sniffed: $url');
       setState(() {
@@ -468,7 +597,17 @@ class _BrowserPageState extends State<BrowserPage> {
         if (!_detectedUrls.contains(url)) {
           _detectedUrls.add(url);
         }
+        if (widget.recoveryMode &&
+            mimeType != null &&
+            mimeType.isNotEmpty) {
+          _recoveryMimeTypesByUrl.putIfAbsent(url, () => mimeType);
+        }
+        if (widget.recoveryMode) _recoveryCanContinue = true;
       });
+      if (widget.recoveryMode) {
+        _recoveryTimeoutTimer?.cancel();
+        _recoveryTimeoutTimer = null;
+      }
     } catch (e) {
       debugPrint('[BrowserPage] CatCatch message parse error: $e');
     }
@@ -487,13 +626,14 @@ class _BrowserPageState extends State<BrowserPage> {
     }
   }
 
-  /// Reset detected URLs for a new page load.
+  /// Reset per-page detection state for a new page load.
   /// The panel visibility is NOT reset here — it persists across page
   /// navigations until the user manually closes it. The detection epoch
-  /// bumps so the panel drops any selection from the previous page.
+  /// bumps so the panel drops any selection from the previous page. Recovery
+  /// URLs stay available across sign-in redirects and manual navigation.
   void _resetDetection() {
     setState(() {
-      _detectedUrls.clear();
+      if (!widget.recoveryMode) _detectedUrls.clear();
       _catCatchHookInjected = false;
       _detectionEpoch++;
     });
@@ -541,6 +681,7 @@ class _BrowserPageState extends State<BrowserPage> {
   }
 
   Future<void> _goToUrl(String url) async {
+    _pauseRecoveryRetriesForUserAction();
     final controller = _webViewController;
     if (controller == null) return;
     final previousAddress = _urlController.text;
@@ -598,6 +739,7 @@ class _BrowserPageState extends State<BrowserPage> {
         titleSpacing: 4,
         title: TextField(
           controller: _urlController,
+          onChanged: (_) => _pauseRecoveryRetriesForUserAction(),
           style: const TextStyle(fontSize: 14),
           decoration: InputDecoration(
             hintText: l10n.browserAddressHint,
@@ -619,12 +761,40 @@ class _BrowserPageState extends State<BrowserPage> {
           onSubmitted: _goToUrl,
         ),
         actions: [
+          if (widget.recoveryMode)
+            TextButton.icon(
+              onPressed: _recoveryCanContinue && _detectedUrls.isNotEmpty
+                  ? _continueRecovery
+                  : null,
+              icon: const Icon(Icons.play_arrow),
+              label: Text(l10n.browserRecoveryContinue),
+            ),
           IconButton(
             icon: const Icon(Icons.extension, size: 20),
             tooltip: l10n.browserUserScripts,
-            onPressed: _showScriptManager,
+            onPressed: () {
+              _pauseRecoveryRetriesForUserAction();
+              _showScriptManager();
+            },
           ),
         ],
+        bottom: widget.recoveryMode
+            ? PreferredSize(
+                preferredSize: const Size.fromHeight(44),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      l10n.catcatchWebViewRecoveryGuidance,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+                ),
+              )
+            : null,
       ),
       body: LayoutBuilder(
         builder: (context, constraints) {
@@ -638,7 +808,10 @@ class _BrowserPageState extends State<BrowserPage> {
                 children: [
                   if (_isLoading) LinearProgressIndicator(value: _progress),
                   Expanded(
-                    child: InAppWebView(
+                    child: Listener(
+                      onPointerDown: (_) =>
+                          _pauseRecoveryRetriesForUserAction(),
+                      child: InAppWebView(
                       // The initial page is loaded explicitly in onWebViewCreated
                       // after the native cookie store is prepared for the selected
                       // retention mode.
@@ -699,6 +872,22 @@ class _BrowserPageState extends State<BrowserPage> {
                         });
                         _currentUrl = urlString;
                         _urlController.text = urlString;
+                        if (_recoveryReloadAwaitingNavigation) {
+                          _recoveryReloadAwaitingNavigation = false;
+                          _recoveryNavigationFallbackTimer?.cancel();
+                          _recoveryNavigationFallbackTimer = null;
+                          if (_recoveryTimeoutTimer != null) {
+                            _recoveryTimeoutTimer?.cancel();
+                            _recoveryTimeoutTimer = null;
+                            _startRecoveryTimeout(
+                              restartCurrentAttempt: true,
+                            );
+                          } else {
+                            _startRecoveryTimeout();
+                          }
+                        } else {
+                          _startRecoveryTimeout();
+                        }
                         // Reset detection for new page
                         _resetDetection();
                         // Inject cat-catch hook as early as possible
@@ -706,7 +895,16 @@ class _BrowserPageState extends State<BrowserPage> {
                       },
                       onLoadStop: (controller, url) {
                         _cancelPendingMainFrameError();
-                        setState(() => _isLoading = false);
+                        setState(() {
+                          _isLoading = false;
+                          if (widget.recoveryMode && _detectedUrls.isNotEmpty) {
+                            _recoveryCanContinue = true;
+                          }
+                        });
+                        if (_detectedUrls.isNotEmpty) {
+                          _recoveryTimeoutTimer?.cancel();
+                          _recoveryTimeoutTimer = null;
+                        }
                         _currentUrl = url.toString();
                         // Track the host so cookies can be persisted/displayed
                         // even on platforms without CookieManager.getAllCookies.
@@ -761,6 +959,7 @@ class _BrowserPageState extends State<BrowserPage> {
                         }
                         setState(() => _progress = nextProgress);
                       },
+                      ),
                     ),
                   ),
                 ],
@@ -826,15 +1025,24 @@ class _BrowserPageState extends State<BrowserPage> {
           children: [
             IconButton(
               icon: const Icon(Icons.arrow_back),
-              onPressed: () => _webViewController?.goBack(),
+              onPressed: () {
+                _pauseRecoveryRetriesForUserAction();
+                _webViewController?.goBack();
+              },
             ),
             IconButton(
               icon: const Icon(Icons.arrow_forward),
-              onPressed: () => _webViewController?.goForward(),
+              onPressed: () {
+                _pauseRecoveryRetriesForUserAction();
+                _webViewController?.goForward();
+              },
             ),
             IconButton(
               icon: const Icon(Icons.refresh),
-              onPressed: () => _webViewController?.reload(),
+              onPressed: () {
+                _pauseRecoveryRetriesForUserAction();
+                _webViewController?.reload();
+              },
             ),
             // Desktop / Mobile UA toggle
             IconButton(
@@ -846,6 +1054,7 @@ class _BrowserPageState extends State<BrowserPage> {
                   ? l10n.browserSwitchToMobile
                   : l10n.browserSwitchToDesktop,
               onPressed: () async {
+                _pauseRecoveryRetriesForUserAction();
                 final controller = _webViewController;
                 if (controller == null) return;
                 final messenger = ScaffoldMessenger.of(context);

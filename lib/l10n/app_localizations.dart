@@ -4384,6 +4384,15 @@ abstract class AppLocalizations {
   /// **'Flow action failed: {error}'**
   String catcatchFlowActionFailed(Object error);
 
+  /// Guidance shown when CatCatch needs interactive browser recovery.
+  String get catcatchWebViewRecoveryGuidance;
+
+  /// Continue the paused CatCatch flow from the interactive browser.
+  String get browserRecoveryContinue;
+
+  /// Reopen the interactive browser recovery page.
+  String get browserRecoveryOpenPage;
+
   /// No description provided for @catcatchSkipped.
   ///
   /// In en, this message translates to:

@@ -241,11 +241,16 @@ class TaskExecutor {
             // 检查服务器是否支持断点续传
             if (task.metadata['resumeSupported'] == null &&
                 selectedMedia != null) {
+              final resumeCookieHeader =
+                  task.browserCookieHeaderForUrl(selectedMedia.url);
               final supportsResume =
                   await DownloadManager.checkServerResumeSupport(
                 selectedMedia.url,
                 headers: DefaultRules.buildBrowserHeaders(
                   referer: selectedMedia.initiator,
+                  extraHeaders: resumeCookieHeader == null
+                      ? null
+                      : {'Cookie': resumeCookieHeader},
                 ),
               );
               onUpdate(
@@ -374,11 +379,31 @@ class TaskExecutor {
           completedAt: DateTime.now(),
           selectedMedia: selectedMedia,
           downloadedFilePath: downloadedFilePath,
+          clearRuntimeBrowserCookieHeader: true,
         ),
       );
       return downloadedFilePath;
     } catch (e, s) {
       if (cancelToken?.isCancelled ?? false) return null;
+      if (e is WebViewRecoveryRequiredException) {
+        final metadata = {
+          ...task.metadata,
+          CatCatchTask.webViewRecoveryRequiredKey: 'true',
+        };
+        onUpdate(
+          task.copyWith(
+            status: TaskStatus.paused,
+            steps: steps,
+            detectedMedia: e.existingResources,
+            title: e.pageTitle?.trim().isNotEmpty == true
+                ? e.pageTitle!.trim()
+                : task.title,
+            metadata: metadata,
+            clearError: true,
+          ),
+        );
+        return null;
+      }
       debugPrint('[TaskExecutor] Task failed: $e\n$s');
       // Format DioException with user-friendly Chinese message
       if (e is DioException) {
@@ -399,6 +424,7 @@ class TaskExecutor {
           error: taskError,
           downloadedFilePath: downloadedFilePath,
           progress: calcExecutorProgress(steps),
+          clearRuntimeBrowserCookieHeader: true,
         ),
       );
       return null;
@@ -487,6 +513,7 @@ class TaskExecutor {
         );
       }
     } catch (e) {
+      if (e is WebViewRecoveryRequiredException) rethrow;
       debugPrint('[TaskExecutor] DartCatCatchSniffer failed: $e');
       // On web, if direct HTTP sniffing fails, don't fall through to Tier 2/3
       // because WebView will open a visible browser window.
@@ -596,22 +623,39 @@ class TaskExecutor {
     var pageTitle = capturedPageTitle;
 
     try {
-      final (webViewResources, pTitle) = await WebViewSniffer.sniff(
-        url: task.url,
-        timeout: const Duration(seconds: 30),
-        cancelToken: cancelToken,
-        onProgress: (step, progress) {
-          markExecutorStep(
-            steps,
-            0,
-            running: true,
-            progress: 50 + (progress ~/ 2),
+      final attemptResult =
+          await WebViewSniffer.runHeadlessRecoveryAttempts<
+            (List<MediaResource>, String?)
+          >(
+            isCancelled: () => cancelToken?.isCancelled ?? false,
+            runAttempt: (timeout) => WebViewSniffer.sniff(
+              url: task.url,
+              timeout: timeout,
+              cancelToken: cancelToken,
+              onProgress: (step, progress) {
+                markExecutorStep(
+                  steps,
+                  0,
+                  running: true,
+                  progress: 50 + (progress ~/ 2),
+                );
+                onUpdate(
+                  task.copyWith(
+                    steps: steps,
+                    progress: 20 + (progress * 30 ~/ 100),
+                  ),
+                );
+              },
+            ),
           );
-          onUpdate(
-            task.copyWith(steps: steps, progress: 20 + (progress * 30 ~/ 100)),
-          );
-        },
-      );
+      if (attemptResult == null) {
+        if (cancelToken?.isCancelled ?? false) return (resources, pageTitle);
+        throw WebViewRecoveryRequiredException(
+          existingResources: resources,
+          pageTitle: pageTitle,
+        );
+      }
+      final (webViewResources, pTitle) = attemptResult;
 
       if (pTitle != null && pTitle.isNotEmpty) {
         pageTitle = pTitle;
@@ -630,6 +674,7 @@ class TaskExecutor {
         'total after merge: ${resources.length}',
       );
     } catch (e) {
+      if (e is WebViewRecoveryRequiredException) rethrow;
       debugPrint(
         '[TaskExecutor] WebView sniffing failed, continuing with direct results: $e',
       );
@@ -667,6 +712,10 @@ class TaskExecutor {
               'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         };
         if (pl.initiator != null) headers['Referer'] = pl.initiator!;
+        final cookieHeader = task.browserCookieHeaderForUrl(pl.url);
+        if (cookieHeader != null && cookieHeader.isNotEmpty) {
+          headers['Cookie'] = cookieHeader;
+        }
         final response = await dio.get(
           pl.url,
           options: Options(headers: headers),
@@ -765,7 +814,12 @@ class TaskExecutor {
     }
 
     final referer = media.initiator;
-    final browserHeaders = DefaultRules.buildBrowserHeaders(referer: referer);
+    final cookieHeader = task.browserCookieHeaderForUrl(media.url);
+    final browserHeaders = DefaultRules.buildBrowserHeaders(
+      referer: referer,
+      extraHeaders:
+          cookieHeader == null ? null : {'Cookie': cookieHeader},
+    );
 
     return RetryHelper.retry(
       fn: () async {
@@ -795,7 +849,17 @@ class TaskExecutor {
               downloadDir,
               '${playlistBaseName}_merged.${PlaylistMergedExtensions.forPlaylist(task.metadata, media.url) == 'mp4' ? 'mp4' : 'ts'}',
             ),
-            headers: browserHeaders,
+            headers: DefaultRules.buildBrowserHeaders(referer: referer),
+            headersForUrl: (url) {
+              final segmentCookieHeader =
+                  task.browserCookieHeaderForUrl(url);
+              return DefaultRules.buildBrowserHeaders(
+                referer: referer,
+                extraHeaders: segmentCookieHeader == null
+                    ? null
+                    : {'Cookie': segmentCookieHeader},
+              );
+            },
             concurrency: DefaultRules.maxConcurrency,
             onProgress: (completed, total, progress) {
               markExecutorStep(steps, 5, running: true, progress: progress);

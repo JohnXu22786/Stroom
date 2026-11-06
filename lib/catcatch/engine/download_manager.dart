@@ -210,6 +210,7 @@ class DownloadManager {
     List<({int start, int length})?>? segmentRanges,
     required String outputPath,
     Map<String, String>? headers,
+    Map<String, String> Function(String url)? headersForUrl,
     int concurrency = 3,
     void Function(int completed, int total, int progress)? onProgress,
 
@@ -294,7 +295,7 @@ class DownloadManager {
         rangeLength: segmentRanges?[i]?.length,
         tempDir: tempDirPath,
         partFiles: partFiles,
-        headers: headers,
+        headers: headersForUrl?.call(segmentUrls[i]) ?? headers,
         semaphore: semaphore,
         cancelToken: cancelToken,
         errors: errors,

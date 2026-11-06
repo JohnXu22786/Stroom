@@ -6,6 +6,19 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import '../models/media_resource.dart';
 import 'sniffing_engine.dart';
 
+class WebViewRecoveryRequiredException implements Exception {
+  final List<MediaResource> existingResources;
+  final String? pageTitle;
+
+  const WebViewRecoveryRequiredException({
+    this.existingResources = const [],
+    this.pageTitle,
+  });
+
+  @override
+  String toString() => 'WebView scan needs manual browser recovery';
+}
+
 class WebViewSniffer {
   WebViewSniffer._();
 
@@ -14,6 +27,34 @@ class WebViewSniffer {
 
   /// Maximum results to collect
   static const int maxResults = 50;
+
+  /// Timeout schedule for the two background attempts. The two headed
+  /// attempts are performed by BrowserPage after the task is paused.
+  static const headlessTimeouts = <Duration>[
+    Duration(seconds: 10),
+    Duration(seconds: 20),
+  ];
+  static const headedRecoveryTimeouts = <Duration>[
+    Duration(seconds: 20),
+    Duration(seconds: 20),
+  ];
+
+  /// Runs the two headless attempts before continuing in the visible browser.
+  /// Only a timeout advances to the next attempt.
+  static Future<T?> runHeadlessRecoveryAttempts<T>({
+    required Future<T> Function(Duration timeout) runAttempt,
+    bool Function()? isCancelled,
+  }) async {
+    for (final timeout in headlessTimeouts) {
+      if (isCancelled?.call() ?? false) return null;
+      try {
+        return await runAttempt(timeout);
+      } on TimeoutException {
+        continue;
+      }
+    }
+    return null;
+  }
 
   /// Sniff media resources by loading URL in a background WebView
   ///
@@ -108,9 +149,10 @@ class WebViewSniffer {
             );
           }).toList();
 
-          // Cancel timeout & dispose
-          timeoutTimer?.cancel();
-          if (!completer.isCompleted) {
+          // A page load alone is not success when it has not exposed any
+          // media yet. Keep watching intercepted requests until timeout.
+          if (resources.isNotEmpty && !completer.isCompleted) {
+            timeoutTimer?.cancel();
             completer.complete((resources, capturedTitle));
           }
         } catch (e) {
@@ -132,31 +174,32 @@ class WebViewSniffer {
       },
     );
 
-    try {
-      await headlessWebView.run();
-      onProgress?.call('浏览器已启动，正在加载页面', 20);
+    Future<void> disposeHeadlessWebView() async {
+      if (disposed) return;
+      disposed = true;
+      try {
+        await headlessWebView.dispose();
+      } catch (e) {
+        debugPrint('[WebViewSniffer] WebView disposal failed: $e');
+      }
+    }
 
-      cancelToken?.whenCancel.then((_) {
+    try {
+      cancelToken?.whenCancel.then((_) async {
         if (!completer.isCompleted) {
           debugPrint('[WebViewSniffer] Cancelled by user');
-          if (!disposed) {
-            disposed = true;
-            headlessWebView.dispose();
-          }
+          await disposeHeadlessWebView();
           completer.complete((<MediaResource>[], null));
         }
       });
 
       // Set timeout
-      timeoutTimer = Timer(timeout, () {
+      timeoutTimer = Timer(timeout, () async {
         if (!completer.isCompleted) {
           debugPrint(
             '[WebViewSniffer] Timeout reached, returning ${detectedUrls.length} resources',
           );
-          onProgress?.call(
-            '超时，返回已发现的 ${detectedUrls.length} 个资源',
-            100,
-          );
+          onProgress?.call('页面扫描超时', 100);
           final resources = detectedUrls.map((u) {
             final (name, ext) = SniffingEngine.parseFileName(u);
             return MediaResource(
@@ -169,21 +212,28 @@ class WebViewSniffer {
               isPlaylist: ['m3u8', 'm3u', 'mpd'].contains(ext),
             );
           }).toList();
-          if (!disposed) {
-            disposed = true;
-            headlessWebView.dispose();
+          await disposeHeadlessWebView();
+          if (resources.isNotEmpty) {
+            completer.complete((resources, capturedTitle));
+          } else {
+            completer.completeError(
+              TimeoutException('WebView media scan timed out', timeout),
+            );
           }
-          completer.complete((resources, capturedTitle));
         }
       });
+
+      final runFuture = headlessWebView.run();
+      await Future.any<void>([
+        runFuture,
+        completer.future.then<void>((_) {}, onError: (Object _) {}),
+      ]);
+      onProgress?.call('浏览器已启动，正在加载页面', 20);
 
       return await completer.future;
     } finally {
       timeoutTimer?.cancel();
-      if (!disposed) {
-        disposed = true;
-        await headlessWebView.dispose();
-      }
+      await disposeHeadlessWebView();
     }
   }
 

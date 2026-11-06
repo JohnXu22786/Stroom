@@ -2579,6 +2579,16 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get catcatchWebViewRecoveryGuidance =>
+      'Automatic page scanning timed out. Sign in or configure a user script on this page; after media is detected, choose Continue flow.';
+
+  @override
+  String get browserRecoveryOpenPage => 'Open recovery page';
+
+  @override
+  String get browserRecoveryContinue => 'Continue flow';
+
+  @override
   String get catcatchSkipped => 'Skipped (nothing to process)';
 
   @override
@@ -11264,6 +11274,16 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String catcatchFlowActionFailed(Object error) {
     return 'Flow action failed: $error';
   }
+
+  @override
+  String get catcatchWebViewRecoveryGuidance =>
+      'Automatic page scanning timed out. Sign in or configure a user script on this page; after media is detected, choose Continue flow.';
+
+  @override
+  String get browserRecoveryOpenPage => 'Open recovery page';
+
+  @override
+  String get browserRecoveryContinue => 'Continue flow';
 
   @override
   String get catcatchSkipped => 'Skipped (nothing to process)';

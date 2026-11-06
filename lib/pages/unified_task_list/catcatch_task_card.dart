@@ -10,6 +10,7 @@ import '../../catcatch/models/catcatch_task.dart' as catcatch;
 import '../../task_flow/services/task_flow_execution_service.dart';
 import '../../utils/audio_utils.dart';
 import '../catcatch_page.dart';
+import '../browser_page.dart';
 import 'task_utils.dart';
 import 'file_opener.dart';
 import 'media_preview_sheet.dart';
@@ -71,6 +72,48 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
   final Map<String, String?> _mergeAudioUrls = {};
   final Set<String> _pendingFlowActions = {};
   final Set<String> _expandedSegments = {};
+  bool _recoveryPageOpened = false;
+
+  void _openRecoveryPageWhenReady() {
+    if (_recoveryPageOpened ||
+        widget.task.status != catcatch.TaskStatus.paused ||
+        widget.task.metadata[catcatch.CatCatchTask.webViewRecoveryRequiredKey] !=
+            'true') {
+      return;
+    }
+    _recoveryPageOpened = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _openRecoveryPage();
+    });
+  }
+
+  Future<void> _openRecoveryPage() async {
+    final result = await Navigator.push<BrowserRecoveryResult>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => BrowserPage(
+          initialUrl: widget.task.url,
+          recoveryMode: true,
+        ),
+      ),
+    );
+    if (!mounted || result == null || result.mediaUrls.isEmpty) return;
+    final notifier = ref.read(catcatchTasksProvider.notifier);
+    final action = (CatCatchNotifier current) =>
+        current.continueAfterBrowserRecovery(
+          widget.task.id,
+          mediaUrls: result.mediaUrls,
+          mimeTypesByUrl: result.mimeTypesByUrl,
+          pageUrl: result.pageUrl,
+          pageTitle: result.pageTitle,
+          cookieHeadersByHost: result.cookieHeadersByHost,
+        );
+    if (widget.isFlowManaged) {
+      await _performFlowAction(widget.task.id, false, action);
+    } else {
+      action(notifier);
+    }
+  }
 
   bool _isFlowActionPending(String taskId) =>
       widget.isFlowManaged && _pendingFlowActions.contains(taskId);
@@ -142,6 +185,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
   void initState() {
     super.initState();
     _expanded = widget.task.status == catcatch.TaskStatus.running;
+    _openRecoveryPageWhenReady();
   }
 
   @override
@@ -151,6 +195,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
         oldWidget.task.status != catcatch.TaskStatus.running) {
       setState(() => _expanded = true);
     }
+    _openRecoveryPageWhenReady();
   }
 
   @override
@@ -201,6 +246,33 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
       ),
       child: Column(
         children: [
+          if (task.metadata[catcatch.CatCatchTask.webViewRecoveryRequiredKey] ==
+              'true')
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    AppLocalizations.of(context)!
+                        .catcatchWebViewRecoveryGuidance,
+                    style: TextStyle(color: colorScheme.onSurfaceVariant),
+                  ),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: () {
+                        _recoveryPageOpened = true;
+                        _openRecoveryPage();
+                      },
+                      icon: const Icon(Icons.open_in_browser),
+                      label: Text(AppLocalizations.of(context)!
+                          .browserRecoveryOpenPage),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           InkWell(
             borderRadius: BorderRadius.circular(12),
             onTap: () => setState(() => _expanded = !_expanded),

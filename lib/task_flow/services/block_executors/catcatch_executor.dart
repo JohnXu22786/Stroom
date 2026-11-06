@@ -135,6 +135,7 @@ Future<String> executeCatCatchBlock({
   bool autoConfirmed = false;
   bool promptOpen = false;
   bool manualPickerOpen = false;
+  bool browserRecoveryWaitOpen = false;
 
   bool isCurrent() {
     if (!execNotifier.mounted || !isFlowExecutionActive(execNotifier, execId)) {
@@ -194,6 +195,12 @@ Future<String> executeCatCatchBlock({
         );
     final awaitingConfirmation =
         task.metadata['pendingConfirm'] == 'special_format';
+    final awaitingBrowserRecovery =
+        task.metadata[catcatch.CatCatchTask.webViewRecoveryRequiredKey] == 'true';
+    if (awaitingBrowserRecovery && !browserRecoveryWaitOpen) {
+      onManualWait?.call(taskId);
+      browserRecoveryWaitOpen = true;
+    }
     // Waiting for an intentional human decision or a user pause is not a stall.
     // Reset the window so resumed engine work receives a full stall allowance.
     if (!awaitingSelection || task.selectedMedia != null) promptOpen = false;

@@ -196,7 +196,12 @@ class TaskFlowExecutionService {
         .read(catcatchTasksProvider)
         .where((task) => task.id == taskId)
         .firstOrNull;
-    if (task == null || task.status != catcatch.TaskStatus.running) {
+    final awaitingBrowserRecovery = task?.status == catcatch.TaskStatus.paused &&
+        task?.metadata[catcatch.CatCatchTask.webViewRecoveryRequiredKey] ==
+            'true';
+    if (task == null ||
+        (task.status != catcatch.TaskStatus.running &&
+            !(awaitingBrowserRecovery && !selecting))) {
       return null;
     }
     final awaitingSelection = task.selectedMedia == null &&
@@ -209,7 +214,11 @@ class TaskFlowExecutionService {
             !step.skipped);
     final awaitingConfirmation =
         task.metadata['pendingConfirm'] == 'special_format';
-    if (selecting ? !awaitingSelection : !awaitingConfirmation) return null;
+    if (selecting
+        ? !awaitingSelection
+        : !awaitingConfirmation && !awaitingBrowserRecovery) {
+      return null;
+    }
     return _notifier.executions.where((execution) {
       return execution.status == FlowExecutionStatus.running &&
           _activeBlockTypes[execution.id] == BlockType.catcatch &&

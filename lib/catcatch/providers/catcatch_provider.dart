@@ -13,6 +13,7 @@ import '../models/catcatch_task.dart';
 import 'catcatch_provider_shared.dart';
 import '../models/media_resource.dart';
 import '../engine/task_executor.dart';
+import '../engine/sniffing_engine.dart';
 import '../config/default_rules.dart';
 import '../engine/executor_save.dart';
 import '../../utils/atomic_file.dart';
@@ -264,6 +265,42 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
       // 所有步骤都已完成的极端情况，从头执行
       _executeTask(updated);
     }
+  }
+
+  /// Returns resources found in the interactive browser to the same paused
+  /// CatCatch task and continues after the fetch step.
+  void continueAfterBrowserRecovery(
+    String id, {
+    required List<String> mediaUrls,
+    Map<String, String> mimeTypesByUrl = const {},
+    String? pageUrl,
+    String? pageTitle,
+    Map<String, String> cookieHeadersByHost = const {},
+  }) {
+    final index = state.lastIndexWhere((task) => task.id == id);
+    if (index < 0) return;
+    final task = state[index];
+    final resources = <MediaResource>[];
+    final seen = <String>{};
+    for (final url in mediaUrls) {
+      if (!url.startsWith('http') || !seen.add(url)) continue;
+      resources.add(recoveredBrowserMediaResource(
+        url: url,
+        initiator: pageUrl ?? task.url,
+        mimeType: mimeTypesByUrl[url],
+      ));
+    }
+    final updated = task.resumeAfterBrowserRecovery(
+      recoveredMedia: resources,
+      pageTitle: pageTitle,
+      cookieHeadersByHost: cookieHeadersByHost,
+    );
+    if (updated == null) return;
+    state = [
+      for (var i = 0; i < state.length; i++)
+        if (i == index) updated else state[i],
+    ];
+    _executeTaskFrom(updated, StepType.parsingPlaylist);
   }
 
   /// 重试失败的任务（从头开始）
@@ -1279,4 +1316,30 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
     }
     return File(p.join(catcatchDir.path, 'tasks.json'));
   }
+}
+
+MediaResource recoveredBrowserMediaResource({
+  required String url,
+  required String initiator,
+  String? mimeType,
+}) {
+  final (name, ext) = SniffingEngine.parseFileName(url);
+  final normalizedMimeType = mimeType?.split(';').first.trim().toLowerCase();
+  final isPlaylist = ['m3u8', 'm3u', 'mpd'].contains(ext) ||
+      normalizedMimeType == 'application/vnd.apple.mpegurl' ||
+      normalizedMimeType == 'application/x-mpegurl' ||
+      normalizedMimeType == 'application/dash+xml';
+  final isPlayableByMime = normalizedMimeType?.startsWith('audio/') == true ||
+      normalizedMimeType?.startsWith('video/') == true;
+  return MediaResource(
+    url: url,
+    name: name,
+    ext: ext,
+    mimeType: mimeType,
+    initiator: initiator,
+    isPlayable: !isPlaylist &&
+        (isPlayableByMime ||
+            (ext.isNotEmpty && !['ts', 'ev1'].contains(ext))),
+    isPlaylist: isPlaylist,
+  );
 }

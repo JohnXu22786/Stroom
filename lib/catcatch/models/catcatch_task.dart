@@ -175,9 +175,20 @@ class CatCatchTask {
   /// Legacy task records require the task-flow registration fallback.
   static const nativeRegisteredPathKey = 'nativeRegisteredPath';
 
+  /// Marks the fetch step as waiting for a user to finish in BrowserPage.
+  static const webViewRecoveryRequiredKey = 'webViewRecoveryRequired';
+
   // Keep ownership across immutable updates without persisting runtime state.
   final Object? _runtimeIdentity;
   Object get runtimeIdentity => _runtimeIdentity ?? this;
+  final Map<String, String> _runtimeBrowserCookieHeadersByHost;
+
+  String? browserCookieHeaderForUrl(String url) {
+    final requestHost = Uri.tryParse(url)?.host;
+    return requestHost == null
+        ? null
+        : _runtimeBrowserCookieHeadersByHost[requestHost];
+  }
 
   final String id;
   final String url;
@@ -219,7 +230,10 @@ class CatCatchTask {
     this.metadata = const {},
     this.downloadedBytes = 0,
     Object? runtimeIdentity,
-  }) : _runtimeIdentity = runtimeIdentity;
+    Map<String, String> runtimeBrowserCookieHeadersByHost = const {},
+  })  : _runtimeIdentity = runtimeIdentity,
+        _runtimeBrowserCookieHeadersByHost =
+            runtimeBrowserCookieHeadersByHost;
 
   // ---------------------------------------------------------------------------
   // copyWith
@@ -246,6 +260,8 @@ class CatCatchTask {
     bool clearCompletedAt = false,
     bool clearDownloadedFilePath = false,
     bool clearSelectedMedia = false,
+    Map<String, String>? runtimeBrowserCookieHeadersByHost,
+    bool clearRuntimeBrowserCookieHeader = false,
   }) {
     final newStatus = status ?? this.status;
     final newStatusChangedAt = statusChangedAt ??
@@ -255,6 +271,11 @@ class CatCatchTask {
 
     return CatCatchTask(
       runtimeIdentity: runtimeIdentity,
+      runtimeBrowserCookieHeadersByHost: clearRuntimeBrowserCookieHeader
+          ? const {}
+          : runtimeBrowserCookieHeadersByHost == null
+          ? _runtimeBrowserCookieHeadersByHost
+          : Map.unmodifiable(runtimeBrowserCookieHeadersByHost),
       id: id ?? this.id,
       url: url ?? this.url,
       expectedDurationSec: expectedDurationSec ?? this.expectedDurationSec,
@@ -274,6 +295,46 @@ class CatCatchTask {
           : (downloadedFilePath ?? this.downloadedFilePath),
       metadata: metadata ?? this.metadata,
       downloadedBytes: downloadedBytes ?? this.downloadedBytes,
+    );
+  }
+
+  /// Builds the same task at the first step after an interactive browser
+  /// recovery, retaining any media found before the pause.
+  CatCatchTask? resumeAfterBrowserRecovery({
+    required List<MediaResource> recoveredMedia,
+    String? pageTitle,
+    Map<String, String> cookieHeadersByHost = const {},
+  }) {
+    if (status != TaskStatus.paused ||
+        metadata[webViewRecoveryRequiredKey] != 'true') {
+      return null;
+    }
+    final media = <MediaResource>[];
+    final seen = <String>{};
+    for (final resource in [...detectedMedia, ...recoveredMedia]) {
+      if (seen.add(resource.url)) media.add(resource);
+    }
+    if (media.isEmpty) return null;
+
+    final nextSteps = List<StepStatus>.from(steps);
+    while (nextSteps.length < StepType.values.length) {
+      nextSteps.add(StepStatus.pending(StepType.values[nextSteps.length]));
+    }
+    nextSteps[0] = StepStatus.done(
+      StepType.fetching,
+      detail: '浏览器中获取到${media.length}个资源',
+    );
+    nextSteps[1] = StepStatus.done(StepType.analyzing);
+    final nextMetadata = Map<String, String>.from(metadata)
+      ..remove(webViewRecoveryRequiredKey);
+    return copyWith(
+      status: TaskStatus.running,
+      steps: nextSteps,
+      detectedMedia: media,
+      metadata: nextMetadata,
+      title: pageTitle?.trim().isNotEmpty == true ? pageTitle!.trim() : title,
+      runtimeBrowserCookieHeadersByHost: cookieHeadersByHost,
+      clearError: true,
     );
   }
 
