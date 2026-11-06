@@ -24,6 +24,26 @@ const _devinCliTestExecutableSha256 =
     'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 
 void main() {
+  testWidgets('desktop account page offers Zed keychain import',
+      (tester) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    if (Platform.isMacOS || Platform.isLinux || Platform.isWindows) {
+      expect(find.byTooltip('从 Zed 导入 API 凭据'), findsOneWidget);
+    } else {
+      expect(find.byTooltip('从 Zed 导入 API 凭据'), findsNothing);
+    }
+  });
+
   testWidgets(
     'Cloudflare Workers AI keeps token secure and account ID separate',
     (tester) async {

@@ -20,6 +20,7 @@ import '../services/auggie_cli_service.dart';
 import '../services/zcode_cli_service.dart';
 import '../services/llm_oauth_flow.dart';
 import '../services/llm_oauth_loopback.dart';
+import '../services/zed_keychain_import.dart';
 import '../services/trae_solo_connector.dart';
 import 'browser_page.dart';
 import 'trae_solo_authorization_page.dart';
@@ -529,6 +530,158 @@ class _LlmAccountManagementPageState extends State<LlmAccountManagementPage> {
     if (mounted) await _reload();
   }
 
+  Future<void> _importZedKeychainAccounts() async {
+    final gateway = await _gatewayFuture;
+    if (!mounted) return;
+    if (Platform.isMacOS) {
+      final continueDiscovery = await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('检查 Zed 钥匙串？'),
+              content: const Text(
+                'macOS 可能在生成可导入清单时，逐项询问是否允许 Stroom 检查匹配的钥匙串条目。'
+                '这一步不会保存账号；之后你仍需逐个确认要导入的账号。',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('取消'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text('继续检查'),
+                ),
+              ],
+            ),
+          ) ??
+          false;
+      if (!mounted || !continueDiscovery) return;
+    }
+    final importer = ZedKeychainImportService(
+      reader: const MethodChannelZedKeychainReader(),
+      saveAccount: (account, {required secret}) async {
+        final existing = (await gateway.accountManagement.listAccounts())
+            .where((item) => item.id == account.id)
+            .firstOrNull;
+        final target = existing == null
+            ? account
+            : AiGatewayAccount(
+                id: existing.id,
+                connectorType: existing.connectorType,
+                authType: existing.authType,
+                displayName: existing.displayName,
+                status: existing.status,
+                hasCredential: existing.hasCredential,
+                endpointConfig: existing.endpointConfig,
+                models: existing.models,
+                policy: existing.policy,
+                usageByWindow: existing.usageByWindow,
+                remainingQuota: existing.remainingQuota,
+                quotaSignals: existing.quotaSignals,
+              );
+        return gateway.accountManagement.saveAccount(target, secret: secret);
+      },
+    );
+
+    late final List<ZedKeychainCredentialCandidate> candidates;
+    try {
+      candidates = await importer.discover();
+    } on ZedKeychainImportException {
+      if (mounted) {
+        _showError('无法读取系统钥匙串。请检查系统钥匙串访问权限后重试。');
+      }
+      return;
+    }
+    if (!mounted) return;
+    if (candidates.isEmpty) {
+      _showError(
+        '没有找到可读取的 Zed OpenAI、Anthropic、Google、Mistral 或 xAI 凭据。'
+        '${Platform.isMacOS ? '如果 macOS 拒绝了某个钥匙串请求，该条目会被跳过。' : ''}',
+      );
+      return;
+    }
+
+    var imported = 0;
+    var stopped = false;
+    var legacyCleanupFailed = false;
+    for (final candidate in candidates) {
+      if (!mounted) return;
+      late final bool alreadyExists;
+      try {
+        alreadyExists = (await gateway.accountManagement.listAccounts())
+            .any((account) => account.id == _zedAccountId(candidate));
+      } catch (_) {
+        stopped = true;
+        break;
+      }
+      if (!mounted) return;
+      final providerName = switch (candidate.provider) {
+        'openai' => 'OpenAI',
+        'anthropic' => 'Anthropic',
+        'google' => 'Google',
+        'mistral' => 'Mistral',
+        'xai' => 'xAI',
+        _ => '提供商',
+      };
+      final confirmed = await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: Text('导入 $providerName 凭据？'),
+              content: Text(
+                '将从本机钥匙串导入“${candidate.account}”到 Stroom 的 $providerName API 账号。'
+                '${alreadyExists ? '这会更新该 Stroom 账号的密钥，并保留现有名称、模型和路由设置。' : ''}'
+                '\n\nStroom 会在确认后重新读取并核对该凭据。密钥不会显示在界面中。',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('跳过'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text('导入此账号'),
+                ),
+              ],
+            ),
+          ) ??
+          false;
+      if (!mounted) return;
+      if (!confirmed) continue;
+      try {
+        final saved = await importer.importConfirmed(candidate);
+        imported++;
+        try {
+          await widget.onAccountSaved?.call(saved);
+        } catch (_) {
+          legacyCleanupFailed = true;
+          stopped = true;
+          break;
+        }
+      } on ZedKeychainImportException {
+        stopped = true;
+        break;
+      }
+    }
+    if (!mounted) return;
+    await _reload();
+    if (!mounted) return;
+    if (stopped) {
+      final message = legacyCleanupFailed
+          ? '已导入 $imported 个账号，但旧配置同步失败。'
+          : imported == 0
+              ? '凭据未导入。钥匙串项目可能已更改、访问被拒绝，或安全存储不可用。'
+              : '已导入 $imported 个账号；后续凭据未导入，因为钥匙串项目已更改、访问被拒绝或安全存储不可用。';
+      _showError(message);
+    } else if (imported > 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('已安全导入 $imported 个提供商账号。')),
+      );
+    }
+  }
+
+  String _zedAccountId(ZedKeychainCredentialCandidate candidate) =>
+      'zed-${candidate.provider}-${ZedKeychainImportService.fingerprint(candidate.service, candidate.account, '')}';
+
   Future<void> _addGroup(List<AiGatewayAccount> accounts) async {
     final choices = [
       for (final account in accounts)
@@ -685,6 +838,12 @@ class _LlmAccountManagementPageState extends State<LlmAccountManagementPage> {
                 const Expanded(
                   child: Text('每个账号独立保存凭据、模型能力、额度和并发策略。未知额度保持未知。'),
                 ),
+                if (Platform.isMacOS || Platform.isWindows || Platform.isLinux)
+                  IconButton.filledTonal(
+                    tooltip: '从 Zed 导入 API 凭据',
+                    onPressed: _importZedKeychainAccounts,
+                    icon: const Icon(Icons.key_outlined),
+                  ),
                 IconButton.filledTonal(
                   tooltip: '添加账号',
                   onPressed: _addAccount,

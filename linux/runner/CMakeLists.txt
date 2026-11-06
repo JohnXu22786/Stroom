@@ -23,4 +23,10 @@ add_definitions(-DAPPLICATION_ID="${APPLICATION_ID}")
 target_link_libraries(${BINARY_NAME} PRIVATE flutter)
 target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::GTK)
 
+# Zed stores provider keys in the Secret Service collection on Linux. Reuse
+# the same libsecret API family as Stroom's secure-storage plugin.
+pkg_check_modules(LIBSECRET REQUIRED IMPORTED_TARGET libsecret-1>=0.18.4)
+target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::LIBSECRET)
+target_sources(${BINARY_NAME} PRIVATE "zed_keychain_bridge.cc")
+
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
