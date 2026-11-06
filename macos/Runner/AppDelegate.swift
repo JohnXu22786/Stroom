@@ -93,6 +93,7 @@ enum ZedKeychainBridge {
       var rawItems: CFTypeRef?
       let status = SecItemCopyMatching(query as CFDictionary, &rawItems)
       if status == errSecItemNotFound { continue }
+      if isUserDenied(status) { continue }
       guard status == errSecSuccess else { throw KeychainFailure.unavailable }
 
       let itemRecords: [[String: Any]]
@@ -105,10 +106,16 @@ enum ZedKeychainBridge {
       }
       for item in itemRecords {
         guard let account = item[kSecAttrAccount as String] as? String,
-              !account.isEmpty,
-              let secret = try readSecret(service: service, account: account),
-              !secret.isEmpty
-        else { continue }
+              !account.isEmpty else { continue }
+        let secret: String?
+        do {
+          secret = try readSecret(service: service, account: account)
+        } catch KeychainFailure.accessDenied {
+          // A user may deny one service/account while still wanting to inspect
+          // and import other providers. Treat that denial as a skipped item.
+          continue
+        }
+        guard let secret, !secret.isEmpty else { continue }
         candidates.append([
           "provider": provider,
           "service": service,
@@ -133,11 +140,16 @@ enum ZedKeychainBridge {
     var rawValue: CFTypeRef?
     let status = SecItemCopyMatching(query as CFDictionary, &rawValue)
     if status == errSecItemNotFound { return nil }
+    if isUserDenied(status) { throw KeychainFailure.accessDenied }
     guard status == errSecSuccess,
           let data = rawValue as? Data,
           let secret = String(data: data, encoding: .utf8)
     else { throw KeychainFailure.unavailable }
     return secret
+  }
+
+  private static func isUserDenied(_ status: OSStatus) -> Bool {
+    status == errSecUserCanceled || status == errSecAuthFailed
   }
 
   private static func fingerprint(service: String, account: String, secret: String) -> String {
@@ -147,5 +159,6 @@ enum ZedKeychainBridge {
 
   private enum KeychainFailure: Error {
     case unavailable
+    case accessDenied
   }
 }

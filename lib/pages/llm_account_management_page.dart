@@ -533,6 +533,30 @@ class _LlmAccountManagementPageState extends State<LlmAccountManagementPage> {
   Future<void> _importZedKeychainAccounts() async {
     final gateway = await _gatewayFuture;
     if (!mounted) return;
+    if (Platform.isMacOS) {
+      final continueDiscovery = await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('检查 Zed 钥匙串？'),
+              content: const Text(
+                'macOS 可能在生成可导入清单时，逐项询问是否允许 Stroom 检查匹配的钥匙串条目。'
+                '这一步不会保存账号；之后你仍需逐个确认要导入的账号。',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('取消'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text('继续检查'),
+                ),
+              ],
+            ),
+          ) ??
+          false;
+      if (!mounted || !continueDiscovery) return;
+    }
     final importer = ZedKeychainImportService(
       reader: const MethodChannelZedKeychainReader(),
       saveAccount: (account, {required secret}) async {
@@ -570,7 +594,10 @@ class _LlmAccountManagementPageState extends State<LlmAccountManagementPage> {
     }
     if (!mounted) return;
     if (candidates.isEmpty) {
-      _showError('没有找到受支持的 Zed OpenAI、Anthropic、Google、Mistral 或 xAI 凭据。');
+      _showError(
+        '没有找到可读取的 Zed OpenAI、Anthropic、Google、Mistral 或 xAI 凭据。'
+        '${Platform.isMacOS ? '如果 macOS 拒绝了某个钥匙串请求，该条目会被跳过。' : ''}',
+      );
       return;
     }
 
