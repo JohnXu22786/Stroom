@@ -76,6 +76,7 @@ extension _ChatStreamManagerEventsExt on ChatStreamManager {
           _pushToProvider(convId, streamingReasoningAppendProvider, append);
         }
         final completedReasoning = state.reasoningBuffer;
+        state.setCompletedToolCallReasoning(completedReasoning);
         state.endReasoningSection();
         final sections = state.reasoningSections;
         _pushToProvider(convId, streamingReasoningProvider, completedReasoning);

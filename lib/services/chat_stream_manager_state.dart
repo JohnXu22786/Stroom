@@ -207,6 +207,7 @@ class _ConversationStreamState {
 
   bool _serviceStartedTextChunk = false;
   String? _completedServiceTextChunk;
+  String? _completedToolCallReasoning;
 
   String startTextChunkFromService() {
     _serviceStartedTextChunk = true;
@@ -217,6 +218,16 @@ class _ConversationStreamState {
     final completed = _completedServiceTextChunk;
     _completedServiceTextChunk = null;
     return completed;
+  }
+
+  String? takeCompletedToolCallReasoning() {
+    final completed = _completedToolCallReasoning;
+    _completedToolCallReasoning = null;
+    return completed;
+  }
+
+  void setCompletedToolCallReasoning(String reasoning) {
+    _completedToolCallReasoning = reasoning;
   }
 
   bool takeServiceStartedTextChunk() {
