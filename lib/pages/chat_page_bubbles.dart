@@ -568,9 +568,8 @@ extension _ChatPageBubblesExt on _ChatPageState {
     // segments of this message) keeps the "current" highlight aligned with
     // the global navigation cursor across segments.
     final lowerQuery = hasSearchMatch ? _searchQuery.toLowerCase() : '';
-    final messageFirstMatchIndex = hasSearchMatch
-        ? _searchMatchFirstIndexByMessageId[messageId]!
-        : 0;
+    final messageFirstMatchIndex =
+        hasSearchMatch ? _searchMatchFirstIndexByMessageId[messageId]! : 0;
     var occurrenceOffset = 0;
     final streamingConvId = isStreaming && messageId == _streamingMsgId
         ? ref.read(activeConversationIdProvider)
