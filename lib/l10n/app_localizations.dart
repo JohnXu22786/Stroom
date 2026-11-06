@@ -1780,6 +1780,24 @@ abstract class AppLocalizations {
   /// **'Downloading update…'**
   String get updateDownloading;
 
+  /// No description provided for @updateCheckNetworkError.
+  ///
+  /// In en, this message translates to:
+  /// **'Network error: {details}'**
+  String updateCheckNetworkError(Object details);
+
+  /// No description provided for @updateCheckHttpFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to check for updates: HTTP {statusCode}'**
+  String updateCheckHttpFailed(Object statusCode);
+
+  /// No description provided for @updateCheckInvalidResponse.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to check for updates: the server returned unrecognized data'**
+  String get updateCheckInvalidResponse;
+
   /// No description provided for @updateDownloadUrlUnavailable.
   ///
   /// In en, this message translates to:
