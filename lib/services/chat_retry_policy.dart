@@ -33,8 +33,8 @@ class RateLimitRetryPolicy {
     final rawMs = initialDelay.inMilliseconds * multiplier;
     final cappedMs = math.min(rawMs, maxDelay.inMilliseconds).toInt();
     if (!jitter) return Duration(milliseconds: cappedMs);
-    final jitter = _jitterMultiplier(randomValue);
-    return Duration(milliseconds: (cappedMs * jitter).round());
+    final jitterMultiplier = _jitterMultiplier(randomValue);
+    return Duration(milliseconds: (cappedMs * jitterMultiplier).round());
   }
 }
 
