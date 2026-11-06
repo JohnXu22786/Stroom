@@ -250,6 +250,7 @@ class AuggieCliService {
   ];
 
   static const _maxDiscoveryBytes = 64 * 1024;
+  static const _maxLiveModels = 256;
   static const _diagnosticTailLength = 128;
   static const _quotaBufferLength = 2048;
   static const _processShutdownGrace = Duration(seconds: 1);
@@ -258,6 +259,17 @@ class AuggieCliService {
     'run out of usage for',
     'usage limit exceeded',
   ];
+  static const _unsupportedMediaKeys = {
+    'image',
+    'image_url',
+    'images',
+    'audio',
+    'audio_url',
+    'input_audio',
+    'video',
+    'video_url',
+    'attachments',
+  };
   static final _modelIdPattern = RegExp(r'^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$');
 
   final AuggieCliProcessLauncher _launcher;
@@ -269,8 +281,8 @@ class AuggieCliService {
     AuggieCliProcessLauncher? launcher,
     bool Function()? supportsLocalProcess,
     this.timeout = const Duration(seconds: 45),
-  }) : _launcher = launcher ?? IoAuggieCliProcessLauncher(),
-       _supportsLocalProcess = supportsLocalProcess ?? _desktopProcessSupport;
+  })  : _launcher = launcher ?? IoAuggieCliProcessLauncher(),
+        _supportsLocalProcess = supportsLocalProcess ?? _desktopProcessSupport;
 
   static bool _desktopProcessSupport() =>
       !kIsWeb &&
@@ -350,14 +362,18 @@ class AuggieCliService {
       final code = await process.exitCode.timeout(const Duration(seconds: 8));
       if (code == 0) {
         final text = utf8.decode(output.takeBytes(), allowMalformed: true);
-        final discovered = <String>{};
+        final discovered = <String, AuggieCliModel>{};
         for (final match in RegExp(r'\[([^\]\r\n]+)\]').allMatches(text)) {
           final id = match.group(1)!.trim();
-          if (_modelIdPattern.hasMatch(id)) discovered.add(id);
+          if (_modelIdPattern.hasMatch(id) &&
+              (discovered.containsKey(id) ||
+                  discovered.length < _maxLiveModels)) {
+            discovered[id] = _modelFor(id);
+          }
         }
-        for (final id in discovered) {
-          _liveModels[id] = _modelFor(id);
-        }
+        _liveModels
+          ..clear()
+          ..addAll(discovered);
       }
     } on TimeoutException {
       if (process != null) await _terminateAndWait(process);
@@ -376,10 +392,10 @@ class AuggieCliService {
   }
 
   List<AuggieCliModel> _catalog() => [
-    ...pinnedModels,
-    for (final entry in _liveModels.entries)
-      if (!pinnedModels.any((model) => model.id == entry.key)) entry.value,
-  ];
+        ...pinnedModels,
+        for (final entry in _liveModels.entries)
+          if (!pinnedModels.any((model) => model.id == entry.key)) entry.value,
+      ];
 
   String resolveModel(
     Object? modelId, {
@@ -410,6 +426,7 @@ class AuggieCliService {
       final message = Map<String, dynamic>.from(raw);
       if (message.containsKey('tool_calls') ||
           message.containsKey('function_call') ||
+          message.keys.any(_unsupportedMediaKeys.contains) ||
           message['role'] == 'tool' ||
           message['role'] == 'function') {
         _unsupported();
@@ -428,7 +445,8 @@ class AuggieCliService {
         for (final part in content) {
           if (part is! Map ||
               part['type'] != 'text' ||
-              part['text'] is! String) {
+              part['text'] is! String ||
+              part.keys.any(_unsupportedMediaKeys.contains)) {
             _unsupported();
           }
           text.write(part['text']);
@@ -456,7 +474,10 @@ class AuggieCliService {
     final request = body is Map
         ? Map<String, dynamic>.from(body)
         : const <String, dynamic>{};
-    if (_hasUnsupportedTools(request)) _unsupported();
+    if (_hasUnsupportedTools(request) ||
+        request.keys.any(_unsupportedMediaKeys.contains)) {
+      _unsupported();
+    }
     final messages = request['messages'];
     if (messages is! List) _unsupported();
     final prompt = buildPrompt(messages);
@@ -468,6 +489,11 @@ class AuggieCliService {
         'auggie_not_installed',
         'Auggie CLI was not found. Install it and sign in with `auggie login`.',
       );
+    }
+    if (cancelToken?.isCancelled == true) {
+      await _terminateAndWait(process);
+      await process.dispose();
+      _cancelled();
     }
     try {
       process.writeStdin(utf8.encode(prompt));
@@ -506,18 +532,16 @@ class AuggieCliService {
     var diagnosticReadFailed = false;
     final stdoutDone = Completer<void>();
     final stderrDone = Completer<void>();
-    final stdout = process.stdout
-        .transform(utf8.decoder)
-        .listen(
-          output.write,
-          onError: (Object _, StackTrace _) {
-            outputReadFailed = true;
-            if (!stdoutDone.isCompleted) stdoutDone.complete();
-          },
-          onDone: () {
-            if (!stdoutDone.isCompleted) stdoutDone.complete();
-          },
-        );
+    final stdout = process.stdout.transform(utf8.decoder).listen(
+      output.write,
+      onError: (Object _, StackTrace _) {
+        outputReadFailed = true;
+        if (!stdoutDone.isCompleted) stdoutDone.complete();
+      },
+      onDone: () {
+        if (!stdoutDone.isCompleted) stdoutDone.complete();
+      },
+    );
     final stderr = process.stderr.listen(
       (bytes) {
         stderrTail = _appendDiagnosticTail(
@@ -598,8 +622,8 @@ class AuggieCliService {
     StreamSubscription<List<int>>? stderr;
     StreamSubscription<dynamic>? cancelSub;
     final pending = StringBuffer();
-    var initialText = '';
-    var quotaChecked = false;
+    var bufferingInitialOutput = true;
+    var quotaTail = '';
     var roleSent = false;
     var closed = false;
     var stderrLogin = false;
@@ -639,51 +663,59 @@ class AuggieCliService {
       controller.add(_sse(model, {'content': text}));
     }
 
-    void flushPending() {
-      if (quotaChecked) return;
-      quotaChecked = true;
-      final value = pending.toString();
-      if (_quotaExhausted(value)) {
-        emitError(
+    void emitQuotaError() => emitError(
           const AuggieCliException(
             'auggie_quota_exhausted',
             'Auggie reported that the local account usage limit is exhausted.',
           ),
         );
+
+    void flushPending() {
+      final value = pending.toString();
+      if (_quotaExhausted(value)) {
+        emitQuotaError();
         return;
       }
+      bufferingInitialOutput = false;
       emitText(value);
       pending.clear();
     }
 
     controller = StreamController<List<int>>(
       onListen: () {
-        stdout = process.stdout
-            .transform(utf8.decoder)
-            .listen(
-              (chunk) {
-                if (closed) return;
-                if (quotaChecked) {
-                  emitText(chunk);
-                  return;
-                }
-                pending.write(chunk);
-                initialText += chunk;
-                if (initialText.length >= _quotaBufferLength) flushPending();
-              },
-              onError: (_) {
-                if (!stdoutDone.isCompleted) stdoutDone.complete();
-                emitError(
-                  const AuggieCliException(
-                    'process_failure',
-                    'Auggie CLI request failed.',
-                  ),
-                );
-              },
-              onDone: () {
-                if (!stdoutDone.isCompleted) stdoutDone.complete();
-              },
+        stdout = process.stdout.transform(utf8.decoder).listen(
+          (chunk) {
+            if (closed) return;
+            final quotaScan = '$quotaTail$chunk';
+            if (_quotaExhausted(quotaScan)) {
+              emitQuotaError();
+              return;
+            }
+            quotaTail = quotaScan.length <= _diagnosticTailLength
+                ? quotaScan
+                : quotaScan.substring(
+                    quotaScan.length - _diagnosticTailLength,
+                  );
+            if (bufferingInitialOutput) {
+              pending.write(chunk);
+              if (pending.length >= _quotaBufferLength) flushPending();
+              return;
+            }
+            emitText(chunk);
+          },
+          onError: (_) {
+            if (!stdoutDone.isCompleted) stdoutDone.complete();
+            emitError(
+              const AuggieCliException(
+                'process_failure',
+                'Auggie CLI request failed.',
+              ),
             );
+          },
+          onDone: () {
+            if (!stdoutDone.isCompleted) stdoutDone.complete();
+          },
+        );
         stderr = process.stderr.listen(
           (chunk) {
             stderrTail = _appendDiagnosticTail(
@@ -721,9 +753,9 @@ class AuggieCliService {
             if (closed) return;
             if (stderrReadFailed) _processFailed(exitCode);
             if (stderrLogin) _notLoggedIn();
-            if (exitCode != 0) _processFailed(exitCode);
             flushPending();
             if (closed) return;
+            if (exitCode != 0) _processFailed(exitCode);
             controller.add(_sse(model, {}, finishReason: 'stop'));
             controller.add(utf8.encode('data: [DONE]\n\n'));
             closed = true;
@@ -880,9 +912,9 @@ class AuggieCliService {
   }
 
   static Never _unsupported() => throw const AuggieCliException(
-    'unsupported_capability',
-    'Auggie CLI supports text-only conversations without tools or media.',
-  );
+        'auggie_unsupported_capability',
+        'Auggie CLI supports text-only conversations without tools or media.',
+      );
 
   static Never _throwUnsupportedRole() => _unsupported();
 
@@ -907,24 +939,24 @@ class AuggieCliService {
   }
 
   static Never _notLoggedIn() => throw const AuggieCliException(
-    'auggie_not_logged_in',
-    'Auggie CLI is not signed in. Run `auggie login` in the local terminal.',
-  );
+        'auggie_not_logged_in',
+        'Auggie CLI is not signed in. Run `auggie login` in the local terminal.',
+      );
 
   static Never _processFailed(int code) => throw AuggieCliException(
-    'process_failure',
-    'Auggie CLI exited with code $code. Check the local CLI status and sign-in.',
-  );
+        'process_failure',
+        'Auggie CLI exited with code $code. Check the local CLI status and sign-in.',
+      );
 
   static Never _quotaFailure() => throw const AuggieCliException(
-    'auggie_quota_exhausted',
-    'Auggie reported that the local account usage limit is exhausted.',
-  );
+        'auggie_quota_exhausted',
+        'Auggie reported that the local account usage limit is exhausted.',
+      );
 
   static Never _cancelled() => throw const AuggieCliException(
-    'cancelled',
-    'Auggie CLI request was cancelled.',
-  );
+        'cancelled',
+        'Auggie CLI request was cancelled.',
+      );
 
   static AuggieCliModel _modelFor(String id) => AuggieCliModel(id, id, 200000);
 

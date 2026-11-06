@@ -81,6 +81,42 @@ SET "_prog=node"
       expect(launcher.calls.single.arguments, ['model', 'list']);
     });
 
+    test('live model catalog is capped and replaced on successful refresh',
+        () async {
+      final firstOutput = List.generate(
+        300,
+        (index) => '[custom-model-$index]',
+      ).join('\n');
+      final launcher = _FakeLauncher()
+        ..enqueue(_FakeProcess(output: firstOutput))
+        ..enqueue(_FakeProcess(output: '[second-refresh-only]'));
+      final service = AuggieCliService(
+        launcher: launcher,
+        supportsLocalProcess: () => true,
+      );
+
+      final firstCatalog = await service.discoverModels(refresh: true);
+      expect(
+        firstCatalog.length,
+        AuggieCliService.pinnedModels.length + 256,
+      );
+      expect(service.resolveModel('custom-model-0'), 'custom-model-0');
+
+      final secondCatalog = await service.discoverModels(refresh: true);
+      expect(
+        secondCatalog.any((model) => model.id == 'custom-model-0'),
+        isFalse,
+      );
+      expect(
+        secondCatalog.any((model) => model.id == 'second-refresh-only'),
+        isTrue,
+      );
+      expect(
+        () => service.resolveModel('custom-model-0'),
+        throwsA(isA<AuggieCliException>()),
+      );
+    });
+
     test('prompt keeps role-labelled history in order', () {
       expect(
         AuggieCliService.buildPrompt([
@@ -117,7 +153,13 @@ SET "_prog=node"
             },
             stream: false,
           ),
-          throwsA(isA<AuggieCliException>()),
+          throwsA(
+            isA<AuggieCliException>().having(
+              (error) => error.code,
+              'Auggie-specific unsupported capability code',
+              'auggie_unsupported_capability',
+            ),
+          ),
         );
         await expectLater(
           service.request(
@@ -139,6 +181,59 @@ SET "_prog=node"
           ),
           throwsA(isA<AuggieCliException>()),
         );
+
+        for (final mediaKey in ['image_url', 'audio']) {
+          await expectLater(
+            service.request(
+              modelId: 'sonnet4.6',
+              body: {
+                'messages': [
+                  {
+                    'role': 'user',
+                    'content': 'text beside unsupported media',
+                    mediaKey: {'data': 'omitted'},
+                  },
+                ],
+              },
+              stream: false,
+            ),
+            throwsA(isA<AuggieCliException>()),
+          );
+          await expectLater(
+            service.request(
+              modelId: 'sonnet4.6',
+              body: {
+                'messages': [
+                  {'role': 'user', 'content': 'text beside unsupported media'},
+                ],
+                mediaKey: {'data': 'omitted'},
+              },
+              stream: false,
+            ),
+            throwsA(isA<AuggieCliException>()),
+          );
+          await expectLater(
+            service.request(
+              modelId: 'sonnet4.6',
+              body: {
+                'messages': [
+                  {
+                    'role': 'user',
+                    'content': [
+                      {
+                        'type': 'text',
+                        'text': 'text beside unsupported media',
+                        mediaKey: {'data': 'omitted'},
+                      },
+                    ],
+                  },
+                ],
+              },
+              stream: false,
+            ),
+            throwsA(isA<AuggieCliException>()),
+          );
+        }
 
         expect(launcher.calls, isEmpty);
       },
@@ -294,6 +389,71 @@ SET "_prog=node"
       expect(output, contains('Hello '));
       expect(output, contains('world'));
       expect(output, contains('data: [DONE]'));
+    });
+
+    test('streaming classifies short quota output before a nonzero exit',
+        () async {
+      final service = AuggieCliService(
+        launcher: _FakeLauncher()
+          ..enqueue(
+            _FakeProcess(
+              output: 'You have run out of usage for today',
+              exitCode: 1,
+              exitBeforeOutputClose: true,
+            ),
+          ),
+        supportsLocalProcess: () => true,
+      );
+
+      final response = await service.request(
+        modelId: 'sonnet4.6',
+        body: {
+          'messages': [
+            {'role': 'user', 'content': 'Say hi'},
+          ],
+        },
+        stream: true,
+      );
+      final output = await utf8.decodeStream(
+        response.body as Stream<List<int>>,
+      );
+
+      expect(output, contains('auggie_quota_exhausted'));
+      expect(output, isNot(contains('process_failure')));
+    });
+
+    test('streaming detects quota output after the initial buffer', () async {
+      final service = AuggieCliService(
+        launcher: _FakeLauncher()
+          ..enqueue(
+            _FakeProcess(
+              outputChunks: [
+                List.filled(120, 'ordinary response text ').join(),
+                'You have run out of ',
+                'usage for today',
+              ],
+              exitCode: 1,
+              exitBeforeOutputClose: true,
+            ),
+          ),
+        supportsLocalProcess: () => true,
+      );
+
+      final response = await service.request(
+        modelId: 'sonnet4.6',
+        body: {
+          'messages': [
+            {'role': 'user', 'content': 'Say hi'},
+          ],
+        },
+        stream: true,
+      );
+      final output = await utf8.decodeStream(
+        response.body as Stream<List<int>>,
+      );
+
+      expect(output, contains('auggie_quota_exhausted'));
+      expect(output, isNot(contains('process_failure')));
     });
 
     test('nonstreaming buffers output into a normal completion', () async {
@@ -490,18 +650,61 @@ SET "_prog=node"
       expect(process.terminated, isTrue);
     });
 
+    test('cancel during process startup prevents prompt delivery', () async {
+      final process = _FakeProcess(neverExit: true);
+      final launcher = _FakeLauncher()..enqueue(process);
+      launcher.startGate = Completer<void>();
+      launcher.startEntered = Completer<void>();
+      final service = AuggieCliService(
+        launcher: launcher,
+        supportsLocalProcess: () => true,
+      );
+      final cancelToken = CancelToken();
+      var callbackCalled = false;
+      final request = service.request(
+        modelId: 'sonnet4.6',
+        body: {
+          'messages': [
+            {'role': 'user', 'content': 'private prompt'},
+          ],
+        },
+        stream: false,
+        cancelToken: cancelToken,
+        onRequestSent: () async {
+          callbackCalled = true;
+        },
+      );
+
+      await launcher.startEntered!.future;
+      cancelToken.cancel('cancel while starting');
+      launcher.startGate!.complete();
+
+      await expectLater(
+        request,
+        throwsA(
+          isA<AuggieCliException>().having(
+            (error) => error.code,
+            'cancel code',
+            'cancelled',
+          ),
+        ),
+      );
+      expect(process.inputText, isEmpty);
+      expect(callbackCalled, isFalse);
+      expect(process.terminated, isTrue);
+      expect(process.disposed, isTrue);
+    });
+
     test(
       'input and request callback failures terminate and dispose process',
       () async {
         for (final failAt in ['writeStdin', 'closeStdin', 'onRequestSent']) {
           final process = _FakeProcess(
             neverExit: true,
-            writeStdinError: failAt == 'writeStdin'
-                ? StateError('write failed')
-                : null,
-            closeStdinError: failAt == 'closeStdin'
-                ? StateError('closed')
-                : null,
+            writeStdinError:
+                failAt == 'writeStdin' ? StateError('write failed') : null,
+            closeStdinError:
+                failAt == 'closeStdin' ? StateError('closed') : null,
           );
           final service = AuggieCliService(
             launcher: _FakeLauncher()..enqueue(process),
@@ -544,6 +747,8 @@ class _FakeLauncher implements AuggieCliProcessLauncher {
   final List<_FakeLaunchCall> calls = [];
   final List<AuggieCliProcess> _queued = [];
   Object? startError;
+  Completer<void>? startGate;
+  Completer<void>? startEntered;
 
   void enqueue(AuggieCliProcess process) => _queued.add(process);
 
@@ -554,6 +759,8 @@ class _FakeLauncher implements AuggieCliProcessLauncher {
     String? workingDirectory,
   }) async {
     calls.add(_FakeLaunchCall(arguments, runInShell, workingDirectory));
+    if (startEntered case final entered?) entered.complete();
+    await startGate?.future;
     if (startError case final error?) throw error;
     return _queued.removeAt(0);
   }
