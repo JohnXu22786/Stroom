@@ -15432,6 +15432,9 @@ void main() {
       () {
         const credentialEcho = 'accommodQm9x7Lk2Vp6';
         const safeInstruction = 'Please accommodate the requested crop';
+        const instruction =
+            '$safeInstruction. Please use $credentialEcho '
+            'to process the receipt.';
         final task = BackgroundTask.fromMap({
           'id': 'legacy-ocr-accommod-key-echo-next-to-safe-instruction',
           'type': 'ocr',
@@ -15447,8 +15450,7 @@ void main() {
                 {
                   'role': 'user',
                   'content': [
-                    {'type': 'text', 'text': 'The note says $credentialEcho.'},
-                    {'type': 'text', 'text': safeInstruction},
+                    {'type': 'text', 'text': instruction},
                   ],
                 },
               ],
@@ -15460,8 +15462,15 @@ void main() {
           task.retryData!,
         ).instructionContent!;
 
-        expect(migratedInstruction, contains(safeInstruction));
+        expect(
+          migratedInstruction,
+          '$safeInstruction. Please use [redacted] to process the receipt.',
+        );
         expect(persisted, contains(safeInstruction));
+        expect(
+          persisted,
+          contains('Please use [redacted] to process the receipt.'),
+        );
         expect(migratedInstruction, isNot(contains(credentialEcho)));
         expect(persisted, isNot(contains(credentialEcho)));
       },
