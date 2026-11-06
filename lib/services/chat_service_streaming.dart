@@ -139,6 +139,8 @@ extension ChatServiceStreamingExt on ChatService {
     Map<String, String>? customParamValues,
     List<ToolDefinition> tools = const [],
     void Function()? onToolCallIntent,
+    void Function(String text)? onTextDelta,
+    String Function()? takeCompletedToolCallRound,
   }) {
     AppLogService.info(
         'ChatService', 'sendStreamWithTools 开始: ${userMessage.length} 字符');
@@ -148,9 +150,14 @@ extension ChatServiceStreamingExt on ChatService {
     _lastReasoningLength = 0;
     _thinkingSignature = '';
 
+    Completer<void>? pendingRoundBoundary;
     late final StreamController<ChatEvent> controller;
     controller = StreamController<ChatEvent>(
       onCancel: () {
+        if (pendingRoundBoundary != null &&
+            !pendingRoundBoundary!.isCompleted) {
+          pendingRoundBoundary!.complete();
+        }
         _cancelToken?.cancel();
         _cancelToken = null;
         _streamSubscription?.cancel();
@@ -230,6 +237,7 @@ extension ChatServiceStreamingExt on ChatService {
           // （真实 provider 取消订阅后 onDone/onError 不送达）。
           _roundCompleter = completer;
           final toolCallRefs = <Map<String, dynamic>>[];
+          String? roundContentForToolChain;
           // 本轮流错误标记：onError 后立即停止轮处理，不再执行
           // 本轮的剩余工具或发起下一轮请求（错误已上抛给 manager，
           // 继续执行工具只会产生用户看不到的副作用）。
@@ -278,10 +286,15 @@ extension ChatServiceStreamingExt on ChatService {
                 toolCallRefs.addAll(event.toolCalls!);
                 if (event.toolCalls!.isNotEmpty) onToolCallIntent?.call();
               } else if (event.text.isNotEmpty) {
-                // Accumulate visible content for tool call chain
-                // preservation per DeepSeek spec.
-                _contentBuffer.write(event.text);
-                controller.add(TextEvent(event.text));
+                // The stream manager owns the canonical visible reply. Reuse
+                // its per-conversation accumulation for tool-chain messages
+                // instead of retaining a second copy in this service.
+                if (onTextDelta == null) _contentBuffer.write(event.text);
+                onTextDelta?.call(event.text);
+                controller.add(TextEvent(
+                  event.text,
+                  alreadyAccumulated: onTextDelta != null,
+                ));
               }
             },
             onDone: () {
@@ -328,7 +341,19 @@ extension ChatServiceStreamingExt on ChatService {
           // Emit ReasoningSectionEndEvent before starting the next round.
           // This allows the UI to split multi-step reasoning chains into
           // separate panels.
-          controller.add(const ReasoningSectionEndEvent());
+          if (onTextDelta != null) {
+            final delivered = Completer<void>();
+            pendingRoundBoundary = delivered;
+            controller.add(ReasoningSectionEndEvent(
+              onDelivered: delivered.complete,
+            ));
+            await delivered.future;
+            pendingRoundBoundary = null;
+            if (_isCancelledByUser || controller.isClosed) break;
+            roundContentForToolChain = takeCompletedToolCallRound?.call();
+          } else {
+            controller.add(const ReasoningSectionEndEvent());
+          }
 
           // Capture the current round's reasoning content (what was added
           // since the last round). Per the DeepSeek Tool Calls guide,
@@ -411,7 +436,9 @@ extension ChatServiceStreamingExt on ChatService {
           // Anthropic 为 assistant(thinking/text/tool_use 块) + 单条
           // user(tool_result 块)。历史保持中立，格式切换安全。
           messages.addAll(_protocol.buildAssistantChainMessage(
-            content: _contentBuffer.toString(),
+            content: onTextDelta == null
+                ? _contentBuffer.toString()
+                : roundContentForToolChain ?? '',
             toolCalls: neutralCalls,
             roundReasoning: roundReasoning,
             thinkingSignature: _thinkingSignature,

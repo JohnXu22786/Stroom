@@ -6,7 +6,8 @@ sealed class ChatEvent {
 
 class TextEvent extends ChatEvent {
   final String text;
-  TextEvent(this.text);
+  final bool alreadyAccumulated;
+  TextEvent(this.text, {this.alreadyAccumulated = false});
 }
 
 class ToolCallStartEvent extends ChatEvent {
@@ -32,5 +33,6 @@ class ReasoningEvent extends ChatEvent {
 /// begin. Used by the UI to split multi-step reasoning chains into separate
 /// panels when tool calls create distinct reasoning rounds.
 class ReasoningSectionEndEvent extends ChatEvent {
-  const ReasoningSectionEndEvent();
+  final void Function()? onDelivered;
+  const ReasoningSectionEndEvent({this.onDelivered});
 }

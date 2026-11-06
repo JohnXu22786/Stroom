@@ -205,6 +205,26 @@ class _ConversationStreamState {
     return delta;
   }
 
+  bool _serviceStartedTextChunk = false;
+  String? _completedServiceTextChunk;
+
+  String startTextChunkFromService() {
+    _serviceStartedTextChunk = true;
+    return _completedServiceTextChunk = startTextChunk();
+  }
+
+  String? takeCompletedToolCallRound() {
+    final completed = _completedServiceTextChunk;
+    _completedServiceTextChunk = null;
+    return completed;
+  }
+
+  bool takeServiceStartedTextChunk() {
+    final started = _serviceStartedTextChunk;
+    _serviceStartedTextChunk = false;
+    return started;
+  }
+
   void appendText(String text) {
     _currentTextChunk.write(text);
     _pendingTextDelta.write(text);
@@ -422,8 +442,9 @@ class _ConversationStreamState {
     }
   }
 
-  void startTextChunk() {
-    _completedTextChunks.add(_currentTextChunk.toString());
+  String startTextChunk() {
+    final completed = _currentTextChunk.toString();
+    _completedTextChunks.add(completed);
     _currentTextChunk = StringBuffer();
     _pendingTextDelta.clear();
     _currentChunkHasMarkdownSyntax = false;
@@ -444,6 +465,7 @@ class _ConversationStreamState {
     _closedLinkLabelAtLineStart = false;
     _linkScannerAtLineStart = true;
     _linkScannerLineSpaces = 0;
+    return completed;
   }
 
   bool get currentTextChunkIsNotEmpty => _currentTextChunk.length > 0;
