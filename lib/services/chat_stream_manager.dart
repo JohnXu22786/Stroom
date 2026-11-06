@@ -691,6 +691,15 @@ class ChatStreamManager {
           '[ChatStreamManager] continuation display callback failed: $callbackError');
     } finally {
       state.deliveringContinuations.remove(continuation);
+      final replacementHandler = state.onContinuation;
+      if (!state.cancelledByUser &&
+          state.pendingContinuations.contains(continuation) &&
+          replacementHandler != null &&
+          !identical(replacementHandler, handler)) {
+        unawaited(
+          _deliverContinuation(state, continuation, replacementHandler),
+        );
+      }
     }
   }
 

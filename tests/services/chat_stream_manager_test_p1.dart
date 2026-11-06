@@ -474,6 +474,53 @@ void chatStreamManagerGroup1() {
       manager.dispose();
     });
 
+    test('redelivers pending continuation when page changes during callback',
+        () async {
+      final manager =
+          ChatStreamManager.withRetryPolicy(retryDelay: (_) async {});
+      final firstCallStarted = Completer<void>();
+      final oldHandlerStarted = Completer<void>();
+      final finishOldHandler = Completer<bool>();
+      final restoredPageContinuations = <ChatMessage>[];
+      final provider = _MockProvider(
+        [
+          [AIStreamEvent('partial answer')],
+          [AIStreamEvent('completed answer')],
+        ],
+        firstCallStarted: firstCallStarted,
+      )..errorsAfterCall[1] = DioException(
+          requestOptions: RequestOptions(path: '/chat'),
+          type: DioExceptionType.connectionError,
+        );
+      manager.adapter.forceService(_makeChatService(provider));
+      manager.setContinuationHandler('conv-page-race', (_) {
+        oldHandlerStarted.complete();
+        return finishOldHandler.future;
+      });
+
+      final stream = manager.startStreaming(
+        text: 'Continue this turn',
+        convId: 'conv-page-race',
+        history: [_userMsg('Continue this turn')],
+      );
+      await firstCallStarted.future;
+      await oldHandlerStarted.future;
+      manager.setContinuationHandler('conv-page-race', (message) async {
+        restoredPageContinuations.add(message);
+        return true;
+      });
+      finishOldHandler.complete(false);
+      await stream;
+
+      expect(restoredPageContinuations, hasLength(1));
+      expect(restoredPageContinuations.single.role, 'user');
+      expect(
+        restoredPageContinuations.single.content,
+        'Continue if not finished.',
+      );
+      manager.dispose();
+    });
+
     test('isStreamingFor returns true during streaming', () async {
       final manager = ChatStreamManager();
       final completer = Completer<void>();

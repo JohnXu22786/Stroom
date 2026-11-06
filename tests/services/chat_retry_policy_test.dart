@@ -64,7 +64,10 @@ void main() {
                 requestOptions: RequestOptions(path: '/chat'),
                 statusCode: 429,
                 data: {
-                  'error': {'type': 'rate_limit_error'}
+                  'error': {
+                    'type': 'rate_limit_error',
+                    'message': 'account rate limit exceeded',
+                  }
                 },
               ),
               type: DioExceptionType.badResponse,
@@ -91,6 +94,7 @@ void main() {
       for (final message in [
         'insufficient_quota',
         'Your account billing limit has been reached',
+        'Your account limit has been reached',
         'Invalid request parameter',
         'Authentication error: invalid API key',
       ]) {
