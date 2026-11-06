@@ -16,7 +16,12 @@ class StreamResult {
   final ChatMessage? assistantMessage;
 
   /// The full accumulated reply text from the stream.
-  final String fullReply;
+  ///
+  /// Ordinary chat results keep this lazy because their assistant message
+  /// already owns the canonical text sections. Callers that need a single
+  /// string (such as TaskFlow) materialize it on demand.
+  final String? _fullReply;
+  String get fullReply => _fullReply ?? textSections.join();
 
   /// The accumulated reasoning buffer, or empty if no reasoning events.
   final String reasoningBuffer;
@@ -46,7 +51,7 @@ class StreamResult {
   const StreamResult({
     required this.history,
     this.assistantMessage,
-    this.fullReply = '',
+    String? fullReply,
     this.reasoningBuffer = '',
     this.reasoningSections = const [],
     this.textSections = const [],
@@ -54,10 +59,12 @@ class StreamResult {
     this.toolCallRoundStarts = const [],
     this.blocks = const [],
     this.cancelled = false,
-  });
+  }) : _fullReply = fullReply;
 
-  /// Whether the stream produced any content.
-  bool get hasContent => fullReply.isNotEmpty;
+  /// Whether the stream produced any content, without joining text sections.
+  bool get hasContent =>
+      _fullReply?.isNotEmpty ??
+      textSections.any((section) => section.isNotEmpty);
 }
 
 // ============================================================================

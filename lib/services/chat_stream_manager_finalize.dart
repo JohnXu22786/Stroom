@@ -127,9 +127,14 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
       debugPrint('[ChatStreamManager] 中断工具标记失败: $e');
     }
 
-    final fullReply = state.fullReply;
+    // Keep ordinary stream text section-backed. The persisted message and UI
+    // can materialize content when needed, while TaskFlow's fullReply getter
+    // joins only when that consumer explicitly asks for a String. Synthetic
+    // error replies are not represented by text sections and stay explicit.
+    final fullReply = state.hasSyntheticErrorReply ? state.fullReply : null;
     final textChunks =
         state.hasSyntheticErrorReply ? <String>[] : state.textChunks;
+    final hasTextContent = textChunks.any((chunk) => chunk.isNotEmpty);
     try {
       // 纯工具轮取消时 fullReply 为空但 accumulatedToolCalls 非空：
       // 仍要持久化 assistant 消息，否则中断标记（[工具执行被中断]）
@@ -137,7 +142,7 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
       // 均空但 reasoningSections 非空）：已流出的推理内容也要落库，
       // 否则用户看到的思考过程在崩溃/重进后消失。
       final hasContent = wasCancelled ||
-          fullReply.isNotEmpty ||
+          (fullReply?.isNotEmpty ?? hasTextContent) ||
           state.accumulatedToolCalls.isNotEmpty ||
           state.reasoningSections.any((s) => s.isNotEmpty);
       if (hasContent) {
@@ -161,9 +166,9 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
         }
         final msg = ChatMessage(
           role: 'assistant',
-          content: fullReply,
-          contentFromTextSections: !state.hasSyntheticErrorReply &&
-              textChunks.any((chunk) => chunk.isNotEmpty),
+          content: fullReply ?? '',
+          contentFromTextSections:
+              !state.hasSyntheticErrorReply && hasTextContent,
           id: state.streamingMsgId ?? '',
           isError: isError,
           rawRequest: rawRequestCapture,
@@ -247,7 +252,7 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
       debugPrint('[ChatStreamManager] 结果构造失败: $e\n$s');
       result = StreamResult(
         history: List.from(state.history),
-        fullReply: fullReply,
+        fullReply: fullReply ?? state.textChunks.join(),
         cancelled: wasCancelled,
       );
     }
