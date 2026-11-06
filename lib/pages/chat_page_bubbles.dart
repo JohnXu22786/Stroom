@@ -174,10 +174,8 @@ class _StreamingSearchOccurrenceCount {
   ) {
     final lastSigmaIndex = searchableText.lastIndexOf('\u03A3');
     if (lastSigmaIndex == -1) return false;
-    final lowerSigmaIndex = searchableText
-        .substring(0, lastSigmaIndex)
-        .toLowerCase()
-        .length;
+    final lowerSigmaIndex =
+        searchableText.substring(0, lastSigmaIndex).toLowerCase().length;
     if (lowerSigmaIndex >= lowerSearchableText.length ||
         lowerSearchableText.codeUnitAt(lowerSigmaIndex) != 0x03C2) {
       return false;
