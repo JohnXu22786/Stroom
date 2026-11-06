@@ -825,6 +825,7 @@ class ChatAdapter {
     void Function()? onToolCallIntent,
     void Function(String text)? onTextDelta,
     String? Function()? takeCompletedToolCallRound,
+    String? Function()? takeCompletedToolCallReasoning,
   }) {
     final svc = convId.isNotEmpty
         ? getOrCreateService(convId,
@@ -844,6 +845,7 @@ class ChatAdapter {
       onToolCallIntent: onToolCallIntent,
       onTextDelta: onTextDelta,
       takeCompletedToolCallRound: takeCompletedToolCallRound,
+      takeCompletedToolCallReasoning: takeCompletedToolCallReasoning,
     );
   }
 

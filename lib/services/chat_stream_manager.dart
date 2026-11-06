@@ -531,6 +531,8 @@ class ChatStreamManager {
                 onToolCallIntent: () => state.toolCallStarted = true,
                 onTextDelta: state.appendText,
                 takeCompletedToolCallRound: state.takeCompletedToolCallRound,
+                takeCompletedToolCallReasoning:
+                    state.takeCompletedToolCallReasoning,
               );
 
     // Now safe to yield to event loop — all state is established and the

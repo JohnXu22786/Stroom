@@ -141,6 +141,7 @@ extension ChatServiceStreamingExt on ChatService {
     void Function()? onToolCallIntent,
     void Function(String text)? onTextDelta,
     String? Function()? takeCompletedToolCallRound,
+    String? Function()? takeCompletedToolCallReasoning,
   }) {
     AppLogService.info(
         'ChatService', 'sendStreamWithTools 开始: ${userMessage.length} 字符');
@@ -222,7 +223,13 @@ extension ChatServiceStreamingExt on ChatService {
         // 后才置 true——循环从 while 条件检查处退出时若该标记为 true，
         // 说明是达到上限被强制停止，而非模型停用工具/出错/取消。
         var lastRoundHadToolCalls = false;
-        final roundReasoningBuffer = StringBuffer();
+        // The conversation manager already owns the canonical reasoning
+        // stream. Only keep a service-side copy for callers that do not
+        // provide its round handoff callback.
+        final roundReasoningBuffer =
+            onTextDelta == null || takeCompletedToolCallReasoning == null
+                ? StringBuffer()
+                : null;
         while (!_isCancelledByUser && loopProtection < maxRounds) {
           loopProtection++;
           lastRoundHadToolCalls = false;
@@ -238,6 +245,7 @@ extension ChatServiceStreamingExt on ChatService {
           _roundCompleter = completer;
           final toolCallRefs = <Map<String, dynamic>>[];
           String? roundContentForToolChain;
+          String? roundReasoningForToolChain;
           // 本轮流错误标记：onError 后立即停止轮处理，不再执行
           // 本轮的剩余工具或发起下一轮请求（错误已上抛给 manager，
           // 继续执行工具只会产生用户看不到的副作用）。
@@ -278,7 +286,7 @@ extension ChatServiceStreamingExt on ChatService {
               }
               if (event.isReasoning) {
                 if (toolDefs.isNotEmpty) {
-                  roundReasoningBuffer.write(event.text);
+                  roundReasoningBuffer?.write(event.text);
                 }
                 // Emit reasoning text as ReasoningEvent so the UI
                 // can stream it in real-time to the reasoning panel.
@@ -350,8 +358,10 @@ extension ChatServiceStreamingExt on ChatService {
             ));
             await delivered.future;
             pendingRoundBoundary = null;
-            if (_isCancelledByUser || controller.isClosed) break;
             roundContentForToolChain = takeCompletedToolCallRound?.call();
+            roundReasoningForToolChain =
+                takeCompletedToolCallReasoning?.call();
+            if (_isCancelledByUser || controller.isClosed) break;
           } else {
             controller.add(const ReasoningSectionEndEvent());
           }
@@ -361,7 +371,11 @@ extension ChatServiceStreamingExt on ChatService {
           // messages.append(message) preserves the complete assistant message
           // (including reasoning_content) when sending subsequent requests
           // in the same tool call chain.
-          final roundReasoning = roundReasoningBuffer.toString();
+          final roundReasoning = onTextDelta != null
+              ? roundReasoningForToolChain ??
+                  roundReasoningBuffer?.toString() ??
+                  ''
+              : roundReasoningBuffer?.toString() ?? '';
 
           // Collect all tool calls and results first, then build the chain
           // messages via the protocol (format-specific). The neutral
@@ -449,7 +463,7 @@ extension ChatServiceStreamingExt on ChatService {
 
           // Reset per-round buffers for the next iteration
           _contentBuffer.clear();
-          roundReasoningBuffer.clear();
+          roundReasoningBuffer?.clear();
           _lastReasoningLength = _reasoningBuffer.length;
           _thinkingSignature = '';
           // 本轮完整执行且未提前退出（工具已执行、消息已追加）。
