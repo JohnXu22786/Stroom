@@ -2752,6 +2752,61 @@ class EvaluateTests(unittest.TestCase):
         self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 1)
         self.assertEqual(report["metrics"]["character_error_rate"]["value"], 0)
 
+    def test_latex_unbraced_square_root_is_scored_against_its_display_transcription(
+        self,
+    ):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "unbraced-square-root",
+                    "gold_text": "Square root of x\n√x",
+                    "formula_text": "√x",
+                    "categories": ["english", "formula"],
+                }
+            ]
+        }
+        input_data = predictions(
+            [
+                {
+                    "fixture_id": "unbraced-square-root",
+                    "text": r"Square root of x $\sqrt x$",
+                }
+            ]
+        )
+        input_data["run"]["output_format"] = "latex"
+
+        report = evaluate_predictions(manifest, input_data)
+
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 1)
+        self.assertEqual(report["metrics"]["character_error_rate"]["value"], 0)
+
+    def test_latex_unbraced_square_root_preserves_fraction_operand_grouping(self):
+        formula = "√(1/2)"
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "unbraced-fraction-square-root",
+                    "gold_text": formula,
+                    "formula_text": formula,
+                    "categories": ["formula"],
+                }
+            ]
+        }
+        input_data = predictions(
+            [
+                {
+                    "fixture_id": "unbraced-fraction-square-root",
+                    "text": r"$\sqrt\frac{1}{2}$",
+                }
+            ]
+        )
+        input_data["run"]["output_format"] = "latex"
+
+        report = evaluate_predictions(manifest, input_data)
+
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 1)
+        self.assertEqual(report["metrics"]["character_error_rate"]["value"], 0)
+
     def test_latex_compound_square_root_preserves_operand_grouping(self):
         formula = "√(x+1)"
         manifest = {
