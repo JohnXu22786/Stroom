@@ -63,7 +63,7 @@ import 'app_localizations_zh.dart';
 /// property.
 abstract class AppLocalizations {
   AppLocalizations(String locale)
-    : localeName = intl.Intl.canonicalizedLocale(locale.toString());
+      : localeName = intl.Intl.canonicalizedLocale(locale.toString());
 
   final String localeName;
 
@@ -86,11 +86,11 @@ abstract class AppLocalizations {
   /// of delegates is preferred or required.
   static const List<LocalizationsDelegate<dynamic>> localizationsDelegates =
       <LocalizationsDelegate<dynamic>>[
-        delegate,
-        GlobalMaterialLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-      ];
+    delegate,
+    GlobalMaterialLocalizations.delegate,
+    GlobalCupertinoLocalizations.delegate,
+    GlobalWidgetsLocalizations.delegate,
+  ];
 
   /// A list of this localizations delegate's supported locales.
   static const List<Locale> supportedLocales = <Locale>[
@@ -4857,6 +4857,78 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count} files selected'**
   String appMediaSelectedFiles(Object count);
+
+  /// No description provided for @chatAlbumPickerTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'App album'**
+  String get chatAlbumPickerTitle;
+
+  /// No description provided for @chatAlbumPickerEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No images available'**
+  String get chatAlbumPickerEmpty;
+
+  /// No description provided for @appAlbumPickerSelectedImages.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{{count} image selected} other{{count} images selected}}'**
+  String appAlbumPickerSelectedImages(num count);
+
+  /// No description provided for @chatFilePickerTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose files'**
+  String get chatFilePickerTitle;
+
+  /// No description provided for @chatFilePickerTabText.
+  ///
+  /// In en, this message translates to:
+  /// **'Text'**
+  String get chatFilePickerTabText;
+
+  /// No description provided for @chatFilePickerTabImages.
+  ///
+  /// In en, this message translates to:
+  /// **'Images'**
+  String get chatFilePickerTabImages;
+
+  /// No description provided for @chatFilePickerTabVideos.
+  ///
+  /// In en, this message translates to:
+  /// **'Videos'**
+  String get chatFilePickerTabVideos;
+
+  /// No description provided for @chatFilePickerTabAudio.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio'**
+  String get chatFilePickerTabAudio;
+
+  /// No description provided for @chatFilePickerEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No files available'**
+  String get chatFilePickerEmpty;
+
+  /// No description provided for @chatFilePickerLoadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load files'**
+  String get chatFilePickerLoadFailed;
+
+  /// No description provided for @chatVideoPickerTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose app videos'**
+  String get chatVideoPickerTitle;
+
+  /// No description provided for @chatVideoPickerEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No videos available'**
+  String get chatVideoPickerEmpty;
 
   /// No description provided for @imagePreviewCrop.
   ///

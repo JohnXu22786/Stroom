@@ -2514,7 +2514,7 @@ void main() {
             await tester.tap(find.text('replacement.png'));
             await _pumpUntil(
               tester,
-              () => find.text('确定 (1)').evaluate().isNotEmpty,
+              () => find.text('Done (1)').evaluate().isNotEmpty,
             );
             await tester.tap(find.byKey(const Key('album_picker_confirm_btn')));
             await tester.pumpAndSettle();

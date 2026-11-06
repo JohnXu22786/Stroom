@@ -248,7 +248,9 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
     _notifyPendingSelectionChanged();
     if (!hasData && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('无法读取文件')),
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.appMediaUnreadable),
+        ),
       );
     }
   }
@@ -295,6 +297,7 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final l10n = AppLocalizations.of(context)!;
     final hasSelection = _selectionCount > 0;
 
     return PopScope(
@@ -312,7 +315,7 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
       child: Scaffold(
         backgroundColor: cs.surface,
         appBar: AppBar(
-          title: const Text('应用内相册'),
+          title: Text(l10n.chatAlbumPickerTitle),
           centerTitle: true,
           leading: IconButton(
             icon: const Icon(Icons.close),
@@ -324,7 +327,7 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
                 key: const Key('album_picker_clear_btn'),
                 onPressed: _clearSelection,
                 child: Text(
-                  '清除 ($_selectionCount)',
+                  l10n.appMediaClearSelection(_selectionCount),
                   style: const TextStyle(color: Colors.red),
                 ),
               ),
@@ -382,7 +385,11 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
                       ? null
                       : _confirmSelection,
                   icon: const Icon(Icons.check, size: 18),
-                  label: Text(hasSelection ? '确定 ($_selectionCount)' : '确定'),
+                  label: Text(
+                    hasSelection
+                        ? l10n.appMediaConfirmSelectionCount(_selectionCount)
+                        : l10n.appMediaConfirmSelection,
+                  ),
                 ),
               ),
             ),
@@ -393,6 +400,7 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
   }
 
   Widget _buildContent(ColorScheme cs) {
+    final l10n = AppLocalizations.of(context)!;
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -431,7 +439,7 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
             ),
             const SizedBox(height: 12),
             Text(
-              _isRoot ? '暂无图片' : '此文件夹为空',
+              _isRoot ? l10n.chatAlbumPickerEmpty : l10n.appMediaEmptyFolder,
               style: TextStyle(
                 fontSize: 14,
                 color: cs.onSurfaceVariant,
@@ -472,8 +480,10 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
               const SizedBox(width: 12),
               Text(
                 parent.isEmpty
-                    ? '返回根目录'
-                    : '返回: ${FolderPathUtils.getFolderBaseName(parent)}',
+                    ? AppLocalizations.of(context)!.appMediaRoot
+                    : AppLocalizations.of(context)!.appMediaParentFolder(
+                        FolderPathUtils.getFolderBaseName(parent),
+                      ),
                 style: const TextStyle(fontSize: 15, color: Colors.blue),
               ),
               const Spacer(),
@@ -636,7 +646,8 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 6, 12, 2),
             child: Text(
-              '已选择 $_selectionCount 张图片',
+              AppLocalizations.of(context)!
+                  .appAlbumPickerSelectedImages(_selectionCount),
               style: TextStyle(
                 fontSize: 11,
                 color: cs.onSurfaceVariant,

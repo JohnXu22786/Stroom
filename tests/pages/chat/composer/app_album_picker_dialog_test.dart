@@ -208,6 +208,7 @@ void main() {
     bool failRead = false,
     bool includeReplacement = false,
     bool blockReplacementRead = false,
+    Locale locale = const Locale('zh', 'CN'),
   }) async {
     final png = await tester.runAsync(_createEnginePng);
     await tester.runAsync(() async {
@@ -243,7 +244,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         child: MaterialApp(
-          locale: const Locale('zh', 'CN'),
+          locale: locale,
           supportedLocales: AppLocalizations.supportedLocales,
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Builder(
@@ -577,6 +578,44 @@ void main() {
       expect(tester.takeException(), isNull);
       expect(picker.result(), isNull);
     });
+  });
+
+  group('AppAlbumPickerDialog localization', () {
+    for (final (locale, title, confirm, unreadable) in [
+      (
+        const Locale('en', 'US'),
+        'App album',
+        'Done',
+        'Could not read file',
+      ),
+      (
+        const Locale('zh', 'CN'),
+        '应用内相册',
+        '确定',
+        '无法读取文件',
+      ),
+    ]) {
+      testWidgets('$locale localizes picker chrome and read errors', (
+        tester,
+      ) async {
+        final picker = await openPickerWithBlockedRead(
+          tester,
+          failRead: true,
+          locale: locale,
+        );
+
+        expect(find.text(title), findsOneWidget);
+        expect(find.textContaining(confirm), findsOneWidget);
+
+        picker.releaseRead.complete();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+
+        expect(find.text(unreadable), findsOneWidget);
+        expect(find.text('pending-read.png'), findsOneWidget,
+            reason: 'the picker must keep the original filename visible');
+      });
+    }
   });
 
   // ====================================================================

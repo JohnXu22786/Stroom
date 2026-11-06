@@ -2712,6 +2712,44 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get chatAlbumPickerTitle => '应用内相册';
+
+  @override
+  String get chatAlbumPickerEmpty => '暂无图片';
+
+  @override
+  String appAlbumPickerSelectedImages(num count) {
+    return '已选择 $count 张图片';
+  }
+
+  @override
+  String get chatFilePickerTitle => '选择文件';
+
+  @override
+  String get chatFilePickerTabText => '文本';
+
+  @override
+  String get chatFilePickerTabImages => '图片';
+
+  @override
+  String get chatFilePickerTabVideos => '视频';
+
+  @override
+  String get chatFilePickerTabAudio => '音频';
+
+  @override
+  String get chatFilePickerEmpty => '暂无文件';
+
+  @override
+  String get chatFilePickerLoadFailed => '加载失败';
+
+  @override
+  String get chatVideoPickerTitle => '选择应用内视频';
+
+  @override
+  String get chatVideoPickerEmpty => '暂无视频';
+
+  @override
   String get imagePreviewCrop => '裁剪';
 
   @override
@@ -11259,6 +11297,44 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String appMediaSelectedFiles(Object count) {
     return '已选择 $count 个文件';
   }
+
+  @override
+  String get chatAlbumPickerTitle => '应用内相册';
+
+  @override
+  String get chatAlbumPickerEmpty => '暂无图片';
+
+  @override
+  String appAlbumPickerSelectedImages(num count) {
+    return '已选择 $count 张图片';
+  }
+
+  @override
+  String get chatFilePickerTitle => '选择文件';
+
+  @override
+  String get chatFilePickerTabText => '文本';
+
+  @override
+  String get chatFilePickerTabImages => '图片';
+
+  @override
+  String get chatFilePickerTabVideos => '视频';
+
+  @override
+  String get chatFilePickerTabAudio => '音频';
+
+  @override
+  String get chatFilePickerEmpty => '暂无文件';
+
+  @override
+  String get chatFilePickerLoadFailed => '加载失败';
+
+  @override
+  String get chatVideoPickerTitle => '选择应用内视频';
+
+  @override
+  String get chatVideoPickerEmpty => '暂无视频';
 
   @override
   String get imagePreviewCrop => '裁剪';
