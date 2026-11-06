@@ -375,6 +375,8 @@ class _ApplicationState extends ConsumerState<Application>
   Widget build(BuildContext context) {
     final themeMode = ref.watch(themeProvider);
     final locale = ref.watch(localeProvider);
+    NotificationService().updateLocaleOverride(locale);
+    DesktopAppService.instance.updateLocaleOverride(locale);
 
     return DynamicColorBuilder(
       builder: (lightDynamic, darkDynamic) {

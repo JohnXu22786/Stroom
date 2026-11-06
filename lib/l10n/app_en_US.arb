@@ -5228,5 +5228,45 @@
   "bgTaskOcrPageFailureSeparator": "; ",
   "bgTaskInterruptedOnRestart": "Interrupted when the app restarted",
   "bgTaskOcrErrorDetailsHidden": "OCR error details were hidden",
-  "bgTaskErrorDetailsHidden": "Error details were hidden"
+  "bgTaskErrorDetailsHidden": "Error details were hidden",
+  "notificationTaskCompletedTitle": "Task completed: {typeLabel}",
+  "@notificationTaskCompletedTitle": {
+    "placeholders": {
+      "typeLabel": {
+        "type": "String"
+      }
+    }
+  },
+  "notificationTaskFailedTitle": "Task failed: {typeLabel}",
+  "@notificationTaskFailedTitle": {
+    "placeholders": {
+      "typeLabel": {
+        "type": "String"
+      }
+    }
+  },
+  "notificationTaskCompletedBody": "{title} completed",
+  "@notificationTaskCompletedBody": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "notificationTaskFailedBody": "{title} failed: {error}",
+  "@notificationTaskFailedBody": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "notificationUnknownError": "Unknown error",
+  "desktopTrayTooltip": "Stroom is running in the background",
+  "desktopTrayOpen": "Open Stroom",
+  "desktopTrayShowMainWindow": "Show Main Window",
+  "desktopTrayQuitStroom": "Quit Stroom"
 }

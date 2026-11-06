@@ -5228,5 +5228,45 @@
   "bgTaskOcrPageFailureSeparator": "；",
   "bgTaskInterruptedOnRestart": "应用重启，已中断",
   "bgTaskOcrErrorDetailsHidden": "OCR 错误详情已隐藏",
-  "bgTaskErrorDetailsHidden": "错误详情已隐藏"
+  "bgTaskErrorDetailsHidden": "错误详情已隐藏",
+  "notificationTaskCompletedTitle": "任务完成：{typeLabel}",
+  "@notificationTaskCompletedTitle": {
+    "placeholders": {
+      "typeLabel": {
+        "type": "String"
+      }
+    }
+  },
+  "notificationTaskFailedTitle": "任务失败：{typeLabel}",
+  "@notificationTaskFailedTitle": {
+    "placeholders": {
+      "typeLabel": {
+        "type": "String"
+      }
+    }
+  },
+  "notificationTaskCompletedBody": "{title} 已完成",
+  "@notificationTaskCompletedBody": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "notificationTaskFailedBody": "{title} 失败：{error}",
+  "@notificationTaskFailedBody": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "notificationUnknownError": "未知错误",
+  "desktopTrayTooltip": "Stroom 正在后台运行",
+  "desktopTrayOpen": "打开 Stroom",
+  "desktopTrayShowMainWindow": "显示主窗口",
+  "desktopTrayQuitStroom": "退出 Stroom"
 }

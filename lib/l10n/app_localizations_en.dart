@@ -9399,6 +9399,41 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get bgTaskErrorDetailsHidden => 'Error details were hidden';
+
+  @override
+  String notificationTaskCompletedTitle(String typeLabel) {
+    return 'Task completed: $typeLabel';
+  }
+
+  @override
+  String notificationTaskFailedTitle(String typeLabel) {
+    return 'Task failed: $typeLabel';
+  }
+
+  @override
+  String notificationTaskCompletedBody(String title) {
+    return '$title completed';
+  }
+
+  @override
+  String notificationTaskFailedBody(String title, String error) {
+    return '$title failed: $error';
+  }
+
+  @override
+  String get notificationUnknownError => 'Unknown error';
+
+  @override
+  String get desktopTrayTooltip => 'Stroom is running in the background';
+
+  @override
+  String get desktopTrayOpen => 'Open Stroom';
+
+  @override
+  String get desktopTrayShowMainWindow => 'Show Main Window';
+
+  @override
+  String get desktopTrayQuitStroom => 'Quit Stroom';
 }
 
 /// The translations for English, as used in the United States (`en_US`).
@@ -18795,4 +18830,39 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get bgTaskErrorDetailsHidden => 'Error details were hidden';
+
+  @override
+  String notificationTaskCompletedTitle(String typeLabel) {
+    return 'Task completed: $typeLabel';
+  }
+
+  @override
+  String notificationTaskFailedTitle(String typeLabel) {
+    return 'Task failed: $typeLabel';
+  }
+
+  @override
+  String notificationTaskCompletedBody(String title) {
+    return '$title completed';
+  }
+
+  @override
+  String notificationTaskFailedBody(String title, String error) {
+    return '$title failed: $error';
+  }
+
+  @override
+  String get notificationUnknownError => 'Unknown error';
+
+  @override
+  String get desktopTrayTooltip => 'Stroom is running in the background';
+
+  @override
+  String get desktopTrayOpen => 'Open Stroom';
+
+  @override
+  String get desktopTrayShowMainWindow => 'Show Main Window';
+
+  @override
+  String get desktopTrayQuitStroom => 'Quit Stroom';
 }

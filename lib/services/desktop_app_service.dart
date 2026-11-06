@@ -9,11 +9,13 @@ import 'package:flutter/foundation.dart'
         debugPrint,
         defaultTargetPlatform,
         visibleForTesting;
+import 'package:flutter/widgets.dart' show Locale;
 import 'package:tray_manager/legacy.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'app_log_service.dart';
 import 'background_service.dart' as background_service;
+import '../providers/locale_provider.dart';
 
 /// Operations the desktop window service needs from the native tray plugin.
 /// Keeping this boundary injectable lets tests cover tray behavior without
@@ -105,6 +107,22 @@ class DesktopAppService extends WindowListener with TrayListener {
   bool _quitRequested = false;
   Menu? _menu;
   DesktopTrayAdapter _trayAdapter = _LegacyDesktopTrayAdapter();
+  Locale? _localeOverride;
+  String? _effectiveLocaleName;
+  int _localeGeneration = 0;
+
+  /// Keeps tray labels in sync with the app's selected locale.
+  void updateLocaleOverride(Locale? locale) {
+    final effectiveLocaleName = appLocalizationsForLocale(locale).localeName;
+    if (_localeOverride == locale &&
+        _effectiveLocaleName == effectiveLocaleName) {
+      return;
+    }
+    _localeOverride = locale;
+    _effectiveLocaleName = effectiveLocaleName;
+    _localeGeneration++;
+    if (_trayReady.value) unawaited(_refreshLocalizedTrayStrings());
+  }
 
   /// 当前是否运行在桌面平台（Windows / macOS / Linux）。
   ///
@@ -150,6 +168,8 @@ class DesktopAppService extends WindowListener with TrayListener {
     _quitRequested = false;
     _confirmInProgress = false;
     _menu = null;
+    _localeOverride = null;
+    _effectiveLocaleName = null;
     onQuitConfirmation = null;
   }
 
@@ -182,6 +202,7 @@ class DesktopAppService extends WindowListener with TrayListener {
   ///    监听，避免出现「窗口已隐藏但无托盘可恢复」的幽灵进程。
   Future<void> setupTrayAndCloseBehavior() async {
     if (!isDesktopPlatform || _quitRequested || _trayReady.value) return;
+    final localeGeneration = _localeGeneration;
     // 托盘注册超时：插件挂起（如 Linux 缺少 appindicator 服务）时
     // 走回滚路径，而不是让窗口永远无法关闭。
 
@@ -207,13 +228,20 @@ class DesktopAppService extends WindowListener with TrayListener {
         // 单独捕获，避免拖垮整个托盘注册流程；同样受超时保护
         // （DBus/appindicator 挂起时不能无限期停留在无监听的拦截状态）。
         try {
-          await _trayAdapter.setToolTip('Stroom 正在后台运行').timeout(_trayTimeout);
+          await _trayAdapter
+              .setToolTip(
+                appLocalizationsForLocale(_localeOverride).desktopTrayTooltip,
+              )
+              .timeout(_trayTimeout);
         } catch (e) {
           debugPrint('[DesktopAppService] setToolTip unsupported: $e');
         }
         _menu = _buildMenu();
         await _trayAdapter.setContextMenu(_menu!).timeout(_trayTimeout);
         _trayReady.value = true;
+        if (localeGeneration != _localeGeneration) {
+          unawaited(_refreshLocalizedTrayStrings());
+        }
         _trayRollbackCloseInterceptionFailed = false;
         debugPrint('[DesktopAppService] Tray icon registered');
       } catch (e) {
@@ -274,13 +302,37 @@ class DesktopAppService extends WindowListener with TrayListener {
     // 注意：托盘菜单项的点击回调统一走 [onTrayMenuItemClick] 按键路由，
     // 不要在 MenuItem.onClick 中重复绑定，否则每次点击会执行两次
     // （tray_manager 会同时触发 item.onClick 和 listener.onTrayMenuItemClick）。
+    final strings = appLocalizationsForLocale(_localeOverride);
     return Menu(
       items: [
-        MenuItem(key: _menuShowKey, label: '显示主窗口'),
+        MenuItem(key: _menuShowKey, label: strings.desktopTrayShowMainWindow),
         MenuItem.separator(),
-        MenuItem(key: _menuQuitKey, label: '退出 Stroom'),
+        MenuItem(key: _menuQuitKey, label: strings.desktopTrayQuitStroom),
       ],
     );
+  }
+
+  Future<void> _refreshLocalizedTrayStrings() async {
+    while (_trayReady.value) {
+      final localeGeneration = _localeGeneration;
+      final strings = appLocalizationsForLocale(_localeOverride);
+      try {
+        await _trayAdapter.setToolTip(strings.desktopTrayTooltip).timeout(
+              _trayTimeout,
+            );
+      } catch (e) {
+        debugPrint('[DesktopAppService] setToolTip unsupported: $e');
+      }
+      if (localeGeneration != _localeGeneration) continue;
+      try {
+        final menu = _buildMenu();
+        await _trayAdapter.setContextMenu(menu).timeout(_trayTimeout);
+        if (localeGeneration == _localeGeneration) _menu = menu;
+      } catch (e) {
+        debugPrint('[DesktopAppService] Failed to refresh localized tray: $e');
+      }
+      if (localeGeneration == _localeGeneration) return;
+    }
   }
 
   // ── 窗口事件 ──────────────────────────────────────────────────────
