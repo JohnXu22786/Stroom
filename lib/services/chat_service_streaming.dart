@@ -215,6 +215,7 @@ extension ChatServiceStreamingExt on ChatService {
         // 后才置 true——循环从 while 条件检查处退出时若该标记为 true，
         // 说明是达到上限被强制停止，而非模型停用工具/出错/取消。
         var lastRoundHadToolCalls = false;
+        final roundReasoningBuffer = StringBuffer();
         while (!_isCancelledByUser && loopProtection < maxRounds) {
           loopProtection++;
           lastRoundHadToolCalls = false;
@@ -269,6 +270,7 @@ extension ChatServiceStreamingExt on ChatService {
               }
               if (event.isReasoning) {
                 _reasoningBuffer.write(event.text);
+                roundReasoningBuffer.write(event.text);
                 // Emit reasoning text as ReasoningEvent so the UI
                 // can stream it in real-time to the reasoning panel.
                 controller.add(ReasoningEvent(event.text));
@@ -333,9 +335,7 @@ extension ChatServiceStreamingExt on ChatService {
           // messages.append(message) preserves the complete assistant message
           // (including reasoning_content) when sending subsequent requests
           // in the same tool call chain.
-          final roundReasoning = _reasoningBuffer.toString().substring(
-                _lastReasoningLength,
-              );
+          final roundReasoning = roundReasoningBuffer.toString();
 
           // Collect all tool calls and results first, then build the chain
           // messages via the protocol (format-specific). The neutral
@@ -421,6 +421,7 @@ extension ChatServiceStreamingExt on ChatService {
 
           // Reset per-round buffers for the next iteration
           _contentBuffer.clear();
+          roundReasoningBuffer.clear();
           _lastReasoningLength = _reasoningBuffer.length;
           _thinkingSignature = '';
           // 本轮完整执行且未提前退出（工具已执行、消息已追加）。
