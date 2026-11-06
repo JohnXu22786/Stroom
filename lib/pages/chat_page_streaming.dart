@@ -75,6 +75,8 @@ extension _ChatPageStreamingExt on _ChatPageState {
           .removeWhere((key, _) => key.startsWith('$msgId:'));
       _streamingFenceInfoCaches
           .removeWhere((key, _) => key.startsWith('$msgId:'));
+      _streamingSearchOccurrenceCache
+          .removeWhere((key, _) => key.startsWith('$msgId:'));
       _livePlainTextFragments
           .removeWhere((key, _) => key.startsWith('$msgId:'));
       manager.detachStreamPage(
@@ -552,6 +554,8 @@ extension _ChatPageStreamingExt on _ChatPageState {
             .removeWhere((key, _) => key.startsWith('$aiMsgId:'));
         _streamingFenceInfoCaches
             .removeWhere((key, _) => key.startsWith('$aiMsgId:'));
+        _streamingSearchOccurrenceCache
+            .removeWhere((key, _) => key.startsWith('$aiMsgId:'));
         _livePlainTextFragments
             .removeWhere((key, _) => key.startsWith('$aiMsgId:'));
         _reasoningContents.remove(aiMsgId);
@@ -566,6 +570,8 @@ extension _ChatPageStreamingExt on _ChatPageState {
     _streamingMarkdownCache
         .removeWhere((key, _) => key.startsWith('${msg.id}:'));
     _streamingFenceInfoCaches
+        .removeWhere((key, _) => key.startsWith('${msg.id}:'));
+    _streamingSearchOccurrenceCache
         .removeWhere((key, _) => key.startsWith('${msg.id}:'));
     _livePlainTextFragments
         .removeWhere((key, _) => key.startsWith('${msg.id}:'));

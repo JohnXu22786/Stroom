@@ -256,6 +256,7 @@ extension _ChatPageListenersExt on _ChatPageState {
         // conversation don't leak into _loadConversationMessages'
         // save/restore block, which would cross-contaminate segment data.
         _chatSegments.clear();
+        _streamingSearchOccurrenceCache.clear();
         _reasoningContents.clear();
         _finalizedMessages.clear();
         _isReasoningCompletedForMsg.clear();

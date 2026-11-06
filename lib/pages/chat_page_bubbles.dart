@@ -14,6 +14,145 @@ class _CachedStreamingMarkdown {
   });
 }
 
+class _StreamingSearchOccurrenceCount {
+  String _query = '';
+  String _text = '';
+  String _tail = '';
+  int _count = 0;
+  int _nextSearchIndex = 0;
+  int _lowerTextLength = 0;
+  bool _canAppendIncrementally = false;
+  bool _hasContextualLowercase = false;
+  List<String> _liveFragmentsSnapshot = const [];
+
+  int countFor(String text, String lowerQuery) {
+    if (_query != lowerQuery) _reset(lowerQuery);
+    // Live text sections only append. Comparing lengths avoids rescanning the
+    // growing prefix just to confirm that the new snapshot extends it.
+    if (identical(text, _text) || text.length == _text.length) return _count;
+
+    if (_canAppendIncrementally &&
+        text.length > _text.length &&
+        lowerQuery.isNotEmpty) {
+      final appended = text.substring(_text.length);
+      if (appended.contains('`') ||
+          appended.contains('~') ||
+          appended.contains(r'$') ||
+          appended.contains('\r') ||
+          appended.contains('\u03A3')) {
+        return _recount(text, lowerQuery);
+      }
+      _appendLowerText(appended.toLowerCase(), lowerQuery);
+      _text = text;
+      return _count;
+    }
+
+    return _recount(text, lowerQuery);
+  }
+
+  int countLiveFragmentsFor(List<String> fragments, String lowerQuery) {
+    if (_query != lowerQuery) _reset(lowerQuery);
+    if (_hasContextualLowercase ||
+        fragments.any((fragment) => fragment.contains('\u03A3'))) {
+      final text = fragments.join();
+      final count = _recount(text, lowerQuery);
+      _hasContextualLowercase = true;
+      _liveFragmentsSnapshot = List<String>.of(fragments);
+      return count;
+    }
+    var samePrefix = _liveFragmentsSnapshot.length <= fragments.length;
+    for (var i = 0; samePrefix && i < _liveFragmentsSnapshot.length; i++) {
+      samePrefix = identical(_liveFragmentsSnapshot[i], fragments[i]);
+    }
+    if (!samePrefix) {
+      _count = 0;
+      _nextSearchIndex = 0;
+      _lowerTextLength = 0;
+      _tail = '';
+      _liveFragmentsSnapshot = const [];
+    }
+    if (lowerQuery.isNotEmpty) {
+      for (var i = _liveFragmentsSnapshot.length; i < fragments.length; i++) {
+        _appendLowerText(fragments[i].toLowerCase(), lowerQuery);
+      }
+    }
+    _liveFragmentsSnapshot = List<String>.of(fragments);
+    return _count;
+  }
+
+  int _recount(String text, String lowerQuery) {
+    final isPlainText = !text.contains('`') &&
+        !text.contains('~') &&
+        !text.contains(r'$') &&
+        !text.contains('\r');
+    _hasContextualLowercase = text.contains('\u03A3');
+    _count = countOccurrences(
+      stripSearchIrrelevantMarkdown(text),
+      lowerQuery,
+    );
+    _nextSearchIndex = 0;
+    _lowerTextLength = 0;
+    _tail = '';
+    if (isPlainText && lowerQuery.isNotEmpty) {
+      final lowerText = text.toLowerCase();
+      _lowerTextLength = lowerText.length;
+      var start = 0;
+      while (true) {
+        final index = lowerText.indexOf(lowerQuery, start);
+        if (index == -1) break;
+        _nextSearchIndex = index + lowerQuery.length;
+        start = _nextSearchIndex;
+      }
+    }
+    _text = text;
+    _canAppendIncrementally = isPlainText &&
+        lowerQuery.isNotEmpty &&
+        !_hasContextualLowercase;
+    if (_canAppendIncrementally && lowerQuery.length > 1) {
+      final lowerText = text.toLowerCase();
+      final tailLength = lowerQuery.length - 1;
+      _tail = lowerText.length <= tailLength
+          ? lowerText
+          : lowerText.substring(lowerText.length - tailLength);
+    }
+    return _count;
+  }
+
+  void _appendLowerText(String appended, String lowerQuery) {
+    final searchText = _tail + appended;
+    final tailStart = _lowerTextLength - _tail.length;
+    var start = _nextSearchIndex > tailStart
+        ? _nextSearchIndex - tailStart
+        : 0;
+    while (true) {
+      final index = searchText.indexOf(lowerQuery, start);
+      if (index == -1) break;
+      if (index + lowerQuery.length > _tail.length) {
+        _count++;
+        _nextSearchIndex = tailStart + index + lowerQuery.length;
+      }
+      start = index + lowerQuery.length;
+    }
+    _lowerTextLength += appended.length;
+    final tailLength = lowerQuery.length - 1;
+    _tail = tailLength == 0 || searchText.length <= tailLength
+        ? (tailLength == 0 ? '' : searchText)
+        : searchText.substring(searchText.length - tailLength);
+  }
+
+  void _reset(String lowerQuery) {
+    _query = lowerQuery;
+    _text = '';
+    _tail = '';
+    _count = 0;
+    _nextSearchIndex = 0;
+    _lowerTextLength = 0;
+    _canAppendIncrementally = false;
+    _hasContextualLowercase = false;
+    _liveFragmentsSnapshot = const [];
+  }
+}
+
 extension _ChatPageBubblesExt on _ChatPageState {
   /// Error bubble for failed AI messages with status code, response body
   /// and original error text.
@@ -189,10 +328,22 @@ extension _ChatPageBubblesExt on _ChatPageState {
     final liveTextChunkCount = streamingConvId == null
         ? 0
         : ref.read(streamingTextSectionsProvider(streamingConvId)).length;
-    for (final seg in mergeConsecutiveTextSegments(segments)) {
+    final mergedSegments = mergeConsecutiveTextSegments(segments);
+    for (var segmentIndex = 0;
+        segmentIndex < mergedSegments.length;
+        segmentIndex++) {
+      final seg = mergedSegments[segmentIndex];
       switch (seg) {
         case TextSegment s:
           if (s.liveTextFragments != null) {
+            if (hasSearchMatch) {
+              final cacheKey = s.chunkIndex == null
+                  ? '$messageId:live-segment:$segmentIndex'
+                  : '$messageId:live-chunk:${s.chunkIndex}';
+              occurrenceOffset += _streamingSearchOccurrenceCache
+                  .putIfAbsent(cacheKey, _StreamingSearchOccurrenceCount.new)
+                  .countLiveFragmentsFor(s.liveTextFragments!, lowerQuery);
+            }
             widgets.add(Padding(
               padding: const EdgeInsets.only(bottom: 4),
               child: SelectableText.rich(
@@ -286,10 +437,21 @@ extension _ChatPageBubblesExt on _ChatPageState {
           // become highlightable text), so the offset stays aligned with the
           // per-segment ordinal of the next text segment.
           if (hasSearchMatch) {
-            occurrenceOffset += countOccurrences(
-              stripSearchIrrelevantMarkdown(s.text),
-              lowerQuery,
-            );
+            final isActiveStreamingSearch =
+                isStreaming && messageId == _streamingMsgId;
+            if (isActiveStreamingSearch) {
+              final cacheKey = s.chunkIndex == null
+                  ? '$messageId:segment:$segmentIndex'
+                  : '$messageId:chunk:${s.chunkIndex}';
+              occurrenceOffset += _streamingSearchOccurrenceCache
+                  .putIfAbsent(cacheKey, _StreamingSearchOccurrenceCount.new)
+                  .countFor(s.text, lowerQuery);
+            } else {
+              occurrenceOffset += countOccurrences(
+                stripSearchIrrelevantMarkdown(s.text),
+                lowerQuery,
+              );
+            }
           }
         case ErrorSegment s:
           widgets.add(Container(
