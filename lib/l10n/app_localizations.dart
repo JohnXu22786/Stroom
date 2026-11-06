@@ -4402,14 +4402,17 @@ abstract class AppLocalizations {
   /// **'Flow action failed: {error}'**
   String catcatchFlowActionFailed(Object error);
 
-  /// Guidance shown when CatCatch needs interactive browser recovery.
+  /// No description provided for @catcatchWebViewRecoveryGuidance.
+  ///
+  /// In en, this message translates to:
+  /// **'Automatic page scanning timed out. Sign in or configure a user script on this page; after media is detected, choose Continue flow.'**
   String get catcatchWebViewRecoveryGuidance;
 
-  /// Continue the paused CatCatch flow from the interactive browser.
+  /// No description provided for @browserRecoveryContinue.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue flow'**
   String get browserRecoveryContinue;
-
-  /// Reopen the interactive browser recovery page.
-  String get browserRecoveryOpenPage;
 
   /// No description provided for @catcatchSkipped.
   ///
@@ -14646,6 +14649,342 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Platform tutorials'**
   String get platformTutorialPageTitle;
+
+  /// No description provided for @browserRecoveryOpenPage.
+  ///
+  /// In en, this message translates to:
+  /// **'Open recovery page'**
+  String get browserRecoveryOpenPage;
+
+  /// Media gallery and image editor interface copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview is not supported for .{format} files'**
+  String galleryUnsupportedPreview(String format);
+
+  /// Media gallery and image editor interface copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not take a photo: {error}'**
+  String galleryCameraFailed(String error);
+
+  /// No description provided for @galleryPhotoSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Photo saved'**
+  String get galleryPhotoSaved;
+
+  /// Media gallery and image editor interface copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Skipped unsupported format: {format}'**
+  String galleryUnsupportedImportFormat(String format);
+
+  /// Media gallery and image editor interface copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Imported {count, plural, =1{# image} other{# images}}'**
+  String galleryImportImagesCount(int count);
+
+  /// Media gallery and image editor interface copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Imported {count, plural, =1{# video} other{# videos}}'**
+  String galleryImportVideosCount(int count);
+
+  /// Media gallery and image editor interface copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Import failed: {error}'**
+  String galleryImportFailed(String error);
+
+  /// No description provided for @galleryFileReadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not read file data'**
+  String get galleryFileReadFailed;
+
+  /// No description provided for @galleryExportImageTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Export image'**
+  String get galleryExportImageTitle;
+
+  /// No description provided for @galleryExportVideoTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Export video'**
+  String get galleryExportVideoTitle;
+
+  /// Media gallery and image editor interface copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Exported to: {path}'**
+  String galleryExportedTo(String path);
+
+  /// Media gallery and image editor interface copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Export failed: {error}'**
+  String galleryExportFailed(String error);
+
+  /// No description provided for @galleryChooseExportDirectory.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose export directory'**
+  String get galleryChooseExportDirectory;
+
+  /// Media gallery and image editor interface copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Exported {count, plural, =1{# file} other{# files}}'**
+  String galleryExportedFilesCount(int count);
+
+  /// No description provided for @galleryFolderExportTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Export folder'**
+  String get galleryFolderExportTitle;
+
+  /// No description provided for @galleryWebFolderExportInfo.
+  ///
+  /// In en, this message translates to:
+  /// **'The browser cannot select an export directory. A ZIP file that preserves the folder structure will be downloaded.'**
+  String get galleryWebFolderExportInfo;
+
+  /// No description provided for @galleryDownloadZip.
+  ///
+  /// In en, this message translates to:
+  /// **'Download ZIP file'**
+  String get galleryDownloadZip;
+
+  /// No description provided for @galleryExportImageFolderTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Export image folder'**
+  String get galleryExportImageFolderTitle;
+
+  /// No description provided for @galleryExportVideoFolderTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Export video folder'**
+  String get galleryExportVideoFolderTitle;
+
+  /// No description provided for @galleryImagePageTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Gallery'**
+  String get galleryImagePageTitle;
+
+  /// No description provided for @galleryVideoPageTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Videos'**
+  String get galleryVideoPageTitle;
+
+  /// No description provided for @galleryTakePhoto.
+  ///
+  /// In en, this message translates to:
+  /// **'Take photo'**
+  String get galleryTakePhoto;
+
+  /// No description provided for @galleryRecordVideo.
+  ///
+  /// In en, this message translates to:
+  /// **'Record'**
+  String get galleryRecordVideo;
+
+  /// No description provided for @galleryImport.
+  ///
+  /// In en, this message translates to:
+  /// **'Import'**
+  String get galleryImport;
+
+  /// No description provided for @galleryExportToLocal.
+  ///
+  /// In en, this message translates to:
+  /// **'Export to local'**
+  String get galleryExportToLocal;
+
+  /// No description provided for @galleryPlayVideo.
+  ///
+  /// In en, this message translates to:
+  /// **'Play'**
+  String get galleryPlayVideo;
+
+  /// Media gallery and image editor interface copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy failed: {error}'**
+  String galleryCopyFailed(String error);
+
+  /// No description provided for @galleryVideoSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Video saved'**
+  String get galleryVideoSaved;
+
+  /// Media gallery and image editor interface copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Recording failed: {error}'**
+  String galleryVideoRecordFailed(String error);
+
+  /// No description provided for @galleryVideoLoadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load video'**
+  String get galleryVideoLoadFailed;
+
+  /// No description provided for @imageEditorSaveImageTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Save image'**
+  String get imageEditorSaveImageTitle;
+
+  /// No description provided for @imageEditorSaveImagePrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose how to save the image:'**
+  String get imageEditorSaveImagePrompt;
+
+  /// No description provided for @imageEditorOverwrite.
+  ///
+  /// In en, this message translates to:
+  /// **'Overwrite'**
+  String get imageEditorOverwrite;
+
+  /// No description provided for @imageEditorSaveAs.
+  ///
+  /// In en, this message translates to:
+  /// **'Save as'**
+  String get imageEditorSaveAs;
+
+  /// No description provided for @imageEditorSavePhotoTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Save photo'**
+  String get imageEditorSavePhotoTitle;
+
+  /// No description provided for @imageEditorSavePhotoPrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Save this photo?'**
+  String get imageEditorSavePhotoPrompt;
+
+  /// No description provided for @imageEditorDiscard.
+  ///
+  /// In en, this message translates to:
+  /// **'Discard'**
+  String get imageEditorDiscard;
+
+  /// No description provided for @imageEditorDoneLoading.
+  ///
+  /// In en, this message translates to:
+  /// **'Generating image. Please wait…'**
+  String get imageEditorDoneLoading;
+
+  /// Media gallery and image editor interface copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Quick edit – {fileName}'**
+  String imageEditorQuickTitle(String fileName);
+
+  /// No description provided for @imageEditorNotReady.
+  ///
+  /// In en, this message translates to:
+  /// **'The editor is not ready. Please try again in a moment.'**
+  String get imageEditorNotReady;
+
+  /// Media gallery and image editor interface copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not process image: {error}'**
+  String imageEditorProcessingFailed(String error);
+
+  /// No description provided for @imageEditorLoadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load image'**
+  String get imageEditorLoadFailed;
+
+  /// No description provided for @imageEditorProcessing.
+  ///
+  /// In en, this message translates to:
+  /// **'Processing image. Please wait…'**
+  String get imageEditorProcessing;
+
+  /// No description provided for @imageEditorRotateLeft.
+  ///
+  /// In en, this message translates to:
+  /// **'Rotate left'**
+  String get imageEditorRotateLeft;
+
+  /// No description provided for @imageEditorRotateRight.
+  ///
+  /// In en, this message translates to:
+  /// **'Rotate right'**
+  String get imageEditorRotateRight;
+
+  /// No description provided for @imageEditorFlip.
+  ///
+  /// In en, this message translates to:
+  /// **'Flip'**
+  String get imageEditorFlip;
+
+  /// No description provided for @imageEditorCrop.
+  ///
+  /// In en, this message translates to:
+  /// **'Crop'**
+  String get imageEditorCrop;
+
+  /// No description provided for @imageViewerImageSavedAsCopy.
+  ///
+  /// In en, this message translates to:
+  /// **'Image saved as a copy'**
+  String get imageViewerImageSavedAsCopy;
+
+  /// No description provided for @imageViewerImageUpdated.
+  ///
+  /// In en, this message translates to:
+  /// **'Image updated'**
+  String get imageViewerImageUpdated;
+
+  /// Media gallery and image editor interface copy.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save image: {error}'**
+  String imageViewerSaveFailed(String error);
+
+  /// No description provided for @imageViewerInvalidIndex.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid image index'**
+  String get imageViewerInvalidIndex;
+
+  /// Suggested archive filename shown when exporting gallery media.
+  ///
+  /// In en, this message translates to:
+  /// **'image-export.zip'**
+  String get galleryExportImageArchiveFileName;
+
+  /// Suggested archive filename shown when exporting gallery media.
+  ///
+  /// In en, this message translates to:
+  /// **'video-export.zip'**
+  String get galleryExportVideoArchiveFileName;
+
+  /// Suggested archive filename shown when exporting a gallery folder.
+  ///
+  /// In en, this message translates to:
+  /// **'image-folder-export.zip'**
+  String get galleryExportImageFolderArchiveFileName;
+
+  /// Suggested archive filename shown when exporting a gallery folder.
+  ///
+  /// In en, this message translates to:
+  /// **'video-folder-export.zip'**
+  String get galleryExportVideoFolderArchiveFileName;
 }
 
 class _AppLocalizationsDelegate

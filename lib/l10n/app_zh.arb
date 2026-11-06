@@ -4631,5 +4631,184 @@
   "browserCookiesDeleteFailed": "删除失败，请重试",
   "browserCookiesEmptyValue": "（空值）",
   "platformTutorialPageTitle": "平台教程",
-  "browserRecoveryOpenPage": "打开恢复页面"
+  "browserRecoveryOpenPage": "打开恢复页面",
+  "galleryUnsupportedPreview": "不支持预览 .{format} 格式",
+  "galleryCameraFailed": "拍照失败：{error}",
+  "galleryPhotoSaved": "照片已保存",
+  "galleryUnsupportedImportFormat": "已跳过不支持的格式：{format}",
+  "galleryImportImagesCount": "已导入 {count} 张图片",
+  "galleryImportVideosCount": "已导入 {count} 个视频",
+  "galleryImportFailed": "导入失败：{error}",
+  "galleryFileReadFailed": "文件数据读取失败",
+  "galleryExportImageTitle": "导出图片",
+  "galleryExportVideoTitle": "导出视频",
+  "galleryExportedTo": "已导出到：{path}",
+  "galleryExportFailed": "导出失败：{error}",
+  "galleryChooseExportDirectory": "选择导出目录",
+  "galleryExportedFilesCount": "已导出 {count} 个文件",
+  "galleryFolderExportTitle": "导出文件夹",
+  "galleryWebFolderExportInfo": "浏览器无法选择导出目录，将下载保留文件夹层级的 ZIP 文件。",
+  "galleryDownloadZip": "下载 ZIP 文件",
+  "galleryExportImageFolderTitle": "导出图片文件夹",
+  "galleryExportVideoFolderTitle": "导出视频文件夹",
+  "galleryImagePageTitle": "相册",
+  "galleryVideoPageTitle": "视频",
+  "galleryTakePhoto": "拍照",
+  "galleryRecordVideo": "录制",
+  "galleryImport": "导入",
+  "galleryExportToLocal": "导出到本地",
+  "galleryPlayVideo": "播放",
+  "galleryCopyFailed": "复制失败：{error}",
+  "galleryVideoSaved": "视频已保存",
+  "galleryVideoRecordFailed": "录制失败：{error}",
+  "galleryVideoLoadFailed": "无法加载视频",
+  "imageEditorSaveImageTitle": "保存图片",
+  "imageEditorSaveImagePrompt": "请选择保存方式：",
+  "imageEditorOverwrite": "覆盖",
+  "imageEditorSaveAs": "另存为",
+  "imageEditorSavePhotoTitle": "保存照片",
+  "imageEditorSavePhotoPrompt": "是否保存当前照片？",
+  "imageEditorDiscard": "不保存",
+  "imageEditorDoneLoading": "正在生成图片，请稍候…",
+  "imageEditorQuickTitle": "快速编辑 - {fileName}",
+  "imageEditorNotReady": "编辑器尚未就绪，请稍后重试",
+  "imageEditorProcessingFailed": "图片处理失败：{error}",
+  "imageEditorLoadFailed": "无法加载图片",
+  "imageEditorProcessing": "正在处理图片，请稍候…",
+  "imageEditorRotateLeft": "左旋",
+  "imageEditorRotateRight": "右旋",
+  "imageEditorFlip": "翻转",
+  "imageEditorCrop": "裁剪",
+  "imageViewerImageSavedAsCopy": "图片已另存为副本",
+  "imageViewerImageUpdated": "图片已更新",
+  "imageViewerSaveFailed": "图片保存失败：{error}",
+  "imageViewerInvalidIndex": "图片索引无效",
+  "@galleryUnsupportedPreview": {
+    "description": "Media gallery and image editor interface copy.",
+    "placeholders": {
+      "format": {
+        "type": "String"
+      }
+    }
+  },
+  "@galleryCameraFailed": {
+    "description": "Media gallery and image editor interface copy.",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@galleryUnsupportedImportFormat": {
+    "description": "Media gallery and image editor interface copy.",
+    "placeholders": {
+      "format": {
+        "type": "String"
+      }
+    }
+  },
+  "@galleryImportImagesCount": {
+    "description": "Media gallery and image editor interface copy.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@galleryImportVideosCount": {
+    "description": "Media gallery and image editor interface copy.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@galleryImportFailed": {
+    "description": "Media gallery and image editor interface copy.",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@galleryExportedTo": {
+    "description": "Media gallery and image editor interface copy.",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "@galleryExportFailed": {
+    "description": "Media gallery and image editor interface copy.",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@galleryExportedFilesCount": {
+    "description": "Media gallery and image editor interface copy.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@galleryCopyFailed": {
+    "description": "Media gallery and image editor interface copy.",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@galleryVideoRecordFailed": {
+    "description": "Media gallery and image editor interface copy.",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@imageEditorQuickTitle": {
+    "description": "Media gallery and image editor interface copy.",
+    "placeholders": {
+      "fileName": {
+        "type": "String"
+      }
+    }
+  },
+  "@imageEditorProcessingFailed": {
+    "description": "Media gallery and image editor interface copy.",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@imageViewerSaveFailed": {
+    "description": "Media gallery and image editor interface copy.",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "galleryExportImageArchiveFileName": "图片导出.zip",
+  "@galleryExportImageArchiveFileName": {
+    "description": "Suggested archive filename shown when exporting gallery media."
+  },
+  "galleryExportVideoArchiveFileName": "视频导出.zip",
+  "@galleryExportVideoArchiveFileName": {
+    "description": "Suggested archive filename shown when exporting gallery media."
+  },
+  "galleryExportImageFolderArchiveFileName": "图片文件夹导出.zip",
+  "@galleryExportImageFolderArchiveFileName": {
+    "description": "Suggested archive filename shown when exporting a gallery folder."
+  },
+  "galleryExportVideoFolderArchiveFileName": "视频文件夹导出.zip",
+  "@galleryExportVideoFolderArchiveFileName": {
+    "description": "Suggested archive filename shown when exporting a gallery folder."
+  }
 }

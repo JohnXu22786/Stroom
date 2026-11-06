@@ -4631,5 +4631,184 @@
   "browserCookiesDeleteFailed": "Could not delete. Try again.",
   "browserCookiesEmptyValue": "(empty value)",
   "platformTutorialPageTitle": "Platform tutorials",
-  "browserRecoveryOpenPage": "Open recovery page"
+  "browserRecoveryOpenPage": "Open recovery page",
+  "galleryUnsupportedPreview": "Preview is not supported for .{format} files",
+  "galleryCameraFailed": "Could not take a photo: {error}",
+  "galleryPhotoSaved": "Photo saved",
+  "galleryUnsupportedImportFormat": "Skipped unsupported format: {format}",
+  "galleryImportImagesCount": "Imported {count, plural, =1{# image} other{# images}}",
+  "galleryImportVideosCount": "Imported {count, plural, =1{# video} other{# videos}}",
+  "galleryImportFailed": "Import failed: {error}",
+  "galleryFileReadFailed": "Could not read file data",
+  "galleryExportImageTitle": "Export image",
+  "galleryExportVideoTitle": "Export video",
+  "galleryExportedTo": "Exported to: {path}",
+  "galleryExportFailed": "Export failed: {error}",
+  "galleryChooseExportDirectory": "Choose export directory",
+  "galleryExportedFilesCount": "Exported {count, plural, =1{# file} other{# files}}",
+  "galleryFolderExportTitle": "Export folder",
+  "galleryWebFolderExportInfo": "The browser cannot select an export directory. A ZIP file that preserves the folder structure will be downloaded.",
+  "galleryDownloadZip": "Download ZIP file",
+  "galleryExportImageFolderTitle": "Export image folder",
+  "galleryExportVideoFolderTitle": "Export video folder",
+  "galleryImagePageTitle": "Gallery",
+  "galleryVideoPageTitle": "Videos",
+  "galleryTakePhoto": "Take photo",
+  "galleryRecordVideo": "Record",
+  "galleryImport": "Import",
+  "galleryExportToLocal": "Export to local",
+  "galleryPlayVideo": "Play",
+  "galleryCopyFailed": "Copy failed: {error}",
+  "galleryVideoSaved": "Video saved",
+  "galleryVideoRecordFailed": "Recording failed: {error}",
+  "galleryVideoLoadFailed": "Could not load video",
+  "imageEditorSaveImageTitle": "Save image",
+  "imageEditorSaveImagePrompt": "Choose how to save the image:",
+  "imageEditorOverwrite": "Overwrite",
+  "imageEditorSaveAs": "Save as",
+  "imageEditorSavePhotoTitle": "Save photo",
+  "imageEditorSavePhotoPrompt": "Save this photo?",
+  "imageEditorDiscard": "Discard",
+  "imageEditorDoneLoading": "Generating image. Please wait…",
+  "imageEditorQuickTitle": "Quick edit – {fileName}",
+  "imageEditorNotReady": "The editor is not ready. Please try again in a moment.",
+  "imageEditorProcessingFailed": "Could not process image: {error}",
+  "imageEditorLoadFailed": "Could not load image",
+  "imageEditorProcessing": "Processing image. Please wait…",
+  "imageEditorRotateLeft": "Rotate left",
+  "imageEditorRotateRight": "Rotate right",
+  "imageEditorFlip": "Flip",
+  "imageEditorCrop": "Crop",
+  "imageViewerImageSavedAsCopy": "Image saved as a copy",
+  "imageViewerImageUpdated": "Image updated",
+  "imageViewerSaveFailed": "Could not save image: {error}",
+  "imageViewerInvalidIndex": "Invalid image index",
+  "@galleryUnsupportedPreview": {
+    "description": "Media gallery and image editor interface copy.",
+    "placeholders": {
+      "format": {
+        "type": "String"
+      }
+    }
+  },
+  "@galleryCameraFailed": {
+    "description": "Media gallery and image editor interface copy.",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@galleryUnsupportedImportFormat": {
+    "description": "Media gallery and image editor interface copy.",
+    "placeholders": {
+      "format": {
+        "type": "String"
+      }
+    }
+  },
+  "@galleryImportImagesCount": {
+    "description": "Media gallery and image editor interface copy.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@galleryImportVideosCount": {
+    "description": "Media gallery and image editor interface copy.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@galleryImportFailed": {
+    "description": "Media gallery and image editor interface copy.",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@galleryExportedTo": {
+    "description": "Media gallery and image editor interface copy.",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "@galleryExportFailed": {
+    "description": "Media gallery and image editor interface copy.",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@galleryExportedFilesCount": {
+    "description": "Media gallery and image editor interface copy.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@galleryCopyFailed": {
+    "description": "Media gallery and image editor interface copy.",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@galleryVideoRecordFailed": {
+    "description": "Media gallery and image editor interface copy.",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@imageEditorQuickTitle": {
+    "description": "Media gallery and image editor interface copy.",
+    "placeholders": {
+      "fileName": {
+        "type": "String"
+      }
+    }
+  },
+  "@imageEditorProcessingFailed": {
+    "description": "Media gallery and image editor interface copy.",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@imageViewerSaveFailed": {
+    "description": "Media gallery and image editor interface copy.",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "galleryExportImageArchiveFileName": "image-export.zip",
+  "@galleryExportImageArchiveFileName": {
+    "description": "Suggested archive filename shown when exporting gallery media."
+  },
+  "galleryExportVideoArchiveFileName": "video-export.zip",
+  "@galleryExportVideoArchiveFileName": {
+    "description": "Suggested archive filename shown when exporting gallery media."
+  },
+  "galleryExportImageFolderArchiveFileName": "image-folder-export.zip",
+  "@galleryExportImageFolderArchiveFileName": {
+    "description": "Suggested archive filename shown when exporting a gallery folder."
+  },
+  "galleryExportVideoFolderArchiveFileName": "video-folder-export.zip",
+  "@galleryExportVideoFolderArchiveFileName": {
+    "description": "Suggested archive filename shown when exporting a gallery folder."
+  }
 }

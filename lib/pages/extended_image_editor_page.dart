@@ -2,6 +2,7 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:extended_image/extended_image.dart';
 import 'package:image/image.dart' as img;
 
@@ -61,7 +62,9 @@ class _ExtendedImageEditorPageState extends State<ExtendedImageEditorPage> {
     if (editorState == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('编辑器尚未就绪，请稍后重试')),
+          SnackBar(
+            content: Text(AppLocalizations.of(context)!.imageEditorNotReady),
+          ),
         );
       }
       return;
@@ -90,7 +93,12 @@ class _ExtendedImageEditorPageState extends State<ExtendedImageEditorPage> {
       debugPrint('ExtendedImageEditor save error: $e');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('图片处理失败: $e')),
+        SnackBar(
+          content: Text(
+            AppLocalizations.of(context)!
+                .imageEditorProcessingFailed(e.toString()),
+          ),
+        ),
       );
       // Stay on the page and unlock it so the user can retry or close.
       setState(() => _isProcessing = false);
@@ -111,7 +119,8 @@ class _ExtendedImageEditorPageState extends State<ExtendedImageEditorPage> {
           backgroundColor: Colors.black,
           foregroundColor: Colors.white,
           title: Text(
-            '快速编辑 - ${widget.fileName}',
+            AppLocalizations.of(context)!
+                .imageEditorQuickTitle(widget.fileName),
             style: const TextStyle(fontSize: 16),
           ),
           leading: IconButton(
@@ -126,8 +135,8 @@ class _ExtendedImageEditorPageState extends State<ExtendedImageEditorPage> {
             TextButton.icon(
               onPressed: (_isProcessing || _isClosing) ? null : _onSave,
               icon: const Icon(Icons.save, color: Colors.white),
-              label: const Text(
-                '保存',
+              label: Text(
+                AppLocalizations.of(context)!.actionSave,
                 style: TextStyle(color: Colors.white),
               ),
             ),
@@ -149,14 +158,20 @@ class _ExtendedImageEditorPageState extends State<ExtendedImageEditorPage> {
               ),
               loadStateChanged: (state) {
                 if (state.extendedImageLoadState == LoadState.failed) {
-                  return const Center(
+                  return Center(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.broken_image,
-                            size: 48, color: Colors.white54),
+                        Icon(
+                          Icons.broken_image,
+                          size: 48,
+                          color: Colors.white54,
+                        ),
                         SizedBox(height: 8),
-                        Text('无法加载图片', style: TextStyle(color: Colors.white54)),
+                        Text(
+                          AppLocalizations.of(context)!.imageEditorLoadFailed,
+                          style: TextStyle(color: Colors.white54),
+                        ),
                       ],
                     ),
                   );
@@ -168,7 +183,7 @@ class _ExtendedImageEditorPageState extends State<ExtendedImageEditorPage> {
             // 需要时间，用明显的遮罩 + 文案给出 UI 反馈，避免用户
             // 以为界面卡死。关闭（X）时 [_isClosing] 为 true，不显示。
             if (_isProcessing && !_isClosing)
-              const Positioned.fill(
+              Positioned.fill(
                 child: AbsorbPointer(
                   child: ColoredBox(
                     color: Colors.black54,
@@ -182,11 +197,8 @@ class _ExtendedImageEditorPageState extends State<ExtendedImageEditorPage> {
                           ),
                           SizedBox(height: 16),
                           Text(
-                            '正在处理图片，请稍候…',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 15,
-                            ),
+                            AppLocalizations.of(context)!.imageEditorProcessing,
+                            style: TextStyle(color: Colors.white, fontSize: 15),
                           ),
                         ],
                       ),
@@ -207,7 +219,7 @@ class _ExtendedImageEditorPageState extends State<ExtendedImageEditorPage> {
             children: [
               _buildToolButton(
                 icon: Icons.rotate_left,
-                label: '左旋',
+                label: AppLocalizations.of(context)!.imageEditorRotateLeft,
                 onTap: (_isProcessing || _isClosing)
                     ? null
                     : () {
@@ -216,7 +228,7 @@ class _ExtendedImageEditorPageState extends State<ExtendedImageEditorPage> {
               ),
               _buildToolButton(
                 icon: Icons.rotate_right,
-                label: '右旋',
+                label: AppLocalizations.of(context)!.imageEditorRotateRight,
                 onTap: (_isProcessing || _isClosing)
                     ? null
                     : () {
@@ -225,7 +237,7 @@ class _ExtendedImageEditorPageState extends State<ExtendedImageEditorPage> {
               ),
               _buildToolButton(
                 icon: Icons.flip,
-                label: '翻转',
+                label: AppLocalizations.of(context)!.imageEditorFlip,
                 onTap: (_isProcessing || _isClosing)
                     ? null
                     : () {
@@ -234,7 +246,7 @@ class _ExtendedImageEditorPageState extends State<ExtendedImageEditorPage> {
               ),
               _buildToolButton(
                 icon: Icons.crop,
-                label: '裁剪',
+                label: AppLocalizations.of(context)!.imageEditorCrop,
                 onTap: (_isProcessing || _isClosing)
                     ? null
                     : () {
@@ -263,11 +275,7 @@ class _ExtendedImageEditorPageState extends State<ExtendedImageEditorPage> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            icon,
-            color: disabled ? Colors.white38 : Colors.white,
-            size: 28,
-          ),
+          Icon(icon, color: disabled ? Colors.white38 : Colors.white, size: 28),
           const SizedBox(height: 4),
           Text(
             label,
@@ -439,7 +447,11 @@ Future<Uint8List?> _processImage({
 
   final src = cropRect != null
       ? Rect.fromLTWH(
-          cropRect.left, cropRect.top, cropRect.width, cropRect.height)
+          cropRect.left,
+          cropRect.top,
+          cropRect.width,
+          cropRect.height,
+        )
       : Offset.zero & Size(image.width.toDouble(), image.height.toDouble());
   final dst = Rect.fromLTWH(-srcW / 2.0, -srcH / 2.0, srcW, srcH);
 

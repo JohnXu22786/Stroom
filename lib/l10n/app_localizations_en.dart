@@ -2594,9 +2594,6 @@ class AppLocalizationsEn extends AppLocalizations {
       'Automatic page scanning timed out. Sign in or configure a user script on this page; after media is detected, choose Continue flow.';
 
   @override
-  String get browserRecoveryOpenPage => 'Open recovery page';
-
-  @override
   String get browserRecoveryContinue => 'Continue flow';
 
   @override
@@ -8711,6 +8708,224 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get platformTutorialPageTitle => 'Platform tutorials';
+
+  @override
+  String get browserRecoveryOpenPage => 'Open recovery page';
+
+  @override
+  String galleryUnsupportedPreview(String format) {
+    return 'Preview is not supported for .$format files';
+  }
+
+  @override
+  String galleryCameraFailed(String error) {
+    return 'Could not take a photo: $error';
+  }
+
+  @override
+  String get galleryPhotoSaved => 'Photo saved';
+
+  @override
+  String galleryUnsupportedImportFormat(String format) {
+    return 'Skipped unsupported format: $format';
+  }
+
+  @override
+  String galleryImportImagesCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '# images',
+      one: '# image',
+    );
+    return 'Imported $_temp0';
+  }
+
+  @override
+  String galleryImportVideosCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '# videos',
+      one: '# video',
+    );
+    return 'Imported $_temp0';
+  }
+
+  @override
+  String galleryImportFailed(String error) {
+    return 'Import failed: $error';
+  }
+
+  @override
+  String get galleryFileReadFailed => 'Could not read file data';
+
+  @override
+  String get galleryExportImageTitle => 'Export image';
+
+  @override
+  String get galleryExportVideoTitle => 'Export video';
+
+  @override
+  String galleryExportedTo(String path) {
+    return 'Exported to: $path';
+  }
+
+  @override
+  String galleryExportFailed(String error) {
+    return 'Export failed: $error';
+  }
+
+  @override
+  String get galleryChooseExportDirectory => 'Choose export directory';
+
+  @override
+  String galleryExportedFilesCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '# files',
+      one: '# file',
+    );
+    return 'Exported $_temp0';
+  }
+
+  @override
+  String get galleryFolderExportTitle => 'Export folder';
+
+  @override
+  String get galleryWebFolderExportInfo =>
+      'The browser cannot select an export directory. A ZIP file that preserves the folder structure will be downloaded.';
+
+  @override
+  String get galleryDownloadZip => 'Download ZIP file';
+
+  @override
+  String get galleryExportImageFolderTitle => 'Export image folder';
+
+  @override
+  String get galleryExportVideoFolderTitle => 'Export video folder';
+
+  @override
+  String get galleryImagePageTitle => 'Gallery';
+
+  @override
+  String get galleryVideoPageTitle => 'Videos';
+
+  @override
+  String get galleryTakePhoto => 'Take photo';
+
+  @override
+  String get galleryRecordVideo => 'Record';
+
+  @override
+  String get galleryImport => 'Import';
+
+  @override
+  String get galleryExportToLocal => 'Export to local';
+
+  @override
+  String get galleryPlayVideo => 'Play';
+
+  @override
+  String galleryCopyFailed(String error) {
+    return 'Copy failed: $error';
+  }
+
+  @override
+  String get galleryVideoSaved => 'Video saved';
+
+  @override
+  String galleryVideoRecordFailed(String error) {
+    return 'Recording failed: $error';
+  }
+
+  @override
+  String get galleryVideoLoadFailed => 'Could not load video';
+
+  @override
+  String get imageEditorSaveImageTitle => 'Save image';
+
+  @override
+  String get imageEditorSaveImagePrompt => 'Choose how to save the image:';
+
+  @override
+  String get imageEditorOverwrite => 'Overwrite';
+
+  @override
+  String get imageEditorSaveAs => 'Save as';
+
+  @override
+  String get imageEditorSavePhotoTitle => 'Save photo';
+
+  @override
+  String get imageEditorSavePhotoPrompt => 'Save this photo?';
+
+  @override
+  String get imageEditorDiscard => 'Discard';
+
+  @override
+  String get imageEditorDoneLoading => 'Generating image. Please wait…';
+
+  @override
+  String imageEditorQuickTitle(String fileName) {
+    return 'Quick edit – $fileName';
+  }
+
+  @override
+  String get imageEditorNotReady =>
+      'The editor is not ready. Please try again in a moment.';
+
+  @override
+  String imageEditorProcessingFailed(String error) {
+    return 'Could not process image: $error';
+  }
+
+  @override
+  String get imageEditorLoadFailed => 'Could not load image';
+
+  @override
+  String get imageEditorProcessing => 'Processing image. Please wait…';
+
+  @override
+  String get imageEditorRotateLeft => 'Rotate left';
+
+  @override
+  String get imageEditorRotateRight => 'Rotate right';
+
+  @override
+  String get imageEditorFlip => 'Flip';
+
+  @override
+  String get imageEditorCrop => 'Crop';
+
+  @override
+  String get imageViewerImageSavedAsCopy => 'Image saved as a copy';
+
+  @override
+  String get imageViewerImageUpdated => 'Image updated';
+
+  @override
+  String imageViewerSaveFailed(String error) {
+    return 'Could not save image: $error';
+  }
+
+  @override
+  String get imageViewerInvalidIndex => 'Invalid image index';
+
+  @override
+  String get galleryExportImageArchiveFileName => 'image-export.zip';
+
+  @override
+  String get galleryExportVideoArchiveFileName => 'video-export.zip';
+
+  @override
+  String get galleryExportImageFolderArchiveFileName =>
+      'image-folder-export.zip';
+
+  @override
+  String get galleryExportVideoFolderArchiveFileName =>
+      'video-folder-export.zip';
 }
 
 /// The translations for English, as used in the United States (`en_US`).
@@ -11302,9 +11517,6 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
       'Automatic page scanning timed out. Sign in or configure a user script on this page; after media is detected, choose Continue flow.';
 
   @override
-  String get browserRecoveryOpenPage => 'Open recovery page';
-
-  @override
   String get browserRecoveryContinue => 'Continue flow';
 
   @override
@@ -17419,4 +17631,222 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get platformTutorialPageTitle => 'Platform tutorials';
+
+  @override
+  String get browserRecoveryOpenPage => 'Open recovery page';
+
+  @override
+  String galleryUnsupportedPreview(String format) {
+    return 'Preview is not supported for .$format files';
+  }
+
+  @override
+  String galleryCameraFailed(String error) {
+    return 'Could not take a photo: $error';
+  }
+
+  @override
+  String get galleryPhotoSaved => 'Photo saved';
+
+  @override
+  String galleryUnsupportedImportFormat(String format) {
+    return 'Skipped unsupported format: $format';
+  }
+
+  @override
+  String galleryImportImagesCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '# images',
+      one: '# image',
+    );
+    return 'Imported $_temp0';
+  }
+
+  @override
+  String galleryImportVideosCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '# videos',
+      one: '# video',
+    );
+    return 'Imported $_temp0';
+  }
+
+  @override
+  String galleryImportFailed(String error) {
+    return 'Import failed: $error';
+  }
+
+  @override
+  String get galleryFileReadFailed => 'Could not read file data';
+
+  @override
+  String get galleryExportImageTitle => 'Export image';
+
+  @override
+  String get galleryExportVideoTitle => 'Export video';
+
+  @override
+  String galleryExportedTo(String path) {
+    return 'Exported to: $path';
+  }
+
+  @override
+  String galleryExportFailed(String error) {
+    return 'Export failed: $error';
+  }
+
+  @override
+  String get galleryChooseExportDirectory => 'Choose export directory';
+
+  @override
+  String galleryExportedFilesCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '# files',
+      one: '# file',
+    );
+    return 'Exported $_temp0';
+  }
+
+  @override
+  String get galleryFolderExportTitle => 'Export folder';
+
+  @override
+  String get galleryWebFolderExportInfo =>
+      'The browser cannot select an export directory. A ZIP file that preserves the folder structure will be downloaded.';
+
+  @override
+  String get galleryDownloadZip => 'Download ZIP file';
+
+  @override
+  String get galleryExportImageFolderTitle => 'Export image folder';
+
+  @override
+  String get galleryExportVideoFolderTitle => 'Export video folder';
+
+  @override
+  String get galleryImagePageTitle => 'Gallery';
+
+  @override
+  String get galleryVideoPageTitle => 'Videos';
+
+  @override
+  String get galleryTakePhoto => 'Take photo';
+
+  @override
+  String get galleryRecordVideo => 'Record';
+
+  @override
+  String get galleryImport => 'Import';
+
+  @override
+  String get galleryExportToLocal => 'Export to local';
+
+  @override
+  String get galleryPlayVideo => 'Play';
+
+  @override
+  String galleryCopyFailed(String error) {
+    return 'Copy failed: $error';
+  }
+
+  @override
+  String get galleryVideoSaved => 'Video saved';
+
+  @override
+  String galleryVideoRecordFailed(String error) {
+    return 'Recording failed: $error';
+  }
+
+  @override
+  String get galleryVideoLoadFailed => 'Could not load video';
+
+  @override
+  String get imageEditorSaveImageTitle => 'Save image';
+
+  @override
+  String get imageEditorSaveImagePrompt => 'Choose how to save the image:';
+
+  @override
+  String get imageEditorOverwrite => 'Overwrite';
+
+  @override
+  String get imageEditorSaveAs => 'Save as';
+
+  @override
+  String get imageEditorSavePhotoTitle => 'Save photo';
+
+  @override
+  String get imageEditorSavePhotoPrompt => 'Save this photo?';
+
+  @override
+  String get imageEditorDiscard => 'Discard';
+
+  @override
+  String get imageEditorDoneLoading => 'Generating image. Please wait…';
+
+  @override
+  String imageEditorQuickTitle(String fileName) {
+    return 'Quick edit – $fileName';
+  }
+
+  @override
+  String get imageEditorNotReady =>
+      'The editor is not ready. Please try again in a moment.';
+
+  @override
+  String imageEditorProcessingFailed(String error) {
+    return 'Could not process image: $error';
+  }
+
+  @override
+  String get imageEditorLoadFailed => 'Could not load image';
+
+  @override
+  String get imageEditorProcessing => 'Processing image. Please wait…';
+
+  @override
+  String get imageEditorRotateLeft => 'Rotate left';
+
+  @override
+  String get imageEditorRotateRight => 'Rotate right';
+
+  @override
+  String get imageEditorFlip => 'Flip';
+
+  @override
+  String get imageEditorCrop => 'Crop';
+
+  @override
+  String get imageViewerImageSavedAsCopy => 'Image saved as a copy';
+
+  @override
+  String get imageViewerImageUpdated => 'Image updated';
+
+  @override
+  String imageViewerSaveFailed(String error) {
+    return 'Could not save image: $error';
+  }
+
+  @override
+  String get imageViewerInvalidIndex => 'Invalid image index';
+
+  @override
+  String get galleryExportImageArchiveFileName => 'image-export.zip';
+
+  @override
+  String get galleryExportVideoArchiveFileName => 'video-export.zip';
+
+  @override
+  String get galleryExportImageFolderArchiveFileName =>
+      'image-folder-export.zip';
+
+  @override
+  String get galleryExportVideoFolderArchiveFileName =>
+      'video-folder-export.zip';
 }

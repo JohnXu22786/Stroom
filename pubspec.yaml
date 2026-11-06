@@ -115,6 +115,7 @@ dev_dependencies:
   visibility_detector: ^0.4.0+2
   cross_file: ^0.3.5+5
   file_picker_platform_interface: ^4.2.0
+  video_player_platform_interface: ^6.9.0
   # Run collection sync integration tests against real SQLite transactions.
   sqflite_common_ffi: ^2.4.4
 

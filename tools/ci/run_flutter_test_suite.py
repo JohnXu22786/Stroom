@@ -130,6 +130,7 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
         "pages/content/extended_image_editor_page_test.dart",
         "pages/content/gallery_viewer_page_test.dart",
         "pages/content/image_editor_page_test.dart",
+        "pages/video_gallery_shared_test.dart",
         "pages/content/ocr*_test.dart",
         "pages/content/media_preview_sheet_test.dart",
         "pages/media_preview_audio_classification_test.dart",

@@ -6,6 +6,7 @@ import 'package:cross_platform_video_thumbnails/cross_platform_video_thumbnails.
 import 'package:flutter/foundation.dart'
     show debugPrint, defaultTargetPlatform, kIsWeb, TargetPlatform;
 import 'package:flutter/material.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:get_thumbnail_video/index.dart' show ImageFormat;
 import 'package:get_thumbnail_video/video_thumbnail.dart' show VideoThumbnail;
@@ -233,8 +234,8 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
       // 只有真正保存了记录才提示成功（空字节时没有保存任何内容）
       if (mounted && videoSaved) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('视频已保存'),
+          SnackBar(
+            content: Text(AppLocalizations.of(context)!.galleryVideoSaved),
             duration: Duration(seconds: 2),
           ),
         );
@@ -248,7 +249,10 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('录制失败: $e'),
+            content: Text(
+              AppLocalizations.of(context)!
+                  .galleryVideoRecordFailed(e.toString()),
+            ),
             duration: const Duration(seconds: 3),
           ),
         );
@@ -370,7 +374,9 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
       if (mounted && count > 0) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('已导入 $count 个视频'),
+            content: Text(
+              AppLocalizations.of(context)!.galleryImportVideosCount(count),
+            ),
             duration: const Duration(seconds: 2),
           ),
         );
@@ -386,7 +392,9 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('导入失败: $e'),
+            content: Text(
+              AppLocalizations.of(context)!.galleryImportFailed(e.toString()),
+            ),
             duration: const Duration(seconds: 3),
           ),
         );
@@ -402,8 +410,11 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
     final filePath = await VideoManifest.readFilePath(file.storagePath);
     if (filePath == null || filePath.isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('无法加载视频文件')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(AppLocalizations.of(context)!.galleryVideoLoadFailed),
+          ),
+        );
       }
       return;
     }
@@ -425,6 +436,7 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
   // ====================================================================
 
   Future<void> _exportFile(String id) async {
+    final strings = AppLocalizations.of(context)!;
     try {
       final records = ref.read(videoRecordsProvider);
       final file = records.firstWhere((r) => r.id == id);
@@ -432,15 +444,16 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
       final data = await VideoManifest.readFile(file.storagePath);
       if (data == null || data.isEmpty) {
         if (mounted) {
-          ScaffoldMessenger.of(context)
-              .showSnackBar(const SnackBar(content: Text('文件数据读取失败')));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(strings.galleryFileReadFailed)),
+          );
         }
         return;
       }
 
       final exportName = '${file.name}.${file.format}';
       final outputUri = await saveFileWithType(
-        dialogTitle: '导出视频',
+        dialogTitle: strings.galleryExportVideoTitle,
         fileName: exportName,
         extensions: [file.format],
         bytes: data,
@@ -450,7 +463,7 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
         final outputPath = filePickerLocationLabel(outputUri);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('已导出到: $outputPath'),
+            content: Text(strings.galleryExportedTo(outputPath)),
             duration: const Duration(seconds: 3),
           ),
         );
@@ -459,7 +472,7 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('导出失败: $e'),
+            content: Text(strings.galleryExportFailed(e.toString())),
             duration: const Duration(seconds: 3),
           ),
         );
@@ -470,6 +483,7 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
   /// 批量导出文件。返回用户最终使用的导出目录
   /// （用户取消目录选择或导出失败时返回 null；归档导出返回 ''）。
   Future<String?> _exportFiles(List<String> ids, String targetDirectory) async {
+    final strings = AppLocalizations.of(context)!;
     try {
       final useArchive = kIsWeb || SystemPickDirectories.isNativeMobile;
       String? outputDir;
@@ -479,7 +493,7 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
         outputDir = targetDirectory.isNotEmpty ? targetDirectory : null;
         if (outputDir == null) {
           outputDir = await FilePicker.getDirectoryPath(
-            dialogTitle: '选择导出目录',
+            dialogTitle: strings.galleryChooseExportDirectory,
             initialDirectory: SystemPickDirectories.videos(),
           );
           if (outputDir == null) return null;
@@ -524,8 +538,8 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
 
       if (useArchive && exportedCount > 0) {
         final saved = await saveFileWithType(
-          dialogTitle: '导出视频',
-          fileName: '视频导出.zip',
+          dialogTitle: strings.galleryExportVideoTitle,
+          fileName: strings.galleryExportVideoArchiveFileName,
           extensions: const ['zip'],
           bytes: encodeUserVisibleExportArchive(files: archiveFiles),
           initialDirectory: SystemPickDirectories.videos(),
@@ -541,7 +555,7 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('已导出 $exportedCount 个文件'),
+            content: Text(strings.galleryExportedFilesCount(exportedCount)),
             duration: const Duration(seconds: 2),
           ),
         );
@@ -551,7 +565,7 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('导出失败: $e'),
+            content: Text(strings.galleryExportFailed(e.toString())),
             duration: const Duration(seconds: 3),
           ),
         );
@@ -566,6 +580,7 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
     List<String> names,
     String targetDirectory,
   ) async {
+    final strings = AppLocalizations.of(context)!;
     try {
       if (kIsWeb || SystemPickDirectories.isNativeMobile) {
         if (kIsWeb) {
@@ -573,18 +588,18 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
           final action = await showDialog<String>(
             context: context,
             builder: (ctx) => AlertDialog(
-              title: const Text('文件夹导出'),
-              content: const Text('浏览器无法选择导出目录，将下载保留文件夹层级的 ZIP 文件。'),
+              title: Text(strings.galleryFolderExportTitle),
+              content: Text(strings.galleryWebFolderExportInfo),
               actions: [
                 TextButton(
                   key: const Key('fm_web_export_cancel_btn'),
                   onPressed: () => Navigator.pop(ctx),
-                  child: const Text('取消'),
+                  child: Text(strings.actionCancel),
                 ),
                 ElevatedButton(
                   key: const Key('fm_web_export_individual_btn'),
                   onPressed: () => Navigator.pop(ctx, 'exportFiles'),
-                  child: const Text('下载 ZIP 文件'),
+                  child: Text(strings.galleryDownloadZip),
                 ),
               ],
             ),
@@ -621,8 +636,8 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
         // 全部保存被取消时返回 null（保持选择模式不退出），
         // 且不显示「已导出 0 个文件」提示
         final saved = await saveFileWithType(
-          dialogTitle: '导出视频文件夹',
-          fileName: '视频文件夹导出.zip',
+          dialogTitle: strings.galleryExportVideoFolderTitle,
+          fileName: strings.galleryExportVideoFolderArchiveFileName,
           extensions: const ['zip'],
           bytes: encodeUserVisibleExportArchive(
             files: archiveFiles,
@@ -642,7 +657,7 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('已导出 $exportedCount 个文件'),
+              content: Text(strings.galleryExportedFilesCount(exportedCount)),
               duration: const Duration(seconds: 2),
             ),
           );
@@ -653,7 +668,7 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
       String? outputDir = targetDirectory.isNotEmpty ? targetDirectory : null;
       if (outputDir == null) {
         outputDir = await FilePicker.getDirectoryPath(
-          dialogTitle: '选择导出目录',
+          dialogTitle: strings.galleryChooseExportDirectory,
           initialDirectory: SystemPickDirectories.videos(),
         );
         if (outputDir == null) return null;
@@ -710,7 +725,7 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('已导出 $exportedCount 个文件'),
+            content: Text(strings.galleryExportedFilesCount(exportedCount)),
             duration: const Duration(seconds: 2),
           ),
         );
@@ -720,7 +735,7 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('导出失败: $e'),
+            content: Text(strings.galleryExportFailed(e.toString())),
             duration: const Duration(seconds: 3),
           ),
         );
@@ -767,8 +782,8 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
                   ),
                 ),
                 icon: const Icon(Icons.videocam, size: 20),
-                label: const Text(
-                  '录制',
+                label: Text(
+                  AppLocalizations.of(context)!.galleryRecordVideo,
                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
                 ),
               ),
@@ -786,8 +801,8 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
                   ),
                 ),
                 icon: const Icon(Icons.photo_library_outlined, size: 20),
-                label: const Text(
-                  '导入',
+                label: Text(
+                  AppLocalizations.of(context)!.galleryImport,
                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
                 ),
               ),
@@ -941,7 +956,7 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
 
     // FileManagerConfig
     final config = FileManagerConfig<VideoRecord>(
-      title: '视频',
+      title: AppLocalizations.of(context)!.galleryVideoPageTitle,
       topActionBar: topActionBar,
       showThumbnailToggle: true,
       fileIconBuilder: (_) => const Icon(Icons.videocam, color: Colors.red),
@@ -955,20 +970,20 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
         ref.read(filesPageCurrentFolderProvider.notifier).state = f;
       },
       extraPopupMenuItems: (file) => [
-        const PopupMenuItem(
+        PopupMenuItem(
           value: 'play',
           child: ListTile(
             leading: Icon(Icons.play_arrow, size: 20),
-            title: Text('播放'),
+            title: Text(AppLocalizations.of(context)!.galleryPlayVideo),
             dense: true,
             contentPadding: EdgeInsets.zero,
           ),
         ),
-        const PopupMenuItem(
+        PopupMenuItem(
           value: 'export',
           child: ListTile(
             leading: Icon(Icons.file_download, size: 20),
-            title: Text('导出到本地'),
+            title: Text(AppLocalizations.of(context)!.galleryExportToLocal),
             dense: true,
             contentPadding: EdgeInsets.zero,
           ),
@@ -1037,7 +1052,9 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('复制失败: $e'),
+                content: Text(
+                  AppLocalizations.of(context)!.galleryCopyFailed(e.toString()),
+                ),
                 duration: const Duration(seconds: 2),
               ),
             );
