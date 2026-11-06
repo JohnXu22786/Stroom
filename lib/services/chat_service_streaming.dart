@@ -65,18 +65,22 @@ extension ChatServiceStreamingExt on ChatService {
           ...extraParams,
         };
         _cancelToken = CancelToken();
-        _streamSubscription =
-            retryRateLimitedStream<AIStreamEvent>(() => _provider!.chatStream(
-                  apiMessages,
-                  model: _modelConfig!.modelId,
-                  reasoning: reasoning,
-                  reasoningEffort: reasoningEffort,
-                  maxTokens: _effectiveMaxTokens, // null when toggle is OFF
-                  temperature: _effectiveTemperature, // null when toggle is OFF
-                  system: req.system,
-                  extraParams: extraParams,
-                  cancelToken: _cancelToken,
-                )).listen(
+        final cancelToken = _cancelToken!;
+        _streamSubscription = retryRateLimitedStream<AIStreamEvent>(
+          () => _provider!.chatStream(
+            apiMessages,
+            model: _modelConfig!.modelId,
+            reasoning: reasoning,
+            reasoningEffort: reasoningEffort,
+            maxTokens: _effectiveMaxTokens, // null when toggle is OFF
+            temperature: _effectiveTemperature, // null when toggle is OFF
+            system: req.system,
+            extraParams: extraParams,
+            cancelToken: cancelToken,
+          ),
+          cancellation: cancelToken.whenCancel.then<void>((_) {}),
+          isCancelled: () => cancelToken.isCancelled,
+        ).listen(
           (event) {
             if (event.isReasoning) {
               _reasoningBuffer.write(event.text);
@@ -134,6 +138,7 @@ extension ChatServiceStreamingExt on ChatService {
     Map<String, String> reasoningParamValues = const {},
     Map<String, String>? customParamValues,
     List<ToolDefinition> tools = const [],
+    void Function()? onToolCallIntent,
   }) {
     AppLogService.info(
         'ChatService', 'sendStreamWithTools 开始: ${userMessage.length} 字符');
@@ -217,6 +222,7 @@ extension ChatServiceStreamingExt on ChatService {
           _streamSubscription?.cancel();
           _cancelToken?.cancel();
           _cancelToken = CancelToken();
+          final cancelToken = _cancelToken!;
 
           final completer = Completer<void>();
           // 登记当前轮 completer：cancel() 时完成它使循环退出
@@ -229,20 +235,22 @@ extension ChatServiceStreamingExt on ChatService {
           Object? roundStreamError;
           // 上限内的每一轮工具都保持可用（与 AI SDK stepCountIs 语义一致：
           // 所有 step 均携带 tools，达限即停，无额外"收尾轮"）。
-          _streamSubscription =
-              retryRateLimitedStream<AIStreamEvent>(() => _provider!.chatStream(
-                    messages,
-                    model: _modelConfig!.modelId,
-                    reasoning: reasoning,
-                    reasoningEffort: reasoningEffort,
-                    maxTokens: _effectiveMaxTokens, // null when toggle is OFF
-                    temperature:
-                        _effectiveTemperature, // null when toggle is OFF
-                    tools: toolDefs.isEmpty ? null : toolDefs,
-                    system: req.system,
-                    extraParams: extraParams,
-                    cancelToken: _cancelToken,
-                  )).listen(
+          _streamSubscription = retryRateLimitedStream<AIStreamEvent>(
+            () => _provider!.chatStream(
+              messages,
+              model: _modelConfig!.modelId,
+              reasoning: reasoning,
+              reasoningEffort: reasoningEffort,
+              maxTokens: _effectiveMaxTokens, // null when toggle is OFF
+              temperature: _effectiveTemperature, // null when toggle is OFF
+              tools: toolDefs.isEmpty ? null : toolDefs,
+              system: req.system,
+              extraParams: extraParams,
+              cancelToken: cancelToken,
+            ),
+            cancellation: cancelToken.whenCancel.then<void>((_) {}),
+            isCancelled: () => cancelToken.isCancelled,
+          ).listen(
             (event) {
               // usage 计量是 API 计费事实（per-request 隔离），必须
               // 先于取消守卫处理：用户停止后仍要把已计量请求的
@@ -266,6 +274,7 @@ extension ChatServiceStreamingExt on ChatService {
                 controller.add(ReasoningEvent(event.text));
               } else if (event.isToolCallEvent) {
                 toolCallRefs.addAll(event.toolCalls!);
+                if (event.toolCalls!.isNotEmpty) onToolCallIntent?.call();
               } else if (event.text.isNotEmpty) {
                 // Accumulate visible content for tool call chain
                 // preservation per DeepSeek spec.

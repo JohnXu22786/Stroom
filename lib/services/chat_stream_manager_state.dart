@@ -67,13 +67,21 @@ class StreamResult {
 class _ConversationStreamState {
   final String convId;
   bool cancelledByUser = false;
+  bool toolCallStarted = false;
+  final Completer<void> cancellationSignal = Completer<void>();
+
+  void cancelByUser() {
+    cancelledByUser = true;
+    if (!cancellationSignal.isCompleted) cancellationSignal.complete();
+  }
 
   /// Guards against overlapping periodic persist calls from the timer.
   bool _isPersisting = false;
   Future<void>? _periodicPersistFuture;
   String? streamingMsgId;
   Future<bool> Function(ChatMessage continuation)? onContinuation;
-  ChatMessage? pendingContinuation;
+  final List<ChatMessage> pendingContinuations = [];
+  final Set<ChatMessage> deliveringContinuations = {};
   // The text sections are the canonical live representation. Completed
   // sections are immutable strings, and only the current section remains a
   // mutable buffer. This lets throttled snapshots reuse sealed sections

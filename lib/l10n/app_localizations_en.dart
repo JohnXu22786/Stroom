@@ -1325,6 +1325,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get taskListEmpty => 'No tasks';
 
   @override
+  String get chatAutoContinuePrompt => 'Continue if not finished.';
+
+  @override
   String get chatSearchCurrent => 'Search this conversation...';
 
   @override
@@ -10018,6 +10021,9 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get taskListEmpty => 'No tasks';
+
+  @override
+  String get chatAutoContinuePrompt => 'Continue if not finished.';
 
   @override
   String get chatSearchCurrent => 'Search this conversation...';

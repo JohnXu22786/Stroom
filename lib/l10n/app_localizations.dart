@@ -2254,6 +2254,12 @@ abstract class AppLocalizations {
   /// **'No tasks'**
   String get taskListEmpty;
 
+  /// No description provided for @chatAutoContinuePrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue if not finished.'**
+  String get chatAutoContinuePrompt;
+
   /// No description provided for @chatSearchCurrent.
   ///
   /// In en, this message translates to:

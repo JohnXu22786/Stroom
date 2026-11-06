@@ -1243,6 +1243,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get taskListEmpty => '暂无任务';
 
   @override
+  String get chatAutoContinuePrompt => '如果还没完成，请继续。';
+
+  @override
   String get chatSearchCurrent => '搜索当前对话...';
 
   @override
@@ -9500,6 +9503,9 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get taskListEmpty => '暂无任务';
+
+  @override
+  String get chatAutoContinuePrompt => '如果还没完成，请继续。';
 
   @override
   String get chatSearchCurrent => '搜索当前对话...';
