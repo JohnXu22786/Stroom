@@ -464,6 +464,11 @@ class AnthropicChatProvider extends BaseChatProvider {
         yield AIStreamEvent('', usage: localUsage);
       }
       rethrow;
+    } finally {
+      // The service keeps its per-conversation copy until the manager
+      // snapshots rawRequest. Do not retain this shared provider copy after
+      // the stream, and do not clear a newer concurrent request's slot.
+      if (identical(_lastRequestBody, body)) _lastRequestBody = null;
     }
 
     // 流结束后：产出 usage 计量（per-request 隔离），

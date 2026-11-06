@@ -141,6 +141,7 @@ extension ChatServiceStreamingExt on ChatService {
     List<ToolDefinition> tools = const [],
     void Function()? onToolCallIntent,
     void Function(String text)? onTextDelta,
+    void Function(Map<String, dynamic> body)? onRequestBody,
     String? Function()? takeCompletedToolCallRound,
     String? Function()? takeCompletedToolCallReasoning,
   }) {
@@ -207,6 +208,7 @@ extension ChatServiceStreamingExt on ChatService {
           if (toolDefs.isNotEmpty) 'tools': toolDefs,
           ...extraParams,
         };
+        onRequestBody?.call(_lastRequestBody!);
         int loopProtection = 0;
         // ── 工具循环上限 ──
         // maxToolCalls = 单条用户消息内模型 API 请求（步骤）的最大次数。

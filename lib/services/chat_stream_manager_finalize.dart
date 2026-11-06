@@ -37,7 +37,7 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
     Map<String, dynamic>? rawRequestCapture;
     Map<String, dynamic>? rawResponseCapture;
     try {
-      final reqBody = snappedChatService?.lastRequestBody;
+      final reqBody = state.requestBodySnapshot;
       final headers = snappedChatService?.lastRequestHeaders;
       final url = snappedChatService?.lastRequestUrl;
       if (reqBody != null || headers != null || url != null) {
@@ -49,6 +49,8 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
       if (rawRequestCapture != null) {
         rawRequestCapture = ChatMessage.compactRawRequest(rawRequestCapture);
       }
+      snappedChatService?.releaseLastRequestBody(reqBody);
+      state.requestBodySnapshot = null;
       final respData = snappedChatService?.lastResponseData;
       final statusCode = snappedChatService?.lastResponseStatusCode;
       final respHeaders = snappedChatService?.lastResponseHeaders;

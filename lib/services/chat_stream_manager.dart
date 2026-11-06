@@ -534,6 +534,7 @@ class ChatStreamManager {
                     entriesStateOverride ?? _ref?.read(providerEntriesProvider),
                 onToolCallIntent: () => state.toolCallStarted = true,
                 onTextDelta: state.appendText,
+                onRequestBody: (body) => state.requestBodySnapshot = body,
                 takeCompletedToolCallRound: state.takeCompletedToolCallRound,
                 takeCompletedToolCallReasoning:
                     state.takeCompletedToolCallReasoning,
