@@ -145,7 +145,7 @@ class OcrDiagnosticSnapshot {
           if (entry.key is String) {
             collect(
               entry.value,
-              credentialField:
+              credentialField: credentialField ||
                   _credentialQueryParameter.hasMatch(entry.key as String),
             );
           }
