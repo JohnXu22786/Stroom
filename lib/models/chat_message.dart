@@ -185,7 +185,7 @@ class ChatMessage {
   ChatMessage({
     String? id,
     required this.role,
-    required this.content,
+    required String content,
     DateTime? createdAt,
     List<Attachment>? attachments,
     this.isStreaming = false,
