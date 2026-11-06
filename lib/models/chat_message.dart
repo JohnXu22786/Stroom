@@ -338,6 +338,8 @@ class ChatMessage {
       switch (part['type']) {
         case 'image_url':
           return _compactRawPayloadInPart(part, 'image_url', 'url');
+        case 'video_url':
+          return _compactRawPayloadInPart(part, 'video_url', 'url');
         case 'input_audio':
           return _compactRawPayloadInPart(part, 'input_audio', 'data');
         case 'image':
