@@ -17,6 +17,8 @@ import 'llm_credential_store.dart';
 import 'llm_connector_model_catalog.dart';
 import 'cloudflare_workers_ai_connector.dart';
 import 'llm_provider_preset_catalog.dart';
+import '../utils/xxhash64.dart';
+import 'agentrouter_claude_version_resolver.dart';
 import 'ai_horde_connector.dart';
 import 'llm_oauth_flow.dart';
 import 'llm_oauth_token_client.dart';
@@ -1651,6 +1653,48 @@ class LlmAccountConnectorService {
     final connector = LlmConnectorRegistry.find(account.connectorType);
     if (connector == null || connector.id != account.connectorType) {
       throw const LlmAccountConnectorException();
+    }
+    if (account.connectorType == 'openai-compatibility') {
+      final presetId = account.endpointConfig['providerPresetId'];
+      final preset = findLlmOpenAiProviderPreset(
+        presetId is String ? presetId : null,
+      );
+      if (preset != null &&
+          preset.id == 'agentrouter' &&
+          preset.modelsUrl == null) {
+        final supportedProtocols = preset.protocolRoutes.keys.toList();
+        final fallbackModels = [
+          for (final model in preset.fallbackModels)
+            LlmUpstreamModel(
+              id: '${account.id}:preset:${model.id}',
+              upstreamModelId: model.id,
+              displayName: model.displayName,
+              capabilities: {
+                ...model.capabilities,
+                'supportedApiProtocols': supportedProtocols,
+              },
+              config: {
+                'catalogSource': 'pinned-provider-preset',
+                if (model.apiProtocolOverride != null)
+                  'apiProtocolOverride': model.apiProtocolOverride,
+              },
+            ),
+        ];
+        final configuredModels = [
+          for (final model in account.models)
+            LlmUpstreamModel(
+              id: model.id,
+              upstreamModelId: model.upstreamModelId,
+              displayName: model.displayName,
+              capabilities: {
+                ...model.capabilities,
+                'supportedApiProtocols': supportedProtocols,
+              },
+              config: model.config,
+            ),
+        ];
+        return _mergeModelMappings(fallbackModels, configuredModels);
+      }
     }
     if ({'vertex', 'vertex-partner'}.contains(account.connectorType) &&
         account.authType == 'oauth') {
@@ -5940,33 +5984,57 @@ class LlmNativeRequestBuilder {
   static void _applyConfiguredApiKeyHeader(
     Map<String, String> headers,
     Map<String, dynamic> endpointConfig,
-    String apiKey,
-  ) {
+    String apiKey, {
+    String? nativeFormat,
+  }) {
     final presetId = endpointConfig['providerPresetId'];
     final preset = findLlmOpenAiProviderPreset(
       presetId is String ? presetId : null,
     );
+    final route =
+        preset?.protocolRoutes[_apiProtocolForNativeFormat(nativeFormat)];
     final configuredName = endpointConfig['apiKeyHeader'];
-    final headerName = configuredName is String
-        ? configuredName
-        : preset?.authorizationHeader ?? 'Authorization';
+    final headerName = route?.authorizationHeader ??
+        (configuredName is String
+            ? configuredName
+            : preset?.authorizationHeader ?? 'Authorization');
     final configuredScheme = endpointConfig['apiKeyScheme'];
-    final scheme = configuredScheme is String
-        ? configuredScheme
-        : preset?.authorizationScheme ?? 'Bearer';
+    final scheme = route?.authorizationScheme ??
+        (configuredScheme is String
+            ? configuredScheme
+            : preset?.authorizationScheme ?? 'Bearer');
     if (!_isValidHeaderName(headerName) ||
         !_isValidHeaderValue(scheme) ||
         !_isValidHeaderValue(apiKey)) {
       throw const LlmAccountConnectorException();
     }
     final lowerName = headerName.toLowerCase();
+    final authHeaderNames = {
+      'authorization',
+      'x-api-key',
+      lowerName,
+      if (preset != null)
+        for (final presetRoute in preset.protocolRoutes.values)
+          presetRoute.authorizationHeader.toLowerCase(),
+    };
     headers.removeWhere((name, _) {
-      final lowerExisting = name.toLowerCase();
-      return lowerExisting == lowerName ||
-          (lowerName != 'authorization' && lowerExisting == 'authorization');
+      return authHeaderNames.contains(name.toLowerCase());
     });
     headers[headerName] = scheme.isEmpty ? apiKey : '$scheme $apiKey';
+    if (route != null) {
+      for (final entry in route.headers.entries) {
+        _validateRequestHeader(entry.key, entry.value);
+        headers[entry.key] = entry.value;
+      }
+    }
   }
+
+  static String _apiProtocolForNativeFormat(String? nativeFormat) =>
+      switch (nativeFormat) {
+        'anthropic' || 'anthropic.messages' => 'anthropic.messages',
+        'responses' || 'openai.responses' => 'openai.responses',
+        _ => 'openai.chat_completions',
+      };
 
   static String? credentialBundleString(
     String? credential,
@@ -5984,7 +6052,27 @@ class LlmNativeRequestBuilder {
     bool stream = false,
     String? nativeFormat,
     String? zedLlmToken,
+    AgentRouterClaudeClientVersion? agentRouterClaudeVersion,
   }) {
+    if (nativeFormat == null &&
+        account.connectorType == 'openai-compatibility' &&
+        account.endpointConfig['providerPresetId'] == 'agentrouter') {
+      final modelProtocol = account.models
+          .where((model) => model.upstreamModelId == modelId)
+          .firstOrNull
+          ?.config['apiProtocolOverride'];
+      final configuredProtocol = modelProtocol is String
+          ? modelProtocol
+          : account.endpointConfig['apiProtocol'];
+      if (configuredProtocol == null ||
+          configuredProtocol == 'anthropic.messages') {
+        nativeFormat = 'anthropic';
+      } else if (configuredProtocol == 'openai.chat_completions') {
+        nativeFormat = 'openai.chat_completions';
+      } else if (configuredProtocol == 'openai.responses') {
+        nativeFormat = 'openai.responses';
+      }
+    }
     final connector = LlmConnectorRegistry.find(account.connectorType);
     if (account.connectorType == 'zed-hosted') {
       final model = account.models
@@ -6454,7 +6542,12 @@ class LlmNativeRequestBuilder {
         break;
       case 'openai-compatibility':
         if (account.authType == 'api_key') {
-          _applyConfiguredApiKeyHeader(headers, config, secret);
+          _applyConfiguredApiKeyHeader(
+            headers,
+            config,
+            secret,
+            nativeFormat: nativeFormat,
+          );
         } else if (secret.isNotEmpty) {
           headers['Authorization'] = 'Bearer $secret';
         }
@@ -6566,6 +6659,117 @@ class LlmNativeRequestBuilder {
         payload.remove('store');
       }
       requestBody = payload;
+    }
+
+    final agentRouterAnthropic =
+        account.connectorType == 'openai-compatibility' &&
+            config['providerPresetId'] == 'agentrouter' &&
+            _apiProtocolForNativeFormat(nativeFormat) == 'anthropic.messages';
+    if (agentRouterAnthropic) {
+      if (requestBody is! Map || secret.trim().isEmpty) {
+        throw const LlmAccountConnectorException();
+      }
+      final sessionId = conversationId != null &&
+              RegExp(
+                r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
+              ).hasMatch(conversationId)
+          ? conversationId
+          : const Uuid().v4();
+      String stableUuid(String label) {
+        final digest = crypto.sha256
+            .convert(utf8.encode('stroom-agentrouter:$label:${account.id}'))
+            .toString()
+            .substring(0, 32);
+        final hex = '${digest.substring(0, 12)}4${digest.substring(13, 16)}'
+            '${'89ab'[int.parse(digest[16], radix: 16) & 3]}'
+            '${digest.substring(17)}';
+        return '${hex.substring(0, 8)}-${hex.substring(8, 12)}-'
+            '${hex.substring(12, 16)}-${hex.substring(16, 20)}-'
+            '${hex.substring(20)}';
+      }
+
+      final deviceId = stableUuid('device');
+      final accountUuid = stableUuid('account');
+      final payload = Map<String, dynamic>.from(requestBody);
+      final originalSystem = payload['system'];
+      final systemBlocks = originalSystem is List
+          ? List<dynamic>.from(originalSystem)
+          : originalSystem is String
+              ? <dynamic>[
+                  {'type': 'text', 'text': originalSystem}
+                ]
+              : <dynamic>[];
+      systemBlocks.insertAll(0, [
+        {
+          'type': 'text',
+          'text': 'x-anthropic-billing-header: cc_version='
+              '${(agentRouterClaudeVersion ?? const AgentRouterClaudeClientVersion('2.1.280')).billingVersion}; '
+              'cc_entrypoint=cli; cch=00000;',
+        },
+        {
+          'type': 'text',
+          'text': 'You are Claude Code, Anthropic\'s official CLI for Claude.',
+        },
+      ]);
+      payload['system'] = systemBlocks;
+      final metadata = payload['metadata'] is Map
+          ? Map<String, dynamic>.from(payload['metadata'] as Map)
+          : <String, dynamic>{};
+      metadata['user_id'] = jsonEncode({
+        'device_id': deviceId,
+        'account_uuid': accountUuid,
+        'session_id': sessionId,
+      });
+      payload['metadata'] = metadata;
+      const fieldOrder = [
+        'model',
+        'messages',
+        'system',
+        'tools',
+        'tool_choice',
+        'metadata',
+        'max_tokens',
+        'thinking',
+        'output_config',
+        'stream',
+      ];
+      final orderedPayload = <String, dynamic>{
+        for (final field in fieldOrder)
+          if (payload.containsKey(field)) field: payload[field],
+        for (final entry in payload.entries)
+          if (!fieldOrder.contains(entry.key)) entry.key: entry.value,
+      };
+      final serialized = jsonEncode(orderedPayload);
+      final signature = (xxHash64(
+                utf8.encode(serialized),
+                seed: BigInt.parse('6e52736ac806831e', radix: 16),
+              ) &
+              BigInt.from(0xfffff))
+          .toRadixString(16)
+          .padLeft(5, '0');
+      requestBody = serialized.replaceFirst('cch=00000;', 'cch=$signature;');
+      final agentRouterVersion = agentRouterClaudeVersion ??
+          const AgentRouterClaudeClientVersion('2.1.280');
+      headers.addAll({
+        'Accept': 'application/json',
+        'anthropic-beta':
+            'claude-code-20250219,interleaved-thinking-2025-05-14,effort-2025-11-24',
+        'anthropic-dangerous-direct-browser-access': 'true',
+        'anthropic-version': '2023-06-01',
+        'User-Agent': agentRouterVersion.userAgent,
+        'X-Claude-Code-Session-Id': sessionId,
+        'X-Stainless-Package-Version':
+            AgentRouterClaudeClientVersion.sdkVersion,
+        'X-Stainless-Timeout': '600',
+        'X-Stainless-Lang': 'js',
+        'X-Stainless-Runtime': 'node',
+        'X-Stainless-Runtime-Version':
+            AgentRouterClaudeClientVersion.runtimeVersion,
+        'X-Stainless-Retry-Count': '0',
+        'accept-encoding': 'gzip, deflate, br, zstd',
+        'x-app': 'cli',
+        'x-client-request-id': const Uuid().v4(),
+      });
     }
 
     var requestHeaders = headers;
@@ -7324,7 +7528,13 @@ class LlmNativeRequestBuilder {
         }
         if (stream) query = 'alt=sse';
       case 'openai-compatibility':
-        baseUrl = _baseUrl(config, '');
+        final presetId = config['providerPresetId'];
+        final preset = findLlmOpenAiProviderPreset(
+          presetId is String ? presetId : null,
+        );
+        final route = preset?.protocolRoutes[
+            LlmNativeRequestBuilder._apiProtocolForNativeFormat(nativeFormat)];
+        baseUrl = route?.endpoint ?? _baseUrl(config, '');
         final baseUri = Uri.tryParse(baseUrl);
         if (baseUri == null ||
             !baseUri.hasScheme ||
@@ -7334,9 +7544,10 @@ class LlmNativeRequestBuilder {
           throw const LlmAccountConnectorException();
         }
         final endpointPath = baseUri.path.replaceFirst(RegExp(r'/+$'), '');
-        final desiredPath = switch (nativeFormat) {
-          'responses' => '/responses',
-          'anthropic' => '/messages',
+        final desiredPath = switch (
+            LlmNativeRequestBuilder._apiProtocolForNativeFormat(nativeFormat)) {
+          'openai.responses' => '/responses',
+          'anthropic.messages' => '/messages',
           _ => '/chat/completions',
         };
         if (preserveLegacyOcrEndpoint) {
@@ -7361,6 +7572,11 @@ class LlmNativeRequestBuilder {
             }
             path = desiredPath;
           }
+        }
+        if (presetId == 'agentrouter' &&
+            LlmNativeRequestBuilder._apiProtocolForNativeFormat(nativeFormat) ==
+                'anthropic.messages') {
+          query = 'beta=true';
         }
       default:
         throw const LlmAccountConnectorException();

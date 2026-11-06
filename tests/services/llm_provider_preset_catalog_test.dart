@@ -222,6 +222,206 @@ void main() {
     expect(custom['headers'], {'X-Workspace': 'personal'});
   });
 
+  test('AgentRouter preset keeps its source-backed multi-protocol contract',
+      () {
+    final preset = findLlmOpenAiProviderPreset('agentrouter')!;
+
+    expect(preset.displayName, 'AgentRouter');
+    expect(preset.baseUrl, 'https://agentrouter.org/v1/messages');
+    expect(preset.modelsUrl, isNull);
+    expect(preset.defaultApiProtocol, 'anthropic.messages');
+    expect(preset.authorizationHeader, 'x-api-key');
+    expect(preset.authorizationScheme, isEmpty);
+    expect(preset.protocolRoutes.keys, {
+      'anthropic.messages',
+      'openai.chat_completions',
+      'openai.responses',
+    });
+    expect(
+      preset.protocolRoutes['anthropic.messages']!.endpoint,
+      'https://agentrouter.org/v1/messages',
+    );
+    expect(
+      preset.protocolRoutes['anthropic.messages']!.authorizationHeader,
+      'x-api-key',
+    );
+    expect(
+      preset.protocolRoutes['openai.chat_completions']!.endpoint,
+      'https://agentrouter.org/v1/chat/completions',
+    );
+    expect(
+      preset.protocolRoutes['openai.responses']!.endpoint,
+      'https://agentrouter.org/v1/responses',
+    );
+    for (final protocol in [
+      'openai.chat_completions',
+      'openai.responses',
+    ]) {
+      final route = preset.protocolRoutes[protocol]!;
+      expect(route.authorizationHeader, 'Authorization');
+      expect(route.authorizationScheme, 'Bearer');
+      expect(route.headers, {
+        'User-Agent': 'codex_cli_rs/0.159.2',
+        'originator': 'codex_cli_rs',
+      });
+    }
+    expect(
+      preset.protocolRoutes['anthropic.messages']!.headers,
+      {'anthropic-version': '2023-06-01'},
+    );
+
+    expect(
+      preset.fallbackModels.map((model) => model.id),
+      ['claude-opus-4-8', 'claude-opus-5', 'gpt-5.6-sol'],
+    );
+    for (final model in preset.fallbackModels.take(2)) {
+      expect(model.capabilities['contextLength'], 128000);
+      expect(model.capabilities['reasoning'], isTrue);
+      expect(
+        model.capabilities['supportedThinkingEfforts'],
+        ['low', 'medium', 'high', 'xhigh', 'max'],
+      );
+    }
+    expect(preset.fallbackModels.last.capabilities['contextLength'], 128000);
+    expect(preset.fallbackModels.last.capabilities.containsKey('reasoning'),
+        isFalse);
+    expect(
+        preset.fallbackModels.last.capabilities.containsKey('vision'), isFalse);
+
+    final endpointConfig = preset.applyToEndpointConfig(const {
+      'customSetting': 'preserved',
+    });
+    expect(endpointConfig['providerPresetId'], 'agentrouter');
+    expect(endpointConfig['apiProtocol'], 'anthropic.messages');
+    expect(endpointConfig['apiKeyHeader'], 'x-api-key');
+    expect(endpointConfig['apiKeyScheme'], isEmpty);
+    expect(endpointConfig['customSetting'], 'preserved');
+    expect(
+      preset.applyToEndpointConfig(const {
+        'apiProtocol': 'openai.responses',
+      })['apiProtocol'],
+      'openai.responses',
+    );
+  });
+
+  test('AgentRouter default protocol and model overrides survive Chat grouping',
+      () {
+    final preset = findLlmOpenAiProviderPreset('agentrouter')!;
+    const accountId = 'agentrouter-model-group';
+    final account = LlmAccount(
+      id: accountId,
+      connectorType: 'openai-compatibility',
+      authType: 'api_key',
+      displayName: 'AgentRouter',
+      endpointConfig: preset.applyToEndpointConfig(const {}),
+      models: [
+        for (final model in preset.fallbackModels)
+          LlmUpstreamModel(
+            id: '$accountId:${model.id}',
+            upstreamModelId: model.id,
+            displayName: model.displayName,
+            capabilities: model.capabilities,
+            config: {
+              if (model.apiProtocolOverride != null)
+                'apiProtocolOverride': model.apiProtocolOverride,
+            },
+          ),
+        const LlmUpstreamModel(
+          id: '$accountId:responses-model',
+          upstreamModelId: 'custom-responses-model',
+          displayName: 'Custom Responses model',
+          config: {'apiProtocolOverride': 'openai.responses'},
+        ),
+      ],
+    );
+    final group = LlmModelGroup(
+      id: stableLlmModelGroupId(accountId, 'custom-responses-model'),
+      displayName: 'AgentRouter models',
+      members: const [
+        LlmModelGroupMember(
+          accountId: accountId,
+          upstreamModelId: 'custom-responses-model',
+          localModelId: 'custom-responses-model',
+        ),
+      ],
+    );
+
+    final providerConfigs = buildLlmModelGroupProviderConfigs(
+      accounts: [account],
+      groups: [group],
+    );
+
+    expect(providerConfigs, hasLength(1));
+    expect(providerConfigs.single.apiProtocol, 'anthropic.messages');
+    expect(providerConfigs.single.models.single.apiProtocolOverride,
+        'openai.responses');
+    expect(
+      supportedApiProtocolsForSupplier(
+        providerConfigs.single.apiProtocol,
+        connectorType: account.connectorType,
+      ),
+      kCustomHttpApiProtocols,
+    );
+    for (final protocol in kCustomHttpApiProtocols) {
+      expect(
+        llmRoutedChatSupportedConnectorTypes(protocol),
+        contains('openai-compatibility'),
+      );
+    }
+  });
+
+  test('AgentRouter model discovery uses pinned examples without a guessed URL',
+      () async {
+    var requestCount = 0;
+    final dio = Dio()
+      ..httpClientAdapter = _FunctionalAdapter((_) async {
+        requestCount++;
+        throw StateError('AgentRouter has no source-declared models URL.');
+      });
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryLlmAccountPreferences(),
+      credentialStore: _MemoryLlmCredentials(),
+      dio: dio,
+    );
+    final preset = findLlmOpenAiProviderPreset('agentrouter')!;
+    final account = await service.saveAccount(
+      LlmAccount(
+        id: 'agentrouter-static-models',
+        connectorType: 'openai-compatibility',
+        authType: 'api_key',
+        displayName: 'AgentRouter',
+        endpointConfig: preset.applyToEndpointConfig(const {}),
+        models: const [
+          LlmUpstreamModel(
+            id: 'agentrouter-static-models:custom',
+            upstreamModelId: 'user-added-source-model',
+            displayName: 'User added source model',
+          ),
+        ],
+      ),
+      secret: 'agentrouter-discovery-key',
+    );
+
+    final models = await service.discoverModels(account, refreshRemote: true);
+
+    expect(requestCount, 0);
+    expect(
+      models.map((model) => model.upstreamModelId),
+      [
+        'claude-opus-4-8',
+        'claude-opus-5',
+        'gpt-5.6-sol',
+        'user-added-source-model',
+      ],
+    );
+    expect(models.last.capabilities['supportedApiProtocols'], [
+      'anthropic.messages',
+      'openai.chat_completions',
+      'openai.responses',
+    ]);
+    expect(models[2].config['apiProtocolOverride'], 'openai.responses');
+  });
+
   test('M49 API-key requests use the selected dynamic auth header', () {
     final airforce = findLlmOpenAiProviderPreset('api-airforce')!;
     final pioneer = findLlmOpenAiProviderPreset('pioneer')!;
