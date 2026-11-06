@@ -15749,6 +15749,114 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Quit Stroom'**
   String get desktopTrayQuitStroom;
+
+  /// No description provided for @providerPresetExaDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Search the web, extract page content, and support in-depth research through Exa MCP, with semantic and keyword search.'**
+  String get providerPresetExaDescription;
+
+  /// No description provided for @providerPresetExaApiKeyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Get an API key from the Exa website.'**
+  String get providerPresetExaApiKeyHint;
+
+  /// No description provided for @providerPresetTavilyDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'An AI-native search engine for real-time web search optimized for large language models.'**
+  String get providerPresetTavilyDescription;
+
+  /// No description provided for @providerPresetTavilyApiKeyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Get an API key from Tavily. It supports ?tavilyApiKey= or an Authorization: Bearer header.'**
+  String get providerPresetTavilyApiKeyHint;
+
+  /// No description provided for @providerPresetJinaDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'A multimodal AI service for extracting web content, generating embeddings, and retrieving search results.'**
+  String get providerPresetJinaDescription;
+
+  /// No description provided for @providerPresetJinaApiKeyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Get a Jina AI API key (Bearer token) from its website.'**
+  String get providerPresetJinaApiKeyHint;
+
+  /// No description provided for @providerPresetFirecrawlDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'A web crawling and extraction service that turns pages into clean Markdown or structured data.'**
+  String get providerPresetFirecrawlDescription;
+
+  /// No description provided for @providerPresetFirecrawlApiKeyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Get a Firecrawl API key, or try it without a key with the free tier limits.'**
+  String get providerPresetFirecrawlApiKeyHint;
+
+  /// No description provided for @providerPresetZhipuDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Zhipu AI’s web reader MCP service for fetching and understanding web pages.'**
+  String get providerPresetZhipuDescription;
+
+  /// No description provided for @providerPresetZhipuApiKeyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Get an API key (Bearer token) from the Zhipu AI Open Platform.'**
+  String get providerPresetZhipuApiKeyHint;
+
+  /// No description provided for @providerPresetBraveSearchDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'A privacy-focused independent search engine with high-quality web results.'**
+  String get providerPresetBraveSearchDescription;
+
+  /// No description provided for @providerPresetBraveSearchApiKeyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Get an API key from the Brave Search website.'**
+  String get providerPresetBraveSearchApiKeyHint;
+
+  /// No description provided for @providerPresetBochaDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Bocha AI web search provides intelligent search results for Chinese-language pages.'**
+  String get providerPresetBochaDescription;
+
+  /// No description provided for @providerPresetBochaApiKeyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Get an API key (Bearer token) from the Bocha AI Open Platform.'**
+  String get providerPresetBochaApiKeyHint;
+
+  /// No description provided for @providerPresetQueritDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Querit AI search offers intelligent search and content discovery.'**
+  String get providerPresetQueritDescription;
+
+  /// No description provided for @providerPresetQueritApiKeyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Get an API key (Bearer token) from the Querit website.'**
+  String get providerPresetQueritApiKeyHint;
+
+  /// No description provided for @providerPresetSearxngDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'A self-hosted metasearch engine that aggregates search sources with a focus on privacy.'**
+  String get providerPresetSearxngDescription;
+
+  /// No description provided for @providerPresetSearxngApiKeyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Set your SearXNG instance URL (for example, http://your-instance:8080); an API key is optional.'**
+  String get providerPresetSearxngApiKeyHint;
 }
 
 class _AppLocalizationsDelegate

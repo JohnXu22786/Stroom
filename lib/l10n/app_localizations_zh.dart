@@ -8947,6 +8947,72 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get desktopTrayQuitStroom => '退出 Stroom';
+
+  @override
+  String get providerPresetExaDescription =>
+      '通过 Exa MCP 搜索网页、提取内容并开展深入研究，支持语义搜索和关键词搜索。';
+
+  @override
+  String get providerPresetExaApiKeyHint => '请在 Exa 官网获取 API Key。';
+
+  @override
+  String get providerPresetTavilyDescription => '面向大语言模型优化的 AI 原生实时网络搜索引擎。';
+
+  @override
+  String get providerPresetTavilyApiKeyHint =>
+      '请在 Tavily 官网获取 API Key，支持 ?tavilyApiKey= 或 Authorization: Bearer 请求头。';
+
+  @override
+  String get providerPresetJinaDescription =>
+      '多模态 AI 服务，支持网页内容提取、Embedding 生成和搜索结果抓取。';
+
+  @override
+  String get providerPresetJinaApiKeyHint =>
+      '请在 Jina AI 官网获取 API Key（Bearer Token）。';
+
+  @override
+  String get providerPresetFirecrawlDescription =>
+      '网页抓取与内容提取服务，可将网页转换为清晰的 Markdown 或结构化数据。';
+
+  @override
+  String get providerPresetFirecrawlApiKeyHint =>
+      '请在 Firecrawl 官网获取 API Key，也可免 Key 试用（免费版有使用限额）。';
+
+  @override
+  String get providerPresetZhipuDescription =>
+      '智谱 AI 网页阅读器 MCP 服务，用于抓取和理解网页内容。';
+
+  @override
+  String get providerPresetZhipuApiKeyHint =>
+      '请在智谱 AI 开放平台获取 API Key（Bearer Token）。';
+
+  @override
+  String get providerPresetBraveSearchDescription => '注重隐私的独立搜索引擎，提供高质量网页搜索结果。';
+
+  @override
+  String get providerPresetBraveSearchApiKeyHint =>
+      '请在 Brave Search 官网获取 API Key。';
+
+  @override
+  String get providerPresetBochaDescription => '博查 AI 网页搜索服务，为中文网页提供智能搜索结果。';
+
+  @override
+  String get providerPresetBochaApiKeyHint =>
+      '请在博查 AI 开放平台获取 API Key（Bearer Token）。';
+
+  @override
+  String get providerPresetQueritDescription => 'Querit AI 搜索服务，提供智能搜索和内容发现能力。';
+
+  @override
+  String get providerPresetQueritApiKeyHint =>
+      '请在 Querit 官网获取 API Key（Bearer Token）。';
+
+  @override
+  String get providerPresetSearxngDescription => '自托管的元搜索引擎，可聚合多种搜索源并注重隐私保护。';
+
+  @override
+  String get providerPresetSearxngApiKeyHint =>
+      '请设置 SearXNG 实例 URL（如 http://your-instance:8080）；API Key 可选。';
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).
@@ -17891,4 +17957,70 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get desktopTrayQuitStroom => '退出 Stroom';
+
+  @override
+  String get providerPresetExaDescription =>
+      '通过 Exa MCP 搜索网页、提取内容并开展深入研究，支持语义搜索和关键词搜索。';
+
+  @override
+  String get providerPresetExaApiKeyHint => '请在 Exa 官网获取 API Key。';
+
+  @override
+  String get providerPresetTavilyDescription => '面向大语言模型优化的 AI 原生实时网络搜索引擎。';
+
+  @override
+  String get providerPresetTavilyApiKeyHint =>
+      '请在 Tavily 官网获取 API Key，支持 ?tavilyApiKey= 或 Authorization: Bearer 请求头。';
+
+  @override
+  String get providerPresetJinaDescription =>
+      '多模态 AI 服务，支持网页内容提取、Embedding 生成和搜索结果抓取。';
+
+  @override
+  String get providerPresetJinaApiKeyHint =>
+      '请在 Jina AI 官网获取 API Key（Bearer Token）。';
+
+  @override
+  String get providerPresetFirecrawlDescription =>
+      '网页抓取与内容提取服务，可将网页转换为清晰的 Markdown 或结构化数据。';
+
+  @override
+  String get providerPresetFirecrawlApiKeyHint =>
+      '请在 Firecrawl 官网获取 API Key，也可免 Key 试用（免费版有使用限额）。';
+
+  @override
+  String get providerPresetZhipuDescription =>
+      '智谱 AI 网页阅读器 MCP 服务，用于抓取和理解网页内容。';
+
+  @override
+  String get providerPresetZhipuApiKeyHint =>
+      '请在智谱 AI 开放平台获取 API Key（Bearer Token）。';
+
+  @override
+  String get providerPresetBraveSearchDescription => '注重隐私的独立搜索引擎，提供高质量网页搜索结果。';
+
+  @override
+  String get providerPresetBraveSearchApiKeyHint =>
+      '请在 Brave Search 官网获取 API Key。';
+
+  @override
+  String get providerPresetBochaDescription => '博查 AI 网页搜索服务，为中文网页提供智能搜索结果。';
+
+  @override
+  String get providerPresetBochaApiKeyHint =>
+      '请在博查 AI 开放平台获取 API Key（Bearer Token）。';
+
+  @override
+  String get providerPresetQueritDescription => 'Querit AI 搜索服务，提供智能搜索和内容发现能力。';
+
+  @override
+  String get providerPresetQueritApiKeyHint =>
+      '请在 Querit 官网获取 API Key（Bearer Token）。';
+
+  @override
+  String get providerPresetSearxngDescription => '自托管的元搜索引擎，可聚合多种搜索源并注重隐私保护。';
+
+  @override
+  String get providerPresetSearxngApiKeyHint =>
+      '请设置 SearXNG 实例 URL（如 http://your-instance:8080）；API Key 可选。';
 }
