@@ -79,6 +79,7 @@ String builtinDefaultApiProtocolForConnector(String? connectorType) =>
       'devin' => 'devin.connect_rpc',
       'devin-cli-agentic' => 'devin.acp',
       'auggie' => 'auggie.cli',
+      'zcode-cli' => 'openai.chat_completions',
       'opencode-go' ||
       'opencode-zen' ||
       'command-code' =>
@@ -126,6 +127,7 @@ Set<String> supportedApiProtocolsForSupplier(
       },
     'amazon-q' => const {'amazon-q.chat'},
     'auggie' => const {'auggie.cli'},
+    'zcode-cli' => const {'openai.chat_completions'},
     'oneminai' => const {'oneminai.chat'},
     'moonshot' || 'glm' || 'deepseek' || 'minimax' || 'qwen' => const {
         'openai.chat_completions'

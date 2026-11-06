@@ -33,6 +33,30 @@ void main() {
       },
     );
 
+    test('ZCode CLI owns the local Chat Completions protocol', () {
+      expect(
+        builtinDefaultApiProtocolForConnector('zcode-cli'),
+        'openai.chat_completions',
+      );
+      expect(
+        supportedApiProtocolsForSupplier(
+          'openai.chat_completions',
+          connectorType: 'zcode-cli',
+        ),
+        {'openai.chat_completions'},
+      );
+      expect(
+        () => validateApiProtocolOverride(
+          'openai.responses',
+          supportedApiProtocolsForSupplier(
+            'openai.chat_completions',
+            connectorType: 'zcode-cli',
+          ),
+        ),
+        throwsArgumentError,
+      );
+    });
+
     test('1min.AI has one fixed provider-native protocol', () {
       expect(
         builtinDefaultApiProtocolForConnector('oneminai'),
@@ -150,86 +174,99 @@ void main() {
       }
     });
 
-    test('Vertex partner Claude model override wins within its supported route',
-        () {
-      expect(
-        builtinDefaultApiProtocolForConnector('vertex-partner'),
-        'openai.chat_completions',
-      );
-      const supported = {'anthropic.messages'};
-      expect(
-        resolveApiProtocol(
-          modelOverride: 'anthropic.messages',
-          supplierProtocol: 'openai.chat_completions',
-          builtinDefault: builtinDefaultApiProtocolForConnector(
-            'vertex-partner',
-          ),
-        ),
-        'anthropic.messages',
-      );
-      expect(
-        () => validateApiProtocolOverride('openai.responses', supported),
-        throwsArgumentError,
-      );
-    });
-
-    test('OpenCode account mode does not select supplier or model protocol',
-        () {
-      for (final connector in ['opencode-go', 'opencode-zen']) {
+    test(
+      'Vertex partner Claude model override wins within its supported route',
+      () {
         expect(
-          builtinDefaultApiProtocolForConnector(connector),
+          builtinDefaultApiProtocolForConnector('vertex-partner'),
+          'openai.chat_completions',
+        );
+        const supported = {'anthropic.messages'};
+        expect(
+          resolveApiProtocol(
+            modelOverride: 'anthropic.messages',
+            supplierProtocol: 'openai.chat_completions',
+            builtinDefault: builtinDefaultApiProtocolForConnector(
+              'vertex-partner',
+            ),
+          ),
+          'anthropic.messages',
+        );
+        expect(
+          () => validateApiProtocolOverride('openai.responses', supported),
+          throwsArgumentError,
+        );
+      },
+    );
+
+    test(
+      'OpenCode account mode does not select supplier or model protocol',
+      () {
+        for (final connector in ['opencode-go', 'opencode-zen']) {
+          expect(
+            builtinDefaultApiProtocolForConnector(connector),
+            'openai.chat_completions',
+          );
+          expect(
+            supportedApiProtocolsForSupplier(
+              'openai.chat_completions',
+              connectorType: connector,
+            ),
+            {
+              'openai.chat_completions',
+              'openai.responses',
+              'anthropic.messages',
+            },
+          );
+          expect(
+            resolveApiProtocol(
+              modelOverride: 'anthropic.messages',
+              supplierProtocol: 'openai.responses',
+              builtinDefault: builtinDefaultApiProtocolForConnector(connector),
+            ),
+            'anthropic.messages',
+            reason:
+                'the model override wins without changing connector identity',
+          );
+          expect(
+            resolveConnectorProtocol('openai.responses', connector),
+            'openai.responses',
+          );
+        }
+      },
+    );
+
+    test(
+      'Command Code API-key mode keeps model protocols account-independent',
+      () {
+        expect(
+          builtinDefaultApiProtocolForConnector('command-code'),
           'openai.chat_completions',
         );
         expect(
           supportedApiProtocolsForSupplier(
             'openai.chat_completions',
-            connectorType: connector,
+            connectorType: 'command-code',
           ),
-          {'openai.chat_completions', 'openai.responses', 'anthropic.messages'},
+          kCustomHttpApiProtocols,
         );
         expect(
           resolveApiProtocol(
             modelOverride: 'anthropic.messages',
             supplierProtocol: 'openai.responses',
-            builtinDefault: builtinDefaultApiProtocolForConnector(connector),
+            builtinDefault: builtinDefaultApiProtocolForConnector(
+              'command-code',
+            ),
           ),
           'anthropic.messages',
-          reason: 'the model override wins without changing connector identity',
         );
         expect(
-          resolveConnectorProtocol('openai.responses', connector),
+          resolveConnectorProtocol('openai.responses', 'command-code'),
           'openai.responses',
+          reason: 'the API-key account does not select a wire protocol',
         );
-      }
-    });
-
-    test('Command Code API-key mode keeps model protocols account-independent',
-        () {
-      expect(
-        builtinDefaultApiProtocolForConnector('command-code'),
-        'openai.chat_completions',
-      );
-      expect(
-        supportedApiProtocolsForSupplier(
-          'openai.chat_completions',
-          connectorType: 'command-code',
-        ),
-        kCustomHttpApiProtocols,
-      );
-      expect(
-        resolveApiProtocol(
-          modelOverride: 'anthropic.messages',
-          supplierProtocol: 'openai.responses',
-          builtinDefault: builtinDefaultApiProtocolForConnector('command-code'),
-        ),
-        'anthropic.messages',
-      );
-      expect(
-        resolveConnectorProtocol('openai.responses', 'command-code'),
-        'openai.responses',
-        reason: 'the API-key account does not select a wire protocol',
-      );
-    });
+      },
+    );
 
     test(
       'GLM and MiniMax regional account IDs keep Chat protocol defaults',

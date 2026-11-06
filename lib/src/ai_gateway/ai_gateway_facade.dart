@@ -16,6 +16,7 @@ import '../../services/llm_connector_service.dart';
 import '../../services/devin_cli_acp_service.dart';
 import '../../services/auggie_cli_service.dart';
 import '../../services/codex_app_server_service.dart';
+import '../../services/zcode_cli_service.dart';
 import '../../services/qoder_cli_service.dart';
 import '../../services/llm_connector_http_client.dart';
 import '../../services/llm_connector_model_catalog.dart';
@@ -79,6 +80,7 @@ class LlmChatRoutingRuntime implements AiGatewayFacade {
   final DevinCliAcpService _devinCliAcp;
   final AuggieCliService _auggieCli;
   final CodexAppServerService _codexAppServer;
+  final ZcodeCliService _zcodeCli;
   final QoderCliService _qoderCli;
   @override
   late final AiGatewayLocalCliAuthentication localCliAuthentication =
@@ -97,6 +99,7 @@ class LlmChatRoutingRuntime implements AiGatewayFacade {
   late final AiGatewayModelDiscovery modelDiscovery = _LlmGatewayModelDiscovery(
     _accountService,
     _codexAppServer,
+    _zcodeCli,
   );
   final LlmRoutingService _routingService;
   final LlmConnectorHttpClient _connectorClient;
@@ -107,6 +110,7 @@ class LlmChatRoutingRuntime implements AiGatewayFacade {
     _qoderCli,
     _auggieCli,
     _codexAppServer,
+    _zcodeCli,
   );
 
   LlmChatRoutingRuntime({
@@ -119,12 +123,14 @@ class LlmChatRoutingRuntime implements AiGatewayFacade {
     QoderCliService? qoderCliService,
     AuggieCliService? auggieCliService,
     CodexAppServerService? codexAppServerService,
+    ZcodeCliService? zcodeCliService,
   })  : _accountService = accountService,
         _oauthDio = oauthDio,
         _oauthAuthorizationOverride = oauthAuthorization,
         _devinCliAcp = devinCliAcpService ?? DevinCliAcpService(),
         _auggieCli = auggieCliService ?? AuggieCliService(),
         _codexAppServer = codexAppServerService ?? CodexAppServerService(),
+        _zcodeCli = zcodeCliService ?? ZcodeCliService(),
         _qoderCli = qoderCliService ??
             QoderCliService(readCredential: accountService.readCredential),
         accountManagement = _LlmGatewayAccountManagement(accountService),
@@ -2341,11 +2347,36 @@ class _LlmGatewayProviderCatalog implements AiGatewayProviderCatalog {
 class _LlmGatewayModelDiscovery implements AiGatewayModelDiscovery {
   final LlmAccountConnectorService _accounts;
   final CodexAppServerService _codexAppServer;
+  final ZcodeCliService _zcodeCli;
 
-  const _LlmGatewayModelDiscovery(this._accounts, this._codexAppServer);
+  const _LlmGatewayModelDiscovery(
+    this._accounts,
+    this._codexAppServer,
+    this._zcodeCli,
+  );
 
   @override
   Future<void> testConnection(AiGatewayAccount account) async {
+    if (account.connectorType == 'zcode-cli') {
+      if (account.authType != 'none' || account.hasCredential) {
+        throw AiGatewayExecutionException(
+          kind: AiGatewayFailureKind.request,
+          code: 'unsupported_capability',
+        );
+      }
+      final result = await _zcodeCli.status();
+      if (result.status != ZcodeServerStatus.ready) {
+        throw AiGatewayExecutionException(
+          kind: result.status == ZcodeServerStatus.signedOut
+              ? AiGatewayFailureKind.authenticationRequired
+              : result.status == ZcodeServerStatus.noEnabledCodingPlanModel
+                  ? AiGatewayFailureKind.request
+                  : AiGatewayFailureKind.transportUnavailable,
+          code: 'zcode_${result.code}',
+        );
+      }
+      return;
+    }
     if (account.connectorType == 'codex-app-server') {
       if (account.authType != 'none' || account.hasCredential) {
         throw AiGatewayExecutionException(
@@ -2395,13 +2426,45 @@ class _LlmGatewayModelDiscovery implements AiGatewayModelDiscovery {
   Future<List<AiGatewayUpstreamModel>> discoverModels(
     AiGatewayAccount account, {
     bool refreshRemote = false,
-  }) async =>
-      (await _accounts.discoverModels(
-        _legacyAccount(account),
-        refreshRemote: refreshRemote,
-      ))
-          .map(_gatewayModel)
-          .toList(growable: false);
+  }) async {
+    if (account.connectorType == 'zcode-cli') {
+      if (account.authType != 'none' || account.hasCredential) {
+        throw AiGatewayExecutionException(
+          kind: AiGatewayFailureKind.request,
+          code: 'unsupported_capability',
+        );
+      }
+      final models = await _zcodeCli.discoverModels();
+      return [
+        for (final model in models)
+          AiGatewayUpstreamModel(
+            id: '${account.id}:zcode:${model.id}',
+            upstreamModelId: model.id,
+            displayName: model.displayName,
+            capabilities: {
+              'chat': true,
+              'streaming': true,
+              'reasoning': true,
+              'tools': true,
+              'vision': model.supportsVision,
+              'audio': false,
+              'contextLength': model.contextLength,
+              'supportedApiProtocols': ['openai.chat_completions'],
+            },
+            config: const {
+              'catalogSource': 'native_zcode_registry',
+              'availability': 'enabled',
+            },
+          ),
+      ];
+    }
+    return (await _accounts.discoverModels(
+      _legacyAccount(account),
+      refreshRemote: refreshRemote,
+    ))
+        .map(_gatewayModel)
+        .toList(growable: false);
+  }
 
   @override
   Future<List<AiGatewayUpstreamModel>> discoverGroupModels({
@@ -2478,6 +2541,7 @@ bool _hasRequiredModelCapabilities(
     LlmNativeProtocol.metaResponses,
     LlmNativeProtocol.devinCliAcp,
     LlmNativeProtocol.auggieCli,
+    LlmNativeProtocol.zcodeCli,
   };
   for (final capability in required) {
     final explicitlyEnabled = capabilities[capability] == true;
@@ -2518,6 +2582,7 @@ bool _hasRequiredModelCapabilities(
               LlmNativeProtocol.metaResponses,
               LlmNativeProtocol.devinCliAcp,
               LlmNativeProtocol.auggieCli,
+              LlmNativeProtocol.zcodeCli,
               LlmNativeProtocol.bedrockConverse,
             }.contains(protocol) ||
         capability == 'streaming' && streamingProtocols.contains(protocol);
@@ -2552,6 +2617,7 @@ class _LlmGatewayExecutor
   final QoderCliService _qoderCli;
   final AuggieCliService _auggieCli;
   final CodexAppServerService _codexAppServer;
+  final ZcodeCliService _zcodeCli;
 
   const _LlmGatewayExecutor(
     this._client,
@@ -2559,6 +2625,7 @@ class _LlmGatewayExecutor
     this._qoderCli,
     this._auggieCli,
     this._codexAppServer,
+    this._zcodeCli,
   );
 
   @override
@@ -2617,6 +2684,58 @@ class _LlmGatewayExecutor
     Duration? sendTimeout,
     Duration? receiveTimeout,
   }) async {
+    if (account.connectorType == 'zcode-cli') {
+      if (account.authType != 'none' || account.hasCredential) {
+        throw AiGatewayExecutionException(
+          kind: AiGatewayFailureKind.request,
+          code: 'unsupported_capability',
+        );
+      }
+      try {
+        final response = await _zcodeCli.request(
+          modelId: modelId,
+          body: body is Map ? Map<String, dynamic>.from(body) : const {},
+          stream: stream,
+          cancelToken: cancelToken,
+          onRequestSent: onRequestSent,
+        );
+        return AiGatewayResponse(
+          statusCode: response.statusCode,
+          headers: response.headers,
+          body: response.body,
+        );
+      } on ZcodeCliException catch (error) {
+        final kind = switch (error.code) {
+          'cancelled' => AiGatewayFailureKind.cancelled,
+          'signed_out' => AiGatewayFailureKind.authenticationRequired,
+          'binary_missing' ||
+          'server_unavailable' ||
+          'hello_timeout' ||
+          'startup_timeout' ||
+          'model_service_not_ready' ||
+          'protocol_error' =>
+            AiGatewayFailureKind.transportUnavailable,
+          _ => AiGatewayFailureKind.request,
+        };
+        throw AiGatewayExecutionException(
+          kind: kind,
+          statusCode: error.code == 'request_timeout' ? 504 : null,
+          code: 'zcode_${error.code}',
+        );
+      } on ProcessException catch (error) {
+        throw AiGatewayExecutionException(
+          kind: AiGatewayFailureKind.transportUnavailable,
+          code: error.errorCode == 2 || error.errorCode == -2
+              ? 'zcode_binary_missing'
+              : 'zcode_server_unavailable',
+        );
+      } catch (_) {
+        throw AiGatewayExecutionException(
+          kind: AiGatewayFailureKind.transportUnavailable,
+          code: 'zcode_server_unavailable',
+        );
+      }
+    }
     if (account.connectorType == 'codex-app-server') {
       if (account.authType != 'none' || account.hasCredential) {
         throw AiGatewayExecutionException(

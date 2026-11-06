@@ -110,6 +110,30 @@ class AiGatewayExecutionException implements Exception {
         return 'Codex CLI is not signed in. Run `codex login` in the local terminal.';
       case 'codex_app_server_unsupported_request':
         return 'Codex App Server supports text conversations and Stroom tool calls; this request contains an unsupported feature.';
+      case 'zcode_binary_missing':
+        return 'ZCode CLI was not found. Install the official ZCode app or CLI.';
+      case 'zcode_signed_out':
+        return 'ZCode has no enabled Coding Plan model. Sign in with the official ZCode app and enable a Coding Plan model.';
+      case 'zcode_model_unavailable':
+        return 'No enabled ZCode Coding Plan model matches this account model.';
+      case 'zcode_model_service_not_ready':
+        return 'ZCode local model service is not ready. Open the official ZCode app and check its local model status.';
+      case 'zcode_server_unavailable' ||
+            'zcode_hello_timeout' ||
+            'zcode_startup_timeout':
+        return 'ZCode app-server is unavailable. Open the official ZCode app and try again.';
+      case 'zcode_protocol_error':
+        return 'ZCode app-server returned an invalid response.';
+      case 'zcode_request_timeout':
+        return 'ZCode request timed out.';
+      case 'zcode_invalid_model':
+        return 'The selected model is not available through the local ZCode Coding Plan.';
+      case 'zcode_unsupported_media' ||
+            'zcode_unsupported_message' ||
+            'zcode_unsupported_tool' ||
+            'zcode_invalid_request' ||
+            'zcode_invalid_token_limit':
+        return 'ZCode does not support one of the selected message, media, tool, or token options.';
     }
     if (code == 'cursor_api_key_rejected') {
       return 'Cursor rejected this User API Key. Create or copy an active key from cursor.com/dashboard/api, then edit this account to replace it.';

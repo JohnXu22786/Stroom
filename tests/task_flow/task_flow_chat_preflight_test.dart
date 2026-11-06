@@ -84,7 +84,7 @@ void main() {
       IOType.image,
       IOType.audio,
       IOType.video,
-      IOType.file
+      IOType.file,
     ]) {
       expect(
         flowChatInputError(input, 'oneminai.chat'),
@@ -95,64 +95,66 @@ void main() {
     expect(flowChatInputError(IOType.text, 'oneminai.chat'), isNull);
   });
 
-  test('1min.AI account protocol reaches Chat and Task Flow model selection',
-      () async {
-    final account = LlmAccount(
-      id: 'oneminai-task-flow',
-      connectorType: 'oneminai',
-      authType: 'api_key',
-      displayName: '1min.AI',
-      status: LlmAccountStatus.ready,
-      models: const [
-        LlmUpstreamModel(
-          id: 'oneminai-gpt4o-mini',
-          upstreamModelId: 'gpt-4o-mini',
-          displayName: 'GPT-4o Mini',
-          capabilities: {
-            'chat': true,
-            'streaming': true,
-            'supportedApiProtocols': ['oneminai.chat'],
-          },
-        ),
-      ],
-    );
-    final group = LlmModelGroup(
-      id: 'oneminai-task-flow-group',
-      displayName: '1min.AI models',
-      members: const [
-        LlmModelGroupMember(
-          accountId: 'oneminai-task-flow',
-          localModelId: 'oneminai-local',
-          upstreamModelId: 'gpt-4o-mini',
-        ),
-      ],
-    );
-    final config = buildLlmModelGroupProviderConfigs(
-      accounts: [account],
-      groups: [group],
-    ).single;
-    final providers = ProviderEntriesState(
-      entries: [
-        ProviderEntry(name: 'LLM', type: 'llm', configs: [config])
-      ],
-    );
-    final assistant = Assistant(
-      id: 'assistant',
-      name: '1min.AI assistant',
-      prompt: 'Answer clearly.',
-      defaultModelId: config.models.single.modelId,
-      defaultProviderName: config.providerName,
-    );
+  test(
+    '1min.AI account protocol reaches Chat and Task Flow model selection',
+    () async {
+      final account = LlmAccount(
+        id: 'oneminai-task-flow',
+        connectorType: 'oneminai',
+        authType: 'api_key',
+        displayName: '1min.AI',
+        status: LlmAccountStatus.ready,
+        models: const [
+          LlmUpstreamModel(
+            id: 'oneminai-gpt4o-mini',
+            upstreamModelId: 'gpt-4o-mini',
+            displayName: 'GPT-4o Mini',
+            capabilities: {
+              'chat': true,
+              'streaming': true,
+              'supportedApiProtocols': ['oneminai.chat'],
+            },
+          ),
+        ],
+      );
+      final group = LlmModelGroup(
+        id: 'oneminai-task-flow-group',
+        displayName: '1min.AI models',
+        members: const [
+          LlmModelGroupMember(
+            accountId: 'oneminai-task-flow',
+            localModelId: 'oneminai-local',
+            upstreamModelId: 'gpt-4o-mini',
+          ),
+        ],
+      );
+      final config = buildLlmModelGroupProviderConfigs(
+        accounts: [account],
+        groups: [group],
+      ).single;
+      final providers = ProviderEntriesState(
+        entries: [
+          ProviderEntry(name: 'LLM', type: 'llm', configs: [config]),
+        ],
+      );
+      final assistant = Assistant(
+        id: 'assistant',
+        name: '1min.AI assistant',
+        prompt: 'Answer clearly.',
+        defaultModelId: config.models.single.modelId,
+        defaultProviderName: config.providerName,
+      );
 
-    expect(config.apiProtocol, 'oneminai.chat');
-    expect(flowChatEndpointType(assistant, providers), 'oneminai.chat');
-    await validateTaskFlow(
-      chatFlow(IOType.text),
-      [FlowRunInput(text: 'hello')],
-      providers: providers,
-      assistants: [assistant],
-    );
-  });
+      expect(config.apiProtocol, 'oneminai.chat');
+      expect(flowChatEndpointType(assistant, providers), 'oneminai.chat');
+      await validateTaskFlow(
+        chatFlow(IOType.text),
+        [FlowRunInput(text: 'hello')],
+        providers: providers,
+        assistants: [assistant],
+      );
+    },
+  );
 
   test(
     'mixed-protocol model group preflights media for Anthropic members',
@@ -336,63 +338,65 @@ void main() {
     },
   );
 
-  test('Cursor API-key model group resolves through Chat in Task Flow',
-      () async {
-    final account = LlmAccount(
-      id: 'cursor-api-key',
-      connectorType: 'cursor',
-      authType: 'api_key',
-      displayName: 'Cursor User API Key',
-      status: LlmAccountStatus.ready,
-      models: const [
-        LlmUpstreamModel(
-          id: 'cursor-sonnet-local',
-          upstreamModelId: 'claude-sonnet-5-high',
-          displayName: 'Claude Sonnet 5 High',
-          capabilities: {'chat': true, 'streaming': true, 'vision': true},
-        ),
-      ],
-    );
-    final group = LlmModelGroup(
-      id: 'cursor-api-key-task-flow-group',
-      displayName: 'Cursor group',
-      members: const [
-        LlmModelGroupMember(
-          accountId: 'cursor-api-key',
-          localModelId: 'cursor-sonnet-local',
-          upstreamModelId: 'claude-sonnet-5-high',
-        ),
-      ],
-    );
-    final config = buildLlmModelGroupProviderConfigs(
-      accounts: [account],
-      groups: [group],
-    ).single;
-    final providers = ProviderEntriesState(
-      entries: [
-        ProviderEntry(name: 'LLM', type: 'llm', configs: [config])
-      ],
-    );
-    final assistant = Assistant(
-      id: 'assistant',
-      name: 'Cursor assistant',
-      prompt: 'Help',
-      defaultModelId: config.models.single.modelId,
-      defaultProviderName: config.providerName,
-    );
+  test(
+    'Cursor API-key model group resolves through Chat in Task Flow',
+    () async {
+      final account = LlmAccount(
+        id: 'cursor-api-key',
+        connectorType: 'cursor',
+        authType: 'api_key',
+        displayName: 'Cursor User API Key',
+        status: LlmAccountStatus.ready,
+        models: const [
+          LlmUpstreamModel(
+            id: 'cursor-sonnet-local',
+            upstreamModelId: 'claude-sonnet-5-high',
+            displayName: 'Claude Sonnet 5 High',
+            capabilities: {'chat': true, 'streaming': true, 'vision': true},
+          ),
+        ],
+      );
+      final group = LlmModelGroup(
+        id: 'cursor-api-key-task-flow-group',
+        displayName: 'Cursor group',
+        members: const [
+          LlmModelGroupMember(
+            accountId: 'cursor-api-key',
+            localModelId: 'cursor-sonnet-local',
+            upstreamModelId: 'claude-sonnet-5-high',
+          ),
+        ],
+      );
+      final config = buildLlmModelGroupProviderConfigs(
+        accounts: [account],
+        groups: [group],
+      ).single;
+      final providers = ProviderEntriesState(
+        entries: [
+          ProviderEntry(name: 'LLM', type: 'llm', configs: [config]),
+        ],
+      );
+      final assistant = Assistant(
+        id: 'assistant',
+        name: 'Cursor assistant',
+        prompt: 'Help',
+        defaultModelId: config.models.single.modelId,
+        defaultProviderName: config.providerName,
+      );
 
-    expect(config.key, isEmpty, reason: 'credentials stay in secure storage');
-    expect(
-      flowChatEndpointType(assistant, providers),
-      'openai.chat_completions',
-    );
-    await validateTaskFlow(
-      chatFlow(IOType.text),
-      [FlowRunInput(text: 'hello')],
-      providers: providers,
-      assistants: [assistant],
-    );
-  });
+      expect(config.key, isEmpty, reason: 'credentials stay in secure storage');
+      expect(
+        flowChatEndpointType(assistant, providers),
+        'openai.chat_completions',
+      );
+      await validateTaskFlow(
+        chatFlow(IOType.text),
+        [FlowRunInput(text: 'hello')],
+        providers: providers,
+        assistants: [assistant],
+      );
+    },
+  );
 
   test(
     'Codex model group resolves as Responses during Task Flow preflight',
@@ -450,68 +454,123 @@ void main() {
     },
   );
 
-  test(
-    'GigaChat model remains selectable in Task Flow',
-    () async {
-      final account = LlmAccount(
-        id: 'gigachat-account',
-        connectorType: 'openai-compatibility',
-        authType: 'api_key',
-        displayName: 'GigaChat',
-        status: LlmAccountStatus.ready,
-        endpointConfig: const {
-          'providerPresetId': 'gigachat',
-          'apiProtocol': 'openai.chat_completions',
-        },
-        models: const [
-          LlmUpstreamModel(
-            id: 'gigachat-max-local',
-            upstreamModelId: 'GigaChat-2-Max',
-            displayName: 'GigaChat 2 Max',
-            capabilities: {'chat': true, 'streaming': true},
-          ),
-        ],
-      );
-      final group = LlmModelGroup(
-        id: 'gigachat-task-flow-group',
-        displayName: 'GigaChat',
-        members: const [
-          LlmModelGroupMember(
-            accountId: 'gigachat-account',
-            localModelId: 'gigachat-max-local',
-            upstreamModelId: 'GigaChat-2-Max',
-          ),
-        ],
-      );
-      final config = buildLlmModelGroupProviderConfigs(
-        accounts: [account],
-        groups: [group],
-      ).single;
-      final providers = ProviderEntriesState(
-        entries: [
-          ProviderEntry(name: 'LLM', type: 'llm', configs: [config])
-        ],
-      );
-      final assistant = Assistant(
-        id: 'assistant',
-        name: 'GigaChat assistant',
-        prompt: 'Help',
-        defaultModelId: config.models.single.modelId,
-        defaultProviderName: config.providerName,
-      );
+  test('GigaChat model remains selectable in Task Flow', () async {
+    final account = LlmAccount(
+      id: 'gigachat-account',
+      connectorType: 'openai-compatibility',
+      authType: 'api_key',
+      displayName: 'GigaChat',
+      status: LlmAccountStatus.ready,
+      endpointConfig: const {
+        'providerPresetId': 'gigachat',
+        'apiProtocol': 'openai.chat_completions',
+      },
+      models: const [
+        LlmUpstreamModel(
+          id: 'gigachat-max-local',
+          upstreamModelId: 'GigaChat-2-Max',
+          displayName: 'GigaChat 2 Max',
+          capabilities: {'chat': true, 'streaming': true},
+        ),
+      ],
+    );
+    final group = LlmModelGroup(
+      id: 'gigachat-task-flow-group',
+      displayName: 'GigaChat',
+      members: const [
+        LlmModelGroupMember(
+          accountId: 'gigachat-account',
+          localModelId: 'gigachat-max-local',
+          upstreamModelId: 'GigaChat-2-Max',
+        ),
+      ],
+    );
+    final config = buildLlmModelGroupProviderConfigs(
+      accounts: [account],
+      groups: [group],
+    ).single;
+    final providers = ProviderEntriesState(
+      entries: [
+        ProviderEntry(name: 'LLM', type: 'llm', configs: [config]),
+      ],
+    );
+    final assistant = Assistant(
+      id: 'assistant',
+      name: 'GigaChat assistant',
+      prompt: 'Help',
+      defaultModelId: config.models.single.modelId,
+      defaultProviderName: config.providerName,
+    );
 
-      expect(config.apiProtocol, 'openai.chat_completions');
-      expect(config.models.single.apiProtocolOverride, isNull);
-      expect(flowChatEndpointType(assistant, providers),
-          'openai.chat_completions');
-      await validateTaskFlow(
-        chatFlow(IOType.text),
-        [FlowRunInput(text: 'hello')],
-        providers: providers,
-        assistants: [assistant],
-      );
-    },
-  );
+    expect(config.apiProtocol, 'openai.chat_completions');
+    expect(config.models.single.apiProtocolOverride, isNull);
+    expect(
+      flowChatEndpointType(assistant, providers),
+      'openai.chat_completions',
+    );
+    await validateTaskFlow(
+      chatFlow(IOType.text),
+      [FlowRunInput(text: 'hello')],
+      providers: providers,
+      assistants: [assistant],
+    );
+  });
+
+  test('ZCode local account uses its native chat route in Task Flow', () async {
+    final account = LlmAccount(
+      id: 'zcode-task-flow-account',
+      connectorType: 'zcode-cli',
+      authType: 'none',
+      displayName: 'Local ZCode Coding Plan',
+      status: LlmAccountStatus.ready,
+      models: const [
+        LlmUpstreamModel(
+          id: 'zcode-model',
+          upstreamModelId: 'glm-5.3-flash',
+          displayName: 'GLM 5.3 Flash',
+          capabilities: {'chat': true, 'streaming': true, 'vision': true},
+        ),
+      ],
+    );
+    final group = LlmModelGroup(
+      id: 'zcode-task-flow-group',
+      displayName: 'ZCode group',
+      members: const [
+        LlmModelGroupMember(
+          accountId: 'zcode-task-flow-account',
+          localModelId: 'glm-5.3-flash',
+          upstreamModelId: 'glm-5.3-flash',
+        ),
+      ],
+    );
+    final config = buildLlmModelGroupProviderConfigs(
+      accounts: [account],
+      groups: [group],
+    ).single;
+    final providers = ProviderEntriesState(
+      entries: [
+        ProviderEntry(name: 'LLM', type: 'llm', configs: [config]),
+      ],
+    );
+    final assistant = Assistant(
+      id: 'assistant',
+      name: 'ZCode assistant',
+      prompt: 'Help',
+      defaultModelId: config.models.single.modelId,
+      defaultProviderName: config.providerName,
+    );
+
+    expect(
+      flowChatEndpointType(assistant, providers),
+      'openai.chat_completions',
+    );
+    await validateTaskFlow(
+      chatFlow(IOType.text),
+      [FlowRunInput(text: 'hello')],
+      providers: providers,
+      assistants: [assistant],
+    );
+  });
 
   test(
     'Devin model group preserves Connect-RPC in Task Flow preflight',
@@ -789,7 +848,7 @@ void main() {
     ).single;
     final providers = ProviderEntriesState(
       entries: [
-        ProviderEntry(name: 'LLM', type: 'llm', configs: [config])
+        ProviderEntry(name: 'LLM', type: 'llm', configs: [config]),
       ],
     );
     final assistant = Assistant(
@@ -930,67 +989,69 @@ void main() {
     },
   );
 
-  test('Vertex partner Claude models preflight with Anthropic Messages',
-      () async {
-    final account = LlmAccount(
-      id: 'vertex-partner-flow',
-      connectorType: 'vertex-partner',
-      authType: 'service_account',
-      displayName: 'Vertex AI Partners',
-      status: LlmAccountStatus.ready,
-      models: [
-        LlmUpstreamModel(
-          id: 'vertex-partner-claude-model',
-          upstreamModelId: 'claude-sonnet-4-5',
-          displayName: 'Claude Sonnet 4.5',
-          capabilities: const {
-            'streaming': true,
-            'supportedApiProtocols': ['anthropic.messages'],
-          },
-          config: const {
-            'apiProtocolOverride': 'anthropic.messages',
-            'targetFormat': 'claude',
-          },
-        ),
-      ],
-    );
-    final group = LlmModelGroup(
-      id: 'vertex-partner-flow-group',
-      displayName: 'Vertex partner group',
-      members: const [
-        LlmModelGroupMember(
-          accountId: 'vertex-partner-flow',
-          localModelId: 'vertex-partner-claude-model',
-          upstreamModelId: 'claude-sonnet-4-5',
-        ),
-      ],
-    );
-    final config = buildLlmModelGroupProviderConfigs(
-      accounts: [account],
-      groups: [group],
-    ).single;
-    final providers = ProviderEntriesState(
-      entries: [
-        ProviderEntry(name: 'LLM', type: 'llm', configs: [config]),
-      ],
-    );
-    final assistant = Assistant(
-      id: 'assistant',
-      name: 'Vertex partner assistant',
-      prompt: 'Help',
-      defaultModelId: config.models.single.modelId,
-      defaultProviderName: config.providerName,
-    );
+  test(
+    'Vertex partner Claude models preflight with Anthropic Messages',
+    () async {
+      final account = LlmAccount(
+        id: 'vertex-partner-flow',
+        connectorType: 'vertex-partner',
+        authType: 'service_account',
+        displayName: 'Vertex AI Partners',
+        status: LlmAccountStatus.ready,
+        models: [
+          LlmUpstreamModel(
+            id: 'vertex-partner-claude-model',
+            upstreamModelId: 'claude-sonnet-4-5',
+            displayName: 'Claude Sonnet 4.5',
+            capabilities: const {
+              'streaming': true,
+              'supportedApiProtocols': ['anthropic.messages'],
+            },
+            config: const {
+              'apiProtocolOverride': 'anthropic.messages',
+              'targetFormat': 'claude',
+            },
+          ),
+        ],
+      );
+      final group = LlmModelGroup(
+        id: 'vertex-partner-flow-group',
+        displayName: 'Vertex partner group',
+        members: const [
+          LlmModelGroupMember(
+            accountId: 'vertex-partner-flow',
+            localModelId: 'vertex-partner-claude-model',
+            upstreamModelId: 'claude-sonnet-4-5',
+          ),
+        ],
+      );
+      final config = buildLlmModelGroupProviderConfigs(
+        accounts: [account],
+        groups: [group],
+      ).single;
+      final providers = ProviderEntriesState(
+        entries: [
+          ProviderEntry(name: 'LLM', type: 'llm', configs: [config]),
+        ],
+      );
+      final assistant = Assistant(
+        id: 'assistant',
+        name: 'Vertex partner assistant',
+        prompt: 'Help',
+        defaultModelId: config.models.single.modelId,
+        defaultProviderName: config.providerName,
+      );
 
-    expect(config.apiProtocol, 'openai.chat_completions');
-    expect(flowChatEndpointType(assistant, providers), 'anthropic.messages');
-    await validateTaskFlow(
-      chatFlow(IOType.text),
-      [FlowRunInput(text: 'hello')],
-      providers: providers,
-      assistants: [assistant],
-    );
-  });
+      expect(config.apiProtocol, 'openai.chat_completions');
+      expect(flowChatEndpointType(assistant, providers), 'anthropic.messages');
+      await validateTaskFlow(
+        chatFlow(IOType.text),
+        [FlowRunInput(text: 'hello')],
+        providers: providers,
+        assistants: [assistant],
+      );
+    },
+  );
 
   test(
     'xAI and Meta API keys plus Muse OAuth preflight through Responses',
@@ -1465,66 +1526,68 @@ void main() {
     );
   });
 
-  test('AI Horde anonymous text model passes Task Flow chat preflight',
-      () async {
-    const modelId = 'aphrodite/TheDrummer/Cydonia-24B-v4.3';
-    final account = LlmAccount(
-      id: 'aihorde-anonymous',
-      connectorType: 'aihorde',
-      authType: 'none',
-      displayName: 'AI Horde anonymous',
-      status: LlmAccountStatus.ready,
-      models: const [
-        LlmUpstreamModel(
-          id: 'aihorde-cydonia',
-          upstreamModelId: modelId,
-          displayName: 'Cydonia 24B (AI Horde)',
-          capabilities: {
-            'chat': true,
-            'streaming': true,
-            'toolCalling': false,
-            'supportedApiProtocols': ['openai.chat_completions'],
-          },
-        ),
-      ],
-    );
-    final group = LlmModelGroup(
-      id: 'aihorde-task-flow-group',
-      displayName: 'AI Horde group',
-      members: const [
-        LlmModelGroupMember(
-          accountId: 'aihorde-anonymous',
-          localModelId: 'aihorde-cydonia',
-          upstreamModelId: modelId,
-        ),
-      ],
-    );
-    final config = buildLlmModelGroupProviderConfigs(
-      accounts: [account],
-      groups: [group],
-    ).single;
-    final providers = ProviderEntriesState(
-      entries: [
-        ProviderEntry(name: 'LLM', type: 'llm', configs: [config])
-      ],
-    );
-    final assistant = Assistant(
-      id: 'assistant',
-      name: 'AI Horde assistant',
-      prompt: 'Answer with plain text.',
-      defaultModelId: config.models.single.modelId,
-      defaultProviderName: config.providerName,
-    );
+  test(
+    'AI Horde anonymous text model passes Task Flow chat preflight',
+    () async {
+      const modelId = 'aphrodite/TheDrummer/Cydonia-24B-v4.3';
+      final account = LlmAccount(
+        id: 'aihorde-anonymous',
+        connectorType: 'aihorde',
+        authType: 'none',
+        displayName: 'AI Horde anonymous',
+        status: LlmAccountStatus.ready,
+        models: const [
+          LlmUpstreamModel(
+            id: 'aihorde-cydonia',
+            upstreamModelId: modelId,
+            displayName: 'Cydonia 24B (AI Horde)',
+            capabilities: {
+              'chat': true,
+              'streaming': true,
+              'toolCalling': false,
+              'supportedApiProtocols': ['openai.chat_completions'],
+            },
+          ),
+        ],
+      );
+      final group = LlmModelGroup(
+        id: 'aihorde-task-flow-group',
+        displayName: 'AI Horde group',
+        members: const [
+          LlmModelGroupMember(
+            accountId: 'aihorde-anonymous',
+            localModelId: 'aihorde-cydonia',
+            upstreamModelId: modelId,
+          ),
+        ],
+      );
+      final config = buildLlmModelGroupProviderConfigs(
+        accounts: [account],
+        groups: [group],
+      ).single;
+      final providers = ProviderEntriesState(
+        entries: [
+          ProviderEntry(name: 'LLM', type: 'llm', configs: [config]),
+        ],
+      );
+      final assistant = Assistant(
+        id: 'assistant',
+        name: 'AI Horde assistant',
+        prompt: 'Answer with plain text.',
+        defaultModelId: config.models.single.modelId,
+        defaultProviderName: config.providerName,
+      );
 
-    expect(
-      flowChatEndpointType(assistant, providers),
-      'openai.chat_completions',
-    );
-    await validateTaskFlow(
-      chatFlow(IOType.text),
-      [FlowRunInput(text: 'Summarize this paragraph.')],
-      providers: providers,
-      assistants: [assistant],
-    );
-  });
+      expect(
+        flowChatEndpointType(assistant, providers),
+        'openai.chat_completions',
+      );
+      await validateTaskFlow(
+        chatFlow(IOType.text),
+        [FlowRunInput(text: 'Summarize this paragraph.')],
+        providers: providers,
+        assistants: [assistant],
+      );
+    },
+  );
 }

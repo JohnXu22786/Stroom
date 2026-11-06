@@ -60,6 +60,7 @@ Set<String> llmRoutedChatSupportedConnectorTypes(String endpointType) =>
       'devin.connect_rpc' => const {'devin'},
       'devin.acp' => const {'devin-cli-agentic'},
       'auggie.cli' => const {'auggie'},
+      'zcode.cli' => const {'zcode-cli'},
       'ollama.chat' => const {'ollama'},
       _ => const {
           'openai-compatibility',
@@ -82,6 +83,7 @@ Set<String> llmRoutedChatSupportedConnectorTypes(String endpointType) =>
           'qoder',
           'qwen-cloud',
           'qwen-cloud-token-plan',
+          'zcode-cli',
           'command-code',
           'zed-hosted',
         },
@@ -163,6 +165,24 @@ String llmRoutedChatProtocolForAccountModel({
       throw StateError('Codex App Server supports only OpenAI Responses.');
     }
     return 'openai.responses';
+  }
+  if (account.connectorType == 'zcode-cli') {
+    if (account.authType != 'none' || account.hasCredential) {
+      throw StateError('ZCode CLI accounts do not store Stroom credentials.');
+    }
+    final model = account.models
+        .where((item) => item.upstreamModelId == upstreamModelId)
+        .firstOrNull;
+    final configured = apiProtocolOverride ??
+        model?.config['apiProtocolOverride'] ??
+        account.endpointConfig['apiProtocol'] ??
+        apiProtocol;
+    if (configured is String &&
+        configured.isNotEmpty &&
+        configured != 'openai.chat_completions') {
+      throw StateError('ZCode CLI uses native Chat Completions requests.');
+    }
+    return 'openai.chat_completions';
   }
   // Cursor's source-owned transport is selected by account ownership. The
   // model's generic API protocol continues to govern other providers.
