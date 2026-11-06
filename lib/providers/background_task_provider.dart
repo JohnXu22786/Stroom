@@ -1669,6 +1669,13 @@ bool _legacyOcrTextContainsMaskedCredential(
   // edges before preserving any persisted text or diagnostic value.
   final compactedText = text.replaceAll(RegExp(r'\s+'), '');
   final textWithoutPartMarkers = text.replaceAll('\u0000', '');
+  if (_legacyOcrRedactWhitespaceSplitMaskedOpenPrefixEchoes(
+        textWithoutPartMarkers,
+        credentialValues,
+      ) !=
+      textWithoutPartMarkers) {
+    return true;
+  }
   final partBoundaryOffsets = <int>[];
   var cleanedTextOffset = 0;
   for (final codeUnit in text.codeUnits) {
@@ -2537,8 +2544,11 @@ String _legacyOcrRedactMaskedCredentialEchoes(
   Iterable<String> credentialValues,
 ) {
   final hasSentenceBoundary = RegExp(r'[.!?]\s+\S').hasMatch(text);
-  var sanitized = _legacyOcrRedactWhitespaceSplitMaskedDocumentationEchoes(
-    text,
+  var sanitized = _legacyOcrRedactWhitespaceSplitMaskedOpenPrefixEchoes(
+    _legacyOcrRedactWhitespaceSplitMaskedDocumentationEchoes(
+      text,
+      credentialValues,
+    ),
     credentialValues,
   );
   for (final value in credentialValues) {
@@ -2790,6 +2800,55 @@ String _legacyOcrRedactWhitespaceSplitMaskedDocumentationEchoes(
       final safeTrailingText = match.group(4)!.substring(credentialEnd);
       return '${match.group(1)}[redacted]$safeTrailingText';
     });
+  }
+  return sanitized;
+}
+
+String _legacyOcrRedactWhitespaceSplitMaskedOpenPrefixEchoes(
+  String text,
+  Iterable<String> credentialValues,
+) {
+  var sanitized = text;
+  for (final value in credentialValues) {
+    final ellipsis = RegExp(r'\.\.\.|…').firstMatch(value);
+    if (ellipsis == null || value.substring(ellipsis.end).isNotEmpty) continue;
+    final prefix =
+        value.substring(0, ellipsis.start).trim().split(RegExp(r'\s+')).last;
+    if (prefix.isEmpty || prefix.length >= 8) continue;
+
+    for (var tokenCount = 1; tokenCount <= 4; tokenCount++) {
+      const token = r'[a-zA-Z0-9._/+~-]+';
+      final additionalTokens = tokenCount == 1
+          ? ''
+          : '(?:[ \\t\\r\\n]+$token){${tokenCount - 1}}';
+      final pattern = RegExp(
+        '(^|[^a-zA-Z0-9])'
+        '(${RegExp.escape(prefix)}[ \\t\\r\\n]+$token$additionalTokens)',
+        caseSensitive: false,
+      );
+      sanitized = sanitized.replaceAllMapped(pattern, (match) {
+        final echo = match.group(2)!;
+        final suffix = echo
+            .replaceAll(RegExp(r'\s+'), '')
+            .substring(prefix.length);
+        final hasCredentialShape = suffix.length >= 5 &&
+            (RegExp(r'[0-9_]').hasMatch(suffix) ||
+                (RegExp(r'[a-z]').hasMatch(suffix) &&
+                    RegExp(r'[A-Z]').hasMatch(suffix) &&
+                    !_legacyOcrHasNaturalWordContinuation(prefix, suffix)) ||
+                _legacyOcrHasUncommonAlphaContinuation(suffix));
+        if (!hasCredentialShape ||
+            !_legacyOcrHasCredentialUseContext(
+              sanitized,
+              match,
+              prefix,
+              suffix,
+            )) {
+          return match.group(0)!;
+        }
+        return '${match.group(1)}[redacted]';
+      });
+    }
   }
   return sanitized;
 }

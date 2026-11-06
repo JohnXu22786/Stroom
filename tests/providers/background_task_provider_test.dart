@@ -7280,6 +7280,47 @@ void main() {
     );
 
     test(
+      'legacy OCR instruction migration redacts a whitespace-split short open-mask credential echo',
+      () {
+        const apiKey = 'abcQmXvPs123';
+        const instruction = 'Please use abc QmXvPs123 for the request';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-short-open-mask-whitespace-split-echo',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer abc…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+        final serializedRetryData = (jsonDecode(persisted)
+            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
+        final retryInstruction = OcrRetrySnapshot.fromMap(
+          task.retryData!,
+        ).instructionContent;
+
+        expect(retryInstruction, '[redacted]');
+        expect(serializedRetryData['instructionContent'], '[redacted]');
+        expect(retryInstruction, isNot(contains(apiKey)));
+        expect(persisted, isNot(contains(apiKey)));
+      },
+    );
+
+    test(
       'legacy OCR instruction migration redacts a numeric opaque prefix echo split after its prefix',
       () {
         const apiKey = 'Qwrty12345';
