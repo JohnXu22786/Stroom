@@ -510,6 +510,7 @@ extension _ChatPageMessagesExt on _ChatPageState {
       if (_isSearching) {
         final searchQuery = _searchQuery;
         _searchMatches.clear();
+        _searchMatchFirstIndexByMessageId.clear();
         _currentMatchIndex = 0;
         if (searchQuery.isNotEmpty) {
           _performSearch(searchQuery);
@@ -519,6 +520,7 @@ extension _ChatPageMessagesExt on _ChatPageState {
         _isSearching = false;
         _searchQuery = '';
         _searchMatches.clear();
+        _searchMatchFirstIndexByMessageId.clear();
         _currentMatchIndex = 0;
       }
       _editingMessageId = null;

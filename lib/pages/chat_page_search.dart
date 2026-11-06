@@ -12,27 +12,29 @@ extension _ChatPageSearchExt on _ChatPageState {
       _searchQuery = query;
       _searchMatches.clear();
       _currentMatchIndex = 0;
-      if (query.isEmpty) return;
-      final lowerQuery = query.toLowerCase();
-      for (final msg in _history) {
-        // AI messages are rendered as markdown: matches inside code blocks,
-        // inline code or math can never be highlighted (those are rendered
-        // as dedicated widgets), so strip them before matching — otherwise
-        // they would overstate the counter and shift the "current" match.
-        // User messages are plain text and keep raw offsets (used by the
-        // plain-text highlight).
-        final text = msg.role == 'user'
-            ? msg.content
-            : stripSearchIrrelevantMarkdown(msg.content);
-        final lowerContent = text.toLowerCase();
-        int start = 0;
-        while (true) {
-          final idx = lowerContent.indexOf(lowerQuery, start);
-          if (idx == -1) break;
-          _searchMatches.add(SearchMatch(msg.id, idx, idx + query.length));
-          start = idx + query.length;
+      if (query.isNotEmpty) {
+        final lowerQuery = query.toLowerCase();
+        for (final msg in _history) {
+          // AI messages are rendered as markdown: matches inside code blocks,
+          // inline code or math can never be highlighted (those are rendered
+          // as dedicated widgets), so strip them before matching — otherwise
+          // they would overstate the counter and shift the "current" match.
+          // User messages are plain text and keep raw offsets (used by the
+          // plain-text highlight).
+          final text = msg.role == 'user'
+              ? msg.content
+              : stripSearchIrrelevantMarkdown(msg.content);
+          final lowerContent = text.toLowerCase();
+          int start = 0;
+          while (true) {
+            final idx = lowerContent.indexOf(lowerQuery, start);
+            if (idx == -1) break;
+            _searchMatches.add(SearchMatch(msg.id, idx, idx + query.length));
+            start = idx + query.length;
+          }
         }
       }
+      _rebuildSearchMatchFirstIndex();
     });
     if (_searchMatches.isNotEmpty) {
       // Scroll after the rebuild so the message list reflects the new
@@ -40,6 +42,16 @@ extension _ChatPageSearchExt on _ChatPageState {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _scrollToCurrentMatch();
       });
+    }
+  }
+
+  void _rebuildSearchMatchFirstIndex() {
+    _searchMatchFirstIndexByMessageId.clear();
+    for (var i = 0; i < _searchMatches.length; i++) {
+      _searchMatchFirstIndexByMessageId.putIfAbsent(
+        _searchMatches[i].messageId,
+        () => i,
+      );
     }
   }
 
@@ -195,6 +207,7 @@ extension _ChatPageSearchExt on _ChatPageState {
       _searchMode = SearchMode.current;
       _searchQuery = '';
       _searchMatches.clear();
+      _searchMatchFirstIndexByMessageId.clear();
       _currentMatchIndex = 0;
       _searchTextController.clear();
     });
