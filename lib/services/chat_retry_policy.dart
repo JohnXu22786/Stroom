@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 
@@ -9,8 +10,9 @@ const String kAutoContinuationMessage = 'Continue if not finished.';
 /// Retry policy for actual HTTP 429 throttling responses.
 ///
 /// Five retries follow the initial request. The delay schedule is based on
-/// OpenCode CLI's 2/4/8/10/10 second backoff and adds jitter. A valid
-/// Retry-After value is a minimum delay, bounded to fifteen minutes.
+/// OpenCode CLI's 2/4/8/10/10 second backoff and adds approximately ±20%
+/// jitter. The ten-second cap applies to the nominal schedule before jitter.
+/// A valid Retry-After value is a minimum delay, bounded to fifteen minutes.
 class RateLimitRetryPolicy {
   final int maxRetries;
   final Duration initialDelay;
@@ -31,9 +33,8 @@ class RateLimitRetryPolicy {
     final rawMs = initialDelay.inMilliseconds * multiplier;
     final cappedMs = math.min(rawMs, maxDelay.inMilliseconds).toInt();
     if (!jitter) return Duration(milliseconds: cappedMs);
-    final fraction =
-        (randomValue ?? math.Random().nextDouble()).clamp(0.5, 1.0);
-    return Duration(milliseconds: (cappedMs * fraction).round());
+    final jitter = _jitterMultiplier(randomValue);
+    return Duration(milliseconds: (cappedMs * jitter).round());
   }
 }
 
@@ -56,10 +57,15 @@ class TransportRetryPolicy {
     final rawMs = initialDelay.inMilliseconds * multiplier;
     final cappedMs = math.min(rawMs, maxDelay.inMilliseconds).toInt();
     if (!jitter) return Duration(milliseconds: cappedMs);
-    final fraction =
-        (randomValue ?? math.Random().nextDouble()).clamp(0.5, 1.0);
-    return Duration(milliseconds: (cappedMs * fraction).round());
+    final jitteredMs = (cappedMs * _jitterMultiplier(randomValue)).round();
+    return Duration(
+        milliseconds: math.min(jitteredMs, maxDelay.inMilliseconds));
   }
+}
+
+double _jitterMultiplier(double? randomValue) {
+  final value = (randomValue ?? math.Random().nextDouble()).clamp(0.0, 1.0);
+  return 0.8 + value * 0.4;
 }
 
 /// Retries a failed stream only when its HTTP response is 429 and no event
@@ -84,7 +90,7 @@ Stream<T> retryRateLimitedStream<T>(
       if (isCancelled?.call() == true ||
           emittedEvent ||
           retries >= policy.maxRetries ||
-          !_isRateLimit(error)) {
+          !await _isRateLimit(error)) {
         rethrow;
       }
       retries++;
@@ -130,10 +136,14 @@ Future<void> waitForRetryOrCancellation(
   timer.cancel();
 }
 
-bool _isRateLimit(Object error) {
+Future<bool> _isRateLimit(Object error) async {
   if (error is! DioException || error.response?.statusCode != 429) return false;
+  final responseData = error.response?.data;
+  final responseBody = responseData is ResponseBody
+      ? await _readResponseBody(responseData)
+      : _flattenErrorDetails(responseData);
   final details = [
-    _flattenErrorDetails(error.response?.data),
+    responseBody,
     error.response?.statusMessage ?? '',
     error.message ?? '',
   ].join(' ').toLowerCase();
@@ -154,6 +164,9 @@ bool _isRateLimit(Object error) {
     'permission_denied',
     'validation_error',
     'bad_request',
+    'server_error',
+    'internal_error',
+    'internal server error',
   ];
   if (nonThrottleMarkers.any(details.contains)) return false;
   const throttleMarkers = [
@@ -163,6 +176,18 @@ bool _isRateLimit(Object error) {
     'throttl',
   ];
   return throttleMarkers.any(details.contains);
+}
+
+Future<String> _readResponseBody(ResponseBody body) async {
+  try {
+    final bytes = await body.stream.fold<List<int>>(
+      <int>[],
+      (buffer, chunk) => buffer..addAll(chunk),
+    );
+    return utf8.decode(bytes, allowMalformed: true).toLowerCase();
+  } catch (_) {
+    return '';
+  }
 }
 
 String _flattenErrorDetails(Object? value) {

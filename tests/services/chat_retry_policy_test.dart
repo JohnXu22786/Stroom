@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -7,19 +9,44 @@ import 'package:stroom/services/chat_retry_policy.dart';
 
 void main() {
   group('retryRateLimitedStream', () {
-    test('jitter stays within half to all of the scheduled delay', () {
+    test('rate-limit jitter spans 80 to 120 percent of nominal delays', () {
       const policy = RateLimitRetryPolicy();
       expect(
-        policy.delayForRetry(1, randomValue: 0.5),
-        const Duration(seconds: 1),
+        policy.delayForRetry(1, randomValue: 0),
+        const Duration(milliseconds: 1600),
       );
       expect(
         policy.delayForRetry(1, randomValue: 1),
-        const Duration(seconds: 2),
+        const Duration(milliseconds: 2400),
+      );
+      expect(
+        policy.delayForRetry(4, randomValue: 0),
+        const Duration(seconds: 8),
       );
       expect(
         policy.delayForRetry(4, randomValue: 1),
-        const Duration(seconds: 10),
+        const Duration(milliseconds: 12000),
+      );
+    });
+
+    test('transport jitter spans 80 to 120 percent within the 30s cap', () {
+      const policy = TransportRetryPolicy();
+      expect(
+        policy.delayForRetry(1, randomValue: 0),
+        const Duration(milliseconds: 1600),
+      );
+      expect(
+        policy.delayForRetry(1, randomValue: 1),
+        const Duration(milliseconds: 2400),
+      );
+      expect(
+        policy.delayForRetry(5, randomValue: 0),
+        const Duration(seconds: 24),
+      );
+      // The hard transport gap cap applies after jitter.
+      expect(
+        policy.delayForRetry(5, randomValue: 1),
+        const Duration(seconds: 30),
       );
     });
 
@@ -95,6 +122,61 @@ void main() {
         );
         expect(calls, 1, reason: message);
       }
+    });
+
+    test('does not retry a server-error 429 with a throttle phrase', () async {
+      var calls = 0;
+      final failure = DioException(
+        requestOptions: RequestOptions(path: '/chat'),
+        response: Response(
+          requestOptions: RequestOptions(path: '/chat'),
+          statusCode: 429,
+          data: {
+            'error': {
+              'type': 'server_error',
+              'message': 'rate limit backend service unavailable',
+            }
+          },
+        ),
+        type: DioExceptionType.badResponse,
+      );
+
+      await expectLater(
+        retryRateLimitedStream<String>(() {
+          calls++;
+          return Stream.error(failure);
+        }, delay: (_) async {}),
+        emitsError(same(failure)),
+      );
+      expect(calls, 1);
+    });
+
+    test('classifies a throttled 429 from a streaming response body', () async {
+      var calls = 0;
+      final response = ResponseBody(
+        Stream.value(Uint8List.fromList(
+          utf8.encode('{"error":{"type":"rate_limit_error"}}'),
+        )),
+        429,
+      );
+      await retryRateLimitedStream<String>(() {
+        calls++;
+        if (calls == 1) {
+          return Stream.error(DioException(
+            requestOptions: RequestOptions(path: '/chat'),
+            response: Response(
+              requestOptions: RequestOptions(path: '/chat'),
+              statusCode: 429,
+              data: response,
+            ),
+            type: DioExceptionType.badResponse,
+          ));
+        }
+        return Stream.value('ok');
+      }, policy: const RateLimitRetryPolicy(jitter: false), delay: (_) async {})
+          .toList();
+
+      expect(calls, 2);
     });
 
     test('cancellation interrupts a pending retry delay', () async {
