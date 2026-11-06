@@ -9,6 +9,8 @@ import 'package:stroom/models/message_block.dart';
 import 'package:stroom/providers/chat_api_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/providers/locale_provider.dart';
+import 'package:stroom/services/chat_retry_policy.dart'
+    show TransportRetryPolicy;
 import 'package:stroom/services/chat_service.dart';
 import 'package:stroom/services/chat_stream_manager.dart';
 part 'chat_stream_manager_test_p1.dart';

@@ -67,6 +67,12 @@ class StreamResult {
 class _ConversationStreamState {
   final String convId;
   bool cancelledByUser = false;
+  final Completer<void> cancellationSignal = Completer<void>();
+
+  void cancelByUser() {
+    cancelledByUser = true;
+    if (!cancellationSignal.isCompleted) cancellationSignal.complete();
+  }
 
   /// Guards against overlapping periodic persist calls from the timer.
   bool _isPersisting = false;

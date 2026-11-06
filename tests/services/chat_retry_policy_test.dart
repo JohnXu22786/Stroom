@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -22,7 +23,8 @@ void main() {
       );
     });
 
-    test('retries a throttled 429 five times with OpenCode-style waits', () async {
+    test('retries a throttled 429 five times with OpenCode-style waits',
+        () async {
       var calls = 0;
       final delays = <Duration>[];
       final events = await retryRateLimitedStream<String>(
@@ -34,7 +36,9 @@ void main() {
               response: Response(
                 requestOptions: RequestOptions(path: '/chat'),
                 statusCode: 429,
-                data: {'error': {'type': 'rate_limit_error'}},
+                data: {
+                  'error': {'type': 'rate_limit_error'}
+                },
               ),
               type: DioExceptionType.badResponse,
             ));
@@ -93,6 +97,45 @@ void main() {
       }
     });
 
+    test('cancellation interrupts a pending retry delay', () async {
+      final cancelSignal = Completer<void>();
+      final delayStarted = Completer<void>();
+      var cancelled = false;
+      var calls = 0;
+      final failure = DioException(
+        requestOptions: RequestOptions(path: '/chat'),
+        response: Response(
+          requestOptions: RequestOptions(path: '/chat'),
+          statusCode: 429,
+          data: {
+            'error': {'type': 'rate_limit_error'}
+          },
+        ),
+        type: DioExceptionType.badResponse,
+      );
+      final stream = retryRateLimitedStream<String>(
+        () {
+          calls++;
+          return Stream.error(failure);
+        },
+        policy: const RateLimitRetryPolicy(jitter: false),
+        delay: (_) {
+          delayStarted.complete();
+          return Completer<void>().future;
+        },
+        cancellation: cancelSignal.future,
+        isCancelled: () => cancelled,
+      );
+
+      final completion = expectLater(stream, emitsError(same(failure)));
+      await delayStarted.future;
+      cancelled = true;
+      cancelSignal.complete();
+      await completion;
+
+      expect(calls, 1);
+    });
+
     test('does not retry non-429 errors or retry after its budget', () async {
       var calls = 0;
       final failure = DioException(
@@ -121,7 +164,9 @@ void main() {
             response: Response(
               requestOptions: RequestOptions(path: '/chat'),
               statusCode: 429,
-              data: {'error': {'code': 'rate_limit_exceeded'}},
+              data: {
+                'error': {'code': 'rate_limit_exceeded'}
+              },
             ),
             type: DioExceptionType.badResponse,
           ));
@@ -188,7 +233,9 @@ void main() {
               response: Response(
                 requestOptions: RequestOptions(path: '/chat'),
                 statusCode: 429,
-                data: {'error': {'type': 'rate_limit_error'}},
+                data: {
+                  'error': {'type': 'rate_limit_error'}
+                },
                 headers: headers,
               ),
               type: DioExceptionType.badResponse,
@@ -215,7 +262,9 @@ void main() {
             response: Response(
               requestOptions: RequestOptions(path: '/chat'),
               statusCode: 429,
-              data: {'error': {'type': 'rate_limit_error'}},
+              data: {
+                'error': {'type': 'rate_limit_error'}
+              },
               headers: Headers.fromMap({
                 'retry-after': ['8']
               }),
@@ -241,7 +290,9 @@ void main() {
             response: Response(
               requestOptions: RequestOptions(path: '/chat'),
               statusCode: 429,
-              data: {'error': {'type': 'rate_limit_error'}},
+              data: {
+                'error': {'type': 'rate_limit_error'}
+              },
               headers: Headers.fromMap({
                 'retry-after': ['3600']
               }),

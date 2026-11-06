@@ -45,7 +45,8 @@ void chatStreamManagerGroup1() {
 
     test('network interruption after partial output adds a user continuation',
         () async {
-      final manager = ChatStreamManager(retryDelay: (_) async {});
+      final manager =
+          ChatStreamManager.withRetryPolicy(retryDelay: (_) async {});
       final networkFailure = DioException(
         requestOptions: RequestOptions(path: '/chat'),
         type: DioExceptionType.connectionError,
@@ -98,7 +99,7 @@ void chatStreamManagerGroup1() {
       ])
         ..errorsAfterCall.addAll({1: networkFailure, 2: networkFailure});
       final waits = <Duration>[];
-      final manager = ChatStreamManager(
+      final manager = ChatStreamManager.withRetryPolicy(
         retryDelay: (duration) async => waits.add(duration),
         transportRetryPolicy: const TransportRetryPolicy(jitter: false),
       );
@@ -135,8 +136,10 @@ void chatStreamManagerGroup1() {
       );
       final provider = _MockProvider([
         [AIStreamEvent('部分回答')],
-      ])..errorAfterYield = networkFailure;
-      final manager = ChatStreamManager(container, retryDelay: (_) async {});
+      ])
+        ..errorAfterYield = networkFailure;
+      final manager = ChatStreamManager.withRetryPolicy(
+          ref: container, retryDelay: (_) async {});
       manager.adapter.forceService(_makeChatService(provider));
       final bubbles = <ChatMessage>[];
       manager.setContinuationHandler(
@@ -168,9 +171,10 @@ void chatStreamManagerGroup1() {
       final provider = _MockProvider([
         [],
         [AIStreamEvent('recovered')],
-      ])..errorsAfterCall[1] = networkFailure;
+      ])
+        ..errorsAfterCall[1] = networkFailure;
       final waits = <Duration>[];
-      final manager = ChatStreamManager(
+      final manager = ChatStreamManager.withRetryPolicy(
         retryDelay: (duration) async => waits.add(duration),
         transportRetryPolicy: const TransportRetryPolicy(jitter: false),
       );
@@ -205,8 +209,10 @@ void chatStreamManagerGroup1() {
       );
       final provider = _MockProvider([
         [AIStreamEvent('partial reasoning', isReasoning: true)],
-      ])..errorAfterYield = networkFailure;
-      final manager = ChatStreamManager(retryDelay: (_) async {});
+      ])
+        ..errorAfterYield = networkFailure;
+      final manager =
+          ChatStreamManager.withRetryPolicy(retryDelay: (_) async {});
       manager.adapter.forceService(_makeChatService(provider));
       var bubbleCount = 0;
       manager.setContinuationHandler('conv-visible-reasoning', (_) async {
@@ -241,7 +247,7 @@ void chatStreamManagerGroup1() {
       }
       final waits = <Duration>[];
       final bubbles = <ChatMessage>[];
-      final manager = ChatStreamManager(
+      final manager = ChatStreamManager.withRetryPolicy(
         retryDelay: (duration) async => waits.add(duration),
         transportRetryPolicy: const TransportRetryPolicy(jitter: false),
       );
@@ -273,12 +279,12 @@ void chatStreamManagerGroup1() {
       );
       final provider = _MockProvider([
         [AIStreamEvent('partial')],
-      ])..errorAfterYield = networkFailure;
+      ])
+        ..errorAfterYield = networkFailure;
       final delayStarted = Completer<void>();
-      final releaseDelay = Completer<void>();
-      final manager = ChatStreamManager(retryDelay: (_) async {
+      final manager = ChatStreamManager.withRetryPolicy(retryDelay: (_) async {
         delayStarted.complete();
-        await releaseDelay.future;
+        await Completer<void>().future;
       });
       manager.adapter.forceService(_makeChatService(provider));
       var bubbleCount = 0;
@@ -294,7 +300,6 @@ void chatStreamManagerGroup1() {
       );
       await delayStarted.future;
       manager.cancel('conv-cancel-backoff');
-      releaseDelay.complete();
       await stream;
 
       expect(provider.callCount, 1);
@@ -317,8 +322,10 @@ void chatStreamManagerGroup1() {
             },
           ]),
         ],
-      ])..errorAfterYield = networkFailure;
-      final manager = ChatStreamManager(retryDelay: (_) async {});
+      ])
+        ..errorAfterYield = networkFailure;
+      final manager =
+          ChatStreamManager.withRetryPolicy(retryDelay: (_) async {});
       manager.adapter.forceService(_makeChatService(provider));
 
       await manager.startStreaming(
@@ -332,7 +339,8 @@ void chatStreamManagerGroup1() {
     });
 
     test('continuation handler survives stop followed by resend', () async {
-      final manager = ChatStreamManager(retryDelay: (_) async {});
+      final manager =
+          ChatStreamManager.withRetryPolicy(retryDelay: (_) async {});
       final firstStreamGate = Completer<void>();
       final firstCallStarted = Completer<void>();
       final networkFailure = DioException(
@@ -390,7 +398,8 @@ void chatStreamManagerGroup1() {
     });
 
     test('replays an undisplayed continuation to the restored page', () async {
-      final manager = ChatStreamManager(retryDelay: (_) async {});
+      final manager =
+          ChatStreamManager.withRetryPolicy(retryDelay: (_) async {});
       final firstCallStarted = Completer<void>();
       final secondCallStarted = Completer<void>();
       final secondCallGate = Completer<void>();

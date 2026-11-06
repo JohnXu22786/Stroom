@@ -68,6 +68,7 @@ Stream<T> retryRateLimitedStream<T>(
   Stream<T> Function() createStream, {
   RateLimitRetryPolicy policy = const RateLimitRetryPolicy(),
   Future<void> Function(Duration duration)? delay,
+  Future<void>? cancellation,
   bool Function()? isCancelled,
 }) async* {
   var retries = 0;
@@ -89,13 +90,44 @@ Stream<T> retryRateLimitedStream<T>(
       retries++;
       final retryAfter = _retryAfter(error, maximum: policy.maxRetryAfter);
       final backoff = policy.delayForRetry(retries);
-      final wait = retryAfter != null && retryAfter > backoff
-          ? retryAfter
-          : backoff;
-      await (delay?.call(wait) ?? Future<void>.delayed(wait));
+      final wait =
+          retryAfter != null && retryAfter > backoff ? retryAfter : backoff;
+      await waitForRetryOrCancellation(
+        wait,
+        delay: delay,
+        cancellation: cancellation,
+      );
       if (isCancelled?.call() == true) rethrow;
     }
   }
+}
+
+/// Waits for a retry delay, returning early when [cancellation] completes.
+/// The default timer is cancelled when possible; injected delays are raced
+/// against the cancellation signal for deterministic tests.
+Future<void> waitForRetryOrCancellation(
+  Duration duration, {
+  Future<void> Function(Duration duration)? delay,
+  Future<void>? cancellation,
+}) async {
+  if (cancellation == null) {
+    await (delay?.call(duration) ?? Future<void>.delayed(duration));
+    return;
+  }
+  if (delay != null) {
+    await Future.any<void>([delay(duration), cancellation]);
+    return;
+  }
+
+  final completed = Completer<void>();
+  final timer = Timer(duration, () {
+    if (!completed.isCompleted) completed.complete();
+  });
+  cancellation.then((_) {
+    if (!completed.isCompleted) completed.complete();
+  });
+  await completed.future;
+  timer.cancel();
 }
 
 bool _isRateLimit(Object error) {

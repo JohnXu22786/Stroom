@@ -23,8 +23,11 @@ import 'chat_protocol.dart' show rebuildToolResultText;
 import 'chat_service.dart' show ChatService;
 import 'context_manager.dart';
 import 'chat_retry_policy.dart'
-    show TransportRetryPolicy, isRetryableTransportFailure,
-        shouldAutoContinueStream;
+    show
+        TransportRetryPolicy,
+        isRetryableTransportFailure,
+        shouldAutoContinueStream,
+        waitForRetryOrCancellation;
 import '../l10n/app_localizations.dart' show appLocalizationsForLocale;
 
 // ============================================================================
@@ -108,11 +111,17 @@ class ChatStreamManager {
         hasAccumulatedToolCalls;
   }
 
-  ChatStreamManager(
-    [this._ref], {
+  ChatStreamManager([this._ref])
+      : _transportRetryPolicy = const TransportRetryPolicy(),
+        _retryDelay = null;
+
+  @visibleForTesting
+  ChatStreamManager.withRetryPolicy({
+    Ref? ref,
     TransportRetryPolicy transportRetryPolicy = const TransportRetryPolicy(),
-    @visibleForTesting Future<void> Function(Duration duration)? retryDelay,
-  })  : _transportRetryPolicy = transportRetryPolicy,
+    Future<void> Function(Duration duration)? retryDelay,
+  })  : _ref = ref,
+        _transportRetryPolicy = transportRetryPolicy,
         _retryDelay = retryDelay;
 
   // ── 公开 getter ──
@@ -563,7 +572,11 @@ class ChatStreamManager {
 
           transportRetries++;
           final wait = _transportRetryPolicy.delayForRetry(transportRetries);
-          await (_retryDelay?.call(wait) ?? Future<void>.delayed(wait));
+          await waitForRetryOrCancellation(
+            wait,
+            delay: _retryDelay,
+            cancellation: state.cancellationSignal.future,
+          );
           if (state.cancelledByUser) rethrow;
 
           if (hasPartialOutput) {
@@ -684,13 +697,13 @@ class ChatStreamManager {
     if (convId != null) {
       final state = _streams[convId];
       if (state == null) return;
-      state.cancelledByUser = true;
+      state.cancelByUser();
       // Cancel only this conversation's HTTP request.
       _adapter.cancelService(convId);
     } else {
       if (_streams.isEmpty) return;
       for (final s in _streams.values) {
-        s.cancelledByUser = true;
+        s.cancelByUser();
       }
       // Cancel all services.
       _adapter.cancelAllServices();
