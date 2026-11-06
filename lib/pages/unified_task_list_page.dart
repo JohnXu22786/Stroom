@@ -116,6 +116,9 @@ class _UnifiedTaskListPageState extends ConsumerState<UnifiedTaskListPage>
       return switch (error.message) {
         '任务流取消状态无法保存，请重试清除' => strings.unifiedTaskListCancellationSaveFailed,
         '任务流记录删除状态无法保存，请重试清除' => strings.unifiedTaskListRemovalSaveFailed,
+        '猫抓子任务删除状态无法保存，请重试' => strings.taskFlowCardCatCatchDeletePersistError,
+        '合成子任务删除状态无法保存，请重试' => strings.taskFlowCardSynthesisDeletePersistError,
+        '后台子任务删除状态无法保存，请重试' => strings.taskFlowCardBackgroundDeletePersistError,
         _ => error.toString(),
       };
     }

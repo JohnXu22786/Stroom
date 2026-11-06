@@ -742,7 +742,7 @@ void main() {
     expect(executions.durable.single.id, 'finished');
     expect(backgrounds.tasks, isEmpty);
     expect(backgrounds.durable, isEmpty);
-    expect(find.textContaining('记录删除状态无法保存'), findsOneWidget);
+    expect(find.textContaining('无法保存任务流记录的删除状态'), findsOneWidget);
 
     executions.removalPersistenceFails = false;
     await _clearAll(tester);
@@ -991,7 +991,7 @@ void main() {
     expect(executions.durable.map((e) => e.id),
         containsAll(['failed', 'completed', 'later']));
     expect(backgrounds.durable, isEmpty);
-    expect(find.textContaining('记录删除状态无法保存'), findsOneWidget);
+    expect(find.textContaining('无法保存任务流记录的删除状态'), findsOneWidget);
 
     final restoredExecutions = _Executions()
       ..load(List.of(executions.durable))
@@ -1236,6 +1236,73 @@ void main() {
     expect(backgrounds.durable, isEmpty);
     expect(executions.executions, isEmpty);
     expect(executions.durable, isEmpty);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('clear all localizes fixed child removal errors in English', (
+    tester,
+  ) async {
+    final executions = _Executions();
+    executions.load([
+      TaskFlowExecution(
+        id: 'finished',
+        flowId: 'f',
+        flowName: 'Finished',
+        status: FlowExecutionStatus.completed,
+        subTasks: [
+          FlowSubTask(
+            blockTypeKey: 'chat',
+            blockLabel: 'Child',
+            subTaskId: 'child',
+            subTaskType: 'background',
+            status: TaskStatus.completed,
+          ),
+        ],
+      ),
+    ]);
+    final backgrounds = _Backgrounds()
+      ..load([
+        BackgroundTask(
+          id: 'child',
+          type: BackgroundTaskType.chat,
+          title: 'Child',
+          status: TaskStatus.completed,
+        ),
+      ])
+      ..removalPersistenceFails = true;
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          taskFlowExecutionsProvider.overrideWith((ref) => executions),
+          backgroundTasksProvider.overrideWith((ref) => backgrounds),
+        ],
+        child: MaterialApp(
+          locale: const Locale('en', 'US'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          home: const UnifiedTaskListPage(),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(find.byType(PopupMenuButton<String>));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.tap(find.text('Clear all tasks'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.tap(find.widgetWithText(TextButton, 'Confirm'));
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(
+      find.textContaining(
+          'Could not save background child task deletion state.'),
+      findsOneWidget,
+    );
+    expect(executions.executions.single.id, 'finished');
+    expect(backgrounds.tasks.single.id, 'child');
+    expect(backgrounds.durable.single.id, 'child');
     await tester.pumpWidget(const SizedBox.shrink());
   });
 }
