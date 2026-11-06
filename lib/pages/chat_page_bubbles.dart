@@ -16,25 +16,25 @@ class _CachedStreamingMarkdown {
 
 class _StreamingSearchOccurrenceCount {
   String _query = '';
-  String _text = '';
+  int _textLength = 0;
   String _tail = '';
   int _count = 0;
   int _nextSearchIndex = 0;
   int _lowerTextLength = 0;
+  int _liveRawTextLength = 0;
   bool _canAppendIncrementally = false;
   bool _hasContextualLowercase = false;
-  List<String> _liveFragmentsSnapshot = const [];
 
   int countFor(String text, String lowerQuery) {
     if (_query != lowerQuery) _reset(lowerQuery);
     // Live text sections only append. Comparing lengths avoids rescanning the
     // growing prefix just to confirm that the new snapshot extends it.
-    if (identical(text, _text) || text.length == _text.length) return _count;
+    if (text.length == _textLength) return _count;
 
     if (_canAppendIncrementally &&
-        text.length > _text.length &&
+        text.length > _textLength &&
         lowerQuery.isNotEmpty) {
-      final appended = text.substring(_text.length);
+      final appended = text.substring(_textLength);
       if (appended.contains('`') ||
           appended.contains('~') ||
           appended.contains(r'$') ||
@@ -43,7 +43,7 @@ class _StreamingSearchOccurrenceCount {
         return _recount(text, lowerQuery);
       }
       _appendLowerText(appended.toLowerCase(), lowerQuery);
-      _text = text;
+      _textLength = text.length;
       return _count;
     }
 
@@ -52,31 +52,40 @@ class _StreamingSearchOccurrenceCount {
 
   int countLiveFragmentsFor(List<String> fragments, String lowerQuery) {
     if (_query != lowerQuery) _reset(lowerQuery);
-    if (_hasContextualLowercase ||
-        fragments.any((fragment) => fragment.contains('\u03A3'))) {
+    var liveTextLength = 0;
+    for (final fragment in fragments) {
+      liveTextLength += fragment.length;
+    }
+    if (liveTextLength < _liveRawTextLength) _reset(lowerQuery);
+    if (_hasContextualLowercase) {
       final text = fragments.join();
       final count = _recount(text, lowerQuery);
       _hasContextualLowercase = true;
-      _liveFragmentsSnapshot = List<String>.of(fragments);
+      _liveRawTextLength = liveTextLength;
       return count;
     }
-    var samePrefix = _liveFragmentsSnapshot.length <= fragments.length;
-    for (var i = 0; samePrefix && i < _liveFragmentsSnapshot.length; i++) {
-      samePrefix = identical(_liveFragmentsSnapshot[i], fragments[i]);
-    }
-    if (!samePrefix) {
-      _count = 0;
-      _nextSearchIndex = 0;
-      _lowerTextLength = 0;
-      _tail = '';
-      _liveFragmentsSnapshot = const [];
-    }
-    if (lowerQuery.isNotEmpty) {
-      for (var i = _liveFragmentsSnapshot.length; i < fragments.length; i++) {
-        _appendLowerText(fragments[i].toLowerCase(), lowerQuery);
+
+    final appendedLength = liveTextLength - _liveRawTextLength;
+    if (appendedLength > 0 && lowerQuery.isNotEmpty) {
+      final appendedParts = <String>[];
+      var remaining = appendedLength;
+      for (var i = fragments.length - 1; i >= 0 && remaining > 0; i--) {
+        final fragment = fragments[i];
+        final take = fragment.length < remaining ? fragment.length : remaining;
+        appendedParts.add(fragment.substring(fragment.length - take));
+        remaining -= take;
       }
+      final appended = appendedParts.reversed.join();
+      if (appended.contains('\u03A3')) {
+        final text = fragments.join();
+        final count = _recount(text, lowerQuery);
+        _hasContextualLowercase = true;
+        _liveRawTextLength = liveTextLength;
+        return count;
+      }
+      _appendLowerText(appended.toLowerCase(), lowerQuery);
     }
-    _liveFragmentsSnapshot = List<String>.of(fragments);
+    _liveRawTextLength = liveTextLength;
     return _count;
   }
 
@@ -104,7 +113,7 @@ class _StreamingSearchOccurrenceCount {
         start = _nextSearchIndex;
       }
     }
-    _text = text;
+    _textLength = text.length;
     _canAppendIncrementally = isPlainText &&
         lowerQuery.isNotEmpty &&
         !_hasContextualLowercase;
@@ -142,14 +151,14 @@ class _StreamingSearchOccurrenceCount {
 
   void _reset(String lowerQuery) {
     _query = lowerQuery;
-    _text = '';
+    _textLength = 0;
     _tail = '';
     _count = 0;
     _nextSearchIndex = 0;
     _lowerTextLength = 0;
+    _liveRawTextLength = 0;
     _canAppendIncrementally = false;
     _hasContextualLowercase = false;
-    _liveFragmentsSnapshot = const [];
   }
 }
 
