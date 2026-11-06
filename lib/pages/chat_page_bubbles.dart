@@ -24,6 +24,15 @@ class _StreamingSearchOccurrenceCount {
   int _liveRawTextLength = 0;
   bool _canAppendIncrementally = false;
   bool _hasContextualLowercase = false;
+  String? _unfinishedFenceChar;
+  int _unfinishedFenceLength = 0;
+  int _fenceLineStage = 0;
+  int _fenceLineLeadingSpaces = 0;
+  int _fenceLinePostQuoteSpaces = 0;
+  int _fenceLineRunLength = 0;
+  bool _fenceLineQuoteSpaceConsumed = false;
+  bool _fencePreviousRawWasCr = false;
+  bool _textEndsWithCr = false;
 
   int countFor(String text, String lowerQuery) {
     if (_query != lowerQuery) _reset(lowerQuery);
@@ -31,19 +40,37 @@ class _StreamingSearchOccurrenceCount {
     // growing prefix just to confirm that the new snapshot extends it.
     if (text.length == _textLength) return _count;
 
+    if (_unfinishedFenceChar != null &&
+        text.length > _textLength &&
+        lowerQuery.isNotEmpty &&
+        !_hasContextualLowercase) {
+      if (_scanUnfinishedFence(text.substring(_textLength))) {
+        _textLength = text.length;
+        return _count;
+      }
+      // A closing fence changes the searchable text. Recount once at that
+      // boundary; subsequent appends use the normal path.
+      return _recount(text, lowerQuery);
+    }
+
     if (_canAppendIncrementally &&
         text.length > _textLength &&
         lowerQuery.isNotEmpty) {
-      final appended = text.substring(_textLength);
+      var appended = text.substring(_textLength);
+      if (_textEndsWithCr && appended.startsWith('\n')) {
+        appended = appended.substring(1);
+      }
       if (appended.contains('`') ||
           appended.contains('~') ||
           appended.contains(r'$') ||
-          appended.contains('\r') ||
           appended.contains('\u03A3')) {
         return _recount(text, lowerQuery);
       }
-      _appendLowerText(appended.toLowerCase(), lowerQuery);
+      final normalizedAppended =
+          appended.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+      _appendLowerText(normalizedAppended.toLowerCase(), lowerQuery);
       _textLength = text.length;
+      _textEndsWithCr = text.endsWith('\r');
       return _count;
     }
 
@@ -90,38 +117,35 @@ class _StreamingSearchOccurrenceCount {
   }
 
   int _recount(String text, String lowerQuery) {
-    final isPlainText = !text.contains('`') &&
-        !text.contains('~') &&
-        !text.contains(r'$') &&
-        !text.contains('\r');
     _hasContextualLowercase = text.contains('\u03A3');
-    _count = countOccurrences(
-      stripSearchIrrelevantMarkdown(text),
-      lowerQuery,
-    );
+    final searchableText = stripSearchIrrelevantMarkdown(text);
+    final lowerSearchableText = searchableText.toLowerCase();
+    _count = countOccurrences(searchableText, lowerQuery);
     _nextSearchIndex = 0;
-    _lowerTextLength = 0;
+    _lowerTextLength = lowerSearchableText.length;
     _tail = '';
-    if (isPlainText && lowerQuery.isNotEmpty) {
-      final lowerText = text.toLowerCase();
-      _lowerTextLength = lowerText.length;
+    if (lowerQuery.isNotEmpty) {
       var start = 0;
       while (true) {
-        final index = lowerText.indexOf(lowerQuery, start);
+        final index = lowerSearchableText.indexOf(lowerQuery, start);
         if (index == -1) break;
         _nextSearchIndex = index + lowerQuery.length;
         start = _nextSearchIndex;
       }
     }
     _textLength = text.length;
-    _canAppendIncrementally =
-        isPlainText && lowerQuery.isNotEmpty && !_hasContextualLowercase;
+    _textEndsWithCr = text.endsWith('\r');
+    _setUnfinishedFenceState(text);
+    _canAppendIncrementally = lowerQuery.isNotEmpty &&
+        !_hasContextualLowercase &&
+        _unfinishedFenceChar == null;
     if (_canAppendIncrementally && lowerQuery.length > 1) {
-      final lowerText = text.toLowerCase();
       final tailLength = lowerQuery.length - 1;
-      _tail = lowerText.length <= tailLength
-          ? lowerText
-          : lowerText.substring(lowerText.length - tailLength);
+      _tail = lowerSearchableText.length <= tailLength
+          ? lowerSearchableText
+          : lowerSearchableText.substring(
+              lowerSearchableText.length - tailLength,
+            );
     }
     return _count;
   }
@@ -156,6 +180,189 @@ class _StreamingSearchOccurrenceCount {
     _liveRawTextLength = 0;
     _canAppendIncrementally = false;
     _hasContextualLowercase = false;
+    _unfinishedFenceChar = null;
+    _unfinishedFenceLength = 0;
+    _resetFenceLineState();
+    _fencePreviousRawWasCr = false;
+    _textEndsWithCr = false;
+  }
+
+  void _setUnfinishedFenceState(String text) {
+    final normalized = text.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+    var inFence = false;
+    String? fenceChar;
+    var fenceLength = 0;
+    final lines = normalized.split('\n');
+    var trailingLineIsFenceContent = false;
+    for (final line in lines) {
+      trailingLineIsFenceContent = inFence;
+      final withoutQuote = _stripFenceBlockquote(line.trimRight());
+      if (inFence) {
+        if (_isFenceClosingLine(withoutQuote, fenceChar!, fenceLength)) {
+          inFence = false;
+          fenceChar = null;
+          fenceLength = 0;
+        }
+      } else {
+        final opening = _findFenceOpening(withoutQuote);
+        if (opening != null) {
+          inFence = true;
+          fenceChar = opening.$1;
+          fenceLength = opening.$2;
+        }
+      }
+    }
+    _unfinishedFenceChar = inFence ? fenceChar : null;
+    _unfinishedFenceLength = inFence ? fenceLength : 0;
+    _resetFenceLineState();
+    if (inFence && trailingLineIsFenceContent) {
+      final trailingLine = normalized.substring(
+        normalized.lastIndexOf('\n') + 1,
+      );
+      for (final char in trailingLine.split('')) {
+        _trackFenceLineChar(char);
+      }
+    }
+    _fencePreviousRawWasCr = text.endsWith('\r');
+  }
+
+  /// Scans only newly received characters while an unterminated fence is
+  /// active. The markdown stripper emits the same single trailing blank line
+  /// regardless of how much more fence content arrives, so its searchable
+  /// output and count remain unchanged until a closing fence appears.
+  bool _scanUnfinishedFence(String appended) {
+    final fenceLength = _unfinishedFenceLength;
+    for (final char in appended.split('')) {
+      if (_fencePreviousRawWasCr && char == '\n') {
+        _fencePreviousRawWasCr = false;
+        continue;
+      }
+      _fencePreviousRawWasCr = false;
+      if (char == '\r') {
+        if (_isFenceLineClosingCandidate(fenceLength)) {
+          _unfinishedFenceChar = null;
+          _unfinishedFenceLength = 0;
+          _resetFenceLineState();
+          return false;
+        }
+        _resetFenceLineState();
+        _fencePreviousRawWasCr = true;
+      } else if (char == '\n') {
+        if (_isFenceLineClosingCandidate(fenceLength)) {
+          _unfinishedFenceChar = null;
+          _unfinishedFenceLength = 0;
+          _resetFenceLineState();
+          return false;
+        }
+        _resetFenceLineState();
+      } else {
+        _trackFenceLineChar(char);
+      }
+    }
+    if (_isFenceLineClosingCandidate(fenceLength)) {
+      _unfinishedFenceChar = null;
+      _unfinishedFenceLength = 0;
+      _resetFenceLineState();
+      return false;
+    }
+    return true;
+  }
+
+  void _resetFenceLineState() {
+    _fenceLineStage = 0;
+    _fenceLineLeadingSpaces = 0;
+    _fenceLinePostQuoteSpaces = 0;
+    _fenceLineRunLength = 0;
+    _fenceLineQuoteSpaceConsumed = false;
+  }
+
+  void _trackFenceLineChar(String char) {
+    final fenceChar = _unfinishedFenceChar!;
+    if (_fenceLineStage == 4) return;
+    if (_fenceLineStage == 0) {
+      if (char == ' ' && _fenceLineLeadingSpaces < 3) {
+        _fenceLineLeadingSpaces++;
+      } else if (char == '>') {
+        _fenceLineStage = 1;
+      } else if (char == fenceChar) {
+        _fenceLineStage = 2;
+        _fenceLineRunLength = 1;
+      } else {
+        _fenceLineStage = 4;
+      }
+      return;
+    }
+    if (_fenceLineStage == 1) {
+      if (char == ' ' && !_fenceLineQuoteSpaceConsumed) {
+        _fenceLineQuoteSpaceConsumed = true;
+      } else if (char == ' ' && _fenceLinePostQuoteSpaces < 3) {
+        _fenceLinePostQuoteSpaces++;
+      } else if (char == fenceChar) {
+        _fenceLineStage = 2;
+        _fenceLineRunLength = 1;
+      } else {
+        _fenceLineStage = 4;
+      }
+      return;
+    }
+    if (_fenceLineStage == 2) {
+      if (char == fenceChar) {
+        _fenceLineRunLength++;
+      } else if (_fenceLineRunLength >= _unfinishedFenceLength &&
+          char.trim().isEmpty) {
+        _fenceLineStage = 3;
+      } else {
+        _fenceLineStage = 4;
+      }
+      return;
+    }
+    if (char.trim().isNotEmpty) _fenceLineStage = 4;
+  }
+
+  bool _isFenceLineClosingCandidate(int fenceLength) =>
+      (_fenceLineStage == 2 || _fenceLineStage == 3) &&
+      _fenceLineRunLength >= fenceLength;
+
+  static String _stripFenceBlockquote(String line) {
+    var i = 0;
+    while (i < line.length && i < 3 && line[i] == ' ') {
+      i++;
+    }
+    if (i >= line.length || line[i] != '>') return line;
+    i++;
+    if (i < line.length && line[i] == ' ') i++;
+    return line.substring(i);
+  }
+
+  static (String, int)? _findFenceOpening(String line) {
+    var i = 0;
+    while (i < line.length && i < 3 && line[i] == ' ') {
+      i++;
+    }
+    if (i >= line.length || (line[i] != '`' && line[i] != '~')) return null;
+    final char = line[i];
+    var end = i;
+    while (end < line.length && line[end] == char) {
+      end++;
+    }
+    if (end - i < 3 || (char == '`' && line.substring(end).contains('`'))) {
+      return null;
+    }
+    return (char, end - i);
+  }
+
+  static bool _isFenceClosingLine(String line, String char, int length) {
+    var i = 0;
+    while (i < line.length && i < 3 && line[i] == ' ') {
+      i++;
+    }
+    final trimmed = line.substring(i).trimRight();
+    if (trimmed.isEmpty || trimmed[0] != char) return false;
+    var run = 0;
+    while (run < trimmed.length && trimmed[run] == char) {
+      run++;
+    }
+    return run >= length && trimmed.substring(run).trim().isEmpty;
   }
 }
 
