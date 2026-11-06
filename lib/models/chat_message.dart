@@ -483,12 +483,13 @@ class ChatMessage {
     return {
       'id': id,
       'role': role,
-      if (!_matchesJoinedSections(
-        textSections,
-        content,
-        skipEmptySections:
-            toolCallRoundStarts == null || toolCallRoundStarts!.isEmpty,
-      ))
+      if (!(content.isEmpty && (textSections?.isNotEmpty ?? false)) &&
+          !_matchesJoinedSections(
+            textSections,
+            content,
+            skipEmptySections:
+                toolCallRoundStarts == null || toolCallRoundStarts!.isEmpty,
+          ))
         'content': content,
       'createdAt': createdAt.toIso8601String(),
       'attachments': attachments.map((a) => a.toMap()).toList(),
