@@ -1043,8 +1043,8 @@ void main() {
     });
     expect(applied['accountOwnedConfig'], 'preserved');
 
-    final switched = findLlmOpenAiProviderPreset('speka')!
-        .applyToEndpointConfig(applied);
+    final switched =
+        findLlmOpenAiProviderPreset('speka')!.applyToEndpointConfig(applied);
     expect(switched['providerPresetId'], 'speka');
     expect(switched['headers'], {'X-Workspace': 'saved'});
     final custom = LlmProviderPreset.clearFromEndpointConfig(applied);
