@@ -4,6 +4,41 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/utils/ocr_diagnostics.dart';
 
 void main() {
+  test('nested request body credentials exclude echoed request IDs', () {
+    const credential = 'opaque-secret-77';
+    const nestedCredential = 'nested-token-secret-77';
+    const safeRequestId = 'req-safe-nested-credentials-77';
+    final excludedValues = OcrDiagnosticSnapshot.credentialValuesFromRequest({
+      'body': {
+        'credentials': {
+          'value': credential,
+          'nested': [
+            {'access_token': nestedCredential},
+          ],
+        },
+      },
+    });
+    final echoedResponse = OcrDiagnosticSnapshot.sanitizeResponse(
+      {'statusCode': 401, 'requestId': credential},
+      excludedValues: excludedValues,
+    )!;
+    final safeResponse = OcrDiagnosticSnapshot.sanitizeResponse(
+      {'statusCode': 429, 'requestId': safeRequestId},
+      excludedValues: excludedValues,
+    )!;
+
+    expect(excludedValues, containsAll([credential, nestedCredential]));
+    expect(echoedResponse, {'statusCode': 401});
+    expect(safeResponse, {
+      'statusCode': 429,
+      'requestId': safeRequestId,
+    });
+    expect(jsonEncode([echoedResponse, safeResponse]),
+        isNot(contains(credential)));
+    expect(jsonEncode([echoedResponse, safeResponse]),
+        isNot(contains(nestedCredential)));
+  });
+
   test('long body credentials exclude echoed request ID prefixes', () {
     final credential = List.filled(700, 'x').join();
     final echoedPrefix = credential.substring(0, 120);
