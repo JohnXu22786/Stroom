@@ -807,9 +807,8 @@ _MermaidFenceInfo _unclosedFenceInfo(
       (resume == null
           ? text.replaceAll('\r\n', '\n').replaceAll('\r', '\n')
           : resumeText!);
-  final normalizedLength = resume == null
-      ? normalized.length
-      : resume.offset + normalized.length;
+  final normalizedLength =
+      resume == null ? normalized.length : resume.offset + normalized.length;
   final lines = normalized.split('\n');
   var inFence = resume?.inFence ?? false;
   String? fenceChar = resume?.fenceChar;
@@ -1099,11 +1098,10 @@ _MermaidFenceInfo _unclosedFenceInfo(
                   : null
       : null;
   final tail = includeTail ? normalizedTail : null;
-  final normalizedTailSource = shouldCacheTail &&
-          !needsContainerTransform &&
-          normalizedTail != null
-      ? _SegmentedText(normalizedTail)
-      : null;
+  final normalizedTailSource =
+      shouldCacheTail && !needsContainerTransform && normalizedTail != null
+          ? _SegmentedText(normalizedTail)
+          : null;
   final normalizedContainerTailSource =
       shouldCacheTail && needsContainerTransform && normalizedTail != null
           ? _NormalizedContainerTailSource(
@@ -1125,13 +1123,7 @@ _MermaidFenceInfo _unclosedFenceInfo(
     mermaidFenceIndex: openMermaidFenceIndex,
     mermaidFenceCount: mermaidFenceCount,
     tailStart: tailStart,
-    tailSourceStart: shouldCacheTail &&
-            needsContainerTransform &&
-            normalizedTail != null
-        ? (normalizedTail.isEmpty
-            ? text.length
-            : _sourceOffsetForNormalizedOffset(text, tailStart))
-        : 0,
+    tailSourceStart: 0,
     fenceChar: fenceChar,
     fenceLength: fenceLength,
     fenceQuoteDepth: fenceQuoteDepth,
@@ -1146,23 +1138,6 @@ _MermaidFenceInfo _unclosedFenceInfo(
     scanCheckpoint: scanCheckpoint,
     pendingLine: _SegmentedText(lines.last),
   );
-}
-
-int _sourceOffsetForNormalizedOffset(String text, int normalizedOffset) {
-  var sourceOffset = 0;
-  var currentNormalizedOffset = 0;
-  while (sourceOffset < text.length &&
-      currentNormalizedOffset < normalizedOffset) {
-    if (text.codeUnitAt(sourceOffset) == 0x0d &&
-        sourceOffset + 1 < text.length &&
-        text.codeUnitAt(sourceOffset + 1) == 0x0a) {
-      sourceOffset += 2;
-    } else {
-      sourceOffset++;
-    }
-    currentNormalizedOffset++;
-  }
-  return sourceOffset;
 }
 
 /// Reuses parser state while an active streaming section grows.
@@ -1284,7 +1259,8 @@ class StreamingFenceInfoCache {
   _MermaidFenceInfo _copyWithPendingLine(
     _MermaidFenceInfo info,
     String text,
-  ) => (
+  ) =>
+      (
         tail: info.tail,
         tailSource: info.tailSource == null ? null : text,
         normalizedTailSource: info.normalizedTailSource,
@@ -1313,9 +1289,8 @@ class StreamingFenceInfoCache {
 
   static String _suffixAfterAppend(String suffix, String appended) {
     final newline = appended.lastIndexOf('\n');
-    final currentLine = newline == -1
-        ? '$suffix$appended'
-        : appended.substring(newline + 1);
+    final currentLine =
+        newline == -1 ? '$suffix$appended' : appended.substring(newline + 1);
     return currentLine.length <= 2
         ? currentLine
         : currentLine.substring(currentLine.length - 2);
