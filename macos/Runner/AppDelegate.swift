@@ -78,6 +78,11 @@ enum ZedKeychainBridge {
   private static func discover() throws -> [[String: String]] {
     var candidates: [[String: String]] = []
     for (service, provider) in providerByService {
+      // Keep SecItem on macOS's default file-based login Keychain. Zed's
+      // keytar-compatible generic-password entries use this store; its per-item
+      // ACL can ask the user to allow another signed app to read a selected key.
+      // Do not opt into the Data Protection Keychain, whose access groups are
+      // restricted by the app's signing entitlements and aren't shared with Zed.
       var query: [String: Any] = [
         kSecClass as String: kSecClassGenericPassword,
         kSecAttrService as String: service,
