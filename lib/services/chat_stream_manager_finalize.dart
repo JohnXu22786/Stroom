@@ -160,6 +160,7 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
         final msg = ChatMessage(
           role: 'assistant',
           content: fullReply,
+          contentFromTextSections: true,
           id: state.streamingMsgId ?? '',
           isError: isError,
           rawRequest: rawRequestCapture,
