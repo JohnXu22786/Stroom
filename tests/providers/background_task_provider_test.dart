@@ -15432,8 +15432,7 @@ void main() {
       () {
         const credentialEcho = 'accommodQm9x7Lk2Vp6';
         const safeInstruction = 'Please accommodate the requested crop';
-        const instruction =
-            '$safeInstruction. Please use $credentialEcho '
+        const instruction = '$safeInstruction. Please use $credentialEcho '
             'to process the receipt.';
         final task = BackgroundTask.fromMap({
           'id': 'legacy-ocr-accommod-key-echo-next-to-safe-instruction',
