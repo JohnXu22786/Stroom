@@ -142,7 +142,9 @@ void main() {
       expect(preset.authType, 'api_key');
       expect(preset.authorizationHeader, 'Authorization');
       expect(preset.authorizationScheme, 'Bearer');
-      expect(preset.defaultApiProtocol, 'openai.chat_completions');
+      if (preset.id != 'agentrouter') {
+        expect(preset.defaultApiProtocol, 'openai.chat_completions');
+      }
     }
   });
 
@@ -188,7 +190,9 @@ void main() {
       expect(preset.authorizationScheme, entry.value.$3, reason: entry.key);
       expect(preset.headers, entry.value.$4, reason: entry.key);
       expect(preset.modelsUrl, entry.value.$5, reason: entry.key);
-      expect(preset.defaultApiProtocol, 'openai.chat_completions');
+      if (preset.id != 'agentrouter') {
+        expect(preset.defaultApiProtocol, 'openai.chat_completions');
+      }
 
       final config = preset.applyToEndpointConfig(const {
         'userSetting': 'preserved',
@@ -646,7 +650,9 @@ void main() {
       expect(preset.authType, 'api_key', reason: entry.key);
       expect(preset.authorizationHeader, 'Authorization', reason: entry.key);
       expect(preset.authorizationScheme, 'Bearer', reason: entry.key);
-      expect(preset.defaultApiProtocol, 'openai.chat_completions');
+      if (preset.id != 'agentrouter') {
+        expect(preset.defaultApiProtocol, 'openai.chat_completions');
+      }
     }
     expect({
       for (final id in ['onomeo', 'openadapter', 'opper', 'poixe-ai'])
@@ -851,7 +857,9 @@ void main() {
       expect(preset.authType, 'api_key', reason: entry.key);
       expect(preset.authorizationHeader, 'Authorization', reason: entry.key);
       expect(preset.authorizationScheme, 'Bearer', reason: entry.key);
-      expect(preset.defaultApiProtocol, 'openai.chat_completions');
+      if (preset.id != 'agentrouter') {
+        expect(preset.defaultApiProtocol, 'openai.chat_completions');
+      }
     }
     expect(
       {
@@ -1288,7 +1296,9 @@ void main() {
       expect(preset.authType, 'api_key', reason: entry.key);
       expect(preset.authorizationHeader, 'Authorization', reason: entry.key);
       expect(preset.authorizationScheme, 'Bearer', reason: entry.key);
-      expect(preset.defaultApiProtocol, 'openai.chat_completions');
+      if (preset.id != 'agentrouter') {
+        expect(preset.defaultApiProtocol, 'openai.chat_completions');
+      }
     }
     expect(
       {
@@ -1336,6 +1346,7 @@ void main() {
 
   test('the source-backed presets retain their endpoint and auth metadata', () {
     expect(llmOpenAiProviderPresets.map((preset) => preset.id), [
+      'agentrouter',
       'g4f-gemini',
       'g4f-groq',
       'g4f-nvidia',
@@ -1494,14 +1505,20 @@ void main() {
     for (final preset in llmOpenAiProviderPresets) {
       expect(preset.baseUrl, startsWith('https://'));
       expect(preset.authType, 'api_key');
-      if (const {'pioneer', 'uc-direct'}.contains(preset.id)) {
+      if (preset.id == 'agentrouter') {
+        expect(preset.authorizationHeader, 'x-api-key', reason: preset.id);
+        expect(preset.authorizationScheme, isEmpty, reason: preset.id);
+        expect(preset.defaultApiProtocol, 'anthropic.messages');
+      } else if (const {'pioneer', 'uc-direct'}.contains(preset.id)) {
         expect(preset.authorizationHeader, 'X-API-Key', reason: preset.id);
         expect(preset.authorizationScheme, isEmpty, reason: preset.id);
       } else {
         expect(preset.authorizationHeader, 'Authorization', reason: preset.id);
         expect(preset.authorizationScheme, 'Bearer', reason: preset.id);
       }
-      expect(preset.defaultApiProtocol, 'openai.chat_completions');
+      if (preset.id != 'agentrouter') {
+        expect(preset.defaultApiProtocol, 'openai.chat_completions');
+      }
     }
     expect(
       {
@@ -1509,6 +1526,7 @@ void main() {
           preset.id: preset.baseUrl,
       },
       {
+        'agentrouter': 'https://agentrouter.org/v1/messages',
         'g4f-gemini': 'https://g4f.space/api/gemini/v1/chat/completions',
         'g4f-groq': 'https://g4f.space/api/groq/v1/chat/completions',
         'g4f-nvidia': 'https://g4f.space/api/nvidia/v1/chat/completions',
@@ -2096,7 +2114,9 @@ void main() {
       expect(preset.authType, 'api_key');
       expect(preset.authorizationHeader, 'Authorization');
       expect(preset.authorizationScheme, 'Bearer');
-      expect(preset.defaultApiProtocol, 'openai.chat_completions');
+      if (preset.id != 'agentrouter') {
+        expect(preset.defaultApiProtocol, 'openai.chat_completions');
+      }
       expect(preset.fallbackModels.map((model) => model.id), [
         'step-5-preview',
         'step-3.7-flash',
@@ -2299,7 +2319,9 @@ void main() {
       expect(preset.authType, 'api_key');
       expect(preset.authorizationHeader, 'Authorization');
       expect(preset.authorizationScheme, 'Bearer');
-      expect(preset.defaultApiProtocol, 'openai.chat_completions');
+      if (preset.id != 'agentrouter') {
+        expect(preset.defaultApiProtocol, 'openai.chat_completions');
+      }
     }
     expect(
       findLlmOpenAiProviderPreset('freeaiapikey')!
@@ -3684,7 +3706,9 @@ void main() {
       expect(preset.authType, 'api_key', reason: entry.key);
       expect(preset.authorizationHeader, 'Authorization', reason: entry.key);
       expect(preset.authorizationScheme, 'Bearer', reason: entry.key);
-      expect(preset.defaultApiProtocol, 'openai.chat_completions');
+      if (preset.id != 'agentrouter') {
+        expect(preset.defaultApiProtocol, 'openai.chat_completions');
+      }
     }
     expect(
       {
@@ -3932,7 +3956,9 @@ void main() {
       expect(preset.authType, 'api_key', reason: entry.key);
       expect(preset.authorizationHeader, 'Authorization', reason: entry.key);
       expect(preset.authorizationScheme, 'Bearer', reason: entry.key);
-      expect(preset.defaultApiProtocol, 'openai.chat_completions');
+      if (preset.id != 'agentrouter') {
+        expect(preset.defaultApiProtocol, 'openai.chat_completions');
+      }
     }
     expect({
       for (final id in [
@@ -4211,7 +4237,9 @@ void main() {
       expect(preset.authType, 'api_key', reason: entry.key);
       expect(preset.authorizationHeader, 'Authorization', reason: entry.key);
       expect(preset.authorizationScheme, 'Bearer', reason: entry.key);
-      expect(preset.defaultApiProtocol, 'openai.chat_completions');
+      if (preset.id != 'agentrouter') {
+        expect(preset.defaultApiProtocol, 'openai.chat_completions');
+      }
     }
     expect(findLlmOpenAiProviderPreset('watsonx'), isNull);
     expect(findLlmOpenAiProviderPreset('x5lab'), isNull);

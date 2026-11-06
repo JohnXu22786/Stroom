@@ -449,7 +449,9 @@ class LlmConnectorHttpClient {
                   : storedAccount.connectorType == 'bedrock'
                       ? useBedrockEventStream
                       : stream,
-          nativeFormat: effectiveNativeFormat,
+          nativeFormat: useAgentRouterClaudeProfile
+              ? effectiveNativeFormat
+              : nativeFormat,
           agentRouterClaudeVersion: agentRouterVersion,
         );
       } on LlmConnectorHttpException {
