@@ -1192,9 +1192,15 @@ class StreamingFenceInfoCache {
     final normalizedAppended =
         appended.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
     final checkpoint = cached.scanCheckpoint!;
+    final canReuseFenceState = cached.fenceChar == null ||
+        (checkpoint.inFence &&
+            cached.fenceQuoteDepth == 0 &&
+            cached.fenceListIndent == 0 &&
+            cached.fenceInnerQuoteDepth == 0);
     if (!_mayContainFenceMarker('$_markerSuffix$normalizedAppended') &&
+        !normalizedAppended.contains('\n') &&
         !cached.trailingLineClosedFence &&
-        (cached.fenceChar == null || checkpoint.inFence)) {
+        canReuseFenceState) {
       cached.pendingLine.append(normalizedAppended);
       if (cached.fenceChar != null && cached.hasUnfencedIndentedCode) {
         cached.normalizedTailSource?.append(normalizedAppended);
@@ -1307,7 +1313,9 @@ class StreamingFenceInfoCache {
 
   static String _suffixAfterAppend(String suffix, String appended) {
     final newline = appended.lastIndexOf('\n');
-    final currentLine = newline == -1 ? '$suffix$appended' : appended.substring(newline + 1);
+    final currentLine = newline == -1
+        ? '$suffix$appended'
+        : appended.substring(newline + 1);
     return currentLine.length <= 2
         ? currentLine
         : currentLine.substring(currentLine.length - 2);
