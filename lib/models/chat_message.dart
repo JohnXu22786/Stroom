@@ -200,10 +200,7 @@ class ChatMessage {
     this.blocks,
     bool contentFromTextSections = false,
   })  : id = id ?? const Uuid().v4(),
-        _content = contentFromTextSections &&
-                _matchesJoinedSections(textSections, content)
-            ? null
-            : content,
+        _content = contentFromTextSections ? null : content,
         createdAt = createdAt ?? DateTime.now(),
         attachments = attachments ?? [];
 
@@ -623,15 +620,19 @@ class ChatMessage {
       if (textSections.isEmpty) textSections = null;
     }
 
+    final rawContent = map['content'];
+    final content = rawContent is String ? rawContent : '';
+    final contentFromTextSections = rawContent is String
+        ? _matchesJoinedSections(textSections, content)
+        : textSections != null;
+
     return ChatMessage(
       id: map['id'] is String ? map['id'] as String : null,
       role: roleStr,
       // 防御：content 非 String（损坏数据）时回退空串，
       // 不抛 TypeError 丢弃整条消息（与其他字段防御风格一致）
-      content: map['content'] is String
-          ? map['content'] as String
-          : (textSections?.join() ?? ''),
-      contentFromTextSections: true,
+      content: content,
+      contentFromTextSections: contentFromTextSections,
       createdAt: createdAt,
       attachments: attachments,
       isStreaming: map['isStreaming'] is bool ? map['isStreaming'] : false,
@@ -684,8 +685,10 @@ class ChatMessage {
       ChatMessage(
         id: id,
         role: role ?? this.role,
-        content: content ?? this.content,
-        contentFromTextSections: _content == null && content == null,
+        content: content ??
+            (_content == null && textSections == null ? '' : this.content),
+        contentFromTextSections:
+            _content == null && content == null && textSections == null,
         createdAt: createdAt ?? this.createdAt,
         attachments: attachments ?? this.attachments,
         isStreaming: isStreaming ?? this.isStreaming,
