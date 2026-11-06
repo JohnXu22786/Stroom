@@ -824,7 +824,7 @@ class ChatAdapter {
     ProviderEntriesState? entriesState,
     void Function()? onToolCallIntent,
     void Function(String text)? onTextDelta,
-    String Function()? takeCompletedToolCallRound,
+    String? Function()? takeCompletedToolCallRound,
   }) {
     final svc = convId.isNotEmpty
         ? getOrCreateService(convId,

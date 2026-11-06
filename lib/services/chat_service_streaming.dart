@@ -140,7 +140,7 @@ extension ChatServiceStreamingExt on ChatService {
     List<ToolDefinition> tools = const [],
     void Function()? onToolCallIntent,
     void Function(String text)? onTextDelta,
-    String Function()? takeCompletedToolCallRound,
+    String? Function()? takeCompletedToolCallRound,
   }) {
     AppLogService.info(
         'ChatService', 'sendStreamWithTools 开始: ${userMessage.length} 字符');
