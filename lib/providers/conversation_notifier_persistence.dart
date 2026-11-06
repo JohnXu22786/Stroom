@@ -375,6 +375,8 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
               createdAt: c.createdAt,
               updatedAt: c.updatedAt,
               messages: c.messages
+                  // Preserve section-backed content while dropping the large
+                  // request/response snapshots that made the full save fail.
                   .map((m) => m.copyWith(stripRawData: true))
                   .toList(),
               isPinned: c.isPinned,

@@ -697,10 +697,8 @@ class ChatMessage {
       ChatMessage(
         id: id,
         role: role ?? this.role,
-        content: content ??
-            (_content == null && textSections == null ? '' : this.content),
-        contentFromTextSections:
-            _content == null && content == null && textSections == null,
+        content: content ?? (_content == null ? '' : this.content),
+        contentFromTextSections: _content == null && content == null,
         createdAt: createdAt ?? this.createdAt,
         attachments: attachments ?? this.attachments,
         isStreaming: isStreaming ?? this.isStreaming,
