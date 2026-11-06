@@ -114,9 +114,8 @@ class _StreamingSearchOccurrenceCount {
       }
     }
     _textLength = text.length;
-    _canAppendIncrementally = isPlainText &&
-        lowerQuery.isNotEmpty &&
-        !_hasContextualLowercase;
+    _canAppendIncrementally =
+        isPlainText && lowerQuery.isNotEmpty && !_hasContextualLowercase;
     if (_canAppendIncrementally && lowerQuery.length > 1) {
       final lowerText = text.toLowerCase();
       final tailLength = lowerQuery.length - 1;
@@ -130,9 +129,7 @@ class _StreamingSearchOccurrenceCount {
   void _appendLowerText(String appended, String lowerQuery) {
     final searchText = _tail + appended;
     final tailStart = _lowerTextLength - _tail.length;
-    var start = _nextSearchIndex > tailStart
-        ? _nextSearchIndex - tailStart
-        : 0;
+    var start = _nextSearchIndex > tailStart ? _nextSearchIndex - tailStart : 0;
     while (true) {
       final index = searchText.indexOf(lowerQuery, start);
       if (index == -1) break;
@@ -338,6 +335,8 @@ extension _ChatPageBubblesExt on _ChatPageState {
         ? 0
         : ref.read(streamingTextSectionsProvider(streamingConvId)).length;
     final mergedSegments = mergeConsecutiveTextSegments(segments);
+    final lastTextSegmentIndex =
+        mergedSegments.lastIndexWhere((segment) => segment is TextSegment);
     for (var segmentIndex = 0;
         segmentIndex < mergedSegments.length;
         segmentIndex++) {
@@ -345,7 +344,10 @@ extension _ChatPageBubblesExt on _ChatPageState {
       switch (seg) {
         case TextSegment s:
           if (s.liveTextFragments != null) {
-            if (hasSearchMatch) {
+            if (hasSearchMatch &&
+                !(isStreaming &&
+                    messageId == _streamingMsgId &&
+                    segmentIndex == lastTextSegmentIndex)) {
               final cacheKey = s.chunkIndex == null
                   ? '$messageId:live-segment:$segmentIndex'
                   : '$messageId:live-chunk:${s.chunkIndex}';
@@ -448,7 +450,12 @@ extension _ChatPageBubblesExt on _ChatPageState {
           if (hasSearchMatch) {
             final isActiveStreamingSearch =
                 isStreaming && messageId == _streamingMsgId;
-            if (isActiveStreamingSearch) {
+            if (isActiveStreamingSearch &&
+                segmentIndex == lastTextSegmentIndex) {
+              // The trailing text block cannot shift a later segment's
+              // highlight ordinal. Count it once after another text block
+              // arrives and seals it instead of recounting it while growing.
+            } else if (isActiveStreamingSearch) {
               final cacheKey = s.chunkIndex == null
                   ? '$messageId:segment:$segmentIndex'
                   : '$messageId:chunk:${s.chunkIndex}';
