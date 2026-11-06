@@ -527,6 +527,8 @@ class ChatStreamManager {
                 entriesState:
                     entriesStateOverride ?? _ref?.read(providerEntriesProvider),
                 onToolCallIntent: () => state.toolCallStarted = true,
+                onTextDelta: state.appendText,
+                takeCompletedToolCallRound: state.takeCompletedToolCallRound,
               );
 
     // Now safe to yield to event loop — all state is established and the

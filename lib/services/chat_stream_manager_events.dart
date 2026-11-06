@@ -11,7 +11,7 @@ extension _ChatStreamManagerEventsExt on ChatStreamManager {
           state.hasReceivedFirstToken = true;
           _pushToProvider(convId, streamingHasFirstTokenProvider, true);
         }
-        state.appendText(e.text);
+        if (!e.alreadyAccumulated) state.appendText(e.text);
         // 节流：最长200ms更新一次 provider
         final now = DateTime.now();
         if (now.difference(state.lastTextUpdate) >=
@@ -47,7 +47,29 @@ extension _ChatStreamManagerEventsExt on ChatStreamManager {
           }
         }
 
-      case ReasoningSectionEndEvent():
+      case ReasoningSectionEndEvent e:
+        // Drain the last visible text delta before sealing this round. The
+        // service waits for this event before building the tool-chain message
+        // or requesting the next round.
+        final pendingText = state.takeTextDelta();
+        if (pendingText.isNotEmpty) {
+          final hasMarkdownSyntax = state.currentChunkHasMarkdownSyntax;
+          if (hasMarkdownSyntax) {
+            _pushToProvider(
+                convId, streamingTextSectionsProvider, state.textChunks);
+          }
+          _pushToProvider(
+            convId,
+            streamingTextAppendProvider,
+            StreamingTextAppend(
+              sequence: state.nextTextUpdateSequence,
+              chunkIndex: state.currentTextChunkIndex,
+              text: pendingText,
+              hasMarkdownSyntax: hasMarkdownSyntax,
+            ),
+          );
+        }
+        state.startTextChunkFromService();
         // Preserve the sub-throttle tail before publishing the boundary.
         final append = state.takeReasoningAppend();
         if (append != null) {
@@ -67,6 +89,7 @@ extension _ChatStreamManagerEventsExt on ChatStreamManager {
         // bottom of the message by _buildWithRounds' trailing loop.
         state.pendingRoundStart = true;
         _pushToProvider(convId, streamingReasoningSectionsProvider, sections);
+        e.onDelivered?.call();
 
       case ToolCallStartEvent e:
         final toolCallData = ToolCallData(
@@ -89,10 +112,12 @@ extension _ChatStreamManagerEventsExt on ChatStreamManager {
         // Consecutive tool calls within the same assistant step (parallel
         // tools emitted in one response) don't satisfy any condition and
         // stay grouped in the same round.
-        if (state.pendingRoundStart ||
+        final serviceStartedTextChunk = state.takeServiceStartedTextChunk();
+        if (serviceStartedTextChunk ||
+            state.pendingRoundStart ||
             state.currentTextChunkIsNotEmpty ||
             state.textChunks.length == 1) {
-          state.startTextChunk();
+          if (!serviceStartedTextChunk) state.startTextChunk();
           // Record that this tool call starts a new round.
           state.toolCallRoundStarts.add(state.toolCalls.length - 1);
         }
