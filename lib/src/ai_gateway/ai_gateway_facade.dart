@@ -13,6 +13,7 @@ import '../../models/llm_account.dart';
 import '../../services/llm_account_migration_service.dart';
 import '../../services/llm_connector_service.dart';
 import '../../services/devin_cli_acp_service.dart';
+import '../../services/auggie_cli_service.dart';
 import '../../services/qoder_cli_service.dart';
 import '../../services/llm_connector_http_client.dart';
 import '../../services/llm_connector_model_catalog.dart';
@@ -74,6 +75,7 @@ class LlmChatRoutingRuntime implements AiGatewayFacade {
   @override
   final AiGatewayAccountManagement accountManagement;
   final DevinCliAcpService _devinCliAcp;
+  final AuggieCliService _auggieCli;
   final QoderCliService _qoderCli;
   @override
   late final AiGatewayLocalCliAuthentication localCliAuthentication =
@@ -99,6 +101,7 @@ class LlmChatRoutingRuntime implements AiGatewayFacade {
     _connectorClient,
     _devinCliAcp,
     _qoderCli,
+    _auggieCli,
   );
 
   LlmChatRoutingRuntime({
@@ -109,10 +112,12 @@ class LlmChatRoutingRuntime implements AiGatewayFacade {
     AiGatewayOAuthAuthorization? oauthAuthorization,
     DevinCliAcpService? devinCliAcpService,
     QoderCliService? qoderCliService,
+    AuggieCliService? auggieCliService,
   })  : _accountService = accountService,
         _oauthDio = oauthDio,
         _oauthAuthorizationOverride = oauthAuthorization,
         _devinCliAcp = devinCliAcpService ?? DevinCliAcpService(),
+        _auggieCli = auggieCliService ?? AuggieCliService(),
         _qoderCli = qoderCliService ??
             QoderCliService(readCredential: accountService.readCredential),
         accountManagement = _LlmGatewayAccountManagement(accountService),
@@ -2332,6 +2337,30 @@ class _LlmGatewayModelDiscovery implements AiGatewayModelDiscovery {
   const _LlmGatewayModelDiscovery(this._accounts);
 
   @override
+  Future<void> testConnection(AiGatewayAccount account) async {
+    if (account.connectorType != 'auggie' || account.authType != 'none') {
+      throw AiGatewayExecutionException(
+        kind: AiGatewayFailureKind.request,
+        code: 'unsupported_capability',
+      );
+    }
+    try {
+      await _accounts.testAuggieCliConnection(_legacyAccount(account));
+    } on AuggieCliException catch (error) {
+      throw AiGatewayExecutionException(
+        kind: error.code == 'desktop_only'
+            ? AiGatewayFailureKind.transportUnavailable
+            : AiGatewayFailureKind.request,
+        code: error.code,
+      );
+    } catch (_) {
+      throw AiGatewayExecutionException(
+        kind: AiGatewayFailureKind.transportUnavailable,
+      );
+    }
+  }
+
+  @override
   Future<List<AiGatewayUpstreamModel>> discoverModels(
     AiGatewayAccount account, {
     bool refreshRemote = false,
@@ -2417,6 +2446,7 @@ bool _hasRequiredModelCapabilities(
     LlmNativeProtocol.xaiOAuthResponses,
     LlmNativeProtocol.metaResponses,
     LlmNativeProtocol.devinCliAcp,
+    LlmNativeProtocol.auggieCli,
   };
   for (final capability in required) {
     final explicitlyEnabled = capabilities[capability] == true;
@@ -2456,6 +2486,7 @@ bool _hasRequiredModelCapabilities(
               LlmNativeProtocol.xaiOAuthResponses,
               LlmNativeProtocol.metaResponses,
               LlmNativeProtocol.devinCliAcp,
+              LlmNativeProtocol.auggieCli,
               LlmNativeProtocol.bedrockConverse,
             }.contains(protocol) ||
         capability == 'streaming' && streamingProtocols.contains(protocol);
@@ -2488,8 +2519,14 @@ class _LlmGatewayExecutor
   final LlmConnectorHttpClient _client;
   final DevinCliAcpService _devinCliAcp;
   final QoderCliService _qoderCli;
+  final AuggieCliService _auggieCli;
 
-  const _LlmGatewayExecutor(this._client, this._devinCliAcp, this._qoderCli);
+  const _LlmGatewayExecutor(
+    this._client,
+    this._devinCliAcp,
+    this._qoderCli,
+    this._auggieCli,
+  );
 
   @override
   Future<AiGatewayRealtimeSession> connectRealtime({
@@ -2547,6 +2584,42 @@ class _LlmGatewayExecutor
     Duration? sendTimeout,
     Duration? receiveTimeout,
   }) async {
+    if (account.connectorType == 'auggie') {
+      try {
+        final response = await _auggieCli.request(
+          modelId: modelId,
+          knownModelIds: account.models.map((model) => model.upstreamModelId),
+          body: body,
+          stream: stream,
+          cancelToken: cancelToken,
+          onRequestSent: onRequestSent,
+        );
+        return AiGatewayResponse(
+          statusCode: response.statusCode,
+          headers: response.headers,
+          body: response.body,
+        );
+      } on AuggieCliException catch (error) {
+        throw AiGatewayExecutionException(
+          kind: switch (error.code) {
+            'cancelled' => AiGatewayFailureKind.cancelled,
+            'desktop_only' ||
+            'auggie_not_installed' =>
+              AiGatewayFailureKind.transportUnavailable,
+            'auggie_not_logged_in' =>
+              AiGatewayFailureKind.authenticationRequired,
+            _ => AiGatewayFailureKind.request,
+          },
+          statusCode: error.code == 'timeout' ? 504 : null,
+          code: error.code,
+        );
+      } catch (_) {
+        throw AiGatewayExecutionException(
+          kind: AiGatewayFailureKind.transportUnavailable,
+          code: 'auggie_process_failure',
+        );
+      }
+    }
     if (account.connectorType == 'qoder' && account.authType == 'pat') {
       try {
         final responseBody = await _qoderCli.request(
@@ -2690,8 +2763,10 @@ AiGatewayAccount _gatewayAccount(LlmAccount account) => AiGatewayAccount(
       authType: account.authType,
       displayName: account.displayName,
       status: AiGatewayAccountStatus.values.byName(account.status.name),
-      hasCredential: account.credentialRef != null,
-      credentialRef: account.credentialRef,
+      hasCredential:
+          account.connectorType != 'auggie' && account.credentialRef != null,
+      credentialRef:
+          account.connectorType == 'auggie' ? null : account.credentialRef,
       endpointConfig: account.endpointConfig,
       models: account.models.map(_gatewayModel).toList(growable: false),
       policy: _gatewayPolicy(account.policy),
@@ -2721,7 +2796,9 @@ LlmAccount _legacyAccount(AiGatewayAccount account, {String? credentialRef}) =>
       authType: account.authType,
       displayName: account.displayName,
       status: LlmAccountStatus.values.byName(account.status.name),
-      credentialRef: credentialRef ?? account.credentialRef,
+      credentialRef: account.connectorType == 'auggie'
+          ? null
+          : credentialRef ?? account.credentialRef,
       endpointConfig: account.endpointConfig,
       models: account.models.map(_legacyModel).toList(growable: false),
       policy: _legacyPolicy(account.policy),

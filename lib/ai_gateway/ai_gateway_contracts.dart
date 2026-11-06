@@ -85,6 +85,24 @@ class AiGatewayExecutionException implements Exception {
 
   @override
   String toString() {
+    switch (code) {
+      case 'desktop_only':
+        return 'Auggie CLI is available only in the Stroom desktop app.';
+      case 'auggie_not_installed':
+        return 'Auggie CLI was not found. Install it and sign in with `auggie login`.';
+      case 'auggie_not_logged_in':
+        return 'Auggie CLI is not signed in. Run `auggie login` in the local terminal.';
+      case 'timeout':
+        return 'Auggie CLI request timed out.';
+      case 'auggie_quota_exhausted':
+        return 'Auggie reported that the local account usage limit is exhausted.';
+      case 'process_failure' || 'auggie_process_failure':
+        return 'Auggie CLI request failed. Check the local CLI status and sign-in.';
+      case 'invalid_model' || 'unknown_model':
+        return 'The selected Auggie model is not in the known local model catalog.';
+      case 'auggie_unsupported_capability':
+        return 'Auggie CLI supports text-only conversations without tools or media.';
+    }
     if (code == 'cursor_api_key_rejected') {
       return 'Cursor rejected this User API Key. Create or copy an active key from cursor.com/dashboard/api, then edit this account to replace it.';
     }
@@ -559,6 +577,8 @@ class AiGatewayOAuthException implements Exception {
 
 /// Capability and model discovery is independent of provider registration.
 abstract interface class AiGatewayModelDiscovery {
+  Future<void> testConnection(AiGatewayAccount account);
+
   Future<List<AiGatewayUpstreamModel>> discoverModels(
     AiGatewayAccount account, {
     bool refreshRemote = false,

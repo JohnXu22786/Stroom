@@ -58,6 +58,7 @@ Set<String> llmRoutedChatSupportedConnectorTypes(String endpointType) =>
       'google.gemini.interactions' => const {'gemini-interactions'},
       'devin.connect_rpc' => const {'devin'},
       'devin.acp' => const {'devin-cli-agentic'},
+      'auggie.cli' => const {'auggie'},
       'ollama.chat' => const {'ollama'},
       _ => const {
           'openai-compatibility',
@@ -102,6 +103,7 @@ Set<String> llmRoutedChatSupportedConnectorTypesForModelOverride(
       'ollama.chat',
       'devin.connect_rpc',
       'devin.acp',
+      'auggie.cli',
       'cursor.agent_connect_rpc',
       'amazon-q.chat',
       'oneminai.chat',
@@ -124,6 +126,24 @@ String llmRoutedChatProtocolForAccountModel({
 }) {
   if (account.connectorType == 'clova-studio') {
     return kClovaStudioProtocolId;
+  }
+  if (account.connectorType == 'auggie') {
+    if (account.authType != 'none') {
+      throw StateError('Auggie CLI accounts do not store Stroom credentials.');
+    }
+    final model = account.models
+        .where((item) => item.upstreamModelId == upstreamModelId)
+        .firstOrNull;
+    final configured = apiProtocolOverride ??
+        model?.config['apiProtocolOverride'] ??
+        account.endpointConfig['apiProtocol'] ??
+        apiProtocol;
+    if (configured is String &&
+        configured.isNotEmpty &&
+        configured != 'auggie.cli') {
+      throw StateError('Auggie CLI uses its built-in local route.');
+    }
+    return 'auggie.cli';
   }
   // Cursor's source-owned transport is selected by account ownership. The
   // model's generic API protocol continues to govern other providers.
@@ -347,7 +367,8 @@ class LlmRoutedChatProvider extends BaseChatProvider {
           _lastResponseStatusCode = response.statusCode;
           _lastResponseHeaders = response.headers;
           final completionProtocol = protocolId == 'devin.acp' ||
-                  protocolId == 'cursor.agent_connect_rpc'
+                  protocolId == 'cursor.agent_connect_rpc' ||
+                  protocolId == 'auggie.cli'
               ? 'openai.chat_completions'
               : protocolId;
           final result = completionProtocol == kClovaStudioProtocolId
@@ -580,7 +601,8 @@ class LlmRoutedChatProvider extends BaseChatProvider {
                 runtime: runtime,
                 accountId: candidate.account.id,
                 protocolId: protocolId == 'devin.acp' ||
-                        protocolId == 'cursor.agent_connect_rpc'
+                        protocolId == 'cursor.agent_connect_rpc' ||
+                        protocolId == 'auggie.cli'
                     ? 'openai.chat_completions'
                     : protocolId,
                 returnedResponsesOutputItems: returnedResponsesOutputItems,
@@ -1057,7 +1079,8 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     final requestProtocolId = protocolId == kClovaStudioProtocolId ||
             protocolId == 'devin.connect_rpc' ||
             protocolId == 'devin.acp' ||
-            protocolId == 'cursor.agent_connect_rpc'
+            protocolId == 'cursor.agent_connect_rpc' ||
+            protocolId == 'auggie.cli'
         ? 'openai.chat_completions'
         : protocolId;
     final bridge = AiGatewayProtocolBridges.forProtocol(requestProtocolId);

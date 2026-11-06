@@ -78,6 +78,7 @@ String builtinDefaultApiProtocolForConnector(String? connectorType) =>
       'ollama' => 'ollama.chat',
       'devin' => 'devin.connect_rpc',
       'devin-cli-agentic' => 'devin.acp',
+      'auggie' => 'auggie.cli',
       'opencode-go' ||
       'opencode-zen' ||
       'command-code' =>
@@ -124,6 +125,7 @@ Set<String> supportedApiProtocolsForSupplier(
         'anthropic.messages',
       },
     'amazon-q' => const {'amazon-q.chat'},
+    'auggie' => const {'auggie.cli'},
     'oneminai' => const {'oneminai.chat'},
     'moonshot' || 'glm' || 'deepseek' || 'minimax' || 'qwen' => const {
         'openai.chat_completions'
@@ -170,6 +172,7 @@ Set<String> supportedApiProtocolsForSupplier(
     'devin' =>
       supplierProtocol,
     'devin-cli-agentic' => 'devin.acp',
+    'auggie' => 'auggie.cli',
     _ => null,
   };
   if (nativeProtocol != null) return {nativeProtocol};
@@ -189,4 +192,5 @@ const apiProtocolLabels = <String, String>{
   'anthropic.messages': 'Anthropic Messages',
   'devin.connect_rpc': 'Devin Connect-RPC',
   'devin.acp': 'Devin CLI ACP',
+  'auggie.cli': 'Auggie CLI',
 };

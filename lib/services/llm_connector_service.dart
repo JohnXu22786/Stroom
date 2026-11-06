@@ -32,6 +32,7 @@ import 'amazon_q_connector.dart';
 import 'azure_openai_endpoint.dart';
 import 'clova_studio_protocol.dart';
 import 'oneminai_protocol.dart';
+import 'auggie_cli_service.dart';
 
 /// Frozen upstream implementation used to define this connector catalog.
 const String kLlmConnectorReferenceRevision =
@@ -277,6 +278,7 @@ String _qwenCloudProtocolBaseUrl(
 enum LlmNativeProtocol {
   clovaStudioChat,
   oneMinAiChat,
+  auggieCli,
   openAIResponses,
   anthropicMessages,
   antigravityGenerateContent,
@@ -503,6 +505,12 @@ abstract final class LlmConnectorRegistry {
       protocol: LlmNativeProtocol.devinCliAcp,
       authTypes: {'cli_session'},
       modelCatalog: kPinnedDevinCliModels,
+    ),
+    LlmConnectorDefinition(
+      id: 'auggie',
+      displayName: 'Auggie CLI',
+      protocol: LlmNativeProtocol.auggieCli,
+      authTypes: {'none'},
     ),
     LlmConnectorDefinition(
       id: 'cursor',
@@ -853,6 +861,7 @@ abstract final class LlmConnectorRegistry {
         'ollama' => 'ollama.chat',
         'devin' => 'devin.connect_rpc',
         'devin-cli-agentic' => 'devin.acp',
+        'auggie' => 'auggie.cli',
         'cursor' => 'cursor.agent_connect_rpc',
         'trae' => 'openai',
         'bedrock' => 'openai',
@@ -931,6 +940,7 @@ class LlmAccountConnectorService {
   final LlmCredentialStore credentialStore;
   final Dio _dio;
   final QoderCliService? _qoderCliOverride;
+  final AuggieCliService _auggieCli;
   late final QoderCliService _qoderCli =
       _qoderCliOverride ?? QoderCliService(readCredential: readCredential);
 
@@ -939,7 +949,9 @@ class LlmAccountConnectorService {
     required this.credentialStore,
     Dio? dio,
     QoderCliService? qoderCliService,
+    AuggieCliService? auggieCliService,
   })  : _qoderCliOverride = qoderCliService,
+        _auggieCli = auggieCliService ?? AuggieCliService(),
         _dio = dio ??
             Dio(
               BaseOptions(
@@ -1647,6 +1659,15 @@ class LlmAccountConnectorService {
   /// Returns the persisted model mapping when present, otherwise the pinned
   /// upstream catalog. OpenAI-compatible endpoints and Gemini API keys can
   /// query their native model-list endpoint when [refreshRemote] is true.
+  Future<void> testAuggieCliConnection(LlmAccount account) async {
+    if (account.connectorType != 'auggie' ||
+        account.authType != 'none' ||
+        account.credentialRef != null) {
+      throw const LlmAccountConnectorException();
+    }
+    await _auggieCli.testConnection();
+  }
+
   Future<List<LlmUpstreamModel>> discoverModels(
     LlmAccount account, {
     bool refreshRemote = false,
@@ -1663,6 +1684,30 @@ class LlmAccountConnectorService {
     final connector = LlmConnectorRegistry.find(account.connectorType);
     if (connector == null || connector.id != account.connectorType) {
       throw const LlmAccountConnectorException();
+    }
+    if (account.connectorType == 'auggie') {
+      final models = await _auggieCli.discoverModels(refresh: refreshRemote);
+      return [
+        for (var index = 0; index < models.length; index++)
+          LlmUpstreamModel(
+            id: '${account.id}:auggie:$index',
+            upstreamModelId: models[index].id,
+            displayName: models[index].displayName,
+            capabilities: {
+              'chat': true,
+              'streaming': true,
+              'textOnly': true,
+              'contextLength': models[index].contextLength,
+              'supportedApiProtocols': ['auggie.cli'],
+            },
+            config: {
+              'catalogSource': index < AuggieCliService.pinnedModels.length
+                  ? 'pinned_auggie_registry'
+                  : 'auggie_cli_model_list',
+              'availability': 'unknown',
+            },
+          ),
+      ];
     }
     if (account.connectorType == 'openai-compatibility') {
       final presetId = account.endpointConfig['providerPresetId'];
@@ -1786,9 +1831,7 @@ class LlmAccountConnectorService {
       } on ArgumentError {
         throw const LlmAccountConnectorException();
       }
-      return List.unmodifiable(
-        cloudflareWorkersAiModelCatalog(account.id),
-      );
+      return List.unmodifiable(cloudflareWorkersAiModelCatalog(account.id));
     }
     if (account.connectorType == 'amazon-q') {
       if (account.authType != 'oauth' || account.credentialRef == null) {
@@ -4778,8 +4821,11 @@ class LlmAccountConnectorService {
     bool refreshRemote,
   ) async {
     final fallback = [
-      for (final (index, id)
-          in LlmConnectorRegistry.find('vertex-partner')!.modelCatalog.indexed)
+      for (final (index, id) in LlmConnectorRegistry.find(
+        'vertex-partner',
+      )!
+          .modelCatalog
+          .indexed)
         LlmUpstreamModel(
           id: '${account.id}:catalog:$index',
           upstreamModelId: id,
@@ -4809,8 +4855,9 @@ class LlmAccountConnectorService {
     );
     if (account.authType == 'api_key') {
       if (configuredProject == null ||
-          !RegExp(r'^[a-z][a-z0-9-]{4,28}[a-z0-9]$')
-              .hasMatch(configuredProject)) {
+          !RegExp(
+            r'^[a-z][a-z0-9-]{4,28}[a-z0-9]$',
+          ).hasMatch(configuredProject)) {
         throw const LlmAccountConnectorException();
       }
       return List.unmodifiable(_mergeModelMappings(fallback, account.models));
@@ -4879,18 +4926,22 @@ class LlmAccountConnectorService {
           final actions = model['supportedActions'];
           if (actions is List &&
               actions.isNotEmpty &&
-              !actions.any((action) =>
-                  action is String &&
-                  {
-                    'viewRestApi',
-                    'openGenerationAiStudio',
-                    'openGenie',
-                    'requestAccess',
-                  }.contains(action))) {
+              !actions.any(
+                (action) =>
+                    action is String &&
+                    {
+                      'viewRestApi',
+                      'openGenerationAiStudio',
+                      'openGenie',
+                      'requestAccess',
+                    }.contains(action),
+              )) {
             continue;
           }
-          if (RegExp(r'(?:^|[-/])ocr(?:-|$)', caseSensitive: false)
-              .hasMatch(id)) {
+          if (RegExp(
+            r'(?:^|[-/])ocr(?:-|$)',
+            caseSensitive: false,
+          ).hasMatch(id)) {
             continue;
           }
           final claude = publisher == 'anthropic';
@@ -4929,9 +4980,7 @@ class LlmAccountConnectorService {
       }
       return List.unmodifiable(_mergeModelMappings(fallback, account.models));
     }
-    return List.unmodifiable(
-      _mergeModelMappings(discovered, account.models),
-    );
+    return List.unmodifiable(_mergeModelMappings(discovered, account.models));
   }
 
   static String _vertexBaseUrl(Map<String, dynamic> config) {
@@ -5069,6 +5118,9 @@ class LlmAccountConnectorService {
         normalized['providerSpecificData'] = providerData;
         secret = jsonEncode(normalized);
       }
+      if (account.connectorType == 'auggie' && secret != null) {
+        throw const LlmAccountConnectorException();
+      }
       _validateAccount(account);
       if (secret != null) _validateCredential(account, secret);
       final currentRecords = await _readAccounts();
@@ -5079,6 +5131,23 @@ class LlmAccountConnectorService {
         (record) => record['id'] == account.id,
       );
       final previous = index < 0 ? null : currentRecords[index];
+      if (account.connectorType == 'auggie') {
+        final savedAuggieModelIds = previous?['connectorType'] == 'auggie'
+            ? LlmAccount.fromMap(
+                previous!,
+              ).models.map((model) => model.upstreamModelId)
+            : const <String>[];
+        for (final model in account.models) {
+          try {
+            _auggieCli.resolveModel(
+              model.upstreamModelId,
+              knownModelIds: savedAuggieModelIds,
+            );
+          } on AuggieCliException {
+            throw const LlmAccountConnectorException();
+          }
+        }
+      }
       if (previous != null) {
         oldModelGroupsJson = await preferences.getString(
           LlmAccountMigrationService.modelGroupsPreferenceKey,
@@ -5710,6 +5779,10 @@ class LlmAccountConnectorService {
         account.endpointConfig.containsKey('baseUrl')) {
       throw const LlmAccountConnectorException();
     }
+    if (account.connectorType == 'auggie' &&
+        (account.authType != 'none' || account.credentialRef != null)) {
+      throw const LlmAccountConnectorException();
+    }
     if (account.connectorType == 'gitlab-duo' && account.authType == 'oauth') {
       final clientId = account.endpointConfig['clientId'];
       final baseUrl = account.endpointConfig['baseUrl'];
@@ -5743,8 +5816,9 @@ class LlmAccountConnectorService {
         final projectId = account.endpointConfig['projectId'];
         if (projectId != null &&
             (projectId is! String ||
-                !RegExp(r'^[a-z][a-z0-9-]{4,28}[a-z0-9]$')
-                    .hasMatch(projectId.trim()))) {
+                !RegExp(
+                  r'^[a-z][a-z0-9-]{4,28}[a-z0-9]$',
+                ).hasMatch(projectId.trim()))) {
           throw const LlmAccountConnectorException();
         }
       }
@@ -6726,7 +6800,7 @@ class LlmNativeRequestBuilder {
           ? List<dynamic>.from(originalSystem)
           : originalSystem is String
               ? <dynamic>[
-                  {'type': 'text', 'text': originalSystem}
+                  {'type': 'text', 'text': originalSystem},
                 ]
               : <dynamic>[];
       systemBlocks.insertAll(0, [
@@ -7570,7 +7644,9 @@ class LlmNativeRequestBuilder {
           presetId is String ? presetId : null,
         );
         final route = preset?.protocolRoutes[
-            LlmNativeRequestBuilder._apiProtocolForNativeFormat(nativeFormat)];
+            LlmNativeRequestBuilder._apiProtocolForNativeFormat(
+          nativeFormat,
+        )];
         baseUrl = route?.endpoint ?? _baseUrl(config, '');
         final baseUri = Uri.tryParse(baseUrl);
         if (baseUri == null ||
@@ -7581,8 +7657,10 @@ class LlmNativeRequestBuilder {
           throw const LlmAccountConnectorException();
         }
         final endpointPath = baseUri.path.replaceFirst(RegExp(r'/+$'), '');
-        final desiredPath = switch (
-            LlmNativeRequestBuilder._apiProtocolForNativeFormat(nativeFormat)) {
+        final desiredPath =
+            switch (LlmNativeRequestBuilder._apiProtocolForNativeFormat(
+          nativeFormat,
+        )) {
           'openai.responses' => '/responses',
           'anthropic.messages' => '/messages',
           _ => '/chat/completions',

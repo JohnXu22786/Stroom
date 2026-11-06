@@ -25,74 +25,78 @@ const _devinCliTestExecutableSha256 =
 
 void main() {
   testWidgets(
-      'Cloudflare Workers AI keeps token secure and account ID separate', (
-    tester,
-  ) async {
-    final credentials = _MemoryCredentialStore();
-    final preferences = _MemoryPreferences();
-    final service = LlmAccountConnectorService(
-      preferences: preferences,
-      credentialStore: credentials,
-    );
-    await tester.pumpWidget(
-      MaterialApp(
-        home: LlmAccountManagementPage(gateway: _testGateway(service)),
-      ),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('添加账号'));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField).first, 'Workers AI');
-
-    final connectorField = find.byType(DropdownButtonFormField<String>).first;
-    await tester.ensureVisible(connectorField);
-    tester
-        .widget<DropdownButtonFormField<String>>(connectorField)
-        .onChanged!('cloudflare-ai');
-    await tester.pumpAndSettle();
-
-    Future<void> enterField(String label, String value) async {
-      final field = find.byWidgetPredicate(
-        (widget) =>
-            widget is TextField && widget.decoration?.labelText == label,
+    'Cloudflare Workers AI keeps token secure and account ID separate',
+    (tester) async {
+      final credentials = _MemoryCredentialStore();
+      final preferences = _MemoryPreferences();
+      final service = LlmAccountConnectorService(
+        preferences: preferences,
+        credentialStore: credentials,
       );
-      await tester.ensureVisible(field);
-      await tester.enterText(field, value);
-    }
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('添加账号'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).first, 'Workers AI');
 
-    await enterField('Cloudflare Account ID', 'account-123');
-    await enterField('Cloudflare API Token', 'synthetic-cloudflare-token');
-    expect(
-      find.byWidgetPredicate(
-        (widget) =>
-            widget is TextField &&
-            widget.decoration?.labelText == '上游模型与能力' &&
-            widget.readOnly,
-      ),
-      findsOneWidget,
-    );
-    await tester.ensureVisible(find.text('保存').last);
-    await tester.tap(find.text('保存').last);
-    await tester.pumpAndSettle();
+      final connectorField = find.byType(DropdownButtonFormField<String>).first;
+      await tester.ensureVisible(connectorField);
+      tester.widget<DropdownButtonFormField<String>>(connectorField).onChanged!(
+        'cloudflare-ai',
+      );
+      await tester.pumpAndSettle();
 
-    final saved = (await service.listAccounts()).single;
-    expect(saved.connectorType, 'cloudflare-ai');
-    expect(saved.authType, 'api_key');
-    expect(saved.endpointConfig['cloudflareAccountId'], 'account-123');
-    expect(saved.endpointConfig.toString(),
-        isNot(contains('synthetic-cloudflare-token')));
-    expect(
-        await service.readCredential(saved.id), 'synthetic-cloudflare-token');
-    expect(
-      preferences.values.values.join(),
-      isNot(contains('synthetic-cloudflare-token')),
-    );
-    expect(
-      saved.models.map((model) => model.upstreamModelId).toList(),
-      kCloudflareWorkersAiModelIds,
-    );
-    expect(saved.models.first.capabilities, {'contextLength': 15000});
-  });
+      Future<void> enterField(String label, String value) async {
+        final field = find.byWidgetPredicate(
+          (widget) =>
+              widget is TextField && widget.decoration?.labelText == label,
+        );
+        await tester.ensureVisible(field);
+        await tester.enterText(field, value);
+      }
+
+      await enterField('Cloudflare Account ID', 'account-123');
+      await enterField('Cloudflare API Token', 'synthetic-cloudflare-token');
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is TextField &&
+              widget.decoration?.labelText == '上游模型与能力' &&
+              widget.readOnly,
+        ),
+        findsOneWidget,
+      );
+      await tester.ensureVisible(find.text('保存').last);
+      await tester.tap(find.text('保存').last);
+      await tester.pumpAndSettle();
+
+      final saved = (await service.listAccounts()).single;
+      expect(saved.connectorType, 'cloudflare-ai');
+      expect(saved.authType, 'api_key');
+      expect(saved.endpointConfig['cloudflareAccountId'], 'account-123');
+      expect(
+        saved.endpointConfig.toString(),
+        isNot(contains('synthetic-cloudflare-token')),
+      );
+      expect(
+        await service.readCredential(saved.id),
+        'synthetic-cloudflare-token',
+      );
+      expect(
+        preferences.values.values.join(),
+        isNot(contains('synthetic-cloudflare-token')),
+      );
+      expect(
+        saved.models.map((model) => model.upstreamModelId).toList(),
+        kCloudflareWorkersAiModelIds,
+      );
+      expect(saved.models.first.capabilities, {'contextLength': 15000});
+    },
+  );
 
   testWidgets('Azure account saves endpoint settings and secure API key', (
     tester,
@@ -114,9 +118,9 @@ void main() {
 
     final connectorField = find.byType(DropdownButtonFormField<String>).first;
     await tester.ensureVisible(connectorField);
-    tester
-        .widget<DropdownButtonFormField<String>>(connectorField)
-        .onChanged!('azure-ai');
+    tester.widget<DropdownButtonFormField<String>>(connectorField).onChanged!(
+      'azure-ai',
+    );
     await tester.pumpAndSettle();
 
     Future<void> enterField(String label, String value) async {
@@ -128,8 +132,10 @@ void main() {
       await tester.enterText(field, value);
     }
 
-    await enterField('Azure resource / Foundry host',
-        'https://example-resource.openai.azure.com');
+    await enterField(
+      'Azure resource / Foundry host',
+      'https://example-resource.openai.azure.com',
+    );
     await enterField('Azure deployment ID', 'gpt-4o-production');
     await enterField('Azure API version', '2024-12-01-preview');
     await enterField('Azure API Key', 'synthetic-azure-secret');
@@ -146,11 +152,15 @@ void main() {
       'apiVersion': '2024-12-01-preview',
     });
     expect(saved.models.single.upstreamModelId, 'gpt-4o-production');
-    expect(saved.models.single.config['catalogSource'],
-        'configured-azure-deployment');
+    expect(
+      saved.models.single.config['catalogSource'],
+      'configured-azure-deployment',
+    );
     expect(credentials.values.values, ['synthetic-azure-secret']);
-    expect(saved.endpointConfig.toString(),
-        isNot(contains('synthetic-azure-secret')));
+    expect(
+      saved.endpointConfig.toString(),
+      isNot(contains('synthetic-azure-secret')),
+    );
     final refreshed = await service.discoverModels(saved, refreshRemote: true);
     expect(refreshed.single.id, saved.models.single.id);
     expect(refreshed.single.upstreamModelId, 'gpt-4o-production');
@@ -343,16 +353,21 @@ void main() {
     expect(saved.endpointConfig['providerPresetId'], 'agentrouter');
     expect(saved.endpointConfig['apiProtocol'], 'anthropic.messages');
     expect(
-        saved.endpointConfig['baseUrl'], 'https://agentrouter.org/v1/messages');
+      saved.endpointConfig['baseUrl'],
+      'https://agentrouter.org/v1/messages',
+    );
     expect(saved.endpointConfig['apiKeyHeader'], 'x-api-key');
     expect(saved.endpointConfig['apiKeyScheme'], isEmpty);
     expect(saved.endpointConfig['modelsUrl'], isNull);
+    expect(saved.models.map((model) => model.upstreamModelId), [
+      'claude-opus-4-8',
+      'claude-opus-5',
+      'gpt-5.6-sol',
+    ]);
     expect(
-      saved.models.map((model) => model.upstreamModelId),
-      ['claude-opus-4-8', 'claude-opus-5', 'gpt-5.6-sol'],
+      saved.models.first.config['apiProtocolOverride'],
+      'openai.responses',
     );
-    expect(
-        saved.models.first.config['apiProtocolOverride'], 'openai.responses');
     expect(await service.readCredential(saved.id), 'agentrouter-test-key');
   });
 
@@ -403,11 +418,7 @@ void main() {
       );
       expect(
         saved.models.map((model) => model.upstreamModelId),
-        orderedEquals([
-          'GigaChat-2-Max',
-          'GigaChat-2-Pro',
-          'GigaChat-2-Lite',
-        ]),
+        orderedEquals(['GigaChat-2-Max', 'GigaChat-2-Pro', 'GigaChat-2-Lite']),
       );
       expect(
         saved.models.map((model) => model.config['apiProtocolOverride']),
@@ -488,17 +499,14 @@ void main() {
       'https://inference.dahl.global/v1/chat/completions',
     );
     expect(saved.endpointConfig['modelsUrl'], isNull);
-    expect(
-      saved.models.map((model) => model.upstreamModelId),
-      ['MiniMaxAI/MiniMax-M2.7', 'moonshotai/Kimi-K2.6'],
-    );
-    expect(
-      saved.models.map((model) => model.capabilities),
-      [
-        {'contextLength': 200000},
-        {'contextLength': 200000},
-      ],
-    );
+    expect(saved.models.map((model) => model.upstreamModelId), [
+      'MiniMaxAI/MiniMax-M2.7',
+      'moonshotai/Kimi-K2.6',
+    ]);
+    expect(saved.models.map((model) => model.capabilities), [
+      {'contextLength': 200000},
+      {'contextLength': 200000},
+    ]);
     expect(credentials.values.values, ['dahl-test-key']);
     expect(saved.endpointConfig.toString(), isNot(contains('dahl-test-key')));
   });
@@ -737,11 +745,7 @@ void main() {
             id: 'fireworks-model',
             upstreamModelId: 'accounts/fireworks/models/deepseek-v4-flash',
             displayName: 'DeepSeek V4 Flash',
-            capabilities: {
-              'chat': true,
-              'streaming': true,
-              'reasoning': true,
-            },
+            capabilities: {'chat': true, 'streaming': true, 'reasoning': true},
           ),
         ],
       ),
@@ -799,13 +803,14 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('请输入凭据。'), findsOneWidget);
-    expect(await service.readCredential('preset-key-change'),
-        'existing-fireworks-key');
     expect(
-        (await service.listAccounts())
-            .single
-            .endpointConfig['providerPresetId'],
-        'fireworks');
+      await service.readCredential('preset-key-change'),
+      'existing-fireworks-key',
+    );
+    expect(
+      (await service.listAccounts()).single.endpointConfig['providerPresetId'],
+      'fireworks',
+    );
 
     await tester.enterText(
       find.byWidgetPredicate(
@@ -823,15 +828,10 @@ void main() {
       'https://api.bytez.com/models/v2/openai/v1/chat/completions',
     );
     expect(saved.endpointConfig.containsKey('modelsUrl'), isFalse);
-    expect(
-      await service.readCredential('preset-key-change'),
-      'new-bytez-key',
-    );
+    expect(await service.readCredential('preset-key-change'), 'new-bytez-key');
     expect(
       saved.models
-          .singleWhere(
-            (model) => model.upstreamModelId == 'user-owned-model',
-          )
+          .singleWhere((model) => model.upstreamModelId == 'user-owned-model')
           .displayName,
       'user-owned-model',
     );
@@ -932,19 +932,29 @@ void main() {
 
     final saved = (await service.listAccounts()).single;
     expect(saved.endpointConfig['providerPresetId'], 'agnes-cn');
-    expect(saved.endpointConfig['baseUrl'],
-        'https://api.agnes-ai.cn/v1/chat/completions');
     expect(
-        saved.endpointConfig['modelsUrl'], 'https://api.agnes-ai.cn/v1/models');
+      saved.endpointConfig['baseUrl'],
+      'https://api.agnes-ai.cn/v1/chat/completions',
+    );
+    expect(
+      saved.endpointConfig['modelsUrl'],
+      'https://api.agnes-ai.cn/v1/models',
+    );
     expect(saved.endpointConfig['customHeader'], 'retained');
     expect(saved.endpointConfig['apiProtocol'], 'openai.chat_completions');
     expect(await service.readCredential(saved.id), 'new-agnes-key');
-    expect(saved.models.map((model) => model.upstreamModelId),
-        contains('custom-model'));
-    expect(saved.models.map((model) => model.upstreamModelId),
-        contains('agnes-2.0-flash'));
-    expect(saved.models.map((model) => model.upstreamModelId),
-        isNot(contains('ernie-5.1')));
+    expect(
+      saved.models.map((model) => model.upstreamModelId),
+      contains('custom-model'),
+    );
+    expect(
+      saved.models.map((model) => model.upstreamModelId),
+      contains('agnes-2.0-flash'),
+    );
+    expect(
+      saved.models.map((model) => model.upstreamModelId),
+      isNot(contains('ernie-5.1')),
+    );
     final agnes = saved.models.singleWhere(
       (model) => model.upstreamModelId == 'agnes-2.0-flash',
     );
@@ -1031,15 +1041,19 @@ void main() {
     );
     expect(modelsField.controller!.text, contains('claude-sonnet-4-6'));
     expect(modelsField.controller!.text, contains('custom-model'));
-    expect(modelsField.controller!.text,
-        isNot(contains('deepseek-ai/DeepSeek-V4-Flash')));
+    expect(
+      modelsField.controller!.text,
+      isNot(contains('deepseek-ai/DeepSeek-V4-Flash')),
+    );
     await tester.ensureVisible(find.text('保存').last);
     await tester.tap(find.text('保存').last);
     await tester.pumpAndSettle();
 
     expect(find.text('请输入凭据。'), findsOneWidget);
     expect(
-        await service.readCredential('m39-preset-switch'), 'old-deepinfra-key');
+      await service.readCredential('m39-preset-switch'),
+      'old-deepinfra-key',
+    );
     await tester.enterText(
       find.byWidgetPredicate(
         (widget) => widget is TextField && widget.decoration?.labelText == '凭据',
@@ -1052,19 +1066,29 @@ void main() {
     final saved = (await service.listAccounts()).single;
     expect(saved.connectorType, 'openai-compatibility');
     expect(saved.endpointConfig['providerPresetId'], 'daoxe');
-    expect(saved.endpointConfig['baseUrl'],
-        'https://api.daoxe.com/v1/chat/completions');
     expect(
-        saved.endpointConfig['modelsUrl'], 'https://api.daoxe.com/v1/models');
+      saved.endpointConfig['baseUrl'],
+      'https://api.daoxe.com/v1/chat/completions',
+    );
+    expect(
+      saved.endpointConfig['modelsUrl'],
+      'https://api.daoxe.com/v1/models',
+    );
     expect(saved.endpointConfig['customHeader'], 'retained');
     expect(saved.endpointConfig['apiProtocol'], 'openai.chat_completions');
     expect(await service.readCredential(saved.id), 'new-daoxe-key');
-    expect(saved.models.map((model) => model.upstreamModelId),
-        contains('custom-model'));
-    expect(saved.models.map((model) => model.upstreamModelId),
-        contains('claude-sonnet-4-6'));
-    expect(saved.models.map((model) => model.upstreamModelId),
-        isNot(contains('deepseek-ai/DeepSeek-V4-Flash')));
+    expect(
+      saved.models.map((model) => model.upstreamModelId),
+      contains('custom-model'),
+    );
+    expect(
+      saved.models.map((model) => model.upstreamModelId),
+      contains('claude-sonnet-4-6'),
+    );
+    expect(
+      saved.models.map((model) => model.upstreamModelId),
+      isNot(contains('deepseek-ai/DeepSeek-V4-Flash')),
+    );
     final daoxeModel = saved.models.singleWhere(
       (model) => model.upstreamModelId == 'claude-sonnet-4-6',
     );
@@ -1148,15 +1172,19 @@ void main() {
     );
     expect(modelsField.controller!.text, contains('claude-opus-4-7'));
     expect(modelsField.controller!.text, contains('custom-model'));
-    expect(modelsField.controller!.text,
-        isNot(contains('accounts/fireworks/models/deepseek-v4-flash')));
+    expect(
+      modelsField.controller!.text,
+      isNot(contains('accounts/fireworks/models/deepseek-v4-flash')),
+    );
     await tester.ensureVisible(find.text('保存').last);
     await tester.tap(find.text('保存').last);
     await tester.pumpAndSettle();
 
     expect(find.text('请输入凭据。'), findsOneWidget);
     expect(
-        await service.readCredential('m40-preset-switch'), 'old-fireworks-key');
+      await service.readCredential('m40-preset-switch'),
+      'old-fireworks-key',
+    );
     await tester.enterText(
       find.byWidgetPredicate(
         (widget) => widget is TextField && widget.decoration?.labelText == '凭据',
@@ -1169,18 +1197,26 @@ void main() {
     final saved = (await service.listAccounts()).single;
     expect(saved.connectorType, 'openai-compatibility');
     expect(saved.endpointConfig['providerPresetId'], 'heroku');
-    expect(saved.endpointConfig['baseUrl'],
-        'https://us.inference.heroku.com/v1/chat/completions');
+    expect(
+      saved.endpointConfig['baseUrl'],
+      'https://us.inference.heroku.com/v1/chat/completions',
+    );
     expect(saved.endpointConfig.containsKey('modelsUrl'), isFalse);
     expect(saved.endpointConfig['customHeader'], 'retained');
     expect(saved.endpointConfig['apiProtocol'], 'openai.chat_completions');
     expect(await service.readCredential(saved.id), 'new-heroku-key');
-    expect(saved.models.map((model) => model.upstreamModelId),
-        contains('custom-model'));
-    expect(saved.models.map((model) => model.upstreamModelId),
-        contains('claude-opus-4-7'));
-    expect(saved.models.map((model) => model.upstreamModelId),
-        isNot(contains('accounts/fireworks/models/deepseek-v4-flash')));
+    expect(
+      saved.models.map((model) => model.upstreamModelId),
+      contains('custom-model'),
+    );
+    expect(
+      saved.models.map((model) => model.upstreamModelId),
+      contains('claude-opus-4-7'),
+    );
+    expect(
+      saved.models.map((model) => model.upstreamModelId),
+      isNot(contains('accounts/fireworks/models/deepseek-v4-flash')),
+    );
     final herokuModel = saved.models.singleWhere(
       (model) => model.upstreamModelId == 'claude-opus-4-7',
     );
@@ -1317,8 +1353,10 @@ void main() {
 
       final saved = (await service.listAccounts()).single;
       expect(saved.endpointConfig['providerPresetId'], 'stepfun-international');
-      expect(saved.endpointConfig['baseUrl'],
-          'https://api.stepfun.ai/v1/chat/completions');
+      expect(
+        saved.endpointConfig['baseUrl'],
+        'https://api.stepfun.ai/v1/chat/completions',
+      );
       expect(saved.endpointConfig.containsKey('modelsUrl'), isFalse);
       expect(saved.endpointConfig['apiProtocol'], 'openai.chat_completions');
       final stepFive = saved.models.singleWhere(
@@ -1562,6 +1600,167 @@ void main() {
       expect(find.text('Openference API Key'), findsOneWidget);
     },
   );
+
+  testWidgets('Auggie account is local, named, and credential-free', (
+    tester,
+  ) async {
+    final credentials = _MemoryCredentialStore();
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: credentials,
+    );
+    final gateway = _testGateway(service);
+    await tester.pumpWidget(
+      MaterialApp(home: LlmAccountManagementPage(gateway: gateway)),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('添加账号'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField).first, 'Workstation Auggie');
+    final connectorField = find.byType(DropdownButtonFormField<String>).first;
+    tester.widget<DropdownButtonFormField<String>>(connectorField).onChanged!(
+      'auggie',
+    );
+    await tester.pumpAndSettle();
+
+    final authField = find.byType(DropdownButtonFormField<String>).at(1);
+    final authDropdown = tester.widget<DropdownButton<String>>(
+      find.descendant(
+        of: authField,
+        matching: find.byType(DropdownButton<String>),
+      ),
+    );
+    expect(authDropdown.value, 'none');
+    expect(authDropdown.items!.map((item) => item.value), ['none']);
+    expect(find.text('Auggie API Key'), findsNothing);
+    final modelField = find.byWidgetPredicate(
+      (widget) =>
+          widget is TextField && widget.decoration?.labelText == '上游模型与能力',
+    );
+    expect(
+      tester.widget<TextField>(modelField).controller!.text,
+      contains('sonnet4.6'),
+    );
+
+    await tester.ensureVisible(find.text('保存').last);
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+
+    final saved = (await service.listAccounts()).single;
+    expect(saved.connectorType, 'auggie');
+    expect(saved.authType, 'none');
+    expect(saved.displayName, 'Workstation Auggie');
+    expect(saved.credentialRef, isNull);
+    expect(credentials.values, isEmpty);
+  });
+
+  testWidgets(
+    'editing an Auggie account preserves discovered models and clears stale protocol',
+    (tester) async {
+      final preferences = _MemoryPreferences();
+      final service = LlmAccountConnectorService(
+        preferences: preferences,
+        credentialStore: _MemoryCredentialStore(),
+      );
+      final account = LlmAccount(
+        id: 'saved-auggie',
+        connectorType: 'auggie',
+        authType: 'none',
+        displayName: 'Saved Auggie',
+        status: LlmAccountStatus.ready,
+        endpointConfig: const {'apiProtocol': 'openai.responses'},
+        models: const [
+          LlmUpstreamModel(
+            id: 'saved-auggie-custom',
+            upstreamModelId: 'custom-live-model',
+            displayName: 'Custom live model',
+            capabilities: {'chat': true, 'streaming': true},
+          ),
+        ],
+      );
+      preferences.values[LlmAccountMigrationService.accountsPreferenceKey] =
+          jsonEncode({
+        'version': 1,
+        'items': [account.toMap()],
+      });
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(PopupMenuButton<String>).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('编辑账号'));
+      await tester.pumpAndSettle();
+
+      final modelField = find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && widget.decoration?.labelText == '上游模型与能力',
+      );
+      expect(
+        tester.widget<TextField>(modelField).controller!.text,
+        contains('custom-live-model'),
+      );
+      await tester.ensureVisible(find.text('保存').last);
+      await tester.tap(find.text('保存').last);
+      await tester.pumpAndSettle();
+
+      final saved = (await service.listAccounts()).single;
+      expect(saved.models.map((model) => model.upstreamModelId), [
+        'custom-live-model',
+      ]);
+      expect(saved.endpointConfig, isNot(contains('apiProtocol')));
+    },
+  );
+
+  testWidgets('switching an account to Auggie clears its old API protocol', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'legacy-custom-protocol',
+        connectorType: 'openai-compatibility',
+        authType: 'api_key',
+        displayName: 'Legacy compatible account',
+        endpointConfig: const {
+          'baseUrl': 'https://example.test/v1',
+          'apiProtocol': 'openai.responses',
+        },
+      ),
+      secret: 'test-api-key',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑账号'));
+    await tester.pumpAndSettle();
+
+    final connector = find.byType(DropdownButtonFormField<String>).first;
+    tester.widget<DropdownButtonFormField<String>>(connector).onChanged!(
+      'auggie',
+    );
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('保存').last);
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+
+    final saved = (await service.listAccounts()).single;
+    expect(saved.connectorType, 'auggie');
+    expect(saved.endpointConfig, isNot(contains('apiProtocol')));
+  });
 
   testWidgets('GitLab Duo offers PAT and configured OAuth with prerequisites', (
     tester,

@@ -16,11 +16,35 @@ import '../services/amazon_q_connector.dart';
 import '../services/azure_openai_endpoint.dart';
 import '../services/devin_cli_acp.dart';
 import '../services/api_protocol_config.dart';
+import '../services/auggie_cli_service.dart';
 import '../services/llm_oauth_flow.dart';
 import '../services/llm_oauth_loopback.dart';
 import '../services/trae_solo_connector.dart';
 import 'browser_page.dart';
 import 'trae_solo_authorization_page.dart';
+
+List<AiGatewayUpstreamModel> _pinnedAuggieModels(String accountId) => [
+      for (var index = 0; index < AuggieCliService.pinnedModels.length; index++)
+        AiGatewayUpstreamModel(
+          id: '$accountId:auggie:$index',
+          upstreamModelId: AuggieCliService.pinnedModels[index].id,
+          displayName: AuggieCliService.pinnedModels[index].displayName,
+          capabilities: {
+            'chat': true,
+            'streaming': true,
+            'textOnly': true,
+            'vision': false,
+            'audio': false,
+            'tools': false,
+            'contextLength': AuggieCliService.pinnedModels[index].contextLength,
+            'supportedApiProtocols': ['auggie.cli'],
+          },
+          config: const {
+            'catalogSource': 'pinned_auggie_registry',
+            'availability': 'unknown',
+          },
+        ),
+    ];
 
 class LlmAccountManagementPage extends StatefulWidget {
   final AiGatewayFacade? gateway;
@@ -1841,6 +1865,12 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
     super.initState();
     final account = widget.account;
     _connectorType = account?.connectorType ?? 'openai-compatibility';
+    final savedAuggieModels = account?.connectorType == 'auggie'
+        ? account!.models
+        : const <AiGatewayUpstreamModel>[];
+    final auggieModelIds = savedAuggieModels.isEmpty
+        ? AuggieCliService.pinnedModels.map((model) => model.id).join('\n')
+        : savedAuggieModels.map((model) => model.upstreamModelId).join('\n');
     _authType = account?.authType ?? 'api_key';
     final savedProviderPresetId = account?.endpointConfig['providerPresetId'];
     _providerPresetId = _connectorType == 'openai-compatibility'
@@ -1942,33 +1972,38 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
     _models = TextEditingController(
       text: account?.connectorType == 'devin-cli-agentic'
           ? kPinnedDevinCliModels.join('\n')
-          : account?.connectorType == 'kimi-coding'
-              ? kPinnedKimiCodeModels.join('\n')
-              : account?.models
-                      .map(
-                        (model) => [
-                          model.upstreamModelId,
-                          ...model.capabilities.entries
-                              .where((entry) => entry.value is bool)
-                              .map(
-                                (entry) => entry.value == true
-                                    ? entry.key
-                                    : '${entry.key}=false',
-                              ),
-                          if ({'command-code', 'openai-compatibility'}
-                                  .contains(_connectorType) &&
-                              model.config['apiProtocolOverride'] is String)
-                            'apiProtocolOverride=${model.config['apiProtocolOverride']}',
-                        ].join(','),
-                      )
-                      .join('\n') ??
-                  '',
+          : account?.connectorType == 'auggie'
+              ? auggieModelIds
+              : account?.connectorType == 'kimi-coding'
+                  ? kPinnedKimiCodeModels.join('\n')
+                  : account?.models
+                          .map(
+                            (model) => [
+                              model.upstreamModelId,
+                              ...model.capabilities.entries
+                                  .where((entry) => entry.value is bool)
+                                  .map(
+                                    (entry) => entry.value == true
+                                        ? entry.key
+                                        : '${entry.key}=false',
+                                  ),
+                              if ({
+                                    'command-code',
+                                    'openai-compatibility',
+                                  }.contains(_connectorType) &&
+                                  model.config['apiProtocolOverride'] is String)
+                                'apiProtocolOverride=${model.config['apiProtocolOverride']}',
+                            ].join(','),
+                          )
+                          .join('\n') ??
+                      '',
     );
     if (_connectorType == 'cloudflare-ai') {
       _models.text = kCloudflareWorkersAiModelIds.join('\n');
       _discoveredModels = [
-        for (final model
-            in cloudflareWorkersAiModelCatalog(account?.id ?? 'new'))
+        for (final model in cloudflareWorkersAiModelCatalog(
+          account?.id ?? 'new',
+        ))
           AiGatewayUpstreamModel(
             id: model.id,
             upstreamModelId: model.upstreamModelId,
@@ -1978,6 +2013,13 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
           ),
       ];
     }
+    if (_connectorType == 'auggie') {
+      _models.text = auggieModelIds;
+      _discoveredModels = savedAuggieModels.isEmpty
+          ? _pinnedAuggieModels(account?.id ?? 'new')
+          : List<AiGatewayUpstreamModel>.of(savedAuggieModels);
+      _endpoint.clear();
+    }
     if (_isAzureConnector && _azureDeployment.text.trim().isNotEmpty) {
       _models.text = _azureDeployment.text.trim();
     }
@@ -1986,9 +2028,8 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
         preset?.fallbackModels.isNotEmpty == true) {
       _models.text = preset!.fallbackModels
           .map(
-            (model) => model.accountEditorLine(
-              modelIdPrefix: preset.modelIdPrefix,
-            ),
+            (model) =>
+                model.accountEditorLine(modelIdPrefix: preset.modelIdPrefix),
           )
           .join('\n');
       _discoveredModels = [
@@ -2059,8 +2100,9 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
       };
       final currentLines = normalizedLines
           .where(
-            (line) => !previousFallbackModelIds
-                .contains(line.split(',').first.trim()),
+            (line) => !previousFallbackModelIds.contains(
+              line.split(',').first.trim(),
+            ),
           )
           .toList();
       final currentModelIds = {
@@ -2072,9 +2114,8 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                 !currentModelIds.contains('${preset.modelIdPrefix}${model.id}'),
           )
           .map(
-            (model) => model.accountEditorLine(
-              modelIdPrefix: preset.modelIdPrefix,
-            ),
+            (model) =>
+                model.accountEditorLine(modelIdPrefix: preset.modelIdPrefix),
           )
           .toList();
       if (_models.text.trim().isEmpty || previousPreset != null) {
@@ -2153,9 +2194,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
 
   bool get _hasApiProtocolSelection => _accountApiProtocolOptions.length > 1;
 
-  static List<String> _apiProtocolOptionsForPreset(
-    LlmProviderPreset? preset,
-  ) =>
+  static List<String> _apiProtocolOptionsForPreset(LlmProviderPreset? preset) =>
       preset == null
           ? kCustomHttpApiProtocols.toList(growable: false)
           : preset.protocolRoutes.isNotEmpty
@@ -2301,7 +2340,16 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                       _commandCodeModelProtocol = '';
                       _discoveredModels = const [];
                     }
-                    if (value == 'devin-cli-agentic') {
+                    if (value == 'auggie') {
+                      _authType = 'none';
+                      _endpoint.clear();
+                      _models.text = AuggieCliService.pinnedModels
+                          .map((model) => model.id)
+                          .join('\n');
+                      _discoveredModels = _pinnedAuggieModels(
+                        widget.account?.id ?? 'new',
+                      );
+                    } else if (value == 'devin-cli-agentic') {
                       _models.text = kPinnedDevinCliModels.join('\n');
                     } else if (value == 'cloudflare-ai') {
                       _models.text = kCloudflareWorkersAiModelIds.join('\n');
@@ -2364,8 +2412,10 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                     if (_connectorType == 'bedrock' &&
                         _region.text.trim().isEmpty) {
                       _region.text = 'us-east-1';
-                    } else if ({'vertex', 'vertex-partner'}
-                            .contains(_connectorType) &&
+                    } else if ({
+                          'vertex',
+                          'vertex-partner',
+                        }.contains(_connectorType) &&
                         _region.text.trim().isEmpty) {
                       _region.text = 'us-central1';
                     }
@@ -3058,6 +3108,17 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                   label: const Text('刷新模型目录'),
                 ),
               ),
+              if (_connectorType == 'auggie')
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: OutlinedButton.icon(
+                    onPressed: widget.account != null && !_draftChanged
+                        ? _testAuggieCli
+                        : null,
+                    icon: const Icon(Icons.terminal),
+                    label: const Text('测试本地 Auggie CLI'),
+                  ),
+                ),
               if (widget.account == null || _draftChanged)
                 const Align(
                   alignment: Alignment.centerRight,
@@ -3120,8 +3181,10 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                           ? entry.key
                           : '${entry.key}=false',
                     ),
-                if ({'command-code', 'openai-compatibility'}
-                        .contains(_connectorType) &&
+                if ({
+                      'command-code',
+                      'openai-compatibility',
+                    }.contains(_connectorType) &&
                     model.config['apiProtocolOverride'] is String)
                   'apiProtocolOverride=${model.config['apiProtocolOverride']}',
               ].join(','),
@@ -3132,18 +3195,39 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
       });
     } catch (_) {
       if (!mounted) return;
-      setState(() => _error = _connectorType == 'vertex-partner'
-          ? 'Vertex AI Partners 需要有效的 Google Cloud 项目和有权限的服务账号；Express API Key 仅支持 Gemini。'
-          : '模型目录读取失败，请检查账号认证和连接设置。');
+      setState(
+        () => _error = _connectorType == 'auggie'
+            ? 'Auggie CLI model list 未返回目录；已保留固定模型目录。'
+            : _connectorType == 'vertex-partner'
+                ? 'Vertex AI Partners 需要有效的 Google Cloud 项目和有权限的服务账号；Express API Key 仅支持 Gemini。'
+                : '模型目录读取失败，请检查账号认证和连接设置。',
+      );
+    }
+  }
+
+  Future<void> _testAuggieCli() async {
+    final account = widget.account;
+    if (account == null || _draftChanged) return;
+    try {
+      await widget.modelDiscovery.testConnection(account);
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Auggie CLI 已安装并可运行。')));
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _error = error.toString());
     }
   }
 
   void _saveSafely({bool reconnectOAuth = false}) {
     _save(reconnectOAuth: reconnectOAuth).catchError((_) {
       if (!mounted) return;
-      setState(() => _error = _connectorType == 'vertex-partner'
-          ? 'Vertex AI Partners 需要有效项目 ID；服务账号可从 JSON 读取，API Key 必须绑定项目。'
-          : '保存账号失败，请检查连接设置后重试。');
+      setState(
+        () => _error = _connectorType == 'vertex-partner'
+            ? 'Vertex AI Partners 需要有效项目 ID；服务账号可从 JSON 读取，API Key 必须绑定项目。'
+            : '保存账号失败，请检查连接设置后重试。',
+      );
     });
   }
 
@@ -3210,9 +3294,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
           widget.account?.authType == 'api_key';
       if (!retainingExistingKey &&
           !(candidate.startsWith('crsr_') || candidate.startsWith('grok_'))) {
-        setState(
-          () => _error = '请输入以 crsr_ 开头的 Cursor User API Key。',
-        );
+        setState(() => _error = '请输入以 crsr_ 开头的 Cursor User API Key。');
         return;
       }
     }
@@ -3327,8 +3409,10 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
           apiVersion: azureApiVersion,
         );
       } on FormatException {
-        setState(() => _error =
-            '请输入有效的 Azure HTTPS resource host、deployment ID 和 API version。');
+        setState(
+          () => _error =
+              '请输入有效的 Azure HTTPS resource host、deployment ID 和 API version。',
+        );
         return;
       }
       // Azure deployments are the source model IDs; there is no public model
@@ -3552,8 +3636,10 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
             modelConfig.remove('apiProtocolOverrideSource');
           }
         }
-      } else if ({'command-code', 'openai-compatibility'}
-          .contains(widget.account?.connectorType)) {
+      } else if ({
+        'command-code',
+        'openai-compatibility',
+      }.contains(widget.account?.connectorType)) {
         modelConfig.remove('apiProtocolOverride');
       }
       parsedModels.add(
@@ -3584,6 +3670,12 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
         ..['azureDeploymentId'] = azureDeploymentId
         ..['apiVersion'] = azureApiVersion
         ..['apiProtocol'] = 'openai.chat_completions';
+    } else if (_connectorType == 'auggie') {
+      endpointConfig
+        ..remove('baseUrl')
+        ..remove('host')
+        ..remove('apiBase')
+        ..remove('apiProtocol');
     } else if (widget.account?.connectorType == 'azure-ai' ||
         widget.account?.connectorType == 'azure-openai') {
       endpointConfig
@@ -3733,14 +3825,16 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
       previousPresetId is String ? previousPresetId : null,
     );
     if (selectedPreset != null) {
-      final appliedPresetConfig =
-          selectedPreset.applyToEndpointConfig(endpointConfig);
+      final appliedPresetConfig = selectedPreset.applyToEndpointConfig(
+        endpointConfig,
+      );
       endpointConfig
         ..clear()
         ..addAll(appliedPresetConfig);
     } else {
-      final customEndpointConfig =
-          LlmProviderPreset.clearFromEndpointConfig(endpointConfig);
+      final customEndpointConfig = LlmProviderPreset.clearFromEndpointConfig(
+        endpointConfig,
+      );
       endpointConfig
         ..clear()
         ..addAll(customEndpointConfig);
