@@ -300,8 +300,7 @@ class ChatMessage {
         compactMessages.add(_compactCurrentRawUserMessage(message));
         continue;
       }
-      if (message['content'] == null &&
-          message['reasoning_content'] == null) {
+      if (message['content'] == null && message['reasoning_content'] == null) {
         compactMessages.add(message);
         continue;
       }
