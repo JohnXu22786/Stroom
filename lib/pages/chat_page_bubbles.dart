@@ -568,9 +568,8 @@ extension _ChatPageBubblesExt on _ChatPageState {
     // segments of this message) keeps the "current" highlight aligned with
     // the global navigation cursor across segments.
     final lowerQuery = hasSearchMatch ? _searchQuery.toLowerCase() : '';
-    final messageFirstMatchIndex = hasSearchMatch
-        ? _searchMatches.indexWhere((m) => m.messageId == messageId)
-        : 0;
+    final messageFirstMatchIndex =
+        hasSearchMatch ? _searchMatchFirstIndexByMessageId[messageId]! : 0;
     var occurrenceOffset = 0;
     final streamingConvId = isStreaming && messageId == _streamingMsgId
         ? ref.read(activeConversationIdProvider)
@@ -778,9 +777,7 @@ extension _ChatPageBubblesExt on _ChatPageState {
         );
     final hasSearchMatch = _isSearching &&
         _searchQuery.isNotEmpty &&
-        _searchMatches.any(
-          (m) => m.messageId == message.id,
-        );
+        _searchMatchFirstIndexByMessageId.containsKey(message.id);
 
     // Per-message markdown config: only the message that is currently
     // being generated uses the streaming config (mermaid blocks show the
@@ -869,9 +866,8 @@ extension _ChatPageBubblesExt on _ChatPageState {
               config: markdownConfig,
               markdownGenerator: buildSearchMarkdownGenerator(
                 query: _searchQuery,
-                messageFirstMatchIndex: _searchMatches.indexWhere(
-                  (m) => m.messageId == message.id,
-                ),
+                messageFirstMatchIndex:
+                    _searchMatchFirstIndexByMessageId[message.id]!,
                 occurrenceOffset: 0,
                 currentMatchIndex: _currentMatchIndex,
               ),
@@ -905,9 +901,7 @@ extension _ChatPageBubblesExt on _ChatPageState {
     final hasText = message.text.trim().isNotEmpty;
     final hasSearchMatch = _isSearching &&
         _searchQuery.isNotEmpty &&
-        _searchMatches.any(
-          (m) => m.messageId == message.id,
-        );
+        _searchMatchFirstIndexByMessageId.containsKey(message.id);
     return Column(
       crossAxisAlignment: hasAttachments && isSentByMe
           ? CrossAxisAlignment.end

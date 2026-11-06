@@ -324,6 +324,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
   SearchMode _searchMode = SearchMode.current;
   String _searchQuery = '';
   final List<SearchMatch> _searchMatches = [];
+  final Map<String, int> _searchMatchFirstIndexByMessageId = {};
   int _currentMatchIndex = 0;
   final TextEditingController _searchTextController = TextEditingController();
   final Map<String, GlobalKey> _messageKeys = {};
