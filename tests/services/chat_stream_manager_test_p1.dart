@@ -138,8 +138,13 @@ void chatStreamManagerGroup1() {
         [AIStreamEvent('部分回答')],
       ])
         ..errorAfterYield = networkFailure;
-      final manager = ChatStreamManager.withRetryPolicy(
-          ref: container, retryDelay: (_) async {});
+      final managerProvider = Provider<ChatStreamManager>(
+        (ref) => ChatStreamManager.withRetryPolicy(
+          ref: ref,
+          retryDelay: (_) async {},
+        ),
+      );
+      final manager = container.read(managerProvider);
       manager.adapter.forceService(_makeChatService(provider));
       final bubbles = <ChatMessage>[];
       manager.setContinuationHandler(
