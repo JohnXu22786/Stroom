@@ -375,29 +375,7 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
               createdAt: c.createdAt,
               updatedAt: c.updatedAt,
               messages: c.messages
-                  .map(
-                    (m) => ChatMessage(
-                      id: m.id,
-                      role: m.role,
-                      content: m.content,
-                      createdAt: m.createdAt,
-                      attachments: m.attachments,
-                      isStreaming: m.isStreaming,
-                      isError: m.isError,
-                      reasoningContent: m.reasoningContent,
-                      toolCalls: m.toolCalls,
-                      reasoningSections: m.reasoningSections,
-                      textSections: m.textSections,
-                      toolCallRoundStarts: m.toolCallRoundStarts,
-                      blocks: m.blocks,
-                      // Tier 2 的目的就是剥离 rawRequest/rawResponse
-                      // （通常含大体积 base64，Tier 1 全量保存失败的
-                      // 原因）：这里必须传 null，否则与 Tier 1 相同
-                      // 的内容会再次失败，兜底层形同虚设。
-                      rawRequest: null,
-                      rawResponse: null,
-                    ),
-                  )
+                  .map((m) => m.copyWith(stripRawData: true))
                   .toList(),
               isPinned: c.isPinned,
               sortOrder: c.sortOrder,

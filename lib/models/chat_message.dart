@@ -143,7 +143,11 @@ class ChatMessage {
   final List<Attachment> attachments;
   final bool isStreaming;
   final bool isError;
-  final String? reasoningContent;
+
+  /// Legacy single-string reasoning, derived from sections when not stored.
+  final String? _reasoningContent;
+  String? get reasoningContent =>
+      _reasoningContent ?? reasoningSections?.join('\n');
   final Map<String, dynamic>? rawRequest;
   final Map<String, dynamic>? rawResponse;
 
@@ -190,7 +194,7 @@ class ChatMessage {
     List<Attachment>? attachments,
     this.isStreaming = false,
     this.isError = false,
-    this.reasoningContent,
+    String? reasoningContent,
     this.rawRequest,
     this.rawResponse,
     this.toolCalls,
@@ -201,6 +205,7 @@ class ChatMessage {
     bool contentFromTextSections = false,
   })  : id = id ?? const Uuid().v4(),
         _content = contentFromTextSections ? null : content,
+        _reasoningContent = reasoningContent,
         createdAt = createdAt ?? DateTime.now(),
         attachments = attachments ?? [];
 
@@ -484,7 +489,7 @@ class ChatMessage {
     final errorBlocks = hasCanonicalSections
         ? blocks?.whereType<ErrorBlock>().toList()
         : blocks;
-    final savedReasoningContent = reasoningContent;
+    final savedReasoningContent = _reasoningContent;
     return {
       'id': id,
       'role': role,
@@ -639,9 +644,15 @@ class ChatMessage {
       isError: map['isError'] is bool ? map['isError'] : false,
       // A wrong-typed optional field should not make Conversation.fromMap
       // discard the entire message while recovering the rest of the history.
-      reasoningContent: map['reasoningContent'] is String
+      reasoningContent: map['reasoningContent'] is String &&
+              !_matchesJoinedSections(
+                reasoningSections,
+                map['reasoningContent'] as String,
+                separator: '\n',
+                skipEmptySections: !keepEmptySections,
+              )
           ? map['reasoningContent'] as String
-          : (reasoningSections?.join('\n')),
+          : null,
       // Use safe casting so non-Map rawRequest/rawResponse values don't throw
       // a TypeError, which would skip the ENTIRE message in Conversation.fromMap.
       rawRequest: _compactDeserializedRawRequest(map['rawRequest']),
@@ -673,6 +684,7 @@ class ChatMessage {
     List<Attachment>? attachments,
     bool? isStreaming,
     bool? isError,
+    bool stripRawData = false,
     String? reasoningContent,
     Map<String, dynamic>? rawRequest,
     Map<String, dynamic>? rawResponse,
@@ -693,9 +705,9 @@ class ChatMessage {
         attachments: attachments ?? this.attachments,
         isStreaming: isStreaming ?? this.isStreaming,
         isError: isError ?? this.isError,
-        reasoningContent: reasoningContent ?? this.reasoningContent,
-        rawRequest: rawRequest ?? this.rawRequest,
-        rawResponse: rawResponse ?? this.rawResponse,
+        reasoningContent: reasoningContent ?? _reasoningContent,
+        rawRequest: stripRawData ? null : rawRequest ?? this.rawRequest,
+        rawResponse: stripRawData ? null : rawResponse ?? this.rawResponse,
         toolCalls: toolCalls ?? this.toolCalls,
         reasoningSections: reasoningSections ?? this.reasoningSections,
         textSections: textSections ?? this.textSections,
