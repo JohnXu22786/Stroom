@@ -1414,7 +1414,7 @@ bool _legacyOcrHasDocumentationCredentialEchoAcrossLineBreak(
 ) {
   if (prefix.toLowerCase() != 'documentation' ||
       RegExp(
-        r'^\s*please\s+review\s+the\s+documentation[\r\n]+\s*carefully[.!?]?\s*$',
+        r'^\s*please\s+review\s+the\s+documentation[\r\n]+\s*(?:carefully|visually)[.!?]?\s*$',
         caseSensitive: false,
       ).hasMatch(text)) {
     return false;

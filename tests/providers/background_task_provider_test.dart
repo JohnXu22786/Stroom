@@ -15876,6 +15876,67 @@ void main() {
     );
 
     test(
+      'legacy OCR instruction migration preserves recognized prose and redacts documentation echoes after a line break',
+      () {
+        BackgroundTask taskFor(String id, String instruction) =>
+            BackgroundTask.fromMap({
+              'id': id,
+              'type': 'ocr',
+              'title': 'legacy OCR request',
+              'status': 'failed',
+              'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+              'rawRequest': {
+                'url': 'https://api.example.com/v1/chat/completions',
+                'headers': {'Authorization': 'Bearer documentation…'},
+                'body': {
+                  'model': 'vision-model',
+                  'messages': [
+                    {
+                      'role': 'user',
+                      'content': [
+                        {'type': 'text', 'text': instruction},
+                      ],
+                    },
+                  ],
+                },
+              },
+            });
+
+        const instruction = 'Please review the documentation\nvisually';
+        final task = taskFor(
+          'legacy-ocr-documentation-visually-natural-line-break',
+          instruction,
+        );
+        final persisted = jsonEncode(task.toMap());
+        final serializedTask = jsonDecode(persisted) as Map<String, dynamic>;
+        final serializedRetryData =
+            serializedTask['retryData'] as Map<String, dynamic>;
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          instruction,
+        );
+        expect(serializedRetryData['instructionContent'], instruction);
+        expect(serializedTask, isNot(contains('rawRequest')));
+        expect(persisted, isNot(contains('Authorization')));
+        expect(persisted, isNot(contains('Bearer documentation…')));
+
+        const echoedCredential = 'foobarxyz';
+        final credentialTask = taskFor(
+          'legacy-ocr-documentation-line-break-credential-echo',
+          'Please review the documentation\n$echoedCredential',
+        );
+        final credentialPersisted = jsonEncode(credentialTask.toMap());
+        expect(
+          OcrRetrySnapshot.fromMap(credentialTask.retryData!)
+              .instructionContent,
+          isNot(contains(echoedCredential)),
+        );
+        expect(credentialPersisted, isNot(contains(echoedCredential)));
+      },
+    );
+
+    test(
       'legacy OCR instruction migration redacts whitespace-split documentation echoes and preserves safe text',
       () {
         BackgroundTask taskFor(
