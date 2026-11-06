@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -24,14 +23,6 @@ import '../../models/task_flow_definition.dart';
 import '../../models/task_flow_exception.dart';
 import '../../providers/task_flow_execution_provider.dart';
 import 'shared_helpers.dart';
-
-/// Approximate length of the JSON request body: the base64 data-URI is the
-/// dominant term (~1.33x the raw image bytes) plus a fixed envelope.
-int _encodedBodyLength(Uint8List imageBytes, String imageFormat) {
-  final b64 = base64Encode(imageBytes).length;
-  final dataUri = 'data:image/$imageFormat;base64,'.length + b64;
-  return dataUri + 512; // JSON envelope overhead (model, messages, etc.)
-}
 
 Future<Uint8List> _readInputBytesUpTo(File file, int maxBytes) async {
   final bytes = BytesBuilder(copy: false);
@@ -303,7 +294,9 @@ Future<String> executeOcrBlock({
         dio: ocrDio,
         connectTimeout: connectTimeoutDefault,
         sendTimeout: sendTimeoutForBytes(
-          _encodedBodyLength(imageBytes, imageFormat),
+          sizeEstimator.encodedRequestSizeBytes(
+            imageBytesList: [(imageBytes, imageFormat)],
+          ),
         ),
         receiveTimeout: receiveTimeoutFallback,
       );
