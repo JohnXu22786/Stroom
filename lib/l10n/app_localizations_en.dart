@@ -1034,6 +1034,20 @@ class AppLocalizationsEn extends AppLocalizations {
   String get updateDownloading => 'Downloading update…';
 
   @override
+  String updateCheckNetworkError(Object details) {
+    return 'Network error: $details';
+  }
+
+  @override
+  String updateCheckHttpFailed(Object statusCode) {
+    return 'Failed to check for updates: HTTP $statusCode';
+  }
+
+  @override
+  String get updateCheckInvalidResponse =>
+      'Failed to check for updates: the server returned unrecognized data';
+
+  @override
   String get updateDownloadUrlUnavailable => 'The download URL is unavailable.';
 
   @override
@@ -10535,6 +10549,20 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get updateDownloading => 'Downloading update…';
+
+  @override
+  String updateCheckNetworkError(Object details) {
+    return 'Network error: $details';
+  }
+
+  @override
+  String updateCheckHttpFailed(Object statusCode) {
+    return 'Failed to check for updates: HTTP $statusCode';
+  }
+
+  @override
+  String get updateCheckInvalidResponse =>
+      'Failed to check for updates: the server returned unrecognized data';
 
   @override
   String get updateDownloadUrlUnavailable => 'The download URL is unavailable.';

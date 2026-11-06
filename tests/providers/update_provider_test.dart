@@ -1,14 +1,19 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io' show Directory, File;
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart'
     show
         debugDefaultTargetPlatformOverride,
         defaultTargetPlatform,
         TargetPlatform;
+import 'package:flutter/services.dart' show MethodChannel, PlatformException;
+import 'package:flutter/widgets.dart' show Locale;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/l10n/app_localizations.dart';
+import 'package:stroom/providers/locale_provider.dart';
 import 'package:stroom/providers/update_provider.dart';
 
 /// Creates a mock [Dio] that intercepts all requests and returns [jsonResponse]
@@ -307,6 +312,53 @@ void main() {
   });
 
   group('UpdateNotifier', () {
+    test('localizes update check errors and preserves HTTP status', () async {
+      SharedPreferences.setMockInitialValues({});
+
+      final english = UpdateNotifier(
+        dio: _createNon200Dio(503),
+        localizations: () =>
+            appLocalizationsForLocale(const Locale('en', 'US')),
+      );
+      await english.checkForUpdate();
+      expect(english.state.error, 'Failed to check for updates: HTTP 503');
+
+      final chinese = UpdateNotifier(
+        dio: _createNon200Dio(503),
+        localizations: () =>
+            appLocalizationsForLocale(const Locale('zh', 'CN')),
+      );
+      await chinese.checkForUpdate();
+      expect(chinese.state.error, '检查更新失败：HTTP 503');
+    });
+
+    test('localizes download errors and preserves exception details', () async {
+      SharedPreferences.setMockInitialValues({});
+      final english = UpdateNotifier(
+        dio: _createFailingDio(),
+        localizations: () =>
+            appLocalizationsForLocale(const Locale('en', 'US')),
+      );
+      english.state = const UpdateState(
+        downloadUrl: 'https://example.com/update.zip',
+      );
+      await english.downloadUpdate(downloadDir: Directory.systemTemp.path);
+      expect(english.state.downloadError, contains('Download failed: '));
+      expect(english.state.downloadError, contains('Connection refused'));
+
+      final chinese = UpdateNotifier(
+        dio: _createFailingDio(),
+        localizations: () =>
+            appLocalizationsForLocale(const Locale('zh', 'CN')),
+      );
+      chinese.state = const UpdateState(
+        downloadUrl: 'https://example.com/update.zip',
+      );
+      await chinese.downloadUpdate(downloadDir: Directory.systemTemp.path);
+      expect(chinese.state.downloadError, contains('下载失败：'));
+      expect(chinese.state.downloadError, contains('Connection refused'));
+    });
+
     test('checkForUpdate sets isChecking immediately', () {
       final dio = Dio(BaseOptions());
       dio.interceptors.add(InterceptorsWrapper(
@@ -372,7 +424,7 @@ void main() {
 
       expect(notifier.state.isChecking, false);
       expect(notifier.state.error, isNotNull);
-      expect(notifier.state.error, contains('网络错误'));
+      expect(notifier.state.error, contains('Connection refused'));
     });
 
     test('resets state on HTTP failure when silent', () async {
@@ -1033,7 +1085,7 @@ void main() {
 
       expect(notifier.state.isDownloading, false);
       expect(notifier.state.downloadError, isNotNull);
-      expect(notifier.state.downloadError, contains('下载失败'));
+      expect(notifier.state.downloadError, contains('Connection refused'));
     });
 
     test('downloadUpdate handles non-200 response', () async {
@@ -1097,6 +1149,41 @@ void main() {
       // downloadedFilePath is null → early return, no install attempt
       await notifier.installDownloadedFile();
       expect(notifier.state.downloadError, isNull);
+    });
+
+    test('localizes APK install fallback in English and Simplified Chinese',
+        () async {
+      const channel = MethodChannel('com.johntsui.stroom/install');
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+        throw PlatformException(code: 'install_failed');
+      });
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+
+      try {
+        final english = UpdateNotifier(
+          dio: Dio(BaseOptions()),
+          localizations: () =>
+              appLocalizationsForLocale(const Locale('en', 'US')),
+        )..state = UpdateState(downloadedFilePath: '$tempDir/update.apk');
+        await english.installDownloadedFile();
+        expect(
+          english.state.downloadError,
+          'Installation failed. Open the APK manually.',
+        );
+
+        final chinese = UpdateNotifier(
+          dio: Dio(BaseOptions()),
+          localizations: () =>
+              appLocalizationsForLocale(const Locale('zh', 'CN')),
+        )..state = UpdateState(downloadedFilePath: '$tempDir/update.apk');
+        await chinese.installDownloadedFile();
+        expect(chinese.state.downloadError, '安装失败，请手动打开 APK 安装');
+      } finally {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, null);
+        debugDefaultTargetPlatformOverride = originalPlatform;
+      }
     });
 
     test('installDownloadedFile does nothing when downloadedFilePath is empty',

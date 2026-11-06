@@ -964,6 +964,19 @@ class AppLocalizationsZh extends AppLocalizations {
   String get updateDownloading => '正在下载更新...';
 
   @override
+  String updateCheckNetworkError(Object details) {
+    return '网络错误：$details';
+  }
+
+  @override
+  String updateCheckHttpFailed(Object statusCode) {
+    return '检查更新失败：HTTP $statusCode';
+  }
+
+  @override
+  String get updateCheckInvalidResponse => '检查更新失败：服务器返回了无法识别的数据';
+
+  @override
   String get updateDownloadUrlUnavailable => '下载地址不可用';
 
   @override
@@ -9972,6 +9985,19 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get updateDownloading => '正在下载更新...';
+
+  @override
+  String updateCheckNetworkError(Object details) {
+    return '网络错误：$details';
+  }
+
+  @override
+  String updateCheckHttpFailed(Object statusCode) {
+    return '检查更新失败：HTTP $statusCode';
+  }
+
+  @override
+  String get updateCheckInvalidResponse => '检查更新失败：服务器返回了无法识别的数据';
 
   @override
   String get updateDownloadUrlUnavailable => '下载地址不可用';

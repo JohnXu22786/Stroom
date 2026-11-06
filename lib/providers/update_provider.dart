@@ -14,13 +14,17 @@ import 'package:flutter_riverpod/legacy.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../l10n/app_localizations.dart';
 import '../services/startup_preferences.dart';
 import '../utils/app_version.dart';
+import 'locale_provider.dart';
 import 'update_provider_shared.dart';
 export 'update_provider_shared.dart';
 
 final updateProvider = StateNotifierProvider<UpdateNotifier, UpdateState>(
-  (ref) => UpdateNotifier(),
+  (ref) => UpdateNotifier(
+    localizations: () => appLocalizationsForLocale(ref.read(localeProvider)),
+  ),
 );
 
 class UpdateState {
@@ -172,8 +176,9 @@ void setPendingRestartInMemory(bool value) {
 
 class UpdateNotifier extends StateNotifier<UpdateState> {
   final Dio _dio;
+  final AppLocalizations Function() _localizations;
 
-  UpdateNotifier({Dio? dio})
+  UpdateNotifier({Dio? dio, AppLocalizations Function()? localizations})
       : _dio = dio ??
             Dio(
               BaseOptions(
@@ -181,6 +186,8 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
                 receiveTimeout: const Duration(seconds: 10),
               ),
             ),
+        _localizations =
+            localizations ?? (() => appLocalizationsForLocale(null)),
         super(const UpdateState());
 
   /// Finds the download URL for the given [platformKey] from the release [assets].
@@ -366,7 +373,7 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
         state = state.copyWith(
           isChecking: false,
           updateAvailable: false,
-          error: '网络错误: $e',
+          error: _localizations().updateCheckNetworkError(e),
         );
       } else {
         state = _resetState();
@@ -397,7 +404,9 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
         state = state.copyWith(
           isChecking: false,
           updateAvailable: false,
-          error: '检查更新失败: HTTP ${response.statusCode}',
+          error: _localizations().updateCheckHttpFailed(
+            response.statusCode.toString(),
+          ),
         );
       } else {
         state = _resetState();
@@ -412,7 +421,7 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
         state = state.copyWith(
           isChecking: false,
           updateAvailable: false,
-          error: '检查更新失败: 服务器返回了无法识别的数据',
+          error: _localizations().updateCheckInvalidResponse,
         );
       } else {
         state = _resetState();
@@ -723,7 +732,7 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     if (url == null || url.isEmpty) {
       state = state.copyWith(
         isDownloading: false,
-        downloadError: '下载地址不可用',
+        downloadError: _localizations().updateDownloadUrlUnavailable,
       );
       return;
     }
@@ -745,7 +754,7 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     if (url.contains('/releases/tag/')) {
       state = state.copyWith(
         isDownloading: false,
-        downloadError: '当前平台暂无直接下载链接，请前往浏览器手动下载',
+        downloadError: _localizations().updateNoDirectDownloadLink,
       );
       return;
     }
@@ -792,7 +801,7 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
         } catch (e) {
           // 捕获 installDownloadedFile 未处理到的异常
           state = state.copyWith(
-            downloadError: '自动安装失败: $e',
+            downloadError: _localizations().updateAutomaticInstallFailed(e),
           );
         } finally {
           state = state.copyWith(isInstalling: false);
@@ -800,13 +809,15 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
       } else {
         state = state.copyWith(
           isDownloading: false,
-          downloadError: '下载失败: HTTP ${response.statusCode}',
+          downloadError: _localizations().updateDownloadHttpFailed(
+            response.statusCode.toString(),
+          ),
         );
       }
     } catch (e) {
       state = state.copyWith(
         isDownloading: false,
-        downloadError: '下载失败: $e',
+        downloadError: _localizations().updateDownloadFailed(e),
       );
     }
   }
@@ -840,7 +851,7 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
         await _installOnAndroid(filePath);
       } catch (e) {
         state = state.copyWith(
-          downloadError: '安装失败: $e',
+          downloadError: _localizations().updateInstallFailed(e),
         );
       }
     } else if (defaultTargetPlatform == TargetPlatform.windows ||
@@ -850,7 +861,7 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
         await _installOnDesktop(filePath);
       } catch (e) {
         state = state.copyWith(
-          downloadError: '更新失败: $e',
+          downloadError: _localizations().updateFailed(e),
         );
       }
     } else {
@@ -861,12 +872,13 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
           await launchUrl(uri, mode: LaunchMode.externalApplication);
         } else {
           state = state.copyWith(
-            downloadError: '无法打开文件，请手动安装: $filePath',
+            downloadError:
+                _localizations().updateManualInstallFileError(filePath),
           );
         }
       } catch (e) {
         state = state.copyWith(
-          downloadError: '安装失败: $e',
+          downloadError: _localizations().updateInstallFailed(e),
         );
       }
     }
@@ -1178,13 +1190,14 @@ rm -- "\$0"
       // Install failed — clear both flags to prevent false "update complete" dialog
       await _clearPendingRestartFlags();
       state = state.copyWith(
-        downloadError: e.message ?? '安装失败，请手动打开 APK 安装',
+        downloadError:
+            e.message ?? _localizations().updateApkInstallFailedNoDetails,
       );
     } catch (e) {
       // Install failed — clear both flags
       await _clearPendingRestartFlags();
       state = state.copyWith(
-        downloadError: '安装失败: $e',
+        downloadError: _localizations().updateInstallFailed(e),
       );
     }
   }
