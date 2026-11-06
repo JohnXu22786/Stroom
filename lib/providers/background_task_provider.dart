@@ -2806,6 +2806,7 @@ bool _legacyOcrHasOrdinaryNaturalPromptContext(
         caseSensitive: false,
       ).hasMatch(after);
   final naturalImperativePrompt = const {
+        'accommodate',
         'recognize',
         'interpret',
         'calculate',

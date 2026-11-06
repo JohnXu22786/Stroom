@@ -13231,7 +13231,7 @@ void main() {
           ),
           'accommod': (
             'Please accommodate the requested crop',
-            'Please [redacted] the requested crop',
+            'Please accommodate the requested crop',
           ),
           'secretar': (
             'Please ask the secretary carefully',
@@ -13260,6 +13260,20 @@ void main() {
           );
           expect(jsonEncode(task.toMap()), contains(expectedInstruction));
         }
+        const credentialEcho = 'accommodQm9x7Lk2Vp6';
+        final credentialEchoTask = taskFor(
+          'legacy-ocr-accommod-credential-echo',
+          'Use credential $credentialEcho as the authorization value',
+          credentialPrefix: 'accommod',
+        );
+        final credentialEchoPersisted = jsonEncode(credentialEchoTask.toMap());
+        expect(
+          OcrRetrySnapshot.fromMap(
+            credentialEchoTask.retryData!,
+          ).instructionContent,
+          'Use credential [redacted] as the authorization value',
+        );
+        expect(credentialEchoPersisted, isNot(contains(credentialEcho)));
 
         const oneLetterNaturalPrompts = {
           'password': 'The passwords are saved securely.',
