@@ -548,7 +548,7 @@ void main() {
         expect(
           tester
               .widget<FilledButton>(
-                find.widgetWithText(FilledButton, '开始识别'),
+                find.widgetWithText(FilledButton, '正在导入图片...'),
               )
               .onPressed,
           isNull,
