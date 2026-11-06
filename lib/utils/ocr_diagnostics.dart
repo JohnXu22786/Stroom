@@ -500,6 +500,9 @@ class OcrDiagnosticSnapshot {
           ).hasMatch(candidate) ||
           RegExp(
             r'^部分图片 OCR 未完成：第 \d+ 张图片(?:识别失败|结果不完整)(?:；第 \d+ 张图片(?:识别失败|结果不完整))*$',
+          ).hasMatch(candidate) ||
+          RegExp(
+            r'^Some images were not fully recognized: Image \d+: (?:recognition failed|incomplete result)(?:; Image \d+: (?:recognition failed|incomplete result))*$',
           ).hasMatch(candidate)) {
         return true;
       }
@@ -507,7 +510,11 @@ class OcrDiagnosticSnapshot {
       final incompleteResult = RegExp(
         r'^OCR 返回了不完整结果（finish_reason=([A-Za-z0-9_-]{1,48})）$',
       ).firstMatch(candidate);
-      final finishReason = incompleteResult?.group(1);
+      final englishIncompleteResult = RegExp(
+        r'^OCR returned an incomplete result \(finish_reason=([A-Za-z0-9_-]{1,48})\)$',
+      ).firstMatch(candidate);
+      final finishReason =
+          incompleteResult?.group(1) ?? englishIncompleteResult?.group(1);
       if (finishReason == 'unknown' ||
           (finishReason != null &&
               _safeReason(finishReason, excludedValues: excludedValues) ==

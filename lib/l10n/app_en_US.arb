@@ -4955,5 +4955,278 @@
         "type": "int"
       }
     }
-  }
+  },
+  "bgTaskCancelled": "Canceled",
+  "bgTaskAsrError": "Speech transcription failed: {details}",
+  "@bgTaskAsrError": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "bgTaskAsrSaveError": "Saving speech transcription failed: {details}",
+  "@bgTaskAsrSaveError": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "bgTaskOcrError": "OCR failed: {details}",
+  "@bgTaskOcrError": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "bgTaskOcrSaveError": "Saving OCR results failed: {details}",
+  "@bgTaskOcrSaveError": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "bgTaskOcrIncompleteError": "OCR result is incomplete: {details}",
+  "@bgTaskOcrIncompleteError": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "bgTaskOcrIncompleteFallback": "Some OCR pages were not completed",
+  "bgTaskProgressMetrics": " · phase {phaseElapsedMs} ms · {completedRequests} requests · {completedChunks}/{chunkCount} chunks completed",
+  "@bgTaskProgressMetrics": {
+    "placeholders": {
+      "phaseElapsedMs": {
+        "type": "String"
+      },
+      "completedRequests": {
+        "type": "String"
+      },
+      "completedChunks": {
+        "type": "String"
+      },
+      "chunkCount": {
+        "type": "String"
+      }
+    }
+  },
+  "bgTaskAsrUploadProgress": "Uploading audio{chunk} {percent}% · {bytes} bytes{metrics}",
+  "@bgTaskAsrUploadProgress": {
+    "placeholders": {
+      "chunk": {
+        "type": "String"
+      },
+      "percent": {
+        "type": "String"
+      },
+      "bytes": {
+        "type": "String"
+      },
+      "metrics": {
+        "type": "String"
+      }
+    }
+  },
+  "bgTaskAsrUploadChunk": "Uploading audio{chunk}{metrics}",
+  "@bgTaskAsrUploadChunk": {
+    "placeholders": {
+      "chunk": {
+        "type": "String"
+      },
+      "metrics": {
+        "type": "String"
+      }
+    }
+  },
+  "bgTaskAsrChunk": " (chunk {index}/{count})",
+  "@bgTaskAsrChunk": {
+    "placeholders": {
+      "index": {
+        "type": "String"
+      },
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "bgTaskAsrTranscribing": "Transcribing{metrics}",
+  "@bgTaskAsrTranscribing": {
+    "placeholders": {
+      "metrics": {
+        "type": "String"
+      }
+    }
+  },
+  "bgTaskAsrTranscribingChunk": "Transcribing (chunk {index}/{count}){metrics}",
+  "@bgTaskAsrTranscribingChunk": {
+    "placeholders": {
+      "index": {
+        "type": "String"
+      },
+      "count": {
+        "type": "String"
+      },
+      "metrics": {
+        "type": "String"
+      }
+    }
+  },
+  "bgTaskAsrReceivingChunk": "Transcribing (receiving chunk {index}/{count}){metrics}",
+  "@bgTaskAsrReceivingChunk": {
+    "placeholders": {
+      "index": {
+        "type": "String"
+      },
+      "count": {
+        "type": "String"
+      },
+      "metrics": {
+        "type": "String"
+      }
+    }
+  },
+  "bgTaskAsrReceiveProgress": "Receiving result {percent}%{metrics}",
+  "@bgTaskAsrReceiveProgress": {
+    "placeholders": {
+      "percent": {
+        "type": "String"
+      },
+      "metrics": {
+        "type": "String"
+      }
+    }
+  },
+  "bgTaskAsrReceive": "Receiving result",
+  "bgTaskAsrCompletedChunks": "Transcribing ({index}/{count} chunks completed){metrics}",
+  "@bgTaskAsrCompletedChunks": {
+    "placeholders": {
+      "index": {
+        "type": "String"
+      },
+      "count": {
+        "type": "String"
+      },
+      "metrics": {
+        "type": "String"
+      }
+    }
+  },
+  "bgTaskAsrChunkReturned": "Transcribing (chunk {index}/{count} returned){metrics}",
+  "@bgTaskAsrChunkReturned": {
+    "placeholders": {
+      "index": {
+        "type": "String"
+      },
+      "count": {
+        "type": "String"
+      },
+      "metrics": {
+        "type": "String"
+      }
+    }
+  },
+  "bgTaskOcrUploadPageProgress": "Image {index}/{total} {percent}%",
+  "@bgTaskOcrUploadPageProgress": {
+    "placeholders": {
+      "index": {
+        "type": "String"
+      },
+      "total": {
+        "type": "String"
+      },
+      "percent": {
+        "type": "String"
+      }
+    }
+  },
+  "bgTaskOcrUploadPagesProgress": "Uploading {details}",
+  "@bgTaskOcrUploadPagesProgress": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "bgTaskOcrUploadProgress": "Uploading images {percent}%",
+  "@bgTaskOcrUploadProgress": {
+    "placeholders": {
+      "percent": {
+        "type": "String"
+      }
+    }
+  },
+  "bgTaskAsrCheckpointUncertain": "ASR recovery checkpoint could not be saved; the request outcome is uncertain and the task was stopped: {details}",
+  "@bgTaskAsrCheckpointUncertain": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "bgTaskAsrCheckpointNotSent": "ASR recovery checkpoint could not be saved; this chunk was not sent and can be retried after fixing local storage: {details}",
+  "@bgTaskAsrCheckpointNotSent": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "bgTaskAsrCheckpointCancelled": "ASR chunk state could not be saved before cancellation; this chunk outcome remains uncertain: {details}",
+  "@bgTaskAsrCheckpointCancelled": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "bgTaskAsrRetryAudioSaveError": "Could not save ASR retry audio; the task was not sent: {details}",
+  "@bgTaskAsrRetryAudioSaveError": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "bgTaskAsrBatchAudioSaveError": "Another audio file could not be saved; sending was canceled",
+  "bgTaskOcrResultIncomplete": "OCR returned an incomplete result (finish_reason={finishReason})",
+  "@bgTaskOcrResultIncomplete": {
+    "placeholders": {
+      "finishReason": {
+        "type": "String"
+      }
+    }
+  },
+  "bgTaskOcrPagesIncomplete": "Some images were not fully recognized: {details}",
+  "@bgTaskOcrPagesIncomplete": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "bgTaskOcrPageIncomplete": "Image {index}: incomplete result",
+  "@bgTaskOcrPageIncomplete": {
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
+  },
+  "bgTaskOcrPageFailed": "Image {index}: recognition failed",
+  "@bgTaskOcrPageFailed": {
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
+  },
+  "bgTaskOcrPageFailureSeparator": "; ",
+  "bgTaskInterruptedOnRestart": "Interrupted when the app restarted",
+  "bgTaskOcrErrorDetailsHidden": "OCR error details were hidden",
+  "bgTaskErrorDetailsHidden": "Error details were hidden"
 }

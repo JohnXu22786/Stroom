@@ -9226,6 +9226,179 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get filesReorderDone => 'Done';
+
+  @override
+  String get bgTaskCancelled => 'Canceled';
+
+  @override
+  String bgTaskAsrError(String details) {
+    return 'Speech transcription failed: $details';
+  }
+
+  @override
+  String bgTaskAsrSaveError(String details) {
+    return 'Saving speech transcription failed: $details';
+  }
+
+  @override
+  String bgTaskOcrError(String details) {
+    return 'OCR failed: $details';
+  }
+
+  @override
+  String bgTaskOcrSaveError(String details) {
+    return 'Saving OCR results failed: $details';
+  }
+
+  @override
+  String bgTaskOcrIncompleteError(String details) {
+    return 'OCR result is incomplete: $details';
+  }
+
+  @override
+  String get bgTaskOcrIncompleteFallback => 'Some OCR pages were not completed';
+
+  @override
+  String bgTaskProgressMetrics(
+    String phaseElapsedMs,
+    String completedRequests,
+    String completedChunks,
+    String chunkCount,
+  ) {
+    return ' · phase $phaseElapsedMs ms · $completedRequests requests · $completedChunks/$chunkCount chunks completed';
+  }
+
+  @override
+  String bgTaskAsrUploadProgress(
+    String chunk,
+    String percent,
+    String bytes,
+    String metrics,
+  ) {
+    return 'Uploading audio$chunk $percent% · $bytes bytes$metrics';
+  }
+
+  @override
+  String bgTaskAsrUploadChunk(String chunk, String metrics) {
+    return 'Uploading audio$chunk$metrics';
+  }
+
+  @override
+  String bgTaskAsrChunk(String index, String count) {
+    return ' (chunk $index/$count)';
+  }
+
+  @override
+  String bgTaskAsrTranscribing(String metrics) {
+    return 'Transcribing$metrics';
+  }
+
+  @override
+  String bgTaskAsrTranscribingChunk(
+    String index,
+    String count,
+    String metrics,
+  ) {
+    return 'Transcribing (chunk $index/$count)$metrics';
+  }
+
+  @override
+  String bgTaskAsrReceivingChunk(String index, String count, String metrics) {
+    return 'Transcribing (receiving chunk $index/$count)$metrics';
+  }
+
+  @override
+  String bgTaskAsrReceiveProgress(String percent, String metrics) {
+    return 'Receiving result $percent%$metrics';
+  }
+
+  @override
+  String get bgTaskAsrReceive => 'Receiving result';
+
+  @override
+  String bgTaskAsrCompletedChunks(String index, String count, String metrics) {
+    return 'Transcribing ($index/$count chunks completed)$metrics';
+  }
+
+  @override
+  String bgTaskAsrChunkReturned(String index, String count, String metrics) {
+    return 'Transcribing (chunk $index/$count returned)$metrics';
+  }
+
+  @override
+  String bgTaskOcrUploadPageProgress(
+    String index,
+    String total,
+    String percent,
+  ) {
+    return 'Image $index/$total $percent%';
+  }
+
+  @override
+  String bgTaskOcrUploadPagesProgress(String details) {
+    return 'Uploading $details';
+  }
+
+  @override
+  String bgTaskOcrUploadProgress(String percent) {
+    return 'Uploading images $percent%';
+  }
+
+  @override
+  String bgTaskAsrCheckpointUncertain(String details) {
+    return 'ASR recovery checkpoint could not be saved; the request outcome is uncertain and the task was stopped: $details';
+  }
+
+  @override
+  String bgTaskAsrCheckpointNotSent(String details) {
+    return 'ASR recovery checkpoint could not be saved; this chunk was not sent and can be retried after fixing local storage: $details';
+  }
+
+  @override
+  String bgTaskAsrCheckpointCancelled(String details) {
+    return 'ASR chunk state could not be saved before cancellation; this chunk outcome remains uncertain: $details';
+  }
+
+  @override
+  String bgTaskAsrRetryAudioSaveError(String details) {
+    return 'Could not save ASR retry audio; the task was not sent: $details';
+  }
+
+  @override
+  String get bgTaskAsrBatchAudioSaveError =>
+      'Another audio file could not be saved; sending was canceled';
+
+  @override
+  String bgTaskOcrResultIncomplete(String finishReason) {
+    return 'OCR returned an incomplete result (finish_reason=$finishReason)';
+  }
+
+  @override
+  String bgTaskOcrPagesIncomplete(String details) {
+    return 'Some images were not fully recognized: $details';
+  }
+
+  @override
+  String bgTaskOcrPageIncomplete(String index) {
+    return 'Image $index: incomplete result';
+  }
+
+  @override
+  String bgTaskOcrPageFailed(String index) {
+    return 'Image $index: recognition failed';
+  }
+
+  @override
+  String get bgTaskOcrPageFailureSeparator => '; ';
+
+  @override
+  String get bgTaskInterruptedOnRestart => 'Interrupted when the app restarted';
+
+  @override
+  String get bgTaskOcrErrorDetailsHidden => 'OCR error details were hidden';
+
+  @override
+  String get bgTaskErrorDetailsHidden => 'Error details were hidden';
 }
 
 /// The translations for English, as used in the United States (`en_US`).
@@ -18449,4 +18622,177 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get filesReorderDone => 'Done';
+
+  @override
+  String get bgTaskCancelled => 'Canceled';
+
+  @override
+  String bgTaskAsrError(String details) {
+    return 'Speech transcription failed: $details';
+  }
+
+  @override
+  String bgTaskAsrSaveError(String details) {
+    return 'Saving speech transcription failed: $details';
+  }
+
+  @override
+  String bgTaskOcrError(String details) {
+    return 'OCR failed: $details';
+  }
+
+  @override
+  String bgTaskOcrSaveError(String details) {
+    return 'Saving OCR results failed: $details';
+  }
+
+  @override
+  String bgTaskOcrIncompleteError(String details) {
+    return 'OCR result is incomplete: $details';
+  }
+
+  @override
+  String get bgTaskOcrIncompleteFallback => 'Some OCR pages were not completed';
+
+  @override
+  String bgTaskProgressMetrics(
+    String phaseElapsedMs,
+    String completedRequests,
+    String completedChunks,
+    String chunkCount,
+  ) {
+    return ' · phase $phaseElapsedMs ms · $completedRequests requests · $completedChunks/$chunkCount chunks completed';
+  }
+
+  @override
+  String bgTaskAsrUploadProgress(
+    String chunk,
+    String percent,
+    String bytes,
+    String metrics,
+  ) {
+    return 'Uploading audio$chunk $percent% · $bytes bytes$metrics';
+  }
+
+  @override
+  String bgTaskAsrUploadChunk(String chunk, String metrics) {
+    return 'Uploading audio$chunk$metrics';
+  }
+
+  @override
+  String bgTaskAsrChunk(String index, String count) {
+    return ' (chunk $index/$count)';
+  }
+
+  @override
+  String bgTaskAsrTranscribing(String metrics) {
+    return 'Transcribing$metrics';
+  }
+
+  @override
+  String bgTaskAsrTranscribingChunk(
+    String index,
+    String count,
+    String metrics,
+  ) {
+    return 'Transcribing (chunk $index/$count)$metrics';
+  }
+
+  @override
+  String bgTaskAsrReceivingChunk(String index, String count, String metrics) {
+    return 'Transcribing (receiving chunk $index/$count)$metrics';
+  }
+
+  @override
+  String bgTaskAsrReceiveProgress(String percent, String metrics) {
+    return 'Receiving result $percent%$metrics';
+  }
+
+  @override
+  String get bgTaskAsrReceive => 'Receiving result';
+
+  @override
+  String bgTaskAsrCompletedChunks(String index, String count, String metrics) {
+    return 'Transcribing ($index/$count chunks completed)$metrics';
+  }
+
+  @override
+  String bgTaskAsrChunkReturned(String index, String count, String metrics) {
+    return 'Transcribing (chunk $index/$count returned)$metrics';
+  }
+
+  @override
+  String bgTaskOcrUploadPageProgress(
+    String index,
+    String total,
+    String percent,
+  ) {
+    return 'Image $index/$total $percent%';
+  }
+
+  @override
+  String bgTaskOcrUploadPagesProgress(String details) {
+    return 'Uploading $details';
+  }
+
+  @override
+  String bgTaskOcrUploadProgress(String percent) {
+    return 'Uploading images $percent%';
+  }
+
+  @override
+  String bgTaskAsrCheckpointUncertain(String details) {
+    return 'ASR recovery checkpoint could not be saved; the request outcome is uncertain and the task was stopped: $details';
+  }
+
+  @override
+  String bgTaskAsrCheckpointNotSent(String details) {
+    return 'ASR recovery checkpoint could not be saved; this chunk was not sent and can be retried after fixing local storage: $details';
+  }
+
+  @override
+  String bgTaskAsrCheckpointCancelled(String details) {
+    return 'ASR chunk state could not be saved before cancellation; this chunk outcome remains uncertain: $details';
+  }
+
+  @override
+  String bgTaskAsrRetryAudioSaveError(String details) {
+    return 'Could not save ASR retry audio; the task was not sent: $details';
+  }
+
+  @override
+  String get bgTaskAsrBatchAudioSaveError =>
+      'Another audio file could not be saved; sending was canceled';
+
+  @override
+  String bgTaskOcrResultIncomplete(String finishReason) {
+    return 'OCR returned an incomplete result (finish_reason=$finishReason)';
+  }
+
+  @override
+  String bgTaskOcrPagesIncomplete(String details) {
+    return 'Some images were not fully recognized: $details';
+  }
+
+  @override
+  String bgTaskOcrPageIncomplete(String index) {
+    return 'Image $index: incomplete result';
+  }
+
+  @override
+  String bgTaskOcrPageFailed(String index) {
+    return 'Image $index: recognition failed';
+  }
+
+  @override
+  String get bgTaskOcrPageFailureSeparator => '; ';
+
+  @override
+  String get bgTaskInterruptedOnRestart => 'Interrupted when the app restarted';
+
+  @override
+  String get bgTaskOcrErrorDetailsHidden => 'OCR error details were hidden';
+
+  @override
+  String get bgTaskErrorDetailsHidden => 'Error details were hidden';
 }

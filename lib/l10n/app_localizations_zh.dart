@@ -8740,6 +8740,178 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get filesReorderDone => '确定';
+
+  @override
+  String get bgTaskCancelled => '已取消';
+
+  @override
+  String bgTaskAsrError(String details) {
+    return '音频转写失败：$details';
+  }
+
+  @override
+  String bgTaskAsrSaveError(String details) {
+    return '音频转写结果保存失败：$details';
+  }
+
+  @override
+  String bgTaskOcrError(String details) {
+    return 'OCR识别失败：$details';
+  }
+
+  @override
+  String bgTaskOcrSaveError(String details) {
+    return 'OCR结果保存失败：$details';
+  }
+
+  @override
+  String bgTaskOcrIncompleteError(String details) {
+    return 'OCR结果不完整：$details';
+  }
+
+  @override
+  String get bgTaskOcrIncompleteFallback => 'OCR 部分页面未完成';
+
+  @override
+  String bgTaskProgressMetrics(
+    String phaseElapsedMs,
+    String completedRequests,
+    String completedChunks,
+    String chunkCount,
+  ) {
+    return ' · 阶段 ${phaseElapsedMs}ms · 请求 $completedRequests · 已完成片段 $completedChunks/$chunkCount';
+  }
+
+  @override
+  String bgTaskAsrUploadProgress(
+    String chunk,
+    String percent,
+    String bytes,
+    String metrics,
+  ) {
+    return '上传音频$chunk $percent% · $bytes bytes$metrics';
+  }
+
+  @override
+  String bgTaskAsrUploadChunk(String chunk, String metrics) {
+    return '上传音频$chunk$metrics';
+  }
+
+  @override
+  String bgTaskAsrChunk(String index, String count) {
+    return '（片段 $index/$count）';
+  }
+
+  @override
+  String bgTaskAsrTranscribing(String metrics) {
+    return '转写中$metrics';
+  }
+
+  @override
+  String bgTaskAsrTranscribingChunk(
+    String index,
+    String count,
+    String metrics,
+  ) {
+    return '转写中（片段 $index/$count）$metrics';
+  }
+
+  @override
+  String bgTaskAsrReceivingChunk(String index, String count, String metrics) {
+    return '转写中（接收片段 $index/$count）$metrics';
+  }
+
+  @override
+  String bgTaskAsrReceiveProgress(String percent, String metrics) {
+    return '接收结果 $percent%$metrics';
+  }
+
+  @override
+  String get bgTaskAsrReceive => '接收结果';
+
+  @override
+  String bgTaskAsrCompletedChunks(String index, String count, String metrics) {
+    return '转写中（已完成片段 $index/$count）$metrics';
+  }
+
+  @override
+  String bgTaskAsrChunkReturned(String index, String count, String metrics) {
+    return '转写中（片段 $index/$count 已返回）$metrics';
+  }
+
+  @override
+  String bgTaskOcrUploadPageProgress(
+    String index,
+    String total,
+    String percent,
+  ) {
+    return '第 $index/$total 张图片 $percent%';
+  }
+
+  @override
+  String bgTaskOcrUploadPagesProgress(String details) {
+    return '上传$details';
+  }
+
+  @override
+  String bgTaskOcrUploadProgress(String percent) {
+    return '上传图片 $percent%';
+  }
+
+  @override
+  String bgTaskAsrCheckpointUncertain(String details) {
+    return 'ASR 分段恢复记录写入失败；当前请求结果可能不确定，任务已停止：$details';
+  }
+
+  @override
+  String bgTaskAsrCheckpointNotSent(String details) {
+    return 'ASR 分段恢复记录写入失败；该片段尚未发送，可修复本地存储后重试：$details';
+  }
+
+  @override
+  String bgTaskAsrCheckpointCancelled(String details) {
+    return 'ASR 取消前的分段状态写入失败；该片段仍按结果不确定处理：$details';
+  }
+
+  @override
+  String bgTaskAsrRetryAudioSaveError(String details) {
+    return '无法保存 ASR 重试音频，任务未发送：$details';
+  }
+
+  @override
+  String get bgTaskAsrBatchAudioSaveError => '批次中的其他音频无法保存，已取消发送';
+
+  @override
+  String bgTaskOcrResultIncomplete(String finishReason) {
+    return 'OCR 返回了不完整结果（finish_reason=$finishReason）';
+  }
+
+  @override
+  String bgTaskOcrPagesIncomplete(String details) {
+    return '部分图片 OCR 未完成：$details';
+  }
+
+  @override
+  String bgTaskOcrPageIncomplete(String index) {
+    return '第 $index 张图片结果不完整';
+  }
+
+  @override
+  String bgTaskOcrPageFailed(String index) {
+    return '第 $index 张图片识别失败';
+  }
+
+  @override
+  String get bgTaskOcrPageFailureSeparator => '；';
+
+  @override
+  String get bgTaskInterruptedOnRestart => '应用重启，已中断';
+
+  @override
+  String get bgTaskOcrErrorDetailsHidden => 'OCR 错误详情已隐藏';
+
+  @override
+  String get bgTaskErrorDetailsHidden => '错误详情已隐藏';
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).
@@ -17477,4 +17649,176 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get filesReorderDone => '确定';
+
+  @override
+  String get bgTaskCancelled => '已取消';
+
+  @override
+  String bgTaskAsrError(String details) {
+    return '音频转写失败：$details';
+  }
+
+  @override
+  String bgTaskAsrSaveError(String details) {
+    return '音频转写结果保存失败：$details';
+  }
+
+  @override
+  String bgTaskOcrError(String details) {
+    return 'OCR识别失败：$details';
+  }
+
+  @override
+  String bgTaskOcrSaveError(String details) {
+    return 'OCR结果保存失败：$details';
+  }
+
+  @override
+  String bgTaskOcrIncompleteError(String details) {
+    return 'OCR结果不完整：$details';
+  }
+
+  @override
+  String get bgTaskOcrIncompleteFallback => 'OCR 部分页面未完成';
+
+  @override
+  String bgTaskProgressMetrics(
+    String phaseElapsedMs,
+    String completedRequests,
+    String completedChunks,
+    String chunkCount,
+  ) {
+    return ' · 阶段 ${phaseElapsedMs}ms · 请求 $completedRequests · 已完成片段 $completedChunks/$chunkCount';
+  }
+
+  @override
+  String bgTaskAsrUploadProgress(
+    String chunk,
+    String percent,
+    String bytes,
+    String metrics,
+  ) {
+    return '上传音频$chunk $percent% · $bytes bytes$metrics';
+  }
+
+  @override
+  String bgTaskAsrUploadChunk(String chunk, String metrics) {
+    return '上传音频$chunk$metrics';
+  }
+
+  @override
+  String bgTaskAsrChunk(String index, String count) {
+    return '（片段 $index/$count）';
+  }
+
+  @override
+  String bgTaskAsrTranscribing(String metrics) {
+    return '转写中$metrics';
+  }
+
+  @override
+  String bgTaskAsrTranscribingChunk(
+    String index,
+    String count,
+    String metrics,
+  ) {
+    return '转写中（片段 $index/$count）$metrics';
+  }
+
+  @override
+  String bgTaskAsrReceivingChunk(String index, String count, String metrics) {
+    return '转写中（接收片段 $index/$count）$metrics';
+  }
+
+  @override
+  String bgTaskAsrReceiveProgress(String percent, String metrics) {
+    return '接收结果 $percent%$metrics';
+  }
+
+  @override
+  String get bgTaskAsrReceive => '接收结果';
+
+  @override
+  String bgTaskAsrCompletedChunks(String index, String count, String metrics) {
+    return '转写中（已完成片段 $index/$count）$metrics';
+  }
+
+  @override
+  String bgTaskAsrChunkReturned(String index, String count, String metrics) {
+    return '转写中（片段 $index/$count 已返回）$metrics';
+  }
+
+  @override
+  String bgTaskOcrUploadPageProgress(
+    String index,
+    String total,
+    String percent,
+  ) {
+    return '第 $index/$total 张图片 $percent%';
+  }
+
+  @override
+  String bgTaskOcrUploadPagesProgress(String details) {
+    return '上传$details';
+  }
+
+  @override
+  String bgTaskOcrUploadProgress(String percent) {
+    return '上传图片 $percent%';
+  }
+
+  @override
+  String bgTaskAsrCheckpointUncertain(String details) {
+    return 'ASR 分段恢复记录写入失败；当前请求结果可能不确定，任务已停止：$details';
+  }
+
+  @override
+  String bgTaskAsrCheckpointNotSent(String details) {
+    return 'ASR 分段恢复记录写入失败；该片段尚未发送，可修复本地存储后重试：$details';
+  }
+
+  @override
+  String bgTaskAsrCheckpointCancelled(String details) {
+    return 'ASR 取消前的分段状态写入失败；该片段仍按结果不确定处理：$details';
+  }
+
+  @override
+  String bgTaskAsrRetryAudioSaveError(String details) {
+    return '无法保存 ASR 重试音频，任务未发送：$details';
+  }
+
+  @override
+  String get bgTaskAsrBatchAudioSaveError => '批次中的其他音频无法保存，已取消发送';
+
+  @override
+  String bgTaskOcrResultIncomplete(String finishReason) {
+    return 'OCR 返回了不完整结果（finish_reason=$finishReason）';
+  }
+
+  @override
+  String bgTaskOcrPagesIncomplete(String details) {
+    return '部分图片 OCR 未完成：$details';
+  }
+
+  @override
+  String bgTaskOcrPageIncomplete(String index) {
+    return '第 $index 张图片结果不完整';
+  }
+
+  @override
+  String bgTaskOcrPageFailed(String index) {
+    return '第 $index 张图片识别失败';
+  }
+
+  @override
+  String get bgTaskOcrPageFailureSeparator => '；';
+
+  @override
+  String get bgTaskInterruptedOnRestart => '应用重启，已中断';
+
+  @override
+  String get bgTaskOcrErrorDetailsHidden => 'OCR 错误详情已隐藏';
+
+  @override
+  String get bgTaskErrorDetailsHidden => '错误详情已隐藏';
 }

@@ -15477,6 +15477,224 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Done'**
   String get filesReorderDone;
+
+  /// No description provided for @bgTaskCancelled.
+  ///
+  /// In en, this message translates to:
+  /// **'Canceled'**
+  String get bgTaskCancelled;
+
+  /// No description provided for @bgTaskAsrError.
+  ///
+  /// In en, this message translates to:
+  /// **'Speech transcription failed: {details}'**
+  String bgTaskAsrError(String details);
+
+  /// No description provided for @bgTaskAsrSaveError.
+  ///
+  /// In en, this message translates to:
+  /// **'Saving speech transcription failed: {details}'**
+  String bgTaskAsrSaveError(String details);
+
+  /// No description provided for @bgTaskOcrError.
+  ///
+  /// In en, this message translates to:
+  /// **'OCR failed: {details}'**
+  String bgTaskOcrError(String details);
+
+  /// No description provided for @bgTaskOcrSaveError.
+  ///
+  /// In en, this message translates to:
+  /// **'Saving OCR results failed: {details}'**
+  String bgTaskOcrSaveError(String details);
+
+  /// No description provided for @bgTaskOcrIncompleteError.
+  ///
+  /// In en, this message translates to:
+  /// **'OCR result is incomplete: {details}'**
+  String bgTaskOcrIncompleteError(String details);
+
+  /// No description provided for @bgTaskOcrIncompleteFallback.
+  ///
+  /// In en, this message translates to:
+  /// **'Some OCR pages were not completed'**
+  String get bgTaskOcrIncompleteFallback;
+
+  /// No description provided for @bgTaskProgressMetrics.
+  ///
+  /// In en, this message translates to:
+  /// **' · phase {phaseElapsedMs} ms · {completedRequests} requests · {completedChunks}/{chunkCount} chunks completed'**
+  String bgTaskProgressMetrics(
+    String phaseElapsedMs,
+    String completedRequests,
+    String completedChunks,
+    String chunkCount,
+  );
+
+  /// No description provided for @bgTaskAsrUploadProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'Uploading audio{chunk} {percent}% · {bytes} bytes{metrics}'**
+  String bgTaskAsrUploadProgress(
+    String chunk,
+    String percent,
+    String bytes,
+    String metrics,
+  );
+
+  /// No description provided for @bgTaskAsrUploadChunk.
+  ///
+  /// In en, this message translates to:
+  /// **'Uploading audio{chunk}{metrics}'**
+  String bgTaskAsrUploadChunk(String chunk, String metrics);
+
+  /// No description provided for @bgTaskAsrChunk.
+  ///
+  /// In en, this message translates to:
+  /// **' (chunk {index}/{count})'**
+  String bgTaskAsrChunk(String index, String count);
+
+  /// No description provided for @bgTaskAsrTranscribing.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribing{metrics}'**
+  String bgTaskAsrTranscribing(String metrics);
+
+  /// No description provided for @bgTaskAsrTranscribingChunk.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribing (chunk {index}/{count}){metrics}'**
+  String bgTaskAsrTranscribingChunk(String index, String count, String metrics);
+
+  /// No description provided for @bgTaskAsrReceivingChunk.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribing (receiving chunk {index}/{count}){metrics}'**
+  String bgTaskAsrReceivingChunk(String index, String count, String metrics);
+
+  /// No description provided for @bgTaskAsrReceiveProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'Receiving result {percent}%{metrics}'**
+  String bgTaskAsrReceiveProgress(String percent, String metrics);
+
+  /// No description provided for @bgTaskAsrReceive.
+  ///
+  /// In en, this message translates to:
+  /// **'Receiving result'**
+  String get bgTaskAsrReceive;
+
+  /// No description provided for @bgTaskAsrCompletedChunks.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribing ({index}/{count} chunks completed){metrics}'**
+  String bgTaskAsrCompletedChunks(String index, String count, String metrics);
+
+  /// No description provided for @bgTaskAsrChunkReturned.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribing (chunk {index}/{count} returned){metrics}'**
+  String bgTaskAsrChunkReturned(String index, String count, String metrics);
+
+  /// No description provided for @bgTaskOcrUploadPageProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'Image {index}/{total} {percent}%'**
+  String bgTaskOcrUploadPageProgress(
+    String index,
+    String total,
+    String percent,
+  );
+
+  /// No description provided for @bgTaskOcrUploadPagesProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'Uploading {details}'**
+  String bgTaskOcrUploadPagesProgress(String details);
+
+  /// No description provided for @bgTaskOcrUploadProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'Uploading images {percent}%'**
+  String bgTaskOcrUploadProgress(String percent);
+
+  /// No description provided for @bgTaskAsrCheckpointUncertain.
+  ///
+  /// In en, this message translates to:
+  /// **'ASR recovery checkpoint could not be saved; the request outcome is uncertain and the task was stopped: {details}'**
+  String bgTaskAsrCheckpointUncertain(String details);
+
+  /// No description provided for @bgTaskAsrCheckpointNotSent.
+  ///
+  /// In en, this message translates to:
+  /// **'ASR recovery checkpoint could not be saved; this chunk was not sent and can be retried after fixing local storage: {details}'**
+  String bgTaskAsrCheckpointNotSent(String details);
+
+  /// No description provided for @bgTaskAsrCheckpointCancelled.
+  ///
+  /// In en, this message translates to:
+  /// **'ASR chunk state could not be saved before cancellation; this chunk outcome remains uncertain: {details}'**
+  String bgTaskAsrCheckpointCancelled(String details);
+
+  /// No description provided for @bgTaskAsrRetryAudioSaveError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save ASR retry audio; the task was not sent: {details}'**
+  String bgTaskAsrRetryAudioSaveError(String details);
+
+  /// No description provided for @bgTaskAsrBatchAudioSaveError.
+  ///
+  /// In en, this message translates to:
+  /// **'Another audio file could not be saved; sending was canceled'**
+  String get bgTaskAsrBatchAudioSaveError;
+
+  /// No description provided for @bgTaskOcrResultIncomplete.
+  ///
+  /// In en, this message translates to:
+  /// **'OCR returned an incomplete result (finish_reason={finishReason})'**
+  String bgTaskOcrResultIncomplete(String finishReason);
+
+  /// No description provided for @bgTaskOcrPagesIncomplete.
+  ///
+  /// In en, this message translates to:
+  /// **'Some images were not fully recognized: {details}'**
+  String bgTaskOcrPagesIncomplete(String details);
+
+  /// No description provided for @bgTaskOcrPageIncomplete.
+  ///
+  /// In en, this message translates to:
+  /// **'Image {index}: incomplete result'**
+  String bgTaskOcrPageIncomplete(String index);
+
+  /// No description provided for @bgTaskOcrPageFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Image {index}: recognition failed'**
+  String bgTaskOcrPageFailed(String index);
+
+  /// No description provided for @bgTaskOcrPageFailureSeparator.
+  ///
+  /// In en, this message translates to:
+  /// **'; '**
+  String get bgTaskOcrPageFailureSeparator;
+
+  /// No description provided for @bgTaskInterruptedOnRestart.
+  ///
+  /// In en, this message translates to:
+  /// **'Interrupted when the app restarted'**
+  String get bgTaskInterruptedOnRestart;
+
+  /// No description provided for @bgTaskOcrErrorDetailsHidden.
+  ///
+  /// In en, this message translates to:
+  /// **'OCR error details were hidden'**
+  String get bgTaskOcrErrorDetailsHidden;
+
+  /// No description provided for @bgTaskErrorDetailsHidden.
+  ///
+  /// In en, this message translates to:
+  /// **'Error details were hidden'**
+  String get bgTaskErrorDetailsHidden;
 }
 
 class _AppLocalizationsDelegate
