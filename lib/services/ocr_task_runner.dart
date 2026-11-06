@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -103,7 +104,22 @@ class OcrTaskRunner {
   }
 
   /// Memoization fences duplicate starts, including starts after completion.
-  Future<void> run() => _running ??= _run();
+  Future<void> run() {
+    final running = _running;
+    if (running != null) return running;
+
+    final completer = Completer<void>();
+    _running = completer.future;
+    unawaited(
+      _run().then<void>(
+        (_) => completer.complete(),
+        onError: (Object error, StackTrace stackTrace) {
+          completer.completeError(error, stackTrace);
+        },
+      ),
+    );
+    return completer.future;
+  }
 
   bool get _ownsTaskGeneration {
     final taskGeneration = _taskGeneration;
