@@ -2832,6 +2832,62 @@ const llmOpenAiProviderPresets = <LlmProviderPreset>[
     baseUrl: 'https://router.requesty.ai/v1/chat/completions',
     modelsUrl: 'https://router.requesty.ai/v1/models',
   ),
+  // Routeway uses live /v1/models discovery, passthrough model IDs, and a
+  // fixed browser-style User-Agent required by its Cloudflare front door.
+  // Evidence: registry/routeway/index.ts:4-27.
+  LlmProviderPreset(
+    id: 'routeway',
+    displayName: 'Routeway',
+    baseUrl: 'https://api.routeway.ai/v1/chat/completions',
+    modelsUrl: 'https://api.routeway.ai/v1/models',
+    headers: {'User-Agent': 'Mozilla/5.0 OmniRoute/1.0'},
+    fallbackModels: [
+      LlmProviderPresetModel(
+        'llama-3.3-70b-instruct:free',
+        displayName: 'Llama 3.3 70B Instruct (free)',
+        capabilities: {'contextLength': 131072, 'toolCalling': true},
+      ),
+      LlmProviderPresetModel(
+        'nemotron-3-nano-30b-a3b:free',
+        displayName: 'Nemotron 3 Nano 30B (free)',
+        capabilities: {'contextLength': 256000, 'toolCalling': true},
+      ),
+      LlmProviderPresetModel(
+        'nemotron-nano-9b-v2:free',
+        displayName: 'Nemotron Nano 9B v2 (free)',
+        capabilities: {'contextLength': 128000, 'toolCalling': true},
+      ),
+      LlmProviderPresetModel(
+        'step-3.7-flash:free',
+        displayName: 'Step 3.7 Flash (free)',
+        capabilities: {
+          'contextLength': 256000,
+          'toolCalling': true,
+          'vision': true,
+        },
+      ),
+      LlmProviderPresetModel(
+        'step-3.5-flash:free',
+        displayName: 'Step 3.5 Flash (free)',
+        capabilities: {'contextLength': 65536, 'toolCalling': true},
+      ),
+      LlmProviderPresetModel(
+        'laguna-m.1:free',
+        displayName: 'Laguna M.1 (free)',
+        capabilities: {'contextLength': 131072, 'toolCalling': true},
+      ),
+      LlmProviderPresetModel(
+        'laguna-xs.2:free',
+        displayName: 'Laguna XS.2 (free)',
+        capabilities: {'contextLength': 131072, 'toolCalling': true},
+      ),
+      LlmProviderPresetModel(
+        'llama-3.2-3b-instruct:free',
+        displayName: 'Llama 3.2 3B Instruct (free)',
+        capabilities: {'contextLength': 16000, 'toolCalling': true},
+      ),
+    ],
+  ),
   // SambaNova's pinned runtime uses the default Bearer Chat Completions
   // executor and a source-declared static catalog.
   // Evidence: registry/sambanova/index.ts:4-12; shared.ts:437-445.
@@ -3090,8 +3146,7 @@ const llmOpenAiProviderPresets = <LlmProviderPreset>[
   // unresolved/discontinued by the M33 2026-06-19 DNS audit despite its static
   // registry declaration (registry/predibase/index.ts:4-12); Qiniu declares
   // defaultContextLength 128000, which the current preset cannot attach to
-  // discovered models (registry/qiniu/index.ts:3-14); Routeway requires a fixed
-  // User-Agent header (registry/routeway/index.ts:12-18); SAP has no per-ID
+  // discovered models (registry/qiniu/index.ts:3-14); SAP has no per-ID
   // provider registry entry or verified runtime adapter at this pin (M33 audit).
   // Deferred from M44: the pinned 1min.ai executor translates OpenAI messages
   // to its promptObject/SSE API and authenticates with `API-KEY`; see registry
