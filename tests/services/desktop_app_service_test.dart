@@ -283,7 +283,7 @@ void main() {
           ((menuCall.arguments as Map)['menu'] as Map)['items'] as List;
       expect(menuItems.map((item) => (item as Map)['label']), [
         'Show Main Window',
-        null,
+        '',
         'Quit Stroom',
       ]);
 
@@ -301,13 +301,14 @@ void main() {
       menuItems = ((menuCall.arguments as Map)['menu'] as Map)['items'] as List;
       expect(menuItems.map((item) => (item as Map)['label']), [
         '显示主窗口',
-        null,
+        '',
         '退出 Stroom',
       ]);
     });
 
     test('setupTrayAndCloseBehavior prevents close and registers tray',
         () async {
+      DesktopAppService.instance.updateLocaleOverride(const Locale('zh', 'CN'));
       final mocks = registerChannelMocks();
       await withDesktopPlatform(TargetPlatform.windows, () async {
         await DesktopAppService.instance.setupTrayAndCloseBehavior();
