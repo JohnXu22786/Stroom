@@ -21,11 +21,11 @@ extension _ChatStreamManagerPersistExt on ChatStreamManager {
     // save has already run by now; don't overwrite it with partial data.
     if (s.persistTimer == null) return;
     if (s.cancelledByUser) return;
-    final fullReply = s.fullReply;
+    final textSections = s.textChunks;
     // 纯工具轮（无文本/推理但已有工具结果）也要持久化——并行执行时
     // 一轮的全部工具同时启动，崩溃会一次丢失所有工具卡片。
     if (!ChatStreamManager.partialPersistHasContent(
-      fullReply: fullReply,
+      textSections: textSections,
       reasoningSections: s.reasoningSections,
       hasAccumulatedToolCalls: s.accumulatedToolCalls.isNotEmpty,
     )) {
@@ -46,7 +46,7 @@ extension _ChatStreamManagerPersistExt on ChatStreamManager {
       // finalize 补；硬崩溃场景下工具卡保持 running 状态——比整轮
       // 丢失好，属既有崩溃恢复限制）。
       if (ChatStreamManager.partialPersistHasContent(
-        fullReply: fullReply,
+        textSections: textSections,
         reasoningSections: s.reasoningSections,
         hasAccumulatedToolCalls: s.accumulatedToolCalls.isNotEmpty,
       )) {
@@ -54,7 +54,9 @@ extension _ChatStreamManagerPersistExt on ChatStreamManager {
         if (!exists) {
           partialHistory.add(ChatMessage(
             role: 'assistant',
-            content: fullReply,
+            // The canonical text sections are persisted below; leave content
+            // empty so each periodic snapshot doesn't join the full reply.
+            content: '',
             id: s.streamingMsgId ?? '',
             toolCalls: s.accumulatedToolCalls.isNotEmpty
                 ? List<ToolCallData>.from(s.accumulatedToolCalls)
@@ -62,8 +64,8 @@ extension _ChatStreamManagerPersistExt on ChatStreamManager {
             reasoningSections: s.reasoningSections.isNotEmpty
                 ? List<String>.from(s.reasoningSections)
                 : null,
-            textSections: s.textChunks.any((c) => c.isNotEmpty)
-                ? List<String>.from(s.textChunks)
+            textSections: textSections.any((c) => c.isNotEmpty)
+                ? List<String>.from(textSections)
                 : null,
             toolCallRoundStarts: s.toolCallRoundStarts.isNotEmpty
                 ? List<int>.from(s.toolCallRoundStarts)

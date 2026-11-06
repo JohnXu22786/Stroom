@@ -102,11 +102,13 @@ class ChatStreamManager {
   /// never disagree.
   @visibleForTesting
   static bool partialPersistHasContent({
-    required String fullReply,
+    List<String>? textSections,
+    String? fullReply,
     required List<String> reasoningSections,
     required bool hasAccumulatedToolCalls,
   }) {
-    return fullReply.isNotEmpty ||
+    return (textSections?.any((section) => section.isNotEmpty) ??
+            (fullReply?.isNotEmpty ?? false)) ||
         reasoningSections.any((s) => s.isNotEmpty) ||
         hasAccumulatedToolCalls;
   }
