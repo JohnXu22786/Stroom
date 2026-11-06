@@ -520,6 +520,120 @@ void main() {
     );
   }
 
+  for (final gallery in [false, true]) {
+    testWidgets(
+      '${gallery ? "gallery" : "camera"} picker disables OCR until it returns',
+      (tester) async {
+        final pickerResult = gallery ? Completer<List<XFile>>() : null;
+        final cameraResult = gallery ? null : Completer<XFile?>();
+        await tester.pumpWidget(
+          _buildTestApp(
+            testImages: [_createValidOcrTestImage()],
+            testCameraPicker: ({maxWidth, maxHeight, imageQuality}) =>
+                cameraResult!.future,
+            testGalleryPicker: ({maxWidth, maxHeight, imageQuality}) =>
+                pickerResult!.future,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text(gallery ? '相册选择' : '拍照识别'));
+        await tester.pumpAndSettle();
+        if (gallery) {
+          await tester.tap(find.text('从系统相册选择'));
+        }
+        await tester.pump();
+
+        expect(find.text('正在导入图片...'), findsOneWidget);
+        expect(
+          tester
+              .widget<FilledButton>(
+                find.widgetWithText(FilledButton, '开始识别'),
+              )
+              .onPressed,
+          isNull,
+        );
+
+        if (gallery) {
+          pickerResult!.complete([]);
+        } else {
+          cameraResult!.complete(null);
+        }
+        await tester.pumpAndSettle();
+
+        expect(
+          tester
+              .widget<FilledButton>(
+                find.widgetWithText(FilledButton, '开始识别'),
+              )
+              .onPressed,
+          isNotNull,
+          reason: 'cancelling a picker must clear its pending state',
+        );
+      },
+    );
+  }
+
+  testWidgets('camera picker errors clear the OCR import-pending state', (
+    tester,
+  ) async {
+    final cameraResult = Completer<XFile?>();
+    await tester.pumpWidget(
+      _buildTestApp(
+        testImages: [_createValidOcrTestImage()],
+        testCameraPicker: ({maxWidth, maxHeight, imageQuality}) =>
+            cameraResult.future,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('拍照识别'));
+    await tester.pump();
+    expect(find.text('正在导入图片...'), findsOneWidget);
+
+    cameraResult.completeError(StateError('picker failed'));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, '开始识别'))
+          .onPressed,
+      isNotNull,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('gallery picker errors clear the OCR import-pending state', (
+    tester,
+  ) async {
+    final galleryResult = Completer<List<XFile>>();
+    await tester.pumpWidget(
+      _buildTestApp(
+        testImages: [_createValidOcrTestImage()],
+        testGalleryPicker: ({maxWidth, maxHeight, imageQuality}) =>
+            galleryResult.future,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('相册选择'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('从系统相册选择'));
+    await tester.pump();
+    expect(find.text('正在导入图片...'), findsOneWidget);
+
+    galleryResult.completeError(StateError('picker failed'));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, '开始识别'))
+          .onPressed,
+      isNotNull,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('gallery keeps valid files when a later file read fails', (
     tester,
   ) async {

@@ -2055,6 +2055,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     try {
       final picker = ImagePicker();
       final mode = _imageImportMode;
+      _beginImageImport();
+      importPending = true;
       final file = await (widget.testCameraPicker?.call(
             maxWidth: mode.maxWidth,
             maxHeight: mode.maxHeight,
@@ -2076,8 +2078,6 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       final cameraCommit = Completer<void>();
       importCommit = cameraCommit;
       _imageImportCommitTail = cameraCommit.future;
-      _beginImageImport();
-      importPending = true;
       final bytes = await file.readAsBytes();
       if (!mounted || importGeneration != _imageImportGeneration) return;
       final payload = await _prepareImagePayload(bytes);
@@ -2127,6 +2127,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     _imageImportCommitTail = galleryCommit.future;
     try {
       final mode = _imageImportMode;
+      _beginImageImport();
+      importPending = true;
       // 原生移动端打开应用内相册选择器，
       // 桌面端打开文件选择器并定位到系统"图片"目录
       final files = await (widget.testGalleryPicker?.call(
@@ -2149,8 +2151,6 @@ class _OcrPageState extends ConsumerState<OcrPage> {
 
       // Overlapping gallery selections share a generation so the later batch
       // cannot invalidate images still being read by the earlier batch.
-      _beginImageImport();
-      importPending = true;
       final newImages = <SelectedImage>[];
       String? firstError;
       Object? firstFileFailure;
