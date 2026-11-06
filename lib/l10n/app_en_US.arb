@@ -4810,5 +4810,52 @@
   "galleryExportVideoFolderArchiveFileName": "video-folder-export.zip",
   "@galleryExportVideoFolderArchiveFileName": {
     "description": "Suggested archive filename shown when exporting a gallery folder."
+  },
+  "catCatchPageTitle": "Web Resource Downloader",
+  "catCatchAddTask": "Add task",
+  "catCatchOpenBrowser": "Built-in browser",
+  "catCatchEmptyState": "No download tasks yet",
+  "catCatchEmptyStateHint": "Tap + in the top right to add a download task",
+  "catCatchInvalidCapturedUrl": "The captured URL is invalid",
+  "catCatchCapturedFromBrowser": "Captured from browser: {url}",
+  "catCatchEnterValidUrl": "Enter at least one valid URL",
+  "catCatchTaskAdded": "Task added",
+  "catCatchTasksAdded": "{count, plural, one{{count} task added} other{{count} tasks added}}",
+  "catCatchViewTaskList": "View task list",
+  "catCatchUrlHint": "Enter a video/audio webpage URL",
+  "catCatchDeleteTask": "Delete this task",
+  "catCatchHour": "Hours",
+  "catCatchMinute": "Minutes",
+  "catCatchSecond": "Seconds",
+  "catCatchDurationPreview": "Preview: ",
+  "catCatchDurationFormat": "hr:min:sec",
+  "catCatchDurationFilterHint": "Optional: filter video resources by duration. Leave blank to show all resources for selection",
+  "catCatchVideoSaveTo": "Save video to",
+  "catCatchAudioSaveTo": "Save audio to",
+  "catCatchTaskCount": "{count, plural, one{{count} task added} other{{count} tasks added}}",
+  "catCatchStartAnalysis": "Analyze",
+  "catCatchVideoFolderTitle": "Video save folder",
+  "catCatchAudioFolderTitle": "Audio save folder",
+  "catCatchRootFolder": "Root folder",
+  "@catCatchCapturedFromBrowser": {
+    "placeholders": {
+      "url": {
+        "type": "String"
+      }
+    }
+  },
+  "@catCatchTasksAdded": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@catCatchTaskCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   }
 }

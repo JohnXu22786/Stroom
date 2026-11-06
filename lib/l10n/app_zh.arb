@@ -4810,5 +4810,52 @@
   "galleryExportVideoFolderArchiveFileName": "视频文件夹导出.zip",
   "@galleryExportVideoFolderArchiveFileName": {
     "description": "Suggested archive filename shown when exporting a gallery folder."
+  },
+  "catCatchPageTitle": "下载网页资源",
+  "catCatchAddTask": "添加任务",
+  "catCatchOpenBrowser": "内置浏览器",
+  "catCatchEmptyState": "暂无下载任务",
+  "catCatchEmptyStateHint": "点击右上角 + 添加下载任务",
+  "catCatchInvalidCapturedUrl": "捕获的URL无效",
+  "catCatchCapturedFromBrowser": "已从浏览器捕获：{url}",
+  "catCatchEnterValidUrl": "请至少输入一个有效的URL",
+  "catCatchTaskAdded": "任务已添加",
+  "catCatchTasksAdded": "已添加 {count} 个任务",
+  "catCatchViewTaskList": "查看任务列表",
+  "catCatchUrlHint": "请输入视频/音频网页URL",
+  "catCatchDeleteTask": "删除此任务",
+  "catCatchHour": "时",
+  "catCatchMinute": "分",
+  "catCatchSecond": "秒",
+  "catCatchDurationPreview": "预览：",
+  "catCatchDurationFormat": "时:分:秒",
+  "catCatchDurationFilterHint": "可选：按时长筛选视频资源。留空则展示全部资源供选择",
+  "catCatchVideoSaveTo": "视频保存至",
+  "catCatchAudioSaveTo": "音频保存至",
+  "catCatchTaskCount": "已添加 {count} 个任务",
+  "catCatchStartAnalysis": "开始分析",
+  "catCatchVideoFolderTitle": "视频保存至文件夹",
+  "catCatchAudioFolderTitle": "音频保存至文件夹",
+  "catCatchRootFolder": "根目录",
+  "@catCatchCapturedFromBrowser": {
+    "placeholders": {
+      "url": {
+        "type": "String"
+      }
+    }
+  },
+  "@catCatchTasksAdded": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@catCatchTaskCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   }
 }

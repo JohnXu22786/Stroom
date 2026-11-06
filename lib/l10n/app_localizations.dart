@@ -63,7 +63,7 @@ import 'app_localizations_zh.dart';
 /// property.
 abstract class AppLocalizations {
   AppLocalizations(String locale)
-      : localeName = intl.Intl.canonicalizedLocale(locale.toString());
+    : localeName = intl.Intl.canonicalizedLocale(locale.toString());
 
   final String localeName;
 
@@ -86,11 +86,11 @@ abstract class AppLocalizations {
   /// of delegates is preferred or required.
   static const List<LocalizationsDelegate<dynamic>> localizationsDelegates =
       <LocalizationsDelegate<dynamic>>[
-    delegate,
-    GlobalMaterialLocalizations.delegate,
-    GlobalCupertinoLocalizations.delegate,
-    GlobalWidgetsLocalizations.delegate,
-  ];
+        delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+      ];
 
   /// A list of this localizations delegate's supported locales.
   static const List<Locale> supportedLocales = <Locale>[
@@ -14985,6 +14985,162 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'video-folder-export.zip'**
   String get galleryExportVideoFolderArchiveFileName;
+
+  /// No description provided for @catCatchPageTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Web Resource Downloader'**
+  String get catCatchPageTitle;
+
+  /// No description provided for @catCatchAddTask.
+  ///
+  /// In en, this message translates to:
+  /// **'Add task'**
+  String get catCatchAddTask;
+
+  /// No description provided for @catCatchOpenBrowser.
+  ///
+  /// In en, this message translates to:
+  /// **'Built-in browser'**
+  String get catCatchOpenBrowser;
+
+  /// No description provided for @catCatchEmptyState.
+  ///
+  /// In en, this message translates to:
+  /// **'No download tasks yet'**
+  String get catCatchEmptyState;
+
+  /// No description provided for @catCatchEmptyStateHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap + in the top right to add a download task'**
+  String get catCatchEmptyStateHint;
+
+  /// No description provided for @catCatchInvalidCapturedUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'The captured URL is invalid'**
+  String get catCatchInvalidCapturedUrl;
+
+  /// No description provided for @catCatchCapturedFromBrowser.
+  ///
+  /// In en, this message translates to:
+  /// **'Captured from browser: {url}'**
+  String catCatchCapturedFromBrowser(String url);
+
+  /// No description provided for @catCatchEnterValidUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter at least one valid URL'**
+  String get catCatchEnterValidUrl;
+
+  /// No description provided for @catCatchTaskAdded.
+  ///
+  /// In en, this message translates to:
+  /// **'Task added'**
+  String get catCatchTaskAdded;
+
+  /// No description provided for @catCatchTasksAdded.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{{count} task added} other{{count} tasks added}}'**
+  String catCatchTasksAdded(int count);
+
+  /// No description provided for @catCatchViewTaskList.
+  ///
+  /// In en, this message translates to:
+  /// **'View task list'**
+  String get catCatchViewTaskList;
+
+  /// No description provided for @catCatchUrlHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a video/audio webpage URL'**
+  String get catCatchUrlHint;
+
+  /// No description provided for @catCatchDeleteTask.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete this task'**
+  String get catCatchDeleteTask;
+
+  /// No description provided for @catCatchHour.
+  ///
+  /// In en, this message translates to:
+  /// **'Hours'**
+  String get catCatchHour;
+
+  /// No description provided for @catCatchMinute.
+  ///
+  /// In en, this message translates to:
+  /// **'Minutes'**
+  String get catCatchMinute;
+
+  /// No description provided for @catCatchSecond.
+  ///
+  /// In en, this message translates to:
+  /// **'Seconds'**
+  String get catCatchSecond;
+
+  /// No description provided for @catCatchDurationPreview.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview: '**
+  String get catCatchDurationPreview;
+
+  /// No description provided for @catCatchDurationFormat.
+  ///
+  /// In en, this message translates to:
+  /// **'hr:min:sec'**
+  String get catCatchDurationFormat;
+
+  /// No description provided for @catCatchDurationFilterHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Optional: filter video resources by duration. Leave blank to show all resources for selection'**
+  String get catCatchDurationFilterHint;
+
+  /// No description provided for @catCatchVideoSaveTo.
+  ///
+  /// In en, this message translates to:
+  /// **'Save video to'**
+  String get catCatchVideoSaveTo;
+
+  /// No description provided for @catCatchAudioSaveTo.
+  ///
+  /// In en, this message translates to:
+  /// **'Save audio to'**
+  String get catCatchAudioSaveTo;
+
+  /// No description provided for @catCatchTaskCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{{count} task added} other{{count} tasks added}}'**
+  String catCatchTaskCount(int count);
+
+  /// No description provided for @catCatchStartAnalysis.
+  ///
+  /// In en, this message translates to:
+  /// **'Analyze'**
+  String get catCatchStartAnalysis;
+
+  /// No description provided for @catCatchVideoFolderTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Video save folder'**
+  String get catCatchVideoFolderTitle;
+
+  /// No description provided for @catCatchAudioFolderTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio save folder'**
+  String get catCatchAudioFolderTitle;
+
+  /// No description provided for @catCatchRootFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'Root folder'**
+  String get catCatchRootFolder;
 }
 
 class _AppLocalizationsDelegate

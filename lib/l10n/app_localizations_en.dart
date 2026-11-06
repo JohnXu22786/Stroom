@@ -8926,6 +8926,104 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get galleryExportVideoFolderArchiveFileName =>
       'video-folder-export.zip';
+
+  @override
+  String get catCatchPageTitle => 'Web Resource Downloader';
+
+  @override
+  String get catCatchAddTask => 'Add task';
+
+  @override
+  String get catCatchOpenBrowser => 'Built-in browser';
+
+  @override
+  String get catCatchEmptyState => 'No download tasks yet';
+
+  @override
+  String get catCatchEmptyStateHint =>
+      'Tap + in the top right to add a download task';
+
+  @override
+  String get catCatchInvalidCapturedUrl => 'The captured URL is invalid';
+
+  @override
+  String catCatchCapturedFromBrowser(String url) {
+    return 'Captured from browser: $url';
+  }
+
+  @override
+  String get catCatchEnterValidUrl => 'Enter at least one valid URL';
+
+  @override
+  String get catCatchTaskAdded => 'Task added';
+
+  @override
+  String catCatchTasksAdded(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count tasks added',
+      one: '$count task added',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get catCatchViewTaskList => 'View task list';
+
+  @override
+  String get catCatchUrlHint => 'Enter a video/audio webpage URL';
+
+  @override
+  String get catCatchDeleteTask => 'Delete this task';
+
+  @override
+  String get catCatchHour => 'Hours';
+
+  @override
+  String get catCatchMinute => 'Minutes';
+
+  @override
+  String get catCatchSecond => 'Seconds';
+
+  @override
+  String get catCatchDurationPreview => 'Preview: ';
+
+  @override
+  String get catCatchDurationFormat => 'hr:min:sec';
+
+  @override
+  String get catCatchDurationFilterHint =>
+      'Optional: filter video resources by duration. Leave blank to show all resources for selection';
+
+  @override
+  String get catCatchVideoSaveTo => 'Save video to';
+
+  @override
+  String get catCatchAudioSaveTo => 'Save audio to';
+
+  @override
+  String catCatchTaskCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count tasks added',
+      one: '$count task added',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get catCatchStartAnalysis => 'Analyze';
+
+  @override
+  String get catCatchVideoFolderTitle => 'Video save folder';
+
+  @override
+  String get catCatchAudioFolderTitle => 'Audio save folder';
+
+  @override
+  String get catCatchRootFolder => 'Root folder';
 }
 
 /// The translations for English, as used in the United States (`en_US`).
@@ -17849,4 +17947,102 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   @override
   String get galleryExportVideoFolderArchiveFileName =>
       'video-folder-export.zip';
+
+  @override
+  String get catCatchPageTitle => 'Web Resource Downloader';
+
+  @override
+  String get catCatchAddTask => 'Add task';
+
+  @override
+  String get catCatchOpenBrowser => 'Built-in browser';
+
+  @override
+  String get catCatchEmptyState => 'No download tasks yet';
+
+  @override
+  String get catCatchEmptyStateHint =>
+      'Tap + in the top right to add a download task';
+
+  @override
+  String get catCatchInvalidCapturedUrl => 'The captured URL is invalid';
+
+  @override
+  String catCatchCapturedFromBrowser(String url) {
+    return 'Captured from browser: $url';
+  }
+
+  @override
+  String get catCatchEnterValidUrl => 'Enter at least one valid URL';
+
+  @override
+  String get catCatchTaskAdded => 'Task added';
+
+  @override
+  String catCatchTasksAdded(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count tasks added',
+      one: '$count task added',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get catCatchViewTaskList => 'View task list';
+
+  @override
+  String get catCatchUrlHint => 'Enter a video/audio webpage URL';
+
+  @override
+  String get catCatchDeleteTask => 'Delete this task';
+
+  @override
+  String get catCatchHour => 'Hours';
+
+  @override
+  String get catCatchMinute => 'Minutes';
+
+  @override
+  String get catCatchSecond => 'Seconds';
+
+  @override
+  String get catCatchDurationPreview => 'Preview: ';
+
+  @override
+  String get catCatchDurationFormat => 'hr:min:sec';
+
+  @override
+  String get catCatchDurationFilterHint =>
+      'Optional: filter video resources by duration. Leave blank to show all resources for selection';
+
+  @override
+  String get catCatchVideoSaveTo => 'Save video to';
+
+  @override
+  String get catCatchAudioSaveTo => 'Save audio to';
+
+  @override
+  String catCatchTaskCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count tasks added',
+      one: '$count task added',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get catCatchStartAnalysis => 'Analyze';
+
+  @override
+  String get catCatchVideoFolderTitle => 'Video save folder';
+
+  @override
+  String get catCatchAudioFolderTitle => 'Audio save folder';
+
+  @override
+  String get catCatchRootFolder => 'Root folder';
 }
