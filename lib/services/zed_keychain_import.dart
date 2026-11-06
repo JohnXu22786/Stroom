@@ -27,7 +27,8 @@ abstract interface class ZedKeychainReader {
   Future<String?> readSecret(String service, String account);
 }
 
-/// macOS implementation backed by Security.framework through a local channel.
+/// Native desktop keychain reader backed by the platform's secure key store.
+/// macOS, Linux, and Windows register this channel in their native runners.
 class MethodChannelZedKeychainReader implements ZedKeychainReader {
   static const _channel = MethodChannel('com.johntsui.stroom/zed_keychain');
 

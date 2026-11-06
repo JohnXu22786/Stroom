@@ -564,7 +564,7 @@ class _LlmAccountManagementPageState extends State<LlmAccountManagementPage> {
       candidates = await importer.discover();
     } on ZedKeychainImportException {
       if (mounted) {
-        _showError('无法读取 macOS 钥匙串。请检查钥匙串访问权限后重试。');
+        _showError('无法读取系统钥匙串。请检查系统钥匙串访问权限后重试。');
       }
       return;
     }
@@ -601,7 +601,7 @@ class _LlmAccountManagementPageState extends State<LlmAccountManagementPage> {
             builder: (context) => AlertDialog(
               title: Text('导入 $providerName 凭据？'),
               content: Text(
-                '将从 macOS 钥匙串导入“${candidate.account}”到 Stroom 的 $providerName API 账号。'
+                '将从本机钥匙串导入“${candidate.account}”到 Stroom 的 $providerName API 账号。'
                 '${alreadyExists ? '这会更新该 Stroom 账号的密钥，并保留现有名称、模型和路由设置。' : ''}'
                 '\n\nStroom 会在确认后重新读取并核对该凭据。密钥不会显示在界面中。',
               ),
@@ -811,7 +811,7 @@ class _LlmAccountManagementPageState extends State<LlmAccountManagementPage> {
                 const Expanded(
                   child: Text('每个账号独立保存凭据、模型能力、额度和并发策略。未知额度保持未知。'),
                 ),
-                if (Platform.isMacOS)
+                if (Platform.isMacOS || Platform.isWindows || Platform.isLinux)
                   IconButton.filledTonal(
                     tooltip: '从 Zed 导入 API 凭据',
                     onPressed: _importZedKeychainAccounts,
