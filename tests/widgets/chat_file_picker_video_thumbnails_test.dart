@@ -36,11 +36,7 @@ void main() {
           },
         ),
       ),
-      localizationsDelegates: const [
-        AppLocalizations.delegate,
-        DefaultMaterialLocalizations.delegate,
-        DefaultWidgetsLocalizations.delegate,
-      ],
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
     );
   }
 
@@ -50,17 +46,19 @@ void main() {
       (const Locale('zh', 'CN'), '选择应用内视频', '暂无视频'),
     ]) {
       testWidgets('$locale localizes the video album picker', (tester) async {
-        await tester.pumpWidget(MaterialApp(
-          locale: locale,
-          supportedLocales: AppLocalizations.supportedLocales,
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          home: Builder(
-            builder: (context) => ElevatedButton(
-              onPressed: () => showAppVideoPickerDialog(context),
-              child: const Text('Open Video Picker'),
+        await tester.pumpWidget(
+          MaterialApp(
+            locale: locale,
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            home: Builder(
+              builder: (context) => ElevatedButton(
+                onPressed: () => showAppVideoPickerDialog(context),
+                child: const Text('Open Video Picker'),
+              ),
             ),
           ),
-        ));
+        );
 
         await tester.tap(find.text('Open Video Picker'));
         await tester.pump();
@@ -87,17 +85,19 @@ void main() {
           ),
         );
 
-        await tester.pumpWidget(MaterialApp(
-          locale: locale,
-          supportedLocales: AppLocalizations.supportedLocales,
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          home: Builder(
-            builder: (context) => ElevatedButton(
-              onPressed: () => showAppVideoPickerDialog(context),
-              child: const Text('Open Video Picker'),
+        await tester.pumpWidget(
+          MaterialApp(
+            locale: locale,
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            home: Builder(
+              builder: (context) => ElevatedButton(
+                onPressed: () => showAppVideoPickerDialog(context),
+                child: const Text('Open Video Picker'),
+              ),
             ),
           ),
-        ));
+        );
 
         await tester.tap(find.text('Open Video Picker'));
         await tester.pump();
