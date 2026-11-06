@@ -8,7 +8,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../l10n/app_localizations.dart';
 import '../catcatch/engine/js_hook_script.dart';
-import '../catcatch/engine/webview_sniffer.dart' show WebViewSniffer;
+import '../catcatch/engine/webview_sniffer.dart'
+    show HeadedRecoveryAttemptSchedule, WebViewSniffer;
 import '../catcatch/widgets/draggable_floating_panel.dart';
 import '../services/browser_cookie_service.dart';
 
@@ -313,7 +314,7 @@ class _BrowserPageState extends State<BrowserPage> {
   Timer? _mainFrameErrorTimer;
   Timer? _recoveryTimeoutTimer;
   Timer? _recoveryNavigationFallbackTimer;
-  int _recoveryAttempt = 0;
+  final _recoveryAttempts = HeadedRecoveryAttemptSchedule();
   bool _recoveryCanContinue = false;
   bool _recoveryContinuationInProgress = false;
   bool _recoveryRetriesPaused = false;
@@ -414,23 +415,20 @@ class _BrowserPageState extends State<BrowserPage> {
     super.dispose();
   }
 
-  void _startRecoveryTimeout({bool restartCurrentAttempt = false}) {
+  void _startRecoveryTimeout() {
     if (!widget.recoveryMode ||
         _recoveryRetriesPaused ||
         _recoveryTimeoutTimer != null ||
-        (!restartCurrentAttempt &&
-            _recoveryAttempt >= WebViewSniffer.headedRecoveryTimeouts.length) ||
-        (restartCurrentAttempt && _recoveryAttempt == 0)) {
+        !_recoveryAttempts.hasRemainingAttempts) {
       return;
     }
-    final attemptIndex =
-        restartCurrentAttempt ? _recoveryAttempt - 1 : _recoveryAttempt++;
+    final attemptIndex = _recoveryAttempts.startNextAttempt()!;
     final timeout = WebViewSniffer.headedRecoveryTimeouts[attemptIndex];
     _recoveryTimeoutTimer = Timer(timeout, () async {
       if (!mounted) return;
       _recoveryTimeoutTimer = null;
       if (_recoveryRetriesPaused) return;
-      if (_recoveryAttempt < WebViewSniffer.headedRecoveryTimeouts.length) {
+      if (_recoveryAttempts.hasRemainingAttempts) {
         _recoveryReloadAwaitingNavigation = true;
         try {
           await _webViewController?.reload();
@@ -898,18 +896,11 @@ class _BrowserPageState extends State<BrowserPage> {
                             _recoveryReloadAwaitingNavigation = false;
                             _recoveryNavigationFallbackTimer?.cancel();
                             _recoveryNavigationFallbackTimer = null;
-                            if (_recoveryTimeoutTimer != null) {
-                              _recoveryTimeoutTimer?.cancel();
-                              _recoveryTimeoutTimer = null;
-                              _startRecoveryTimeout(
-                                restartCurrentAttempt: true,
-                              );
-                            } else {
-                              _startRecoveryTimeout();
-                            }
-                          } else {
-                            _startRecoveryTimeout();
                           }
+                          // A new load consumes the next headed recovery
+                          // attempt. Redirects while an attempt is active keep
+                          // its original timeout instead of replaying it.
+                          _startRecoveryTimeout();
                           // Reset detection for new page
                           _resetDetection();
                           // Inject cat-catch hook as early as possible

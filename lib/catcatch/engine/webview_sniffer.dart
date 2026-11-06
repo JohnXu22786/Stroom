@@ -18,10 +18,16 @@ Future<void> completeAfterCleanupIfPending<T>({
 
 @visibleForTesting
 class SingleFlightAsyncCleanup {
-  Future<void>? _future;
+  Future<void>? _disposalFuture;
 
-  Future<void> run(Future<void> Function() cleanup) =>
-      _future ??= Future<void>.sync(cleanup);
+  Future<void> run(Future<void> Function() cleanup) {
+    final inFlightDisposal = _disposalFuture;
+    if (inFlightDisposal != null) return inFlightDisposal;
+
+    final disposal = Future<void>.sync(cleanup);
+    _disposalFuture = disposal;
+    return disposal;
+  }
 }
 
 class WebViewRecoveryRequiredException implements Exception {
@@ -35,6 +41,19 @@ class WebViewRecoveryRequiredException implements Exception {
 
   @override
   String toString() => 'WebView scan needs manual browser recovery';
+}
+
+@visibleForTesting
+class HeadedRecoveryAttemptSchedule {
+  int _nextAttemptIndex = 0;
+
+  int? startNextAttempt() {
+    if (!hasRemainingAttempts) return null;
+    return _nextAttemptIndex++;
+  }
+
+  bool get hasRemainingAttempts =>
+      _nextAttemptIndex < WebViewSniffer.headedRecoveryTimeouts.length;
 }
 
 class WebViewSniffer {

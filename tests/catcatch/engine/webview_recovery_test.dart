@@ -66,30 +66,34 @@ void main() {
     expect(timeoutCompletions, 0);
   });
 
-  test('concurrent cleanup callers wait for the same disposal', () async {
+  test('cancellation cleanup waits for timeout-owned disposal', () async {
     final cleanup = SingleFlightAsyncCleanup();
     final disposalStarted = Completer<void>();
     final finishDisposal = Completer<void>();
     var disposalCalls = 0;
-    var secondCallerFinished = false;
+    var timeoutCleanupFinished = false;
+    var cancellationCleanupFinished = false;
 
-    Future<void> dispose() => cleanup.run(() async {
-          disposalCalls++;
-          disposalStarted.complete();
-          await finishDisposal.future;
-        });
-
-    final firstCaller = dispose();
+    final timeoutCleanup = cleanup.run(() async {
+      disposalCalls++;
+      disposalStarted.complete();
+      await finishDisposal.future;
+    }).then((_) => timeoutCleanupFinished = true);
     await disposalStarted.future;
-    final secondCaller = dispose().then((_) => secondCallerFinished = true);
+
+    final cancellationCleanup = cleanup
+        .run(() async => disposalCalls++)
+        .then((_) => cancellationCleanupFinished = true);
     await Future<void>.delayed(Duration.zero);
 
     expect(disposalCalls, 1);
-    expect(secondCallerFinished, isFalse);
+    expect(timeoutCleanupFinished, isFalse);
+    expect(cancellationCleanupFinished, isFalse);
     finishDisposal.complete();
-    await Future.wait([firstCaller, secondCaller]);
+    await Future.wait([timeoutCleanup, cancellationCleanup]);
 
-    expect(secondCallerFinished, isTrue);
+    expect(timeoutCleanupFinished, isTrue);
+    expect(cancellationCleanupFinished, isTrue);
   });
 
   group('WebViewSniffer recovery attempts', () {
@@ -113,6 +117,21 @@ void main() {
         ]);
       },
     );
+
+    test('headed recovery consumes exactly two timeout attempts', () {
+      final attempts = HeadedRecoveryAttemptSchedule();
+
+      expect(attempts.hasRemainingAttempts, isTrue);
+      expect(attempts.startNextAttempt(), 0);
+      expect(attempts.hasRemainingAttempts, isTrue);
+      expect(attempts.startNextAttempt(), 1);
+      expect(attempts.hasRemainingAttempts, isFalse);
+      expect(attempts.startNextAttempt(), isNull);
+      expect(WebViewSniffer.headedRecoveryTimeouts, const [
+        Duration(seconds: 20),
+        Duration(seconds: 20),
+      ]);
+    });
 
     test('enters interactive recovery after both headless timeouts', () async {
       final attempts = <Duration>[];
