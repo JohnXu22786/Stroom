@@ -565,7 +565,8 @@ class ChatStreamManager {
           }
           break;
         } catch (e) {
-          final hasPartialOutput = state.fullReply.isNotEmpty;
+          final fullReplySnapshot = state.fullReply;
+          final hasPartialOutput = fullReplySnapshot.isNotEmpty;
           final hasVisibleReasoning = state.reasoningBuffer.isNotEmpty ||
               state.reasoningSections.any((section) => section.isNotEmpty);
           final canContinuePartial = shouldAutoContinueStream(
@@ -611,10 +612,10 @@ class ChatStreamManager {
                   '[ChatStreamManager] continuation display callback failed: $callbackError');
             }
 
-            final replyDelta = state.fullReply.substring(
+            final replyDelta = fullReplySnapshot.substring(
               replyLengthAtLastContinuation,
             );
-            replyLengthAtLastContinuation = state.fullReply.length;
+            replyLengthAtLastContinuation = fullReplySnapshot.length;
             streamHistory = [
               ...streamHistory,
               ChatMessage(role: 'assistant', content: replyDelta),
