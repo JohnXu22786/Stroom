@@ -2818,9 +2818,8 @@ String _legacyOcrRedactWhitespaceSplitMaskedOpenPrefixEchoes(
 
     for (var tokenCount = 1; tokenCount <= 4; tokenCount++) {
       const token = r'[a-zA-Z0-9._/+~-]+';
-      final additionalTokens = tokenCount == 1
-          ? ''
-          : '(?:[ \\t\\r\\n]+$token){${tokenCount - 1}}';
+      final additionalTokens =
+          tokenCount == 1 ? '' : '(?:[ \\t\\r\\n]+$token){${tokenCount - 1}}';
       final pattern = RegExp(
         '(^|[^a-zA-Z0-9])'
         '(${RegExp.escape(prefix)}[ \\t\\r\\n]+$token$additionalTokens)',
@@ -2828,9 +2827,8 @@ String _legacyOcrRedactWhitespaceSplitMaskedOpenPrefixEchoes(
       );
       sanitized = sanitized.replaceAllMapped(pattern, (match) {
         final echo = match.group(2)!;
-        final suffix = echo
-            .replaceAll(RegExp(r'\s+'), '')
-            .substring(prefix.length);
+        final suffix =
+            echo.replaceAll(RegExp(r'\s+'), '').substring(prefix.length);
         final hasCredentialShape = suffix.length >= 5 &&
             (RegExp(r'[0-9_]').hasMatch(suffix) ||
                 (RegExp(r'[a-z]').hasMatch(suffix) &&
