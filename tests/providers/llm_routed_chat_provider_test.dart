@@ -406,42 +406,85 @@ void main() {
     );
   });
 
-  test('Codex App Server unknown account status is not reported as sign-in',
-      () async {
-    final preferences = _MemoryPreferences();
-    final accounts = LlmAccountConnectorService(
-      preferences: preferences,
-      credentialStore: _MemoryCredentialStore(),
-    );
-    final runtime = LlmChatRoutingRuntime(
-      accountService: accounts,
-      routingService: LlmRoutingService(accountService: accounts),
-      codexAppServerService: CodexAppServerService(
-        processLauncher: _FakeCodexProcessLauncher(),
-        socketConnector: _FakeCodexSocketConnector(
-          accountReadResult: {'other': true},
+  test(
+    'ZCode CLI Chat route is native Chat Completions and credential-free',
+    () {
+      final account = AiGatewayAccount(
+        id: 'zcode-local-account',
+        connectorType: 'zcode-cli',
+        authType: 'none',
+        displayName: 'Local ZCode Coding Plan',
+        endpointConfig: const {},
+      );
+      expect(
+        llmRoutedChatProtocolForAccountModel(
+          account: account,
+          upstreamModelId: 'glm-5.3-flash',
+          endpointType: 'openai.chat_completions',
         ),
-      ),
-    );
+        'openai.chat_completions',
+      );
+      expect(
+        () => llmRoutedChatProtocolForAccountModel(
+          account: account,
+          upstreamModelId: 'glm-5.3-flash',
+          endpointType: 'openai.chat_completions',
+          apiProtocolOverride: 'openai.responses',
+        ),
+        throwsStateError,
+      );
+      expect(
+        LlmConnectorRegistry.isChatAdapterAuthTypeSupported(
+          'zcode-cli',
+          'api_key',
+        ),
+        isFalse,
+      );
+      expect(
+        llmRoutedChatSupportedConnectorTypes('openai.chat_completions'),
+        contains('zcode-cli'),
+      );
+    },
+  );
 
-    await expectLater(
-      runtime.modelDiscovery.testConnection(
-        AiGatewayAccount(
-          id: 'codex-app-server-account',
-          connectorType: 'codex-app-server',
-          authType: 'none',
-          displayName: 'Local Codex CLI',
+  test(
+    'Codex App Server unknown account status is not reported as sign-in',
+    () async {
+      final preferences = _MemoryPreferences();
+      final accounts = LlmAccountConnectorService(
+        preferences: preferences,
+        credentialStore: _MemoryCredentialStore(),
+      );
+      final runtime = LlmChatRoutingRuntime(
+        accountService: accounts,
+        routingService: LlmRoutingService(accountService: accounts),
+        codexAppServerService: CodexAppServerService(
+          processLauncher: _FakeCodexProcessLauncher(),
+          socketConnector: _FakeCodexSocketConnector(
+            accountReadResult: {'other': true},
+          ),
         ),
-      ),
-      throwsA(
-        isA<AiGatewayExecutionException>().having(
-          (error) => error.kind,
-          'unknown account status failure kind',
-          AiGatewayFailureKind.transportUnavailable,
+      );
+
+      await expectLater(
+        runtime.modelDiscovery.testConnection(
+          AiGatewayAccount(
+            id: 'codex-app-server-account',
+            connectorType: 'codex-app-server',
+            authType: 'none',
+            displayName: 'Local Codex CLI',
+          ),
         ),
-      ),
-    );
-  });
+        throwsA(
+          isA<AiGatewayExecutionException>().having(
+            (error) => error.kind,
+            'unknown account status failure kind',
+            AiGatewayFailureKind.transportUnavailable,
+          ),
+        ),
+      );
+    },
+  );
   test(
     'Codex App Server routes Chat and Task Flow through local app-server',
     () async {

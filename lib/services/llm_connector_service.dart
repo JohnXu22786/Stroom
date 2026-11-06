@@ -33,6 +33,7 @@ import 'azure_openai_endpoint.dart';
 import 'clova_studio_protocol.dart';
 import 'oneminai_protocol.dart';
 import 'auggie_cli_service.dart';
+import 'zcode_cli_service.dart';
 
 /// Frozen upstream implementation used to define this connector catalog.
 const String kLlmConnectorReferenceRevision =
@@ -279,6 +280,7 @@ enum LlmNativeProtocol {
   clovaStudioChat,
   oneMinAiChat,
   auggieCli,
+  zcodeCli,
   codexAppServer,
   openAIResponses,
   anthropicMessages,
@@ -423,6 +425,13 @@ abstract final class LlmConnectorRegistry {
       protocol: LlmNativeProtocol.codexAppServer,
       authTypes: {'none'},
       modelCatalog: kPinnedCodexModels,
+    ),
+    LlmConnectorDefinition(
+      id: 'zcode-cli',
+      displayName: 'ZCode CLI (Local Coding Plan)',
+      protocol: LlmNativeProtocol.zcodeCli,
+      authTypes: {'none'},
+      modelCatalog: zcodePinnedModelIds,
     ),
     LlmConnectorDefinition(
       id: 'claude',
@@ -837,6 +846,7 @@ abstract final class LlmConnectorRegistry {
       switch (canonicalId(connectorType)) {
         'codex' => 'openai',
         'codex-app-server' => 'openai',
+        'zcode-cli' => 'openai',
         'clova-studio' => 'clova.studio.chat',
         'oneminai' => kOneMinAiProtocolId,
         'amazon-q' => 'amazon-q.chat',
@@ -915,6 +925,7 @@ abstract final class LlmConnectorRegistry {
     return switch (canonicalId(connectorType)) {
       'codex' => authType == 'oauth',
       'codex-app-server' => authType == 'none',
+      'zcode-cli' => authType == 'none',
       'xai' || 'meta' => authType == 'api_key',
       'muse-code' => authType == 'oauth',
       'grok-cli' || 'xai-oauth' => authType == 'oauth',
@@ -951,6 +962,7 @@ class LlmAccountConnectorService {
   final Dio _dio;
   final QoderCliService? _qoderCliOverride;
   final AuggieCliService _auggieCli;
+  final ZcodeCliService _zcodeCli;
   late final QoderCliService _qoderCli =
       _qoderCliOverride ?? QoderCliService(readCredential: readCredential);
 
@@ -960,8 +972,10 @@ class LlmAccountConnectorService {
     Dio? dio,
     QoderCliService? qoderCliService,
     AuggieCliService? auggieCliService,
+    ZcodeCliService? zcodeCliService,
   })  : _qoderCliOverride = qoderCliService,
         _auggieCli = auggieCliService ?? AuggieCliService(),
+        _zcodeCli = zcodeCliService ?? ZcodeCliService(),
         _dio = dio ??
             Dio(
               BaseOptions(
@@ -1678,6 +1692,18 @@ class LlmAccountConnectorService {
     await _auggieCli.testConnection();
   }
 
+  Future<void> testZcodeCliConnection(LlmAccount account) async {
+    if (account.connectorType != 'zcode-cli' ||
+        account.authType != 'none' ||
+        account.credentialRef != null) {
+      throw const LlmAccountConnectorException();
+    }
+    final result = await _zcodeCli.status();
+    if (result.status != ZcodeServerStatus.ready) {
+      throw const LlmAccountConnectorException();
+    }
+  }
+
   Future<List<LlmUpstreamModel>> discoverModels(
     LlmAccount account, {
     bool refreshRemote = false,
@@ -1715,6 +1741,30 @@ class LlmAccountConnectorService {
                   ? 'pinned_auggie_registry'
                   : 'auggie_cli_model_list',
               'availability': 'unknown',
+            },
+          ),
+      ];
+    }
+    if (account.connectorType == 'zcode-cli') {
+      final models = await _zcodeCli.discoverModels();
+      return [
+        for (var index = 0; index < models.length; index++)
+          LlmUpstreamModel(
+            id: '${account.id}:zcode:$index',
+            upstreamModelId: models[index].id,
+            displayName: models[index].displayName,
+            capabilities: {
+              'chat': true,
+              'streaming': true,
+              'reasoning': true,
+              'tools': true,
+              'vision': models[index].supportsVision,
+              'contextLength': models[index].contextLength,
+              'supportedApiProtocols': ['openai.chat_completions'],
+            },
+            config: const {
+              'catalogSource': 'native_zcode_coding_plan',
+              'availability': 'enabled',
             },
           ),
       ];
@@ -5143,7 +5193,8 @@ class LlmAccountConnectorService {
         secret = jsonEncode(normalized);
       }
       if ((account.connectorType == 'auggie' ||
-              account.connectorType == 'codex-app-server') &&
+              account.connectorType == 'codex-app-server' ||
+              account.connectorType == 'zcode-cli') &&
           secret != null) {
         throw const LlmAccountConnectorException();
       }
@@ -5819,6 +5870,15 @@ class LlmAccountConnectorService {
                 'apiBase',
                 'websocketUrl',
               }.contains(key),
+            ))) {
+      throw const LlmAccountConnectorException();
+    }
+    if (account.connectorType == 'zcode-cli' &&
+        (account.authType != 'none' ||
+            account.credentialRef != null ||
+            account.endpointConfig.isNotEmpty ||
+            account.models.any(
+              (model) => !zcodePinnedModelIds.contains(model.upstreamModelId),
             ))) {
       throw const LlmAccountConnectorException();
     }

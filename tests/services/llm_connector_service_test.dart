@@ -3786,6 +3786,89 @@ void main() {
     });
 
     test(
+      'persists ZCode as auth:none without a credential reference',
+      () async {
+        expect(LlmConnectorRegistry.find('zcode-cli')?.authTypes, {'none'});
+        final saved = await service.saveAccount(
+          LlmAccount(
+            id: 'zcode-local',
+            connectorType: 'zcode-cli',
+            authType: 'none',
+            displayName: 'Local ZCode Coding Plan',
+            models: const [
+              LlmUpstreamModel(
+                id: 'zcode-glm53',
+                upstreamModelId: 'glm-5.3-flash',
+                displayName: 'GLM 5.3 Flash',
+                capabilities: {'chat': true, 'vision': true},
+              ),
+            ],
+          ),
+        );
+
+        expect(saved.authType, 'none');
+        expect(saved.credentialRef, isNull);
+        expect(credentials.values, isEmpty);
+        final stored = (jsonDecode(
+          preferences.values[LlmAccountMigrationService.accountsPreferenceKey]!,
+        ) as Map)['items'] as List;
+        expect(stored.single['connectorType'], 'zcode-cli');
+        expect(stored.single['authType'], 'none');
+        expect(stored.single, isNot(contains('credentialRef')));
+      },
+    );
+
+    test(
+      'rejects secrets and endpoint overrides for the ZCode account',
+      () async {
+        final account = LlmAccount(
+          id: 'zcode-invalid',
+          connectorType: 'zcode-cli',
+          authType: 'none',
+          displayName: 'Local ZCode',
+          endpointConfig: const {'baseUrl': 'https://api.z.ai/v1'},
+        );
+
+        await expectLater(
+          service.saveAccount(account),
+          throwsA(isA<LlmAccountConnectorException>()),
+        );
+        await expectLater(
+          service.saveAccount(
+            LlmAccount(
+              id: 'zcode-unknown-model',
+              connectorType: 'zcode-cli',
+              authType: 'none',
+              displayName: 'Local ZCode',
+              models: const [
+                LlmUpstreamModel(
+                  id: 'arbitrary-model',
+                  upstreamModelId: '--help',
+                  displayName: 'Invalid model',
+                ),
+              ],
+            ),
+          ),
+          throwsA(isA<LlmAccountConnectorException>()),
+        );
+        await expectLater(
+          service.saveAccount(
+            LlmAccount(
+              id: 'zcode-secret',
+              connectorType: 'zcode-cli',
+              authType: 'none',
+              displayName: 'Local ZCode',
+            ),
+            secret: 'must-never-be-stored',
+          ),
+          throwsA(isA<LlmAccountConnectorException>()),
+        );
+        expect(credentials.values, isEmpty);
+        expect(preferences.values, isEmpty);
+      },
+    );
+
+    test(
       'rejects Auggie model IDs outside pinned or discovered catalogs',
       () async {
         await expectLater(

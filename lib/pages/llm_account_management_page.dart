@@ -17,6 +17,7 @@ import '../services/azure_openai_endpoint.dart';
 import '../services/devin_cli_acp.dart';
 import '../services/api_protocol_config.dart';
 import '../services/auggie_cli_service.dart';
+import '../services/zcode_cli_service.dart';
 import '../services/llm_oauth_flow.dart';
 import '../services/llm_oauth_loopback.dart';
 import '../services/trae_solo_connector.dart';
@@ -67,6 +68,29 @@ List<AiGatewayUpstreamModel> _pinnedCodexAppServerModels(String accountId) => [
           },
           config: const {
             'catalogSource': 'pinned_codex_app_server_registry',
+            'availability': 'unknown',
+          },
+        ),
+    ];
+
+List<AiGatewayUpstreamModel> _pinnedZcodeModels(String accountId) => [
+      for (var index = 0; index < zcodePinnedModels.length; index++)
+        AiGatewayUpstreamModel(
+          id: '$accountId:zcode:$index',
+          upstreamModelId: zcodePinnedModels[index].id,
+          displayName: zcodePinnedModels[index].displayName,
+          capabilities: {
+            'chat': true,
+            'streaming': true,
+            'reasoning': true,
+            'tools': true,
+            'vision': zcodePinnedModels[index].supportsVision,
+            'audio': false,
+            'contextLength': zcodePinnedModels[index].contextLength,
+            'supportedApiProtocols': ['openai.chat_completions'],
+          },
+          config: const {
+            'catalogSource': 'pinned_zcode_registry',
             'availability': 'unknown',
           },
         ),
@@ -2057,6 +2081,17 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
           : _pinnedCodexAppServerModels(account?.id ?? 'new');
       _endpoint.clear();
     }
+    if (_connectorType == 'zcode-cli') {
+      _authType = 'none';
+      _apiProtocol = 'openai.chat_completions';
+      _models.text = account?.models.isNotEmpty == true
+          ? account!.models.map((model) => model.upstreamModelId).join('\n')
+          : zcodePinnedModelIds.join('\n');
+      _discoveredModels = account?.models.isNotEmpty == true
+          ? List<AiGatewayUpstreamModel>.of(account!.models)
+          : _pinnedZcodeModels(account?.id ?? 'new');
+      _endpoint.clear();
+    }
     if (_isAzureConnector && _azureDeployment.text.trim().isNotEmpty) {
       _models.text = _azureDeployment.text.trim();
     }
@@ -2394,6 +2429,14 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                       _discoveredModels = _pinnedCodexAppServerModels(
                         widget.account?.id ?? 'new',
                       );
+                    } else if (value == 'zcode-cli') {
+                      _authType = 'none';
+                      _endpoint.clear();
+                      _apiProtocol = 'openai.chat_completions';
+                      _models.text = zcodePinnedModelIds.join('\n');
+                      _discoveredModels = _pinnedZcodeModels(
+                        widget.account?.id ?? 'new',
+                      );
                     } else if (value == 'devin-cli-agentic') {
                       _models.text = kPinnedDevinCliModels.join('\n');
                     } else if (value == 'cloudflare-ai') {
@@ -2610,6 +2653,13 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                     '使用本机 Codex CLI。请先在终端运行 codex login；Stroom 不读取或保存 CLI 登录数据。',
                   ),
                 ),
+              if (_connectorType == 'zcode-cli')
+                const Padding(
+                  padding: EdgeInsets.only(top: 6),
+                  child: Text(
+                    '使用本机 ZCode app-server 和 GLM Coding Plan。需要时请先在官方 ZCode 应用中登录；Stroom 不读取或保存 ZCode 登录数据。',
+                  ),
+                ),
               if (_connectorType == 'devin-cli-agentic') ...[
                 TextField(
                   controller: _devinCliExecutable,
@@ -2794,7 +2844,8 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                 const SizedBox(height: 8),
               ],
               if (_connectorType != 'cloudflare-ai' &&
-                  _connectorType != 'codex-app-server')
+                  _connectorType != 'codex-app-server' &&
+                  _connectorType != 'zcode-cli')
                 TextField(
                   controller: _endpoint,
                   enabled: _connectorType != 'devin-cli-agentic' &&
@@ -3291,9 +3342,9 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
     try {
       await widget.modelDiscovery.testConnection(account);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Codex CLI 已登录并可运行。')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Codex CLI 已登录并可运行。')));
     } catch (error) {
       if (!mounted) return;
       setState(() => _error = error.toString());
@@ -3756,6 +3807,8 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
         ..remove('host')
         ..remove('apiBase')
         ..remove('apiProtocol');
+    } else if (_connectorType == 'zcode-cli') {
+      endpointConfig.clear();
     } else if (widget.account?.connectorType == 'azure-ai' ||
         widget.account?.connectorType == 'azure-openai') {
       endpointConfig

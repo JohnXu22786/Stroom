@@ -1722,6 +1722,76 @@ void main() {
     expect(credentials.values, isEmpty);
   });
 
+  testWidgets('ZCode account uses its local Coding Plan and stores no secret', (
+    tester,
+  ) async {
+    final credentials = _MemoryCredentialStore();
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: credentials,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('添加账号'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first, 'Local ZCode');
+
+    final connectorField = find.byType(DropdownButtonFormField<String>).first;
+    tester.widget<DropdownButtonFormField<String>>(connectorField).onChanged!(
+      'zcode-cli',
+    );
+    await tester.pumpAndSettle();
+
+    final authField = find.byType(DropdownButtonFormField<String>).at(1);
+    final authDropdown = tester.widget<DropdownButton<String>>(
+      find.descendant(
+        of: authField,
+        matching: find.byType(DropdownButton<String>),
+      ),
+    );
+    expect(authDropdown.value, 'none');
+    expect(authDropdown.items!.map((item) => item.value), ['none']);
+    expect(find.textContaining('官方 ZCode'), findsOneWidget);
+    expect(find.textContaining('GLM Coding Plan'), findsOneWidget);
+    expect(
+      tester
+          .widget<TextField>(
+            find.byWidgetPredicate(
+              (widget) =>
+                  widget is TextField &&
+                  widget.decoration?.labelText == '上游模型与能力',
+            ),
+          )
+          .controller!
+          .text,
+      contains('glm-5.3-flash'),
+    );
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField &&
+            widget.decoration?.labelText?.contains('端点地址') == true,
+      ),
+      findsNothing,
+    );
+
+    await tester.ensureVisible(find.text('保存').last);
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+
+    final saved = (await service.listAccounts()).single;
+    expect(saved.connectorType, 'zcode-cli');
+    expect(saved.authType, 'none');
+    expect(saved.displayName, 'Local ZCode');
+    expect(saved.credentialRef, isNull);
+    expect(saved.endpointConfig, isEmpty);
+    expect(credentials.values, isEmpty);
+  });
+
   testWidgets(
     'editing an Auggie account preserves discovered models and clears stale protocol',
     (tester) async {
