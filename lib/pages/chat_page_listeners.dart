@@ -27,7 +27,21 @@ extension _ChatPageListenersExt on _ChatPageState {
             ? <String>[existingText.text]
             : <String>[],
       );
-      if (next.text.isNotEmpty) fragments.add(next.text);
+      if (next.text.isNotEmpty) {
+        fragments.add(next.text);
+        if (fragments.length > 32) {
+          var mergeIndex = 0;
+          var shortestPairLength = fragments[0].length + fragments[1].length;
+          for (var i = 1; i < fragments.length - 1; i++) {
+            final pairLength = fragments[i].length + fragments[i + 1].length;
+            if (pairLength < shortestPairLength) {
+              mergeIndex = i;
+              shortestPairLength = pairLength;
+            }
+          }
+          fragments[mergeIndex] += fragments.removeAt(mergeIndex + 1);
+        }
+      }
       final segments = existingSegments;
       final existingIndex = segments.lastIndexWhere(
         (segment) =>
