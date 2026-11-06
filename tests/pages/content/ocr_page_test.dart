@@ -904,7 +904,8 @@ void main() {
       expect(
         find.text('已选 1 张图片'),
         findsNothing,
-        reason: 'the later gallery import must wait for the earlier camera slot',
+        reason:
+            'the later gallery import must wait for the earlier camera slot',
       );
 
       pendingCameraPicker.complete(
