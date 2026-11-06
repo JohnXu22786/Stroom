@@ -15689,6 +15689,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'OCR error details were hidden'**
   String get bgTaskOcrErrorDetailsHidden;
+
+  /// No description provided for @bgTaskErrorDetailsHidden.
+  ///
+  /// In en, this message translates to:
+  /// **'Error details were hidden'**
+  String get bgTaskErrorDetailsHidden;
 }
 
 class _AppLocalizationsDelegate

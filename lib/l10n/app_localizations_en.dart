@@ -9396,6 +9396,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get bgTaskOcrErrorDetailsHidden => 'OCR error details were hidden';
+
+  @override
+  String get bgTaskErrorDetailsHidden => 'Error details were hidden';
 }
 
 /// The translations for English, as used in the United States (`en_US`).
@@ -18789,4 +18792,7 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get bgTaskOcrErrorDetailsHidden => 'OCR error details were hidden';
+
+  @override
+  String get bgTaskErrorDetailsHidden => 'Error details were hidden';
 }

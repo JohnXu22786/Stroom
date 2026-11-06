@@ -8909,6 +8909,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get bgTaskOcrErrorDetailsHidden => 'OCR 错误详情已隐藏';
+
+  @override
+  String get bgTaskErrorDetailsHidden => '错误详情已隐藏';
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).
@@ -17815,4 +17818,7 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get bgTaskOcrErrorDetailsHidden => 'OCR 错误详情已隐藏';
+
+  @override
+  String get bgTaskErrorDetailsHidden => '错误详情已隐藏';
 }

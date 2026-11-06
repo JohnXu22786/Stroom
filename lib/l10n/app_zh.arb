@@ -5227,5 +5227,6 @@
   },
   "bgTaskOcrPageFailureSeparator": "；",
   "bgTaskInterruptedOnRestart": "应用重启，已中断",
-  "bgTaskOcrErrorDetailsHidden": "OCR 错误详情已隐藏"
+  "bgTaskOcrErrorDetailsHidden": "OCR 错误详情已隐藏",
+  "bgTaskErrorDetailsHidden": "错误详情已隐藏"
 }

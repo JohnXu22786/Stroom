@@ -1010,6 +1010,7 @@ void main() {
         'OCR 处理失败（TypeError）',
         'OCR 处理失败（TimeoutException）',
         'OCR 处理失败（UnsupportedError）',
+        'Some images were not fully recognized: Image 1: recognition failed; Image 3: incomplete result',
         'OCR 未识别到文字内容',
         'OCR 未识别到文字内容（content 列表为空）',
         'OCR 返回了不支持的非文本 content block',

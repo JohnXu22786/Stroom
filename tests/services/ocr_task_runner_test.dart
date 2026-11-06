@@ -1200,7 +1200,10 @@ void main() {
 
     expect(notifier.state.single.status, TaskStatus.failed);
     expect(notifier.state.single.result, '');
-    expect(notifier.state.single.error, startsWith('OCR结果保存失败:'));
+    expect(
+      notifier.state.single.error,
+      startsWith(notifier.localizations.bgTaskOcrSaveError('')),
+    );
     expect(await TextManifest.loadRecords(), isEmpty);
 
     final saver = OcrResultSaver(

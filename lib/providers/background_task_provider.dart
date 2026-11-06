@@ -523,6 +523,12 @@ String? _localizeStoredBackgroundError(
 ) {
   if (error == null) return null;
   if (error == '已取消' || error == 'Canceled') return strings.bgTaskCancelled;
+  if (error == 'OCR 错误详情已隐藏' || error == 'OCR error details were hidden') {
+    return strings.bgTaskOcrErrorDetailsHidden;
+  }
+  if (error == '错误详情已隐藏' || error == 'Error details were hidden') {
+    return strings.bgTaskErrorDetailsHidden;
+  }
   if (error == '应用重启，已中断' || error == 'Interrupted when the app restarted') {
     return strings.bgTaskInterruptedOnRestart;
   }
@@ -857,14 +863,24 @@ String? _sanitizeOcrTaskError(
         strings.bgTaskOcrIncompleteError(''),
       ]) {
         if (!error.startsWith(prefix)) continue;
+        if (_legacyOcrTextContainsCredential(prefix, credentialValues)) {
+          return _localizedOcrHiddenTaskError(strings, credentialValues);
+        }
         final details = error.substring(prefix.length);
+        final sanitizedDetails = OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+          details,
+          excludedValues: credentialValues,
+        );
+        const hiddenDetailsPrefix = 'OCR 错误详情已隐藏';
+        final localizedHiddenDetails =
+            _localizedOcrHiddenTaskError(strings, credentialValues);
         final safeDetails =
-            _legacyOcrTextContainsCredential(details, credentialValues)
-                ? strings.bgTaskOcrErrorDetailsHidden
-                : OcrDiagnosticSnapshot.sanitizeStoredTaskError(
-                    details,
-                    excludedValues: credentialValues,
-                  );
+            sanitizedDetails?.startsWith(hiddenDetailsPrefix) == true
+                ? sanitizedDetails!.replaceFirst(
+                    hiddenDetailsPrefix,
+                    localizedHiddenDetails,
+                  )
+                : sanitizedDetails;
         return '$prefix${safeDetails ?? ''}';
       }
     }
@@ -877,6 +893,22 @@ String? _sanitizeOcrTaskError(
     error,
     excludedValues: credentialValues,
   );
+}
+
+String _localizedOcrHiddenTaskError(
+  AppLocalizations strings,
+  Iterable<String> credentialValues,
+) {
+  for (final candidate in [
+    strings.bgTaskErrorDetailsHidden,
+    strings.bgTaskOcrErrorDetailsHidden,
+    '…',
+  ]) {
+    if (!_legacyOcrTextContainsCredential(candidate, credentialValues)) {
+      return candidate;
+    }
+  }
+  return '';
 }
 
 Iterable<String> _combinedOcrCredentialValues(

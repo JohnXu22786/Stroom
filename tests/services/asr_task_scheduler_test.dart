@@ -387,7 +387,7 @@ void main() {
     );
     expect(
       englishNotifier.state.single.steps[2].label,
-      startsWith(englishStrings.bgTaskAsrCompletedChunks('1', '2', '')),
+      contains(englishStrings.bgTaskProgressMetrics('0', '0', '0', '1')),
     );
     expect(englishNotifier.state.single.steps[2].label, isNot(contains('%')));
 

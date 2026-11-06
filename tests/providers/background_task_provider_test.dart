@@ -287,6 +287,61 @@ void main() {
       notifier.dispose();
     });
 
+    test('localized hidden details never echo a matching OCR API key',
+        () async {
+      const apiKey = 'OCR error details were hidden';
+      final strings = lookupAppLocalizations(const Locale('en', 'US'));
+      final notifier = BackgroundTaskNotifier(
+        localizationsResolver: () => strings,
+      );
+      final id = notifier.addTask(
+        type: BackgroundTaskType.ocr,
+        title: 'OCR',
+      );
+      notifier.failTask(
+        id,
+        error: 'Saving OCR results failed: api_key=$apiKey',
+        rawRequest: {
+          'headers': {'Authorization': 'Bearer $apiKey'},
+        },
+      );
+
+      expect(
+        notifier.taskById(id)!.error,
+        'Saving OCR results failed: Error details were hidden',
+      );
+      expect(notifier.taskById(id)!.error, isNot(contains(apiKey)));
+
+      await notifier.pendingPersistence;
+      notifier.dispose();
+    });
+
+    test('stored OCR hidden-details messages refresh with the selected locale',
+        () async {
+      var strings = lookupAppLocalizations(const Locale('en', 'US'));
+      final notifier = BackgroundTaskNotifier(
+        localizationsResolver: () => strings,
+      );
+      final id = notifier.addTask(
+        type: BackgroundTaskType.ocr,
+        title: 'OCR',
+      );
+      notifier.failTask(
+        id,
+        error: 'Saving OCR results failed: OCR error details were hidden',
+      );
+
+      strings = lookupAppLocalizations(const Locale('zh', 'CN'));
+      notifier.refreshLocalizations();
+
+      expect(
+        notifier.taskById(id)!.error,
+        'OCR结果保存失败：OCR 错误详情已隐藏',
+      );
+      await notifier.pendingPersistence;
+      notifier.dispose();
+    });
+
     test('stored ASR and OCR error wrappers localize without changing details',
         () async {
       var strings = lookupAppLocalizations(const Locale('zh', 'CN'));
