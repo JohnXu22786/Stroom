@@ -7313,8 +7313,11 @@ void main() {
           task.retryData!,
         ).instructionContent;
 
-        expect(retryInstruction, '[redacted]');
-        expect(serializedRetryData['instructionContent'], '[redacted]');
+        expect(retryInstruction, 'Please use [redacted] for the request');
+        expect(
+          serializedRetryData['instructionContent'],
+          'Please use [redacted] for the request',
+        );
         expect(retryInstruction, isNot(contains(apiKey)));
         expect(persisted, isNot(contains(apiKey)));
       },
@@ -7391,6 +7394,78 @@ void main() {
 
         expect(retryInstruction, instruction);
         expect(persisted, contains(instruction));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration preserves a keyboard-sequence word after a short mask prefix',
+      () {
+        const instruction = 'Please use abc Qwerty for the request';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-short-open-mask-keyboard-word',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer abc…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+        final retryInstruction = OcrRetrySnapshot.fromMap(
+          task.retryData!,
+        ).instructionContent;
+
+        expect(retryInstruction, instruction);
+        expect(persisted, contains(instruction));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration redacts a numeric credential suffix that begins with a keyboard sequence',
+      () {
+        const instruction = 'Please use abc Qwerty123 for the request';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-short-open-mask-keyboard-numeric-secret',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer abc…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+        final retryInstruction = OcrRetrySnapshot.fromMap(
+          task.retryData!,
+        ).instructionContent;
+
+        expect(retryInstruction, 'Please use [redacted] for the request');
+        expect(persisted, isNot(contains('abcQwerty123')));
       },
     );
 

@@ -1883,7 +1883,8 @@ bool _legacyOcrTextContainsMaskedCredential(
                 unicodeOpaqueContinuation ||
                 prefixHasKeyMarker ||
                 suffixHasKeyMarker ||
-                _legacyOcrHasUncommonAlphaContinuation(suffix) ||
+                (_legacyOcrHasUncommonAlphaContinuation(suffix) &&
+                    !_legacyOcrHasKeyboardSequence(suffix)) ||
                 _legacyOcrHasCredentialWord(suffix) ||
                 _legacyOcrHasCredentialCompound(token) ||
                 shortUnclassifiedAlphaContinuation ||
@@ -2854,6 +2855,8 @@ String _legacyOcrRedactWhitespaceSplitMaskedOpenPrefixEchoes(
         suffix += tokenMatch.group(0)!;
         final echoEnd = tokenMatch.end;
         final hasCredentialShape = suffix.length >= 5 &&
+            (!_legacyOcrHasKeyboardSequence(suffix) ||
+                RegExp(r'[0-9_]').hasMatch(suffix)) &&
             (RegExp(r'[0-9_]').hasMatch(suffix) ||
                 _legacyOcrHasUncommonAlphaContinuation(suffix) ||
                 _legacyOcrHasLongConsonantRun(suffix) ||
