@@ -97,16 +97,9 @@ extension _ChatStreamManagerCompactionExt on ChatStreamManager {
       if (idx >= 0) headStart = idx;
     }
     if (headStart >= tailStart) return false; // 无新增可压缩内容
-    final head = state.history
-        .sublist(headStart, tailStart)
-        // 压缩转写剥离附件（媒体不进摘要请求）
-        .map((m) => m.attachments.isEmpty
-            ? m
-            : m.copyWith(
-                content: contentCache.contentFor(m),
-                attachments: [],
-              ))
-        .toList();
+    // The summary prompt below reads only text/tool results; keep originals
+    // so attachment-bearing messages do not retain copied full text.
+    final head = state.history.sublist(headStart, tailStart);
     final tail = state.history.sublist(tailStart);
     if (head.isEmpty) return false;
 
@@ -166,6 +159,10 @@ extension _ChatStreamManagerCompactionExt on ChatStreamManager {
       convId: convId,
     );
     if (requestSvc == null) return false;
+    // The compaction transcript now owns its assembled text. Drop cached
+    // copies for the summarized head before the network wait; keep the tail
+    // entries that the ensuing main request may reuse.
+    contentCache.retainOnly(tail);
     requestSvc.onUsageEvent =
         (usage, {required bool recordInput, double? costIncrement}) {
       _commitUsage(convId, usage,
