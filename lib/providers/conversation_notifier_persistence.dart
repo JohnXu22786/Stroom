@@ -13,6 +13,16 @@ part of 'conversation_provider.dart';
 /// repeatedly hit decode failures.
 const int _maxCorruptBackups = 3;
 
+/// Latest snapshot and completion shared by periodic stream checkpoints that
+/// can safely supersede one another before the queue reaches them.
+class _CoalescedStreamPersist {
+  List<Conversation> snapshot;
+  final Completer<void> completion = Completer<void>();
+  bool accepting = true;
+
+  _CoalescedStreamPersist(this.snapshot);
+}
+
 extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
   // --------------------------------------------------------------------------
   // Persistence
@@ -292,6 +302,61 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
     return _persistCoreResult();
   }
 
+  /// Queue one latest-wins stream checkpoint while preserving the normal
+  /// serial queue. Explicit persistence calls seal the current checkpoint so
+  /// later periodic writes cannot cross their ordering barrier.
+  Future<void> _persistStreamCheckpoint() {
+    final List<Conversation> snapshot;
+    try {
+      snapshot = List<Conversation>.from(state);
+    } catch (_) {
+      return Future<void>.value();
+    }
+    if (!_loadHasRun) return Future<void>.value();
+
+    final current = _coalescedStreamPersist;
+    if (current != null && current.accepting) {
+      current.snapshot = snapshot;
+      return current.completion.future;
+    }
+
+    final checkpoint = _CoalescedStreamPersist(snapshot);
+    _coalescedStreamPersist = checkpoint;
+    final write = _persistQueue.then(
+      (_) => _drainStreamCheckpoints(checkpoint),
+    );
+    _persistQueue = write.then(
+      (_) {},
+      onError: (Object error, StackTrace st) {
+        debugPrint('Failed to queue conversation persistence: $error');
+      },
+    );
+    return checkpoint.completion.future;
+  }
+
+  Future<void> _drainStreamCheckpoints(
+      _CoalescedStreamPersist checkpoint) async {
+    try {
+      while (true) {
+        final snapshot = checkpoint.snapshot;
+        await _persistSnapshot(snapshot);
+        if (identical(checkpoint.snapshot, snapshot)) break;
+      }
+      checkpoint.accepting = false;
+      if (identical(_coalescedStreamPersist, checkpoint)) {
+        _coalescedStreamPersist = null;
+      }
+      checkpoint.completion.complete();
+    } catch (error, stackTrace) {
+      checkpoint.accepting = false;
+      if (identical(_coalescedStreamPersist, checkpoint)) {
+        _coalescedStreamPersist = null;
+      }
+      checkpoint.completion.completeError(error, stackTrace);
+      rethrow;
+    }
+  }
+
   /// Persist the current state to SharedPreferences with fallback.
   ///
   /// Tries these strategies in order, stopping at the first success:
@@ -318,6 +383,11 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
   }
 
   Future<bool> _persistCoreResult() async {
+    // Seal any coalescible checkpoint before taking an explicit snapshot.
+    // Future stream checkpoints then enter the serial queue after this write.
+    final streamCheckpoint = _coalescedStreamPersist;
+    if (streamCheckpoint != null) streamCheckpoint.accepting = false;
+
     final List<Conversation> snapshot;
     try {
       snapshot = List<Conversation>.from(state);

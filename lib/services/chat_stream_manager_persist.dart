@@ -73,7 +73,7 @@ extension _ChatStreamManagerPersistExt on ChatStreamManager {
           ));
         }
       }
-      await ref.read(conversationsProvider.notifier).updateMessages(
+      await ref.read(conversationsProvider.notifier).updateMessagesPeriodically(
             s.convId,
             partialHistory,
             resetTemporaryCountdown: true,
