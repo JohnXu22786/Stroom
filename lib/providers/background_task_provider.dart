@@ -1510,19 +1510,26 @@ const _legacyOcrNaturalCarefulInstructionActions = {
   'write',
 };
 
-bool _legacyOcrIsNaturalCarefullyObjectPhrase(String prefix, String text) =>
-    const {'read', 'check'}.contains(
-      prefix.toLowerCase(),
-    ) &&
-    RegExp(
-      r'^(?:the|this|that|these|those|a|an|my|your|our|their|his|her|its)\s+'
-      r'(?!authorization\b|auth\b|api[\s_-]*key\b|keys?\b|credentials?\b|tokens?\b|secrets?\b|passwords?\b)'
-      r'[\p{L}\p{M}\p{N}]+(?:[-_][\p{L}\p{M}\p{N}]+)*'
-      r'(?:\s+(?!authorization\b|auth\b|api[\s_-]*key\b|keys?\b|credentials?\b|tokens?\b|secrets?\b|passwords?\b)'
-      r'[\p{L}\p{M}\p{N}]+(?:[-_][\p{L}\p{M}\p{N}]+)*)*[.!?]?$',
-      caseSensitive: false,
-      unicode: true,
-    ).hasMatch(text);
+bool _legacyOcrIsNaturalCarefullyObjectPhrase(String prefix, String text) {
+  if (!const {'read', 'check'}.contains(prefix.toLowerCase())) return false;
+
+  final isSecretLabel = RegExp(
+    r'^(?:(?:the|this|that|these|those|a|an|my|your|our|their|his|her|its)\s+)?'
+    r'secret\s+label\s+carefully[.!?]?$',
+    caseSensitive: false,
+    unicode: true,
+  ).hasMatch(text);
+  return isSecretLabel ||
+      RegExp(
+        r'^(?:the|this|that|these|those|a|an|my|your|our|their|his|her|its)\s+'
+        r'(?!authorization\b|auth\b|api[\s_-]*key\b|keys?\b|credentials?\b|tokens?\b|secrets?\b|passwords?\b)'
+        r'[\p{L}\p{M}\p{N}]+(?:[-_][\p{L}\p{M}\p{N}]+)*'
+        r'(?:\s+(?!authorization\b|auth\b|api[\s_-]*key\b|keys?\b|credentials?\b|tokens?\b|secrets?\b|passwords?\b)'
+        r'[\p{L}\p{M}\p{N}]+(?:[-_][\p{L}\p{M}\p{N}]+)*)*[.!?]?$',
+        caseSensitive: false,
+        unicode: true,
+      ).hasMatch(text);
+}
 
 bool _legacyOcrHasNaturalConnectorAfterLineBreak(
   String text,
