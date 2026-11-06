@@ -1398,29 +1398,19 @@ bool _isStreamingMermaidTailWithInfo(
   if (fenceInfo.isCached) {
     final tailSource = fenceInfo.tailSource;
     if (tailSource != null) {
-      if (mermaidFenceIndex != null &&
-          mermaidFenceIndex != fenceInfo.mermaidFenceIndex) {
-        return false;
+      if (mermaidFenceIndex != null) {
+        return mermaidFenceIndex == fenceInfo.mermaidFenceIndex;
       }
       final normalizedTailSource = fenceInfo.normalizedTailSource;
-      final hasMermaidFenceIndex = mermaidFenceIndex != null &&
-          mermaidFenceIndex == fenceInfo.mermaidFenceIndex;
-      final matchesTail = hasMermaidFenceIndex &&
-              fenceInfo.normalizedContainerTailSource != null
-          ? _matchesTrimmedSegments(
+      final matchesTail = normalizedTailSource != null
+          ? _matchesTrimmedSegments(code, normalizedTailSource.segments)
+          : _matchesTrimmedNormalizedSource(
               code,
-              fenceInfo.normalizedContainerTailSource!.segments,
-            )
-          : normalizedTailSource != null
-              ? _matchesTrimmedSegments(code, normalizedTailSource.segments)
-              : _matchesTrimmedNormalizedSource(
-                  code,
-                  tailSource,
-                  fenceInfo.tailSourceStart,
-                );
+              tailSource,
+              fenceInfo.tailSourceStart,
+            );
       if (!matchesTail) return false;
-      return mermaidFenceIndex == null ||
-          mermaidFenceIndex == fenceInfo.mermaidFenceIndex;
+      return true;
     }
     if (fenceIndex == null || fenceIndex != fenceInfo.openFenceIndex) {
       return false;
