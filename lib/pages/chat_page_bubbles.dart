@@ -285,10 +285,12 @@ extension _ChatPageBubblesExt on _ChatPageState {
           // (matches inside code/math render as dedicated widgets and never
           // become highlightable text), so the offset stays aligned with the
           // per-segment ordinal of the next text segment.
-          occurrenceOffset += countOccurrences(
-            stripSearchIrrelevantMarkdown(s.text),
-            lowerQuery,
-          );
+          if (hasSearchMatch) {
+            occurrenceOffset += countOccurrences(
+              stripSearchIrrelevantMarkdown(s.text),
+              lowerQuery,
+            );
+          }
         case ErrorSegment s:
           widgets.add(Container(
             margin: const EdgeInsets.only(top: 4),
