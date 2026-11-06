@@ -8,8 +8,11 @@ import '../l10n/app_localizations.dart';
 String? localizedProviderPresetDescription(
   AppLocalizations l10n,
   String? providerName,
-  String? description,
-) {
+  String? description, {
+  required bool isVendor,
+}) {
+  if (!isVendor) return description;
+
   final preset = switch (providerName) {
     'Exa' => (
         '通过 Exa MCP 接口进行网络搜索、内容提取和深度研究，支持语义搜索与关键词搜索',
@@ -56,8 +59,11 @@ String? localizedProviderPresetDescription(
 String? localizedProviderPresetApiKeyHint(
   AppLocalizations l10n,
   String? providerName,
-  String? apiKeyHint,
-) {
+  String? apiKeyHint, {
+  required bool isVendor,
+}) {
+  if (!isVendor) return apiKeyHint;
+
   final preset = switch (providerName) {
     'Exa' => ('请在 Exa 官网获取 API Key', l10n.providerPresetExaApiKeyHint),
     'Tavily' => (
