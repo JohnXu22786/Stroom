@@ -24,65 +24,66 @@ Set<String> llmRoutedChatSupportedConnectorTypes(String endpointType) =>
       'oneminai.chat' => const {'oneminai'},
       'cursor.agent_connect_rpc' => const {'cursor'},
       'anthropic' || 'anthropic.messages' => const {
-          'openai-compatibility',
-          'claude',
-          'kimi',
-          'kimi-ai',
-          'kimi.ai',
-          'qwen-cloud',
-          'qwen-cloud-token-plan',
-          'command-code',
-          'zed-hosted',
-        },
+        'openai-compatibility',
+        'claude',
+        'kimi',
+        'kimi-ai',
+        'kimi.ai',
+        'qwen-cloud',
+        'qwen-cloud-token-plan',
+        'command-code',
+        'zed-hosted',
+      },
       'openai.responses' => const {
-          'openai-compatibility',
-          'openai-api',
-          'codex',
-          'xai',
-          'meta',
-          'muse-code',
-          'kimi',
-          'kimi-ai',
-          'kimi.ai',
-          'qwen-cloud',
-          'qwen-cloud-token-plan',
-          'command-code',
-          'zed-hosted',
-        },
+        'openai-compatibility',
+        'openai-api',
+        'codex',
+        'xai',
+        'meta',
+        'muse-code',
+        'kimi',
+        'kimi-ai',
+        'kimi.ai',
+        'qwen-cloud',
+        'qwen-cloud-token-plan',
+        'command-code',
+        'zed-hosted',
+      },
       'google.gemini.generate_content' => const {
-          'gemini',
-          'aistudio',
-          'vertex',
-          'zed-hosted',
-        },
+        'gemini',
+        'aistudio',
+        'vertex',
+        'zed-hosted',
+      },
       'google.gemini.interactions' => const {'gemini-interactions'},
       'devin.connect_rpc' => const {'devin'},
       'devin.acp' => const {'devin-cli-agentic'},
+      'auggie.cli' => const {'auggie'},
       'ollama.chat' => const {'ollama'},
       _ => const {
-          'openai-compatibility',
-          'openai-api',
-          'azure-ai',
-          'azure-openai',
-          'aihorde',
-          'uncloseai',
-          'bedrock',
-          'kimi',
-          'kimi-ai',
-          'kimi.ai',
-          'moonshot',
-          'glm',
-          'glm-cn',
-          'deepseek',
-          'minimax',
-          'minimax-cn',
-          'qwen',
-          'qoder',
-          'qwen-cloud',
-          'qwen-cloud-token-plan',
-          'command-code',
-          'zed-hosted',
-        },
+        'openai-compatibility',
+        'openai-api',
+        'azure-ai',
+        'azure-openai',
+        'aihorde',
+        'uncloseai',
+        'bedrock',
+        'kimi',
+        'kimi-ai',
+        'kimi.ai',
+        'moonshot',
+        'glm',
+        'glm-cn',
+        'deepseek',
+        'minimax',
+        'minimax-cn',
+        'qwen',
+        'qoder',
+        'qwen-cloud',
+        'qwen-cloud-token-plan',
+        'command-code',
+        'zed-hosted',
+      },
     };
 
 Set<String> llmRoutedChatSupportedConnectorTypesForModelOverride(
@@ -102,6 +103,7 @@ Set<String> llmRoutedChatSupportedConnectorTypesForModelOverride(
       'ollama.chat',
       'devin.connect_rpc',
       'devin.acp',
+      'auggie.cli',
       'cursor.agent_connect_rpc',
       'amazon-q.chat',
       'oneminai.chat',
@@ -125,6 +127,25 @@ String llmRoutedChatProtocolForAccountModel({
   if (account.connectorType == 'clova-studio') {
     return kClovaStudioProtocolId;
   }
+  if (account.connectorType == 'auggie') {
+    if (account.authType != 'none') {
+      throw StateError('Auggie CLI accounts do not store Stroom credentials.');
+    }
+    final model = account.models
+        .where((item) => item.upstreamModelId == upstreamModelId)
+        .firstOrNull;
+    final configured =
+        apiProtocolOverride ??
+        model?.config['apiProtocolOverride'] ??
+        account.endpointConfig['apiProtocol'] ??
+        apiProtocol;
+    if (configured is String &&
+        configured.isNotEmpty &&
+        configured != 'auggie.cli') {
+      throw StateError('Auggie CLI uses its built-in local route.');
+    }
+    return 'auggie.cli';
+  }
   // Cursor's source-owned transport is selected by account ownership. The
   // model's generic API protocol continues to govern other providers.
   if (account.connectorType == 'cursor') return 'cursor.agent_connect_rpc';
@@ -142,7 +163,8 @@ String llmRoutedChatProtocolForAccountModel({
       throw StateError('1min.AI supports only its native chat protocol.');
     }
     final requestedProtocol = apiProtocolOverride ?? modelProtocol;
-    final accountProtocol = account.endpointConfig['apiProtocol'] ??
+    final accountProtocol =
+        account.endpointConfig['apiProtocol'] ??
         account.endpointConfig['chatProtocol'] ??
         account.endpointConfig['endpointType'];
     if (requestedProtocol is String &&
@@ -170,7 +192,8 @@ String llmRoutedChatProtocolForAccountModel({
     if (modelOverride is String && modelOverride.isNotEmpty) {
       protocol = apiProtocolFromLegacyEndpointType(modelOverride);
     } else {
-      final accountProtocol = account.endpointConfig['apiProtocol'] ??
+      final accountProtocol =
+          account.endpointConfig['apiProtocol'] ??
           account.endpointConfig['chatProtocol'] ??
           account.endpointConfig['endpointType'];
       protocol = accountProtocol is String && accountProtocol.isNotEmpty
@@ -227,10 +250,10 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     this.selectedAccountId,
     ReasoningReplayCache? reasoningReplayCache,
     ConversationMediaWriter? saveMediaFile,
-  })  : _runtime = runtime,
-        _reasoningReplayCache =
-            reasoningReplayCache ?? _processReasoningReplayCache,
-        _saveMediaFile = saveMediaFile;
+  }) : _runtime = runtime,
+       _reasoningReplayCache =
+           reasoningReplayCache ?? _processReasoningReplayCache,
+       _saveMediaFile = saveMediaFile;
 
   @override
   String get name => 'Stroom account routing';
@@ -274,9 +297,9 @@ class LlmRoutedChatProvider extends BaseChatProvider {
 
   @override
   Map<String, dynamic> get defaultHeaders => const {
-        'Content-Type': 'application/json',
-        'Accept': 'text/event-stream',
-      };
+    'Content-Type': 'application/json',
+    'Accept': 'text/event-stream',
+  };
 
   @override
   Future<String> chat(
@@ -346,8 +369,10 @@ class LlmRoutedChatProvider extends BaseChatProvider {
           );
           _lastResponseStatusCode = response.statusCode;
           _lastResponseHeaders = response.headers;
-          final completionProtocol = protocolId == 'devin.acp' ||
-                  protocolId == 'cursor.agent_connect_rpc'
+          final completionProtocol =
+              protocolId == 'devin.acp' ||
+                  protocolId == 'cursor.agent_connect_rpc' ||
+                  protocolId == 'auggie.cli'
               ? 'openai.chat_completions'
               : protocolId;
           final result = completionProtocol == kClovaStudioProtocolId
@@ -478,8 +503,8 @@ class LlmRoutedChatProvider extends BaseChatProvider {
         final realtimeProviderId = realtimeConnectorTypes == null
             ? null
             : realtimeConnectorTypes.contains('openai-api')
-                ? 'openai'
-                : 'xai';
+            ? 'openai'
+            : 'xai';
         if (realtimeProviderId != null) {
           AiGatewayRealtimeProtocol.buildConversationEvents(
             [
@@ -510,9 +535,9 @@ class LlmRoutedChatProvider extends BaseChatProvider {
             }
             final realtimeProviderId =
                 AiGatewayRealtimeProtocol.providerForModel(
-              candidate.account.connectorType,
-              candidate.upstreamModelId,
-            );
+                  candidate.account.connectorType,
+                  candidate.upstreamModelId,
+                );
             if (realtimeProviderId != null) {
               await _streamRealtimeConversation(
                 runtime: runtime,
@@ -579,8 +604,10 @@ class LlmRoutedChatProvider extends BaseChatProvider {
                 progress,
                 runtime: runtime,
                 accountId: candidate.account.id,
-                protocolId: protocolId == 'devin.acp' ||
-                        protocolId == 'cursor.agent_connect_rpc'
+                protocolId:
+                    protocolId == 'devin.acp' ||
+                        protocolId == 'cursor.agent_connect_rpc' ||
+                        protocolId == 'auggie.cli'
                     ? 'openai.chat_completions'
                     : protocolId,
                 returnedResponsesOutputItems: returnedResponsesOutputItems,
@@ -678,12 +705,12 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     if (executor is! AiGatewayRealtimeExecutor) {
       throw StateError('Realtime transport is unavailable.');
     }
-    final session =
-        await (executor as AiGatewayRealtimeExecutor).connectRealtime(
-      account: account,
-      modelId: modelId,
-      cancelToken: cancelToken,
-    );
+    final session = await (executor as AiGatewayRealtimeExecutor)
+        .connectRealtime(
+          account: account,
+          modelId: modelId,
+          cancelToken: cancelToken,
+        );
     final returnedEvents = <Map<String, dynamic>>[];
     final audio = BytesBuilder(copy: false);
     final functionCallsByItemId = <String, (String callId, String name)>{};
@@ -759,8 +786,9 @@ class LlmRoutedChatProvider extends BaseChatProvider {
           audio.add(base64Decode(event.audioBase64!));
         } else if (event.kind == AiGatewayRealtimeEventKind.toolCall) {
           final itemId = event.raw['item_id'];
-          final itemDetails =
-              itemId is String ? functionCallsByItemId[itemId] : null;
+          final itemDetails = itemId is String
+              ? functionCallsByItemId[itemId]
+              : null;
           final callId = event.raw['call_id'] ?? itemDetails?.$1;
           final name = event.raw['name'] ?? itemDetails?.$2;
           final arguments = event.raw['arguments'];
@@ -944,12 +972,12 @@ class LlmRoutedChatProvider extends BaseChatProvider {
   }
 
   String? _nativeFormatFor(String protocolId) => switch (protocolId) {
-        'clova.studio.chat' => 'clova',
-        'oneminai.chat' => 'oneminai.chat',
-        'openai.responses' => 'responses',
-        'anthropic.messages' => 'anthropic',
-        _ => null,
-      };
+    'clova.studio.chat' => 'clova',
+    'oneminai.chat' => 'oneminai.chat',
+    'openai.responses' => 'responses',
+    'anthropic.messages' => 'anthropic',
+    _ => null,
+  };
 
   static Set<String> _requiredCapabilities(
     List<Map<String, dynamic>> messages,
@@ -1054,10 +1082,12 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     Map<String, dynamic>? extraParams,
     String? accountId,
   }) async {
-    final requestProtocolId = protocolId == kClovaStudioProtocolId ||
+    final requestProtocolId =
+        protocolId == kClovaStudioProtocolId ||
             protocolId == 'devin.connect_rpc' ||
             protocolId == 'devin.acp' ||
-            protocolId == 'cursor.agent_connect_rpc'
+            protocolId == 'cursor.agent_connect_rpc' ||
+            protocolId == 'auggie.cli'
         ? 'openai.chat_completions'
         : protocolId;
     final bridge = AiGatewayProtocolBridges.forProtocol(requestProtocolId);
@@ -1066,7 +1096,8 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     }
     final requestTools = _effectiveTools(tools, extraParams);
     final previousInteractionValue = extraParams?['previous_interaction_id'];
-    final previousInteractionId = protocolId == 'google.gemini.interactions' &&
+    final previousInteractionId =
+        protocolId == 'google.gemini.interactions' &&
             previousInteractionValue is String
         ? previousInteractionValue
         : null;
@@ -1083,7 +1114,8 @@ class LlmRoutedChatProvider extends BaseChatProvider {
         : system;
     final thinking = extraParams?['thinking'];
     final thinkingType = thinking is Map ? thinking['type'] : null;
-    final extendedThinking = thinkingType is String &&
+    final extendedThinking =
+        thinkingType is String &&
         const {
           'enabled',
           'adaptive',
@@ -1137,7 +1169,8 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     required bool stream,
   }) {
     _lastRequestBody = body;
-    final baseUrl = account.endpointConfig['baseUrl'] ??
+    final baseUrl =
+        account.endpointConfig['baseUrl'] ??
         account.endpointConfig['host'] ??
         account.endpointConfig['apiBase'];
     _lastRequestUrl = baseUrl is String ? baseUrl : null;
@@ -1237,8 +1270,8 @@ class LlmRoutedChatProvider extends BaseChatProvider {
           (left, right) =>
               (left.extraFields['stroom.contentOrder'] as int? ?? 1 << 30)
                   .compareTo(
-            right.extraFields['stroom.contentOrder'] as int? ?? 1 << 30,
-          ),
+                    right.extraFields['stroom.contentOrder'] as int? ?? 1 << 30,
+                  ),
         );
       if (pending.isNotEmpty) {
         parsedEvents.add(
@@ -1276,8 +1309,8 @@ class LlmRoutedChatProvider extends BaseChatProvider {
         final payloads = protocolId == 'ollama.chat'
             ? _ndjsonData(body)
             : protocolId == kClovaStudioProtocolId
-                ? _clovaSseData(body)
-                : _sseData(body);
+            ? _clovaSseData(body)
+            : _sseData(body);
         await for (final payload in payloads) {
           final trimmedPayload = payload.trim();
           if (trimmedPayload.isEmpty) continue;
@@ -1324,8 +1357,9 @@ class LlmRoutedChatProvider extends BaseChatProvider {
                         thinkingSignature: _stringValue(
                           part['thoughtSignature'],
                         ),
-                        contentOrder:
-                            part['thought'] == true ? null : nextContentOrder++,
+                        contentOrder: part['thought'] == true
+                            ? null
+                            : nextContentOrder++,
                       ),
                     );
                   } else if (part['inlineData'] is Map) {
@@ -1339,11 +1373,13 @@ class LlmRoutedChatProvider extends BaseChatProvider {
                     final fileData = _jsonMap(part['fileData'])!;
                     final reference = _stringValue(fileData['fileUri']);
                     if (reference != null && reference.isNotEmpty) {
-                      final mimeType = _stringValue(fileData['mimeType']) ??
+                      final mimeType =
+                          _stringValue(fileData['mimeType']) ??
                           'application/octet-stream';
                       final mediaType = _mediaTypeFromMime(mimeType);
                       final uri = Uri.tryParse(reference);
-                      final pathSegments = uri?.pathSegments
+                      final pathSegments =
+                          uri?.pathSegments
                               .where((segment) => segment.isNotEmpty)
                               .toList(growable: false) ??
                           const <String>[];
@@ -1374,7 +1410,8 @@ class LlmRoutedChatProvider extends BaseChatProvider {
               }
             }
             final eventType = _stringValue(data['type']);
-            final audioDelta = protocolId == 'openai.responses' &&
+            final audioDelta =
+                protocolId == 'openai.responses' &&
                     const {
                       'response.output_audio.delta',
                       'response.audio.delta',
@@ -1701,8 +1738,8 @@ class LlmRoutedChatProvider extends BaseChatProvider {
           .whereType<String>()
           .join();
       final hasToolUse = blocks.whereType<Map>().any(
-            (block) => block['type'] == 'tool_use',
-          );
+        (block) => block['type'] == 'tool_use',
+      );
       if (text.trim().isEmpty && !hasToolUse) {
         throw AiGatewayExecutionException(kind: AiGatewayFailureKind.request);
       }
@@ -1924,9 +1961,10 @@ class LlmRoutedChatProvider extends BaseChatProvider {
         final name = _stringValue(functionCall?['name']);
         if (name != null && functionCall != null) {
           signatures[ReasoningReplayCache.functionCallSignatureKey(
-            name: name,
-            arguments: functionCall['args'],
-          )] = signature;
+                name: name,
+                arguments: functionCall['args'],
+              )] =
+              signature;
         }
       }
       return signatures;
@@ -1992,7 +2030,8 @@ class LlmRoutedChatProvider extends BaseChatProvider {
         if (const {'audio', 'input_audio', 'output_audio'}.contains(type) &&
             map['data'] is String) {
           if (accumulateAudio) return;
-          final mimeType = _stringValue(map['mime_type'] ?? map['mimeType']) ??
+          final mimeType =
+              _stringValue(map['mime_type'] ?? map['mimeType']) ??
               _audioMimeFromFormat(_stringValue(map['format']));
           payloads.add(
             _StreamMediaPayload(
@@ -2083,8 +2122,9 @@ class LlmRoutedChatProvider extends BaseChatProvider {
       if (audio is! Map || audio['data'] is! String) continue;
       deltas.add(
         _StreamAudioDelta(
-          choiceIndex:
-              choice['index'] is int ? choice['index'] as int : choiceIndex,
+          choiceIndex: choice['index'] is int
+              ? choice['index'] as int
+              : choiceIndex,
           data: audio['data'] as String,
           format: _stringValue(audio['format']),
           metadata: _mediaMetadata(Map<String, dynamic>.from(audio), const {
@@ -2128,35 +2168,34 @@ class LlmRoutedChatProvider extends BaseChatProvider {
   static Map<String, dynamic> _mediaMetadata(
     Map<String, dynamic> source,
     Set<String> removed,
-  ) =>
-      {
-        for (final entry in source.entries)
-          if (!removed.contains(entry.key) &&
-              !const {
-                'data',
-                'result',
-                'inlineData',
-                'inline_data',
-              }.contains(entry.key))
-            entry.key: entry.value,
-      };
+  ) => {
+    for (final entry in source.entries)
+      if (!removed.contains(entry.key) &&
+          !const {
+            'data',
+            'result',
+            'inlineData',
+            'inline_data',
+          }.contains(entry.key))
+        entry.key: entry.value,
+  };
 
   static String _mediaTypeFromMime(String mimeType) =>
       mimeType.startsWith('audio/')
-          ? 'audio'
-          : mimeType.startsWith('video/')
-              ? 'video'
-              : mimeType.startsWith('image/')
-                  ? 'image'
-                  : 'file';
+      ? 'audio'
+      : mimeType.startsWith('video/')
+      ? 'video'
+      : mimeType.startsWith('image/')
+      ? 'image'
+      : 'file';
 
   static String _audioMimeFromFormat(String? format) => switch (format) {
-        'mp3' => 'audio/mpeg',
-        'wav' => 'audio/wav',
-        'ogg' => 'audio/ogg',
-        'pcm16' || 'pcm' => 'audio/pcm',
-        _ => 'audio/octet-stream',
-      };
+    'mp3' => 'audio/mpeg',
+    'wav' => 'audio/wav',
+    'ogg' => 'audio/ogg',
+    'pcm16' || 'pcm' => 'audio/pcm',
+    _ => 'audio/octet-stream',
+  };
 
   static Uint8List _pcm16Mono24KhzWave(Uint8List pcm) {
     final header = ByteData(44);
@@ -2252,10 +2291,10 @@ class LlmRoutedChatProvider extends BaseChatProvider {
       final parts = content is Map ? content['parts'] : null;
       return parts is List
           ? parts
-              .whereType<Map>()
-              .where((part) => part['thought'] != true)
-              .map((part) => part['text'])
-              .whereType<String>()
+                .whereType<Map>()
+                .where((part) => part['thought'] != true)
+                .map((part) => part['text'])
+                .whereType<String>()
           : const <String>[];
     }).join();
   }
@@ -2281,19 +2320,18 @@ class LlmRoutedChatProvider extends BaseChatProvider {
   static Map<String, dynamic> _rawProtocolUsage(
     Map<String, dynamic> data,
     String protocolId,
-  ) =>
-      switch (protocolId) {
-        'google.gemini.generate_content' =>
-          _jsonMap(data['usageMetadata']) ?? const {},
-        'google.gemini.interactions' => _jsonMap(data['usage']) ?? const {},
-        'ollama.chat' => {
-            if (data['prompt_eval_count'] is num)
-              'prompt_eval_count': data['prompt_eval_count'],
-            if (data['eval_count'] is num) 'eval_count': data['eval_count'],
-          },
-        'openai.responses' => _jsonMap(data['usage']) ?? const {},
-        _ => _jsonMap(data['usage']) ?? const {},
-      };
+  ) => switch (protocolId) {
+    'google.gemini.generate_content' =>
+      _jsonMap(data['usageMetadata']) ?? const {},
+    'google.gemini.interactions' => _jsonMap(data['usage']) ?? const {},
+    'ollama.chat' => {
+      if (data['prompt_eval_count'] is num)
+        'prompt_eval_count': data['prompt_eval_count'],
+      if (data['eval_count'] is num) 'eval_count': data['eval_count'],
+    },
+    'openai.responses' => _jsonMap(data['usage']) ?? const {},
+    _ => _jsonMap(data['usage']) ?? const {},
+  };
 
   static Map<String, dynamic> _normalizeProtocolUsage(
     Map<String, dynamic> raw,
@@ -2308,10 +2346,12 @@ class LlmRoutedChatProvider extends BaseChatProvider {
         protocolId == 'amazon-q.chat') {
       return OpenAICompatibleChatProvider.normalizeUsage(raw) ?? const {};
     }
-    final input = raw['input_tokens'] ??
+    final input =
+        raw['input_tokens'] ??
         raw['promptTokenCount'] ??
         raw['prompt_eval_count'];
-    final output = raw['output_tokens'] ??
+    final output =
+        raw['output_tokens'] ??
         raw['candidatesTokenCount'] ??
         raw['eval_count'];
     return {
@@ -2324,7 +2364,8 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     AiGatewayProtocolStreamEvent event,
     Map<int, Map<String, dynamic>> accumulators,
   ) {
-    final index = event.toolCallIndex ??
+    final index =
+        event.toolCallIndex ??
         (event.toolCallId == null
             ? accumulators.length
             : accumulators.keys.firstWhere(
@@ -2333,8 +2374,9 @@ class LlmRoutedChatProvider extends BaseChatProvider {
               ));
     final entry = accumulators.putIfAbsent(index, () => {});
     if (event.toolCallId != null) entry['id'] = event.toolCallId;
-    final function = entry.putIfAbsent('function', () => <String, dynamic>{})
-        as Map<String, dynamic>;
+    final function =
+        entry.putIfAbsent('function', () => <String, dynamic>{})
+            as Map<String, dynamic>;
     if (event.toolName != null) function['name'] = event.toolName;
     if (event.thoughtSignature != null) {
       entry['thoughtSignature'] = event.thoughtSignature;
@@ -2489,8 +2531,9 @@ class LlmRoutedChatProvider extends BaseChatProvider {
       if (call['type'] is String) entry['type'] = call['type'];
       final function = call['function'];
       if (function is! Map) continue;
-      final target = entry.putIfAbsent('function', () => <String, dynamic>{})
-          as Map<String, dynamic>;
+      final target =
+          entry.putIfAbsent('function', () => <String, dynamic>{})
+              as Map<String, dynamic>;
       if (function['name'] is String) target['name'] = function['name'];
       if (function['arguments'] is String) {
         target['arguments'] =
@@ -2548,8 +2591,9 @@ class LlmRoutedChatProvider extends BaseChatProvider {
   }
 
   static AiGatewayExecutionException _streamRequestError(Object? apiError) {
-    final rawCode =
-        apiError is Map ? apiError['code'] ?? apiError['type'] : null;
+    final rawCode = apiError is Map
+        ? apiError['code'] ?? apiError['type']
+        : null;
     return AiGatewayExecutionException(
       kind: AiGatewayFailureKind.request,
       code: rawCode is String ? rawCode : null,
@@ -2560,16 +2604,15 @@ class LlmRoutedChatProvider extends BaseChatProvider {
 AiGatewayConnectorObservation _mergeGatewayObservations(
   AiGatewayConnectorObservation first,
   AiGatewayConnectorObservation second,
-) =>
-    AiGatewayConnectorObservation(
-      requestUsage: second.requestUsage.isKnown
-          ? second.requestUsage
-          : first.requestUsage,
-      remainingQuota: second.remainingQuota.isKnown
-          ? second.remainingQuota
-          : first.remainingQuota,
-      quotaSignals: {...first.quotaSignals, ...second.quotaSignals},
-    );
+) => AiGatewayConnectorObservation(
+  requestUsage: second.requestUsage.isKnown
+      ? second.requestUsage
+      : first.requestUsage,
+  remainingQuota: second.remainingQuota.isKnown
+      ? second.remainingQuota
+      : first.remainingQuota,
+  quotaSignals: {...first.quotaSignals, ...second.quotaSignals},
+);
 
 class _LlmCompletionResult {
   final Map<String, dynamic> data;

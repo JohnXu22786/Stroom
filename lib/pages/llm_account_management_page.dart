@@ -16,11 +16,35 @@ import '../services/amazon_q_connector.dart';
 import '../services/azure_openai_endpoint.dart';
 import '../services/devin_cli_acp.dart';
 import '../services/api_protocol_config.dart';
+import '../services/auggie_cli_service.dart';
 import '../services/llm_oauth_flow.dart';
 import '../services/llm_oauth_loopback.dart';
 import '../services/trae_solo_connector.dart';
 import 'browser_page.dart';
 import 'trae_solo_authorization_page.dart';
+
+List<AiGatewayUpstreamModel> _pinnedAuggieModels(String accountId) => [
+  for (var index = 0; index < AuggieCliService.pinnedModels.length; index++)
+    AiGatewayUpstreamModel(
+      id: '$accountId:auggie:$index',
+      upstreamModelId: AuggieCliService.pinnedModels[index].id,
+      displayName: AuggieCliService.pinnedModels[index].displayName,
+      capabilities: {
+        'chat': true,
+        'streaming': true,
+        'textOnly': true,
+        'vision': false,
+        'audio': false,
+        'tools': false,
+        'contextLength': AuggieCliService.pinnedModels[index].contextLength,
+        'supportedApiProtocols': ['auggie.cli'],
+      },
+      config: const {
+        'catalogSource': 'pinned_auggie_registry',
+        'availability': 'unknown',
+      },
+    ),
+];
 
 class LlmAccountManagementPage extends StatefulWidget {
   final AiGatewayFacade? gateway;
@@ -169,15 +193,15 @@ class _LlmAccountManagementPageState extends State<LlmAccountManagementPage> {
       final gateway = await _gatewayFuture;
       final changingAwayFromCli =
           account.connectorType == 'devin-cli-agentic' &&
-              result.account.connectorType != 'devin-cli-agentic';
+          result.account.connectorType != 'devin-cli-agentic';
       final groupsToRestore = changingAwayFromCli
           ? (await gateway.accountManagement.listModelGroups())
-              .where(
-                (group) => group.members.any(
-                  (member) => member.accountId == account.id,
-                ),
-              )
-              .toList()
+                .where(
+                  (group) => group.members.any(
+                    (member) => member.accountId == account.id,
+                  ),
+                )
+                .toList()
           : const <AiGatewayModelGroup>[];
       final saved = await _saveAccountResult(
         gateway,
@@ -390,12 +414,12 @@ class _LlmAccountManagementPageState extends State<LlmAccountManagementPage> {
   }
 
   Future<void> _deleteAccount(AiGatewayAccount account) async {
-    final deletionMessage =
-        switch (account.authType == 'oauth' ? account.connectorType : '') {
+    final deletionMessage = switch (account.authType == 'oauth'
+        ? account.connectorType
+        : '') {
       'codex' ||
       'gemini' ||
-      'aistudio' =>
-        '删除“${account.displayName}”、撤销 OAuth 授权并从模型组中移除该账号？',
+      'aistudio' => '删除“${account.displayName}”、撤销 OAuth 授权并从模型组中移除该账号？',
       _ => '删除“${account.displayName}”并从模型组中移除该账号？',
     };
     final confirmed = await _confirm(title: '删除账号', message: deletionMessage);
@@ -406,16 +430,16 @@ class _LlmAccountManagementPageState extends State<LlmAccountManagementPage> {
       if (!mounted) return;
       final groupsToRestore = account.connectorType == 'devin-cli-agentic'
           ? (await gateway.accountManagement.listModelGroups())
-              .where(
-                (group) => group.members.any(
-                  (member) => member.accountId == account.id,
-                ),
-              )
-              .toList()
+                .where(
+                  (group) => group.members.any(
+                    (member) => member.accountId == account.id,
+                  ),
+                )
+                .toList()
           : const <AiGatewayModelGroup>[];
       if (account.authType == 'oauth' && account.hasCredential) {
-        revocationFailed =
-            !await gateway.oauthAuthorization.deleteAccountAndRevoke(account);
+        revocationFailed = !await gateway.oauthAuthorization
+            .deleteAccountAndRevoke(account);
       } else {
         await gateway.accountManagement.deleteAccount(account.id);
       }
@@ -587,13 +611,13 @@ class _LlmAccountManagementPageState extends State<LlmAccountManagementPage> {
             body: snapshot.connectionState != ConnectionState.done
                 ? const Center(child: CircularProgressIndicator())
                 : snapshot.hasError
-                    ? _LoadFailure(onRetry: _reload)
-                    : TabBarView(
-                        children: [
-                          _buildAccounts(snapshot.data!),
-                          _buildGroups(snapshot.data!),
-                        ],
-                      ),
+                ? _LoadFailure(onRetry: _reload)
+                : TabBarView(
+                    children: [
+                      _buildAccounts(snapshot.data!),
+                      _buildGroups(snapshot.data!),
+                    ],
+                  ),
           ),
         );
       },
@@ -640,7 +664,7 @@ class _LlmAccountManagementPageState extends State<LlmAccountManagementPage> {
                 ),
                 localUsage:
                     data.runtimeUsageByAccount[data.accounts[index].id] ??
-                        const <String, num>{},
+                    const <String, num>{},
                 runtimeUsageAvailable: data.runtimeUsageAvailable,
                 onEdit: () => _editAccount(data.accounts[index]),
                 onDelete: () => _deleteAccount(data.accounts[index]),
@@ -715,7 +739,8 @@ class _LlmAccountManagementPageState extends State<LlmAccountManagementPage> {
               itemBuilder: (context, index) => _ModelGroupCard(
                 group: data.groups[index],
                 accounts: data.accounts,
-                localUsage: data.runtimeUsageByGroup[data.groups[index].id] ??
+                localUsage:
+                    data.runtimeUsageByGroup[data.groups[index].id] ??
                     const <String, num>{},
                 runtimeUsageAvailable: data.runtimeUsageAvailable,
                 onEdit: () => _editGroup(data.groups[index], data.accounts),
@@ -759,58 +784,57 @@ class _CursorOAuthAuthorizationDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => PopScope(
-        canPop: false,
-        child: AlertDialog(
-          title: const Text('Connect Cursor'),
-          content: FutureBuilder<AiGatewayAccount>(
-            future: authorization.completed,
-            builder: (context, snapshot) {
-              if (snapshot.hasError) {
-                return const Text(
-                  'Cursor sign-in could not be completed. Cancel and start again.',
-                );
-              }
-              if (snapshot.hasData) {
-                return const Text('Cursor is connected.');
-              }
-              return const Text(
-                'Complete sign-in in Stroom’s in-app browser, then return here. '
-                'Stroom checks authorization directly with Cursor and does not '
-                'read or import another browser session.',
-              );
-            },
-          ),
-          actions: [
-            TextButton(
-              onPressed: () async {
-                authorization.cancel();
-                Navigator.of(context).pop();
-              },
-              child: const Text('Cancel'),
-            ),
-            FutureBuilder<AiGatewayAccount>(
-              future: authorization.completed,
-              builder: (context, snapshot) => TextButton(
-                onPressed: snapshot.hasData
-                    ? () => Navigator.of(context).pop(snapshot.data)
-                    : snapshot.hasError
-                        ? null
-                        : () async {
-                            await Navigator.of(context).push<void>(
-                              MaterialPageRoute<void>(
-                                builder: (_) => BrowserPage(
-                                  initialUrl:
-                                      authorization.authorizationUri.toString(),
-                                ),
-                              ),
-                            );
-                          },
-                child: Text(snapshot.hasData ? 'Finish' : 'Open sign-in'),
-              ),
-            ),
-          ],
+    canPop: false,
+    child: AlertDialog(
+      title: const Text('Connect Cursor'),
+      content: FutureBuilder<AiGatewayAccount>(
+        future: authorization.completed,
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return const Text(
+              'Cursor sign-in could not be completed. Cancel and start again.',
+            );
+          }
+          if (snapshot.hasData) {
+            return const Text('Cursor is connected.');
+          }
+          return const Text(
+            'Complete sign-in in Stroom’s in-app browser, then return here. '
+            'Stroom checks authorization directly with Cursor and does not '
+            'read or import another browser session.',
+          );
+        },
+      ),
+      actions: [
+        TextButton(
+          onPressed: () async {
+            authorization.cancel();
+            Navigator.of(context).pop();
+          },
+          child: const Text('Cancel'),
         ),
-      );
+        FutureBuilder<AiGatewayAccount>(
+          future: authorization.completed,
+          builder: (context, snapshot) => TextButton(
+            onPressed: snapshot.hasData
+                ? () => Navigator.of(context).pop(snapshot.data)
+                : snapshot.hasError
+                ? null
+                : () async {
+                    await Navigator.of(context).push<void>(
+                      MaterialPageRoute<void>(
+                        builder: (_) => BrowserPage(
+                          initialUrl: authorization.authorizationUri.toString(),
+                        ),
+                      ),
+                    );
+                  },
+            child: Text(snapshot.hasData ? 'Finish' : 'Open sign-in'),
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 class _KimiCodeDeviceAuthorizationDialog extends StatefulWidget {
@@ -842,48 +866,45 @@ class _KimiCodeDeviceAuthorizationDialogState
 
   @override
   Widget build(BuildContext context) => PopScope<AiGatewayAccount>(
-        onPopInvokedWithResult: (didPop, _) {
-          if (didPop) widget.authorization.cancel();
-        },
-        child: AlertDialog(
-          title: const Text('登录 Kimi Code CLI'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('打开 Kimi 验证页面，输入下面的代码。授权完成后 Stroom 会自动保存账号。'),
-              const SizedBox(height: 12),
-              SelectableText(widget.authorization.userCode),
-              const SizedBox(height: 8),
-              SelectableText(
-                widget.authorization.verificationUriComplete.toString(),
-              ),
-              if (_error != null) ...[
-                const SizedBox(height: 12),
-                Text(_error!)
-              ],
-            ],
+    onPopInvokedWithResult: (didPop, _) {
+      if (didPop) widget.authorization.cancel();
+    },
+    child: AlertDialog(
+      title: const Text('登录 Kimi Code CLI'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('打开 Kimi 验证页面，输入下面的代码。授权完成后 Stroom 会自动保存账号。'),
+          const SizedBox(height: 12),
+          SelectableText(widget.authorization.userCode),
+          const SizedBox(height: 8),
+          SelectableText(
+            widget.authorization.verificationUriComplete.toString(),
           ),
-          actions: [
-            TextButton(
-              onPressed: () async {
-                await launchUrl(
-                  widget.authorization.verificationUriComplete,
-                  mode: LaunchMode.externalApplication,
-                );
-              },
-              child: const Text('打开 Kimi'),
-            ),
-            TextButton(
-              onPressed: () {
-                widget.authorization.cancel();
-                Navigator.of(context).pop();
-              },
-              child: const Text('取消'),
-            ),
-          ],
+          if (_error != null) ...[const SizedBox(height: 12), Text(_error!)],
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () async {
+            await launchUrl(
+              widget.authorization.verificationUriComplete,
+              mode: LaunchMode.externalApplication,
+            );
+          },
+          child: const Text('打开 Kimi'),
         ),
-      );
+        TextButton(
+          onPressed: () {
+            widget.authorization.cancel();
+            Navigator.of(context).pop();
+          },
+          child: const Text('取消'),
+        ),
+      ],
+    ),
+  );
 }
 
 class _KiloDeviceAuthorizationDialog extends StatefulWidget {
@@ -915,48 +936,45 @@ class _KiloDeviceAuthorizationDialogState
 
   @override
   Widget build(BuildContext context) => PopScope<AiGatewayAccount>(
-        onPopInvokedWithResult: (didPop, _) {
-          if (didPop) widget.authorization.cancel();
-        },
-        child: AlertDialog(
-          title: const Text('登录 Kilo Code'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('打开 Kilo Code 验证页面并输入代码。授权完成后 Stroom 会自动保存账号。'),
-              const SizedBox(height: 12),
-              SelectableText(widget.authorization.userCode),
-              const SizedBox(height: 8),
-              SelectableText(
-                widget.authorization.verificationUriComplete.toString(),
-              ),
-              if (_error != null) ...[
-                const SizedBox(height: 12),
-                Text(_error!)
-              ],
-            ],
+    onPopInvokedWithResult: (didPop, _) {
+      if (didPop) widget.authorization.cancel();
+    },
+    child: AlertDialog(
+      title: const Text('登录 Kilo Code'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('打开 Kilo Code 验证页面并输入代码。授权完成后 Stroom 会自动保存账号。'),
+          const SizedBox(height: 12),
+          SelectableText(widget.authorization.userCode),
+          const SizedBox(height: 8),
+          SelectableText(
+            widget.authorization.verificationUriComplete.toString(),
           ),
-          actions: [
-            TextButton(
-              onPressed: () async {
-                await launchUrl(
-                  widget.authorization.verificationUriComplete,
-                  mode: LaunchMode.externalApplication,
-                );
-              },
-              child: const Text('打开 Kilo Code'),
-            ),
-            TextButton(
-              onPressed: () {
-                widget.authorization.cancel();
-                Navigator.of(context).pop();
-              },
-              child: const Text('取消'),
-            ),
-          ],
+          if (_error != null) ...[const SizedBox(height: 12), Text(_error!)],
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () async {
+            await launchUrl(
+              widget.authorization.verificationUriComplete,
+              mode: LaunchMode.externalApplication,
+            );
+          },
+          child: const Text('打开 Kilo Code'),
         ),
-      );
+        TextButton(
+          onPressed: () {
+            widget.authorization.cancel();
+            Navigator.of(context).pop();
+          },
+          child: const Text('取消'),
+        ),
+      ],
+    ),
+  );
 }
 
 class _MetaMuseDeviceAuthorizationDialog extends StatefulWidget {
@@ -988,48 +1006,45 @@ class _MetaMuseDeviceAuthorizationDialogState
 
   @override
   Widget build(BuildContext context) => PopScope<AiGatewayAccount>(
-        onPopInvokedWithResult: (didPop, _) {
-          if (didPop) widget.authorization.cancel();
-        },
-        child: AlertDialog(
-          title: const Text('登录 Meta Muse Code'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('打开 Meta 验证页面并输入下面的代码。授权完成后 Stroom 会自动保存账号。'),
-              const SizedBox(height: 12),
-              SelectableText(widget.authorization.userCode),
-              const SizedBox(height: 8),
-              SelectableText(
-                widget.authorization.verificationUriComplete.toString(),
-              ),
-              if (_error != null) ...[
-                const SizedBox(height: 12),
-                Text(_error!)
-              ],
-            ],
+    onPopInvokedWithResult: (didPop, _) {
+      if (didPop) widget.authorization.cancel();
+    },
+    child: AlertDialog(
+      title: const Text('登录 Meta Muse Code'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('打开 Meta 验证页面并输入下面的代码。授权完成后 Stroom 会自动保存账号。'),
+          const SizedBox(height: 12),
+          SelectableText(widget.authorization.userCode),
+          const SizedBox(height: 8),
+          SelectableText(
+            widget.authorization.verificationUriComplete.toString(),
           ),
-          actions: [
-            TextButton(
-              onPressed: () async {
-                await launchUrl(
-                  widget.authorization.verificationUriComplete,
-                  mode: LaunchMode.externalApplication,
-                );
-              },
-              child: const Text('打开 Meta'),
-            ),
-            TextButton(
-              onPressed: () {
-                widget.authorization.cancel();
-                Navigator.of(context).pop();
-              },
-              child: const Text('取消'),
-            ),
-          ],
+          if (_error != null) ...[const SizedBox(height: 12), Text(_error!)],
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () async {
+            await launchUrl(
+              widget.authorization.verificationUriComplete,
+              mode: LaunchMode.externalApplication,
+            );
+          },
+          child: const Text('打开 Meta'),
         ),
-      );
+        TextButton(
+          onPressed: () {
+            widget.authorization.cancel();
+            Navigator.of(context).pop();
+          },
+          child: const Text('取消'),
+        ),
+      ],
+    ),
+  );
 }
 
 class _XaiDeviceAuthorizationDialog extends StatefulWidget {
@@ -1051,11 +1066,11 @@ class _XaiDeviceAuthorizationDialogState
   String? _error;
 
   String get _providerName => switch (widget.connectorType) {
-        'github' => 'GitHub Copilot',
-        'ghe-copilot' => 'GitHub Enterprise Copilot',
-        'grok-cli' => 'Grok Build',
-        _ => 'xAI API',
-      };
+    'github' => 'GitHub Copilot',
+    'ghe-copilot' => 'GitHub Enterprise Copilot',
+    'grok-cli' => 'Grok Build',
+    _ => 'xAI API',
+  };
 
   @override
   void initState() {
@@ -1072,48 +1087,45 @@ class _XaiDeviceAuthorizationDialogState
 
   @override
   Widget build(BuildContext context) => PopScope<AiGatewayAccount>(
-        onPopInvokedWithResult: (didPop, _) {
-          if (didPop) widget.authorization.cancel();
-        },
-        child: AlertDialog(
-          title: Text('登录 $_providerName'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('打开 $_providerName 验证页面，输入下面的代码。授权完成后 Stroom 会自动保存账号。'),
-              const SizedBox(height: 12),
-              SelectableText(widget.authorization.userCode),
-              const SizedBox(height: 8),
-              SelectableText(
-                widget.authorization.verificationUriComplete.toString(),
-              ),
-              if (_error != null) ...[
-                const SizedBox(height: 12),
-                Text(_error!)
-              ],
-            ],
+    onPopInvokedWithResult: (didPop, _) {
+      if (didPop) widget.authorization.cancel();
+    },
+    child: AlertDialog(
+      title: Text('登录 $_providerName'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('打开 $_providerName 验证页面，输入下面的代码。授权完成后 Stroom 会自动保存账号。'),
+          const SizedBox(height: 12),
+          SelectableText(widget.authorization.userCode),
+          const SizedBox(height: 8),
+          SelectableText(
+            widget.authorization.verificationUriComplete.toString(),
           ),
-          actions: [
-            TextButton(
-              onPressed: () async {
-                await launchUrl(
-                  widget.authorization.verificationUriComplete,
-                  mode: LaunchMode.externalApplication,
-                );
-              },
-              child: Text('打开 $_providerName'),
-            ),
-            TextButton(
-              onPressed: () {
-                widget.authorization.cancel();
-                Navigator.of(context).pop();
-              },
-              child: const Text('取消'),
-            ),
-          ],
+          if (_error != null) ...[const SizedBox(height: 12), Text(_error!)],
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () async {
+            await launchUrl(
+              widget.authorization.verificationUriComplete,
+              mode: LaunchMode.externalApplication,
+            );
+          },
+          child: Text('打开 $_providerName'),
         ),
-      );
+        TextButton(
+          onPressed: () {
+            widget.authorization.cancel();
+            Navigator.of(context).pop();
+          },
+          child: const Text('取消'),
+        ),
+      ],
+    ),
+  );
 }
 
 class _ManagementData {
@@ -1141,15 +1153,15 @@ class _LoadFailure extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('账号或模型组无法读取。'),
-            const SizedBox(height: 8),
-            OutlinedButton(onPressed: onRetry, child: const Text('重试')),
-          ],
-        ),
-      );
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Text('账号或模型组无法读取。'),
+        const SizedBox(height: 8),
+        OutlinedButton(onPressed: onRetry, child: const Text('重试')),
+      ],
+    ),
+  );
 }
 
 class _AccountCard extends StatelessWidget {
@@ -1339,12 +1351,12 @@ class _ModelGroupCard extends StatelessWidget {
     };
     final diagnostic = LlmChatRouteDiagnostics.latestForGroup(group.id);
     final preservesLegacyIdentity = group.members.asMap().entries.any(
-          (entry) => _preservesStableGroupIdentity(
-            group,
-            members: group.members,
-            index: entry.key,
-          ),
-        );
+      (entry) => _preservesStableGroupIdentity(
+        group,
+        members: group.members,
+        index: entry.key,
+      ),
+    );
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(14),
@@ -1394,8 +1406,8 @@ class _ModelGroupCard extends StatelessWidget {
             Text(
               localUsage.isEmpty
                   ? runtimeUsageAvailable
-                      ? '模型组本地累计用量：未知'
-                      : '模型组本地累计用量：未知（路由记录无法读取）'
+                        ? '模型组本地累计用量：未知'
+                        : '模型组本地累计用量：未知（路由记录无法读取）'
                   : '模型组本地累计用量：${localUsage.entries.map((entry) => '${_usageUnitLabel(entry.key)} ${_formatUsageValue(entry.value)}').join(' · ')}',
             ),
             for (final row in _policyWindowLimitRows(group.policy)) Text(row),
@@ -1476,24 +1488,24 @@ bool _isDisplayableQuotaMetric(AiGatewayMetricObservation metric) =>
     metric.value! >= 0;
 
 String _quotaSignalLabel(String signal) => switch (signal) {
-      'primaryRemainingPercent' => '主窗口额度剩余',
-      'secondaryRemainingPercent' => '次窗口额度剩余',
-      'dailyRemainingPercent' => '每日额度剩余',
-      'weeklyRemainingPercent' => '每周额度剩余',
-      'monthlyRemainingPercent' => '每月额度剩余',
-      'codeReviewRemainingPercent' => '代码审查额度剩余',
-      _ => signal,
-    };
+  'primaryRemainingPercent' => '主窗口额度剩余',
+  'secondaryRemainingPercent' => '次窗口额度剩余',
+  'dailyRemainingPercent' => '每日额度剩余',
+  'weeklyRemainingPercent' => '每周额度剩余',
+  'monthlyRemainingPercent' => '每月额度剩余',
+  'codeReviewRemainingPercent' => '代码审查额度剩余',
+  _ => signal,
+};
 
 String _metricLabel(AiGatewayMetricObservation metric) =>
     '${metric.value ?? '未知'} ${metric.unit ?? '单位未知'}';
 
 String _usageUnitLabel(String unit) => switch (unit) {
-      'requests' => '请求',
-      'tokens' => 'tokens',
-      'usd' => 'USD',
-      _ => unit,
-    };
+  'requests' => '请求',
+  'tokens' => 'tokens',
+  'usd' => 'USD',
+  _ => unit,
+};
 
 String _formatUsageValue(num value) =>
     value % 1 == 0 ? value.toStringAsFixed(0) : value.toStringAsFixed(2);
@@ -1503,17 +1515,21 @@ String _capabilitiesLabel(Map<String, dynamic> capabilities) {
   return capabilities.entries
       .map(
         (entry) =>
-            '${entry.key} ${entry.value == true ? '支持' : entry.value == false ? '不支持' : '未知'}',
+            '${entry.key} ${entry.value == true
+                ? '支持'
+                : entry.value == false
+                ? '不支持'
+                : '未知'}',
       )
       .join('、');
 }
 
 String _statusLabel(AiGatewayAccountStatus status) => switch (status) {
-      AiGatewayAccountStatus.unknown => '连接状态未知',
-      AiGatewayAccountStatus.ready => '就绪',
-      AiGatewayAccountStatus.paused => '已暂停',
-      AiGatewayAccountStatus.needsAttention => '需要重新认证',
-    };
+  AiGatewayAccountStatus.unknown => '连接状态未知',
+  AiGatewayAccountStatus.ready => '就绪',
+  AiGatewayAccountStatus.paused => '已暂停',
+  AiGatewayAccountStatus.needsAttention => '需要重新认证',
+};
 
 String _connectionExplanation(AiGatewayAccountStatus status) =>
     switch (status) {
@@ -1580,11 +1596,11 @@ String _authLabel(String type, {String? connectorType}) {
   }
   return switch (type) {
     'api_key' => switch (connectorType) {
-        'bedrock' => 'Amazon Bedrock API Key',
-        'aihorde' => 'AI Horde API Key (higher queue priority)',
-        'qoder' => 'DashScope API Key',
-        _ => 'API Key',
-      },
+      'bedrock' => 'Amazon Bedrock API Key',
+      'aihorde' => 'AI Horde API Key (higher queue priority)',
+      'qoder' => 'DashScope API Key',
+      _ => 'API Key',
+    },
     'pat' => 'Personal Access Token',
     'oauth' => '订阅 OAuth',
     'setup_token' => 'Setup Token',
@@ -1618,10 +1634,10 @@ class _TencentDeviceAuthorizationDialogState
   String? _error;
 
   String get _name => switch (widget.connectorType) {
-        'codebuddy-cn' => 'CodeBuddy',
-        'codebuddy-intl' => 'CodeBuddy International',
-        _ => 'WorkBuddy',
-      };
+    'codebuddy-cn' => 'CodeBuddy',
+    'codebuddy-intl' => 'CodeBuddy International',
+    _ => 'WorkBuddy',
+  };
 
   @override
   void initState() {
@@ -1638,46 +1654,43 @@ class _TencentDeviceAuthorizationDialogState
 
   @override
   Widget build(BuildContext context) => PopScope<AiGatewayAccount>(
-        onPopInvokedWithResult: (didPop, _) {
-          if (didPop) widget.authorization.cancel();
-        },
-        child: AlertDialog(
-          title: Text('登录 $_name'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('打开 $_name 验证页面并输入下方代码。授权完成后 Stroom 会自动保存账号。'),
-              const SizedBox(height: 12),
-              SelectableText(widget.authorization.userCode),
-              const SizedBox(height: 8),
-              SelectableText(
-                widget.authorization.verificationUriComplete.toString(),
-              ),
-              if (_error != null) ...[
-                const SizedBox(height: 12),
-                Text(_error!)
-              ],
-            ],
+    onPopInvokedWithResult: (didPop, _) {
+      if (didPop) widget.authorization.cancel();
+    },
+    child: AlertDialog(
+      title: Text('登录 $_name'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('打开 $_name 验证页面并输入下方代码。授权完成后 Stroom 会自动保存账号。'),
+          const SizedBox(height: 12),
+          SelectableText(widget.authorization.userCode),
+          const SizedBox(height: 8),
+          SelectableText(
+            widget.authorization.verificationUriComplete.toString(),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => launchUrl(
-                widget.authorization.verificationUriComplete,
-                mode: LaunchMode.externalApplication,
-              ),
-              child: const Text('打开验证页面'),
-            ),
-            TextButton(
-              onPressed: () {
-                widget.authorization.cancel();
-                Navigator.of(context).pop();
-              },
-              child: const Text('取消'),
-            ),
-          ],
+          if (_error != null) ...[const SizedBox(height: 12), Text(_error!)],
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => launchUrl(
+            widget.authorization.verificationUriComplete,
+            mode: LaunchMode.externalApplication,
+          ),
+          child: const Text('打开验证页面'),
         ),
-      );
+        TextButton(
+          onPressed: () {
+            widget.authorization.cancel();
+            Navigator.of(context).pop();
+          },
+          child: const Text('取消'),
+        ),
+      ],
+    ),
+  );
 }
 
 String _authSourceLabel(
@@ -1686,15 +1699,17 @@ String _authSourceLabel(
 ) {
   final provider = connector?.displayName ?? account.connectorType;
   return switch (account.authType) {
-    'oauth' => account.connectorType == 'vertex'
-        ? 'Unsupported Vertex OAuth; reconnect with a supported credential type'
-        : '$provider OAuth',
+    'oauth' =>
+      account.connectorType == 'vertex'
+          ? 'Unsupported Vertex OAuth; reconnect with a supported credential type'
+          : '$provider OAuth',
     'setup_token' => '$provider Setup Token',
-    'api_key' => account.connectorType == 'bedrock'
-        ? 'Amazon Bedrock API Key'
-        : account.connectorType == 'openai-compatibility'
-            ? '用户提供的上游 API Key'
-            : '$provider API Key',
+    'api_key' =>
+      account.connectorType == 'bedrock'
+          ? 'Amazon Bedrock API Key'
+          : account.connectorType == 'openai-compatibility'
+          ? '用户提供的上游 API Key'
+          : '$provider API Key',
     'service_account' => '$provider 企业服务凭据',
     'aws_credentials' => 'AWS Bedrock 用户提供的静态凭据',
     'aws_credential_chain' => 'AWS 默认凭据链',
@@ -1736,27 +1751,27 @@ String? _recentRequestErrorForAccount(
 }
 
 String _safeRequestErrorLabel(String reason) => switch (reason) {
-      'request_authentication' => '上游认证失败',
-      'request_quotaExhausted' => '上游额度不足',
-      'request_rateLimited' => '上游请求受限',
-      'request_connection' => '上游连接失败',
-      'request_server' => '上游服务错误',
-      'request_invalidRequest' => '上游拒绝请求',
-      'request_cancelled' => '请求已取消',
-      _ => '上游请求失败',
-    };
+  'request_authentication' => '上游认证失败',
+  'request_quotaExhausted' => '上游额度不足',
+  'request_rateLimited' => '上游请求受限',
+  'request_connection' => '上游连接失败',
+  'request_server' => '上游服务错误',
+  'request_invalidRequest' => '上游拒绝请求',
+  'request_cancelled' => '请求已取消',
+  _ => '上游请求失败',
+};
 
 IconData _statusIcon(AiGatewayAccountStatus status) => switch (status) {
-      AiGatewayAccountStatus.unknown => Icons.help_outline,
-      AiGatewayAccountStatus.ready => Icons.check_circle_outline,
-      AiGatewayAccountStatus.paused => Icons.pause_circle_outline,
-      AiGatewayAccountStatus.needsAttention => Icons.warning_amber_outlined,
-    };
+  AiGatewayAccountStatus.unknown => Icons.help_outline,
+  AiGatewayAccountStatus.ready => Icons.check_circle_outline,
+  AiGatewayAccountStatus.paused => Icons.pause_circle_outline,
+  AiGatewayAccountStatus.needsAttention => Icons.warning_amber_outlined,
+};
 
 String _fallbackLabel(AiGatewayFallbackScope scope) => switch (scope) {
-      AiGatewayFallbackScope.account => '同一连接器账号',
-      AiGatewayFallbackScope.modelGroup => '当前模型组',
-    };
+  AiGatewayFallbackScope.account => '同一连接器账号',
+  AiGatewayFallbackScope.modelGroup => '当前模型组',
+};
 
 String _strategyLabel(AiGatewaySelectionStrategy strategy) =>
     switch (strategy) {
@@ -1841,6 +1856,12 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
     super.initState();
     final account = widget.account;
     _connectorType = account?.connectorType ?? 'openai-compatibility';
+    final savedAuggieModels = account?.connectorType == 'auggie'
+        ? account!.models
+        : const <AiGatewayUpstreamModel>[];
+    final auggieModelIds = savedAuggieModels.isEmpty
+        ? AuggieCliService.pinnedModels.map((model) => model.id).join('\n')
+        : savedAuggieModels.map((model) => model.upstreamModelId).join('\n');
     _authType = account?.authType ?? 'api_key';
     final savedProviderPresetId = account?.endpointConfig['providerPresetId'];
     _providerPresetId = _connectorType == 'openai-compatibility'
@@ -1849,7 +1870,8 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
           )?.id
         : null;
     final configuredProtocol = account?.endpointConfig['apiProtocol'];
-    _apiProtocol = configuredProtocol is String &&
+    _apiProtocol =
+        configuredProtocol is String &&
             kCustomHttpApiProtocols.contains(configuredProtocol)
         ? configuredProtocol
         : builtinDefaultApiProtocolForConnector(_connectorType);
@@ -1862,8 +1884,10 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
     }
     _status = account?.status ?? AiGatewayAccountStatus.unknown;
     _name = TextEditingController(text: account?.displayName ?? '');
-    final endpoint = account?.endpointConfig[
-            _connectorType == 'ghe-copilot' ? 'gheUrl' : 'baseUrl'] ??
+    final endpoint =
+        account?.endpointConfig[_connectorType == 'ghe-copilot'
+            ? 'gheUrl'
+            : 'baseUrl'] ??
         account?.endpointConfig['host'] ??
         account?.endpointConfig['apiBase'];
     _endpoint = TextEditingController(text: endpoint is String ? endpoint : '');
@@ -1884,23 +1908,24 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
     final configuredRegion = account?.endpointConfig['region'];
     final region = account?.connectorType == 'vertex'
         ? configuredLocation is String
-            ? configuredLocation
-            : configuredRegion is String
-                ? configuredRegion
-                : null
+              ? configuredLocation
+              : configuredRegion is String
+              ? configuredRegion
+              : null
         : configuredRegion is String
-            ? configuredRegion
-            : null;
+        ? configuredRegion
+        : null;
     _region = TextEditingController(
-      text: region ??
+      text:
+          region ??
           (account?.connectorType == 'bedrock' ||
                   account?.connectorType == 'amazon-q'
               ? 'us-east-1'
               : account?.connectorType == 'vertex'
-                  ? 'us-central1'
-                  : account?.connectorType == 'qwen-cloud'
-                      ? 'ap-southeast-1'
-                      : ''),
+              ? 'us-central1'
+              : account?.connectorType == 'qwen-cloud'
+              ? 'ap-southeast-1'
+              : ''),
     );
     final projectId = account?.endpointConfig['projectId'];
     _projectId = TextEditingController(
@@ -1911,7 +1936,8 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
       text: cloudflareAccountId is String ? cloudflareAccountId : '',
     );
     _credential = TextEditingController();
-    final copilotClientId = account?.endpointConfig['copilotClientId'] ??
+    final copilotClientId =
+        account?.endpointConfig['copilotClientId'] ??
         account?.endpointConfig['clientId'] ??
         account?.endpointConfig['qoderClientId'];
     _oauthClientId = TextEditingController(
@@ -1934,41 +1960,47 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
     );
     final devinCliExecutable =
         account?.endpointConfig[DevinCliAcpLaunch.executablePathKey];
-    _initialDevinCliExecutable =
-        devinCliExecutable is String ? devinCliExecutable : null;
+    _initialDevinCliExecutable = devinCliExecutable is String
+        ? devinCliExecutable
+        : null;
     _devinCliExecutable = TextEditingController(
       text: _initialDevinCliExecutable ?? '',
     );
     _models = TextEditingController(
       text: account?.connectorType == 'devin-cli-agentic'
           ? kPinnedDevinCliModels.join('\n')
+          : account?.connectorType == 'auggie'
+          ? auggieModelIds
           : account?.connectorType == 'kimi-coding'
-              ? kPinnedKimiCodeModels.join('\n')
-              : account?.models
-                      .map(
-                        (model) => [
-                          model.upstreamModelId,
-                          ...model.capabilities.entries
-                              .where((entry) => entry.value is bool)
-                              .map(
-                                (entry) => entry.value == true
-                                    ? entry.key
-                                    : '${entry.key}=false',
-                              ),
-                          if ({'command-code', 'openai-compatibility'}
-                                  .contains(_connectorType) &&
-                              model.config['apiProtocolOverride'] is String)
-                            'apiProtocolOverride=${model.config['apiProtocolOverride']}',
-                        ].join(','),
-                      )
-                      .join('\n') ??
-                  '',
+          ? kPinnedKimiCodeModels.join('\n')
+          : account?.models
+                    .map(
+                      (model) => [
+                        model.upstreamModelId,
+                        ...model.capabilities.entries
+                            .where((entry) => entry.value is bool)
+                            .map(
+                              (entry) => entry.value == true
+                                  ? entry.key
+                                  : '${entry.key}=false',
+                            ),
+                        if ({
+                              'command-code',
+                              'openai-compatibility',
+                            }.contains(_connectorType) &&
+                            model.config['apiProtocolOverride'] is String)
+                          'apiProtocolOverride=${model.config['apiProtocolOverride']}',
+                      ].join(','),
+                    )
+                    .join('\n') ??
+                '',
     );
     if (_connectorType == 'cloudflare-ai') {
       _models.text = kCloudflareWorkersAiModelIds.join('\n');
       _discoveredModels = [
-        for (final model
-            in cloudflareWorkersAiModelCatalog(account?.id ?? 'new'))
+        for (final model in cloudflareWorkersAiModelCatalog(
+          account?.id ?? 'new',
+        ))
           AiGatewayUpstreamModel(
             id: model.id,
             upstreamModelId: model.upstreamModelId,
@@ -1978,6 +2010,13 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
           ),
       ];
     }
+    if (_connectorType == 'auggie') {
+      _models.text = auggieModelIds;
+      _discoveredModels = savedAuggieModels.isEmpty
+          ? _pinnedAuggieModels(account?.id ?? 'new')
+          : List<AiGatewayUpstreamModel>.of(savedAuggieModels);
+      _endpoint.clear();
+    }
     if (_isAzureConnector && _azureDeployment.text.trim().isNotEmpty) {
       _models.text = _azureDeployment.text.trim();
     }
@@ -1986,9 +2025,8 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
         preset?.fallbackModels.isNotEmpty == true) {
       _models.text = preset!.fallbackModels
           .map(
-            (model) => model.accountEditorLine(
-              modelIdPrefix: preset.modelIdPrefix,
-            ),
+            (model) =>
+                model.accountEditorLine(modelIdPrefix: preset.modelIdPrefix),
           )
           .join('\n');
       _discoveredModels = [
@@ -2032,14 +2070,15 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
           .map((line) => line.trim())
           .where((line) => line.isNotEmpty)
           .map((line) {
-        final parts = line.split(',');
-        if (inheritedOverrideModelIds.contains(parts.first.trim())) {
-          parts.removeWhere(
-            (part) => part.trim().startsWith('apiProtocolOverride='),
-          );
-        }
-        return parts.join(',');
-      }).toList();
+            final parts = line.split(',');
+            if (inheritedOverrideModelIds.contains(parts.first.trim())) {
+              parts.removeWhere(
+                (part) => part.trim().startsWith('apiProtocolOverride='),
+              );
+            }
+            return parts.join(',');
+          })
+          .toList();
       if (preset == null) {
         _models.text = normalizedLines.join('\n');
         _discoveredModels = const [];
@@ -2059,8 +2098,9 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
       };
       final currentLines = normalizedLines
           .where(
-            (line) => !previousFallbackModelIds
-                .contains(line.split(',').first.trim()),
+            (line) => !previousFallbackModelIds.contains(
+              line.split(',').first.trim(),
+            ),
           )
           .toList();
       final currentModelIds = {
@@ -2072,9 +2112,8 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                 !currentModelIds.contains('${preset.modelIdPrefix}${model.id}'),
           )
           .map(
-            (model) => model.accountEditorLine(
-              modelIdPrefix: preset.modelIdPrefix,
-            ),
+            (model) =>
+                model.accountEditorLine(modelIdPrefix: preset.modelIdPrefix),
           )
           .toList();
       if (_models.text.trim().isEmpty || previousPreset != null) {
@@ -2153,14 +2192,12 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
 
   bool get _hasApiProtocolSelection => _accountApiProtocolOptions.length > 1;
 
-  static List<String> _apiProtocolOptionsForPreset(
-    LlmProviderPreset? preset,
-  ) =>
+  static List<String> _apiProtocolOptionsForPreset(LlmProviderPreset? preset) =>
       preset == null
-          ? kCustomHttpApiProtocols.toList(growable: false)
-          : preset.protocolRoutes.isNotEmpty
-              ? preset.protocolRoutes.keys.toList(growable: false)
-              : [preset.defaultApiProtocol];
+      ? kCustomHttpApiProtocols.toList(growable: false)
+      : preset.protocolRoutes.isNotEmpty
+      ? preset.protocolRoutes.keys.toList(growable: false)
+      : [preset.defaultApiProtocol];
 
   List<String> _commandCodeProtocolsForSelectedModel() {
     final selectedModel = _commandCodeModels
@@ -2242,8 +2279,8 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
     final commandCodeProtocols = _commandCodeProtocolsForSelectedModel();
     final selectedCommandCodeProtocol =
         commandCodeProtocols.contains(_commandCodeModelProtocol)
-            ? _commandCodeModelProtocol
-            : '';
+        ? _commandCodeModelProtocol
+        : '';
     return AlertDialog(
       title: Text(widget.account == null ? '添加 LLM 账号' : '编辑 LLM 账号'),
       content: SizedBox(
@@ -2301,7 +2338,16 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                       _commandCodeModelProtocol = '';
                       _discoveredModels = const [];
                     }
-                    if (value == 'devin-cli-agentic') {
+                    if (value == 'auggie') {
+                      _authType = 'none';
+                      _endpoint.clear();
+                      _models.text = AuggieCliService.pinnedModels
+                          .map((model) => model.id)
+                          .join('\n');
+                      _discoveredModels = _pinnedAuggieModels(
+                        widget.account?.id ?? 'new',
+                      );
+                    } else if (value == 'devin-cli-agentic') {
                       _models.text = kPinnedDevinCliModels.join('\n');
                     } else if (value == 'cloudflare-ai') {
                       _models.text = kCloudflareWorkersAiModelIds.join('\n');
@@ -2350,11 +2396,12 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                         previousConnectorType == 'qwen-cloud') {
                       _region.clear();
                     }
-                    final available = widget.providerCatalog
-                        .findProvider(value)!
-                        .supportedAuthTypes
-                        .toList()
-                      ..sort();
+                    final available =
+                        widget.providerCatalog
+                            .findProvider(value)!
+                            .supportedAuthTypes
+                            .toList()
+                          ..sort();
                     if (value == 'gitlab-duo' &&
                         previousConnectorType != value) {
                       _authType = 'pat';
@@ -2364,8 +2411,10 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                     if (_connectorType == 'bedrock' &&
                         _region.text.trim().isEmpty) {
                       _region.text = 'us-east-1';
-                    } else if ({'vertex', 'vertex-partner'}
-                            .contains(_connectorType) &&
+                    } else if ({
+                          'vertex',
+                          'vertex-partner',
+                        }.contains(_connectorType) &&
                         _region.text.trim().isEmpty) {
                       _region.text = 'us-central1';
                     }
@@ -2447,7 +2496,8 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                   for (final type in authTypes)
                     DropdownMenuItem(
                       value: type,
-                      enabled: type != 'relay' &&
+                      enabled:
+                          type != 'relay' &&
                           (type != 'oauth' ||
                               connector.authTypeLimitations[type] == null),
                       child: Text(
@@ -2694,7 +2744,8 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
               if (_connectorType != 'cloudflare-ai')
                 TextField(
                   controller: _endpoint,
-                  enabled: _connectorType != 'devin-cli-agentic' &&
+                  enabled:
+                      _connectorType != 'devin-cli-agentic' &&
                       _connectorType != 'command-code' &&
                       _connectorType != 'aihorde' &&
                       _connectorType != 'uncloseai' &&
@@ -2707,20 +2758,19 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                     labelText: _isAzureConnector
                         ? 'Azure resource / Foundry host'
                         : _connectorType == 'ghe-copilot'
-                            ? 'GitHub Enterprise instance HTTPS URL'
-                            : _connectorType == 'cline' ||
-                                    _connectorType == 'clinepass'
-                                ? 'Cline 使用固定服务端点'
-                                : _connectorType == 'aihorde'
-                                    ? 'AI Horde 使用固定 HTTPS Chat 端点'
-                                    : _connectorType == 'uncloseai'
-                                        ? 'UncloseAI 使用固定 OpenAI Chat Completions 端点'
-                                        : _connectorType == 'kilocode'
-                                            ? 'Kilo Code 使用固定服务端点'
-                                            : _connectorType == 'qoder' ||
-                                                    _connectorType == 'trae'
-                                                ? '固定服务端点'
-                                                : '端点地址（连接器需要时填写）',
+                        ? 'GitHub Enterprise instance HTTPS URL'
+                        : _connectorType == 'cline' ||
+                              _connectorType == 'clinepass'
+                        ? 'Cline 使用固定服务端点'
+                        : _connectorType == 'aihorde'
+                        ? 'AI Horde 使用固定 HTTPS Chat 端点'
+                        : _connectorType == 'uncloseai'
+                        ? 'UncloseAI 使用固定 OpenAI Chat Completions 端点'
+                        : _connectorType == 'kilocode'
+                        ? 'Kilo Code 使用固定服务端点'
+                        : _connectorType == 'qoder' || _connectorType == 'trae'
+                        ? '固定服务端点'
+                        : '端点地址（连接器需要时填写）',
                     hintText: _isAzureConnector
                         ? 'https://resource.openai.azure.com'
                         : switch (_connectorType) {
@@ -2736,13 +2786,11 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                         ? '输入 Azure OpenAI resource 或 Azure AI Foundry host；部署和版本分别配置。'
                         : switch (_connectorType) {
                             'opencode-go' ||
-                            'opencode-zen' =>
-                              '留空以使用此账号类型的官方模型目录和 API 端点。',
+                            'opencode-zen' => '留空以使用此账号类型的官方模型目录和 API 端点。',
                             'command-code' =>
                               '使用 Command Code 的固定 HTTPS API 端点。',
                             'kilocode' => '使用 Kilo Code 模型网关的固定 HTTPS 端点。',
-                            'cline' ||
-                            'clinepass' =>
+                            'cline' || 'clinepass' =>
                               '使用 Cline 的固定 HTTPS Chat Completions 端点。',
                             'uncloseai' => '无需 API key；可选 key 仅用于身份标识。',
                             'aihorde' =>
@@ -2797,8 +2845,9 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                 TextField(
                   controller: _region,
                   decoration: InputDecoration(
-                    labelText:
-                        _connectorType == 'bedrock' ? 'AWS 区域' : 'Vertex 区域',
+                    labelText: _connectorType == 'bedrock'
+                        ? 'AWS 区域'
+                        : 'Vertex 区域',
                     hintText: _connectorType == 'bedrock'
                         ? 'us-east-1'
                         : 'us-central1',
@@ -2837,77 +2886,65 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                 const SizedBox(height: 8),
                 TextField(
                   controller: _credential,
-                  enabled: _authType != 'none' &&
+                  enabled:
+                      _authType != 'none' &&
                       _authType != 'relay' &&
                       _authType != 'cli_session' &&
                       _authType != 'aws_credential_chain',
                   obscureText: true,
                   decoration: InputDecoration(
-                    labelText: _connectorType == 'amazon-q' &&
-                            _authType == 'oauth'
+                    labelText:
+                        _connectorType == 'amazon-q' && _authType == 'oauth'
                         ? 'AWS Builder ID OAuth 凭据 JSON'
                         : _authType == 'none' ||
-                                _authType == 'relay' ||
-                                _authType == 'cli_session' ||
-                                _authType == 'aws_credential_chain'
-                            ? '该认证方式无需输入凭据'
-                            : _connectorType == 'bedrock' &&
-                                    _authType == 'aws_credentials'
-                                ? 'AWS 凭据 JSON'
-                                : _connectorType == 'bedrock' &&
-                                        _authType == 'api_key'
-                                    ? 'Amazon Bedrock API Key'
-                                    : _connectorType == 'vertex' &&
-                                            _authType == 'service_account'
-                                        ? '服务账号 JSON'
-                                        : _authType == 'setup_token'
-                                            ? 'Claude Setup Token'
-                                            : _authType == 'api_key'
-                                                ? switch (_connectorType) {
-                                                    'cursor' =>
-                                                      'Cursor User API Key',
-                                                    'cloudflare-ai' =>
-                                                      'Cloudflare API Token',
-                                                    'azure-ai' ||
-                                                    'azure-openai' =>
-                                                      'Azure API Key',
-                                                    'aihorde' =>
-                                                      'AI Horde API Key（可选优先级）',
-                                                    'glm-cn' =>
-                                                      'GLM Coding (China) API Key',
-                                                    'minimax-cn' =>
-                                                      'MiniMax (China) API Key',
-                                                    'opencode-go' =>
-                                                      'OpenCode Go API Key',
-                                                    'opencode-zen' =>
-                                                      'OpenCode Zen API Key',
-                                                    'qwen-cloud' =>
-                                                      'Qwen Cloud API Key',
-                                                    'qwen-cloud-token-plan' =>
-                                                      'Qwen Cloud Token Plan API Key',
-                                                    _ => '凭据',
-                                                  }
-                                                : _connectorType == 'qoder' &&
-                                                        _authType == 'pat'
-                                                    ? 'Qoder PAT（pt-…）'
-                                                    : _connectorType == 'trae'
-                                                        ? 'Trae Cloud-IDE-JWT'
-                                                        : '凭据',
+                              _authType == 'relay' ||
+                              _authType == 'cli_session' ||
+                              _authType == 'aws_credential_chain'
+                        ? '该认证方式无需输入凭据'
+                        : _connectorType == 'bedrock' &&
+                              _authType == 'aws_credentials'
+                        ? 'AWS 凭据 JSON'
+                        : _connectorType == 'bedrock' && _authType == 'api_key'
+                        ? 'Amazon Bedrock API Key'
+                        : _connectorType == 'vertex' &&
+                              _authType == 'service_account'
+                        ? '服务账号 JSON'
+                        : _authType == 'setup_token'
+                        ? 'Claude Setup Token'
+                        : _authType == 'api_key'
+                        ? switch (_connectorType) {
+                            'cursor' => 'Cursor User API Key',
+                            'cloudflare-ai' => 'Cloudflare API Token',
+                            'azure-ai' || 'azure-openai' => 'Azure API Key',
+                            'aihorde' => 'AI Horde API Key（可选优先级）',
+                            'glm-cn' => 'GLM Coding (China) API Key',
+                            'minimax-cn' => 'MiniMax (China) API Key',
+                            'opencode-go' => 'OpenCode Go API Key',
+                            'opencode-zen' => 'OpenCode Zen API Key',
+                            'qwen-cloud' => 'Qwen Cloud API Key',
+                            'qwen-cloud-token-plan' =>
+                              'Qwen Cloud Token Plan API Key',
+                            _ => '凭据',
+                          }
+                        : _connectorType == 'qoder' && _authType == 'pat'
+                        ? 'Qoder PAT（pt-…）'
+                        : _connectorType == 'trae'
+                        ? 'Trae Cloud-IDE-JWT'
+                        : '凭据',
                     helperText: _connectorType == 'trae'
                         ? '粘贴 JWT 本身或完整的 “Cloud-IDE-JWT <token>” 请求头值。导入令牌不会自动刷新；应用内 Trae 登录的凭据会在到期时自动刷新。'
                         : _connectorType == 'cursor' && _authType == 'api_key'
-                            ? '从 cursor.com/dashboard/api 获取 User API Key（crsr_… 或 grok_…）。不会读取 Cursor IDE 登录。'
-                            : _connectorType == 'aihorde' &&
-                                    _authType == 'api_key'
-                                ? '可选的 AI Horde API Key 只提高排队优先级（kudos），不会增加模型权限。选择“无认证”即可使用匿名模式。'
-                                : null,
+                        ? '从 cursor.com/dashboard/api 获取 User API Key（crsr_… 或 grok_…）。不会读取 Cursor IDE 登录。'
+                        : _connectorType == 'aihorde' && _authType == 'api_key'
+                        ? '可选的 AI Horde API Key 只提高排队优先级（kudos），不会增加模型权限。选择“无认证”即可使用匿名模式。'
+                        : null,
                     hintText: _connectorType == 'trae'
                         ? 'Cloud-IDE-JWT eyJ…'
                         : _authType == 'aws_credential_chain'
-                            ? '使用运行环境的 AWS 默认凭据链'
-                            : !widget.hasCredential
-                                ? '保存在平台安全存储中'
-                                : '留空以保留当前安全凭据',
+                        ? '使用运行环境的 AWS 默认凭据链'
+                        : !widget.hasCredential
+                        ? '保存在平台安全存储中'
+                        : '留空以保留当前安全凭据',
                   ),
                   onChanged: (_) => setState(() => _draftChanged = true),
                 ),
@@ -2992,7 +3029,8 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                   controller: _models,
                   minLines: 3,
                   maxLines: 7,
-                  readOnly: _connectorType == 'cloudflare-ai' ||
+                  readOnly:
+                      _connectorType == 'cloudflare-ai' ||
                       _connectorType == 'devin-cli-agentic' ||
                       _connectorType == 'kimi-coding' ||
                       _connectorType == 'kilocode' ||
@@ -3009,29 +3047,28 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                     helperText: _connectorType == 'cloudflare-ai'
                         ? '模型 ID 和上下文长度来自固定目录；其他能力保持未知。'
                         : _connectorType == 'kilocode'
-                            ? _authType == 'none'
-                                ? '匿名模式只允许 openrouter/free。连接账号后可使用该账号目录中的模型。'
-                                : '模型来自 Kilo Code 目录；API Key 和设备 OAuth 使用各自保存的凭据。'
-                            : _connectorType == 'command-code'
-                                ? '模型和能力来自上游目录；在上方为每个模型选择其声明支持的 API 协议。'
-                                : _connectorType == 'devin-cli-agentic'
-                                    ? 'ACP 未提供稳定的模型目录；使用官方 CLI 当前默认模型。'
-                                    : _connectorType == 'kimi-coding'
-                                        ? 'Kimi Code CLI 仅开放已验证的 Coding Plan 模型目录。'
-                                        : _connectorType == 'grok-cli'
-                                            ? 'Grok Build 仅开放已验证的订阅模型目录。'
-                                            : _connectorType == 'xai-oauth'
-                                                ? 'xAI OAuth 仅开放该账号从 API 获取的模型目录。'
-                                                : _connectorType == 'muse-code'
-                                                    ? 'Meta Muse OAuth 仅开放该订阅账号从 API 获取的模型目录。'
-                                                    : _connectorType ==
-                                                                'cline' ||
-                                                            _connectorType ==
-                                                                'clinepass'
-                                                        ? '模型来自 Cline 的 Chat Completions 目录；可用性由对应账号和订阅决定。'
-                                                        : '能力为显式声明；用 vision=false 显式禁用，未填写保持未知。',
+                        ? _authType == 'none'
+                              ? '匿名模式只允许 openrouter/free。连接账号后可使用该账号目录中的模型。'
+                              : '模型来自 Kilo Code 目录；API Key 和设备 OAuth 使用各自保存的凭据。'
+                        : _connectorType == 'command-code'
+                        ? '模型和能力来自上游目录；在上方为每个模型选择其声明支持的 API 协议。'
+                        : _connectorType == 'devin-cli-agentic'
+                        ? 'ACP 未提供稳定的模型目录；使用官方 CLI 当前默认模型。'
+                        : _connectorType == 'kimi-coding'
+                        ? 'Kimi Code CLI 仅开放已验证的 Coding Plan 模型目录。'
+                        : _connectorType == 'grok-cli'
+                        ? 'Grok Build 仅开放已验证的订阅模型目录。'
+                        : _connectorType == 'xai-oauth'
+                        ? 'xAI OAuth 仅开放该账号从 API 获取的模型目录。'
+                        : _connectorType == 'muse-code'
+                        ? 'Meta Muse OAuth 仅开放该订阅账号从 API 获取的模型目录。'
+                        : _connectorType == 'cline' ||
+                              _connectorType == 'clinepass'
+                        ? '模型来自 Cline 的 Chat Completions 目录；可用性由对应账号和订阅决定。'
+                        : '能力为显式声明；用 vision=false 显式禁用，未填写保持未知。',
                   ),
-                  onChanged: _connectorType == 'devin-cli-agentic' ||
+                  onChanged:
+                      _connectorType == 'devin-cli-agentic' ||
                           _connectorType == 'kimi-coding' ||
                           _connectorType == 'kilocode' ||
                           _connectorType == 'grok-cli' ||
@@ -3046,7 +3083,8 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton.icon(
-                  onPressed: widget.account != null &&
+                  onPressed:
+                      widget.account != null &&
                           !_draftChanged &&
                           !{
                             'kimi-coding',
@@ -3058,6 +3096,17 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                   label: const Text('刷新模型目录'),
                 ),
               ),
+              if (_connectorType == 'auggie')
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: OutlinedButton.icon(
+                    onPressed: widget.account != null && !_draftChanged
+                        ? _testAuggieCli
+                        : null,
+                    icon: const Icon(Icons.terminal),
+                    label: const Text('测试本地 Auggie CLI'),
+                  ),
+                ),
               if (widget.account == null || _draftChanged)
                 const Align(
                   alignment: Alignment.centerRight,
@@ -3120,8 +3169,10 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                           ? entry.key
                           : '${entry.key}=false',
                     ),
-                if ({'command-code', 'openai-compatibility'}
-                        .contains(_connectorType) &&
+                if ({
+                      'command-code',
+                      'openai-compatibility',
+                    }.contains(_connectorType) &&
                     model.config['apiProtocolOverride'] is String)
                   'apiProtocolOverride=${model.config['apiProtocolOverride']}',
               ].join(','),
@@ -3132,18 +3183,39 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
       });
     } catch (_) {
       if (!mounted) return;
-      setState(() => _error = _connectorType == 'vertex-partner'
-          ? 'Vertex AI Partners 需要有效的 Google Cloud 项目和有权限的服务账号；Express API Key 仅支持 Gemini。'
-          : '模型目录读取失败，请检查账号认证和连接设置。');
+      setState(
+        () => _error = _connectorType == 'auggie'
+            ? 'Auggie CLI model list 未返回目录；已保留固定模型目录。'
+            : _connectorType == 'vertex-partner'
+            ? 'Vertex AI Partners 需要有效的 Google Cloud 项目和有权限的服务账号；Express API Key 仅支持 Gemini。'
+            : '模型目录读取失败，请检查账号认证和连接设置。',
+      );
+    }
+  }
+
+  Future<void> _testAuggieCli() async {
+    final account = widget.account;
+    if (account == null || _draftChanged) return;
+    try {
+      await widget.modelDiscovery.testConnection(account);
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Auggie CLI 已安装并可运行。')));
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _error = error.toString());
     }
   }
 
   void _saveSafely({bool reconnectOAuth = false}) {
     _save(reconnectOAuth: reconnectOAuth).catchError((_) {
       if (!mounted) return;
-      setState(() => _error = _connectorType == 'vertex-partner'
-          ? 'Vertex AI Partners 需要有效项目 ID；服务账号可从 JSON 读取，API Key 必须绑定项目。'
-          : '保存账号失败，请检查连接设置后重试。');
+      setState(
+        () => _error = _connectorType == 'vertex-partner'
+            ? 'Vertex AI Partners 需要有效项目 ID；服务账号可从 JSON 读取，API Key 必须绑定项目。'
+            : '保存账号失败，请检查连接设置后重试。',
+      );
     });
   }
 
@@ -3156,8 +3228,8 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
         (_) => Random.secure().nextInt(256),
       ).map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();
       final callback = loopback.nextCallback().timeout(
-            const Duration(minutes: 5),
-          );
+        const Duration(minutes: 5),
+      );
       final authorizationUri = TraeSoloConnector.authorizationUri(
         loopback.redirectUri,
         state,
@@ -3204,15 +3276,14 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
     final connector = widget.providerCatalog.findProvider(_connectorType)!;
     if (_connectorType == 'cursor' && _authType == 'api_key') {
       final candidate = _credential.text.trim();
-      final retainingExistingKey = candidate.isEmpty &&
+      final retainingExistingKey =
+          candidate.isEmpty &&
           widget.hasCredential &&
           widget.account?.connectorType == 'cursor' &&
           widget.account?.authType == 'api_key';
       if (!retainingExistingKey &&
           !(candidate.startsWith('crsr_') || candidate.startsWith('grok_'))) {
-        setState(
-          () => _error = '请输入以 crsr_ 开头的 Cursor User API Key。',
-        );
+        setState(() => _error = '请输入以 crsr_ 开头的 Cursor User API Key。');
         return;
       }
     }
@@ -3222,37 +3293,40 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
         _connectorType == 'gemini' || _connectorType == 'aistudio';
     final wasGoogleGenerativeLanguageAccount =
         widget.account?.connectorType == 'gemini' ||
-            widget.account?.connectorType == 'aistudio';
-    final geminiOAuthClientChanged = wasGoogleGenerativeLanguageAccount &&
+        widget.account?.connectorType == 'aistudio';
+    final geminiOAuthClientChanged =
+        wasGoogleGenerativeLanguageAccount &&
         widget.account?.authType == 'oauth' &&
         isGoogleGenerativeLanguageAccount &&
         _authType == 'oauth' &&
         previousGoogleClientId != _oauthClientId.text.trim();
-    final geminiOAuthClientSecretChanged = wasGoogleGenerativeLanguageAccount &&
+    final geminiOAuthClientSecretChanged =
+        wasGoogleGenerativeLanguageAccount &&
         widget.account?.authType == 'oauth' &&
         isGoogleGenerativeLanguageAccount &&
         _authType == 'oauth' &&
         _oauthClientSecret.text.trim().isNotEmpty;
     final qoderOAuthConfigurationChanged =
         widget.account?.connectorType == 'qoder' &&
-            widget.account?.authType == 'oauth' &&
-            _connectorType == 'qoder' &&
-            _authType == 'oauth' &&
-            (widget.account!.endpointConfig['qoderLoginUrl'] !=
-                    _qoderAuthorizeUrl.text.trim() ||
-                widget.account!.endpointConfig['qoderExchangeUrl'] !=
-                    _qoderTokenUrl.text.trim() ||
-                widget.account!.endpointConfig['qoderUserInfoUrl'] !=
-                    _qoderUserInfoUrl.text.trim() ||
-                widget.account!.endpointConfig['qoderClientId'] !=
-                    _oauthClientId.text.trim() ||
-                _oauthClientSecret.text.trim().isNotEmpty);
-    final qoderOAuthClientChanged = widget.account?.connectorType == 'qoder' &&
+        widget.account?.authType == 'oauth' &&
+        _connectorType == 'qoder' &&
+        _authType == 'oauth' &&
+        (widget.account!.endpointConfig['qoderLoginUrl'] !=
+                _qoderAuthorizeUrl.text.trim() ||
+            widget.account!.endpointConfig['qoderExchangeUrl'] !=
+                _qoderTokenUrl.text.trim() ||
+            widget.account!.endpointConfig['qoderUserInfoUrl'] !=
+                _qoderUserInfoUrl.text.trim() ||
+            widget.account!.endpointConfig['qoderClientId'] !=
+                _oauthClientId.text.trim() ||
+            _oauthClientSecret.text.trim().isNotEmpty);
+    final qoderOAuthClientChanged =
+        widget.account?.connectorType == 'qoder' &&
         widget.account?.authType == 'oauth' &&
         widget.account!.endpointConfig['qoderClientId'] !=
             _oauthClientId.text.trim();
-    final gitLabOAuthConfigurationChanged = widget.account?.connectorType ==
-            'gitlab-duo' &&
+    final gitLabOAuthConfigurationChanged =
+        widget.account?.connectorType == 'gitlab-duo' &&
         widget.account?.authType == 'oauth' &&
         _connectorType == 'gitlab-duo' &&
         _authType == 'oauth' &&
@@ -3260,18 +3334,20 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
             widget.account!.endpointConfig['clientId'] !=
                 _oauthClientId.text.trim() ||
             _oauthClientSecret.text.trim().isNotEmpty);
-    final gheOAuthConfigurationChanged = widget.account?.connectorType ==
-            'ghe-copilot' &&
+    final gheOAuthConfigurationChanged =
+        widget.account?.connectorType == 'ghe-copilot' &&
         widget.account?.authType == 'oauth' &&
         _connectorType == 'ghe-copilot' &&
         _authType == 'oauth' &&
         (widget.account!.endpointConfig['gheUrl'] != _endpoint.text.trim() ||
             widget.account!.endpointConfig['copilotClientId'] !=
                 _oauthClientId.text.trim());
-    final providerPresetIdentityChanged = widget.account != null &&
+    final providerPresetIdentityChanged =
+        widget.account != null &&
         _connectorType == 'openai-compatibility' &&
         widget.account!.endpointConfig['providerPresetId'] != _providerPresetId;
-    final credentialIdentityChanged = widget.account != null &&
+    final credentialIdentityChanged =
+        widget.account != null &&
         (widget.account!.connectorType != _connectorType ||
             widget.account!.authType != _authType ||
             providerPresetIdentityChanged ||
@@ -3299,7 +3375,8 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
         setState(() => _error = '请输入有效的 HTTPS Qoder OAuth 管理员端点。');
         return;
       }
-      final needsSecret = widget.account == null ||
+      final needsSecret =
+          widget.account == null ||
           widget.account?.authType != 'oauth' ||
           !widget.hasCredential ||
           qoderOAuthClientChanged ||
@@ -3327,8 +3404,10 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
           apiVersion: azureApiVersion,
         );
       } on FormatException {
-        setState(() => _error =
-            '请输入有效的 Azure HTTPS resource host、deployment ID 和 API version。');
+        setState(
+          () => _error =
+              '请输入有效的 Azure HTTPS resource host、deployment ID 和 API version。',
+        );
         return;
       }
       // Azure deployments are the source model IDs; there is no public model
@@ -3385,7 +3464,8 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
       final parts = modelLines[index];
       final upstreamId = parts.first;
       var existing = existingByLine[index];
-      final refreshPresetModel = selectedModelPreset != null &&
+      final refreshPresetModel =
+          selectedModelPreset != null &&
           providerPresetIdentityChanged &&
           selectedModelPreset.fallbackModels.any(
             (model) =>
@@ -3406,8 +3486,8 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
       }
       final refreshedPresetModel = refreshPresetModel
           ? _discoveredModels
-              .where((model) => model.upstreamModelId == upstreamId)
-              .firstOrNull
+                .where((model) => model.upstreamModelId == upstreamId)
+                .firstOrNull
           : null;
       final capabilities = <String, dynamic>{
         if (refreshedPresetModel != null)
@@ -3455,7 +3535,8 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
             continue;
           }
           final declaredProtocols = capabilities['supportedApiProtocols'];
-          final supportedProtocols = _connectorType == 'openai-compatibility' &&
+          final supportedProtocols =
+              _connectorType == 'openai-compatibility' &&
                   _providerPresetId == 'agentrouter'
               ? _accountApiProtocolOptions
               : declaredProtocols;
@@ -3533,14 +3614,16 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
         final existingOverride = existing?.config['apiProtocolOverride'];
         final existingOverrideSource =
             existing?.config['apiProtocolOverrideSource'];
-        final retainedExplicitOverride = existingOverride is String &&
+        final retainedExplicitOverride =
+            existingOverride is String &&
             existingOverrideSource != 'provider-preset-default';
-        final effectiveOverride = apiProtocolOverride ??
+        final effectiveOverride =
+            apiProtocolOverride ??
             (retainedExplicitOverride
                 ? existingOverride
                 : selectedPresetDefaultOverride is String
-                    ? selectedPresetDefaultOverride
-                    : null);
+                ? selectedPresetDefaultOverride
+                : null);
         if (effectiveOverride != null) {
           modelConfig['apiProtocolOverride'] = effectiveOverride;
           if (apiProtocolOverride == null &&
@@ -3552,8 +3635,10 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
             modelConfig.remove('apiProtocolOverrideSource');
           }
         }
-      } else if ({'command-code', 'openai-compatibility'}
-          .contains(widget.account?.connectorType)) {
+      } else if ({
+        'command-code',
+        'openai-compatibility',
+      }.contains(widget.account?.connectorType)) {
         modelConfig.remove('apiProtocolOverride');
       }
       parsedModels.add(
@@ -3584,6 +3669,12 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
         ..['azureDeploymentId'] = azureDeploymentId
         ..['apiVersion'] = azureApiVersion
         ..['apiProtocol'] = 'openai.chat_completions';
+    } else if (_connectorType == 'auggie') {
+      endpointConfig
+        ..remove('baseUrl')
+        ..remove('host')
+        ..remove('apiBase')
+        ..remove('apiProtocol');
     } else if (widget.account?.connectorType == 'azure-ai' ||
         widget.account?.connectorType == 'azure-openai') {
       endpointConfig
@@ -3667,8 +3758,8 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
     if (isGoogleGenerativeLanguageAccount &&
         _authType == 'oauth' &&
         _googleCloudProjectId.text.trim().isNotEmpty) {
-      endpointConfig['googleCloudProjectId'] =
-          _googleCloudProjectId.text.trim();
+      endpointConfig['googleCloudProjectId'] = _googleCloudProjectId.text
+          .trim();
     }
     if (_connectorType == 'qoder' && _authType == 'oauth') {
       endpointConfig['qoderLoginUrl'] = _qoderAuthorizeUrl.text.trim();
@@ -3684,8 +3775,10 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
       endpointConfig.remove('qoderUserInfoUrl');
       endpointConfig.remove('qoderClientId');
     }
-    final previousEndpoint = widget.account?.endpointConfig[
-            _connectorType == 'ghe-copilot' ? 'gheUrl' : 'baseUrl'] ??
+    final previousEndpoint =
+        widget.account?.endpointConfig[_connectorType == 'ghe-copilot'
+            ? 'gheUrl'
+            : 'baseUrl'] ??
         widget.account?.endpointConfig['host'] ??
         widget.account?.endpointConfig['apiBase'];
     if (endpointConfig['legacyOcrFullEndpoint'] == true &&
@@ -3733,14 +3826,16 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
       previousPresetId is String ? previousPresetId : null,
     );
     if (selectedPreset != null) {
-      final appliedPresetConfig =
-          selectedPreset.applyToEndpointConfig(endpointConfig);
+      final appliedPresetConfig = selectedPreset.applyToEndpointConfig(
+        endpointConfig,
+      );
       endpointConfig
         ..clear()
         ..addAll(appliedPresetConfig);
     } else {
-      final customEndpointConfig =
-          LlmProviderPreset.clearFromEndpointConfig(endpointConfig);
+      final customEndpointConfig = LlmProviderPreset.clearFromEndpointConfig(
+        endpointConfig,
+      );
       endpointConfig
         ..clear()
         ..addAll(customEndpointConfig);
@@ -3779,18 +3874,21 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
       models: parsedModels,
       policy: widget.account?.policy,
       usageByWindow: widget.account?.usageByWindow,
-      remainingQuota: widget.account?.remainingQuota ??
+      remainingQuota:
+          widget.account?.remainingQuota ??
           const AiGatewayMetricObservation.unknown(),
       quotaSignals: widget.account?.quotaSignals ?? const {},
     );
-    var secret = _authType == 'none' ||
+    var secret =
+        _authType == 'none' ||
             _authType == 'relay' ||
             _authType == 'aws_credential_chain'
         ? ''
         : _credential.text.trim();
     if (_connectorType == 'amazon-q' && _authType == 'oauth') {
       final region = _region.text.trim().toLowerCase();
-      final retainingExistingCredential = secret.isEmpty &&
+      final retainingExistingCredential =
+          secret.isEmpty &&
           widget.hasCredential &&
           !credentialIdentityChanged &&
           widget.account?.connectorType == 'amazon-q' &&
@@ -3813,7 +3911,8 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
       }
       endpointConfig['region'] = region;
     }
-    final requiresOAuthAuthorization = _authType == 'oauth' &&
+    final requiresOAuthAuthorization =
+        _authType == 'oauth' &&
         _connectorType != 'amazon-q' &&
         (widget.account == null || reconnectOAuth || credentialIdentityChanged);
     final oauthConfiguration = <String, String>{
@@ -3873,10 +3972,12 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
         secret,
         oauthConfiguration: oauthConfiguration,
         requiresOAuthAuthorization: requiresOAuthAuthorization,
-        requiresCliLogin: account.connectorType == 'devin-cli-agentic' &&
+        requiresCliLogin:
+            account.connectorType == 'devin-cli-agentic' &&
             (widget.account?.connectorType != 'devin-cli-agentic' ||
                 _reconnectCli),
-        traeCallbackIssued: _connectorType == 'trae' &&
+        traeCallbackIssued:
+            _connectorType == 'trae' &&
             _authType == 'session_token' &&
             _validatedTraeCallbackCredential != null &&
             secret == _validatedTraeCallbackCredential,
@@ -4094,7 +4195,8 @@ class _ModelGroupEditorDialogState extends State<_ModelGroupEditorDialog> {
       context: context,
       builder: (_) => _AddModelGroupMemberDialog(
         accounts: widget.accounts,
-        defaultLocalModelId: _members.firstOrNull?.localModelId ??
+        defaultLocalModelId:
+            _members.firstOrNull?.localModelId ??
             widget.group.members.firstOrNull?.localModelId ??
             stableLlmModelGroupLocalModelId(widget.group.id) ??
             widget.group.id,
@@ -4180,76 +4282,76 @@ class _AddModelGroupMemberDialogState
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-        title: const Text('添加模型组成员'),
-        content: SizedBox(
-          width: 460,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              DropdownButtonFormField<String>(
-                initialValue: _accountId,
-                decoration: const InputDecoration(labelText: '账号'),
-                items: [
-                  for (final account in _accountsWithModels)
-                    DropdownMenuItem(
-                      value: account.id,
-                      child: Text(account.displayName),
-                    ),
-                ],
-                onChanged: (value) {
-                  if (value == null) return;
-                  setState(() {
-                    _accountId = value;
-                    _modelRecordId = widget.accounts
-                        .firstWhere((account) => account.id == value)
-                        .models
-                        .firstOrNull
-                        ?.id;
-                  });
-                },
-              ),
-              const SizedBox(height: 8),
-              DropdownButtonFormField<String>(
-                key: ValueKey('upstream_model_$_accountId'),
-                initialValue: _modelRecordId,
-                decoration: const InputDecoration(labelText: '上游模型'),
-                items: [
-                  for (final model in _selectableModels)
-                    DropdownMenuItem(
-                      value: model.id,
-                      child: Text(model.displayName),
-                    ),
-                ],
-                onChanged: (value) => setState(() => _modelRecordId = value),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _localModelId,
-                decoration: const InputDecoration(labelText: '本地模型引用 ID'),
-              ),
-              const SizedBox(height: 8),
-              DropdownButtonFormField<int>(
-                initialValue: _priorityTier,
-                decoration: const InputDecoration(labelText: '优先级层级'),
-                items: [
-                  for (var tier = 0; tier < 5; tier++)
-                    DropdownMenuItem(value: tier, child: Text('层级 $tier')),
-                ],
-                onChanged: (value) {
-                  if (value != null) setState(() => _priorityTier = value);
-                },
-              ),
+    title: const Text('添加模型组成员'),
+    content: SizedBox(
+      width: 460,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          DropdownButtonFormField<String>(
+            initialValue: _accountId,
+            decoration: const InputDecoration(labelText: '账号'),
+            items: [
+              for (final account in _accountsWithModels)
+                DropdownMenuItem(
+                  value: account.id,
+                  child: Text(account.displayName),
+                ),
             ],
+            onChanged: (value) {
+              if (value == null) return;
+              setState(() {
+                _accountId = value;
+                _modelRecordId = widget.accounts
+                    .firstWhere((account) => account.id == value)
+                    .models
+                    .firstOrNull
+                    ?.id;
+              });
+            },
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
+          const SizedBox(height: 8),
+          DropdownButtonFormField<String>(
+            key: ValueKey('upstream_model_$_accountId'),
+            initialValue: _modelRecordId,
+            decoration: const InputDecoration(labelText: '上游模型'),
+            items: [
+              for (final model in _selectableModels)
+                DropdownMenuItem(
+                  value: model.id,
+                  child: Text(model.displayName),
+                ),
+            ],
+            onChanged: (value) => setState(() => _modelRecordId = value),
           ),
-          FilledButton(onPressed: _save, child: const Text('添加')),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _localModelId,
+            decoration: const InputDecoration(labelText: '本地模型引用 ID'),
+          ),
+          const SizedBox(height: 8),
+          DropdownButtonFormField<int>(
+            initialValue: _priorityTier,
+            decoration: const InputDecoration(labelText: '优先级层级'),
+            items: [
+              for (var tier = 0; tier < 5; tier++)
+                DropdownMenuItem(value: tier, child: Text('层级 $tier')),
+            ],
+            onChanged: (value) {
+              if (value != null) setState(() => _priorityTier = value);
+            },
+          ),
         ],
-      );
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('取消'),
+      ),
+      FilledButton(onPressed: _save, child: const Text('添加')),
+    ],
+  );
 
   void _save() {
     final accountId = _accountId;
@@ -4318,78 +4420,77 @@ class _RoutingPolicyEditorDialogState
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-        title: Text(widget.title),
-        content: SizedBox(
-          width: 640,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (widget.showGroupOnlyControls) ...[
-                  DropdownButtonFormField<AiGatewaySelectionStrategy>(
-                    initialValue: _strategy,
-                    decoration: const InputDecoration(labelText: '同优先级选择'),
-                    items: [
-                      for (final strategy in AiGatewaySelectionStrategy.values)
-                        DropdownMenuItem(
-                          value: strategy,
-                          child: Text(_strategyLabel(strategy)),
-                        ),
-                    ],
-                    onChanged: (value) {
-                      if (value != null) setState(() => _strategy = value);
-                    },
-                  ),
-                  const SizedBox(height: 8),
-                  DropdownButtonFormField<AiGatewayFallbackScope>(
-                    initialValue: _fallbackScope,
-                    decoration: const InputDecoration(labelText: '跨账号回退范围'),
-                    items: [
-                      for (final scope in AiGatewayFallbackScope.values)
-                        DropdownMenuItem(
-                          value: scope,
-                          child: Text(_fallbackLabel(scope)),
-                        ),
-                    ],
-                    onChanged: (value) {
-                      if (value != null) setState(() => _fallbackScope = value);
-                    },
-                  ),
-                  const SizedBox(height: 8),
-                ] else
-                  const SizedBox(height: 8),
-                TextField(
-                  controller: _concurrency,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: '并发上限',
-                    helperText: '留空表示不限制；账号和模型组分别配置。',
-                  ),
-                ),
-                const SizedBox(height: 12),
-                for (final window in AiGatewayUsageWindow.values)
-                  _windowEditor(window, _windows[window]!),
-                if (_error != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Text(
-                      _error!,
-                      style:
-                          TextStyle(color: Theme.of(context).colorScheme.error),
+    title: Text(widget.title),
+    content: SizedBox(
+      width: 640,
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (widget.showGroupOnlyControls) ...[
+              DropdownButtonFormField<AiGatewaySelectionStrategy>(
+                initialValue: _strategy,
+                decoration: const InputDecoration(labelText: '同优先级选择'),
+                items: [
+                  for (final strategy in AiGatewaySelectionStrategy.values)
+                    DropdownMenuItem(
+                      value: strategy,
+                      child: Text(_strategyLabel(strategy)),
                     ),
-                  ),
-              ],
+                ],
+                onChanged: (value) {
+                  if (value != null) setState(() => _strategy = value);
+                },
+              ),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<AiGatewayFallbackScope>(
+                initialValue: _fallbackScope,
+                decoration: const InputDecoration(labelText: '跨账号回退范围'),
+                items: [
+                  for (final scope in AiGatewayFallbackScope.values)
+                    DropdownMenuItem(
+                      value: scope,
+                      child: Text(_fallbackLabel(scope)),
+                    ),
+                ],
+                onChanged: (value) {
+                  if (value != null) setState(() => _fallbackScope = value);
+                },
+              ),
+              const SizedBox(height: 8),
+            ] else
+              const SizedBox(height: 8),
+            TextField(
+              controller: _concurrency,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: '并发上限',
+                helperText: '留空表示不限制；账号和模型组分别配置。',
+              ),
             ),
-          ),
+            const SizedBox(height: 12),
+            for (final window in AiGatewayUsageWindow.values)
+              _windowEditor(window, _windows[window]!),
+            if (_error != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  _error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
-          ),
-          FilledButton(onPressed: _save, child: const Text('保存策略')),
-        ],
-      );
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('取消'),
+      ),
+      FilledButton(onPressed: _save, child: const Text('保存策略')),
+    ],
+  );
 
   Widget _windowEditor(AiGatewayUsageWindow window, _WindowDraft draft) {
     return Card(
@@ -4482,8 +4583,9 @@ class _RoutingPolicyEditorDialogState
                   controller: draft.unit,
                   enabled: draft.kind == AiGatewayLimitKind.fixed,
                   decoration: InputDecoration(
-                    labelText:
-                        draft.kind == AiGatewayLimitKind.fixed ? '单位' : '%',
+                    labelText: draft.kind == AiGatewayLimitKind.fixed
+                        ? '单位'
+                        : '%',
                   ),
                 ),
               ),
@@ -4496,8 +4598,9 @@ class _RoutingPolicyEditorDialogState
 
   void _save() {
     final concurrencyText = _concurrency.text.trim();
-    final concurrency =
-        concurrencyText.isEmpty ? null : int.tryParse(concurrencyText);
+    final concurrency = concurrencyText.isEmpty
+        ? null
+        : int.tryParse(concurrencyText);
     if (concurrencyText.isNotEmpty &&
         (concurrency == null || concurrency <= 0)) {
       setState(() => _error = '并发上限必须是正整数，或留空表示不限。');
@@ -4561,10 +4664,10 @@ class _WindowDraft {
   final _ThresholdDraft ceiling;
 
   _WindowDraft(AiGatewayWindowPolicy policy)
-      : mode = policy.mode,
-        timeZone = TextEditingController(text: policy.timeZone ?? ''),
-        reserve = _ThresholdDraft(policy.reserveFloor),
-        ceiling = _ThresholdDraft(policy.usageCeiling);
+    : mode = policy.mode,
+      timeZone = TextEditingController(text: policy.timeZone ?? ''),
+      reserve = _ThresholdDraft(policy.reserveFloor),
+      ceiling = _ThresholdDraft(policy.usageCeiling);
 
   void dispose() {
     timeZone.dispose();
@@ -4579,9 +4682,9 @@ class _ThresholdDraft {
   final TextEditingController unit;
 
   _ThresholdDraft(AiGatewayLimitThreshold? threshold)
-      : kind = threshold?.kind ?? AiGatewayLimitKind.fixed,
-        value = TextEditingController(text: threshold?.value.toString() ?? ''),
-        unit = TextEditingController(text: threshold?.unit ?? '');
+    : kind = threshold?.kind ?? AiGatewayLimitKind.fixed,
+      value = TextEditingController(text: threshold?.value.toString() ?? ''),
+      unit = TextEditingController(text: threshold?.unit ?? '');
 
   void dispose() {
     value.dispose();
@@ -4590,16 +4693,16 @@ class _ThresholdDraft {
 }
 
 String _windowLabel(AiGatewayUsageWindow window) => switch (window) {
-      AiGatewayUsageWindow.fiveHour => '5 小时窗口',
-      AiGatewayUsageWindow.day => '日窗口',
-      AiGatewayUsageWindow.week => '周窗口',
-      AiGatewayUsageWindow.month => '月窗口',
-    };
+  AiGatewayUsageWindow.fiveHour => '5 小时窗口',
+  AiGatewayUsageWindow.day => '日窗口',
+  AiGatewayUsageWindow.week => '周窗口',
+  AiGatewayUsageWindow.month => '月窗口',
+};
 
 String _limitThresholdLabel(AiGatewayLimitThreshold threshold) =>
     threshold.kind == AiGatewayLimitKind.percentage
-        ? '${_formatUsageValue(threshold.value)}%'
-        : '${_formatUsageValue(threshold.value)} ${threshold.unit ?? '单位未知'}';
+    ? '${_formatUsageValue(threshold.value)}%'
+    : '${_formatUsageValue(threshold.value)} ${threshold.unit ?? '单位未知'}';
 
 List<String> _policyWindowLimitRows(AiGatewayRoutingPolicy policy) {
   final rows = <String>[];

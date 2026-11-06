@@ -6,7 +6,6 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/models/llm_account.dart';
-import 'package:stroom/ai_gateway/ai_gateway_realtime_session.dart';
 import 'package:stroom/models/ai_stream_event.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/providers/llm_routed_chat_provider.dart';
@@ -15,6 +14,7 @@ import 'package:stroom/services/llm_account_migration_service.dart';
 import 'package:stroom/services/llm_chat_runtime.dart';
 import 'package:stroom/services/llm_connector_http_client.dart';
 import 'package:stroom/services/llm_connector_service.dart';
+import 'package:stroom/services/auggie_cli_service.dart';
 import 'package:stroom/services/llm_credential_store.dart';
 import 'package:stroom/services/llm_model_group_provider.dart';
 import 'package:stroom/services/llm_provider_preset_catalog.dart';
@@ -310,7 +310,8 @@ void main() {
       );
       expect(
         (((provider.lastResponseData?['error'] as Map)['response']
-            as Map)['status_details'] as Map)['error'],
+                as Map)['status_details']
+            as Map)['error'],
         {'code': 'server_error', 'message': 'model is unavailable'},
       );
       await expectLater(
@@ -365,76 +366,272 @@ void main() {
       isNot(contains('qoder')),
     );
   });
-  test(
-    'GigaChat model protocol defaults and overrides are independent',
-    () {
-      final account = AiGatewayAccount(
-        id: 'gigachat-account',
-        connectorType: 'openai-compatibility',
-        authType: 'api_key',
-        displayName: 'GigaChat',
-        endpointConfig: const {
-          'providerPresetId': 'gigachat',
-          'apiProtocol': 'openai.chat_completions',
-        },
+  test('Auggie Chat and Task Flow use its built-in local CLI route', () async {
+    final preferences = _MemoryPreferences();
+    final discoveryLauncher = _FakeAuggieCliLauncher()
+      ..enqueue(_FakeAuggieCliProcess('Auggie v0.32.0'))
+      ..enqueue(_FakeAuggieCliProcess('[auggie-custom-model]'));
+    final launcher = _FakeAuggieCliLauncher()
+      ..enqueue(_FakeAuggieCliProcess('Chat reply'))
+      ..enqueue(_FakeAuggieCliProcess('Task Flow reply'));
+    final accountAuggie = AuggieCliService(
+      launcher: discoveryLauncher,
+      supportsLocalProcess: () => true,
+    );
+    final gatewayAuggie = AuggieCliService(
+      launcher: launcher,
+      supportsLocalProcess: () => true,
+    );
+    final credentials = _MemoryCredentialStore();
+    final accounts = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: credentials,
+      auggieCliService: accountAuggie,
+    );
+    const accountId = 'auggie-local-account';
+    const upstreamModelId = 'auggie-custom-model';
+    const localModelId = 'auggie-chat-model';
+    const groupId = 'auggie-chat-group';
+    final savedAccount = await accounts.saveAccount(
+      LlmAccount(
+        id: accountId,
+        connectorType: 'auggie',
+        authType: 'none',
+        displayName: 'Auggie local',
+        status: LlmAccountStatus.ready,
         models: [
-          AiGatewayUpstreamModel(
-            id: 'GigaChat-2-Max-model',
-            upstreamModelId: 'GigaChat-2-Max',
-            displayName: 'GigaChat 2 Max',
-            config: {'apiProtocolOverride': 'openai.responses'},
-          ),
-          AiGatewayUpstreamModel(
-            id: 'chat-model',
-            upstreamModelId: 'GigaChat-2-Pro',
-            displayName: 'GigaChat 2 Pro',
-            config: {'apiProtocolOverride': 'openai.chat_completions'},
-          ),
-          AiGatewayUpstreamModel(
-            id: 'other-model',
-            upstreamModelId: 'other-model',
-            displayName: 'Other model',
+          LlmUpstreamModel(
+            id: localModelId,
+            upstreamModelId: AuggieCliService.pinnedModels.first.id,
+            displayName: 'Sonnet 4.6',
+            capabilities: {
+              'chat': true,
+              'streaming': true,
+              'textOnly': true,
+              'vision': false,
+              'audio': false,
+              'tools': false,
+              'contextLength': 200000,
+              'supportedApiProtocols': ['auggie.cli'],
+            },
           ),
         ],
-      );
+      ),
+    );
+    expect(savedAccount.credentialRef, isNull);
+    expect(credentials.values, isEmpty);
+    expect(
+      preferences.values[LlmAccountMigrationService.accountsPreferenceKey],
+      isNot(contains('credentialRef')),
+    );
+    await accounts.testAuggieCliConnection(savedAccount);
+    expect(discoveryLauncher.calls.single.arguments, ['--version']);
+    final discoveredModels = await accounts.discoverModels(
+      savedAccount,
+      refreshRemote: true,
+    );
+    expect(
+      discoveredModels
+          .singleWhere((model) => model.upstreamModelId == upstreamModelId)
+          .capabilities['contextLength'],
+      200000,
+    );
+    final customModel = discoveredModels.singleWhere(
+      (model) => model.upstreamModelId == upstreamModelId,
+    );
+    await accounts.saveAccount(
+      LlmAccount(
+        id: accountId,
+        connectorType: 'auggie',
+        authType: 'none',
+        displayName: 'Auggie local',
+        status: LlmAccountStatus.ready,
+        models: [customModel],
+      ),
+    );
+    final group = LlmModelGroup(
+      id: groupId,
+      displayName: 'Auggie local',
+      members: [
+        LlmModelGroupMember(
+          accountId: accountId,
+          localModelId: localModelId,
+          upstreamModelId: upstreamModelId,
+        ),
+      ],
+    );
+    await accounts.saveModelGroup(group);
+    final runtime = LlmChatRoutingRuntime(
+      accountService: accounts,
+      routingService: LlmRoutingService(
+        accountService: accounts,
+        stateStore: LlmRoutingStateStore(preferences: preferences),
+        concurrency: LlmConcurrencyReservations(),
+      ),
+      auggieCliService: gatewayAuggie,
+    );
 
-      expect(
-        llmRoutedChatProtocolForAccountModel(
-          account: account,
-          upstreamModelId: 'GigaChat-2-Max',
-          endpointType: 'openai.chat_completions',
+    expect(
+      LlmConnectorRegistry.chatAdapterEndpointType('auggie'),
+      'auggie.cli',
+    );
+    expect(
+      LlmConnectorRegistry.isChatAdapterAuthTypeSupported('auggie', 'none'),
+      isTrue,
+    );
+    expect(
+      LlmConnectorRegistry.isChatAdapterAuthTypeSupported('auggie', 'api_key'),
+      isFalse,
+    );
+    expect(
+      supportedApiProtocolsForSupplier('auggie.cli', connectorType: 'auggie'),
+      {'auggie.cli'},
+    );
+    final chatProvider = LlmRoutedChatProvider(
+      runtime: Future.value(runtime),
+      groupId: groupId,
+      localModelId: localModelId,
+      endpointType: 'auggie.cli',
+      apiProtocol: 'auggie.cli',
+    );
+    expect(
+      await chatProvider.chat(const [
+        {'role': 'user', 'content': 'Say hello.'},
+      ]),
+      'Chat reply',
+    );
+
+    final groupConfig = buildLlmModelGroupProviderConfigs(
+      accounts: [(await accounts.getAccount(accountId))!],
+      groups: [group],
+    ).single;
+    expect(groupConfig.apiProtocol, 'auggie.cli');
+    final entries = ProviderEntriesState(
+      entries: [
+        ProviderEntry(
+          id: 'auggie-task-flow-group',
+          type: 'llm',
+          name: 'Auggie Task Flow group',
+          configs: [groupConfig],
         ),
-        'openai.responses',
-      );
-      expect(
-        llmRoutedChatProtocolForAccountModel(
-          account: account,
+      ],
+    );
+    final adapter = ChatAdapter(routingRuntime: Future.value(runtime))
+      ..configure(entries);
+    addTearDown(adapter.dispose);
+    final taskFlowService = adapter.getOrCreateService(
+      'auggie-task-flow-conversation',
+      entriesState: entries,
+      modelReference: {
+        'configId': groupConfig.id,
+        'modelId': groupConfig.models.single.id,
+      },
+    );
+    // ignore: invalid_use_of_visible_for_testing_member
+    expect(taskFlowService?.provider, isA<LlmRoutedChatProvider>());
+    expect(
+      // ignore: invalid_use_of_visible_for_testing_member
+      await taskFlowService!.provider!.chat(const [
+        {'role': 'user', 'content': 'Summarize the task.'},
+      ]),
+      'Task Flow reply',
+    );
+    expect(launcher.calls, hasLength(2));
+    expect(launcher.calls[0].arguments, [
+      '--print',
+      '--quiet',
+      '--model',
+      upstreamModelId,
+      '--',
+    ]);
+    expect(launcher.calls[1].arguments, [
+      '--print',
+      '--quiet',
+      '--model',
+      upstreamModelId,
+      '--',
+    ]);
+    expect(discoveryLauncher.calls.first.arguments, ['--version']);
+    expect(discoveryLauncher.calls[1].arguments, ['model', 'list']);
+    for (final call in launcher.calls) {
+      expect(call.arguments, [
+        '--print',
+        '--quiet',
+        '--model',
+        upstreamModelId,
+        '--',
+      ]);
+      expect(call.runInShell, isFalse);
+      expect(call.workingDirectory, contains('stroom-auggie-'));
+    }
+  });
+  test('GigaChat model protocol defaults and overrides are independent', () {
+    final account = AiGatewayAccount(
+      id: 'gigachat-account',
+      connectorType: 'openai-compatibility',
+      authType: 'api_key',
+      displayName: 'GigaChat',
+      endpointConfig: const {
+        'providerPresetId': 'gigachat',
+        'apiProtocol': 'openai.chat_completions',
+      },
+      models: [
+        AiGatewayUpstreamModel(
+          id: 'GigaChat-2-Max-model',
+          upstreamModelId: 'GigaChat-2-Max',
+          displayName: 'GigaChat 2 Max',
+          config: {'apiProtocolOverride': 'openai.responses'},
+        ),
+        AiGatewayUpstreamModel(
+          id: 'chat-model',
           upstreamModelId: 'GigaChat-2-Pro',
-          endpointType: 'openai.chat_completions',
+          displayName: 'GigaChat 2 Pro',
+          config: {'apiProtocolOverride': 'openai.chat_completions'},
         ),
-        'openai.chat_completions',
-        reason: 'a saved model override can keep a tagged model on Chat',
-      );
-      expect(
-        llmRoutedChatProtocolForAccountModel(
-          account: account,
+        AiGatewayUpstreamModel(
+          id: 'other-model',
           upstreamModelId: 'other-model',
-          endpointType: 'openai.chat_completions',
+          displayName: 'Other model',
         ),
-        'openai.chat_completions',
-      );
-      expect(
-        llmRoutedChatProtocolForAccountModel(
-          account: account,
-          upstreamModelId: 'GigaChat-2-Max',
-          endpointType: 'openai.chat_completions',
-          apiProtocolOverride: 'openai.chat_completions',
-        ),
-        'openai.chat_completions',
-        reason: 'an explicit selection overrides the pinned Responses default',
-      );
-    },
-  );
+      ],
+    );
+
+    expect(
+      llmRoutedChatProtocolForAccountModel(
+        account: account,
+        upstreamModelId: 'GigaChat-2-Max',
+        endpointType: 'openai.chat_completions',
+      ),
+      'openai.responses',
+    );
+    expect(
+      llmRoutedChatProtocolForAccountModel(
+        account: account,
+        upstreamModelId: 'GigaChat-2-Pro',
+        endpointType: 'openai.chat_completions',
+      ),
+      'openai.chat_completions',
+      reason: 'a saved model override can keep a tagged model on Chat',
+    );
+    expect(
+      llmRoutedChatProtocolForAccountModel(
+        account: account,
+        upstreamModelId: 'other-model',
+        endpointType: 'openai.chat_completions',
+      ),
+      'openai.chat_completions',
+    );
+    expect(
+      llmRoutedChatProtocolForAccountModel(
+        account: account,
+        upstreamModelId: 'GigaChat-2-Max',
+        endpointType: 'openai.chat_completions',
+        apiProtocolOverride: 'openai.chat_completions',
+      ),
+      'openai.chat_completions',
+      reason: 'an explicit selection overrides the pinned Responses default',
+    );
+  });
   test('UncloseAI Chat route accepts only the source-supported protocol', () {
     final account = AiGatewayAccount(
       id: 'uncloseai-account',
@@ -991,259 +1188,274 @@ void main() {
       contains('uncloseai'),
     );
   });
-  test('routes an anonymous UncloseAI model through ChatAdapter protocol',
-      () async {
-    final preferences = _MemoryPreferences();
-    final accounts = LlmAccountConnectorService(
-      preferences: preferences,
-      credentialStore: _MemoryCredentialStore(),
-    );
-    const accountId = 'uncloseai-chat-account';
-    const modelId = 'turboderp/Qwen3.8-27B-exl3';
-    await accounts.saveAccount(
-      LlmAccount(
-        id: accountId,
-        connectorType: 'uncloseai',
-        authType: 'none',
-        displayName: 'UncloseAI',
-        status: LlmAccountStatus.ready,
-        models: const [
-          LlmUpstreamModel(
-            id: 'uncloseai-chat-model',
-            upstreamModelId: modelId,
-            displayName: 'Qwen 3.8',
-            capabilities: {
-              'chat': true,
-              'streaming': true,
-              'contextLength': 65536,
-              'supportedApiProtocols': ['openai.chat_completions'],
+  test(
+    'routes an anonymous UncloseAI model through ChatAdapter protocol',
+    () async {
+      final preferences = _MemoryPreferences();
+      final accounts = LlmAccountConnectorService(
+        preferences: preferences,
+        credentialStore: _MemoryCredentialStore(),
+      );
+      const accountId = 'uncloseai-chat-account';
+      const modelId = 'turboderp/Qwen3.8-27B-exl3';
+      await accounts.saveAccount(
+        LlmAccount(
+          id: accountId,
+          connectorType: 'uncloseai',
+          authType: 'none',
+          displayName: 'UncloseAI',
+          status: LlmAccountStatus.ready,
+          models: const [
+            LlmUpstreamModel(
+              id: 'uncloseai-chat-model',
+              upstreamModelId: modelId,
+              displayName: 'Qwen 3.8',
+              capabilities: {
+                'chat': true,
+                'streaming': true,
+                'contextLength': 65536,
+                'supportedApiProtocols': ['openai.chat_completions'],
+              },
+            ),
+          ],
+        ),
+      );
+      await accounts.saveModelGroup(
+        LlmModelGroup(
+          id: 'uncloseai-chat-group',
+          displayName: 'UncloseAI',
+          members: const [
+            LlmModelGroupMember(
+              accountId: accountId,
+              localModelId: 'uncloseai-chat-model',
+              upstreamModelId: modelId,
+            ),
+          ],
+        ),
+      );
+      final connector = _FakeConnectorClient(
+        accounts,
+        responseBody: {
+          'choices': [
+            {
+              'message': {'content': 'UncloseAI reply'},
             },
-          ),
-        ],
-      ),
-    );
-    await accounts.saveModelGroup(
-      LlmModelGroup(
-        id: 'uncloseai-chat-group',
-        displayName: 'UncloseAI',
+          ],
+        },
+      );
+      final runtime = LlmChatRoutingRuntime(
+        accountService: accounts,
+        routingService: LlmRoutingService(
+          accountService: accounts,
+          stateStore: LlmRoutingStateStore(preferences: preferences),
+          concurrency: LlmConcurrencyReservations(),
+        ),
+        connectorClient: connector,
+      );
+      final provider = LlmRoutedChatProvider(
+        runtime: Future.value(runtime),
+        groupId: 'uncloseai-chat-group',
+        localModelId: 'uncloseai-chat-model',
+        endpointType: 'openai',
+        apiProtocol: 'openai.chat_completions',
+      );
+
+      expect(
+        await provider.chat(const [
+          {'role': 'user', 'content': 'hello'},
+        ]),
+        'UncloseAI reply',
+      );
+      expect(connector.requestedAccountIds, [accountId]);
+      expect(connector.requestedModelIds, [modelId]);
+      expect(connector.lastNativeFormat, isNull);
+      expect(connector.requestBody?['model'], modelId);
+    },
+  );
+
+  test(
+    'Task Flow b.ai routing replays reasoning and marks cache misses',
+    () async {
+      final preferences = _MemoryPreferences();
+      final accounts = LlmAccountConnectorService(
+        preferences: preferences,
+        credentialStore: _MemoryCredentialStore(),
+      );
+      const accountId = 'bai-task-flow-account';
+      const upstreamModelId = 'deepseek-reasoner';
+      const localModelId = 'bai-task-flow-model';
+      await accounts.saveAccount(
+        LlmAccount(
+          id: accountId,
+          connectorType: 'openai-compatibility',
+          authType: 'api_key',
+          displayName: 'b.ai',
+          status: LlmAccountStatus.ready,
+          endpointConfig: findLlmOpenAiProviderPreset(
+            'bai',
+          )!.applyToEndpointConfig(const {}),
+          models: const [
+            LlmUpstreamModel(
+              id: localModelId,
+              upstreamModelId: upstreamModelId,
+              displayName: 'DeepSeek Reasoner',
+              capabilities: {
+                'chat': true,
+                'streaming': true,
+                'reasoning': true,
+              },
+            ),
+          ],
+        ),
+        secret: 'bai-test-key',
+      );
+      final group = LlmModelGroup(
+        id: 'bai-task-flow-group',
+        displayName: 'b.ai',
         members: const [
           LlmModelGroupMember(
             accountId: accountId,
-            localModelId: 'uncloseai-chat-model',
-            upstreamModelId: modelId,
+            localModelId: localModelId,
+            upstreamModelId: upstreamModelId,
           ),
         ],
-      ),
-    );
-    final connector = _FakeConnectorClient(
-      accounts,
-      responseBody: {
-        'choices': [
+      );
+      await accounts.saveModelGroup(group);
+      final groupConfig = buildLlmModelGroupProviderConfigs(
+        accounts: [(await accounts.getAccount(accountId))!],
+        groups: [group],
+      ).single;
+      final entries = ProviderEntriesState(
+        entries: [
+          ProviderEntry(
+            id: 'task-flow-bai-group',
+            type: 'llm',
+            name: 'b.ai task-flow group',
+            configs: [groupConfig],
+          ),
+        ],
+      );
+      final connector = _FakeConnectorClient(
+        accounts,
+        responseBodies: [
           {
-            'message': {'content': 'UncloseAI reply'},
+            'choices': [
+              {
+                'message': {
+                  'role': 'assistant',
+                  'content': 'previous answer',
+                  'reasoning_content': 'source-returned thought',
+                },
+              },
+            ],
+          },
+          {
+            'choices': [
+              {
+                'message': {'content': 'Task Flow reply'},
+              },
+            ],
+          },
+          {
+            'choices': [
+              {
+                'message': {'content': 'cache-miss reply'},
+              },
+            ],
+          },
+          {
+            'choices': [
+              {
+                'message': {'content': 'stored-reasoning reply'},
+              },
+            ],
           },
         ],
-      },
-    );
-    final runtime = LlmChatRoutingRuntime(
-      accountService: accounts,
-      routingService: LlmRoutingService(
-        accountService: accounts,
-        stateStore: LlmRoutingStateStore(preferences: preferences),
-        concurrency: LlmConcurrencyReservations(),
-      ),
-      connectorClient: connector,
-    );
-    final provider = LlmRoutedChatProvider(
-      runtime: Future.value(runtime),
-      groupId: 'uncloseai-chat-group',
-      localModelId: 'uncloseai-chat-model',
-      endpointType: 'openai',
-      apiProtocol: 'openai.chat_completions',
-    );
-
-    expect(
-      await provider.chat(const [
-        {'role': 'user', 'content': 'hello'},
-      ]),
-      'UncloseAI reply',
-    );
-    expect(connector.requestedAccountIds, [accountId]);
-    expect(connector.requestedModelIds, [modelId]);
-    expect(connector.lastNativeFormat, isNull);
-    expect(connector.requestBody?['model'], modelId);
-  });
-
-  test('Task Flow b.ai routing replays reasoning and marks cache misses',
-      () async {
-    final preferences = _MemoryPreferences();
-    final accounts = LlmAccountConnectorService(
-      preferences: preferences,
-      credentialStore: _MemoryCredentialStore(),
-    );
-    const accountId = 'bai-task-flow-account';
-    const upstreamModelId = 'deepseek-reasoner';
-    const localModelId = 'bai-task-flow-model';
-    await accounts.saveAccount(
-      LlmAccount(
-        id: accountId,
-        connectorType: 'openai-compatibility',
-        authType: 'api_key',
-        displayName: 'b.ai',
-        status: LlmAccountStatus.ready,
-        endpointConfig:
-            findLlmOpenAiProviderPreset('bai')!.applyToEndpointConfig(const {}),
-        models: const [
-          LlmUpstreamModel(
-            id: localModelId,
-            upstreamModelId: upstreamModelId,
-            displayName: 'DeepSeek Reasoner',
-            capabilities: {'chat': true, 'streaming': true, 'reasoning': true},
-          ),
-        ],
-      ),
-      secret: 'bai-test-key',
-    );
-    final group = LlmModelGroup(
-      id: 'bai-task-flow-group',
-      displayName: 'b.ai',
-      members: const [
-        LlmModelGroupMember(
-          accountId: accountId,
-          localModelId: localModelId,
-          upstreamModelId: upstreamModelId,
-        ),
-      ],
-    );
-    await accounts.saveModelGroup(group);
-    final groupConfig = buildLlmModelGroupProviderConfigs(
-      accounts: [(await accounts.getAccount(accountId))!],
-      groups: [group],
-    ).single;
-    final entries = ProviderEntriesState(
-      entries: [
-        ProviderEntry(
-          id: 'task-flow-bai-group',
-          type: 'llm',
-          name: 'b.ai task-flow group',
-          configs: [groupConfig],
-        ),
-      ],
-    );
-    final connector = _FakeConnectorClient(
-      accounts,
-      responseBodies: [
-        {
-          'choices': [
-            {
-              'message': {
-                'role': 'assistant',
-                'content': 'previous answer',
-                'reasoning_content': 'source-returned thought',
-              },
-            },
-          ],
-        },
-        {
-          'choices': [
-            {
-              'message': {'content': 'Task Flow reply'},
-            },
-          ],
-        },
-        {
-          'choices': [
-            {
-              'message': {'content': 'cache-miss reply'},
-            },
-          ],
-        },
-        {
-          'choices': [
-            {
-              'message': {'content': 'stored-reasoning reply'},
-            },
-          ],
-        },
-      ],
-    );
-    final adapter = ChatAdapter(
-      routingRuntime: Future.value(
-        LlmChatRoutingRuntime(
-          accountService: accounts,
-          routingService: LlmRoutingService(
+      );
+      final adapter = ChatAdapter(
+        routingRuntime: Future.value(
+          LlmChatRoutingRuntime(
             accountService: accounts,
-            stateStore: LlmRoutingStateStore(preferences: preferences),
-            concurrency: LlmConcurrencyReservations(),
+            routingService: LlmRoutingService(
+              accountService: accounts,
+              stateStore: LlmRoutingStateStore(preferences: preferences),
+              concurrency: LlmConcurrencyReservations(),
+            ),
+            connectorClient: connector,
           ),
-          connectorClient: connector,
         ),
-      ),
-    )..configure(entries);
-    addTearDown(adapter.dispose);
-    final model = groupConfig.models.single;
-    final service = adapter.getOrCreateService(
-      'task-flow-bai-conversation',
-      entriesState: entries,
-      modelReference: {'configId': groupConfig.id, 'modelId': model.id},
-    );
+      )..configure(entries);
+      addTearDown(adapter.dispose);
+      final model = groupConfig.models.single;
+      final service = adapter.getOrCreateService(
+        'task-flow-bai-conversation',
+        entriesState: entries,
+        modelReference: {'configId': groupConfig.id, 'modelId': model.id},
+      );
 
-    // ignore: invalid_use_of_visible_for_testing_member
-    final provider = service!.provider!;
-    expect(
+      // ignore: invalid_use_of_visible_for_testing_member
+      final provider = service!.provider!;
+      expect(
         await provider.chat(const [
           {'role': 'user', 'content': 'question'},
         ]),
-        'previous answer');
-    expect(
-      await provider.chat(const [
-        {'role': 'user', 'content': 'question'},
-        {'role': 'assistant', 'content': 'previous answer'},
-        {'role': 'user', 'content': 'continue'},
-      ]),
-      'Task Flow reply',
-    );
-    final messages = connector.requestBody!['messages'] as List;
-    expect(
-      (messages[1] as Map)['reasoning_content'],
-      'source-returned thought',
-    );
-    expect(
-      await provider.chat(const [
-        {'role': 'user', 'content': 'question'},
-        {'role': 'assistant', 'content': 'unmatched answer'},
-        {'role': 'user', 'content': 'continue'},
-      ]),
-      'cache-miss reply',
-    );
-    final cacheMissMessages = connector.requestBody!['messages'] as List;
-    expect((cacheMissMessages[1] as Map)['reasoning_content'], ' ');
-    expect(
-      await provider.chat(const [
-        {'role': 'user', 'content': 'question'},
-        {
-          'role': 'assistant',
-          'content': 'stored answer',
-          'reasoning_content': 'stored source reasoning',
-        },
-        {'role': 'user', 'content': 'continue'},
-      ]),
-      'stored-reasoning reply',
-    );
-    final storedReasoningMessages = connector.requestBody!['messages'] as List;
-    expect(
-      (storedReasoningMessages[1] as Map)['reasoning_content'],
-      'stored source reasoning',
-    );
-    expect(
-      connector.requestedAccountIds,
-      [accountId, accountId, accountId, accountId],
-    );
-    expect(
-      connector.requestedModelIds,
-      [upstreamModelId, upstreamModelId, upstreamModelId, upstreamModelId],
-    );
-  });
+        'previous answer',
+      );
+      expect(
+        await provider.chat(const [
+          {'role': 'user', 'content': 'question'},
+          {'role': 'assistant', 'content': 'previous answer'},
+          {'role': 'user', 'content': 'continue'},
+        ]),
+        'Task Flow reply',
+      );
+      final messages = connector.requestBody!['messages'] as List;
+      expect(
+        (messages[1] as Map)['reasoning_content'],
+        'source-returned thought',
+      );
+      expect(
+        await provider.chat(const [
+          {'role': 'user', 'content': 'question'},
+          {'role': 'assistant', 'content': 'unmatched answer'},
+          {'role': 'user', 'content': 'continue'},
+        ]),
+        'cache-miss reply',
+      );
+      final cacheMissMessages = connector.requestBody!['messages'] as List;
+      expect((cacheMissMessages[1] as Map)['reasoning_content'], ' ');
+      expect(
+        await provider.chat(const [
+          {'role': 'user', 'content': 'question'},
+          {
+            'role': 'assistant',
+            'content': 'stored answer',
+            'reasoning_content': 'stored source reasoning',
+          },
+          {'role': 'user', 'content': 'continue'},
+        ]),
+        'stored-reasoning reply',
+      );
+      final storedReasoningMessages =
+          connector.requestBody!['messages'] as List;
+      expect(
+        (storedReasoningMessages[1] as Map)['reasoning_content'],
+        'stored source reasoning',
+      );
+      expect(connector.requestedAccountIds, [
+        accountId,
+        accountId,
+        accountId,
+        accountId,
+      ]);
+      expect(connector.requestedModelIds, [
+        upstreamModelId,
+        upstreamModelId,
+        upstreamModelId,
+        upstreamModelId,
+      ]);
+    },
+  );
 
   test('Qwen Cloud account IDs route only through documented formats', () {
     const qwenAccounts = {'qwen-cloud', 'qwen-cloud-token-plan'};
@@ -2084,8 +2296,9 @@ void main() {
       final events = await provider.chatStream(const [
         {'role': 'user', 'content': 'make audio'},
       ]).toList();
-      final attachments =
-          events.expand((event) => event.mediaAttachments ?? const []).toList();
+      final attachments = events
+          .expand((event) => event.mediaAttachments ?? const [])
+          .toList();
 
       final beforeImageIndex = events.indexWhere(
         (event) => event.text == 'before image',
@@ -2141,18 +2354,18 @@ void main() {
         'audio/mpeg',
       ]);
       expect(
-        attachments[2].extraFields['stroom.mediaSource']['metadata']
-            ['choiceIndex'],
+        attachments[2]
+            .extraFields['stroom.mediaSource']['metadata']['choiceIndex'],
         0,
       );
       expect(
-        attachments[3].extraFields['stroom.mediaSource']['metadata']
-            ['choiceIndex'],
+        attachments[3]
+            .extraFields['stroom.mediaSource']['metadata']['choiceIndex'],
         1,
       );
       expect(
-        attachments[0].extraFields['stroom.mediaSource']['metadata']
-            ['revised_prompt'],
+        attachments[0]
+            .extraFields['stroom.mediaSource']['metadata']['revised_prompt'],
         'A small blue circle',
       );
     },
@@ -2317,8 +2530,9 @@ void main() {
       'audio-item-2',
     );
     expect(
-      attachments.first.extraFields['stroom.mediaSource']['metadata']
-          ['partial_image_index'],
+      attachments
+          .first
+          .extraFields['stroom.mediaSource']['metadata']['partial_image_index'],
       0,
     );
     expect(audioSaveAttempts, 2);
@@ -2418,97 +2632,98 @@ void main() {
         expectedRequestField,
         expectedResponse,
         endpointConfig,
-      ) in [
-    (
-      'openai-compatibility',
-      'openai',
-      'gpt-routed',
-      'messages',
-      {
-        'choices': [
+      )
+      in [
+        (
+          'openai-compatibility',
+          'openai',
+          'gpt-routed',
+          'messages',
           {
-            'message': {'content': 'ok'},
+            'choices': [
+              {
+                'message': {'content': 'ok'},
+              },
+            ],
           },
-        ],
-      },
-      const <String, dynamic>{},
-    ),
-    (
-      'claude',
-      'anthropic',
-      'claude-routed',
-      'messages',
-      {
-        'content': [
-          {'type': 'text', 'text': 'ok'},
-        ],
-      },
-      const <String, dynamic>{},
-    ),
-    (
-      'gemini',
-      'google.gemini.generate_content',
-      'gemini-routed',
-      'contents',
-      {
-        'candidates': [
+          const <String, dynamic>{},
+        ),
+        (
+          'claude',
+          'anthropic',
+          'claude-routed',
+          'messages',
           {
-            'content': {
-              'parts': [
-                {'text': 'private reasoning', 'thought': true},
-                {'text': 'ok'},
-              ],
-            },
-          },
-        ],
-      },
-      const <String, dynamic>{},
-    ),
-    (
-      'gemini-interactions',
-      'google.gemini.interactions',
-      'interaction-routed',
-      'input',
-      {
-        'outputs': [
-          {
-            'type': 'model_output',
             'content': [
               {'type': 'text', 'text': 'ok'},
             ],
           },
-        ],
-      },
-      const <String, dynamic>{},
-    ),
-    (
-      'ollama',
-      'ollama.chat',
-      'llama-routed',
-      'messages',
-      {
-        'message': {'content': 'ok'},
-      },
-      const <String, dynamic>{'baseUrl': 'http://localhost:11434'},
-    ),
-    (
-      'openai-api',
-      'openai',
-      'gpt-response-routed',
-      'input',
-      {
-        'output': [
+          const <String, dynamic>{},
+        ),
+        (
+          'gemini',
+          'google.gemini.generate_content',
+          'gemini-routed',
+          'contents',
           {
-            'type': 'message',
-            'content': [
-              {'type': 'output_text', 'text': 'ok'},
+            'candidates': [
+              {
+                'content': {
+                  'parts': [
+                    {'text': 'private reasoning', 'thought': true},
+                    {'text': 'ok'},
+                  ],
+                },
+              },
             ],
           },
-        ],
-      },
-      const <String, dynamic>{'chatProtocol': 'openai.responses'},
-    ),
-  ]) {
+          const <String, dynamic>{},
+        ),
+        (
+          'gemini-interactions',
+          'google.gemini.interactions',
+          'interaction-routed',
+          'input',
+          {
+            'outputs': [
+              {
+                'type': 'model_output',
+                'content': [
+                  {'type': 'text', 'text': 'ok'},
+                ],
+              },
+            ],
+          },
+          const <String, dynamic>{},
+        ),
+        (
+          'ollama',
+          'ollama.chat',
+          'llama-routed',
+          'messages',
+          {
+            'message': {'content': 'ok'},
+          },
+          const <String, dynamic>{'baseUrl': 'http://localhost:11434'},
+        ),
+        (
+          'openai-api',
+          'openai',
+          'gpt-response-routed',
+          'input',
+          {
+            'output': [
+              {
+                'type': 'message',
+                'content': [
+                  {'type': 'output_text', 'text': 'ok'},
+                ],
+              },
+            ],
+          },
+          const <String, dynamic>{'chatProtocol': 'openai.responses'},
+        ),
+      ]) {
     test(
       '$endpointType request keeps the routed model over extraParams',
       () async {
@@ -2521,12 +2736,13 @@ void main() {
           LlmAccount(
             id: 'account-$endpointType',
             connectorType: connectorType,
-            authType: const {
-              'claude',
-              'gemini',
-              'gemini-interactions',
-              'openai-api',
-            }.contains(connectorType)
+            authType:
+                const {
+                  'claude',
+                  'gemini',
+                  'gemini-interactions',
+                  'openai-api',
+                }.contains(connectorType)
                 ? 'api_key'
                 : 'none',
             displayName: 'Test account',
@@ -2540,12 +2756,13 @@ void main() {
               ),
             ],
           ),
-          secret: const {
-            'claude',
-            'gemini',
-            'gemini-interactions',
-            'openai-api',
-          }.contains(connectorType)
+          secret:
+              const {
+                'claude',
+                'gemini',
+                'gemini-interactions',
+                'openai-api',
+              }.contains(connectorType)
               ? 'test-api-key'
               : null,
         );
@@ -3206,18 +3423,12 @@ void main() {
           'ok',
           reason: connectorType,
         );
-        expect(
-            connector.requestedAccountIds,
-            [
-              accountId,
-            ],
-            reason: connectorType);
-        expect(
-            connector.requestedModelIds,
-            [
-              upstreamModelId,
-            ],
-            reason: connectorType);
+        expect(connector.requestedAccountIds, [
+          accountId,
+        ], reason: connectorType);
+        expect(connector.requestedModelIds, [
+          upstreamModelId,
+        ], reason: connectorType);
         expect(
           await accounts.readCredential(accountId),
           '$connectorType-private-key',
@@ -3610,9 +3821,9 @@ void main() {
         );
         final successStream = endpointType == 'anthropic'
             ? 'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"fallback"}}\n\n'
-                'data: {"type":"message_stop"}\n\n'
+                  'data: {"type":"message_stop"}\n\n'
             : 'data: {"choices":[{"delta":{"content":"fallback"},"finish_reason":null}]}\n\n'
-                'data: [DONE]\n\n';
+                  'data: [DONE]\n\n';
         final connector = _FakeConnectorClient(
           accounts,
           streamBodies: [
@@ -4051,9 +4262,11 @@ void main() {
         endpointType: 'openai',
       );
 
-      final subscription = provider.chatStream(const [
-        {'role': 'user', 'content': 'hello'},
-      ]).listen((_) {});
+      final subscription = provider
+          .chatStream(const [
+            {'role': 'user', 'content': 'hello'},
+          ])
+          .listen((_) {});
       await connector.requestStarted.future;
       await subscription.cancel();
 
@@ -4432,8 +4645,7 @@ void main() {
     expect(connector.requestBody?['model'], 'gpt-unknown');
   });
 
-  test('streaming chat only selects members with streaming capability',
-      () async {
+  test('streaming chat only selects members with streaming capability', () async {
     final preferences = _MemoryPreferences();
     final accounts = LlmAccountConnectorService(
       preferences: preferences,
@@ -4513,8 +4725,7 @@ void main() {
     expect(connector.requestBody?['model'], 'gpt-stream');
   });
 
-  test('replays upstream reasoning for a matching routed conversation',
-      () async {
+  test('replays upstream reasoning for a matching routed conversation', () async {
     final preferences = _MemoryPreferences();
     final accounts = LlmAccountConnectorService(
       preferences: preferences,
@@ -4800,8 +5011,8 @@ void main() {
 
       final input = connector.requestBody!['input'] as List;
       final reasoningItem = input.whereType<Map>().firstWhere(
-            (item) => item['type'] == 'reasoning',
-          );
+        (item) => item['type'] == 'reasoning',
+      );
       expect(reasoningItem['id'], 'rs_source_1');
       expect(reasoningItem['encrypted_content'], 'opaque-source-payload');
       final reasoningIndex = input.indexOf(reasoningItem);
@@ -5082,8 +5293,8 @@ void main() {
       ]);
       final nonstreamFollowUpParts =
           (connector.requestBody!['contents'] as List).expand(
-        (message) => (message['parts'] as List).whereType<Map>(),
-      );
+            (message) => (message['parts'] as List).whereType<Map>(),
+          );
       final replayedThought = nonstreamFollowUpParts.firstWhere(
         (part) => part['thought'] == true,
       );
@@ -5309,8 +5520,9 @@ void main() {
     expect(events.map((event) => event.text).where((text) => text.isNotEmpty), [
       'primary answer',
     ]);
-    final attachment =
-        events.expand((event) => event.mediaAttachments ?? const []).single;
+    final attachment = events
+        .expand((event) => event.mediaAttachments ?? const [])
+        .single;
     expect(attachment.fileType, 'video');
     expect(attachment.mimeType, 'video/mp4');
     expect(attachment.storagePath, 'gs://bucket/generated-clip.mp4');
@@ -5399,75 +5611,76 @@ void main() {
         endpointType,
         contentBlock,
         requiredCapability,
-      ) in [
-    (
-      'input_image',
-      'openai-compatibility',
-      'openai',
-      <String, dynamic>{
-        'type': 'input_image',
-        'image_url': 'https://example.test/input.png',
-      },
-      'vision',
-    ),
-    (
-      'output_image',
-      'openai-compatibility',
-      'openai',
-      <String, dynamic>{
-        'type': 'output_image',
-        'image_url': 'https://example.test/output.png',
-      },
-      'vision',
-    ),
-    (
-      'video_url',
-      'openai-compatibility',
-      'openai',
-      <String, dynamic>{
-        'type': 'video_url',
-        'video_url': {'url': 'https://example.test/video.mp4'},
-      },
-      'vision',
-    ),
-    (
-      'file',
-      'openai-compatibility',
-      'openai',
-      <String, dynamic>{
-        'type': 'file',
-        'file': {
-          'filename': 'report.pdf',
-          'file_data': 'data:application/pdf;base64,cGRm',
-        },
-      },
-      'vision',
-    ),
-    (
-      'document',
-      'claude',
-      'anthropic',
-      <String, dynamic>{
-        'type': 'document',
-        'source': {
-          'type': 'base64',
-          'media_type': 'application/pdf',
-          'data': 'cGRm',
-        },
-      },
-      'vision',
-    ),
-    (
-      'output_audio',
-      'openai-compatibility',
-      'openai',
-      <String, dynamic>{
-        'type': 'output_audio',
-        'output_audio': {'data': 'AQID', 'format': 'pcm16'},
-      },
-      'audio',
-    ),
-  ]) {
+      )
+      in [
+        (
+          'input_image',
+          'openai-compatibility',
+          'openai',
+          <String, dynamic>{
+            'type': 'input_image',
+            'image_url': 'https://example.test/input.png',
+          },
+          'vision',
+        ),
+        (
+          'output_image',
+          'openai-compatibility',
+          'openai',
+          <String, dynamic>{
+            'type': 'output_image',
+            'image_url': 'https://example.test/output.png',
+          },
+          'vision',
+        ),
+        (
+          'video_url',
+          'openai-compatibility',
+          'openai',
+          <String, dynamic>{
+            'type': 'video_url',
+            'video_url': {'url': 'https://example.test/video.mp4'},
+          },
+          'vision',
+        ),
+        (
+          'file',
+          'openai-compatibility',
+          'openai',
+          <String, dynamic>{
+            'type': 'file',
+            'file': {
+              'filename': 'report.pdf',
+              'file_data': 'data:application/pdf;base64,cGRm',
+            },
+          },
+          'vision',
+        ),
+        (
+          'document',
+          'claude',
+          'anthropic',
+          <String, dynamic>{
+            'type': 'document',
+            'source': {
+              'type': 'base64',
+              'media_type': 'application/pdf',
+              'data': 'cGRm',
+            },
+          },
+          'vision',
+        ),
+        (
+          'output_audio',
+          'openai-compatibility',
+          'openai',
+          <String, dynamic>{
+            'type': 'output_audio',
+            'output_audio': {'data': 'AQID', 'format': 'pcm16'},
+          },
+          'audio',
+        ),
+      ]) {
     test(
       '$contentType content routes to a $requiredCapability-capable member',
       () async {
@@ -5548,8 +5761,7 @@ void main() {
     );
   }
 
-  test('records response cost alongside connector token observations',
-      () async {
+  test('records response cost alongside connector token observations', () async {
     final preferences = _MemoryPreferences();
     final accounts = LlmAccountConnectorService(
       preferences: preferences,
@@ -5651,9 +5863,12 @@ void main() {
     expect(measurements.where((item) => item.unit == 'usd').single.value, 0.03);
 
     Map<String, dynamic> storedAccountRecord() {
-      final envelope = jsonDecode(
-        preferences.values[LlmAccountMigrationService.accountsPreferenceKey]!,
-      ) as Map;
+      final envelope =
+          jsonDecode(
+                preferences.values[LlmAccountMigrationService
+                    .accountsPreferenceKey]!,
+              )
+              as Map;
       return Map<String, dynamic>.from(
         (envelope['items'] as List).single as Map,
       );
@@ -5769,9 +5984,12 @@ void main() {
         {'role': 'user', 'content': 'hello'},
       ]).toList();
 
-      final envelope = jsonDecode(
-        preferences.values[LlmAccountMigrationService.accountsPreferenceKey]!,
-      ) as Map;
+      final envelope =
+          jsonDecode(
+                preferences.values[LlmAccountMigrationService
+                    .accountsPreferenceKey]!,
+              )
+              as Map;
       final savedAccount = Map<String, dynamic>.from(
         (envelope['items'] as List).single as Map,
       );
@@ -5886,9 +6104,12 @@ void main() {
         ),
       );
 
-      final envelope = jsonDecode(
-        preferences.values[LlmAccountMigrationService.accountsPreferenceKey]!,
-      ) as Map;
+      final envelope =
+          jsonDecode(
+                preferences.values[LlmAccountMigrationService
+                    .accountsPreferenceKey]!,
+              )
+              as Map;
       final savedAccount = Map<String, dynamic>.from(
         (envelope['items'] as List).single as Map,
       );
@@ -6019,6 +6240,62 @@ void main() {
   );
 }
 
+class _FakeAuggieCliCall {
+  final List<String> arguments;
+  final bool runInShell;
+  final String? workingDirectory;
+
+  const _FakeAuggieCliCall(
+    this.arguments,
+    this.runInShell,
+    this.workingDirectory,
+  );
+}
+
+class _FakeAuggieCliLauncher implements AuggieCliProcessLauncher {
+  final calls = <_FakeAuggieCliCall>[];
+  final _processes = <AuggieCliProcess>[];
+
+  void enqueue(AuggieCliProcess process) => _processes.add(process);
+
+  @override
+  Future<AuggieCliProcess> start(
+    List<String> arguments, {
+    required bool runInShell,
+    String? workingDirectory,
+  }) async {
+    calls.add(_FakeAuggieCliCall(arguments, runInShell, workingDirectory));
+    return _processes.removeAt(0);
+  }
+}
+
+class _FakeAuggieCliProcess implements AuggieCliProcess {
+  final String output;
+
+  const _FakeAuggieCliProcess(this.output);
+
+  @override
+  Stream<List<int>> get stdout => Stream.value(utf8.encode(output));
+
+  @override
+  Stream<List<int>> get stderr => const Stream.empty();
+
+  @override
+  Future<int> get exitCode async => 0;
+
+  @override
+  void writeStdin(List<int> bytes) {}
+
+  @override
+  Future<void> closeStdin() async {}
+
+  @override
+  Future<void> terminate({bool force = false}) async {}
+
+  @override
+  Future<void> dispose() async {}
+}
+
 class _FakeConnectorClient extends LlmConnectorHttpClient {
   _FakeConnectorClient(
     LlmAccountConnectorService accountService, {
@@ -6032,8 +6309,8 @@ class _FakeConnectorClient extends LlmConnectorHttpClient {
     this.completionObservation,
     this.failFirstRequestBeforeSend = false,
     this.firstRequestError,
-  })  : observation = observation ?? LlmConnectorObservation(),
-        super(accountService: accountService);
+  }) : observation = observation ?? LlmConnectorObservation(),
+       super(accountService: accountService);
 
   final Uri? realtimeUri;
   final Object? responseBody;
@@ -6065,8 +6342,9 @@ class _FakeConnectorClient extends LlmConnectorHttpClient {
       account.connectorType,
       modelId,
     );
-    if (providerId == null)
+    if (providerId == null) {
       throw StateError('Unsupported test Realtime model.');
+    }
     return AiGatewayRealtimeProtocol.connect(
       AiGatewayRealtimeConnectionOptions(
         providerId: providerId,
@@ -6110,19 +6388,19 @@ class _FakeConnectorClient extends LlmConnectorHttpClient {
         : streamBodies![requestedAccountIds.length - 1];
     final response = responseBodies == null
         ? responseBody ??
-            (account.connectorType == 'claude'
-                ? {
-                    'content': [
-                      {'type': 'text', 'text': 'ok'},
-                    ],
-                  }
-                : {
-                    'choices': [
-                      {
-                        'message': {'content': 'ok'},
-                      },
-                    ],
-                  })
+              (account.connectorType == 'claude'
+                  ? {
+                      'content': [
+                        {'type': 'text', 'text': 'ok'},
+                      ],
+                    }
+                  : {
+                      'choices': [
+                        {
+                          'message': {'content': 'ok'},
+                        },
+                      ],
+                    })
         : responseBodies![requestedAccountIds.length - 1];
     return LlmConnectorResponse(
       statusCode: 200,

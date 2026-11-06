@@ -100,13 +100,13 @@ void main() {
                     1 =>
               {'__type': 'ExpiredClientException'},
             '/client/register' => {
-                'clientId': 'replacement-client',
-                'clientSecret': 'replacement-secret',
-              },
+              'clientId': 'replacement-client',
+              'clientSecret': 'replacement-secret',
+            },
             '/token' => {
-                'accessToken': 'recovered-access',
-                'refreshToken': 'recovered-refresh',
-              },
+              'accessToken': 'recovered-access',
+              'refreshToken': 'recovered-refresh',
+            },
             _ => throw StateError('Unexpected Amazon Q refresh path.'),
           };
           final status = payload.containsKey('__type') ? 400 : 200;
@@ -327,74 +327,79 @@ void main() {
     expect(connector!.authTypes, {'api_key'});
     expect(connector.modelCatalog, ['gpt-4o-mini']);
     expect(connector.canRefreshCredentials, isFalse);
-    expect(
-      supportedApiProtocolsForSupplier(null, connectorType: 'oneminai'),
-      {'oneminai.chat'},
-    );
-  });
-
-  test('1min.AI account credentials use secure storage and a pinned fallback',
-      () async {
-    final credentials = _MemoryCredentials();
-    final service = LlmAccountConnectorService(
-      preferences: _MemoryPreferences(),
-      credentialStore: credentials,
-      dio: Dio(),
-    );
-    final account = await service.saveAccount(
-      _account('oneminai-account', 'oneminai', authType: 'api_key'),
-      secret: 'one-min-ai-key',
-    );
-
-    expect(await service.readCredential(account.id), 'one-min-ai-key');
-    final models = await service.discoverModels(account);
-    expect(models.map((model) => model.upstreamModelId), ['gpt-4o-mini']);
-    expect(models.single.capabilities['chat'], isTrue);
-    expect(models.single.capabilities['streaming'], isTrue);
-    expect(models.single.capabilities['supportedApiProtocols'], [
+    expect(supportedApiProtocolsForSupplier(null, connectorType: 'oneminai'), {
       'oneminai.chat',
-    ]);
+    });
   });
 
-  test('1min.AI builds a fixed API-KEY request and rejects route overrides',
-      () {
-    final account = _account(
-      'oneminai-request',
-      'oneminai',
-      authType: 'api_key',
-    );
-    final request = LlmNativeRequestBuilder().build(
-      account: account,
-      credential: 'one-min-ai-key',
-      modelId: 'account-owned-model',
-      body: const {
-        'type': 'UNIFY_CHAT_WITH_AI',
-        'model': 'account-owned-model',
-        'promptObject': {'prompt': 'User: hello'},
-      },
-      stream: true,
-      nativeFormat: 'oneminai.chat',
-    );
-    expect(request.uri.toString(),
-        'https://api.1min.ai/api/chat-with-ai?isStreaming=true');
-    expect(request.headers['API-KEY'], 'one-min-ai-key');
-    expect(request.headers, isNot(contains('Authorization')));
-    expect(request.body, {
-      'type': 'UNIFY_CHAT_WITH_AI',
-      'model': 'account-owned-model',
-      'promptObject': {'prompt': 'User: hello'},
-    });
-    expect(
-      () => LlmNativeRequestBuilder().build(
+  test(
+    '1min.AI account credentials use secure storage and a pinned fallback',
+    () async {
+      final credentials = _MemoryCredentials();
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: credentials,
+        dio: Dio(),
+      );
+      final account = await service.saveAccount(
+        _account('oneminai-account', 'oneminai', authType: 'api_key'),
+        secret: 'one-min-ai-key',
+      );
+
+      expect(await service.readCredential(account.id), 'one-min-ai-key');
+      final models = await service.discoverModels(account);
+      expect(models.map((model) => model.upstreamModelId), ['gpt-4o-mini']);
+      expect(models.single.capabilities['chat'], isTrue);
+      expect(models.single.capabilities['streaming'], isTrue);
+      expect(models.single.capabilities['supportedApiProtocols'], [
+        'oneminai.chat',
+      ]);
+    },
+  );
+
+  test(
+    '1min.AI builds a fixed API-KEY request and rejects route overrides',
+    () {
+      final account = _account(
+        'oneminai-request',
+        'oneminai',
+        authType: 'api_key',
+      );
+      final request = LlmNativeRequestBuilder().build(
         account: account,
         credential: 'one-min-ai-key',
         modelId: 'account-owned-model',
-        body: const {},
-        nativeFormat: 'openai.chat_completions',
-      ),
-      throwsA(isA<LlmAccountConnectorException>()),
-    );
-  });
+        body: const {
+          'type': 'UNIFY_CHAT_WITH_AI',
+          'model': 'account-owned-model',
+          'promptObject': {'prompt': 'User: hello'},
+        },
+        stream: true,
+        nativeFormat: 'oneminai.chat',
+      );
+      expect(
+        request.uri.toString(),
+        'https://api.1min.ai/api/chat-with-ai?isStreaming=true',
+      );
+      expect(request.headers['API-KEY'], 'one-min-ai-key');
+      expect(request.headers, isNot(contains('Authorization')));
+      expect(request.body, {
+        'type': 'UNIFY_CHAT_WITH_AI',
+        'model': 'account-owned-model',
+        'promptObject': {'prompt': 'User: hello'},
+      });
+      expect(
+        () => LlmNativeRequestBuilder().build(
+          account: account,
+          credential: 'one-min-ai-key',
+          modelId: 'account-owned-model',
+          body: const {},
+          nativeFormat: 'openai.chat_completions',
+        ),
+        throwsA(isA<LlmAccountConnectorException>()),
+      );
+    },
+  );
 
   test(
     'GitLab Duo keeps PAT and configured OAuth as distinct account modes',
@@ -519,7 +524,8 @@ void main() {
       },
     );
 
-    const expectedPrompt = 'System instruction: Follow the user carefully. \n'
+    const expectedPrompt =
+        'System instruction: Follow the user carefully. \n'
         'User:  What does this function do? \n'
         'Developer instruction: Keep the answer concise.\n'
         'Assistant: It sorts a list.\n'
@@ -753,20 +759,21 @@ void main() {
             },
           );
         });
-      final response = await LlmConnectorHttpClient(
-        accountService: accounts,
-        dio: dio,
-      ).request(
-        account: account,
-        modelId: 'claude-sonnet-4-6',
-        body: const {
-          'model': 'claude-sonnet-4-6',
-          'messages': [
-            {'role': 'user', 'content': 'Hello'},
-          ],
-        },
-        stream: true,
-      );
+      final response =
+          await LlmConnectorHttpClient(
+            accountService: accounts,
+            dio: dio,
+          ).request(
+            account: account,
+            modelId: 'claude-sonnet-4-6',
+            body: const {
+              'model': 'claude-sonnet-4-6',
+              'messages': [
+                {'role': 'user', 'content': 'Hello'},
+              ],
+            },
+            stream: true,
+          );
 
       expect(
         request!.uri.toString(),
@@ -1160,15 +1167,16 @@ void main() {
           );
         });
 
-      final response = await LlmConnectorHttpClient(
-        accountService: accounts,
-        dio: dio,
-      ).request(
-        account: account,
-        modelId: 'gpt-6-astra',
-        body: const {'messages': [], 'stream': false},
-        stream: false,
-      );
+      final response =
+          await LlmConnectorHttpClient(
+            accountService: accounts,
+            dio: dio,
+          ).request(
+            account: account,
+            modelId: 'gpt-6-astra',
+            body: const {'messages': [], 'stream': false},
+            stream: false,
+          );
 
       expect(request?.headers['Accept'], 'text/event-stream');
       expect(
@@ -1229,10 +1237,7 @@ void main() {
         ..httpClientAdapter = _FunctionalAdapter((_) async {
           return ResponseBody.fromString(
             'event: response.completed\n'
-            'data: ${jsonEncode({
-                  'type': 'response.completed',
-                  'response': completedResponse
-                })}\n\n'
+            'data: ${jsonEncode({'type': 'response.completed', 'response': completedResponse})}\n\n'
             'data: [DONE]\n\n',
             200,
             headers: const {
@@ -1241,15 +1246,16 @@ void main() {
           );
         });
 
-      final response = await LlmConnectorHttpClient(
-        accountService: accounts,
-        dio: dio,
-      ).request(
-        account: account,
-        modelId: 'gpt-6-astra',
-        body: const {'input': []},
-        nativeFormat: 'responses',
-      );
+      final response =
+          await LlmConnectorHttpClient(
+            accountService: accounts,
+            dio: dio,
+          ).request(
+            account: account,
+            modelId: 'gpt-6-astra',
+            body: const {'input': []},
+            nativeFormat: 'responses',
+          );
 
       expect(response.body, completedResponse);
     },
@@ -1293,7 +1299,9 @@ void main() {
       );
       expect(
         LlmConnectorRegistry.isChatAdapterAuthTypeSupported(
-            'cursor', 'api_key'),
+          'cursor',
+          'api_key',
+        ),
         isTrue,
       );
 
@@ -1350,42 +1358,49 @@ void main() {
       expect(apiKeyRequest.headers.keys, isNot(contains('Authorization')));
     },
   );
-  test('Cursor API-key accounts create, edit, and delete secure credentials',
-      () async {
-    final credentials = _MemoryCredentials();
-    final service = LlmAccountConnectorService(
-      preferences: _MemoryPreferences(),
-      credentialStore: credentials,
-    );
-    final created = await service.saveAccount(
-      _account(
-        'cursor-api-key-crud',
-        'cursor',
-        authType: 'api_key',
-        models: [_upstreamModel('claude-sonnet-5-high')],
-      ),
-      secret: 'crsr_original-key',
-    );
+  test(
+    'Cursor API-key accounts create, edit, and delete secure credentials',
+    () async {
+      final credentials = _MemoryCredentials();
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: credentials,
+      );
+      final created = await service.saveAccount(
+        _account(
+          'cursor-api-key-crud',
+          'cursor',
+          authType: 'api_key',
+          models: [_upstreamModel('claude-sonnet-5-high')],
+        ),
+        secret: 'crsr_original-key',
+      );
 
-    expect(await credentials.read(created.credentialRef!), 'crsr_original-key');
-    expect(created.authType, 'api_key');
+      expect(
+        await credentials.read(created.credentialRef!),
+        'crsr_original-key',
+      );
+      expect(created.authType, 'api_key');
 
-    final edited = await service.saveAccount(
-      _account(
-        'cursor-api-key-crud',
-        'cursor',
-        authType: 'api_key',
-        models: [_upstreamModel('claude-sonnet-5-high')],
-      ),
-      secret: 'crsr_replacement-key',
-    );
-    expect(
-        await credentials.read(edited.credentialRef!), 'crsr_replacement-key');
+      final edited = await service.saveAccount(
+        _account(
+          'cursor-api-key-crud',
+          'cursor',
+          authType: 'api_key',
+          models: [_upstreamModel('claude-sonnet-5-high')],
+        ),
+        secret: 'crsr_replacement-key',
+      );
+      expect(
+        await credentials.read(edited.credentialRef!),
+        'crsr_replacement-key',
+      );
 
-    await service.deleteAccount(edited.id);
-    expect(await service.listAccounts(), isEmpty);
-    expect(await credentials.read(edited.credentialRef!), isNull);
-  });
+      await service.deleteAccount(edited.id);
+      expect(await service.listAccounts(), isEmpty);
+      expect(await credentials.read(edited.credentialRef!), isNull);
+    },
+  );
 
   test('Cline and ClinePass register distinct OAuth and direct-key owners', () {
     for (final connectorId in ['cline', 'clinepass']) {
@@ -1780,39 +1795,48 @@ void main() {
     },
   );
   group('LlmConnectorRegistry', () {
-    test('Cloudflare Workers AI discovery returns its pinned static catalog',
-        () async {
-      var networkRequests = 0;
-      final dio = Dio()
-        ..httpClientAdapter = _FunctionalAdapter((options) async {
-          networkRequests++;
-          throw StateError('Workers AI has no model-list endpoint.');
-        });
-      final service = LlmAccountConnectorService(
-        preferences: _MemoryPreferences(),
-        credentialStore: _MemoryCredentials(),
-        dio: dio,
-      );
-      final account = await service.saveAccount(
-        _account(
-          'cloudflare-catalog',
-          'cloudflare-ai',
-          endpointConfig: const {'cloudflareAccountId': 'cf-account-id'},
-        ),
-        secret: 'synthetic-token',
-      );
+    test(
+      'Cloudflare Workers AI discovery returns its pinned static catalog',
+      () async {
+        var networkRequests = 0;
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            networkRequests++;
+            throw StateError('Workers AI has no model-list endpoint.');
+          });
+        final service = LlmAccountConnectorService(
+          preferences: _MemoryPreferences(),
+          credentialStore: _MemoryCredentials(),
+          dio: dio,
+        );
+        final account = await service.saveAccount(
+          _account(
+            'cloudflare-catalog',
+            'cloudflare-ai',
+            endpointConfig: const {'cloudflareAccountId': 'cf-account-id'},
+          ),
+          secret: 'synthetic-token',
+        );
 
-      final models = await service.discoverModels(account, refreshRemote: true);
+        final models = await service.discoverModels(
+          account,
+          refreshRemote: true,
+        );
 
-      expect(networkRequests, 0);
-      expect(models.map((model) => model.upstreamModelId),
-          kCloudflareWorkersAiModelIds);
-      for (final model in models) {
-        expect(model.capabilities.keys, {'contextLength'});
-        expect(model.capabilities['contextLength'],
-            kCloudflareWorkersAiModelContextLengths[model.upstreamModelId]);
-      }
-    });
+        expect(networkRequests, 0);
+        expect(
+          models.map((model) => model.upstreamModelId),
+          kCloudflareWorkersAiModelIds,
+        );
+        for (final model in models) {
+          expect(model.capabilities.keys, {'contextLength'});
+          expect(
+            model.capabilities['contextLength'],
+            kCloudflareWorkersAiModelContextLengths[model.upstreamModelId],
+          );
+        }
+      },
+    );
 
     test('registers UncloseAI as an optional-key OpenAI chat connector', () {
       final connector = LlmConnectorRegistry.find('uncloseai');
@@ -3145,227 +3169,253 @@ void main() {
       }
     });
 
-    test('AgentRouter routes protocol-specific endpoints and API-key headers',
-        () {
-      final builder = LlmNativeRequestBuilder();
-      final preset = findLlmOpenAiProviderPreset('agentrouter')!;
-      final account = LlmAccount(
-        id: 'agentrouter-contract',
-        connectorType: 'openai-compatibility',
-        authType: 'api_key',
-        displayName: 'AgentRouter',
-        endpointConfig: preset.applyToEndpointConfig(const {}),
-        models: const [
-          LlmUpstreamModel(
-            id: 'agentrouter-claude-model',
-            upstreamModelId: 'claude-opus-4-8',
-            displayName: 'Claude Opus 4.8',
-          ),
-          LlmUpstreamModel(
-            id: 'agentrouter-codex-model',
-            upstreamModelId: 'gpt-5.6-sol',
-            displayName: 'GPT-5.6 Sol',
-            config: {'apiProtocolOverride': 'openai.responses'},
-          ),
-          LlmUpstreamModel(
-            id: 'agentrouter-custom-model',
-            upstreamModelId: 'source-supported-custom-model',
-            displayName: 'Source-supported custom model',
-          ),
-        ],
-      );
-      const routes = [
-        (
-          'anthropic.messages',
-          'anthropic',
-          'https://agentrouter.org/v1/messages?beta=true',
-          'x-api-key',
-          'agentrouter-key',
-        ),
-        (
-          'openai.chat_completions',
-          'openai.chat_completions',
-          'https://agentrouter.org/v1/chat/completions',
-          'Authorization',
-          'Bearer agentrouter-key',
-        ),
-        (
-          'openai.responses',
-          'responses',
-          'https://agentrouter.org/v1/responses',
-          'Authorization',
-          'Bearer agentrouter-key',
-        ),
-      ];
-
-      for (final (protocol, nativeFormat, expectedUri, authHeader, authValue)
-          in routes) {
-        final request = builder.build(
-          account: account,
-          credential: 'agentrouter-key',
-          modelId: 'source-supported-custom-model',
-          body: const {'model': 'source-supported-custom-model'},
-          nativeFormat: nativeFormat,
-          conversationId: '00000000-0000-4000-8000-000000000001',
-          agentRouterClaudeVersion:
-              const AgentRouterClaudeClientVersion('2.1.281'),
-        );
-
-        expect(request.uri.toString(), expectedUri, reason: protocol);
-        expect(request.headers[authHeader], authValue, reason: protocol);
-        expect(
-          request.headers.containsKey(
-            authHeader == 'Authorization' ? 'x-api-key' : 'Authorization',
-          ),
-          isFalse,
-          reason: protocol,
-        );
-        if (protocol == 'openai.chat_completions' ||
-            protocol == 'openai.responses') {
-          expect(request.headers['User-Agent'], 'codex_cli_rs/0.159.2');
-          expect(request.headers['originator'], 'codex_cli_rs');
-        } else {
-          expect(request.headers['User-Agent'], startsWith('claude-cli/'));
-          expect(request.headers['User-Agent'],
-              'claude-cli/2.1.281 (external, cli)');
-          expect(request.headers['X-Claude-Code-Session-Id'], isNotEmpty);
-          expect(request.headers['anthropic-version'], '2023-06-01');
-          expect(request.body, isA<String>());
-          final signed = request.body as String;
-          final signature = RegExp(r'cch=([0-9a-f]{5});').allMatches(signed);
-          expect(signature, hasLength(1));
-          final placeholder = signed.replaceFirst(
-            RegExp(r'cch=[0-9a-f]{5};'),
-            'cch=00000;',
-          );
-          final expected = (xxHash64(
-                    utf8.encode(placeholder),
-                    seed: BigInt.parse('6e52736ac806831e', radix: 16),
-                  ) &
-                  BigInt.from(0xfffff))
-              .toRadixString(16)
-              .padLeft(5, '0');
-          expect(signature.single.group(1), expected);
-          final decoded = jsonDecode(signed) as Map<String, dynamic>;
-          expect((decoded['system'] as List).first['text'],
-              contains('cc_version=2.1.281.1e2;'));
-          final userId = jsonDecode(decoded['metadata']['user_id'] as String)
-              as Map<String, dynamic>;
-          expect(userId['session_id'], '00000000-0000-4000-8000-000000000001');
-          expect(userId.values, isNot(contains('agentrouter-key')));
-          final repeat = builder.build(
-            account: account,
-            credential: 'agentrouter-key',
-            modelId: 'source-supported-custom-model',
-            body: const {'model': 'source-supported-custom-model'},
-            nativeFormat: nativeFormat,
-            conversationId: '00000000-0000-4000-8000-000000000001',
-          );
-          final repeatBody =
-              jsonDecode(repeat.body as String) as Map<String, dynamic>;
-          final repeatUserId = jsonDecode(
-            repeatBody['metadata']['user_id'] as String,
-          ) as Map<String, dynamic>;
-          expect(repeatUserId, userId);
-          expect(repeat.headers['x-client-request-id'],
-              isNot(request.headers['x-client-request-id']));
-        }
-
-        expect(
-          () => builder.build(
-            account: account,
-            credential: null,
-            modelId: 'source-supported-custom-model',
-            body: const {'model': 'source-supported-custom-model'},
-            nativeFormat: nativeFormat,
-          ),
-          throwsA(isA<LlmAccountConnectorException>()),
-          reason: '$protocol rejects missing API keys',
-        );
-      }
-    });
-
-    test('HTTP client resolves AgentRouter Claude profile only for Messages',
-        () async {
-      var registryCalls = 0;
-      final registryDio = Dio()
-        ..httpClientAdapter = _FunctionalAdapter((options) async {
-          registryCalls++;
-          expect(options.uri.toString(),
-              AgentRouterClaudeVersionResolver.registryUrl);
-          expect(options.headers['Authorization'], isNull);
-          return ResponseBody.fromString('{"version":"2.1.281"}', 200);
-        });
-      final accounts = LlmAccountConnectorService(
-        preferences: _MemoryPreferences(),
-        credentialStore: _MemoryCredentials(),
-      );
-      final preset = findLlmOpenAiProviderPreset('agentrouter')!;
-      final account = await accounts.saveAccount(
-        LlmAccount(
-          id: 'agentrouter-http-profile',
+    test(
+      'AgentRouter routes protocol-specific endpoints and API-key headers',
+      () {
+        final builder = LlmNativeRequestBuilder();
+        final preset = findLlmOpenAiProviderPreset('agentrouter')!;
+        final account = LlmAccount(
+          id: 'agentrouter-contract',
           connectorType: 'openai-compatibility',
           authType: 'api_key',
           displayName: 'AgentRouter',
           endpointConfig: preset.applyToEndpointConfig(const {}),
           models: const [
             LlmUpstreamModel(
-              id: 'agentrouter-http-profile:claude',
+              id: 'agentrouter-claude-model',
               upstreamModelId: 'claude-opus-4-8',
               displayName: 'Claude Opus 4.8',
             ),
             LlmUpstreamModel(
-              id: 'agentrouter-http-profile:gpt',
+              id: 'agentrouter-codex-model',
               upstreamModelId: 'gpt-5.6-sol',
               displayName: 'GPT-5.6 Sol',
               config: {'apiProtocolOverride': 'openai.responses'},
             ),
+            LlmUpstreamModel(
+              id: 'agentrouter-custom-model',
+              upstreamModelId: 'source-supported-custom-model',
+              displayName: 'Source-supported custom model',
+            ),
           ],
-        ),
-        secret: 'test-agentrouter-key',
-      );
-      final sent = <RequestOptions>[];
-      final providerDio = Dio()
-        ..httpClientAdapter = _FunctionalAdapter((options) async {
-          sent.add(options);
-          return ResponseBody.fromString(
-            '{"content":[{"type":"text","text":"ok"}],"stop_reason":"end_turn","usage":{"input_tokens":1,"output_tokens":1}}',
-            200,
-          );
-        });
-      final client = LlmConnectorHttpClient(
-        accountService: accounts,
-        dio: providerDio,
-        agentRouterVersionResolver: AgentRouterClaudeVersionResolver(
-          dio: registryDio,
-        ),
-      );
-      final body = const {
-        'model': 'claude-opus-4-8',
-        'messages': [
-          {'role': 'user', 'content': 'hello'},
-        ],
-        'max_tokens': 32,
-      };
-      await client.request(
-          account: account, modelId: 'claude-opus-4-8', body: body);
-      await client.request(
-          account: account, modelId: 'claude-opus-4-8', body: body);
-      expect(registryCalls, 1);
-      expect(sent.first.headers['User-Agent'],
-          'claude-cli/2.1.281 (external, cli)');
-      expect(sent.first.data, contains('cc_version=2.1.281.1e2;'));
-      expect(sent[1].headers['User-Agent'], sent.first.headers['User-Agent']);
+        );
+        const routes = [
+          (
+            'anthropic.messages',
+            'anthropic',
+            'https://agentrouter.org/v1/messages?beta=true',
+            'x-api-key',
+            'agentrouter-key',
+          ),
+          (
+            'openai.chat_completions',
+            'openai.chat_completions',
+            'https://agentrouter.org/v1/chat/completions',
+            'Authorization',
+            'Bearer agentrouter-key',
+          ),
+          (
+            'openai.responses',
+            'responses',
+            'https://agentrouter.org/v1/responses',
+            'Authorization',
+            'Bearer agentrouter-key',
+          ),
+        ];
 
-      await client.request(
-        account: account,
-        modelId: 'gpt-5.6-sol',
-        nativeFormat: 'responses',
-        body: const {'model': 'gpt-5.6-sol', 'input': []},
-      );
-      expect(registryCalls, 1);
-      expect(sent.last.headers['User-Agent'], 'codex_cli_rs/0.159.2');
-    });
+        for (final (protocol, nativeFormat, expectedUri, authHeader, authValue)
+            in routes) {
+          final request = builder.build(
+            account: account,
+            credential: 'agentrouter-key',
+            modelId: 'source-supported-custom-model',
+            body: const {'model': 'source-supported-custom-model'},
+            nativeFormat: nativeFormat,
+            conversationId: '00000000-0000-4000-8000-000000000001',
+            agentRouterClaudeVersion: const AgentRouterClaudeClientVersion(
+              '2.1.281',
+            ),
+          );
+
+          expect(request.uri.toString(), expectedUri, reason: protocol);
+          expect(request.headers[authHeader], authValue, reason: protocol);
+          expect(
+            request.headers.containsKey(
+              authHeader == 'Authorization' ? 'x-api-key' : 'Authorization',
+            ),
+            isFalse,
+            reason: protocol,
+          );
+          if (protocol == 'openai.chat_completions' ||
+              protocol == 'openai.responses') {
+            expect(request.headers['User-Agent'], 'codex_cli_rs/0.159.2');
+            expect(request.headers['originator'], 'codex_cli_rs');
+          } else {
+            expect(request.headers['User-Agent'], startsWith('claude-cli/'));
+            expect(
+              request.headers['User-Agent'],
+              'claude-cli/2.1.281 (external, cli)',
+            );
+            expect(request.headers['X-Claude-Code-Session-Id'], isNotEmpty);
+            expect(request.headers['anthropic-version'], '2023-06-01');
+            expect(request.body, isA<String>());
+            final signed = request.body as String;
+            final signature = RegExp(r'cch=([0-9a-f]{5});').allMatches(signed);
+            expect(signature, hasLength(1));
+            final placeholder = signed.replaceFirst(
+              RegExp(r'cch=[0-9a-f]{5};'),
+              'cch=00000;',
+            );
+            final expected =
+                (xxHash64(
+                          utf8.encode(placeholder),
+                          seed: BigInt.parse('6e52736ac806831e', radix: 16),
+                        ) &
+                        BigInt.from(0xfffff))
+                    .toRadixString(16)
+                    .padLeft(5, '0');
+            expect(signature.single.group(1), expected);
+            final decoded = jsonDecode(signed) as Map<String, dynamic>;
+            expect(
+              (decoded['system'] as List).first['text'],
+              contains('cc_version=2.1.281.1e2;'),
+            );
+            final userId =
+                jsonDecode(decoded['metadata']['user_id'] as String)
+                    as Map<String, dynamic>;
+            expect(
+              userId['session_id'],
+              '00000000-0000-4000-8000-000000000001',
+            );
+            expect(userId.values, isNot(contains('agentrouter-key')));
+            final repeat = builder.build(
+              account: account,
+              credential: 'agentrouter-key',
+              modelId: 'source-supported-custom-model',
+              body: const {'model': 'source-supported-custom-model'},
+              nativeFormat: nativeFormat,
+              conversationId: '00000000-0000-4000-8000-000000000001',
+            );
+            final repeatBody =
+                jsonDecode(repeat.body as String) as Map<String, dynamic>;
+            final repeatUserId =
+                jsonDecode(repeatBody['metadata']['user_id'] as String)
+                    as Map<String, dynamic>;
+            expect(repeatUserId, userId);
+            expect(
+              repeat.headers['x-client-request-id'],
+              isNot(request.headers['x-client-request-id']),
+            );
+          }
+
+          expect(
+            () => builder.build(
+              account: account,
+              credential: null,
+              modelId: 'source-supported-custom-model',
+              body: const {'model': 'source-supported-custom-model'},
+              nativeFormat: nativeFormat,
+            ),
+            throwsA(isA<LlmAccountConnectorException>()),
+            reason: '$protocol rejects missing API keys',
+          );
+        }
+      },
+    );
+
+    test(
+      'HTTP client resolves AgentRouter Claude profile only for Messages',
+      () async {
+        var registryCalls = 0;
+        final registryDio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            registryCalls++;
+            expect(
+              options.uri.toString(),
+              AgentRouterClaudeVersionResolver.registryUrl,
+            );
+            expect(options.headers['Authorization'], isNull);
+            return ResponseBody.fromString('{"version":"2.1.281"}', 200);
+          });
+        final accounts = LlmAccountConnectorService(
+          preferences: _MemoryPreferences(),
+          credentialStore: _MemoryCredentials(),
+        );
+        final preset = findLlmOpenAiProviderPreset('agentrouter')!;
+        final account = await accounts.saveAccount(
+          LlmAccount(
+            id: 'agentrouter-http-profile',
+            connectorType: 'openai-compatibility',
+            authType: 'api_key',
+            displayName: 'AgentRouter',
+            endpointConfig: preset.applyToEndpointConfig(const {}),
+            models: const [
+              LlmUpstreamModel(
+                id: 'agentrouter-http-profile:claude',
+                upstreamModelId: 'claude-opus-4-8',
+                displayName: 'Claude Opus 4.8',
+              ),
+              LlmUpstreamModel(
+                id: 'agentrouter-http-profile:gpt',
+                upstreamModelId: 'gpt-5.6-sol',
+                displayName: 'GPT-5.6 Sol',
+                config: {'apiProtocolOverride': 'openai.responses'},
+              ),
+            ],
+          ),
+          secret: 'test-agentrouter-key',
+        );
+        final sent = <RequestOptions>[];
+        final providerDio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            sent.add(options);
+            return ResponseBody.fromString(
+              '{"content":[{"type":"text","text":"ok"}],"stop_reason":"end_turn","usage":{"input_tokens":1,"output_tokens":1}}',
+              200,
+            );
+          });
+        final client = LlmConnectorHttpClient(
+          accountService: accounts,
+          dio: providerDio,
+          agentRouterVersionResolver: AgentRouterClaudeVersionResolver(
+            dio: registryDio,
+          ),
+        );
+        final body = const {
+          'model': 'claude-opus-4-8',
+          'messages': [
+            {'role': 'user', 'content': 'hello'},
+          ],
+          'max_tokens': 32,
+        };
+        await client.request(
+          account: account,
+          modelId: 'claude-opus-4-8',
+          body: body,
+        );
+        await client.request(
+          account: account,
+          modelId: 'claude-opus-4-8',
+          body: body,
+        );
+        expect(registryCalls, 1);
+        expect(
+          sent.first.headers['User-Agent'],
+          'claude-cli/2.1.281 (external, cli)',
+        );
+        expect(sent.first.data, contains('cc_version=2.1.281.1e2;'));
+        expect(sent[1].headers['User-Agent'], sent.first.headers['User-Agent']);
+
+        await client.request(
+          account: account,
+          modelId: 'gpt-5.6-sol',
+          nativeFormat: 'responses',
+          body: const {'model': 'gpt-5.6-sol', 'input': []},
+        );
+        expect(registryCalls, 1);
+        expect(sent.last.headers['User-Agent'], 'codex_cli_rs/0.159.2');
+      },
+    );
 
     test('blocks models that require a separate provider-specific API', () {
       for (final connectorType in ['opencode-go', 'opencode-zen']) {
@@ -3422,7 +3472,8 @@ void main() {
       final dio = Dio()
         ..httpClientAdapter = _FunctionalAdapter((options) async {
           observed.add(options);
-          final accountId = options.headers['Authorization'] ==
+          final accountId =
+              options.headers['Authorization'] ==
                   'Bearer private-first-command-key'
               ? 'command-code-first'
               : 'command-code-second';
@@ -3739,6 +3790,30 @@ void main() {
     });
 
     test(
+      'rejects Auggie model IDs outside pinned or discovered catalogs',
+      () async {
+        await expectLater(
+          service.saveAccount(
+            LlmAccount(
+              id: 'auggie-unknown-model',
+              connectorType: 'auggie',
+              authType: 'none',
+              displayName: 'Auggie',
+              models: const [
+                LlmUpstreamModel(
+                  id: 'unknown-model',
+                  upstreamModelId: 'arbitrary-user-model',
+                  displayName: 'Arbitrary model',
+                ),
+              ],
+            ),
+          ),
+          throwsA(isA<LlmAccountConnectorException>()),
+        );
+      },
+    );
+
+    test(
       'accepts Vertex service-account models as model-group members',
       () async {
         final account = await service.saveAccount(
@@ -3828,8 +3903,7 @@ void main() {
         expect(
           (await service.discoverModels(
             account,
-          ))
-              .map((model) => model.upstreamModelId),
+          )).map((model) => model.upstreamModelId),
           contains('claude-sonnet-4-6'),
         );
       },
@@ -3852,9 +3926,13 @@ void main() {
         );
 
         expect(await service.readCredential(account.id), 'old-secret');
-        final saved = (jsonDecode(
-          preferences.values[LlmAccountMigrationService.accountsPreferenceKey]!,
-        ) as Map)['items'] as List;
+        final saved =
+            (jsonDecode(
+                      preferences.values[LlmAccountMigrationService
+                          .accountsPreferenceKey]!,
+                    )
+                    as Map)['items']
+                as List;
         expect(saved.single['credentialRef'], savedAccount.credentialRef);
       },
     );
@@ -4044,26 +4122,26 @@ void main() {
         const sharedRef = 'legacy-shared-credential';
         preferences.values[LlmAccountMigrationService.accountsPreferenceKey] =
             jsonEncode({
-          'version': 1,
-          'items': [
-            {
-              'id': 'legacy-anthropic',
-              'connectorType': 'anthropic',
-              'authType': 'api_key',
-              'displayName': 'Legacy Anthropic',
-              'credentialRef': sharedRef,
-              'endpointConfig': {'host': 'https://claude.example.test'},
-            },
-            {
-              'id': 'legacy-openai',
-              'connectorType': 'openai',
-              'authType': 'api_key',
-              'displayName': 'Legacy OpenAI',
-              'credentialRef': 'legacy-openai-credential',
-              'endpointConfig': {'host': 'https://openai.example.test/v1'},
-            },
-          ],
-        });
+              'version': 1,
+              'items': [
+                {
+                  'id': 'legacy-anthropic',
+                  'connectorType': 'anthropic',
+                  'authType': 'api_key',
+                  'displayName': 'Legacy Anthropic',
+                  'credentialRef': sharedRef,
+                  'endpointConfig': {'host': 'https://claude.example.test'},
+                },
+                {
+                  'id': 'legacy-openai',
+                  'connectorType': 'openai',
+                  'authType': 'api_key',
+                  'displayName': 'Legacy OpenAI',
+                  'credentialRef': 'legacy-openai-credential',
+                  'endpointConfig': {'host': 'https://openai.example.test/v1'},
+                },
+              ],
+            });
         credentials.values[sharedRef] = 'legacy-claude-key';
         credentials.values['legacy-openai-credential'] = 'legacy-openai-key';
 
@@ -4120,19 +4198,19 @@ void main() {
         const sharedRef = 'legacy-shared-credential';
         preferences.values[LlmAccountMigrationService.accountsPreferenceKey] =
             jsonEncode({
-          'version': 1,
-          'items': [
-            for (final id in ['legacy-owner-one', 'legacy-owner-two'])
-              {
-                'id': id,
-                'connectorType': 'codex',
-                'authType': 'oauth',
-                'displayName': id,
-                'credentialRef': sharedRef,
-                'endpointConfig': {},
-              },
-          ],
-        });
+              'version': 1,
+              'items': [
+                for (final id in ['legacy-owner-one', 'legacy-owner-two'])
+                  {
+                    'id': id,
+                    'connectorType': 'codex',
+                    'authType': 'oauth',
+                    'displayName': id,
+                    'credentialRef': sharedRef,
+                    'endpointConfig': {},
+                  },
+              ],
+            });
         const oldSecret = '{"access_token":"shared-old-token"}';
         credentials.values[sharedRef] = oldSecret;
         final accounts = await service.listAccounts();
@@ -4173,19 +4251,19 @@ void main() {
         const sharedRef = 'legacy-shared-credential';
         preferences.values[LlmAccountMigrationService.accountsPreferenceKey] =
             jsonEncode({
-          'version': 1,
-          'items': [
-            for (final id in ['legacy-owner-one', 'legacy-owner-two'])
-              {
-                'id': id,
-                'connectorType': 'codex',
-                'authType': 'oauth',
-                'displayName': id,
-                'credentialRef': sharedRef,
-                'endpointConfig': {},
-              },
-          ],
-        });
+              'version': 1,
+              'items': [
+                for (final id in ['legacy-owner-one', 'legacy-owner-two'])
+                  {
+                    'id': id,
+                    'connectorType': 'codex',
+                    'authType': 'oauth',
+                    'displayName': id,
+                    'credentialRef': sharedRef,
+                    'endpointConfig': {},
+                  },
+              ],
+            });
         credentials.values[sharedRef] = '{"access_token":"shared-token"}';
 
         await service.deleteAccount('legacy-owner-one');
@@ -4588,8 +4666,9 @@ void main() {
                 jsonEncode({
                   'data': [
                     {
-                      'id':
-                          connectorType == 'grok-cli' ? 'grok-4.7' : 'grok-4.6',
+                      'id': connectorType == 'grok-cli'
+                          ? 'grok-4.7'
+                          : 'grok-4.6',
                     },
                     {'id': 'grok-4-image'},
                   ],
@@ -5017,27 +5096,27 @@ void main() {
           final publisher = Uri.parse(options.uri.toString()).pathSegments[2];
           final models = switch (publisher) {
             'anthropic' => [
-                {
-                  'name': 'publishers/anthropic/models/claude-sonnet-4-5',
-                  'displayName': 'Claude Sonnet 4.5',
-                  'supportedActions': ['viewRestApi'],
-                },
-                {
-                  'name': 'publishers/anthropic/models/claude-ocr-helper',
-                  'supportedActions': ['viewRestApi'],
-                },
-              ],
+              {
+                'name': 'publishers/anthropic/models/claude-sonnet-4-5',
+                'displayName': 'Claude Sonnet 4.5',
+                'supportedActions': ['viewRestApi'],
+              },
+              {
+                'name': 'publishers/anthropic/models/claude-ocr-helper',
+                'supportedActions': ['viewRestApi'],
+              },
+            ],
             'deepseek-ai' => [
-                {
-                  'name': 'publishers/deepseek-ai/models/deepseek-v3.2-maas',
-                  'displayName': 'DeepSeek V3.2',
-                  'supportedActions': ['viewRestApi'],
-                },
-                {
-                  'name': 'publishers/deepseek-ai/models/deepseek-embed-1',
-                  'supportedActions': ['embedContent'],
-                },
-              ],
+              {
+                'name': 'publishers/deepseek-ai/models/deepseek-v3.2-maas',
+                'displayName': 'DeepSeek V3.2',
+                'supportedActions': ['viewRestApi'],
+              },
+              {
+                'name': 'publishers/deepseek-ai/models/deepseek-embed-1',
+                'supportedActions': ['embedContent'],
+              },
+            ],
             _ => <Map<String, Object>>[],
           };
           return ResponseBody.fromString(
@@ -5079,19 +5158,18 @@ void main() {
         refreshRemote: true,
       );
 
-      expect(
-        models.map((model) => model.upstreamModelId).toSet(),
-        {'claude-sonnet-4-5', 'deepseek-ai/deepseek-v3.2-maas'},
-      );
+      expect(models.map((model) => model.upstreamModelId).toSet(), {
+        'claude-sonnet-4-5',
+        'deepseek-ai/deepseek-v3.2-maas',
+      });
       final claude = models.singleWhere(
         (model) => model.upstreamModelId == 'claude-sonnet-4-5',
       );
       expect(claude.config['targetFormat'], 'claude');
       expect(claude.config['apiProtocolOverride'], 'anthropic.messages');
-      expect(
-        claude.capabilities['supportedApiProtocols'],
-        ['anthropic.messages'],
-      );
+      expect(claude.capabilities['supportedApiProtocols'], [
+        'anthropic.messages',
+      ]);
     });
 
     test('discovers Vertex Imagen models that support prediction', () async {
@@ -5181,9 +5259,12 @@ void main() {
           ),
           secret: 'vertex-api-key',
         );
-        final accountsEnvelope = jsonDecode(
-          preferences.values[LlmAccountMigrationService.accountsPreferenceKey]!,
-        ) as Map<String, dynamic>;
+        final accountsEnvelope =
+            jsonDecode(
+                  preferences.values[LlmAccountMigrationService
+                      .accountsPreferenceKey]!,
+                )
+                as Map<String, dynamic>;
         final accountRecord = Map<String, dynamic>.from(
           (accountsEnvelope['items'] as List).single as Map,
         )..['authType'] = 'oauth';
@@ -5265,18 +5346,16 @@ void main() {
         expect(requests, hasLength(2), reason: connector);
         expect(requests.first.uri.path, '/v1/models', reason: connector);
         expect(
-          requests[1].uri.queryParameters[
-              connector == 'openai-api' ? 'after' : 'after_id'],
+          requests[1].uri.queryParameters[connector == 'openai-api'
+              ? 'after'
+              : 'after_id'],
           'model-first',
           reason: connector,
         );
-        expect(
-            models.map((model) => model.upstreamModelId),
-            [
-              'model-first',
-              'model-second',
-            ],
-            reason: connector);
+        expect(models.map((model) => model.upstreamModelId), [
+          'model-first',
+          'model-second',
+        ], reason: connector);
       }
     });
 
@@ -5509,12 +5588,9 @@ void main() {
         );
 
         expect(requestedUris.last.toString(), expectedUrl);
-        expect(
-            models.map((model) => model.upstreamModelId),
-            [
-              'qwen3.7-plus',
-            ],
-            reason: connectorType);
+        expect(models.map((model) => model.upstreamModelId), [
+          'qwen3.7-plus',
+        ], reason: connectorType);
         expect(
           models.single.capabilities,
           {'chat': true, 'streaming': true},
@@ -5524,8 +5600,7 @@ void main() {
       }
     });
 
-    test('rejects nested Qwen Cloud hosts before sending the API key',
-        () async {
+    test('rejects nested Qwen Cloud hosts before sending the API key', () async {
       var requestSent = false;
       final dio = Dio()
         ..httpClientAdapter = _FunctionalAdapter((options) async {
@@ -5563,8 +5638,9 @@ void main() {
       final dio = Dio()
         ..httpClientAdapter = _FunctionalAdapter((options) async {
           requestedUris.add(options.uri);
-          final modelId =
-              options.uri.host == 'api.minimaxi.com' ? 'minimax-m2' : 'glm-5';
+          final modelId = options.uri.host == 'api.minimaxi.com'
+              ? 'minimax-m2'
+              : 'glm-5';
           return ResponseBody.fromString(
             jsonEncode({
               'data': [
@@ -6079,18 +6155,19 @@ void main() {
         expect(models.single.capabilities['chat'], isTrue);
         expect(models.single.capabilities['streaming'], isTrue);
 
-        final response = await LlmConnectorHttpClient(
-          accountService: service,
-          dio: dio,
-        ).request(
-          account: account,
-          modelId: models.single.upstreamModelId,
-          body: const {
-            'messages': [
-              {'role': 'user', 'content': 'hello'},
-            ],
-          },
-        );
+        final response =
+            await LlmConnectorHttpClient(
+              accountService: service,
+              dio: dio,
+            ).request(
+              account: account,
+              modelId: models.single.upstreamModelId,
+              body: const {
+                'messages': [
+                  {'role': 'user', 'content': 'hello'},
+                ],
+              },
+            );
 
         expect(requests, hasLength(2));
         expect(
@@ -7099,8 +7176,9 @@ void main() {
         );
 
         for (final connectorType in ['grok-cli', 'xai-oauth']) {
-          final expectedModeScope =
-              connectorType == 'grok-cli' ? 'grok-cli:access' : 'api:access';
+          final expectedModeScope = connectorType == 'grok-cli'
+              ? 'grok-cli:access'
+              : 'api:access';
           responseScope =
               'openid profile email offline_access $expectedModeScope';
           final account = await accountService.saveAccount(
@@ -7136,10 +7214,12 @@ void main() {
         }
 
         for (final connectorType in ['grok-cli', 'xai-oauth']) {
-          final expectedModeScope =
-              connectorType == 'grok-cli' ? 'grok-cli:access' : 'api:access';
-          final oppositeModeScope =
-              connectorType == 'grok-cli' ? 'api:access' : 'grok-cli:access';
+          final expectedModeScope = connectorType == 'grok-cli'
+              ? 'grok-cli:access'
+              : 'api:access';
+          final oppositeModeScope = connectorType == 'grok-cli'
+              ? 'api:access'
+              : 'grok-cli:access';
           responseScope =
               'openid profile email offline_access $oppositeModeScope';
           final account = await accountService.saveAccount(
@@ -7439,87 +7519,89 @@ void main() {
   group('LlmNativeRequestBuilder', () {
     final builder = LlmNativeRequestBuilder();
 
-    test('CheaperInference discovery keeps text models and excludes images',
-        () async {
-      RequestOptions? captured;
-      final dio = Dio()
-        ..httpClientAdapter = _FunctionalAdapter((options) async {
-          captured = options;
-          return ResponseBody.fromString(
-            jsonEncode({
-              'data': [
-                {'id': 'gpt-5.4', 'type': 'text'},
-                {'id': 'gpt-5.4-mini', 'type': 'text'},
-                {'id': 'deepseek-v4-pro', 'type': 'text'},
-                {'id': 'image-generator', 'type': 'image'},
-              ],
-            }),
-            200,
-            headers: const {
-              'content-type': ['application/json'],
+    test(
+      'CheaperInference discovery keeps text models and excludes images',
+      () async {
+        RequestOptions? captured;
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            captured = options;
+            return ResponseBody.fromString(
+              jsonEncode({
+                'data': [
+                  {'id': 'gpt-5.4', 'type': 'text'},
+                  {'id': 'gpt-5.4-mini', 'type': 'text'},
+                  {'id': 'deepseek-v4-pro', 'type': 'text'},
+                  {'id': 'image-generator', 'type': 'image'},
+                ],
+              }),
+              200,
+              headers: const {
+                'content-type': ['application/json'],
+              },
+            );
+          });
+        final accounts = LlmAccountConnectorService(
+          preferences: _MemoryPreferences(),
+          credentialStore: _MemoryCredentials(),
+          dio: dio,
+        );
+        final account = await accounts.saveAccount(
+          LlmAccount(
+            id: 'cheaperinference-catalog',
+            connectorType: 'openai-compatibility',
+            authType: 'api_key',
+            displayName: 'CheaperInference',
+            endpointConfig: const {
+              'baseUrl': 'https://api.cheaperinference.com/v1/chat/completions',
+              'modelsUrl': 'https://api.cheaperinference.com/v1/models',
+              'apiProtocol': 'openai.chat_completions',
+              'providerPresetId': 'cheaperinference',
             },
-          );
-        });
-      final accounts = LlmAccountConnectorService(
-        preferences: _MemoryPreferences(),
-        credentialStore: _MemoryCredentials(),
-        dio: dio,
-      );
-      final account = await accounts.saveAccount(
-        LlmAccount(
-          id: 'cheaperinference-catalog',
-          connectorType: 'openai-compatibility',
-          authType: 'api_key',
-          displayName: 'CheaperInference',
-          endpointConfig: const {
-            'baseUrl': 'https://api.cheaperinference.com/v1/chat/completions',
-            'modelsUrl': 'https://api.cheaperinference.com/v1/models',
-            'apiProtocol': 'openai.chat_completions',
-            'providerPresetId': 'cheaperinference',
-          },
-          models: const [
-            LlmUpstreamModel(
-              id: 'gpt-5.4-local',
-              upstreamModelId: 'gpt-5.4',
-              displayName: 'GPT-5.4',
-            ),
-            LlmUpstreamModel(
-              id: 'gpt-5.4-mini-local',
-              upstreamModelId: 'gpt-5.4-mini',
-              displayName: 'GPT-5.4 mini',
-              config: {'apiProtocolOverride': 'openai.chat_completions'},
-            ),
-          ],
-        ),
-        secret: 'cheaperinference-catalog-key',
-      );
-      expect(account.endpointConfig['providerPresetId'], 'cheaperinference');
+            models: const [
+              LlmUpstreamModel(
+                id: 'gpt-5.4-local',
+                upstreamModelId: 'gpt-5.4',
+                displayName: 'GPT-5.4',
+              ),
+              LlmUpstreamModel(
+                id: 'gpt-5.4-mini-local',
+                upstreamModelId: 'gpt-5.4-mini',
+                displayName: 'GPT-5.4 mini',
+                config: {'apiProtocolOverride': 'openai.chat_completions'},
+              ),
+            ],
+          ),
+          secret: 'cheaperinference-catalog-key',
+        );
+        expect(account.endpointConfig['providerPresetId'], 'cheaperinference');
 
-      final discovered = await accounts.discoverModels(
-        account,
-        refreshRemote: true,
-      );
+        final discovered = await accounts.discoverModels(
+          account,
+          refreshRemote: true,
+        );
 
-      expect(captured?.uri,
-          Uri.parse('https://api.cheaperinference.com/v1/models'));
-      expect(
-        captured?.headers['Authorization'],
-        'Bearer cheaperinference-catalog-key',
-      );
-      expect(
-        discovered.map((model) => model.upstreamModelId),
-        ['gpt-5.4', 'gpt-5.4-mini', 'deepseek-v4-pro'],
-      );
-      expect(
-        discovered[0].config['apiProtocolOverride'],
-        'openai.responses',
-      );
-      expect(
-        discovered[1].config['apiProtocolOverride'],
-        'openai.chat_completions',
-      );
-      expect(discovered.last.config['apiProtocolOverride'], isNull);
-    });
+        expect(
+          captured?.uri,
+          Uri.parse('https://api.cheaperinference.com/v1/models'),
+        );
+        expect(
+          captured?.headers['Authorization'],
+          'Bearer cheaperinference-catalog-key',
+        );
+        expect(discovered.map((model) => model.upstreamModelId), [
+          'gpt-5.4',
+          'gpt-5.4-mini',
+          'deepseek-v4-pro',
+        ]);
+        expect(discovered[0].config['apiProtocolOverride'], 'openai.responses');
+        expect(
+          discovered[1].config['apiProtocolOverride'],
+          'openai.chat_completions',
+        );
+        expect(discovered.last.config['apiProtocolOverride'], isNull);
+      },
+    );
 
     test(
       'CheaperInference selects protocol-specific URL and stateless body',
@@ -7532,7 +7614,7 @@ void main() {
               jsonEncode({'output_text': 'ok'}),
               200,
               headers: const {
-                'content-type': ['application/json']
+                'content-type': ['application/json'],
               },
             );
           });
@@ -7593,17 +7675,11 @@ void main() {
         await client.request(
           account: account,
           modelId: 'gpt-5.4',
-          body: const {
-            'model': 'gpt-5.4',
-            'messages': [],
-            'store': true,
-          },
+          body: const {'model': 'gpt-5.4', 'messages': [], 'store': true},
         );
         expect(
           captured?.uri,
-          Uri.parse(
-            'https://api.cheaperinference.com/v1/chat/completions',
-          ),
+          Uri.parse('https://api.cheaperinference.com/v1/chat/completions'),
         );
         expect((captured?.data as Map).containsKey('store'), isFalse);
         expect((captured?.data as Map)['messages'], isEmpty);
@@ -7611,90 +7687,101 @@ void main() {
     );
 
     test(
-        'Azure deployment requests use the configured deployment and key header',
-        () {
-      final account = _account(
-        'm50-azure-request',
-        'azure-ai',
-        endpointConfig: const {
-          'baseUrl': 'https://example-resource.openai.azure.com',
-          'azureDeploymentId': 'production chat',
-          'apiVersion': '2024-12-01-preview',
-        },
-        models: const [
-          LlmUpstreamModel(
-            id: 'm50-azure-model',
-            upstreamModelId: 'production chat',
-            displayName: 'production chat',
-            capabilities: {
-              'chat': true,
-              'streaming': true,
-              'supportedApiProtocols': ['openai.chat_completions'],
-            },
-            config: {'catalogSource': 'configured-azure-deployment'},
-          ),
-        ],
-      );
-      final request = builder.build(
-        account: account,
-        credential: 'synthetic-azure-secret',
-        modelId: 'production chat',
-        body: const {'model': 'production chat', 'messages': []},
-      );
-
-      expect(request.uri.scheme, 'https');
-      expect(request.uri.host, 'example-resource.openai.azure.com');
-      expect(request.uri.path,
-          '/openai/deployments/production%20chat/chat/completions');
-      expect(
-          request.uri.queryParameters, {'api-version': '2024-12-01-preview'});
-      expect(request.headers['api-key'], 'synthetic-azure-secret');
-      expect(request.headers.containsKey('Authorization'), isFalse);
-      expect(request.toString(), isNot(contains('synthetic-azure-secret')));
-      expect(account.endpointConfig.toString(),
-          isNot(contains('synthetic-azure-secret')));
-      expect(
-        () => builder.build(
-          account: account,
-          credential: 'synthetic-azure-secret',
-          modelId: 'different-deployment',
-          body: const {'model': 'different-deployment', 'messages': []},
-        ),
-        throwsA(isA<LlmAccountConnectorException>()),
-      );
-    });
-
-    test('Azure discovery returns the configured deployment as its model ID',
-        () async {
-      final service = LlmAccountConnectorService(
-        preferences: _MemoryPreferences(),
-        credentialStore: _MemoryCredentials(),
-      );
-      final saved = await service.saveAccount(
-        _account(
-          'm50-azure-refresh',
+      'Azure deployment requests use the configured deployment and key header',
+      () {
+        final account = _account(
+          'm50-azure-request',
           'azure-ai',
           endpointConfig: const {
-            'baseUrl': 'https://example-resource.services.ai.azure.com',
-            'azureDeploymentId': 'foundry-deployment',
+            'baseUrl': 'https://example-resource.openai.azure.com',
+            'azureDeploymentId': 'production chat',
             'apiVersion': '2024-12-01-preview',
           },
-          models: const [],
-        ),
-        secret: 'stored-azure-secret',
-      );
+          models: const [
+            LlmUpstreamModel(
+              id: 'm50-azure-model',
+              upstreamModelId: 'production chat',
+              displayName: 'production chat',
+              capabilities: {
+                'chat': true,
+                'streaming': true,
+                'supportedApiProtocols': ['openai.chat_completions'],
+              },
+              config: {'catalogSource': 'configured-azure-deployment'},
+            ),
+          ],
+        );
+        final request = builder.build(
+          account: account,
+          credential: 'synthetic-azure-secret',
+          modelId: 'production chat',
+          body: const {'model': 'production chat', 'messages': []},
+        );
 
-      final models = await service.discoverModels(saved, refreshRemote: true);
+        expect(request.uri.scheme, 'https');
+        expect(request.uri.host, 'example-resource.openai.azure.com');
+        expect(
+          request.uri.path,
+          '/openai/deployments/production%20chat/chat/completions',
+        );
+        expect(request.uri.queryParameters, {
+          'api-version': '2024-12-01-preview',
+        });
+        expect(request.headers['api-key'], 'synthetic-azure-secret');
+        expect(request.headers.containsKey('Authorization'), isFalse);
+        expect(request.toString(), isNot(contains('synthetic-azure-secret')));
+        expect(
+          account.endpointConfig.toString(),
+          isNot(contains('synthetic-azure-secret')),
+        );
+        expect(
+          () => builder.build(
+            account: account,
+            credential: 'synthetic-azure-secret',
+            modelId: 'different-deployment',
+            body: const {'model': 'different-deployment', 'messages': []},
+          ),
+          throwsA(isA<LlmAccountConnectorException>()),
+        );
+      },
+    );
 
-      expect(
-          models.map((model) => model.upstreamModelId), ['foundry-deployment']);
-      expect(
-          models.single.config['catalogSource'], 'configured-azure-deployment');
-      expect(models.single.capabilities['supportedApiProtocols'], [
-        'openai.chat_completions',
-      ]);
-      expect(await service.readCredential(saved.id), 'stored-azure-secret');
-    });
+    test(
+      'Azure discovery returns the configured deployment as its model ID',
+      () async {
+        final service = LlmAccountConnectorService(
+          preferences: _MemoryPreferences(),
+          credentialStore: _MemoryCredentials(),
+        );
+        final saved = await service.saveAccount(
+          _account(
+            'm50-azure-refresh',
+            'azure-ai',
+            endpointConfig: const {
+              'baseUrl': 'https://example-resource.services.ai.azure.com',
+              'azureDeploymentId': 'foundry-deployment',
+              'apiVersion': '2024-12-01-preview',
+            },
+            models: const [],
+          ),
+          secret: 'stored-azure-secret',
+        );
+
+        final models = await service.discoverModels(saved, refreshRemote: true);
+
+        expect(models.map((model) => model.upstreamModelId), [
+          'foundry-deployment',
+        ]);
+        expect(
+          models.single.config['catalogSource'],
+          'configured-azure-deployment',
+        );
+        expect(models.single.capabilities['supportedApiProtocols'], [
+          'openai.chat_completions',
+        ]);
+        expect(await service.readCredential(saved.id), 'stored-azure-secret');
+      },
+    );
 
     test('redacts query values from prepared request diagnostics', () {
       final request = LlmPreparedNativeRequest(
@@ -8242,8 +8329,8 @@ void main() {
                 ),
               ]
             : connector == 'grok-cli'
-                ? [_upstreamModel('model-1')]
-                : const <LlmUpstreamModel>[];
+            ? [_upstreamModel('model-1')]
+            : const <LlmUpstreamModel>[];
         final credential = connector == 'muse-code'
             ? jsonEncode({
                 'access_token': 'muse-minted-key',
@@ -8567,8 +8654,7 @@ void main() {
       expect(request.uri.path, contains('/locations/europe-west4/'));
     });
 
-    test('routes Vertex MaaS partners globally with project scoped key auth',
-        () {
+    test('routes Vertex MaaS partners globally with project scoped key auth', () {
       final request = builder.build(
         account: LlmAccount(
           id: 'vertex-partner-openai',
@@ -8594,32 +8680,34 @@ void main() {
       expect(request.headers['x-goog-api-key'], isNull);
     });
 
-    test('routes streaming Vertex Claude partners through regional rawPredict',
-        () {
-      final request = builder.build(
-        account: LlmAccount(
-          id: 'vertex-partner-claude',
-          connectorType: 'vertex-partner',
-          authType: 'api_key',
-          displayName: 'Vertex AI Partners',
-          endpointConfig: const {
-            'projectId': 'my-project',
-            'location': 'europe-west4',
-          },
-        ),
-        credential: 'project-bound-key',
-        modelId: 'claude-sonnet-4-5',
-        body: const {'messages': []},
-        stream: true,
-      );
+    test(
+      'routes streaming Vertex Claude partners through regional rawPredict',
+      () {
+        final request = builder.build(
+          account: LlmAccount(
+            id: 'vertex-partner-claude',
+            connectorType: 'vertex-partner',
+            authType: 'api_key',
+            displayName: 'Vertex AI Partners',
+            endpointConfig: const {
+              'projectId': 'my-project',
+              'location': 'europe-west4',
+            },
+          ),
+          credential: 'project-bound-key',
+          modelId: 'claude-sonnet-4-5',
+          body: const {'messages': []},
+          stream: true,
+        );
 
-      expect(request.uri.host, 'europe-west4-aiplatform.googleapis.com');
-      expect(
-        request.uri.path,
-        '/v1/projects/my-project/locations/europe-west4/publishers/anthropic/models/claude-sonnet-4-5:rawPredict',
-      );
-      expect(request.uri.queryParameters['key'], 'project-bound-key');
-    });
+        expect(request.uri.host, 'europe-west4-aiplatform.googleapis.com');
+        expect(
+          request.uri.path,
+          '/v1/projects/my-project/locations/europe-west4/publishers/anthropic/models/claude-sonnet-4-5:rawPredict',
+        );
+        expect(request.uri.queryParameters['key'], 'project-bound-key');
+      },
+    );
 
     test('requires project scope for Vertex partner API keys', () {
       expect(
@@ -8916,8 +9004,7 @@ void main() {
       );
     });
 
-    test('prepares API-key AI Studio requests for Generative Language HTTP',
-        () {
+    test('prepares API-key AI Studio requests for Generative Language HTTP', () {
       const content = {
         'contents': [
           {
@@ -9351,7 +9438,7 @@ void main() {
             jsonEncode({
               'aiRecord': {
                 'aiRecordDetail': {
-                  'resultObject': ['hello', ' world']
+                  'resultObject': ['hello', ' world'],
                 },
               },
             }),
@@ -9370,19 +9457,20 @@ void main() {
         secret: 'test-key',
       );
 
-      final response = await LlmConnectorHttpClient(
-        accountService: accounts,
-        dio: dio,
-      ).request(
-        account: account,
-        modelId: 'gpt-4o-mini',
-        body: const {
-          'type': 'UNIFY_CHAT_WITH_AI',
-          'model': 'gpt-4o-mini',
-          'promptObject': {'prompt': 'User: hello'},
-        },
-        nativeFormat: 'oneminai.chat',
-      );
+      final response =
+          await LlmConnectorHttpClient(
+            accountService: accounts,
+            dio: dio,
+          ).request(
+            account: account,
+            modelId: 'gpt-4o-mini',
+            body: const {
+              'type': 'UNIFY_CHAT_WITH_AI',
+              'model': 'gpt-4o-mini',
+              'promptObject': {'prompt': 'User: hello'},
+            },
+            nativeFormat: 'oneminai.chat',
+          );
 
       expect(captured!.uri.toString(), 'https://api.1min.ai/api/chat-with-ai');
       expect(captured!.headers['API-KEY'], 'test-key');
@@ -9394,70 +9482,78 @@ void main() {
       );
     });
 
-    test('translates 1min.AI SSE frames in order and terminates on done',
-        () async {
-      RequestOptions? captured;
-      final source = StreamController<Uint8List>();
+    test(
+      'translates 1min.AI SSE frames in order and terminates on done',
+      () async {
+        RequestOptions? captured;
+        final source = StreamController<Uint8List>();
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            captured = options;
+            return ResponseBody(
+              source.stream,
+              200,
+              headers: const {
+                'content-type': ['text/event-stream'],
+              },
+            );
+          });
+        final accounts = LlmAccountConnectorService(
+          preferences: _MemoryPreferences(),
+          credentialStore: _MemoryCredentials(),
+        );
+        final account = await accounts.saveAccount(
+          _account('oneminai-http-sse', 'oneminai', authType: 'api_key'),
+          secret: 'test-key',
+        );
+        final response =
+            await LlmConnectorHttpClient(
+              accountService: accounts,
+              dio: dio,
+            ).request(
+              account: account,
+              modelId: 'gpt-4o-mini',
+              body: const {
+                'type': 'UNIFY_CHAT_WITH_AI',
+                'model': 'gpt-4o-mini',
+                'promptObject': {'prompt': 'User: hello'},
+              },
+              stream: true,
+              nativeFormat: 'oneminai.chat',
+            );
+        expect(captured!.uri.queryParameters, {'isStreaming': 'true'});
+        final output = <int>[];
+        final subscription = (response.body as Stream<List<int>>).listen(
+          output.addAll,
+        );
+        source.add(
+          Uint8List.fromList(
+            utf8.encode(
+              'event: content\ndata: {"content":"first"}\n\n'
+              'event: content\ndata: {"content":" second"}\n\n'
+              'event: done\ndata: {}\n\n',
+            ),
+          ),
+        );
+        await source.close();
+        await subscription.asFuture<void>();
+        final text = utf8.decode(output);
+        expect(text.indexOf('first'), lessThan(text.indexOf(' second')));
+        expect(text, contains('data: [DONE]'));
+      },
+    );
+
+    test('1min.AI streaming errors never expose upstream details', () async {
       final dio = Dio()
-        ..httpClientAdapter = _FunctionalAdapter((options) async {
-          captured = options;
-          return ResponseBody(
-            source.stream,
+        ..httpClientAdapter = _FunctionalAdapter(
+          (_) async => ResponseBody.fromString(
+            'event: error\ndata: {"message":"private upstream detail"}\n\n',
             200,
             headers: const {
               'content-type': ['text/event-stream'],
             },
-          );
-        });
-      final accounts = LlmAccountConnectorService(
-        preferences: _MemoryPreferences(),
-        credentialStore: _MemoryCredentials(),
-      );
-      final account = await accounts.saveAccount(
-        _account('oneminai-http-sse', 'oneminai', authType: 'api_key'),
-        secret: 'test-key',
-      );
-      final response = await LlmConnectorHttpClient(
-        accountService: accounts,
-        dio: dio,
-      ).request(
-        account: account,
-        modelId: 'gpt-4o-mini',
-        body: const {
-          'type': 'UNIFY_CHAT_WITH_AI',
-          'model': 'gpt-4o-mini',
-          'promptObject': {'prompt': 'User: hello'},
-        },
-        stream: true,
-        nativeFormat: 'oneminai.chat',
-      );
-      expect(captured!.uri.queryParameters, {'isStreaming': 'true'});
-      final output = <int>[];
-      final subscription = (response.body as Stream<List<int>>).listen(
-        output.addAll,
-      );
-      source.add(Uint8List.fromList(utf8.encode(
-        'event: content\ndata: {"content":"first"}\n\n'
-        'event: content\ndata: {"content":" second"}\n\n'
-        'event: done\ndata: {}\n\n',
-      )));
-      await source.close();
-      await subscription.asFuture<void>();
-      final text = utf8.decode(output);
-      expect(text.indexOf('first'), lessThan(text.indexOf(' second')));
-      expect(text, contains('data: [DONE]'));
-    });
-
-    test('1min.AI streaming errors never expose upstream details', () async {
-      final dio = Dio()
-        ..httpClientAdapter =
-            _FunctionalAdapter((_) async => ResponseBody.fromString(
-                  'event: error\ndata: {"message":"private upstream detail"}\n\n',
-                  200,
-                  headers: const {
-                    'content-type': ['text/event-stream'],
-                  },
-                ));
+          ),
+        );
       final accounts = LlmAccountConnectorService(
         preferences: _MemoryPreferences(),
         credentialStore: _MemoryCredentials(),
@@ -9466,20 +9562,21 @@ void main() {
         _account('oneminai-http-error', 'oneminai', authType: 'api_key'),
         secret: 'test-key',
       );
-      final response = await LlmConnectorHttpClient(
-        accountService: accounts,
-        dio: dio,
-      ).request(
-        account: account,
-        modelId: 'gpt-4o-mini',
-        body: const {
-          'type': 'UNIFY_CHAT_WITH_AI',
-          'model': 'gpt-4o-mini',
-          'promptObject': {'prompt': 'User: hello'},
-        },
-        stream: true,
-        nativeFormat: 'oneminai.chat',
-      );
+      final response =
+          await LlmConnectorHttpClient(
+            accountService: accounts,
+            dio: dio,
+          ).request(
+            account: account,
+            modelId: 'gpt-4o-mini',
+            body: const {
+              'type': 'UNIFY_CHAT_WITH_AI',
+              'model': 'gpt-4o-mini',
+              'promptObject': {'prompt': 'User: hello'},
+            },
+            stream: true,
+            nativeFormat: 'oneminai.chat',
+          );
 
       await expectLater(
         (response.body as Stream<List<int>>).drain<void>(),
@@ -9493,8 +9590,7 @@ void main() {
       );
     });
 
-    test('buffers Cline streaming output for completed-response callers',
-        () async {
+    test('buffers Cline streaming output for completed-response callers', () async {
       RequestOptions? captured;
       final dio = Dio()
         ..httpClientAdapter = _FunctionalAdapter((options) async {
@@ -9518,19 +9614,20 @@ void main() {
         secret: jsonEncode({'access_token': 'cline-private-token'}),
       );
 
-      final response = await LlmConnectorHttpClient(
-        accountService: accounts,
-        dio: dio,
-      ).request(
-        account: account,
-        modelId: 'provider/model',
-        body: const {
-          'messages': [
-            {'role': 'user', 'content': 'hello'},
-          ],
-          'stream': false,
-        },
-      );
+      final response =
+          await LlmConnectorHttpClient(
+            accountService: accounts,
+            dio: dio,
+          ).request(
+            account: account,
+            modelId: 'provider/model',
+            body: const {
+              'messages': [
+                {'role': 'user', 'content': 'hello'},
+              ],
+              'stream': false,
+            },
+          );
 
       expect(
         captured?.uri.toString(),
@@ -9577,19 +9674,20 @@ void main() {
           secret: 'codebuddy-api-key',
         );
 
-        final response = await LlmConnectorHttpClient(
-          accountService: accounts,
-          dio: dio,
-        ).request(
-          account: account,
-          modelId: 'glm-5.2',
-          body: const {
-            'messages': [
-              {'role': 'user', 'content': 'hello'},
-            ],
-            'stream': false,
-          },
-        );
+        final response =
+            await LlmConnectorHttpClient(
+              accountService: accounts,
+              dio: dio,
+            ).request(
+              account: account,
+              modelId: 'glm-5.2',
+              body: const {
+                'messages': [
+                  {'role': 'user', 'content': 'hello'},
+                ],
+                'stream': false,
+              },
+            );
 
         expect(captured?.data['stream'], isTrue);
         expect(response.body, isA<Map>());
@@ -9795,19 +9893,20 @@ void main() {
           }),
         );
 
-        final response = await LlmConnectorHttpClient(
-          accountService: accounts,
-          dio: dio,
-        ).request(
-          account: account,
-          modelId: 'devin/swe-2',
-          body: const {
-            'messages': [
-              {'role': 'user', 'content': 'hello'},
-            ],
-          },
-          stream: true,
-        );
+        final response =
+            await LlmConnectorHttpClient(
+              accountService: accounts,
+              dio: dio,
+            ).request(
+              account: account,
+              modelId: 'devin/swe-2',
+              body: const {
+                'messages': [
+                  {'role': 'user', 'content': 'hello'},
+                ],
+              },
+              stream: true,
+            );
         final sse = utf8.decode(
           (await (response.body as Stream<List<int>>).toList())
               .expand((part) => part)
@@ -10052,20 +10151,21 @@ void main() {
           }),
         );
 
-        final response = await LlmConnectorHttpClient(
-          accountService: accounts,
-          dio: dio,
-        ).request(
-          account: account,
-          modelId: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
-          stream: true,
-          body: const {
-            'messages': [
-              {'role': 'user', 'content': 'Say hello.'},
-            ],
-            'max_tokens': 100,
-          },
-        );
+        final response =
+            await LlmConnectorHttpClient(
+              accountService: accounts,
+              dio: dio,
+            ).request(
+              account: account,
+              modelId: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+              stream: true,
+              body: const {
+                'messages': [
+                  {'role': 'user', 'content': 'Say hello.'},
+                ],
+                'max_tokens': 100,
+              },
+            );
 
         final preferencesJson = preferences.values.values.join();
         expect(captured?.uri.host, 'bedrock-runtime.us-east-1.amazonaws.com');
@@ -10135,18 +10235,19 @@ void main() {
           secret: 'bedrock-api-key-secret',
         );
 
-        final response = await LlmConnectorHttpClient(
-          accountService: accounts,
-          dio: dio,
-        ).request(
-          account: account,
-          modelId: 'amazon.titan-text-express-v1',
-          body: const {
-            'messages': [
-              {'role': 'user', 'content': 'Say hello.'},
-            ],
-          },
-        );
+        final response =
+            await LlmConnectorHttpClient(
+              accountService: accounts,
+              dio: dio,
+            ).request(
+              account: account,
+              modelId: 'amazon.titan-text-express-v1',
+              body: const {
+                'messages': [
+                  {'role': 'user', 'content': 'Say hello.'},
+                ],
+              },
+            );
 
         expect(captured?.uri.host, 'bedrock-runtime.us-east-1.amazonaws.com');
         expect(captured?.uri.path, endsWith('/converse'));
@@ -10214,19 +10315,20 @@ void main() {
           secret: 'bedrock-api-key-secret',
         );
 
-        final response = await LlmConnectorHttpClient(
-          accountService: accounts,
-          dio: dio,
-        ).request(
-          account: account,
-          modelId: 'amazon.titan-text-express-v1',
-          stream: true,
-          body: const {
-            'messages': [
-              {'role': 'user', 'content': 'Say hello.'},
-            ],
-          },
-        );
+        final response =
+            await LlmConnectorHttpClient(
+              accountService: accounts,
+              dio: dio,
+            ).request(
+              account: account,
+              modelId: 'amazon.titan-text-express-v1',
+              stream: true,
+              body: const {
+                'messages': [
+                  {'role': 'user', 'content': 'Say hello.'},
+                ],
+              },
+            );
         final chunks = await (response.body as Stream<List<int>>).toList();
         final text = utf8.decode(chunks.expand((chunk) => chunk).toList());
 
@@ -10451,8 +10553,7 @@ void main() {
       expect(requestsSent, 0);
     });
 
-    test('executes each pinned HTTP connector through its native route',
-        () async {
+    test('executes each pinned HTTP connector through its native route', () async {
       final requests = <RequestOptions>[];
       final dio = Dio()
         ..httpClientAdapter = _FunctionalAdapter((options) async {
@@ -10939,11 +11040,13 @@ void main() {
         final form = _requestForm(tokenRequest!.data);
         final assertion = form['assertion']!;
         final assertionParts = assertion.split('.');
-        final claims = jsonDecode(
-          utf8.decode(
-            base64Url.decode(base64Url.normalize(assertionParts[1])),
-          ),
-        ) as Map;
+        final claims =
+            jsonDecode(
+                  utf8.decode(
+                    base64Url.decode(base64Url.normalize(assertionParts[1])),
+                  ),
+                )
+                as Map;
         expect(
           tokenRequest?.uri.toString(),
           'https://oauth2.googleapis.com/token',
@@ -10978,94 +11081,101 @@ void main() {
       },
     );
 
-    test('synthesizes Anthropic SSE for streamed Vertex Claude rawPredict',
-        () async {
-      RequestOptions? modelRequest;
-      final dio = Dio()
-        ..httpClientAdapter = _FunctionalAdapter((options) async {
-          modelRequest = options;
-          return ResponseBody.fromString(
-            jsonEncode({
-              'id': 'msg_vertex',
-              'model': 'claude-sonnet-4-5',
-              'content': [
-                {'type': 'text', 'text': 'partner response'},
-                {
-                  'type': 'tool_use',
-                  'id': 'toolu_vertex',
-                  'name': 'lookup',
-                  'input': {'query': 'vertex partners'},
-                },
-              ],
-              'stop_reason': 'end_turn',
-              'usage': {'input_tokens': 2, 'output_tokens': 3},
-            }),
-            200,
-            headers: const {
-              'content-type': ['application/json'],
+    test(
+      'synthesizes Anthropic SSE for streamed Vertex Claude rawPredict',
+      () async {
+        RequestOptions? modelRequest;
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            modelRequest = options;
+            return ResponseBody.fromString(
+              jsonEncode({
+                'id': 'msg_vertex',
+                'model': 'claude-sonnet-4-5',
+                'content': [
+                  {'type': 'text', 'text': 'partner response'},
+                  {
+                    'type': 'tool_use',
+                    'id': 'toolu_vertex',
+                    'name': 'lookup',
+                    'input': {'query': 'vertex partners'},
+                  },
+                ],
+                'stop_reason': 'end_turn',
+                'usage': {'input_tokens': 2, 'output_tokens': 3},
+              }),
+              200,
+              headers: const {
+                'content-type': ['application/json'],
+              },
+            );
+          });
+        final accounts = LlmAccountConnectorService(
+          preferences: _MemoryPreferences(),
+          credentialStore: _MemoryCredentials(),
+          dio: dio,
+        );
+        final account = await accounts.saveAccount(
+          LlmAccount(
+            id: 'vertex-partner-claude-stream',
+            connectorType: 'vertex-partner',
+            authType: 'service_account',
+            displayName: 'Vertex AI Partners',
+            endpointConfig: const {
+              'projectId': 'my-project',
+              'location': 'europe-west4',
             },
-          );
-        });
-      final accounts = LlmAccountConnectorService(
-        preferences: _MemoryPreferences(),
-        credentialStore: _MemoryCredentials(),
-        dio: dio,
-      );
-      final account = await accounts.saveAccount(
-        LlmAccount(
-          id: 'vertex-partner-claude-stream',
-          connectorType: 'vertex-partner',
-          authType: 'service_account',
-          displayName: 'Vertex AI Partners',
-          endpointConfig: const {
-            'projectId': 'my-project',
-            'location': 'europe-west4',
-          },
-        ),
-        secret: jsonEncode({
-          'access_token': 'vertex-partner-access-token',
-          'expires_at': DateTime.now()
-              .toUtc()
-              .add(const Duration(hours: 1))
-              .toIso8601String(),
-          'service_account': {
-            ...kVertexTestServiceAccount,
-            'project_id': 'my-project',
-          },
-        }),
-      );
-      final client = LlmConnectorHttpClient(accountService: accounts, dio: dio);
+          ),
+          secret: jsonEncode({
+            'access_token': 'vertex-partner-access-token',
+            'expires_at': DateTime.now()
+                .toUtc()
+                .add(const Duration(hours: 1))
+                .toIso8601String(),
+            'service_account': {
+              ...kVertexTestServiceAccount,
+              'project_id': 'my-project',
+            },
+          }),
+        );
+        final client = LlmConnectorHttpClient(
+          accountService: accounts,
+          dio: dio,
+        );
 
-      final response = await client.request(
-        account: account,
-        modelId: 'claude-sonnet-4-5',
-        nativeFormat: 'anthropic',
-        body: const {
-          'messages': [
-            {'role': 'user', 'content': 'hello'},
-          ],
-        },
-        stream: true,
-      );
-      final bytes = await (response.body as Stream<List<int>>)
-          .expand((chunk) => chunk)
-          .toList();
-      final sse = utf8.decode(bytes);
+        final response = await client.request(
+          account: account,
+          modelId: 'claude-sonnet-4-5',
+          nativeFormat: 'anthropic',
+          body: const {
+            'messages': [
+              {'role': 'user', 'content': 'hello'},
+            ],
+          },
+          stream: true,
+        );
+        final bytes = await (response.body as Stream<List<int>>)
+            .expand((chunk) => chunk)
+            .toList();
+        final sse = utf8.decode(bytes);
 
-      expect(modelRequest!.uri.path, endsWith(':rawPredict'));
-      expect(modelRequest!.headers['Authorization'],
-          'Bearer vertex-partner-access-token');
-      final requestBody = modelRequest!.data as Map;
-      expect(requestBody['anthropic_version'], 'vertex-2023-10-16');
-      expect(requestBody.containsKey('model'), isFalse);
-      expect(sse, contains('event: message_start'));
-      expect(sse, contains('event: content_block_delta'));
-      expect(sse, contains('"text":"partner response"'));
-      expect(sse, contains('"type":"tool_use"'));
-      expect(sse, contains('"type":"input_json_delta"'));
-      expect(sse, contains(r'\"query\":\"vertex partners\"'));
-      expect(sse, contains('event: message_stop'));
-    });
+        expect(modelRequest!.uri.path, endsWith(':rawPredict'));
+        expect(
+          modelRequest!.headers['Authorization'],
+          'Bearer vertex-partner-access-token',
+        );
+        final requestBody = modelRequest!.data as Map;
+        expect(requestBody['anthropic_version'], 'vertex-2023-10-16');
+        expect(requestBody.containsKey('model'), isFalse);
+        expect(sse, contains('event: message_start'));
+        expect(sse, contains('event: content_block_delta'));
+        expect(sse, contains('"text":"partner response"'));
+        expect(sse, contains('"type":"tool_use"'));
+        expect(sse, contains('"type":"input_json_delta"'));
+        expect(sse, contains(r'\"query\":\"vertex partners\"'));
+        expect(sse, contains('event: message_stop'));
+      },
+    );
 
     test(
       'executes Vertex API-key requests in unary and streaming modes',
@@ -11201,14 +11311,15 @@ void main() {
         _account('aistudio-http', 'aistudio'),
         secret: 'aistudio-test-api-key',
       );
-      final response = await LlmConnectorHttpClient(
-        accountService: accounts,
-        dio: dio,
-      ).request(
-        account: account,
-        modelId: 'gemini-3.1-pro',
-        body: const {'contents': []},
-      );
+      final response =
+          await LlmConnectorHttpClient(
+            accountService: accounts,
+            dio: dio,
+          ).request(
+            account: account,
+            modelId: 'gemini-3.1-pro',
+            body: const {'contents': []},
+          );
 
       expect(
         captured?.uri.toString(),
@@ -11219,8 +11330,7 @@ void main() {
       expect(response.body, {'candidates': []});
     });
 
-    test('executes AI Studio OAuth requests with project attribution',
-        () async {
+    test('executes AI Studio OAuth requests with project attribution', () async {
       RequestOptions? captured;
       final dio = Dio()
         ..httpClientAdapter = _FunctionalAdapter((options) async {
@@ -11252,14 +11362,15 @@ void main() {
           'client_secret': 'aistudio-test-client-secret',
         }),
       );
-      final response = await LlmConnectorHttpClient(
-        accountService: accounts,
-        dio: dio,
-      ).request(
-        account: account,
-        modelId: 'gemini-3.1-pro',
-        body: const {'contents': []},
-      );
+      final response =
+          await LlmConnectorHttpClient(
+            accountService: accounts,
+            dio: dio,
+          ).request(
+            account: account,
+            modelId: 'gemini-3.1-pro',
+            body: const {'contents': []},
+          );
 
       expect(
         captured?.uri.toString(),
@@ -11281,16 +11392,16 @@ void main() {
         final preferences = _MemoryPreferences()
           ..values[LlmAccountMigrationService.accountsPreferenceKey] =
               jsonEncode({
-            'version': 1,
-            'items': [
-              {
-                'id': 'legacy-aistudio-relay',
-                'connectorType': 'aistudio',
-                'authType': 'relay',
-                'displayName': 'Legacy AI Studio session',
-              },
-            ],
-          });
+                'version': 1,
+                'items': [
+                  {
+                    'id': 'legacy-aistudio-relay',
+                    'connectorType': 'aistudio',
+                    'authType': 'relay',
+                    'displayName': 'Legacy AI Studio session',
+                  },
+                ],
+              });
         final accounts = LlmAccountConnectorService(
           preferences: preferences,
           credentialStore: _MemoryCredentials(),
@@ -11333,15 +11444,16 @@ void main() {
         _account('aistudio-stream', 'aistudio'),
         secret: 'aistudio-test-key',
       );
-      final response = await LlmConnectorHttpClient(
-        accountService: accounts,
-        dio: dio,
-      ).request(
-        account: account,
-        modelId: 'gemini-3.1-pro',
-        body: const {'contents': []},
-        stream: true,
-      );
+      final response =
+          await LlmConnectorHttpClient(
+            accountService: accounts,
+            dio: dio,
+          ).request(
+            account: account,
+            modelId: 'gemini-3.1-pro',
+            body: const {'contents': []},
+            stream: true,
+          );
       final event = utf8.encode('data: {"candidates":[]}\n\n');
       source.add(Uint8List.fromList(event));
       await source.close();
@@ -11463,15 +11575,16 @@ void main() {
           _account('codex-stream', 'codex', authType: 'oauth'),
           secret: jsonEncode({'access_token': 'codex-stream-token'}),
         );
-        final response = await LlmConnectorHttpClient(
-          accountService: accounts,
-          dio: dio,
-        ).request(
-          account: account,
-          modelId: 'gpt-5.5',
-          body: const {'model': 'gpt-5.5', 'input': []},
-          stream: true,
-        );
+        final response =
+            await LlmConnectorHttpClient(
+              accountService: accounts,
+              dio: dio,
+            ).request(
+              account: account,
+              modelId: 'gpt-5.5',
+              body: const {'model': 'gpt-5.5', 'input': []},
+              stream: true,
+            );
 
         expect(response.body, isA<Stream<List<int>>>());
         final event = utf8.encode(
@@ -11542,15 +11655,16 @@ void main() {
           _account('gemini-large-sse-frame', 'gemini'),
           secret: 'gemini-api-key',
         );
-        final response = await LlmConnectorHttpClient(
-          accountService: accounts,
-          dio: dio,
-        ).request(
-          account: account,
-          modelId: 'gemini-3.1-pro',
-          body: const {'contents': []},
-          stream: true,
-        );
+        final response =
+            await LlmConnectorHttpClient(
+              accountService: accounts,
+              dio: dio,
+            ).request(
+              account: account,
+              modelId: 'gemini-3.1-pro',
+              body: const {'contents': []},
+              stream: true,
+            );
 
         final repeatedFields = List<String>.filled(1000, '"padding":0,').join();
         final oversizedEvent =
@@ -11560,8 +11674,9 @@ void main() {
         expect(utf8.encode(oversizedEvent).length, greaterThan(1048576));
         final bytes = Uint8List.fromList(utf8.encode(oversizedEvent));
         for (var offset = 0; offset < bytes.length; offset += 32768) {
-          final end =
-              offset + 32768 < bytes.length ? offset + 32768 : bytes.length;
+          final end = offset + 32768 < bytes.length
+              ? offset + 32768
+              : bytes.length;
           source.add(Uint8List.sublistView(bytes, offset, end));
         }
         await source.close();
@@ -11600,15 +11715,16 @@ void main() {
           _account('gemini-multiple-sse-events', 'gemini'),
           secret: 'gemini-api-key',
         );
-        final response = await LlmConnectorHttpClient(
-          accountService: accounts,
-          dio: dio,
-        ).request(
-          account: account,
-          modelId: 'gemini-3.1-pro',
-          body: const {'contents': []},
-          stream: true,
-        );
+        final response =
+            await LlmConnectorHttpClient(
+              accountService: accounts,
+              dio: dio,
+            ).request(
+              account: account,
+              modelId: 'gemini-3.1-pro',
+              body: const {'contents': []},
+              stream: true,
+            );
 
         final padding = 'x' * 600000;
         String event(int tokens) =>
@@ -11650,15 +11766,16 @@ void main() {
           _account('gemini-native-stream-cancel', 'gemini'),
           secret: 'gemini-api-key',
         );
-        final response = await LlmConnectorHttpClient(
-          accountService: accounts,
-          dio: dio,
-        ).request(
-          account: account,
-          modelId: 'gemini-3.1-pro',
-          body: const {'contents': []},
-          stream: true,
-        );
+        final response =
+            await LlmConnectorHttpClient(
+              accountService: accounts,
+              dio: dio,
+            ).request(
+              account: account,
+              modelId: 'gemini-3.1-pro',
+              body: const {'contents': []},
+              stream: true,
+            );
         final receivedError = Completer<Object>();
         (response.body as Stream<List<int>>).listen(
           (_) {},
@@ -11702,15 +11819,16 @@ void main() {
           _account('codex-stream-cancel', 'codex', authType: 'oauth'),
           secret: jsonEncode({'access_token': 'codex-stream-token'}),
         );
-        final response = await LlmConnectorHttpClient(
-          accountService: accounts,
-          dio: dio,
-        ).request(
-          account: account,
-          modelId: 'gpt-5.5',
-          body: const {'model': 'gpt-5.5', 'input': []},
-          stream: true,
-        );
+        final response =
+            await LlmConnectorHttpClient(
+              accountService: accounts,
+              dio: dio,
+            ).request(
+              account: account,
+              modelId: 'gpt-5.5',
+              body: const {'model': 'gpt-5.5', 'input': []},
+              stream: true,
+            );
         final delivered = Completer<void>();
         final subscription = (response.body as Stream<List<int>>).listen((_) {
           delivered.complete();
@@ -11951,11 +12069,11 @@ void main() {
         final cancelToken = CancelToken();
         final request =
             LlmConnectorHttpClient(accountService: accounts, dio: dio).request(
-          account: account,
-          modelId: 'gpt-5.5',
-          body: const {'model': 'gpt-5.5', 'input': []},
-          cancelToken: cancelToken,
-        );
+              account: account,
+              modelId: 'gpt-5.5',
+              body: const {'model': 'gpt-5.5', 'input': []},
+              cancelToken: cancelToken,
+            );
 
         await refreshStarted.future;
         cancelToken.cancel('caller cancelled');
@@ -12046,11 +12164,11 @@ void main() {
         );
         final request =
             LlmConnectorHttpClient(accountService: accounts, dio: dio).request(
-          account: account,
-          modelId: 'private-model',
-          body: const {'model': 'private-model', 'messages': []},
-          stream: true,
-        );
+              account: account,
+              modelId: 'private-model',
+              body: const {'model': 'private-model', 'messages': []},
+              stream: true,
+            );
 
         try {
           await expectLater(
@@ -12075,22 +12193,22 @@ void main() {
       );
       preferences.values[LlmAccountMigrationService.accountsPreferenceKey] =
           jsonEncode({
-        'version': 1,
-        'items': [
-          {
-            'id': 'legacy-anthropic-quota',
-            'connectorType': 'anthropic',
-            'authType': 'api_key',
-            'displayName': 'Legacy Anthropic',
-          },
-          {
-            'id': 'legacy-openai-quota',
-            'connectorType': 'openai',
-            'authType': 'api_key',
-            'displayName': 'Legacy OpenAI',
-          },
-        ],
-      });
+            'version': 1,
+            'items': [
+              {
+                'id': 'legacy-anthropic-quota',
+                'connectorType': 'anthropic',
+                'authType': 'api_key',
+                'displayName': 'Legacy Anthropic',
+              },
+              {
+                'id': 'legacy-openai-quota',
+                'connectorType': 'openai',
+                'authType': 'api_key',
+                'displayName': 'Legacy OpenAI',
+              },
+            ],
+          });
       final quota = LlmConnectorQuotaService(accountService: accounts);
 
       for (final record in const [
@@ -12442,15 +12560,9 @@ void main() {
   test(
     'parses response usage but leaves unsupported account quota unknown',
     () {
-      final observation = parseLlmConnectorObservation(
-          'gemini',
-          {
-            'usageMetadata': {
-              'promptTokenCount': 12,
-              'candidatesTokenCount': 8
-            },
-          },
-          observedAt: DateTime.utc(2026, 10, 17));
+      final observation = parseLlmConnectorObservation('gemini', {
+        'usageMetadata': {'promptTokenCount': 12, 'candidatesTokenCount': 8},
+      }, observedAt: DateTime.utc(2026, 10, 17));
 
       expect(observation.requestUsage.isKnown, isTrue);
       expect(observation.requestUsage.value, 20);
@@ -12536,22 +12648,22 @@ void main() {
 }
 
 Uint8List _bedrockTestStream() => Uint8List.fromList([
-      ..._bedrockEvent('messageStart', {
-        'messageStart': {'role': 'assistant'},
-      }),
-      ..._bedrockEvent('contentBlockDelta', {
-        'contentBlockIndex': 0,
-        'delta': {'text': 'Bedrock answer'},
-      }),
-      ..._bedrockEvent('messageStop', {
-        'messageStop': {'stopReason': 'end_turn'},
-      }),
-      ..._bedrockEvent('metadata', {
-        'metadata': {
-          'usage': {'inputTokens': 7, 'outputTokens': 3},
-        },
-      }),
-    ]);
+  ..._bedrockEvent('messageStart', {
+    'messageStart': {'role': 'assistant'},
+  }),
+  ..._bedrockEvent('contentBlockDelta', {
+    'contentBlockIndex': 0,
+    'delta': {'text': 'Bedrock answer'},
+  }),
+  ..._bedrockEvent('messageStop', {
+    'messageStop': {'stopReason': 'end_turn'},
+  }),
+  ..._bedrockEvent('metadata', {
+    'metadata': {
+      'usage': {'inputTokens': 7, 'outputTokens': 3},
+    },
+  }),
+]);
 
 Uint8List _bedrockEvent(String name, Map<String, dynamic> payload) {
   final encodedName = utf8.encode(':event-type');
@@ -12713,16 +12825,17 @@ void _registerZedHostedHttpRetryTest() {
         }),
       );
 
-      final response = await LlmConnectorHttpClient(
-        accountService: accounts,
-        dio: dio,
-      ).request(
-        account: account,
-        modelId: 'claude-model',
-        body: const {'messages': [], 'stream': true},
-        nativeFormat: 'anthropic.messages',
-        stream: true,
-      );
+      final response =
+          await LlmConnectorHttpClient(
+            accountService: accounts,
+            dio: dio,
+          ).request(
+            account: account,
+            modelId: 'claude-model',
+            body: const {'messages': [], 'stream': true},
+            nativeFormat: 'anthropic.messages',
+            stream: true,
+          );
       final chunks = (response.body as Stream<List<int>>).toList();
       expect(await chunks, isNotEmpty);
       expect(tokenRequests, 2);
@@ -12807,21 +12920,20 @@ LlmAccount _account(
   String authType = 'api_key',
   Map<String, dynamic> endpointConfig = const {},
   List<LlmUpstreamModel> models = const [],
-}) =>
-    LlmAccount(
-      id: id,
-      connectorType: connector,
-      authType: authType,
-      displayName: connector,
-      endpointConfig: endpointConfig,
-      models: models,
-    );
+}) => LlmAccount(
+  id: id,
+  connectorType: connector,
+  authType: authType,
+  displayName: connector,
+  endpointConfig: endpointConfig,
+  models: models,
+);
 
 LlmUpstreamModel _upstreamModel(String modelId) => LlmUpstreamModel(
-      id: 'model-$modelId',
-      upstreamModelId: modelId,
-      displayName: modelId,
-    );
+  id: 'model-$modelId',
+  upstreamModelId: modelId,
+  displayName: modelId,
+);
 
 Map<String, String> _requestForm(Object? body) {
   if (body is Map) return body.map((key, value) => MapEntry('$key', '$value'));
@@ -12885,8 +12997,7 @@ class _FunctionalAdapter implements HttpClientAdapter {
     RequestOptions options,
     Stream<Uint8List>? requestStream,
     Future<void>? cancelFuture,
-  ) =>
-      onFetch(options);
+  ) => onFetch(options);
 
   @override
   void close({bool force = false}) {}

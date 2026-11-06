@@ -20,13 +20,12 @@ String resolveApiProtocol({
   String? modelOverride,
   String? supplierProtocol,
   String? builtinDefault,
-}) =>
-    firstNonEmptyProtocol([
-      modelOverride,
-      supplierProtocol,
-      builtinDefault,
-      'openai.chat_completions',
-    ]);
+}) => firstNonEmptyProtocol([
+  modelOverride,
+  supplierProtocol,
+  builtinDefault,
+  'openai.chat_completions',
+]);
 
 /// Resolves persisted settings, including direct in-memory configs created by
 /// older call sites that still populate only endpointType.
@@ -35,22 +34,22 @@ String configuredApiProtocol({
   required String? modelLegacyEndpointType,
   required String? supplierProtocol,
   required String? supplierLegacyEndpointType,
-}) =>
-    resolveApiProtocol(
-      modelOverride: modelOverride ??
-          (modelLegacyEndpointType == null
-              ? null
-              : apiProtocolFromLegacyEndpointType(modelLegacyEndpointType)),
-      supplierProtocol: supplierProtocol ??
-          apiProtocolFromLegacyEndpointType(supplierLegacyEndpointType),
-    );
+}) => resolveApiProtocol(
+  modelOverride:
+      modelOverride ??
+      (modelLegacyEndpointType == null
+          ? null
+          : apiProtocolFromLegacyEndpointType(modelLegacyEndpointType)),
+  supplierProtocol:
+      supplierProtocol ??
+      apiProtocolFromLegacyEndpointType(supplierLegacyEndpointType),
+);
 
 /// Authentication connector identity is deliberately ignored here.
 String resolveConnectorProtocol(
   String configuredProtocol,
   String connectorType,
-) =>
-    configuredProtocol;
+) => configuredProtocol;
 
 String firstNonEmptyProtocol(Iterable<String?> values) {
   for (final value in values) {
@@ -66,8 +65,7 @@ String builtinDefaultApiProtocolForConnector(String? connectorType) =>
       'grok-cli' ||
       'xai-oauth' ||
       'meta' ||
-      'muse-code' =>
-        'openai.responses',
+      'muse-code' => 'openai.responses',
       'claude' => 'anthropic.messages',
       'clova-studio' => 'clova.studio.chat',
       'gemini' || 'aistudio' || 'vertex' => 'google.gemini.generate_content',
@@ -78,10 +76,10 @@ String builtinDefaultApiProtocolForConnector(String? connectorType) =>
       'ollama' => 'ollama.chat',
       'devin' => 'devin.connect_rpc',
       'devin-cli-agentic' => 'devin.acp',
+      'auggie' => 'auggie.cli',
       'opencode-go' ||
       'opencode-zen' ||
-      'command-code' =>
-        'openai.chat_completions',
+      'command-code' => 'openai.chat_completions',
       'openference' || 'openference-api' => 'openai.chat_completions',
       'azure-ai' || 'azure-openai' => 'openai.chat_completions',
       'kimi-coding' => 'openai.chat_completions',
@@ -116,21 +114,24 @@ Set<String> supportedApiProtocolsForSupplier(
     'azure-ai' || 'azure-openai' => const {'openai.chat_completions'},
     'opencode-go' ||
     'opencode-zen' ||
-    'command-code' =>
-      kCustomHttpApiProtocols,
+    'command-code' => kCustomHttpApiProtocols,
     'qwen-cloud' || 'qwen-cloud-token-plan' => const {
-        'openai.chat_completions',
-        'openai.responses',
-        'anthropic.messages',
-      },
+      'openai.chat_completions',
+      'openai.responses',
+      'anthropic.messages',
+    },
     'amazon-q' => const {'amazon-q.chat'},
+    'auggie' => const {'auggie.cli'},
     'oneminai' => const {'oneminai.chat'},
-    'moonshot' || 'glm' || 'deepseek' || 'minimax' || 'qwen' => const {
-        'openai.chat_completions'
-      },
-    'codebuddy-cn' || 'codebuddy-intl' || 'workbuddy' || 'qoder' => const {
-        'openai.chat_completions'
-      },
+    'moonshot' ||
+    'glm' ||
+    'deepseek' ||
+    'minimax' ||
+    'qwen' => const {'openai.chat_completions'},
+    'codebuddy-cn' ||
+    'codebuddy-intl' ||
+    'workbuddy' ||
+    'qoder' => const {'openai.chat_completions'},
     'gitlab-duo' => const {'openai.chat_completions'},
     'uncloseai' => const {'openai.chat_completions'},
     'cline' || 'clinepass' => const {'openai.chat_completions'},
@@ -139,12 +140,9 @@ Set<String> supportedApiProtocolsForSupplier(
     'kimi' ||
     'kimi-ai' ||
     'kimi.ai' ||
-    'kimi-coding' =>
-      kCustomHttpApiProtocols,
-    'openference' || 'openference-api' => const {
-        'openai.chat_completions',
-        'openai.responses'
-      },
+    'kimi-coding' => kCustomHttpApiProtocols,
+    'openference' ||
+    'openference-api' => const {'openai.chat_completions', 'openai.responses'},
     _ => null,
   };
   if (builtinProtocols != null) return builtinProtocols;
@@ -161,15 +159,14 @@ Set<String> supportedApiProtocolsForSupplier(
     'grok-cli' ||
     'xai-oauth' ||
     'meta' ||
-    'muse-code' =>
-      'openai.responses',
+    'muse-code' => 'openai.responses',
     'bedrock' ||
     'vertex' ||
     'codex' ||
     'antigravity' ||
-    'devin' =>
-      supplierProtocol,
+    'devin' => supplierProtocol,
     'devin-cli-agentic' => 'devin.acp',
+    'auggie' => 'auggie.cli',
     _ => null,
   };
   if (nativeProtocol != null) return {nativeProtocol};
@@ -189,4 +186,5 @@ const apiProtocolLabels = <String, String>{
   'anthropic.messages': 'Anthropic Messages',
   'devin.connect_rpc': 'Devin Connect-RPC',
   'devin.acp': 'Devin CLI ACP',
+  'auggie.cli': 'Auggie CLI',
 };
