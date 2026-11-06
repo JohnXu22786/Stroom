@@ -1853,7 +1853,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
             kCustomHttpApiProtocols.contains(configuredProtocol)
         ? configuredProtocol
         : builtinDefaultApiProtocolForConnector(_connectorType);
-    if (_connectorType == 'command-code' &&
+    if ({'command-code', 'openai-compatibility'}.contains(_connectorType) &&
         account?.models.isNotEmpty == true) {
       final model = account!.models.first;
       _selectedCommandCodeModelId = model.upstreamModelId;
@@ -1955,7 +1955,8 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                                     ? entry.key
                                     : '${entry.key}=false',
                               ),
-                          if (_connectorType == 'command-code' &&
+                          if ({'command-code', 'openai-compatibility'}
+                                  .contains(_connectorType) &&
                               model.config['apiProtocolOverride'] is String)
                             'apiProtocolOverride=${model.config['apiProtocolOverride']}',
                         ].join(','),
@@ -1996,7 +1997,11 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
             id: '${account?.id ?? 'new'}:preset:${preset.modelIdPrefix}${model.id}',
             upstreamModelId: '${preset.modelIdPrefix}${model.id}',
             displayName: model.displayName,
-            capabilities: model.capabilities,
+            capabilities: {
+              ...model.capabilities,
+              if (preset.id == 'agentrouter')
+                'supportedApiProtocols': _apiProtocolOptionsForPreset(preset),
+            },
             config: {
               'catalogSource': 'pinned-provider-preset',
               if (model.apiProtocolOverride != null) ...{
@@ -2015,19 +2020,44 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
     setState(() {
       _providerPresetId = preset?.id;
       _draftChanged = true;
-      if (preset == null) return;
+      final inheritedOverrideModelIds = {
+        for (final model
+            in widget.account?.models ?? const <AiGatewayUpstreamModel>[])
+          if (model.config['apiProtocolOverrideSource'] ==
+              'provider-preset-default')
+            model.upstreamModelId,
+      };
+      final normalizedLines = _models.text
+          .split('\n')
+          .map((line) => line.trim())
+          .where((line) => line.isNotEmpty)
+          .map((line) {
+        final parts = line.split(',');
+        if (inheritedOverrideModelIds.contains(parts.first.trim())) {
+          parts.removeWhere(
+            (part) => part.trim().startsWith('apiProtocolOverride='),
+          );
+        }
+        return parts.join(',');
+      }).toList();
+      if (preset == null) {
+        _models.text = normalizedLines.join('\n');
+        _discoveredModels = const [];
+        return;
+      }
       _authType = preset.authType;
       _apiProtocol = preset.defaultApiProtocol;
       _endpoint.text = preset.baseUrl;
       if (_name.text.trim().isEmpty) _name.text = preset.displayName;
+      if (preset.fallbackModels.isNotEmpty) {
+        _selectedCommandCodeModelId =
+            '${preset.modelIdPrefix}${preset.fallbackModels.first.id}';
+      }
       final previousFallbackModelIds = {
         for (final model in previousPreset?.fallbackModels ?? const [])
           '${previousPreset!.modelIdPrefix}${model.id}',
       };
-      final currentLines = _models.text
-          .split('\n')
-          .map((line) => line.trim())
-          .where((line) => line.isNotEmpty)
+      final currentLines = normalizedLines
           .where(
             (line) => !previousFallbackModelIds
                 .contains(line.split(',').first.trim()),
@@ -2056,7 +2086,11 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
             id: '${widget.account?.id ?? 'new'}:preset:${preset.modelIdPrefix}${model.id}',
             upstreamModelId: '${preset.modelIdPrefix}${model.id}',
             displayName: model.displayName,
-            capabilities: model.capabilities,
+            capabilities: {
+              ...model.capabilities,
+              if (preset.id == 'agentrouter')
+                'supportedApiProtocols': _apiProtocolOptionsForPreset(preset),
+            },
             config: {
               'catalogSource': 'pinned-provider-preset',
               if (model.apiProtocolOverride != null) ...{
@@ -2092,8 +2126,8 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
 
   List<AiGatewayUpstreamModel> get _commandCodeModels {
     final models = <String, AiGatewayUpstreamModel>{};
-    if (_connectorType == 'command-code' &&
-        widget.account?.connectorType == 'command-code') {
+    if ({'command-code', 'openai-compatibility'}.contains(_connectorType) &&
+        widget.account?.connectorType == _connectorType) {
       for (final model in widget.account!.models) {
         models[model.upstreamModelId] = model;
       }
@@ -2104,12 +2138,42 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
     return models.values.toList(growable: false);
   }
 
+  List<String> get _accountApiProtocolOptions {
+    if (_connectorType == 'command-code') {
+      return kCustomHttpApiProtocols.toList(growable: false);
+    }
+    if (_connectorType == 'openai-compatibility' &&
+        _providerPresetId == 'agentrouter') {
+      return _apiProtocolOptionsForPreset(
+        findLlmOpenAiProviderPreset(_providerPresetId),
+      );
+    }
+    return const [];
+  }
+
+  bool get _hasApiProtocolSelection => _accountApiProtocolOptions.length > 1;
+
+  static List<String> _apiProtocolOptionsForPreset(
+    LlmProviderPreset? preset,
+  ) =>
+      preset == null
+          ? kCustomHttpApiProtocols.toList(growable: false)
+          : preset.protocolRoutes.isNotEmpty
+              ? preset.protocolRoutes.keys.toList(growable: false)
+              : [preset.defaultApiProtocol];
+
   List<String> _commandCodeProtocolsForSelectedModel() {
     final selectedModel = _commandCodeModels
         .where((model) => model.upstreamModelId == _selectedCommandCodeModelId)
         .firstOrNull;
     final protocols = selectedModel?.capabilities['supportedApiProtocols'];
-    if (protocols is! Iterable) return const [];
+    if (_connectorType == 'openai-compatibility' &&
+        _providerPresetId != 'agentrouter') {
+      return kCustomHttpApiProtocols.toList(growable: false);
+    }
+    if (protocols is! Iterable) {
+      return const [];
+    }
     return protocols
         .whereType<String>()
         .where(kCustomHttpApiProtocols.contains)
@@ -2848,13 +2912,13 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                   onChanged: (_) => setState(() => _draftChanged = true),
                 ),
               ],
-              if (_connectorType == 'command-code') ...[
+              if (_hasApiProtocolSelection) ...[
                 const SizedBox(height: 8),
                 DropdownButtonFormField<String>(
                   initialValue: _apiProtocol,
                   decoration: const InputDecoration(labelText: '默认 API 协议'),
                   items: [
-                    for (final protocol in kCustomHttpApiProtocols)
+                    for (final protocol in _accountApiProtocolOptions)
                       DropdownMenuItem(
                         value: protocol,
                         child: Text(apiProtocolLabels[protocol] ?? protocol),
@@ -2889,8 +2953,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                   }
                 },
               ),
-              if (_connectorType == 'command-code' &&
-                  commandCodeModels.isNotEmpty) ...[
+              if (_hasApiProtocolSelection && commandCodeModels.isNotEmpty) ...[
                 const SizedBox(height: 8),
                 DropdownButtonFormField<String>(
                   initialValue: _selectedCommandCodeModelId,
@@ -3057,7 +3120,8 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                           ? entry.key
                           : '${entry.key}=false',
                     ),
-                if (_connectorType == 'command-code' &&
+                if ({'command-code', 'openai-compatibility'}
+                        .contains(_connectorType) &&
                     model.config['apiProtocolOverride'] is String)
                   'apiProtocolOverride=${model.config['apiProtocolOverride']}',
               ].join(','),
@@ -3352,6 +3416,10 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
           for (final entry in existing.capabilities.entries)
             if (entry.value is! bool) entry.key: entry.value,
       };
+      if (_connectorType == 'openai-compatibility' &&
+          _providerPresetId == 'agentrouter') {
+        capabilities['supportedApiProtocols'] = _accountApiProtocolOptions;
+      }
       if (_connectorType == 'vertex-partner') {
         final isClaude = upstreamId.toLowerCase().startsWith('claude-');
         capabilities
@@ -3379,14 +3447,21 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
             ? 'true'
             : declaration.substring(separator + 1).trim().toLowerCase();
         if (capability == 'apiProtocolOverride') {
-          if (!{'command-code', 'vertex-partner'}.contains(_connectorType)) {
+          if (!{
+            'command-code',
+            'openai-compatibility',
+            'vertex-partner',
+          }.contains(_connectorType)) {
             continue;
           }
-          final supportedProtocols =
-              existing?.capabilities['supportedApiProtocols'];
+          final declaredProtocols = capabilities['supportedApiProtocols'];
+          final supportedProtocols = _connectorType == 'openai-compatibility' &&
+                  _providerPresetId == 'agentrouter'
+              ? _accountApiProtocolOptions
+              : declaredProtocols;
           if (!kCustomHttpApiProtocols.contains(value) ||
-              supportedProtocols is! Iterable ||
-              !supportedProtocols.whereType<String>().contains(value)) {
+              (supportedProtocols is Iterable &&
+                  !supportedProtocols.whereType<String>().contains(value))) {
             setState(
               () => _error = '请先刷新该模型目录，并选择其 supportedApiProtocols 中的协议。',
             );
@@ -3451,12 +3526,34 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
           ..['apiProtocolOverride'] = 'anthropic.messages'
           ..['apiProtocolOverrideSource'] = 'provider-preset-default';
       }
-      if (_connectorType == 'command-code') {
+      if ({'command-code', 'openai-compatibility'}.contains(_connectorType)) {
         modelConfig.remove('apiProtocolOverride');
-        if (apiProtocolOverride != null) {
-          modelConfig['apiProtocolOverride'] = apiProtocolOverride;
+        final selectedPresetDefaultOverride =
+            refreshedPresetModel?.config['apiProtocolOverride'];
+        final existingOverride = existing?.config['apiProtocolOverride'];
+        final existingOverrideSource =
+            existing?.config['apiProtocolOverrideSource'];
+        final retainedExplicitOverride = existingOverride is String &&
+            existingOverrideSource != 'provider-preset-default';
+        final effectiveOverride = apiProtocolOverride ??
+            (retainedExplicitOverride
+                ? existingOverride
+                : selectedPresetDefaultOverride is String
+                    ? selectedPresetDefaultOverride
+                    : null);
+        if (effectiveOverride != null) {
+          modelConfig['apiProtocolOverride'] = effectiveOverride;
+          if (apiProtocolOverride == null &&
+              !retainedExplicitOverride &&
+              selectedPresetDefaultOverride is String) {
+            modelConfig['apiProtocolOverrideSource'] =
+                'provider-preset-default';
+          } else {
+            modelConfig.remove('apiProtocolOverrideSource');
+          }
         }
-      } else if (widget.account?.connectorType == 'command-code') {
+      } else if ({'command-code', 'openai-compatibility'}
+          .contains(widget.account?.connectorType)) {
         modelConfig.remove('apiProtocolOverride');
       }
       parsedModels.add(
@@ -3623,6 +3720,8 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
       if (_connectorType == 'command-code') {
         endpointConfig['apiProtocol'] = _apiProtocol;
       }
+    } else if (_connectorType == 'openai-compatibility') {
+      endpointConfig['apiProtocol'] = _apiProtocol;
     } else if (widget.account?.connectorType == 'command-code') {
       endpointConfig.remove('apiProtocol');
     }

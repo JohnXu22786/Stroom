@@ -10,6 +10,7 @@ import 'aws_bedrock_event_stream.dart';
 import 'aws_credential_chain.dart';
 import 'aws_sigv4.dart';
 import 'llm_connector_service.dart';
+import 'agentrouter_claude_version_resolver.dart';
 import 'ai_horde_connector.dart';
 import 'llm_oauth_flow.dart';
 import 'devin_connect_rpc.dart';
@@ -48,12 +49,14 @@ class LlmConnectorHttpClient {
   final LlmAccountConnectorService accountService;
   final Dio _dio;
   final LlmNativeRequestBuilder _requestBuilder;
+  final AgentRouterClaudeVersionResolver _agentRouterVersionResolver;
   late final ZedHostedApiClient _zedHostedApi = ZedHostedApiClient(dio: _dio);
 
   LlmConnectorHttpClient({
     required this.accountService,
     Dio? dio,
     LlmNativeRequestBuilder? requestBuilder,
+    AgentRouterClaudeVersionResolver? agentRouterVersionResolver,
   })  : _dio = dio ??
             Dio(
               BaseOptions(
@@ -61,7 +64,9 @@ class LlmConnectorHttpClient {
                 receiveTimeout: const Duration(seconds: 60),
               ),
             ),
-        _requestBuilder = requestBuilder ?? LlmNativeRequestBuilder();
+        _requestBuilder = requestBuilder ?? LlmNativeRequestBuilder(),
+        _agentRouterVersionResolver =
+            agentRouterVersionResolver ?? AgentRouterClaudeVersionResolver();
 
   /// Opens a source-defined Realtime session for a catalogued API-key model.
   /// The account credential remains inside the connector service and the
@@ -405,6 +410,27 @@ class LlmConnectorHttpClient {
             }
           }
         }
+        final endpointConfig = storedAccount.endpointConfig;
+        final selectedModel = storedAccount.models
+            .where((model) => model.upstreamModelId == modelId)
+            .firstOrNull;
+        final configuredProtocol =
+            selectedModel?.config['apiProtocolOverride'] ??
+                endpointConfig['apiProtocol'];
+        final effectiveNativeFormat = nativeFormat ??
+            (endpointConfig['providerPresetId'] == 'agentrouter' &&
+                    (configuredProtocol == 'anthropic.messages' ||
+                        configuredProtocol == null)
+                ? 'anthropic'
+                : configuredProtocol);
+        final useAgentRouterClaudeProfile =
+            storedAccount.connectorType == 'openai-compatibility' &&
+                endpointConfig['providerPresetId'] == 'agentrouter' &&
+                (effectiveNativeFormat == 'anthropic' ||
+                    effectiveNativeFormat == 'anthropic.messages');
+        final agentRouterVersion = useAgentRouterClaudeProfile
+            ? await _agentRouterVersionResolver.resolve()
+            : null;
         prepared = _requestBuilder.build(
           account: storedAccount,
           credential: credential,
@@ -423,7 +449,10 @@ class LlmConnectorHttpClient {
                   : storedAccount.connectorType == 'bedrock'
                       ? useBedrockEventStream
                       : stream,
-          nativeFormat: nativeFormat,
+          nativeFormat: useAgentRouterClaudeProfile
+              ? effectiveNativeFormat
+              : nativeFormat,
+          agentRouterClaudeVersion: agentRouterVersion,
         );
       } on LlmConnectorHttpException {
         rethrow;

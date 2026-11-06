@@ -181,6 +181,7 @@ void main() {
     expect(
       items.map((item) => item.value),
       containsAll([
+        'agentrouter',
         'ai21',
         'aimlapi',
         'alibaba',
@@ -250,6 +251,109 @@ void main() {
       tester.widget<TextField>(find.byType(TextField).last).controller!.text,
       contains('accounts/fireworks/models/deepseek-v4-flash'),
     );
+  });
+
+  testWidgets('AgentRouter preset creates an API-key account with defaults', (
+    tester,
+  ) async {
+    final credentials = _MemoryCredentialStore();
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: credentials,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('添加账号'));
+    await tester.pumpAndSettle();
+
+    final preset = tester.widget<DropdownButtonFormField<String>>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is DropdownButtonFormField<String> &&
+            widget.decoration.labelText == '服务商预设',
+      ),
+    );
+    preset.onChanged!('agentrouter');
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byWidgetPredicate(
+        (widget) => widget is TextField && widget.decoration?.labelText == '凭据',
+      ),
+      'agentrouter-test-key',
+    );
+
+    expect(
+      tester
+          .widget<TextField>(
+            find.byWidgetPredicate(
+              (widget) =>
+                  widget is TextField &&
+                  widget.decoration?.labelText == '端点地址（连接器需要时填写）',
+            ),
+          )
+          .controller!
+          .text,
+      'https://agentrouter.org/v1/messages',
+    );
+    expect(
+      tester
+          .widget<TextField>(
+            find.byWidgetPredicate(
+              (widget) =>
+                  widget is TextField &&
+                  widget.decoration?.labelText == '上游模型与能力',
+            ),
+          )
+          .controller!
+          .text,
+      'claude-opus-4-8,reasoning\n'
+      'claude-opus-5,reasoning\n'
+      'gpt-5.6-sol',
+    );
+    final defaultProtocol = tester.widget<DropdownButtonFormField<String>>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is DropdownButtonFormField<String> &&
+            widget.decoration.labelText == '默认 API 协议',
+      ),
+    );
+    expect(defaultProtocol.initialValue, 'anthropic.messages');
+    final modelProtocol = tester.widget<DropdownButtonFormField<String>>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is DropdownButtonFormField<String> &&
+            widget.decoration.labelText == '模型 API 协议',
+      ),
+    );
+    expect(modelProtocol.initialValue, '');
+    modelProtocol.onChanged!('openai.responses');
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.text('保存').last);
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+
+    final saved = (await service.listAccounts()).single;
+    expect(saved.connectorType, 'openai-compatibility');
+    expect(saved.authType, 'api_key');
+    expect(saved.endpointConfig['providerPresetId'], 'agentrouter');
+    expect(saved.endpointConfig['apiProtocol'], 'anthropic.messages');
+    expect(
+        saved.endpointConfig['baseUrl'], 'https://agentrouter.org/v1/messages');
+    expect(saved.endpointConfig['apiKeyHeader'], 'x-api-key');
+    expect(saved.endpointConfig['apiKeyScheme'], isEmpty);
+    expect(saved.endpointConfig['modelsUrl'], isNull);
+    expect(
+      saved.models.map((model) => model.upstreamModelId),
+      ['claude-opus-4-8', 'claude-opus-5', 'gpt-5.6-sol'],
+    );
+    expect(
+        saved.models.first.config['apiProtocolOverride'], 'openai.responses');
+    expect(await service.readCredential(saved.id), 'agentrouter-test-key');
   });
 
   testWidgets(

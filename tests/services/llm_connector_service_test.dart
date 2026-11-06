@@ -12,6 +12,9 @@ import 'package:stroom/services/llm_connector_model_catalog.dart';
 import 'package:stroom/services/llm_connector_http_client.dart';
 import 'package:stroom/services/llm_connector_quota_service.dart';
 import 'package:stroom/services/api_protocol_config.dart';
+import 'package:stroom/services/llm_provider_preset_catalog.dart';
+import 'package:stroom/services/agentrouter_claude_version_resolver.dart';
+import 'package:stroom/utils/xxhash64.dart';
 import 'package:stroom/services/qoder_cli_service.dart';
 import 'package:stroom/services/llm_credential_store.dart';
 import 'package:stroom/services/llm_oauth_flow.dart';
@@ -3065,6 +3068,228 @@ void main() {
               : 'Bearer private-$connectorType-key',
         );
       }
+    });
+
+    test('AgentRouter routes protocol-specific endpoints and API-key headers',
+        () {
+      final builder = LlmNativeRequestBuilder();
+      final preset = findLlmOpenAiProviderPreset('agentrouter')!;
+      final account = LlmAccount(
+        id: 'agentrouter-contract',
+        connectorType: 'openai-compatibility',
+        authType: 'api_key',
+        displayName: 'AgentRouter',
+        endpointConfig: preset.applyToEndpointConfig(const {}),
+        models: const [
+          LlmUpstreamModel(
+            id: 'agentrouter-claude-model',
+            upstreamModelId: 'claude-opus-4-8',
+            displayName: 'Claude Opus 4.8',
+          ),
+          LlmUpstreamModel(
+            id: 'agentrouter-codex-model',
+            upstreamModelId: 'gpt-5.6-sol',
+            displayName: 'GPT-5.6 Sol',
+            config: {'apiProtocolOverride': 'openai.responses'},
+          ),
+          LlmUpstreamModel(
+            id: 'agentrouter-custom-model',
+            upstreamModelId: 'source-supported-custom-model',
+            displayName: 'Source-supported custom model',
+          ),
+        ],
+      );
+      const routes = [
+        (
+          'anthropic.messages',
+          'anthropic',
+          'https://agentrouter.org/v1/messages?beta=true',
+          'x-api-key',
+          'agentrouter-key',
+        ),
+        (
+          'openai.chat_completions',
+          'openai.chat_completions',
+          'https://agentrouter.org/v1/chat/completions',
+          'Authorization',
+          'Bearer agentrouter-key',
+        ),
+        (
+          'openai.responses',
+          'responses',
+          'https://agentrouter.org/v1/responses',
+          'Authorization',
+          'Bearer agentrouter-key',
+        ),
+      ];
+
+      for (final (protocol, nativeFormat, expectedUri, authHeader, authValue)
+          in routes) {
+        final request = builder.build(
+          account: account,
+          credential: 'agentrouter-key',
+          modelId: 'source-supported-custom-model',
+          body: const {'model': 'source-supported-custom-model'},
+          nativeFormat: nativeFormat,
+          conversationId: '00000000-0000-4000-8000-000000000001',
+          agentRouterClaudeVersion:
+              const AgentRouterClaudeClientVersion('2.1.281'),
+        );
+
+        expect(request.uri.toString(), expectedUri, reason: protocol);
+        expect(request.headers[authHeader], authValue, reason: protocol);
+        expect(
+          request.headers.containsKey(
+            authHeader == 'Authorization' ? 'x-api-key' : 'Authorization',
+          ),
+          isFalse,
+          reason: protocol,
+        );
+        if (protocol == 'openai.chat_completions' ||
+            protocol == 'openai.responses') {
+          expect(request.headers['User-Agent'], 'codex_cli_rs/0.159.2');
+          expect(request.headers['originator'], 'codex_cli_rs');
+        } else {
+          expect(request.headers['User-Agent'], startsWith('claude-cli/'));
+          expect(request.headers['User-Agent'],
+              'claude-cli/2.1.281 (external, cli)');
+          expect(request.headers['X-Claude-Code-Session-Id'], isNotEmpty);
+          expect(request.headers['anthropic-version'], '2023-06-01');
+          expect(request.body, isA<String>());
+          final signed = request.body as String;
+          final signature = RegExp(r'cch=([0-9a-f]{5});').allMatches(signed);
+          expect(signature, hasLength(1));
+          final placeholder = signed.replaceFirst(
+            RegExp(r'cch=[0-9a-f]{5};'),
+            'cch=00000;',
+          );
+          final expected = (xxHash64(
+                    utf8.encode(placeholder),
+                    seed: BigInt.parse('6e52736ac806831e', radix: 16),
+                  ) &
+                  BigInt.from(0xfffff))
+              .toRadixString(16)
+              .padLeft(5, '0');
+          expect(signature.single.group(1), expected);
+          final decoded = jsonDecode(signed) as Map<String, dynamic>;
+          expect((decoded['system'] as List).first['text'],
+              contains('cc_version=2.1.281.1e2;'));
+          final userId = jsonDecode(decoded['metadata']['user_id'] as String)
+              as Map<String, dynamic>;
+          expect(userId['session_id'], '00000000-0000-4000-8000-000000000001');
+          expect(userId.values, isNot(contains('agentrouter-key')));
+          final repeat = builder.build(
+            account: account,
+            credential: 'agentrouter-key',
+            modelId: 'source-supported-custom-model',
+            body: const {'model': 'source-supported-custom-model'},
+            nativeFormat: nativeFormat,
+            conversationId: '00000000-0000-4000-8000-000000000001',
+          );
+          final repeatBody =
+              jsonDecode(repeat.body as String) as Map<String, dynamic>;
+          final repeatUserId = jsonDecode(
+            repeatBody['metadata']['user_id'] as String,
+          ) as Map<String, dynamic>;
+          expect(repeatUserId, userId);
+          expect(repeat.headers['x-client-request-id'],
+              isNot(request.headers['x-client-request-id']));
+        }
+
+        expect(
+          () => builder.build(
+            account: account,
+            credential: null,
+            modelId: 'source-supported-custom-model',
+            body: const {'model': 'source-supported-custom-model'},
+            nativeFormat: nativeFormat,
+          ),
+          throwsA(isA<LlmAccountConnectorException>()),
+          reason: '$protocol rejects missing API keys',
+        );
+      }
+    });
+
+    test('HTTP client resolves AgentRouter Claude profile only for Messages',
+        () async {
+      var registryCalls = 0;
+      final registryDio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          registryCalls++;
+          expect(options.uri.toString(),
+              AgentRouterClaudeVersionResolver.registryUrl);
+          expect(options.headers['Authorization'], isNull);
+          return ResponseBody.fromString('{"version":"2.1.281"}', 200);
+        });
+      final accounts = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentials(),
+      );
+      final preset = findLlmOpenAiProviderPreset('agentrouter')!;
+      final account = await accounts.saveAccount(
+        LlmAccount(
+          id: 'agentrouter-http-profile',
+          connectorType: 'openai-compatibility',
+          authType: 'api_key',
+          displayName: 'AgentRouter',
+          endpointConfig: preset.applyToEndpointConfig(const {}),
+          models: const [
+            LlmUpstreamModel(
+              id: 'agentrouter-http-profile:claude',
+              upstreamModelId: 'claude-opus-4-8',
+              displayName: 'Claude Opus 4.8',
+            ),
+            LlmUpstreamModel(
+              id: 'agentrouter-http-profile:gpt',
+              upstreamModelId: 'gpt-5.6-sol',
+              displayName: 'GPT-5.6 Sol',
+              config: {'apiProtocolOverride': 'openai.responses'},
+            ),
+          ],
+        ),
+        secret: 'test-agentrouter-key',
+      );
+      final sent = <RequestOptions>[];
+      final providerDio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          sent.add(options);
+          return ResponseBody.fromString(
+            '{"content":[{"type":"text","text":"ok"}],"stop_reason":"end_turn","usage":{"input_tokens":1,"output_tokens":1}}',
+            200,
+          );
+        });
+      final client = LlmConnectorHttpClient(
+        accountService: accounts,
+        dio: providerDio,
+        agentRouterVersionResolver: AgentRouterClaudeVersionResolver(
+          dio: registryDio,
+        ),
+      );
+      final body = const {
+        'model': 'claude-opus-4-8',
+        'messages': [
+          {'role': 'user', 'content': 'hello'},
+        ],
+        'max_tokens': 32,
+      };
+      await client.request(
+          account: account, modelId: 'claude-opus-4-8', body: body);
+      await client.request(
+          account: account, modelId: 'claude-opus-4-8', body: body);
+      expect(registryCalls, 1);
+      expect(sent.first.headers['User-Agent'],
+          'claude-cli/2.1.281 (external, cli)');
+      expect(sent.first.data, contains('cc_version=2.1.281.1e2;'));
+      expect(sent[1].headers['User-Agent'], sent.first.headers['User-Agent']);
+
+      await client.request(
+        account: account,
+        modelId: 'gpt-5.6-sol',
+        nativeFormat: 'responses',
+        body: const {'model': 'gpt-5.6-sol', 'input': []},
+      );
+      expect(registryCalls, 1);
+      expect(sent.last.headers['User-Agent'], 'codex_cli_rs/0.159.2');
     });
 
     test('blocks models that require a separate provider-specific API', () {

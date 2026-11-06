@@ -23,6 +23,20 @@ class LlmProviderPresetModel {
       ].join(',');
 }
 
+class LlmProviderPresetProtocolRoute {
+  final String endpoint;
+  final String authorizationHeader;
+  final String authorizationScheme;
+  final Map<String, String> headers;
+
+  const LlmProviderPresetProtocolRoute({
+    required this.endpoint,
+    required this.authorizationHeader,
+    required this.authorizationScheme,
+    this.headers = const {},
+  });
+}
+
 class LlmProviderPreset {
   final String id;
   final String displayName;
@@ -34,6 +48,7 @@ class LlmProviderPreset {
   final String authorizationScheme;
   final String defaultApiProtocol;
   final Map<String, String> headers;
+  final Map<String, LlmProviderPresetProtocolRoute> protocolRoutes;
   final List<LlmProviderPresetModel> fallbackModels;
 
   const LlmProviderPreset({
@@ -47,16 +62,20 @@ class LlmProviderPreset {
     this.authorizationScheme = 'Bearer',
     this.defaultApiProtocol = 'openai.chat_completions',
     this.headers = const {},
+    this.protocolRoutes = const {},
     this.fallbackModels = const [],
   });
 
   /// Applies only preset-owned settings, retaining unrelated account settings.
   Map<String, dynamic> applyToEndpointConfig(Map<String, dynamic> existing) {
+    final configuredProtocol = existing['apiProtocol'];
     final endpointConfig = {
       ...existing,
       'providerPresetId': id,
       'baseUrl': baseUrl,
-      'apiProtocol': defaultApiProtocol,
+      'apiProtocol': protocolRoutes.containsKey(configuredProtocol)
+          ? configuredProtocol
+          : defaultApiProtocol,
     };
     _removePreviousPresetHeaders(endpointConfig, existing);
     endpointConfig['apiKeyHeader'] = authorizationHeader;
@@ -141,6 +160,71 @@ class LlmProviderPreset {
 }
 
 const llmOpenAiProviderPresets = <LlmProviderPreset>[
+  LlmProviderPreset(
+    id: 'agentrouter',
+    displayName: 'AgentRouter',
+    baseUrl: 'https://agentrouter.org/v1/messages',
+    defaultApiProtocol: 'anthropic.messages',
+    authorizationHeader: 'x-api-key',
+    authorizationScheme: '',
+    protocolRoutes: {
+      'anthropic.messages': LlmProviderPresetProtocolRoute(
+        endpoint: 'https://agentrouter.org/v1/messages',
+        authorizationHeader: 'x-api-key',
+        authorizationScheme: '',
+        // The request builder supplies the source-pinned Claude Code profile
+        // dynamically; this route record retains only its endpoint and key
+        // authentication contract.
+        headers: {'anthropic-version': '2023-06-01'},
+      ),
+      'openai.chat_completions': LlmProviderPresetProtocolRoute(
+        endpoint: 'https://agentrouter.org/v1/chat/completions',
+        authorizationHeader: 'Authorization',
+        authorizationScheme: 'Bearer',
+        // Mirrors getCodexCliRsHeaders() in the pinned source; refresh this
+        // version with that source's Codex client pin.
+        headers: {
+          'User-Agent': 'codex_cli_rs/0.159.2',
+          'originator': 'codex_cli_rs',
+        },
+      ),
+      'openai.responses': LlmProviderPresetProtocolRoute(
+        endpoint: 'https://agentrouter.org/v1/responses',
+        authorizationHeader: 'Authorization',
+        authorizationScheme: 'Bearer',
+        headers: {
+          'User-Agent': 'codex_cli_rs/0.159.2',
+          'originator': 'codex_cli_rs',
+        },
+      ),
+    },
+    fallbackModels: [
+      LlmProviderPresetModel(
+        'claude-opus-4-8',
+        displayName: 'Claude Opus 4.8',
+        capabilities: {
+          'contextLength': 128000,
+          'reasoning': true,
+          'supportedThinkingEfforts': ['low', 'medium', 'high', 'xhigh', 'max'],
+        },
+      ),
+      LlmProviderPresetModel(
+        'claude-opus-5',
+        displayName: 'Claude Opus 5',
+        capabilities: {
+          'contextLength': 128000,
+          'reasoning': true,
+          'supportedThinkingEfforts': ['low', 'medium', 'high', 'xhigh', 'max'],
+        },
+      ),
+      LlmProviderPresetModel(
+        'gpt-5.6-sol',
+        displayName: 'GPT-5.6 Sol',
+        capabilities: {'contextLength': 128000},
+        apiProtocolOverride: 'openai.responses',
+      ),
+    ],
+  ),
   LlmProviderPreset(
     id: 'g4f-gemini',
     displayName: 'g4f.space Gemini',
