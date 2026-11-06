@@ -4869,5 +4869,65 @@
         "type": "int"
       }
     }
+  },
+  "connectivityTestTitle": "{title} · 连通性测试",
+  "connectivityTestJsonLabel": "测试内容（JSON）",
+  "connectivityTestJsonHelp": "修改后可直接运行或保存。MCP 使用只读 tools/list；搜索工具可改 query/count；Todo 默认只读。",
+  "connectivityTestSaveFailed": "保存失败：{error}",
+  "connectivityTestSaved": "测试内容已保存",
+  "connectivityTestClose": "关闭",
+  "connectivityTestSaveContent": "保存内容",
+  "connectivityTestTesting": "测试中…",
+  "connectivityTestRun": "运行测试",
+  "connectivityTestFailedSummary": "测试未能完成",
+  "connectivityTestDurationSeconds": "{seconds} 秒",
+  "connectivityTestDurationMilliseconds": "{milliseconds} 毫秒",
+  "messageSearchTitle": "全局消息搜索",
+  "messageSearchHint": "搜索所有对话中的消息...",
+  "messageSearchInitialState": "输入关键词搜索所有对话中的消息",
+  "messageSearchEmptyState": "未找到匹配的消息",
+  "messageSearchNewConversation": "新对话",
+  "messageSearchMatchCount": "{count, plural, other{{count} 个匹配}}",
+  "filesTabText": "文本",
+  "filesTabAudio": "音频",
+  "filesTabImages": "图片",
+  "filesTabVideos": "视频",
+  "filesReorderTabs": "排序标签",
+  "filesReorderCancel": "取消",
+  "filesReorderDone": "确定",
+  "@connectivityTestTitle": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "@connectivityTestSaveFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@connectivityTestDurationSeconds": {
+    "placeholders": {
+      "seconds": {
+        "type": "String"
+      }
+    }
+  },
+  "@connectivityTestDurationMilliseconds": {
+    "placeholders": {
+      "milliseconds": {
+        "type": "int"
+      }
+    }
+  },
+  "@messageSearchMatchCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   }
 }

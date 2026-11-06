@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/app_localizations.dart';
 import '../services/connectivity_test_service.dart';
 
 class ConnectivityTestDialog extends StatefulWidget {
@@ -76,7 +77,8 @@ class _ConnectivityTestDialogState extends State<ConnectivityTestDialog> {
         setState(() {
           _result = ConnectivityTestResult(
             succeeded: false,
-            summary: '测试未能完成',
+            summary: AppLocalizations.of(context)!
+                .connectivityTestFailedSummary,
             details: _readableError(error),
             elapsed: Duration.zero,
           );
@@ -93,17 +95,23 @@ class _ConnectivityTestDialogState extends State<ConnectivityTestDialog> {
   }
 
   String _formatDuration(Duration duration) {
+    final localizations = AppLocalizations.of(context)!;
     if (duration.inMilliseconds >= 1000) {
-      return '${(duration.inMilliseconds / 1000).toStringAsFixed(2)} 秒';
+      return localizations.connectivityTestDurationSeconds(
+        (duration.inMilliseconds / 1000).toStringAsFixed(2),
+      );
     }
-    return '${duration.inMilliseconds} 毫秒';
+    return localizations.connectivityTestDurationMilliseconds(
+      duration.inMilliseconds,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final localizations = AppLocalizations.of(context)!;
     return AlertDialog(
-      title: Text('${widget.title} · 连通性测试'),
+      title: Text(localizations.connectivityTestTitle(widget.title)),
       content: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 560),
         child: SingleChildScrollView(
@@ -120,12 +128,11 @@ class _ConnectivityTestDialogState extends State<ConnectivityTestDialog> {
                 enabled: !_isRunning && !_isSaving,
                 keyboardType: TextInputType.multiline,
                 style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
-                decoration: const InputDecoration(
-                  labelText: '测试内容（JSON）',
+                decoration: InputDecoration(
+                  labelText: localizations.connectivityTestJsonLabel,
                   alignLabelWithHint: true,
                   border: OutlineInputBorder(),
-                  helperText:
-                      '修改后可直接运行或保存。MCP 使用只读 tools/list；搜索工具可改 query/count；Todo 默认只读。',
+                  helperText: localizations.connectivityTestJsonHelp,
                 ),
                 onChanged: (_) => setState(() {
                   _isSaved = false;
@@ -136,7 +143,7 @@ class _ConnectivityTestDialogState extends State<ConnectivityTestDialog> {
               if (_saveError != null) ...[
                 const SizedBox(height: 8),
                 Text(
-                  '保存失败：$_saveError',
+                  localizations.connectivityTestSaveFailed(_saveError!),
                   style: TextStyle(color: colorScheme.error),
                 ),
               ],
@@ -144,11 +151,16 @@ class _ConnectivityTestDialogState extends State<ConnectivityTestDialog> {
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    Icon(Icons.check_circle_outline,
-                        size: 16, color: colorScheme.primary),
+                    Icon(
+                      Icons.check_circle_outline,
+                      size: 16,
+                      color: colorScheme.primary,
+                    ),
                     const SizedBox(width: 6),
-                    Text('测试内容已保存',
-                        style: TextStyle(color: colorScheme.primary)),
+                    Text(
+                      localizations.connectivityTestSaved,
+                      style: TextStyle(color: colorScheme.primary),
+                    ),
                   ],
                 ),
               ],
@@ -165,9 +177,10 @@ class _ConnectivityTestDialogState extends State<ConnectivityTestDialog> {
       ),
       actions: [
         TextButton(
-          onPressed:
-              _isRunning || _isSaving ? null : () => Navigator.pop(context),
-          child: const Text('关闭'),
+          onPressed: _isRunning || _isSaving
+              ? null
+              : () => Navigator.pop(context),
+          child: Text(localizations.connectivityTestClose),
         ),
         OutlinedButton.icon(
           onPressed: _isRunning || _isSaving ? null : _save,
@@ -177,7 +190,7 @@ class _ConnectivityTestDialogState extends State<ConnectivityTestDialog> {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : const Icon(Icons.save_outlined, size: 18),
-          label: const Text('保存内容'),
+          label: Text(localizations.connectivityTestSaveContent),
         ),
         FilledButton.icon(
           onPressed: _isRunning || _isSaving ? null : _run,
@@ -187,7 +200,11 @@ class _ConnectivityTestDialogState extends State<ConnectivityTestDialog> {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : const Icon(Icons.network_check, size: 18),
-          label: Text(_isRunning ? '测试中…' : '运行测试'),
+          label: Text(
+            _isRunning
+                ? localizations.connectivityTestTesting
+                : localizations.connectivityTestRun,
+          ),
         ),
       ],
     );

@@ -8590,6 +8590,97 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get catCatchRootFolder => '根目录';
+
+  @override
+  String connectivityTestTitle(String title) {
+    return '$title · 连通性测试';
+  }
+
+  @override
+  String get connectivityTestJsonLabel => '测试内容（JSON）';
+
+  @override
+  String get connectivityTestJsonHelp =>
+      '修改后可直接运行或保存。MCP 使用只读 tools/list；搜索工具可改 query/count；Todo 默认只读。';
+
+  @override
+  String connectivityTestSaveFailed(String error) {
+    return '保存失败：$error';
+  }
+
+  @override
+  String get connectivityTestSaved => '测试内容已保存';
+
+  @override
+  String get connectivityTestClose => '关闭';
+
+  @override
+  String get connectivityTestSaveContent => '保存内容';
+
+  @override
+  String get connectivityTestTesting => '测试中…';
+
+  @override
+  String get connectivityTestRun => '运行测试';
+
+  @override
+  String get connectivityTestFailedSummary => '测试未能完成';
+
+  @override
+  String connectivityTestDurationSeconds(String seconds) {
+    return '$seconds 秒';
+  }
+
+  @override
+  String connectivityTestDurationMilliseconds(int milliseconds) {
+    return '$milliseconds 毫秒';
+  }
+
+  @override
+  String get messageSearchTitle => '全局消息搜索';
+
+  @override
+  String get messageSearchHint => '搜索所有对话中的消息...';
+
+  @override
+  String get messageSearchInitialState => '输入关键词搜索所有对话中的消息';
+
+  @override
+  String get messageSearchEmptyState => '未找到匹配的消息';
+
+  @override
+  String get messageSearchNewConversation => '新对话';
+
+  @override
+  String messageSearchMatchCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个匹配',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get filesTabText => '文本';
+
+  @override
+  String get filesTabAudio => '音频';
+
+  @override
+  String get filesTabImages => '图片';
+
+  @override
+  String get filesTabVideos => '视频';
+
+  @override
+  String get filesReorderTabs => '排序标签';
+
+  @override
+  String get filesReorderCancel => '取消';
+
+  @override
+  String get filesReorderDone => '确定';
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).
@@ -17177,4 +17268,95 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get catCatchRootFolder => '根目录';
+
+  @override
+  String connectivityTestTitle(String title) {
+    return '$title · 连通性测试';
+  }
+
+  @override
+  String get connectivityTestJsonLabel => '测试内容（JSON）';
+
+  @override
+  String get connectivityTestJsonHelp =>
+      '修改后可直接运行或保存。MCP 使用只读 tools/list；搜索工具可改 query/count；Todo 默认只读。';
+
+  @override
+  String connectivityTestSaveFailed(String error) {
+    return '保存失败：$error';
+  }
+
+  @override
+  String get connectivityTestSaved => '测试内容已保存';
+
+  @override
+  String get connectivityTestClose => '关闭';
+
+  @override
+  String get connectivityTestSaveContent => '保存内容';
+
+  @override
+  String get connectivityTestTesting => '测试中…';
+
+  @override
+  String get connectivityTestRun => '运行测试';
+
+  @override
+  String get connectivityTestFailedSummary => '测试未能完成';
+
+  @override
+  String connectivityTestDurationSeconds(String seconds) {
+    return '$seconds 秒';
+  }
+
+  @override
+  String connectivityTestDurationMilliseconds(int milliseconds) {
+    return '$milliseconds 毫秒';
+  }
+
+  @override
+  String get messageSearchTitle => '全局消息搜索';
+
+  @override
+  String get messageSearchHint => '搜索所有对话中的消息...';
+
+  @override
+  String get messageSearchInitialState => '输入关键词搜索所有对话中的消息';
+
+  @override
+  String get messageSearchEmptyState => '未找到匹配的消息';
+
+  @override
+  String get messageSearchNewConversation => '新对话';
+
+  @override
+  String messageSearchMatchCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个匹配',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get filesTabText => '文本';
+
+  @override
+  String get filesTabAudio => '音频';
+
+  @override
+  String get filesTabImages => '图片';
+
+  @override
+  String get filesTabVideos => '视频';
+
+  @override
+  String get filesReorderTabs => '排序标签';
+
+  @override
+  String get filesReorderCancel => '取消';
+
+  @override
+  String get filesReorderDone => '确定';
 }

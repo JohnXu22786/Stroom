@@ -29,6 +29,32 @@ void main() {
   });
 
   group('FilesPage tab navigation - widget tests', () {
+    testWidgets('localizes tab labels and reorder controls in English',
+        (tester) async {
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: MaterialApp(
+            locale: Locale('en', 'US'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: FilesPage(),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.widgetWithText(Tab, 'Text'), findsOneWidget);
+      expect(find.widgetWithText(Tab, 'Audio'), findsOneWidget);
+      expect(find.widgetWithText(Tab, 'Images'), findsOneWidget);
+      expect(find.widgetWithText(Tab, 'Videos'), findsOneWidget);
+
+      await tester.longPress(find.byKey(const Key('files_tab_bar_gesture')));
+      await tester.pumpAndSettle();
+      expect(find.text('Reorder Tabs'), findsOneWidget);
+      expect(find.text('Cancel'), findsOneWidget);
+      expect(find.text('Done'), findsOneWidget);
+    });
+
     testWidgets('double-tap on same tab increments reset signal',
         (tester) async {
       await tester.pumpWidget(_buildTestApp());
