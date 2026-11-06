@@ -621,6 +621,7 @@ class ChatStreamManager {
               ChatMessage(role: 'assistant', content: replyDelta),
               continuation,
             ];
+            state.markToolCallTextBoundary();
           }
           debugPrint(
               '[ChatStreamManager] network stream interrupted; retrying ($transportRetries/${_transportRetryPolicy.maxRetries}), convId=$convId');
