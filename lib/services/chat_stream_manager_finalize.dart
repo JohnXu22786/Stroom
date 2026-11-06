@@ -160,6 +160,8 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
         final msg = ChatMessage(
           role: 'assistant',
           content: fullReply,
+          contentFromTextSections: !state.hasSyntheticErrorReply &&
+              textChunks.any((chunk) => chunk.isNotEmpty),
           id: state.streamingMsgId ?? '',
           isError: isError,
           rawRequest: rawRequestCapture,
