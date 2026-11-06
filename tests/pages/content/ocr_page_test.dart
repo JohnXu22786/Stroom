@@ -6455,6 +6455,15 @@ void main() {
       await tester.pumpWidget(_buildTestApp(testImages: images));
       await tester.pumpAndSettle();
 
+      final originalOrder = List.generate(
+        images.length,
+        (index) => tester
+            .widget<ImageGridItem>(
+              find.byKey(Key('ocr_grid_item_$index')),
+            )
+            .image,
+      );
+
       // Long-press item 0 to trigger drag
       final item0Center = tester.getCenter(
         find.byKey(const Key('ocr_grid_item_0')),
@@ -6469,17 +6478,23 @@ void main() {
       await gesture.moveTo(item1Center);
       await tester.pump(const Duration(milliseconds: 50));
 
-      // Cancel the drag (not drop — cancel leaves original order intact)
+      // Leave every DragTarget before lifting, so this is a canceled drag.
+      await gesture.moveTo(const Offset(-100, -100));
+      await tester.pump(const Duration(milliseconds: 50));
       await gesture.up();
       await tester.pumpAndSettle();
 
-      // All items should still be present and normal
-      expect(find.byKey(const Key('ocr_grid_item_0')), findsOneWidget);
-      expect(find.byKey(const Key('ocr_grid_item_1')), findsOneWidget);
-      expect(find.byKey(const Key('ocr_grid_item_2')), findsOneWidget);
+      // Cancellation must preserve image order and clear visible drag state.
+      for (var index = 0; index < originalOrder.length; index++) {
+        final item = tester.widget<ImageGridItem>(
+          find.byKey(Key('ocr_grid_item_$index')),
+        );
+        expect(item.image, same(originalOrder[index]));
+        expect(item.isDimmed, isFalse);
+        expect(item.isHoverTarget, isFalse);
+      }
 
       // Sort button still functional after drag cancel
-      // (proves no stale drag state)
       expect(find.byKey(const Key('ocr_sort_btn')), findsOneWidget);
     });
 
