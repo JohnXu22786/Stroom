@@ -241,7 +241,11 @@ void main() {
           OcrDiagnosticSnapshot.credentialValuesFromRequest(rawRequest);
       final request = OcrDiagnosticSnapshot.sanitizeRequest(rawRequest)!;
       final echoedResponse = OcrDiagnosticSnapshot.sanitizeResponse(
-        {'statusCode': 401, 'requestId': credential, 'data': {'id': credential}},
+        {
+          'statusCode': 401,
+          'requestId': credential,
+          'data': {'id': credential},
+        },
         excludedValues: credentialValues,
       )!;
       final safeResponse = OcrDiagnosticSnapshot.sanitizeResponse(
