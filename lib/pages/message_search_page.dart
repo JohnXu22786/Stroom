@@ -198,8 +198,8 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
             child: _query.isEmpty
                 ? _buildInitialState(cs)
                 : _results.isEmpty
-                ? _buildEmptyState(cs)
-                : _buildResultsList(cs),
+                    ? _buildEmptyState(cs)
+                    : _buildResultsList(cs),
           ),
         ],
       ),
