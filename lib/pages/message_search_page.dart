@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../l10n/app_localizations.dart';
 import '../models/chat_message.dart';
 import '../providers/conversation_provider.dart';
 
@@ -28,10 +29,7 @@ class SearchResult {
   final Conversation conversation;
   final List<SearchResultMatch> matches;
 
-  const SearchResult({
-    required this.conversation,
-    required this.matches,
-  });
+  const SearchResult({required this.conversation, required this.matches});
 
   int get matchCount => matches.length;
 }
@@ -73,11 +71,13 @@ class MessageSearchPage extends ConsumerStatefulWidget {
         while (true) {
           final idx = lowerContent.indexOf(lowerQuery, start);
           if (idx == -1) break;
-          matches.add(SearchResultMatch(
-            message: msg,
-            matchStart: idx,
-            matchEnd: idx + lowerQuery.length,
-          ));
+          matches.add(
+            SearchResultMatch(
+              message: msg,
+              matchStart: idx,
+              matchEnd: idx + lowerQuery.length,
+            ),
+          );
           start = idx + lowerQuery.length;
         }
       }
@@ -137,19 +137,18 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
   }
 
   void _onResultTapped(SearchResult result) {
-    Navigator.of(context).pop({
-      'conversationId': result.conversation.id,
-      'query': _query,
-    });
+    Navigator.of(context)
+        .pop({'conversationId': result.conversation.id, 'query': _query});
   }
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final localizations = AppLocalizations.of(context)!;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('全局消息搜索'),
+        title: Text(localizations.messageSearchTitle),
         leading: IconButton(
           icon: const Icon(Icons.close),
           onPressed: () => Navigator.of(context).pop(),
@@ -171,7 +170,7 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
               autofocus: true,
               onChanged: _onSearchChanged,
               decoration: InputDecoration(
-                hintText: '搜索所有对话中的消息...',
+                hintText: localizations.messageSearchHint,
                 prefixIcon: const Icon(Icons.search),
                 suffixIcon: _searchController.text.isNotEmpty
                     ? IconButton(
@@ -183,8 +182,10 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
                       )
                     : null,
                 isDense: true,
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
@@ -210,11 +211,14 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.manage_search,
-              size: 48, color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
+          Icon(
+            Icons.manage_search,
+            size: 48,
+            color: cs.onSurfaceVariant.withValues(alpha: 0.4),
+          ),
           const SizedBox(height: 12),
           Text(
-            '输入关键词搜索所有对话中的消息',
+            AppLocalizations.of(context)!.messageSearchInitialState,
             style: TextStyle(color: cs.onSurfaceVariant, fontSize: 14),
           ),
         ],
@@ -227,11 +231,14 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.search_off,
-              size: 48, color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
+          Icon(
+            Icons.search_off,
+            size: 48,
+            color: cs.onSurfaceVariant.withValues(alpha: 0.4),
+          ),
           const SizedBox(height: 12),
           Text(
-            '未找到匹配的消息',
+            AppLocalizations.of(context)!.messageSearchEmptyState,
             style: TextStyle(color: cs.onSurfaceVariant, fontSize: 14),
           ),
         ],
@@ -253,13 +260,18 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
 
   Widget _buildResultTile(SearchResult result, ColorScheme cs) {
     final conv = result.conversation;
-    final title = conv.title.isEmpty ? '新对话' : conv.title;
+    final localizations = AppLocalizations.of(context)!;
+    final title = conv.title.isEmpty
+        ? localizations.messageSearchNewConversation
+        : conv.title;
 
     // Build a preview of the first match
     const contextChars = 40;
     final firstMatch = result.matches.first;
-    final snippetStart = (firstMatch.matchStart - contextChars)
-        .clamp(0, firstMatch.message.content.length);
+    final snippetStart = (firstMatch.matchStart - contextChars).clamp(
+      0,
+      firstMatch.message.content.length,
+    );
     final snippet = MessageSearchPage.getSnippet(
       firstMatch.message.content,
       firstMatch.matchStart,
@@ -295,14 +307,16 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
                 ),
                 const SizedBox(width: 8),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: cs.primaryContainer,
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Text(
-                    '${result.matchCount} 个匹配',
+                    localizations.messageSearchMatchCount(result.matchCount),
                     style: TextStyle(
                       fontSize: 11,
                       color: cs.onPrimaryContainer,
@@ -351,14 +365,16 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
     if (relativeStart > 0) {
       spans.add(TextSpan(text: snippet.substring(0, relativeStart)));
     }
-    spans.add(TextSpan(
-      text: snippet.substring(relativeStart, relativeStart + queryLen),
-      style: TextStyle(
-        backgroundColor: Colors.yellow,
-        color: Colors.black87,
-        fontWeight: FontWeight.bold,
+    spans.add(
+      TextSpan(
+        text: snippet.substring(relativeStart, relativeStart + queryLen),
+        style: TextStyle(
+          backgroundColor: Colors.yellow,
+          color: Colors.black87,
+          fontWeight: FontWeight.bold,
+        ),
       ),
-    ));
+    );
     if (relativeStart + queryLen < snippet.length) {
       spans.add(TextSpan(text: snippet.substring(relativeStart + queryLen)));
     }

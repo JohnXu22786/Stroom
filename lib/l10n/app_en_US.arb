@@ -4869,5 +4869,65 @@
         "type": "int"
       }
     }
+  },
+  "connectivityTestTitle": "{title} · Connectivity Test",
+  "connectivityTestJsonLabel": "Test content (JSON)",
+  "connectivityTestJsonHelp": "You can run or save changes directly. MCP uses read-only tools/list; search tools can change query/count; Todo is read-only by default.",
+  "connectivityTestSaveFailed": "Save failed: {error}",
+  "connectivityTestSaved": "Test content saved",
+  "connectivityTestClose": "Close",
+  "connectivityTestSaveContent": "Save Content",
+  "connectivityTestTesting": "Testing…",
+  "connectivityTestRun": "Run Test",
+  "connectivityTestFailedSummary": "Test could not be completed",
+  "connectivityTestDurationSeconds": "{seconds} sec",
+  "connectivityTestDurationMilliseconds": "{milliseconds} ms",
+  "messageSearchTitle": "Search Messages",
+  "messageSearchHint": "Search messages across all conversations...",
+  "messageSearchInitialState": "Type a keyword to search messages in all conversations",
+  "messageSearchEmptyState": "No matching messages found",
+  "messageSearchNewConversation": "New conversation",
+  "messageSearchMatchCount": "{count, plural, one{{count} match} other{{count} matches}}",
+  "filesTabText": "Text",
+  "filesTabAudio": "Audio",
+  "filesTabImages": "Images",
+  "filesTabVideos": "Videos",
+  "filesReorderTabs": "Reorder Tabs",
+  "filesReorderCancel": "Cancel",
+  "filesReorderDone": "Done",
+  "@connectivityTestTitle": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "@connectivityTestSaveFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@connectivityTestDurationSeconds": {
+    "placeholders": {
+      "seconds": {
+        "type": "String"
+      }
+    }
+  },
+  "@connectivityTestDurationMilliseconds": {
+    "placeholders": {
+      "milliseconds": {
+        "type": "int"
+      }
+    }
+  },
+  "@messageSearchMatchCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   }
 }

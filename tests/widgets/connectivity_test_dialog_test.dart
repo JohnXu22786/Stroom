@@ -2,18 +2,23 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/connectivity_test_dialog.dart';
 import 'package:stroom/services/connectivity_test_service.dart';
 
 void main() {
-  testWidgets('disables test content editing while saving or running',
-      (tester) async {
+  testWidgets('disables test content editing while saving or running', (
+    tester,
+  ) async {
     final saveCompleter = Completer<void>();
     final runCompleter = Completer<ConnectivityTestResult>();
     var saveAttempts = 0;
 
     await tester.pumpWidget(
       MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
         home: Builder(
           builder: (context) => Scaffold(
             body: TextButton(
@@ -75,4 +80,60 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.widget<TextField>(contentField).enabled, isTrue);
   });
+
+  testWidgets(
+    'shows English chrome while preserving entered and returned data',
+    (tester) async {
+      const input = '{"endpoint":"https://example.test"}';
+      String? runContent;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('en', 'US'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: TextButton(
+                onPressed: () {
+                  showDialog<void>(
+                    context: context,
+                    builder: (_) => ConnectivityTestDialog(
+                      title: 'Proxy',
+                      initialContent: input,
+                      note: 'Read-only check.',
+                      onSave: (_) async {},
+                      onRun: (content) async {
+                        runContent = content;
+                        return const ConnectivityTestResult(
+                          succeeded: true,
+                          summary: 'HTTP 200',
+                          details: 'Provider returned HTTP 200',
+                          elapsed: Duration(milliseconds: 120),
+                        );
+                      },
+                    ),
+                  );
+                },
+                child: const Text('Open dialog'),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open dialog'));
+      await tester.pumpAndSettle();
+      expect(find.text('Proxy · Connectivity Test'), findsOneWidget);
+      expect(find.text('Test content (JSON)'), findsOneWidget);
+      expect(find.text('Save Content'), findsOneWidget);
+      expect(find.text(input), findsOneWidget);
+
+      await tester.tap(find.text('Run Test'));
+      await tester.pumpAndSettle();
+      expect(runContent, input);
+      expect(find.text('HTTP 200'), findsOneWidget);
+      expect(find.text('Provider returned HTTP 200'), findsOneWidget);
+    },
+  );
 }

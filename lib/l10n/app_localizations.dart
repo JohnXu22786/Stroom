@@ -15213,6 +15213,156 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Root folder'**
   String get catCatchRootFolder;
+
+  /// No description provided for @connectivityTestTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'{title} · Connectivity Test'**
+  String connectivityTestTitle(String title);
+
+  /// No description provided for @connectivityTestJsonLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Test content (JSON)'**
+  String get connectivityTestJsonLabel;
+
+  /// No description provided for @connectivityTestJsonHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'You can run or save changes directly. MCP uses read-only tools/list; search tools can change query/count; Todo is read-only by default.'**
+  String get connectivityTestJsonHelp;
+
+  /// No description provided for @connectivityTestSaveFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Save failed: {error}'**
+  String connectivityTestSaveFailed(String error);
+
+  /// No description provided for @connectivityTestSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Test content saved'**
+  String get connectivityTestSaved;
+
+  /// No description provided for @connectivityTestClose.
+  ///
+  /// In en, this message translates to:
+  /// **'Close'**
+  String get connectivityTestClose;
+
+  /// No description provided for @connectivityTestSaveContent.
+  ///
+  /// In en, this message translates to:
+  /// **'Save Content'**
+  String get connectivityTestSaveContent;
+
+  /// No description provided for @connectivityTestTesting.
+  ///
+  /// In en, this message translates to:
+  /// **'Testing…'**
+  String get connectivityTestTesting;
+
+  /// No description provided for @connectivityTestRun.
+  ///
+  /// In en, this message translates to:
+  /// **'Run Test'**
+  String get connectivityTestRun;
+
+  /// No description provided for @connectivityTestFailedSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'Test could not be completed'**
+  String get connectivityTestFailedSummary;
+
+  /// No description provided for @connectivityTestDurationSeconds.
+  ///
+  /// In en, this message translates to:
+  /// **'{seconds} sec'**
+  String connectivityTestDurationSeconds(String seconds);
+
+  /// No description provided for @connectivityTestDurationMilliseconds.
+  ///
+  /// In en, this message translates to:
+  /// **'{milliseconds} ms'**
+  String connectivityTestDurationMilliseconds(int milliseconds);
+
+  /// No description provided for @messageSearchTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Search Messages'**
+  String get messageSearchTitle;
+
+  /// No description provided for @messageSearchHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Search messages across all conversations...'**
+  String get messageSearchHint;
+
+  /// No description provided for @messageSearchInitialState.
+  ///
+  /// In en, this message translates to:
+  /// **'Type a keyword to search messages in all conversations'**
+  String get messageSearchInitialState;
+
+  /// No description provided for @messageSearchEmptyState.
+  ///
+  /// In en, this message translates to:
+  /// **'No matching messages found'**
+  String get messageSearchEmptyState;
+
+  /// No description provided for @messageSearchNewConversation.
+  ///
+  /// In en, this message translates to:
+  /// **'New conversation'**
+  String get messageSearchNewConversation;
+
+  /// No description provided for @messageSearchMatchCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{{count} match} other{{count} matches}}'**
+  String messageSearchMatchCount(int count);
+
+  /// No description provided for @filesTabText.
+  ///
+  /// In en, this message translates to:
+  /// **'Text'**
+  String get filesTabText;
+
+  /// No description provided for @filesTabAudio.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio'**
+  String get filesTabAudio;
+
+  /// No description provided for @filesTabImages.
+  ///
+  /// In en, this message translates to:
+  /// **'Images'**
+  String get filesTabImages;
+
+  /// No description provided for @filesTabVideos.
+  ///
+  /// In en, this message translates to:
+  /// **'Videos'**
+  String get filesTabVideos;
+
+  /// No description provided for @filesReorderTabs.
+  ///
+  /// In en, this message translates to:
+  /// **'Reorder Tabs'**
+  String get filesReorderTabs;
+
+  /// No description provided for @filesReorderCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get filesReorderCancel;
+
+  /// No description provided for @filesReorderDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Done'**
+  String get filesReorderDone;
 }
 
 class _AppLocalizationsDelegate

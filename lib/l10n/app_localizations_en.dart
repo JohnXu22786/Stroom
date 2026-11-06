@@ -9068,6 +9068,99 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get catCatchRootFolder => 'Root folder';
+
+  @override
+  String connectivityTestTitle(String title) {
+    return '$title · Connectivity Test';
+  }
+
+  @override
+  String get connectivityTestJsonLabel => 'Test content (JSON)';
+
+  @override
+  String get connectivityTestJsonHelp =>
+      'You can run or save changes directly. MCP uses read-only tools/list; search tools can change query/count; Todo is read-only by default.';
+
+  @override
+  String connectivityTestSaveFailed(String error) {
+    return 'Save failed: $error';
+  }
+
+  @override
+  String get connectivityTestSaved => 'Test content saved';
+
+  @override
+  String get connectivityTestClose => 'Close';
+
+  @override
+  String get connectivityTestSaveContent => 'Save Content';
+
+  @override
+  String get connectivityTestTesting => 'Testing…';
+
+  @override
+  String get connectivityTestRun => 'Run Test';
+
+  @override
+  String get connectivityTestFailedSummary => 'Test could not be completed';
+
+  @override
+  String connectivityTestDurationSeconds(String seconds) {
+    return '$seconds sec';
+  }
+
+  @override
+  String connectivityTestDurationMilliseconds(int milliseconds) {
+    return '$milliseconds ms';
+  }
+
+  @override
+  String get messageSearchTitle => 'Search Messages';
+
+  @override
+  String get messageSearchHint => 'Search messages across all conversations...';
+
+  @override
+  String get messageSearchInitialState =>
+      'Type a keyword to search messages in all conversations';
+
+  @override
+  String get messageSearchEmptyState => 'No matching messages found';
+
+  @override
+  String get messageSearchNewConversation => 'New conversation';
+
+  @override
+  String messageSearchMatchCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count matches',
+      one: '$count match',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get filesTabText => 'Text';
+
+  @override
+  String get filesTabAudio => 'Audio';
+
+  @override
+  String get filesTabImages => 'Images';
+
+  @override
+  String get filesTabVideos => 'Videos';
+
+  @override
+  String get filesReorderTabs => 'Reorder Tabs';
+
+  @override
+  String get filesReorderCancel => 'Cancel';
+
+  @override
+  String get filesReorderDone => 'Done';
 }
 
 /// The translations for English, as used in the United States (`en_US`).
@@ -18133,4 +18226,97 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get catCatchRootFolder => 'Root folder';
+
+  @override
+  String connectivityTestTitle(String title) {
+    return '$title · Connectivity Test';
+  }
+
+  @override
+  String get connectivityTestJsonLabel => 'Test content (JSON)';
+
+  @override
+  String get connectivityTestJsonHelp =>
+      'You can run or save changes directly. MCP uses read-only tools/list; search tools can change query/count; Todo is read-only by default.';
+
+  @override
+  String connectivityTestSaveFailed(String error) {
+    return 'Save failed: $error';
+  }
+
+  @override
+  String get connectivityTestSaved => 'Test content saved';
+
+  @override
+  String get connectivityTestClose => 'Close';
+
+  @override
+  String get connectivityTestSaveContent => 'Save Content';
+
+  @override
+  String get connectivityTestTesting => 'Testing…';
+
+  @override
+  String get connectivityTestRun => 'Run Test';
+
+  @override
+  String get connectivityTestFailedSummary => 'Test could not be completed';
+
+  @override
+  String connectivityTestDurationSeconds(String seconds) {
+    return '$seconds sec';
+  }
+
+  @override
+  String connectivityTestDurationMilliseconds(int milliseconds) {
+    return '$milliseconds ms';
+  }
+
+  @override
+  String get messageSearchTitle => 'Search Messages';
+
+  @override
+  String get messageSearchHint => 'Search messages across all conversations...';
+
+  @override
+  String get messageSearchInitialState =>
+      'Type a keyword to search messages in all conversations';
+
+  @override
+  String get messageSearchEmptyState => 'No matching messages found';
+
+  @override
+  String get messageSearchNewConversation => 'New conversation';
+
+  @override
+  String messageSearchMatchCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count matches',
+      one: '$count match',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get filesTabText => 'Text';
+
+  @override
+  String get filesTabAudio => 'Audio';
+
+  @override
+  String get filesTabImages => 'Images';
+
+  @override
+  String get filesTabVideos => 'Videos';
+
+  @override
+  String get filesReorderTabs => 'Reorder Tabs';
+
+  @override
+  String get filesReorderCancel => 'Cancel';
+
+  @override
+  String get filesReorderDone => 'Done';
 }
