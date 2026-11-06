@@ -67,6 +67,7 @@ class StreamResult {
 class _ConversationStreamState {
   final String convId;
   bool cancelledByUser = false;
+  bool toolCallStarted = false;
   final Completer<void> cancellationSignal = Completer<void>();
 
   void cancelByUser() {

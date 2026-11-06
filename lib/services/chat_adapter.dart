@@ -822,6 +822,7 @@ class ChatAdapter {
     String convId = '',
     Assistant? assistant,
     ProviderEntriesState? entriesState,
+    void Function()? onToolCallIntent,
   }) {
     final svc = convId.isNotEmpty
         ? getOrCreateService(convId,
@@ -838,6 +839,7 @@ class ChatAdapter {
       reasoningParamValues: reasoningParamValues,
       customParamValues: customParamValues,
       tools: tools,
+      onToolCallIntent: onToolCallIntent,
     );
   }
 

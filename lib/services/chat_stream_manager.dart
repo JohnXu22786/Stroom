@@ -526,6 +526,7 @@ class ChatStreamManager {
                 assistant: assistant,
                 entriesState:
                     entriesStateOverride ?? _ref?.read(providerEntriesProvider),
+                onToolCallIntent: () => state.toolCallStarted = true,
               );
 
     // Now safe to yield to event loop — all state is established and the
@@ -559,10 +560,11 @@ class ChatStreamManager {
           final canContinuePartial = shouldAutoContinueStream(
             error: e,
             hasPartialOutput: hasPartialOutput,
-            hasToolHistory: state.toolCalls.isNotEmpty,
+            hasToolHistory: state.toolCalls.isNotEmpty || state.toolCallStarted,
           );
           if (state.cancelledByUser ||
               state.toolCalls.isNotEmpty ||
+              state.toolCallStarted ||
               hasVisibleReasoning ||
               transportRetries >= _transportRetryPolicy.maxRetries ||
               !isRetryableTransportFailure(e) ||

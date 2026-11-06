@@ -138,6 +138,7 @@ extension ChatServiceStreamingExt on ChatService {
     Map<String, String> reasoningParamValues = const {},
     Map<String, String>? customParamValues,
     List<ToolDefinition> tools = const [],
+    void Function()? onToolCallIntent,
   }) {
     AppLogService.info(
         'ChatService', 'sendStreamWithTools 开始: ${userMessage.length} 字符');
@@ -273,6 +274,7 @@ extension ChatServiceStreamingExt on ChatService {
                 controller.add(ReasoningEvent(event.text));
               } else if (event.isToolCallEvent) {
                 toolCallRefs.addAll(event.toolCalls!);
+                if (event.toolCalls!.isNotEmpty) onToolCallIntent?.call();
               } else if (event.text.isNotEmpty) {
                 // Accumulate visible content for tool call chain
                 // preservation per DeepSeek spec.
