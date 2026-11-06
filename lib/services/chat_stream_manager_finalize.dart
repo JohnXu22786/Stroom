@@ -87,12 +87,15 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
     // text into fullReply for ANY thrown object (not just Exception/Error).
     final hadStreamError = streamError != null;
     if (!wasCancelled && !hadStreamError && state.historyOnSuccess != null) {
+      final storedMessagesById = <String, ChatMessage>{};
+      for (final storedMessage in state.history) {
+        storedMessagesById.putIfAbsent(
+          storedMessage.id,
+          () => storedMessage,
+        );
+      }
       state.history = state.historyOnSuccess!
-          .map((message) =>
-              state.history
-                  .where((stored) => stored.id == message.id)
-                  .firstOrNull ??
-              message)
+          .map((message) => storedMessagesById[message.id] ?? message)
           .toList();
     }
 
