@@ -3,7 +3,9 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/chat/composer/chat_file_picker_dialog.dart';
+import 'package:stroom/pages/chat/composer/video_album_picker_dialog.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/video_manifest.dart';
 
@@ -22,6 +24,8 @@ void main() {
 
   Widget buildTestApp() {
     return MaterialApp(
+      locale: const Locale('zh', 'CN'),
+      supportedLocales: AppLocalizations.supportedLocales,
       home: Scaffold(
         body: Builder(
           builder: (context) {
@@ -33,6 +37,7 @@ void main() {
         ),
       ),
       localizationsDelegates: const [
+        AppLocalizations.delegate,
         DefaultMaterialLocalizations.delegate,
         DefaultWidgetsLocalizations.delegate,
       ],
@@ -40,6 +45,68 @@ void main() {
   }
 
   group('ChatFilePickerDialog video thumbnails', () {
+    for (final (locale, title, empty) in [
+      (const Locale('en', 'US'), 'Choose app videos', 'No videos available'),
+      (const Locale('zh', 'CN'), '选择应用内视频', '暂无视频'),
+    ]) {
+      testWidgets('$locale localizes the video album picker', (tester) async {
+        await tester.pumpWidget(MaterialApp(
+          locale: locale,
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showAppVideoPickerDialog(context),
+              child: const Text('Open Video Picker'),
+            ),
+          ),
+        ));
+
+        await tester.tap(find.text('Open Video Picker'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+
+        expect(find.text(title), findsOneWidget);
+        expect(find.text(empty), findsOneWidget);
+      });
+    }
+
+    for (final (locale, expectedDuration) in [
+      (const Locale('en', 'US'), '5 sec'),
+      (const Locale('zh', 'CN'), '5秒'),
+    ]) {
+      testWidgets('$locale localizes the video duration', (tester) async {
+        await VideoManifest.addRecord(
+          VideoRecord(
+            name: 'timed_video',
+            hash: 'timed_video_hash',
+            format: 'mp4',
+            createdAt: DateTime.now(),
+            size: 1024,
+            duration: 5000,
+          ),
+        );
+
+        await tester.pumpWidget(MaterialApp(
+          locale: locale,
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showAppVideoPickerDialog(context),
+              child: const Text('Open Video Picker'),
+            ),
+          ),
+        ));
+
+        await tester.tap(find.text('Open Video Picker'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(find.text('timed_video'), findsOneWidget);
+        expect(find.text(expectedDuration), findsOneWidget);
+      });
+    }
+
     testWidgets('shows video file item with thumbnail fallback icon', (
       tester,
     ) async {

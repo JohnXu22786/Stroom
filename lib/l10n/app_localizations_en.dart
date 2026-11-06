@@ -2853,6 +2853,50 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get chatAlbumPickerTitle => 'App album';
+
+  @override
+  String get chatAlbumPickerEmpty => 'No images available';
+
+  @override
+  String appAlbumPickerSelectedImages(num count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count images selected',
+      one: '$count image selected',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get chatFilePickerTitle => 'Choose files';
+
+  @override
+  String get chatFilePickerTabText => 'Text';
+
+  @override
+  String get chatFilePickerTabImages => 'Images';
+
+  @override
+  String get chatFilePickerTabVideos => 'Videos';
+
+  @override
+  String get chatFilePickerTabAudio => 'Audio';
+
+  @override
+  String get chatFilePickerEmpty => 'No files available';
+
+  @override
+  String get chatFilePickerLoadFailed => 'Could not load files';
+
+  @override
+  String get chatVideoPickerTitle => 'Choose app videos';
+
+  @override
+  String get chatVideoPickerEmpty => 'No videos available';
+
+  @override
   String get imagePreviewCrop => 'Crop';
 
   @override
@@ -11872,6 +11916,50 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String appMediaSelectedFiles(Object count) {
     return '$count files selected';
   }
+
+  @override
+  String get chatAlbumPickerTitle => 'App album';
+
+  @override
+  String get chatAlbumPickerEmpty => 'No images available';
+
+  @override
+  String appAlbumPickerSelectedImages(num count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count images selected',
+      one: '$count image selected',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get chatFilePickerTitle => 'Choose files';
+
+  @override
+  String get chatFilePickerTabText => 'Text';
+
+  @override
+  String get chatFilePickerTabImages => 'Images';
+
+  @override
+  String get chatFilePickerTabVideos => 'Videos';
+
+  @override
+  String get chatFilePickerTabAudio => 'Audio';
+
+  @override
+  String get chatFilePickerEmpty => 'No files available';
+
+  @override
+  String get chatFilePickerLoadFailed => 'Could not load files';
+
+  @override
+  String get chatVideoPickerTitle => 'Choose app videos';
+
+  @override
+  String get chatVideoPickerEmpty => 'No videos available';
 
   @override
   String get imagePreviewCrop => 'Crop';
