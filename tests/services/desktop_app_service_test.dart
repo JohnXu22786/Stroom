@@ -3,6 +3,7 @@ import 'dart:io' show exit;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart' show Locale;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
@@ -260,8 +261,54 @@ void main() {
   });
 
   group('DesktopAppService - tray setup', () {
+    test('tray tooltip and menu labels follow the selected locale', () async {
+      final service = DesktopAppService.instance;
+      final mocks = registerChannelMocks();
+      await withDesktopPlatform(TargetPlatform.windows, () async {
+        service.updateLocaleOverride(const Locale('en', 'US'));
+        await service.setupTrayAndCloseBehavior();
+      });
+
+      var tooltipCall = mocks['tray_manager']!
+          .calls
+          .firstWhere((call) => call.method == 'setToolTip');
+      expect(
+        (tooltipCall.arguments as Map)['toolTip'],
+        'Stroom is running in the background',
+      );
+      var menuCall = mocks['tray_manager']!
+          .calls
+          .firstWhere((call) => call.method == 'setContextMenu');
+      var menuItems =
+          ((menuCall.arguments as Map)['menu'] as Map)['items'] as List;
+      expect(menuItems.map((item) => (item as Map)['label']), [
+        'Show Main Window',
+        '',
+        'Quit Stroom',
+      ]);
+
+      service.updateLocaleOverride(const Locale('zh', 'CN'));
+      await Future<void>.delayed(Duration.zero);
+      tooltipCall = mocks['tray_manager']!
+          .calls
+          .where((call) => call.method == 'setToolTip')
+          .last;
+      expect((tooltipCall.arguments as Map)['toolTip'], 'Stroom 正在后台运行');
+      menuCall = mocks['tray_manager']!
+          .calls
+          .where((call) => call.method == 'setContextMenu')
+          .last;
+      menuItems = ((menuCall.arguments as Map)['menu'] as Map)['items'] as List;
+      expect(menuItems.map((item) => (item as Map)['label']), [
+        '显示主窗口',
+        '',
+        '退出 Stroom',
+      ]);
+    });
+
     test('setupTrayAndCloseBehavior prevents close and registers tray',
         () async {
+      DesktopAppService.instance.updateLocaleOverride(const Locale('zh', 'CN'));
       final mocks = registerChannelMocks();
       await withDesktopPlatform(TargetPlatform.windows, () async {
         await DesktopAppService.instance.setupTrayAndCloseBehavior();

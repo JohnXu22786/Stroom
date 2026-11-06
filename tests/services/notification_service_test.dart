@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -7,12 +8,15 @@ import 'package:stroom/services/notification_service.dart';
 
 /// 记录插件 show 调用时使用的通知 ID。
 final shownIds = <int>[];
+final shownNotifications = <Map>[];
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUp(() async {
     shownIds.clear();
+    shownNotifications.clear();
+    NotificationService().updateLocaleOverride(null);
     SharedPreferences.setMockInitialValues({
       'notifications_enabled': true,
     });
@@ -27,6 +31,7 @@ void main() {
         if (call.method == 'show') {
           final args = call.arguments as Map;
           shownIds.add(args['id'] as int);
+          shownNotifications.add(args);
           return null;
         }
         return null;
@@ -92,5 +97,50 @@ void main() {
     );
 
     expect(shownIds, isEmpty, reason: '关闭通知设置后不应发送任何系统通知');
+  });
+
+  test('system notifications localize app text and preserve task data',
+      () async {
+    final service = NotificationService();
+    await service.initialize();
+
+    service.updateLocaleOverride(const Locale('en', 'US'));
+    await service.showTaskCompletionNotification(
+      taskId: 'task-en',
+      title: 'OCR report',
+      typeLabel: 'OCR',
+      success: true,
+    );
+    service.updateLocaleOverride(const Locale('zh', 'CN'));
+    await service.showTaskCompletionNotification(
+      taskId: 'task-zh',
+      title: '识别报告',
+      typeLabel: 'OCR',
+      success: false,
+      error: 'provider error',
+    );
+
+    expect(shownNotifications, hasLength(2));
+    expect(shownNotifications[0]['title'], 'Task completed: OCR');
+    expect(shownNotifications[0]['body'], 'OCR report completed');
+    expect(shownNotifications[0]['payload'], 'task-en');
+    expect(shownNotifications[1]['title'], '任务失败：OCR');
+    expect(shownNotifications[1]['body'], '识别报告 失败：provider error');
+    expect(shownNotifications[1]['payload'], 'task-zh');
+  });
+
+  test('blocked permission guidance follows the selected locale', () {
+    final service = NotificationService();
+
+    service.updateLocaleOverride(const Locale('en', 'US'));
+    expect(
+      service.blockedGuide,
+      'Notifications are blocked. Open system settings and allow notifications for Stroom.',
+    );
+    service.updateLocaleOverride(const Locale('zh', 'CN'));
+    expect(
+      service.blockedGuide,
+      '通知已被系统屏蔽，请前往系统设置允许 Stroom 的通知权限。',
+    );
   });
 }

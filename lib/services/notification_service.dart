@@ -1,11 +1,14 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:permission_handler/permission_handler.dart';
+
+import '../providers/locale_provider.dart';
 
 // ============================================================================
 // Notification settings keys
@@ -33,6 +36,10 @@ class NotificationService {
 
   FlutterLocalNotificationsPlugin? _plugin;
   bool _initialized = false;
+  Locale? _localeOverride;
+
+  /// Keeps service strings in sync with the app's selected locale.
+  void updateLocaleOverride(Locale? locale) => _localeOverride = locale;
 
   /// 单调递增的通知 ID 计数器。
   ///
@@ -56,6 +63,8 @@ class NotificationService {
   Future<void> initialize() async {
     if (_initialized || kIsWeb) return;
     try {
+      final prefs = await SharedPreferences.getInstance();
+      _localeOverride ??= localeFromCode(prefs.getString(localePreferenceKey));
       _plugin = FlutterLocalNotificationsPlugin();
 
       const androidSettings = AndroidInitializationSettings(
@@ -69,11 +78,14 @@ class NotificationService {
 
       // 桌面端也需要初始化：窗口最小化/关闭后任务完成通知
       // 仍要通过系统通知提示用户（in-app 横幅不可见）。
-      const settings = InitializationSettings(
+      final strings = appLocalizationsForLocale(_localeOverride);
+      final settings = InitializationSettings(
         android: androidSettings,
         iOS: iosSettings,
         macOS: iosSettings,
-        linux: LinuxInitializationSettings(defaultActionName: '打开 Stroom'),
+        linux: LinuxInitializationSettings(
+          defaultActionName: strings.desktopTrayOpen,
+        ),
         windows: WindowsInitializationSettings(
           appName: 'Stroom',
           appUserModelId: 'com.johntsui.stroom',
@@ -201,10 +213,11 @@ class NotificationService {
     if (_plugin == null || !_initialized) return;
 
     try {
+      final strings = appLocalizationsForLocale(_localeOverride);
       final androidDetails = AndroidNotificationDetails(
         'task_completion',
-        '任务完成通知',
-        channelDescription: '任务完成或失败时发送通知',
+        strings.notificationSettingsTaskCompleteTitle,
+        channelDescription: strings.notificationSettingsTaskCompleteDescription,
         importance: Importance.high,
         priority: Priority.high,
         icon: '@mipmap/ic_launcher',
@@ -220,16 +233,21 @@ class NotificationService {
         android: androidDetails,
         iOS: iosDetails,
         macOS: iosDetails,
-        linux: const LinuxNotificationDetails(),
+        linux: LinuxNotificationDetails(
+          defaultActionName: strings.desktopTrayOpen,
+        ),
         windows: const WindowsNotificationDetails(),
       );
 
       final title = payload.success
-          ? '任务完成: ${payload.typeLabel}'
-          : '任务失败: ${payload.typeLabel}';
+          ? strings.notificationTaskCompletedTitle(payload.typeLabel)
+          : strings.notificationTaskFailedTitle(payload.typeLabel);
       final body = payload.success
-          ? '${payload.title} 已完成'
-          : '${payload.title} 失败: ${payload.error ?? "未知错误"}';
+          ? strings.notificationTaskCompletedBody(payload.title)
+          : strings.notificationTaskFailedBody(
+              payload.title,
+              payload.error ?? strings.notificationUnknownError,
+            );
 
       // 使用单调递增 ID，避免 hashCode 碰撞导致通知互相覆盖。
       _notificationIdCounter += 1;
@@ -260,12 +278,13 @@ class NotificationService {
 
   /// Get a guide string for when notifications are blocked by the system.
   String get blockedGuide {
+    final strings = appLocalizationsForLocale(_localeOverride);
     if (Platform.isAndroid) {
-      return '通知已被系统屏蔽。请前往 系统设置 > 应用 > Stroom > 通知管理，允许通知权限。';
+      return strings.notificationSettingsPermissionBlockedAndroid;
     } else if (Platform.isIOS) {
-      return '通知已被系统屏蔽。请前往 系统设置 > Stroom > 通知，允许通知权限。';
+      return strings.notificationSettingsPermissionBlockedIos;
     }
-    return '通知已被系统屏蔽，请在系统设置中允许通知权限。';
+    return strings.notificationSettingsPermissionBlockedGuide;
   }
 }
 

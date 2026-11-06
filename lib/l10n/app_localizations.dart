@@ -15695,6 +15695,60 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Error details were hidden'**
   String get bgTaskErrorDetailsHidden;
+
+  /// No description provided for @notificationTaskCompletedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Task completed: {typeLabel}'**
+  String notificationTaskCompletedTitle(String typeLabel);
+
+  /// No description provided for @notificationTaskFailedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Task failed: {typeLabel}'**
+  String notificationTaskFailedTitle(String typeLabel);
+
+  /// No description provided for @notificationTaskCompletedBody.
+  ///
+  /// In en, this message translates to:
+  /// **'{title} completed'**
+  String notificationTaskCompletedBody(String title);
+
+  /// No description provided for @notificationTaskFailedBody.
+  ///
+  /// In en, this message translates to:
+  /// **'{title} failed: {error}'**
+  String notificationTaskFailedBody(String title, String error);
+
+  /// No description provided for @notificationUnknownError.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown error'**
+  String get notificationUnknownError;
+
+  /// No description provided for @desktopTrayTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Stroom is running in the background'**
+  String get desktopTrayTooltip;
+
+  /// No description provided for @desktopTrayOpen.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Stroom'**
+  String get desktopTrayOpen;
+
+  /// No description provided for @desktopTrayShowMainWindow.
+  ///
+  /// In en, this message translates to:
+  /// **'Show Main Window'**
+  String get desktopTrayShowMainWindow;
+
+  /// No description provided for @desktopTrayQuitStroom.
+  ///
+  /// In en, this message translates to:
+  /// **'Quit Stroom'**
+  String get desktopTrayQuitStroom;
 }
 
 class _AppLocalizationsDelegate

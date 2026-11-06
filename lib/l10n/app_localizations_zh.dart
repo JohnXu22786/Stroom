@@ -8912,6 +8912,41 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get bgTaskErrorDetailsHidden => '错误详情已隐藏';
+
+  @override
+  String notificationTaskCompletedTitle(String typeLabel) {
+    return '任务完成：$typeLabel';
+  }
+
+  @override
+  String notificationTaskFailedTitle(String typeLabel) {
+    return '任务失败：$typeLabel';
+  }
+
+  @override
+  String notificationTaskCompletedBody(String title) {
+    return '$title 已完成';
+  }
+
+  @override
+  String notificationTaskFailedBody(String title, String error) {
+    return '$title 失败：$error';
+  }
+
+  @override
+  String get notificationUnknownError => '未知错误';
+
+  @override
+  String get desktopTrayTooltip => 'Stroom 正在后台运行';
+
+  @override
+  String get desktopTrayOpen => '打开 Stroom';
+
+  @override
+  String get desktopTrayShowMainWindow => '显示主窗口';
+
+  @override
+  String get desktopTrayQuitStroom => '退出 Stroom';
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).
@@ -17821,4 +17856,39 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get bgTaskErrorDetailsHidden => '错误详情已隐藏';
+
+  @override
+  String notificationTaskCompletedTitle(String typeLabel) {
+    return '任务完成：$typeLabel';
+  }
+
+  @override
+  String notificationTaskFailedTitle(String typeLabel) {
+    return '任务失败：$typeLabel';
+  }
+
+  @override
+  String notificationTaskCompletedBody(String title) {
+    return '$title 已完成';
+  }
+
+  @override
+  String notificationTaskFailedBody(String title, String error) {
+    return '$title 失败：$error';
+  }
+
+  @override
+  String get notificationUnknownError => '未知错误';
+
+  @override
+  String get desktopTrayTooltip => 'Stroom 正在后台运行';
+
+  @override
+  String get desktopTrayOpen => '打开 Stroom';
+
+  @override
+  String get desktopTrayShowMainWindow => '显示主窗口';
+
+  @override
+  String get desktopTrayQuitStroom => '退出 Stroom';
 }
