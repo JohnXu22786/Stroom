@@ -955,13 +955,225 @@ void main() {
       'pollinations',
       'predibase',
       'qiniu',
-      'routeway',
       'sap',
     ]) {
       expect(findLlmOpenAiProviderPreset(id), isNull, reason: id);
     }
     // `poolside/...` in the catalog is an upstream model ID, not a preset ID.
     expect(findLlmOpenAiProviderPreset('poolside'), isNotNull);
+  });
+
+  test('M63 Routeway preset matches its pinned API-key registry contract', () {
+    final preset = findLlmOpenAiProviderPreset('routeway')!;
+
+    expect(preset.baseUrl, 'https://api.routeway.ai/v1/chat/completions');
+    expect(preset.modelsUrl, 'https://api.routeway.ai/v1/models');
+    expect(preset.authType, 'api_key');
+    expect(preset.authorizationHeader, 'Authorization');
+    expect(preset.authorizationScheme, 'Bearer');
+    expect(preset.defaultApiProtocol, 'openai.chat_completions');
+    expect(preset.protocolRoutes, isEmpty);
+    expect(preset.headers, {'User-Agent': 'Mozilla/5.0 OmniRoute/1.0'});
+    expect(
+      preset.fallbackModels.map((model) => model.id),
+      [
+        'llama-3.3-70b-instruct:free',
+        'nemotron-3-nano-30b-a3b:free',
+        'nemotron-nano-9b-v2:free',
+        'step-3.7-flash:free',
+        'step-3.5-flash:free',
+        'laguna-m.1:free',
+        'laguna-xs.2:free',
+        'llama-3.2-3b-instruct:free',
+      ],
+    );
+    expect(
+      preset.fallbackModels.map((model) => model.displayName),
+      [
+        'Llama 3.3 70B Instruct (free)',
+        'Nemotron 3 Nano 30B (free)',
+        'Nemotron Nano 9B v2 (free)',
+        'Step 3.7 Flash (free)',
+        'Step 3.5 Flash (free)',
+        'Laguna M.1 (free)',
+        'Laguna XS.2 (free)',
+        'Llama 3.2 3B Instruct (free)',
+      ],
+    );
+    expect(
+      preset.fallbackModels.map((model) => model.capabilities),
+      [
+        {'contextLength': 131072, 'toolCalling': true},
+        {'contextLength': 256000, 'toolCalling': true},
+        {'contextLength': 128000, 'toolCalling': true},
+        {
+          'contextLength': 256000,
+          'toolCalling': true,
+          'vision': true,
+        },
+        {'contextLength': 65536, 'toolCalling': true},
+        {'contextLength': 131072, 'toolCalling': true},
+        {'contextLength': 131072, 'toolCalling': true},
+        {'contextLength': 16000, 'toolCalling': true},
+      ],
+    );
+    expect(
+      preset.fallbackModels.every(
+        (model) => !model.capabilities.containsKey('supportedApiProtocols'),
+      ),
+      isTrue,
+    );
+
+    final applied = preset.applyToEndpointConfig(const {
+      'baseUrl': 'https://custom.invalid/v1/chat/completions',
+      'modelsUrl': 'https://custom.invalid/v1/models',
+      'apiProtocol': 'openai.responses',
+      'headers': {'X-Workspace': 'saved'},
+      'accountOwnedConfig': 'preserved',
+    });
+    expect(applied['providerPresetId'], 'routeway');
+    expect(applied['baseUrl'], preset.baseUrl);
+    expect(applied['modelsUrl'], preset.modelsUrl);
+    expect(applied['apiProtocol'], 'openai.chat_completions');
+    expect(applied['apiKeyHeader'], 'Authorization');
+    expect(applied['apiKeyScheme'], 'Bearer');
+    expect(applied['headers'], {
+      'X-Workspace': 'saved',
+      'User-Agent': 'Mozilla/5.0 OmniRoute/1.0',
+    });
+    expect(applied['accountOwnedConfig'], 'preserved');
+
+    final switched = findLlmOpenAiProviderPreset('speka')!
+        .applyToEndpointConfig(applied);
+    expect(switched['providerPresetId'], 'speka');
+    expect(switched['headers'], {'X-Workspace': 'saved'});
+    final custom = LlmProviderPreset.clearFromEndpointConfig(applied);
+    expect(custom.containsKey('providerPresetId'), isFalse);
+    expect(custom.containsKey('apiKeyHeader'), isFalse);
+    expect(custom.containsKey('apiKeyScheme'), isFalse);
+    expect(custom['headers'], {'X-Workspace': 'saved'});
+  });
+
+  test('M63 Routeway accounts save and route through Chat and Task Flow',
+      () async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryLlmAccountPreferences(),
+      credentialStore: _MemoryLlmCredentials(),
+    );
+    final preset = findLlmOpenAiProviderPreset('routeway')!;
+    const modelOverride = 'openai.chat_completions';
+    final fallback = preset.fallbackModels[3];
+    final account = LlmAccount(
+      id: 'm63-routeway',
+      connectorType: 'openai-compatibility',
+      authType: preset.authType,
+      displayName: 'Routeway',
+      endpointConfig: preset.applyToEndpointConfig(const {
+        'accountOwnedConfig': 'retained',
+      }),
+      models: [
+        LlmUpstreamModel(
+          id: 'm63-routeway:${fallback.id}',
+          upstreamModelId: fallback.id,
+          displayName: fallback.displayName,
+          capabilities: fallback.capabilities,
+          config: const {'apiProtocolOverride': modelOverride},
+        ),
+      ],
+    );
+    await service.saveAccount(account, secret: 'routeway-key');
+
+    final restored = (await service.getAccount(account.id))!;
+    expect(restored.connectorType, 'openai-compatibility');
+    expect(restored.endpointConfig['providerPresetId'], 'routeway');
+    expect(restored.endpointConfig['baseUrl'], preset.baseUrl);
+    expect(restored.endpointConfig['modelsUrl'], preset.modelsUrl);
+    expect(restored.endpointConfig['apiProtocol'], 'openai.chat_completions');
+    expect(restored.endpointConfig['headers'], preset.headers);
+    expect(restored.endpointConfig['accountOwnedConfig'], 'retained');
+    expect(await service.readCredential(account.id), 'routeway-key');
+    expect(restored.models.single.upstreamModelId, fallback.id);
+    expect(restored.models.single.capabilities, fallback.capabilities);
+    expect(restored.models.single.config['apiProtocolOverride'], modelOverride);
+
+    final group = LlmModelGroup(
+      id: 'm63-routeway-group',
+      displayName: 'Routeway',
+      members: [
+        LlmModelGroupMember(
+          accountId: restored.id,
+          upstreamModelId: fallback.id,
+        ),
+      ],
+    );
+    final configs = buildLlmModelGroupProviderConfigs(
+      accounts: [restored],
+      groups: [group],
+    );
+    expect(configs, hasLength(1));
+    expect(configs.single.apiProtocol, 'openai.chat_completions');
+    expect(configs.single.models.single.apiProtocolOverride, modelOverride);
+    expect(
+      llmRoutedChatSupportedConnectorTypes('openai.chat_completions'),
+      contains('openai-compatibility'),
+    );
+
+    final request = LlmNativeRequestBuilder().build(
+      account: restored,
+      credential: 'routeway-key',
+      modelId: fallback.id,
+      body: {'model': fallback.id, 'messages': []},
+    );
+    expect(request.uri.toString(), preset.baseUrl);
+    expect(request.headers['Authorization'], 'Bearer routeway-key');
+    expect(request.headers['User-Agent'], 'Mozilla/5.0 OmniRoute/1.0');
+  });
+
+  test('M63 Routeway model discovery sends its static header and preserves IDs',
+      () async {
+    final requests = <RequestOptions>[];
+    final dio = Dio()
+      ..httpClientAdapter = _FunctionalAdapter((options) async {
+        requests.add(options);
+        return ResponseBody.fromString(
+          jsonEncode({
+            'data': [
+              {'id': 'dynamic-model:free'},
+            ],
+          }),
+          200,
+          headers: const {
+            Headers.contentTypeHeader: ['application/json'],
+          },
+        );
+      });
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryLlmAccountPreferences(),
+      credentialStore: _MemoryLlmCredentials(),
+      dio: dio,
+    );
+    final preset = findLlmOpenAiProviderPreset('routeway')!;
+    final account = await service.saveAccount(
+      LlmAccount(
+        id: 'm63-routeway-discovery',
+        connectorType: 'openai-compatibility',
+        authType: preset.authType,
+        displayName: preset.displayName,
+        endpointConfig: preset.applyToEndpointConfig(const {}),
+      ),
+      secret: 'routeway-key',
+    );
+
+    final models = await service.discoverModels(account, refreshRemote: true);
+
+    expect(requests, hasLength(1));
+    expect(requests.single.uri.toString(), preset.modelsUrl);
+    expect(requests.single.headers['Authorization'], 'Bearer routeway-key');
+    expect(requests.single.headers['User-Agent'], 'Mozilla/5.0 OmniRoute/1.0');
+    expect(
+      models.map((model) => model.upstreamModelId),
+      ['dynamic-model:free'],
+    );
   });
 
   test(
