@@ -2454,6 +2454,16 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get catcatchWebViewRecoveryGuidance =>
+      '自动获取网页资源连续超时。请在此页面登录或设置用户脚本；检测到媒体资源后，点击“继续流程”。';
+
+  @override
+  String get browserRecoveryOpenPage => '打开恢复页面';
+
+  @override
+  String get browserRecoveryContinue => '继续流程';
+
+  @override
   String get catcatchSkipped => '已跳过（无需处理）';
 
   @override
@@ -10714,6 +10724,16 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String catcatchFlowActionFailed(Object error) {
     return '任务流操作失败：$error';
   }
+
+  @override
+  String get catcatchWebViewRecoveryGuidance =>
+      '自动获取网页资源连续超时。请在此页面登录或设置用户脚本；检测到媒体资源后，点击“继续流程”。';
+
+  @override
+  String get browserRecoveryOpenPage => '打开恢复页面';
+
+  @override
+  String get browserRecoveryContinue => '继续流程';
 
   @override
   String get catcatchSkipped => '已跳过（无需处理）';

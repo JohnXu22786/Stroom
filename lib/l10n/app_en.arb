@@ -842,6 +842,8 @@
   "unifiedTaskPauseAudio": "Pause audio",
   "catcatchFlowActionNotStarted": "Flow action did not start. Check the flow status and try again.",
   "catcatchFlowActionFailed": "Flow action failed: {error}",
+  "catcatchWebViewRecoveryGuidance": "Automatic page scanning timed out. Sign in or configure a user script on this page; after media is detected, choose Continue flow.",
+  "browserRecoveryContinue": "Continue flow",
   "catcatchSkipped": "Skipped (nothing to process)",
   "catcatchRetryStep": "Retry this step",
   "catcatchCollapseSegments": "Hide {count} segments",
@@ -4628,5 +4630,6 @@
   "browserCookiesDeletedOne": "Cookie deleted",
   "browserCookiesDeleteFailed": "Could not delete. Try again.",
   "browserCookiesEmptyValue": "(empty value)",
-  "platformTutorialPageTitle": "Platform tutorials"
+  "platformTutorialPageTitle": "Platform tutorials",
+  "browserRecoveryOpenPage": "Open recovery page"
 }
