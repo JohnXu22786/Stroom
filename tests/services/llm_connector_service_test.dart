@@ -321,6 +321,81 @@ void main() {
       throwsA(isA<LlmAccountConnectorException>()),
     );
   });
+  test('1min.AI is an API-key chat connector with a pinned model fallback', () {
+    final connector = LlmConnectorRegistry.find('oneminai');
+    expect(connector, isNotNull);
+    expect(connector!.authTypes, {'api_key'});
+    expect(connector.modelCatalog, ['gpt-4o-mini']);
+    expect(connector.canRefreshCredentials, isFalse);
+    expect(
+      supportedApiProtocolsForSupplier(null, connectorType: 'oneminai'),
+      {'oneminai.chat'},
+    );
+  });
+
+  test('1min.AI account credentials use secure storage and a pinned fallback',
+      () async {
+    final credentials = _MemoryCredentials();
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: credentials,
+      dio: Dio(),
+    );
+    final account = await service.saveAccount(
+      _account('oneminai-account', 'oneminai', authType: 'api_key'),
+      secret: 'one-min-ai-key',
+    );
+
+    expect(await service.readCredential(account.id), 'one-min-ai-key');
+    final models = await service.discoverModels(account);
+    expect(models.map((model) => model.upstreamModelId), ['gpt-4o-mini']);
+    expect(models.single.capabilities['chat'], isTrue);
+    expect(models.single.capabilities['streaming'], isTrue);
+    expect(models.single.capabilities['supportedApiProtocols'], [
+      'oneminai.chat',
+    ]);
+  });
+
+  test('1min.AI builds a fixed API-KEY request and rejects route overrides',
+      () {
+    final account = _account(
+      'oneminai-request',
+      'oneminai',
+      authType: 'api_key',
+    );
+    final request = LlmNativeRequestBuilder().build(
+      account: account,
+      credential: 'one-min-ai-key',
+      modelId: 'account-owned-model',
+      body: const {
+        'type': 'UNIFY_CHAT_WITH_AI',
+        'model': 'account-owned-model',
+        'promptObject': {'prompt': 'User: hello'},
+      },
+      stream: true,
+      nativeFormat: 'oneminai.chat',
+    );
+    expect(request.uri.toString(),
+        'https://api.1min.ai/api/chat-with-ai?isStreaming=true');
+    expect(request.headers['API-KEY'], 'one-min-ai-key');
+    expect(request.headers, isNot(contains('Authorization')));
+    expect(request.body, {
+      'type': 'UNIFY_CHAT_WITH_AI',
+      'model': 'account-owned-model',
+      'promptObject': {'prompt': 'User: hello'},
+    });
+    expect(
+      () => LlmNativeRequestBuilder().build(
+        account: account,
+        credential: 'one-min-ai-key',
+        modelId: 'account-owned-model',
+        body: const {},
+        nativeFormat: 'openai.chat_completions',
+      ),
+      throwsA(isA<LlmAccountConnectorException>()),
+    );
+  });
+
   test(
     'GitLab Duo keeps PAT and configured OAuth as distinct account modes',
     () {
@@ -9267,6 +9342,157 @@ void main() {
   });
 
   group('LlmConnectorHttpClient', () {
+    test('translates 1min.AI nonstream completion to chat format', () async {
+      RequestOptions? captured;
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          captured = options;
+          return ResponseBody.fromString(
+            jsonEncode({
+              'aiRecord': {
+                'aiRecordDetail': {
+                  'resultObject': ['hello', ' world']
+                },
+              },
+            }),
+            200,
+            headers: const {
+              'content-type': ['application/json'],
+            },
+          );
+        });
+      final accounts = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentials(),
+      );
+      final account = await accounts.saveAccount(
+        _account('oneminai-http-json', 'oneminai', authType: 'api_key'),
+        secret: 'test-key',
+      );
+
+      final response = await LlmConnectorHttpClient(
+        accountService: accounts,
+        dio: dio,
+      ).request(
+        account: account,
+        modelId: 'gpt-4o-mini',
+        body: const {
+          'type': 'UNIFY_CHAT_WITH_AI',
+          'model': 'gpt-4o-mini',
+          'promptObject': {'prompt': 'User: hello'},
+        },
+        nativeFormat: 'oneminai.chat',
+      );
+
+      expect(captured!.uri.toString(), 'https://api.1min.ai/api/chat-with-ai');
+      expect(captured!.headers['API-KEY'], 'test-key');
+      expect(captured!.headers.containsKey('Authorization'), isFalse);
+      expect((captured!.data as Map)['promptObject']['prompt'], 'User: hello');
+      expect(
+        ((response.body as Map)['choices'] as List).first['message']['content'],
+        'hello world',
+      );
+    });
+
+    test('translates 1min.AI SSE frames in order and terminates on done',
+        () async {
+      RequestOptions? captured;
+      final source = StreamController<Uint8List>();
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          captured = options;
+          return ResponseBody(
+            source.stream,
+            200,
+            headers: const {
+              'content-type': ['text/event-stream'],
+            },
+          );
+        });
+      final accounts = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentials(),
+      );
+      final account = await accounts.saveAccount(
+        _account('oneminai-http-sse', 'oneminai', authType: 'api_key'),
+        secret: 'test-key',
+      );
+      final response = await LlmConnectorHttpClient(
+        accountService: accounts,
+        dio: dio,
+      ).request(
+        account: account,
+        modelId: 'gpt-4o-mini',
+        body: const {
+          'type': 'UNIFY_CHAT_WITH_AI',
+          'model': 'gpt-4o-mini',
+          'promptObject': {'prompt': 'User: hello'},
+        },
+        stream: true,
+        nativeFormat: 'oneminai.chat',
+      );
+      expect(captured!.uri.queryParameters, {'isStreaming': 'true'});
+      final output = <int>[];
+      final subscription = (response.body as Stream<List<int>>).listen(
+        output.addAll,
+      );
+      source.add(Uint8List.fromList(utf8.encode(
+        'event: content\ndata: {"content":"first"}\n\n'
+        'event: content\ndata: {"content":" second"}\n\n'
+        'event: done\ndata: {}\n\n',
+      )));
+      await source.close();
+      await subscription.asFuture<void>();
+      final text = utf8.decode(output);
+      expect(text.indexOf('first'), lessThan(text.indexOf(' second')));
+      expect(text, contains('data: [DONE]'));
+    });
+
+    test('1min.AI streaming errors never expose upstream details', () async {
+      final dio = Dio()
+        ..httpClientAdapter =
+            _FunctionalAdapter((_) async => ResponseBody.fromString(
+                  'event: error\ndata: {"message":"private upstream detail"}\n\n',
+                  200,
+                  headers: const {
+                    'content-type': ['text/event-stream'],
+                  },
+                ));
+      final accounts = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentials(),
+      );
+      final account = await accounts.saveAccount(
+        _account('oneminai-http-error', 'oneminai', authType: 'api_key'),
+        secret: 'test-key',
+      );
+      final response = await LlmConnectorHttpClient(
+        accountService: accounts,
+        dio: dio,
+      ).request(
+        account: account,
+        modelId: 'gpt-4o-mini',
+        body: const {
+          'type': 'UNIFY_CHAT_WITH_AI',
+          'model': 'gpt-4o-mini',
+          'promptObject': {'prompt': 'User: hello'},
+        },
+        stream: true,
+        nativeFormat: 'oneminai.chat',
+      );
+
+      await expectLater(
+        (response.body as Stream<List<int>>).drain<void>(),
+        throwsA(
+          isA<LlmConnectorHttpException>().having(
+            (error) => error.toString(),
+            'safe error',
+            isNot(contains('private upstream detail')),
+          ),
+        ),
+      );
+    });
+
     test('buffers Cline streaming output for completed-response callers',
         () async {
       RequestOptions? captured;

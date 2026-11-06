@@ -31,6 +31,7 @@ import 'zed_hosted_connector.dart';
 import 'amazon_q_connector.dart';
 import 'azure_openai_endpoint.dart';
 import 'clova_studio_protocol.dart';
+import 'oneminai_protocol.dart';
 
 /// Frozen upstream implementation used to define this connector catalog.
 const String kLlmConnectorReferenceRevision =
@@ -275,6 +276,7 @@ String _qwenCloudProtocolBaseUrl(
 
 enum LlmNativeProtocol {
   clovaStudioChat,
+  oneMinAiChat,
   openAIResponses,
   anthropicMessages,
   antigravityGenerateContent,
@@ -352,6 +354,13 @@ abstract final class LlmConnectorRegistry {
       ).hasMatch(modelId);
 
   static const List<LlmConnectorDefinition> all = [
+    LlmConnectorDefinition(
+      id: 'oneminai',
+      displayName: '1min.AI',
+      protocol: LlmNativeProtocol.oneMinAiChat,
+      authTypes: {'api_key'},
+      modelCatalog: [kOneMinAiFallbackModelId],
+    ),
     LlmConnectorDefinition(
       id: 'clova-studio',
       displayName: 'Naver CLOVA Studio',
@@ -812,6 +821,7 @@ abstract final class LlmConnectorRegistry {
       switch (canonicalId(connectorType)) {
         'codex' => 'openai',
         'clova-studio' => 'clova.studio.chat',
+        'oneminai' => kOneMinAiProtocolId,
         'amazon-q' => 'amazon-q.chat',
         'xai' ||
         'grok-cli' ||
@@ -2072,6 +2082,11 @@ class LlmAccountConnectorService {
                 'maxOutputTokens':
                     connector.modelCatalog[index] == 'HCX-007' ? 32768 : 4096,
                 'supportedApiProtocols': [kClovaStudioProtocolId],
+              },
+            'oneminai' => const {
+                'chat': true,
+                'streaming': true,
+                'supportedApiProtocols': [kOneMinAiProtocolId],
               },
             'codebuddy-cn' ||
             'codebuddy-intl' =>
@@ -6162,6 +6177,9 @@ class LlmNativeRequestBuilder {
         connector.id != account.connectorType ||
         !connector.authTypes.contains(account.authType) ||
         (account.connectorType == 'clova-studio' && nativeFormat != 'clova') ||
+        (account.connectorType == 'oneminai' &&
+            (account.authType != 'api_key' ||
+                nativeFormat != kOneMinAiProtocolId)) ||
         (account.connectorType == 'aihorde' &&
             nativeFormat != null &&
             nativeFormat != 'openai.chat_completions') ||
@@ -6286,6 +6304,11 @@ class LlmNativeRequestBuilder {
             : _credentialValue(account, credential);
     final config = account.endpointConfig;
     final configuredHeaders = config['headers'];
+    if (account.connectorType == 'oneminai' &&
+        configuredHeaders is Map &&
+        configuredHeaders.isNotEmpty) {
+      throw const LlmAccountConnectorException();
+    }
     if (account.connectorType != 'aihorde' &&
         account.connectorType != 'uncloseai' &&
         configuredHeaders is Map) {
@@ -6323,6 +6346,13 @@ class LlmNativeRequestBuilder {
         } on ArgumentError {
           throw const LlmAccountConnectorException();
         }
+        break;
+      case 'oneminai':
+        if (secret.trim().isEmpty || nativeFormat != kOneMinAiProtocolId) {
+          throw const LlmAccountConnectorException();
+        }
+        headers.removeWhere((name, _) => name.toLowerCase() == 'authorization');
+        headers['API-KEY'] = secret.trim();
         break;
       case 'uncloseai':
         if (account.authType == 'api_key' && secret.trim().isNotEmpty) {
@@ -7204,6 +7234,13 @@ class LlmNativeRequestBuilder {
     required bool stream,
     required String? nativeFormat,
   }) {
+    if (account.connectorType == 'oneminai') {
+      if (account.authType != 'api_key' ||
+          nativeFormat != kOneMinAiProtocolId) {
+        throw const LlmAccountConnectorException();
+      }
+      return OneMinAiProtocol.requestUri(stream: stream);
+    }
     if (account.connectorType == 'clova-studio') {
       if (account.authType != 'api_key' || nativeFormat != 'clova') {
         throw const LlmAccountConnectorException();

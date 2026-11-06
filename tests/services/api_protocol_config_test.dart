@@ -33,6 +33,37 @@ void main() {
       },
     );
 
+    test('1min.AI has one fixed provider-native protocol', () {
+      expect(
+        builtinDefaultApiProtocolForConnector('oneminai'),
+        'oneminai.chat',
+      );
+      expect(
+        supportedApiProtocolsForSupplier(
+          'oneminai.chat',
+          connectorType: 'oneminai',
+        ),
+        {'oneminai.chat'},
+      );
+      expect(
+        () => validateApiProtocolOverride(
+          'openai.chat_completions',
+          supportedApiProtocolsForSupplier(
+            'oneminai.chat',
+            connectorType: 'oneminai',
+          ),
+        ),
+        throwsArgumentError,
+      );
+      expect(
+        resolveApiProtocol(
+          supplierProtocol: null,
+          builtinDefault: builtinDefaultApiProtocolForConnector('oneminai'),
+        ),
+        'oneminai.chat',
+      );
+    });
+
     test('Devin CLI ACP is separate from Devin Connect-RPC', () {
       expect(
         builtinDefaultApiProtocolForConnector('devin-cli-agentic'),

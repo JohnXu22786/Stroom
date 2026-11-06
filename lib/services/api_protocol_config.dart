@@ -74,6 +74,7 @@ String builtinDefaultApiProtocolForConnector(String? connectorType) =>
       'vertex-partner' => 'openai.chat_completions',
       'gemini-interactions' => 'google.gemini.interactions',
       'amazon-q' => 'amazon-q.chat',
+      'oneminai' => 'oneminai.chat',
       'ollama' => 'ollama.chat',
       'devin' => 'devin.connect_rpc',
       'devin-cli-agentic' => 'devin.acp',
@@ -123,6 +124,7 @@ Set<String> supportedApiProtocolsForSupplier(
         'anthropic.messages',
       },
     'amazon-q' => const {'amazon-q.chat'},
+    'oneminai' => const {'oneminai.chat'},
     'moonshot' || 'glm' || 'deepseek' || 'minimax' || 'qwen' => const {
         'openai.chat_completions'
       },
@@ -150,6 +152,7 @@ Set<String> supportedApiProtocolsForSupplier(
   final nativeProtocol = switch (connectorType) {
     'claude' => 'anthropic.messages',
     'clova-studio' => 'clova.studio.chat',
+    'oneminai' => 'oneminai.chat',
     'gemini' || 'aistudio' => 'google.gemini.generate_content',
     'gemini-interactions' => 'google.gemini.interactions',
     'vertex-partner' => 'openai.chat_completions',
@@ -180,6 +183,7 @@ Set<String> supportedApiProtocolsForSupplier(
 
 const apiProtocolLabels = <String, String>{
   'clova.studio.chat': 'Naver CLOVA Studio v3',
+  'oneminai.chat': '1min.AI Chat',
   'openai.chat_completions': 'OpenAI Chat Completions',
   'openai.responses': 'OpenAI Responses',
   'anthropic.messages': 'Anthropic Messages',
