@@ -214,6 +214,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// while the final section continues to grow.
   final Map<String, _CachedStreamingMarkdown> _streamingMarkdownCache = {};
   final Map<String, StreamingFenceInfoCache> _streamingFenceInfoCaches = {};
+  final Map<String, _StreamingSearchOccurrenceCount>
+      _streamingSearchOccurrenceCache = {};
   final Map<String, List<String>> _livePlainTextFragments = {};
 
   String? _streamingMsgId;

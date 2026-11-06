@@ -14,6 +14,151 @@ class _CachedStreamingMarkdown {
   });
 }
 
+class _StreamingSearchOccurrenceCount {
+  String _query = '';
+  int _textLength = 0;
+  String _tail = '';
+  int _count = 0;
+  int _nextSearchIndex = 0;
+  int _lowerTextLength = 0;
+  int _liveRawTextLength = 0;
+  bool _canAppendIncrementally = false;
+  bool _hasContextualLowercase = false;
+
+  int countFor(String text, String lowerQuery) {
+    if (_query != lowerQuery) _reset(lowerQuery);
+    // Live text sections only append. Comparing lengths avoids rescanning the
+    // growing prefix just to confirm that the new snapshot extends it.
+    if (text.length == _textLength) return _count;
+
+    if (_canAppendIncrementally &&
+        text.length > _textLength &&
+        lowerQuery.isNotEmpty) {
+      final appended = text.substring(_textLength);
+      if (appended.contains('`') ||
+          appended.contains('~') ||
+          appended.contains(r'$') ||
+          appended.contains('\r') ||
+          appended.contains('\u03A3')) {
+        return _recount(text, lowerQuery);
+      }
+      _appendLowerText(appended.toLowerCase(), lowerQuery);
+      _textLength = text.length;
+      return _count;
+    }
+
+    return _recount(text, lowerQuery);
+  }
+
+  int countLiveFragmentsFor(List<String> fragments, String lowerQuery) {
+    if (_query != lowerQuery) _reset(lowerQuery);
+    var liveTextLength = 0;
+    for (final fragment in fragments) {
+      liveTextLength += fragment.length;
+    }
+    if (liveTextLength < _liveRawTextLength) _reset(lowerQuery);
+    if (_hasContextualLowercase) {
+      final text = fragments.join();
+      final count = _recount(text, lowerQuery);
+      _hasContextualLowercase = true;
+      _liveRawTextLength = liveTextLength;
+      return count;
+    }
+
+    final appendedLength = liveTextLength - _liveRawTextLength;
+    if (appendedLength > 0 && lowerQuery.isNotEmpty) {
+      final appendedParts = <String>[];
+      var remaining = appendedLength;
+      for (var i = fragments.length - 1; i >= 0 && remaining > 0; i--) {
+        final fragment = fragments[i];
+        final take = fragment.length < remaining ? fragment.length : remaining;
+        appendedParts.add(fragment.substring(fragment.length - take));
+        remaining -= take;
+      }
+      final appended = appendedParts.reversed.join();
+      if (appended.contains('\u03A3')) {
+        final text = fragments.join();
+        final count = _recount(text, lowerQuery);
+        _hasContextualLowercase = true;
+        _liveRawTextLength = liveTextLength;
+        return count;
+      }
+      _appendLowerText(appended.toLowerCase(), lowerQuery);
+    }
+    _liveRawTextLength = liveTextLength;
+    return _count;
+  }
+
+  int _recount(String text, String lowerQuery) {
+    final isPlainText = !text.contains('`') &&
+        !text.contains('~') &&
+        !text.contains(r'$') &&
+        !text.contains('\r');
+    _hasContextualLowercase = text.contains('\u03A3');
+    _count = countOccurrences(
+      stripSearchIrrelevantMarkdown(text),
+      lowerQuery,
+    );
+    _nextSearchIndex = 0;
+    _lowerTextLength = 0;
+    _tail = '';
+    if (isPlainText && lowerQuery.isNotEmpty) {
+      final lowerText = text.toLowerCase();
+      _lowerTextLength = lowerText.length;
+      var start = 0;
+      while (true) {
+        final index = lowerText.indexOf(lowerQuery, start);
+        if (index == -1) break;
+        _nextSearchIndex = index + lowerQuery.length;
+        start = _nextSearchIndex;
+      }
+    }
+    _textLength = text.length;
+    _canAppendIncrementally =
+        isPlainText && lowerQuery.isNotEmpty && !_hasContextualLowercase;
+    if (_canAppendIncrementally && lowerQuery.length > 1) {
+      final lowerText = text.toLowerCase();
+      final tailLength = lowerQuery.length - 1;
+      _tail = lowerText.length <= tailLength
+          ? lowerText
+          : lowerText.substring(lowerText.length - tailLength);
+    }
+    return _count;
+  }
+
+  void _appendLowerText(String appended, String lowerQuery) {
+    final searchText = _tail + appended;
+    final tailStart = _lowerTextLength - _tail.length;
+    var start = _nextSearchIndex > tailStart ? _nextSearchIndex - tailStart : 0;
+    while (true) {
+      final index = searchText.indexOf(lowerQuery, start);
+      if (index == -1) break;
+      if (index + lowerQuery.length > _tail.length) {
+        _count++;
+        _nextSearchIndex = tailStart + index + lowerQuery.length;
+      }
+      start = index + lowerQuery.length;
+    }
+    _lowerTextLength += appended.length;
+    final tailLength = lowerQuery.length - 1;
+    _tail = tailLength == 0 || searchText.length <= tailLength
+        ? (tailLength == 0 ? '' : searchText)
+        : searchText.substring(searchText.length - tailLength);
+  }
+
+  void _reset(String lowerQuery) {
+    _query = lowerQuery;
+    _textLength = 0;
+    _tail = '';
+    _count = 0;
+    _nextSearchIndex = 0;
+    _lowerTextLength = 0;
+    _liveRawTextLength = 0;
+    _canAppendIncrementally = false;
+    _hasContextualLowercase = false;
+  }
+}
+
 extension _ChatPageBubblesExt on _ChatPageState {
   /// Error bubble for failed AI messages with status code, response body
   /// and original error text.
@@ -189,10 +334,27 @@ extension _ChatPageBubblesExt on _ChatPageState {
     final liveTextChunkCount = streamingConvId == null
         ? 0
         : ref.read(streamingTextSectionsProvider(streamingConvId)).length;
-    for (final seg in mergeConsecutiveTextSegments(segments)) {
+    final mergedSegments = mergeConsecutiveTextSegments(segments);
+    final lastTextSegmentIndex =
+        mergedSegments.lastIndexWhere((segment) => segment is TextSegment);
+    for (var segmentIndex = 0;
+        segmentIndex < mergedSegments.length;
+        segmentIndex++) {
+      final seg = mergedSegments[segmentIndex];
       switch (seg) {
         case TextSegment s:
           if (s.liveTextFragments != null) {
+            if (hasSearchMatch &&
+                !(isStreaming &&
+                    messageId == _streamingMsgId &&
+                    segmentIndex == lastTextSegmentIndex)) {
+              final cacheKey = s.chunkIndex == null
+                  ? '$messageId:live-segment:$segmentIndex'
+                  : '$messageId:live-chunk:${s.chunkIndex}';
+              occurrenceOffset += _streamingSearchOccurrenceCache
+                  .putIfAbsent(cacheKey, _StreamingSearchOccurrenceCount.new)
+                  .countLiveFragmentsFor(s.liveTextFragments!, lowerQuery);
+            }
             widgets.add(Padding(
               padding: const EdgeInsets.only(bottom: 4),
               child: SelectableText.rich(
@@ -286,10 +448,26 @@ extension _ChatPageBubblesExt on _ChatPageState {
           // become highlightable text), so the offset stays aligned with the
           // per-segment ordinal of the next text segment.
           if (hasSearchMatch) {
-            occurrenceOffset += countOccurrences(
-              stripSearchIrrelevantMarkdown(s.text),
-              lowerQuery,
-            );
+            final isActiveStreamingSearch =
+                isStreaming && messageId == _streamingMsgId;
+            if (isActiveStreamingSearch &&
+                segmentIndex == lastTextSegmentIndex) {
+              // The trailing text block cannot shift a later segment's
+              // highlight ordinal. Count it once after another text block
+              // arrives and seals it instead of recounting it while growing.
+            } else if (isActiveStreamingSearch) {
+              final cacheKey = s.chunkIndex == null
+                  ? '$messageId:segment:$segmentIndex'
+                  : '$messageId:chunk:${s.chunkIndex}';
+              occurrenceOffset += _streamingSearchOccurrenceCache
+                  .putIfAbsent(cacheKey, _StreamingSearchOccurrenceCount.new)
+                  .countFor(s.text, lowerQuery);
+            } else {
+              occurrenceOffset += countOccurrences(
+                stripSearchIrrelevantMarkdown(s.text),
+                lowerQuery,
+              );
+            }
           }
         case ErrorSegment s:
           widgets.add(Container(

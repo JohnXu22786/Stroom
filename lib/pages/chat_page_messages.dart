@@ -195,6 +195,7 @@ extension _ChatPageMessagesExt on _ChatPageState {
     _controller = InMemoryChatController();
     _history.clear();
     _chatSegments.clear();
+    _streamingSearchOccurrenceCache.clear();
     _reasoningContents.clear();
     _finalizedMessages.clear();
     _streamingMsgId = null;
