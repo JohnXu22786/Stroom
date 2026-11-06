@@ -196,9 +196,10 @@ class TaskFlowExecutionService {
         .read(catcatchTasksProvider)
         .where((task) => task.id == taskId)
         .firstOrNull;
-    final awaitingBrowserRecovery = task?.status == catcatch.TaskStatus.paused &&
-        task?.metadata[catcatch.CatCatchTask.webViewRecoveryRequiredKey] ==
-            'true';
+    final awaitingBrowserRecovery =
+        task?.status == catcatch.TaskStatus.paused &&
+            task?.metadata[catcatch.CatCatchTask.webViewRecoveryRequiredKey] ==
+                'true';
     if (task == null ||
         (task.status != catcatch.TaskStatus.running &&
             !(awaitingBrowserRecovery && !selecting))) {

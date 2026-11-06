@@ -196,7 +196,8 @@ Future<String> executeCatCatchBlock({
     final awaitingConfirmation =
         task.metadata['pendingConfirm'] == 'special_format';
     final awaitingBrowserRecovery =
-        task.metadata[catcatch.CatCatchTask.webViewRecoveryRequiredKey] == 'true';
+        task.metadata[catcatch.CatCatchTask.webViewRecoveryRequiredKey] ==
+            'true';
     if (awaitingBrowserRecovery && !browserRecoveryWaitOpen) {
       onManualWait?.call(taskId);
       browserRecoveryWaitOpen = true;

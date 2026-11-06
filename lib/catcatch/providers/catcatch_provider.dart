@@ -1338,8 +1338,7 @@ MediaResource recoveredBrowserMediaResource({
     mimeType: mimeType,
     initiator: initiator,
     isPlayable: !isPlaylist &&
-        (isPlayableByMime ||
-            (ext.isNotEmpty && !['ts', 'ev1'].contains(ext))),
+        (isPlayableByMime || (ext.isNotEmpty && !['ts', 'ev1'].contains(ext))),
     isPlaylist: isPlaylist,
   );
 }

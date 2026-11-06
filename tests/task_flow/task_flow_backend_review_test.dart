@@ -1000,7 +1000,8 @@ void main() {
     ))
         .single;
     await _waitFor(
-      () => downloads?.idsByUrl.containsKey('https://example.com/recovery') ??
+      () =>
+          downloads?.idsByUrl.containsKey('https://example.com/recovery') ??
           false,
       'browser recovery CatCatch task creation',
     );

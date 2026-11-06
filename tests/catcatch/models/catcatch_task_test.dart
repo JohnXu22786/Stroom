@@ -28,7 +28,7 @@ void main() {
     expect(restored.toMap(), updated.toMap());
   });
 
-      test('browser recovery resumes after fetch and retains prior task state', () {
+  test('browser recovery resumes after fetch and retains prior task state', () {
     final originalMedia = MediaResource(
       url: 'https://example.com/original.mp4',
       name: 'original',

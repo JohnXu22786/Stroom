@@ -75,12 +75,12 @@ void main() {
 
         final canceledResult =
             await WebViewSniffer.runHeadlessRecoveryAttempts<int>(
-              isCancelled: () => true,
-              runAttempt: (_) async {
-                calls++;
-                return 1;
-              },
-            );
+          isCancelled: () => true,
+          runAttempt: (_) async {
+            calls++;
+            return 1;
+          },
+        );
         expect(canceledResult, isNull);
         expect(calls, 1);
       },

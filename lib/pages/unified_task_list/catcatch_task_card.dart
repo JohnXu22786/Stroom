@@ -77,7 +77,8 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
   void _openRecoveryPageWhenReady() {
     if (_recoveryPageOpened ||
         widget.task.status != catcatch.TaskStatus.paused ||
-        widget.task.metadata[catcatch.CatCatchTask.webViewRecoveryRequiredKey] !=
+        widget.task
+                .metadata[catcatch.CatCatchTask.webViewRecoveryRequiredKey] !=
             'true') {
       return;
     }
@@ -99,15 +100,15 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
     );
     if (!mounted || result == null || result.mediaUrls.isEmpty) return;
     final notifier = ref.read(catcatchTasksProvider.notifier);
-    final action = (CatCatchNotifier current) =>
-        current.continueAfterBrowserRecovery(
-          widget.task.id,
-          mediaUrls: result.mediaUrls,
-          mimeTypesByUrl: result.mimeTypesByUrl,
-          pageUrl: result.pageUrl,
-          pageTitle: result.pageTitle,
-          cookieHeadersByHost: result.cookieHeadersByHost,
-        );
+    final action =
+        (CatCatchNotifier current) => current.continueAfterBrowserRecovery(
+              widget.task.id,
+              mediaUrls: result.mediaUrls,
+              mimeTypesByUrl: result.mimeTypesByUrl,
+              pageUrl: result.pageUrl,
+              pageTitle: result.pageTitle,
+              cookieHeadersByHost: result.cookieHeadersByHost,
+            );
     if (widget.isFlowManaged) {
       await _performFlowAction(widget.task.id, false, action);
     } else {

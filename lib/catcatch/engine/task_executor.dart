@@ -623,31 +623,29 @@ class TaskExecutor {
     var pageTitle = capturedPageTitle;
 
     try {
-      final attemptResult =
-          await WebViewSniffer.runHeadlessRecoveryAttempts<
-            (List<MediaResource>, String?)
-          >(
-            isCancelled: () => cancelToken?.isCancelled ?? false,
-            runAttempt: (timeout) => WebViewSniffer.sniff(
-              url: task.url,
-              timeout: timeout,
-              cancelToken: cancelToken,
-              onProgress: (step, progress) {
-                markExecutorStep(
-                  steps,
-                  0,
-                  running: true,
-                  progress: 50 + (progress ~/ 2),
-                );
-                onUpdate(
-                  task.copyWith(
-                    steps: steps,
-                    progress: 20 + (progress * 30 ~/ 100),
-                  ),
-                );
-              },
-            ),
-          );
+      final attemptResult = await WebViewSniffer.runHeadlessRecoveryAttempts<
+          (List<MediaResource>, String?)>(
+        isCancelled: () => cancelToken?.isCancelled ?? false,
+        runAttempt: (timeout) => WebViewSniffer.sniff(
+          url: task.url,
+          timeout: timeout,
+          cancelToken: cancelToken,
+          onProgress: (step, progress) {
+            markExecutorStep(
+              steps,
+              0,
+              running: true,
+              progress: 50 + (progress ~/ 2),
+            );
+            onUpdate(
+              task.copyWith(
+                steps: steps,
+                progress: 20 + (progress * 30 ~/ 100),
+              ),
+            );
+          },
+        ),
+      );
       if (attemptResult == null) {
         if (cancelToken?.isCancelled ?? false) return (resources, pageTitle);
         throw WebViewRecoveryRequiredException(
@@ -817,8 +815,7 @@ class TaskExecutor {
     final cookieHeader = task.browserCookieHeaderForUrl(media.url);
     final browserHeaders = DefaultRules.buildBrowserHeaders(
       referer: referer,
-      extraHeaders:
-          cookieHeader == null ? null : {'Cookie': cookieHeader},
+      extraHeaders: cookieHeader == null ? null : {'Cookie': cookieHeader},
     );
 
     return RetryHelper.retry(
@@ -851,8 +848,7 @@ class TaskExecutor {
             ),
             headers: DefaultRules.buildBrowserHeaders(referer: referer),
             headersForUrl: (url) {
-              final segmentCookieHeader =
-                  task.browserCookieHeaderForUrl(url);
+              final segmentCookieHeader = task.browserCookieHeaderForUrl(url);
               return DefaultRules.buildBrowserHeaders(
                 referer: referer,
                 extraHeaders: segmentCookieHeader == null

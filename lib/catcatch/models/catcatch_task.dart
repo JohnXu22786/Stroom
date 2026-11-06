@@ -232,8 +232,7 @@ class CatCatchTask {
     Object? runtimeIdentity,
     Map<String, String> runtimeBrowserCookieHeadersByHost = const {},
   })  : _runtimeIdentity = runtimeIdentity,
-        _runtimeBrowserCookieHeadersByHost =
-            runtimeBrowserCookieHeadersByHost;
+        _runtimeBrowserCookieHeadersByHost = runtimeBrowserCookieHeadersByHost;
 
   // ---------------------------------------------------------------------------
   // copyWith
@@ -274,8 +273,8 @@ class CatCatchTask {
       runtimeBrowserCookieHeadersByHost: clearRuntimeBrowserCookieHeader
           ? const {}
           : runtimeBrowserCookieHeadersByHost == null
-          ? _runtimeBrowserCookieHeadersByHost
-          : Map.unmodifiable(runtimeBrowserCookieHeadersByHost),
+              ? _runtimeBrowserCookieHeadersByHost
+              : Map.unmodifiable(runtimeBrowserCookieHeadersByHost),
       id: id ?? this.id,
       url: url ?? this.url,
       expectedDurationSec: expectedDurationSec ?? this.expectedDurationSec,
