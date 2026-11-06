@@ -11,6 +11,7 @@ import 'dart:convert';
 import 'ai_gateway_contracts.dart';
 import '../models/stroom_conversation.dart';
 import '../services/amazon_q_connector.dart';
+import '../services/oneminai_protocol.dart';
 
 /// Built-in protocol mappings. Gemini Interactions is provider-specific and
 /// remains separate from the four general chat contracts.
@@ -22,6 +23,7 @@ abstract final class AiGatewayProtocolBridges {
   static const geminiInteractions = _GeminiInteractionsBridge();
   static const ollamaChat = _OllamaChatBridge();
   static const amazonQChat = _AmazonQChatBridge();
+  static const oneMinAiChat = _OneMinAiChatBridge();
 
   static AiGatewayProtocolBridge<Map<String, dynamic>>? forProtocol(
     String protocolId,
@@ -34,6 +36,7 @@ abstract final class AiGatewayProtocolBridges {
         'google.gemini.interactions' => geminiInteractions,
         'ollama.chat' => ollamaChat,
         'amazon-q.chat' => amazonQChat,
+        'oneminai.chat' => oneMinAiChat,
         _ => null,
       };
 
@@ -203,6 +206,9 @@ abstract final class AiGatewayProtocolStreamBridge {
       return [make(AiGatewayProtocolStreamEventKind.lifecycle)];
     }
     if (protocolId == 'amazon-q.chat') {
+      return mapEvents('openai.chat_completions', event, state: state);
+    }
+    if (protocolId == kOneMinAiProtocolId) {
       return mapEvents('openai.chat_completions', event, state: state);
     }
     final eventType = protocolId == 'google.gemini.interactions'
@@ -2997,6 +3003,54 @@ final class _AmazonQChatBridge extends _MapBridge {
         temperature: request.temperature,
         options: request.options,
       ),
+      streams: request.stream,
+    );
+  }
+}
+
+final class _OneMinAiChatBridge extends _MapBridge {
+  const _OneMinAiChatBridge();
+
+  @override
+  String get protocolId => kOneMinAiProtocolId;
+
+  @override
+  Map<String, dynamic> _encodeNeutral(StroomMessage message) =>
+      AiGatewayProtocolBridges.openAiChatCompletions.fromStroom(message);
+
+  @override
+  StroomMessage toStroom(Map<String, dynamic> message) =>
+      AiGatewayProtocolBridges.openAiChatCompletions.toStroom(message);
+
+  @override
+  AiGatewayEncodedProtocolRequest buildRequest(
+    AiGatewayProtocolRequest request,
+  ) {
+    if (request.operation != 'generate') {
+      throw ArgumentError.value(request.operation, 'operation');
+    }
+    if (request.tools.isNotEmpty ||
+        request.maxOutputTokens != null ||
+        request.temperature != null ||
+        request.options.isNotEmpty ||
+        request.previousInteractionId != null) {
+      throw UnsupportedError(
+        '1min.AI does not support tools, generation options, or resumable interactions.',
+      );
+    }
+    final messages = <Map<String, dynamic>>[];
+    for (final message in request.messages) {
+      messages.addAll(
+        AiGatewayProtocolBridges.openAiChatCompletions
+            .encodeMessages([message]),
+      );
+    }
+    return AiGatewayEncodedProtocolRequest(
+      path: '/api/chat-with-ai',
+      body: OneMinAiProtocol.buildRequest(request.modelId, {
+        if (request.system != null) 'system': request.system,
+        'messages': messages,
+      }),
       streams: request.stream,
     );
   }

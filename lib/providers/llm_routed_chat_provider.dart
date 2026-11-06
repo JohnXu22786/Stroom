@@ -21,6 +21,7 @@ Set<String> llmRoutedChatSupportedConnectorTypes(String endpointType) =>
     switch (endpointType) {
       'clova.studio.chat' => const {'clova-studio'},
       'amazon-q.chat' => const {'amazon-q'},
+      'oneminai.chat' => const {'oneminai'},
       'cursor.agent_connect_rpc' => const {'cursor'},
       'anthropic' || 'anthropic.messages' => const {
           'openai-compatibility',
@@ -103,6 +104,7 @@ Set<String> llmRoutedChatSupportedConnectorTypesForModelOverride(
       'devin.acp',
       'cursor.agent_connect_rpc',
       'amazon-q.chat',
+      'oneminai.chat',
     ])
       ...llmRoutedChatSupportedConnectorTypes(protocol),
   };
@@ -128,6 +130,33 @@ String llmRoutedChatProtocolForAccountModel({
   if (account.connectorType == 'cursor') return 'cursor.agent_connect_rpc';
   if (account.connectorType == 'aihorde') return 'openai.chat_completions';
   if (account.connectorType == 'amazon-q') return 'amazon-q.chat';
+  if (account.connectorType == 'oneminai') {
+    final model = account.models
+        .where((model) => model.upstreamModelId == upstreamModelId)
+        .firstOrNull;
+    final modelProtocol =
+        model?.config['apiProtocolOverride'] ?? model?.config['endpointType'];
+    if (modelProtocol is String &&
+        modelProtocol.isNotEmpty &&
+        modelProtocol != 'oneminai.chat') {
+      throw StateError('1min.AI supports only its native chat protocol.');
+    }
+    final requestedProtocol = apiProtocolOverride ?? modelProtocol;
+    final accountProtocol = account.endpointConfig['apiProtocol'] ??
+        account.endpointConfig['chatProtocol'] ??
+        account.endpointConfig['endpointType'];
+    if (requestedProtocol is String &&
+        requestedProtocol.isNotEmpty &&
+        requestedProtocol != 'oneminai.chat') {
+      throw StateError('1min.AI supports only its native chat protocol.');
+    }
+    if (accountProtocol is String &&
+        accountProtocol.isNotEmpty &&
+        apiProtocolFromLegacyEndpointType(accountProtocol) != 'oneminai.chat') {
+      throw StateError('1min.AI supports only its native chat protocol.');
+    }
+    return 'oneminai.chat';
+  }
   String protocol;
   if (apiProtocolOverride?.isNotEmpty == true) {
     protocol = apiProtocolOverride!;
@@ -916,6 +945,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
 
   String? _nativeFormatFor(String protocolId) => switch (protocolId) {
         'clova.studio.chat' => 'clova',
+        'oneminai.chat' => 'oneminai.chat',
         'openai.responses' => 'responses',
         'anthropic.messages' => 'anthropic',
         _ => null,

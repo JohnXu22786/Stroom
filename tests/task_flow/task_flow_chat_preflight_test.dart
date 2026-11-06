@@ -20,7 +20,7 @@ import 'package:stroom/task_flow/models/io_type.dart';
 import 'package:stroom/task_flow/models/task_flow_definition.dart';
 import 'package:stroom/task_flow/models/task_flow_execution.dart';
 import 'package:stroom/task_flow/services/block_executors/chat_executor.dart'
-    show flowChatEndpointType;
+    show flowChatEndpointType, flowChatInputError;
 import 'package:stroom/task_flow/services/task_flow_validator.dart';
 
 void main() {
@@ -78,6 +78,81 @@ void main() {
           ),
         ],
       );
+
+  test('1min.AI Task Flow preflight rejects every non-text input', () {
+    for (final input in [
+      IOType.image,
+      IOType.audio,
+      IOType.video,
+      IOType.file
+    ]) {
+      expect(
+        flowChatInputError(input, 'oneminai.chat'),
+        isNotNull,
+        reason: input.name,
+      );
+    }
+    expect(flowChatInputError(IOType.text, 'oneminai.chat'), isNull);
+  });
+
+  test('1min.AI account protocol reaches Chat and Task Flow model selection',
+      () async {
+    final account = LlmAccount(
+      id: 'oneminai-task-flow',
+      connectorType: 'oneminai',
+      authType: 'api_key',
+      displayName: '1min.AI',
+      status: LlmAccountStatus.ready,
+      models: const [
+        LlmUpstreamModel(
+          id: 'oneminai-gpt4o-mini',
+          upstreamModelId: 'gpt-4o-mini',
+          displayName: 'GPT-4o Mini',
+          capabilities: {
+            'chat': true,
+            'streaming': true,
+            'supportedApiProtocols': ['oneminai.chat'],
+          },
+        ),
+      ],
+    );
+    final group = LlmModelGroup(
+      id: 'oneminai-task-flow-group',
+      displayName: '1min.AI models',
+      members: const [
+        LlmModelGroupMember(
+          accountId: 'oneminai-task-flow',
+          localModelId: 'oneminai-local',
+          upstreamModelId: 'gpt-4o-mini',
+        ),
+      ],
+    );
+    final config = buildLlmModelGroupProviderConfigs(
+      accounts: [account],
+      groups: [group],
+    ).single;
+    final providers = ProviderEntriesState(
+      entries: [
+        ProviderEntry(name: 'LLM', type: 'llm', configs: [config])
+      ],
+    );
+    final assistant = Assistant(
+      id: 'assistant',
+      name: '1min.AI assistant',
+      prompt: 'Answer clearly.',
+      defaultModelId: config.models.single.modelId,
+      defaultProviderName: config.providerName,
+    );
+
+    expect(config.apiProtocol, 'oneminai.chat');
+    expect(flowChatEndpointType(assistant, providers), 'oneminai.chat');
+    await validateTaskFlow(
+      chatFlow(IOType.text),
+      [FlowRunInput(text: 'hello')],
+      providers: providers,
+      assistants: [assistant],
+    );
+  });
 
   test(
     'mixed-protocol model group preflights media for Anthropic members',

@@ -20,6 +20,7 @@ import 'cursor_api_key_auth.dart';
 import 'trae_solo_connector.dart';
 import 'zed_hosted_connector.dart';
 import 'amazon_q_connector.dart';
+import 'oneminai_protocol.dart';
 import '../ai_gateway/ai_gateway_contracts.dart';
 import '../ai_gateway/ai_gateway_realtime_session.dart';
 
@@ -753,6 +754,57 @@ class LlmConnectorHttpClient {
             statusCode: status,
             headers: response.headers.map,
             body: completion,
+            observation: mergeLlmConnectorObservations(
+              headerObservation,
+              bodyObservation,
+            ),
+          );
+        }
+        if (storedAccount.connectorType == 'oneminai') {
+          final responseData = response.data;
+          final responseStream = responseData is ResponseBody
+              ? responseData.stream
+              : responseData is Stream<List<int>>
+                  ? responseData
+                  : null;
+          if (stream) {
+            if (responseStream == null) {
+              throw const LlmConnectorHttpException();
+            }
+            final completed = Completer<LlmConnectorObservation>();
+            final converted = OneMinAiProtocol.translateSse(
+              responseStream,
+              modelId: modelId,
+            );
+            final observed = _observeResponseStream(
+              storedAccount.connectorType,
+              converted,
+              headerObservation,
+              completed,
+            );
+            return LlmConnectorResponse(
+              statusCode: status,
+              headers: response.headers.map,
+              body: observed,
+              observation: headerObservation,
+              completedObservation: completed.future,
+            );
+          }
+          final rawResponse = responseStream == null
+              ? responseData
+              : await _readResponseStream(responseStream);
+          final normalized = OneMinAiProtocol.toChatCompletion(
+            _decodeResponseBody(rawResponse),
+            modelId: modelId,
+          );
+          final bodyObservation = parseLlmConnectorObservation(
+            storedAccount.connectorType,
+            normalized,
+          );
+          return LlmConnectorResponse(
+            statusCode: status,
+            headers: response.headers.map,
+            body: normalized,
             observation: mergeLlmConnectorObservations(
               headerObservation,
               bodyObservation,

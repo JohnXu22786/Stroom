@@ -166,6 +166,9 @@ String? flowChatInputError(
   final isAnthropic = mayUseAnthropic ||
       endpointType == 'anthropic' ||
       endpointType == 'anthropic.messages';
+  if (endpointType == 'oneminai.chat' && type != IOType.text) {
+    return '1min.AI chat supports text input only';
+  }
   final mime = mimeType?.split(';').first.trim().toLowerCase();
   if (mime == 'image/svg+xml') {
     return '助手对话不支持 SVG 图片附件，请转换为 PNG 或 JPEG';
