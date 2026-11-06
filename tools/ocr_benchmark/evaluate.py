@@ -1075,6 +1075,36 @@ def _strip_latex_markup(value: str) -> str:
             index += 1
         return None
 
+    def root_operand(value: str, start_index: int) -> tuple[str, int] | None:
+        group = braced_group(value, start_index)
+        if group is not None:
+            return group
+        if start_index >= len(value) or value[start_index] in "{}":
+            return None
+
+        fraction_match = fraction_command.match(value, start_index)
+        if fraction_match is not None:
+            numerator_group = braced_group(value, fraction_match.end())
+            if numerator_group is not None:
+                next_index = numerator_group[1]
+                while next_index < len(value) and value[next_index].isspace():
+                    next_index += 1
+                denominator_group = braced_group(value, next_index)
+                if denominator_group is not None:
+                    end_index = denominator_group[1]
+                    return value[start_index:end_index], end_index
+
+        end_index = start_index + 1
+        if value[start_index] == "\\":
+            if end_index >= len(value):
+                return None
+            if value[end_index].isalpha():
+                while end_index < len(value) and value[end_index].isalpha():
+                    end_index += 1
+            else:
+                end_index += 1
+        return value[start_index:end_index], end_index
+
     def replace_fractions(value: str) -> str:
         output = []
         index = 0
@@ -1122,7 +1152,7 @@ def _strip_latex_markup(value: str) -> str:
                 if match.group(1) is None
                 else indexed_root_symbols.get(match.group(1))
             )
-            operand_group = braced_group(value, match.end())
+            operand_group = root_operand(value, match.end())
             if root_symbol is None or operand_group is None:
                 output.append(value[index : match.end()])
                 index = match.end()
@@ -1140,8 +1170,8 @@ def _strip_latex_markup(value: str) -> str:
 
     while True:
         previous = text
-        text = replace_fractions(text)
         text = replace_roots(text)
+        text = replace_fractions(text)
         if text == previous:
             break
 
