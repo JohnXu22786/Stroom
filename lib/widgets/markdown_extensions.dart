@@ -1225,8 +1225,7 @@ class StreamingFenceInfoCache {
       _textEndedWithCarriageReturn = text.endsWith('\r');
       return updated;
     }
-    final resumedText =
-        '${_previousPendingLine(text)}$normalizedAppended';
+    final resumedText = '${_previousPendingLine(text)}$normalizedAppended';
     final updated = _scanFromStart(
       text,
       resume: checkpoint,
@@ -1427,9 +1426,8 @@ class StreamingFenceInfoCache {
   ) {
     final lastLineFeed = appended.lastIndexOf('\n');
     final lastCarriageReturn = appended.lastIndexOf('\r');
-    final lastLineBreak = lastLineFeed > lastCarriageReturn
-        ? lastLineFeed
-        : lastCarriageReturn;
+    final lastLineBreak =
+        lastLineFeed > lastCarriageReturn ? lastLineFeed : lastCarriageReturn;
     return lastLineBreak < 0
         ? previousLineStart
         : previousTextLength + lastLineBreak + 1;
