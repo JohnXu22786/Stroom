@@ -46,6 +46,32 @@ List<AiGatewayUpstreamModel> _pinnedAuggieModels(String accountId) => [
         ),
     ];
 
+List<AiGatewayUpstreamModel> _pinnedCodexAppServerModels(String accountId) => [
+      for (var index = 0; index < kPinnedCodexModels.length; index++)
+        AiGatewayUpstreamModel(
+          id: '$accountId:codex-app-server:$index',
+          upstreamModelId: kPinnedCodexModels[index],
+          displayName: kPinnedCodexModels[index],
+          capabilities: {
+            if (!kPinnedCodexModels[index].startsWith('gpt-image-')) ...{
+              'chat': true,
+              'streaming': true,
+              'reasoning': true,
+              'tools': true,
+              'textOnly': true,
+            },
+            'vision': false,
+            'audio': false,
+            'contextLength': 400000,
+            'supportedApiProtocols': ['openai.responses'],
+          },
+          config: const {
+            'catalogSource': 'pinned_codex_app_server_registry',
+            'availability': 'unknown',
+          },
+        ),
+    ];
+
 class LlmAccountManagementPage extends StatefulWidget {
   final AiGatewayFacade? gateway;
   final Future<void> Function()? onConfigurationChanged;
@@ -2020,6 +2046,17 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
           : List<AiGatewayUpstreamModel>.of(savedAuggieModels);
       _endpoint.clear();
     }
+    if (_connectorType == 'codex-app-server') {
+      _authType = 'none';
+      _apiProtocol = 'openai.responses';
+      _models.text = account?.models.isNotEmpty == true
+          ? account!.models.map((model) => model.upstreamModelId).join('\n')
+          : kPinnedCodexModels.join('\n');
+      _discoveredModels = account?.models.isNotEmpty == true
+          ? List<AiGatewayUpstreamModel>.of(account!.models)
+          : _pinnedCodexAppServerModels(account?.id ?? 'new');
+      _endpoint.clear();
+    }
     if (_isAzureConnector && _azureDeployment.text.trim().isNotEmpty) {
       _models.text = _azureDeployment.text.trim();
     }
@@ -2349,6 +2386,14 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                       _discoveredModels = _pinnedAuggieModels(
                         widget.account?.id ?? 'new',
                       );
+                    } else if (value == 'codex-app-server') {
+                      _authType = 'none';
+                      _endpoint.clear();
+                      _apiProtocol = 'openai.responses';
+                      _models.text = kPinnedCodexModels.join('\n');
+                      _discoveredModels = _pinnedCodexAppServerModels(
+                        widget.account?.id ?? 'new',
+                      );
                     } else if (value == 'devin-cli-agentic') {
                       _models.text = kPinnedDevinCliModels.join('\n');
                     } else if (value == 'cloudflare-ai') {
@@ -2558,6 +2603,13 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                     '仅启动官方 devin CLI。登录配置保存在此账号独立的 Stroom 应用目录；不会读取主机 Devin 登录或 API key。',
                   ),
                 ),
+              if (_connectorType == 'codex-app-server')
+                const Padding(
+                  padding: EdgeInsets.only(top: 6),
+                  child: Text(
+                    '使用本机 Codex CLI。请先在终端运行 codex login；Stroom 不读取或保存 CLI 登录数据。',
+                  ),
+                ),
               if (_connectorType == 'devin-cli-agentic') ...[
                 TextField(
                   controller: _devinCliExecutable,
@@ -2741,7 +2793,8 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                 ),
                 const SizedBox(height: 8),
               ],
-              if (_connectorType != 'cloudflare-ai')
+              if (_connectorType != 'cloudflare-ai' &&
+                  _connectorType != 'codex-app-server')
                 TextField(
                   controller: _endpoint,
                   enabled: _connectorType != 'devin-cli-agentic' &&
@@ -3043,6 +3096,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                   minLines: 3,
                   maxLines: 7,
                   readOnly: _connectorType == 'cloudflare-ai' ||
+                      _connectorType == 'codex-app-server' ||
                       _connectorType == 'devin-cli-agentic' ||
                       _connectorType == 'kimi-coding' ||
                       _connectorType == 'kilocode' ||
@@ -3117,6 +3171,17 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                         : null,
                     icon: const Icon(Icons.terminal),
                     label: const Text('测试本地 Auggie CLI'),
+                  ),
+                ),
+              if (_connectorType == 'codex-app-server')
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: OutlinedButton.icon(
+                    onPressed: widget.account != null && !_draftChanged
+                        ? _testCodexAppServer
+                        : null,
+                    icon: const Icon(Icons.terminal),
+                    label: const Text('检查本地 Codex CLI 登录状态'),
                   ),
                 ),
               if (widget.account == null || _draftChanged)
@@ -3214,6 +3279,21 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Auggie CLI 已安装并可运行。')));
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _error = error.toString());
+    }
+  }
+
+  Future<void> _testCodexAppServer() async {
+    final account = widget.account;
+    if (account == null || _draftChanged) return;
+    try {
+      await widget.modelDiscovery.testConnection(account);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Codex CLI 已登录并可运行。')),
+      );
     } catch (error) {
       if (!mounted) return;
       setState(() => _error = error.toString());
@@ -3792,10 +3872,14 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
       endpointConfig.remove('apiBase');
     } else if (_connectorType == 'trae' ||
         _connectorType == 'uncloseai' ||
-        _connectorType == 'cloudflare-ai') {
+        _connectorType == 'cloudflare-ai' ||
+        _connectorType == 'codex-app-server') {
       endpointConfig.remove('baseUrl');
       endpointConfig.remove('host');
       endpointConfig.remove('apiBase');
+      if (_connectorType == 'codex-app-server') {
+        endpointConfig.remove('websocketUrl');
+      }
     } else if (endpoint.isEmpty) {
       endpointConfig.remove('baseUrl');
       endpointConfig.remove('host');
@@ -3814,6 +3898,8 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
       }
     } else if (_connectorType == 'openai-compatibility') {
       endpointConfig['apiProtocol'] = _apiProtocol;
+    } else if (_connectorType == 'codex-app-server') {
+      endpointConfig['apiProtocol'] = 'openai.responses';
     } else if (widget.account?.connectorType == 'command-code') {
       endpointConfig.remove('apiProtocol');
     }

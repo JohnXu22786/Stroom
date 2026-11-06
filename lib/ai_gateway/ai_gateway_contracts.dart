@@ -102,6 +102,14 @@ class AiGatewayExecutionException implements Exception {
         return 'The selected Auggie model is not in the known local model catalog.';
       case 'auggie_unsupported_capability':
         return 'Auggie CLI supports text-only conversations without tools or media.';
+      case 'codex_cli_not_installed':
+        return 'Codex CLI was not found. Install the official Codex CLI, then sign in with `codex login`.';
+      case 'codex_app_server_unavailable':
+        return 'Codex App Server could not start or accept a local connection.';
+      case 'codex_cli_not_signed_in':
+        return 'Codex CLI is not signed in. Run `codex login` in the local terminal.';
+      case 'codex_app_server_unsupported_request':
+        return 'Codex App Server supports text conversations and Stroom tool calls; this request contains an unsupported feature.';
     }
     if (code == 'cursor_api_key_rejected') {
       return 'Cursor rejected this User API Key. Create or copy an active key from cursor.com/dashboard/api, then edit this account to replace it.';

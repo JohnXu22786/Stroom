@@ -15,6 +15,7 @@ import 'package:stroom/services/llm_chat_runtime.dart';
 import 'package:stroom/services/llm_connector_http_client.dart';
 import 'package:stroom/services/llm_connector_service.dart';
 import 'package:stroom/services/auggie_cli_service.dart';
+import 'package:stroom/services/codex_app_server_service.dart';
 import 'package:stroom/services/llm_credential_store.dart';
 import 'package:stroom/services/llm_model_group_provider.dart';
 import 'package:stroom/services/llm_provider_preset_catalog.dart';
@@ -371,6 +372,199 @@ void main() {
       isNot(contains('qoder')),
     );
   });
+  test('Codex App Server Chat route is Responses-only and credential-free', () {
+    final account = AiGatewayAccount(
+      id: 'codex-app-server-account',
+      connectorType: 'codex-app-server',
+      authType: 'none',
+      displayName: 'Local Codex CLI',
+      endpointConfig: const {'apiProtocol': 'openai.responses'},
+    );
+    expect(
+      llmRoutedChatProtocolForAccountModel(
+        account: account,
+        upstreamModelId: 'gpt-6.1-sol',
+        endpointType: 'openai',
+      ),
+      'openai.responses',
+    );
+    expect(
+      () => llmRoutedChatProtocolForAccountModel(
+        account: account,
+        upstreamModelId: 'gpt-6.1-sol',
+        endpointType: 'openai',
+        apiProtocolOverride: 'openai.chat_completions',
+      ),
+      throwsStateError,
+    );
+    expect(
+      LlmConnectorRegistry.isChatAdapterAuthTypeSupported(
+        'codex-app-server',
+        'api_key',
+      ),
+      isFalse,
+    );
+  });
+
+  test('Codex App Server unknown account status is not reported as sign-in',
+      () async {
+    final preferences = _MemoryPreferences();
+    final accounts = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: _MemoryCredentialStore(),
+    );
+    final runtime = LlmChatRoutingRuntime(
+      accountService: accounts,
+      routingService: LlmRoutingService(accountService: accounts),
+      codexAppServerService: CodexAppServerService(
+        processLauncher: _FakeCodexProcessLauncher(),
+        socketConnector: _FakeCodexSocketConnector(
+          accountReadResult: {'other': true},
+        ),
+      ),
+    );
+
+    await expectLater(
+      runtime.modelDiscovery.testConnection(
+        AiGatewayAccount(
+          id: 'codex-app-server-account',
+          connectorType: 'codex-app-server',
+          authType: 'none',
+          displayName: 'Local Codex CLI',
+        ),
+      ),
+      throwsA(
+        isA<AiGatewayExecutionException>().having(
+          (error) => error.kind,
+          'unknown account status failure kind',
+          AiGatewayFailureKind.transportUnavailable,
+        ),
+      ),
+    );
+  });
+  test(
+    'Codex App Server routes Chat and Task Flow through local app-server',
+    () async {
+      final preferences = _MemoryPreferences();
+      final credentials = _MemoryCredentialStore();
+      final accounts = LlmAccountConnectorService(
+        preferences: preferences,
+        credentialStore: credentials,
+      );
+      const accountId = 'codex-app-server-local';
+      const groupId = 'codex-app-server-group';
+      const modelId = 'codex-app-server-model';
+      const upstreamModelId = 'gpt-6.1-sol';
+      final account = await accounts.saveAccount(
+        LlmAccount(
+          id: accountId,
+          connectorType: 'codex-app-server',
+          authType: 'none',
+          displayName: 'Local Codex CLI',
+          status: LlmAccountStatus.ready,
+          endpointConfig: const {'apiProtocol': 'openai.responses'},
+          models: const [
+            LlmUpstreamModel(
+              id: modelId,
+              upstreamModelId: upstreamModelId,
+              displayName: 'GPT 6.1',
+              capabilities: {
+                'chat': true,
+                'streaming': true,
+                'tools': true,
+                'reasoning': true,
+                'textOnly': true,
+                'vision': false,
+                'audio': false,
+                'supportedApiProtocols': ['openai.responses'],
+              },
+            ),
+          ],
+        ),
+      );
+      expect(account.credentialRef, isNull);
+      expect(credentials.values, isEmpty);
+      final group = LlmModelGroup(
+        id: groupId,
+        displayName: 'Local Codex CLI',
+        members: const [
+          LlmModelGroupMember(
+            accountId: accountId,
+            localModelId: modelId,
+            upstreamModelId: upstreamModelId,
+          ),
+        ],
+      );
+      await accounts.saveModelGroup(group);
+      final runtime = LlmChatRoutingRuntime(
+        accountService: accounts,
+        routingService: LlmRoutingService(
+          accountService: accounts,
+          stateStore: LlmRoutingStateStore(preferences: preferences),
+          concurrency: LlmConcurrencyReservations(),
+        ),
+        codexAppServerService: CodexAppServerService(
+          processLauncher: _FakeCodexProcessLauncher(),
+          socketConnector: _FakeCodexSocketConnector(),
+        ),
+      );
+      final chatProvider = LlmRoutedChatProvider(
+        runtime: Future.value(runtime),
+        groupId: groupId,
+        localModelId: modelId,
+        endpointType: 'openai',
+        apiProtocol: 'openai.responses',
+      );
+      expect(
+        await chatProvider.chat(const [
+          {'role': 'user', 'content': 'Say hello.'},
+        ]),
+        'Local Codex reply',
+      );
+      final streamedChat = await chatProvider.chatStream(const [
+        {'role': 'user', 'content': 'Say hello.'},
+      ]).toList();
+      expect(
+        streamedChat.map((event) => event.text).join(),
+        'Local Codex reply',
+      );
+
+      final config = buildLlmModelGroupProviderConfigs(
+        accounts: [account],
+        groups: [group],
+      ).single;
+      final entries = ProviderEntriesState(
+        entries: [
+          ProviderEntry(
+            id: 'codex-task-flow-group',
+            type: 'llm',
+            name: 'Local Codex CLI',
+            configs: [config],
+          ),
+        ],
+      );
+      final adapter = ChatAdapter(routingRuntime: Future.value(runtime))
+        ..configure(entries);
+      addTearDown(adapter.dispose);
+      final taskFlowService = adapter.getOrCreateService(
+        'codex-task-flow-conversation',
+        entriesState: entries,
+        modelReference: {
+          'configId': config.id,
+          'modelId': config.models.single.id,
+        },
+      );
+      // ignore: invalid_use_of_visible_for_testing_member
+      expect(taskFlowService?.provider, isA<LlmRoutedChatProvider>());
+      expect(
+        // ignore: invalid_use_of_visible_for_testing_member
+        await taskFlowService!.provider!.chat(const [
+          {'role': 'user', 'content': 'Summarize the task.'},
+        ]),
+        'Local Codex reply',
+      );
+    },
+  );
   test('Auggie Chat and Task Flow use its built-in local CLI route', () async {
     final preferences = _MemoryPreferences();
     final discoveryLauncher = _FakeAuggieCliLauncher()
@@ -6448,4 +6642,100 @@ class _MemoryCredentialStore implements LlmCredentialStore {
   Future<void> write(String reference, String value) async {
     values[reference] = value;
   }
+}
+
+class _FakeCodexProcessLauncher implements CodexAppServerProcessLauncher {
+  @override
+  Future<CodexAppServerProcess> start(CodexAppServerLaunch launch) async =>
+      _FakeCodexProcess();
+}
+
+class _FakeCodexProcess implements CodexAppServerProcess {
+  final _exitCode = Completer<int>();
+
+  @override
+  Stream<List<int>> get stdout => const Stream.empty();
+
+  @override
+  Stream<List<int>> get stderr => const Stream.empty();
+
+  @override
+  Future<int> get exitCode => _exitCode.future;
+
+  @override
+  Future<void> terminate({bool force = false}) async {
+    if (!_exitCode.isCompleted) _exitCode.complete(0);
+  }
+}
+
+class _FakeCodexSocketConnector implements CodexAppServerSocketConnector {
+  final Object? accountReadResult;
+
+  _FakeCodexSocketConnector({this.accountReadResult});
+
+  @override
+  Future<CodexAppServerSocket> connect(Uri uri, String capabilityToken) async {
+    final socket = _FakeCodexSocket();
+    socket.onSend = (message) {
+      final frame = jsonDecode(message) as Map<String, dynamic>;
+      final method = frame['method'];
+      final id = frame['id'];
+      if (method == null || id is! int) return;
+      switch (method) {
+        case 'initialize':
+          socket.receive({'jsonrpc': '2.0', 'id': id, 'result': {}});
+        case 'account/read':
+          socket.receive({
+            'jsonrpc': '2.0',
+            'id': id,
+            'result': accountReadResult ??
+                {
+                  'account': {'type': 'chatgpt'},
+                },
+          });
+        case 'thread/start':
+          socket.receive({
+            'jsonrpc': '2.0',
+            'id': id,
+            'result': {
+              'thread': {'id': 'local-thread'},
+            },
+          });
+        case 'turn/start':
+          socket.receive({'jsonrpc': '2.0', 'id': id, 'result': {}});
+          socket.receive({
+            'jsonrpc': '2.0',
+            'method': 'item/agentMessage/delta',
+            'params': {'delta': 'Local Codex reply'},
+          });
+          socket.receive({
+            'jsonrpc': '2.0',
+            'method': 'turn/completed',
+            'params': {
+              'turn': {
+                'usage': {'input_tokens': 1},
+              },
+            },
+          });
+      }
+    };
+    return socket;
+  }
+}
+
+class _FakeCodexSocket implements CodexAppServerSocket {
+  final _incoming = StreamController<Object?>();
+  void Function(String message)? onSend;
+
+  @override
+  Stream<Object?> get messages => _incoming.stream;
+
+  @override
+  void send(String message) => onSend?.call(message);
+
+  void receive(Map<String, dynamic> message) =>
+      _incoming.add(jsonEncode(message));
+
+  @override
+  Future<void> close() => _incoming.close();
 }

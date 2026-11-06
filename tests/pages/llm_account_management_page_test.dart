@@ -1655,6 +1655,73 @@ void main() {
     expect(credentials.values, isEmpty);
   });
 
+  testWidgets('Codex App Server account stays local and credential-free', (
+    tester,
+  ) async {
+    final credentials = _MemoryCredentialStore();
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: credentials,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('添加账号'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first, 'Local Codex');
+
+    final connectorField = find.byType(DropdownButtonFormField<String>).first;
+    tester.widget<DropdownButtonFormField<String>>(connectorField).onChanged!(
+      'codex-app-server',
+    );
+    await tester.pumpAndSettle();
+
+    final authField = find.byType(DropdownButtonFormField<String>).at(1);
+    final authDropdown = tester.widget<DropdownButton<String>>(
+      find.descendant(
+        of: authField,
+        matching: find.byType(DropdownButton<String>),
+      ),
+    );
+    expect(authDropdown.value, 'none');
+    expect(authDropdown.items!.map((item) => item.value), ['none']);
+    expect(find.textContaining('codex login'), findsOneWidget);
+    expect(find.text('检查本地 Codex CLI 登录状态'), findsOneWidget);
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && widget.decoration?.labelText == '上游模型与能力',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField &&
+            widget.decoration?.labelText?.contains('端点地址') == true,
+      ),
+      findsNothing,
+    );
+    await tester.ensureVisible(find.text('保存').last);
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+
+    final saved = (await service.listAccounts()).single;
+    expect(saved.connectorType, 'codex-app-server');
+    expect(saved.authType, 'none');
+    expect(saved.displayName, 'Local Codex');
+    expect(saved.credentialRef, isNull);
+    expect(
+      saved.endpointConfig,
+      containsPair('apiProtocol', 'openai.responses'),
+    );
+    expect(saved.endpointConfig, isNot(contains('baseUrl')));
+    expect(credentials.values, isEmpty);
+  });
+
   testWidgets(
     'editing an Auggie account preserves discovered models and clears stale protocol',
     (tester) async {

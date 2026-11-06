@@ -279,6 +279,7 @@ enum LlmNativeProtocol {
   clovaStudioChat,
   oneMinAiChat,
   auggieCli,
+  codexAppServer,
   openAIResponses,
   anthropicMessages,
   antigravityGenerateContent,
@@ -415,6 +416,13 @@ abstract final class LlmConnectorRegistry {
       modelCatalog: kPinnedCodexModels,
       canRefreshCredentials: true,
       quotaAvailability: LlmQuotaAvailability.accountQuota,
+    ),
+    LlmConnectorDefinition(
+      id: 'codex-app-server',
+      displayName: 'OpenAI Codex App Server',
+      protocol: LlmNativeProtocol.codexAppServer,
+      authTypes: {'none'},
+      modelCatalog: kPinnedCodexModels,
     ),
     LlmConnectorDefinition(
       id: 'claude',
@@ -828,6 +836,7 @@ abstract final class LlmConnectorRegistry {
   static String? chatAdapterEndpointType(String connectorType) =>
       switch (canonicalId(connectorType)) {
         'codex' => 'openai',
+        'codex-app-server' => 'openai',
         'clova-studio' => 'clova.studio.chat',
         'oneminai' => kOneMinAiProtocolId,
         'amazon-q' => 'amazon-q.chat',
@@ -905,6 +914,7 @@ abstract final class LlmConnectorRegistry {
     }
     return switch (canonicalId(connectorType)) {
       'codex' => authType == 'oauth',
+      'codex-app-server' => authType == 'none',
       'xai' || 'meta' => authType == 'api_key',
       'muse-code' => authType == 'oauth',
       'grok-cli' || 'xai-oauth' => authType == 'oauth',
@@ -2110,6 +2120,20 @@ class LlmAccountConnectorService {
                 'supportedApiProtocols': ['openai.chat_completions'],
               },
             'devin-cli-agentic' => const {'chat': true, 'streaming': true},
+            'codex-app-server' => {
+                if (!connector.modelCatalog[index].startsWith('gpt-image-'))
+                  'chat': true,
+                if (!connector.modelCatalog[index].startsWith('gpt-image-'))
+                  'streaming': true,
+                if (!connector.modelCatalog[index].startsWith('gpt-image-'))
+                  'tools': true,
+                if (!connector.modelCatalog[index].startsWith('gpt-image-'))
+                  'reasoning': true,
+                if (!connector.modelCatalog[index].startsWith('gpt-image-'))
+                  'textOnly': true,
+                'contextLength': 400000,
+                'supportedApiProtocols': ['openai.responses'],
+              },
             // The Cursor adapter maps Stroom's supported inline image blocks;
             // remote or unsupported image representations fail explicitly.
             'cursor' => const {'chat': true, 'streaming': true, 'vision': true},
@@ -5118,7 +5142,9 @@ class LlmAccountConnectorService {
         normalized['providerSpecificData'] = providerData;
         secret = jsonEncode(normalized);
       }
-      if (account.connectorType == 'auggie' && secret != null) {
+      if ((account.connectorType == 'auggie' ||
+              account.connectorType == 'codex-app-server') &&
+          secret != null) {
         throw const LlmAccountConnectorException();
       }
       _validateAccount(account);
@@ -5781,6 +5807,19 @@ class LlmAccountConnectorService {
     }
     if (account.connectorType == 'auggie' &&
         (account.authType != 'none' || account.credentialRef != null)) {
+      throw const LlmAccountConnectorException();
+    }
+    if (account.connectorType == 'codex-app-server' &&
+        (account.authType != 'none' ||
+            account.credentialRef != null ||
+            account.endpointConfig.keys.any(
+              (key) => const {
+                'baseUrl',
+                'host',
+                'apiBase',
+                'websocketUrl',
+              }.contains(key),
+            ))) {
       throw const LlmAccountConnectorException();
     }
     if (account.connectorType == 'gitlab-duo' && account.authType == 'oauth') {
