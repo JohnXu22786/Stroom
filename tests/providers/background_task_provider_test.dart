@@ -15928,7 +15928,8 @@ void main() {
         );
         final credentialPersisted = jsonEncode(credentialTask.toMap());
         expect(
-          OcrRetrySnapshot.fromMap(credentialTask.retryData!).instructionContent,
+          OcrRetrySnapshot.fromMap(credentialTask.retryData!)
+              .instructionContent,
           isNot(contains(echoedCredential)),
         );
         expect(credentialPersisted, isNot(contains(echoedCredential)));
