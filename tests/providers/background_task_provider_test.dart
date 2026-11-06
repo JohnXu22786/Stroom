@@ -13231,7 +13231,7 @@ void main() {
           ),
           'accommod': (
             'Please accommodate the requested crop',
-            'Please [redacted] the requested crop',
+            'Please accommodate the requested crop',
           ),
           'secretar': (
             'Please ask the secretary carefully',
@@ -15480,42 +15480,48 @@ void main() {
     test(
       'legacy OCR instruction migration redacts an authenticated credential used to process an image',
       () {
-        const credentialEcho = 'myprojectabcef';
-        const instruction =
-            'Authenticate with $credentialEcho to process this image.';
-        final task = BackgroundTask.fromMap({
-          'id': 'legacy-ocr-authenticate-with-open-mask-credential-echo',
-          'type': 'ocr',
-          'title': 'legacy OCR request',
-          'status': 'failed',
-          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
-          'rawRequest': {
-            'imageCount': 1,
-            'url': 'https://api.example.com/v1/chat/completions',
-            'headers': {'Authorization': 'Bearer myproject…'},
-            'body': {
-              'model': 'vision-model',
-              'messages': [
-                {
-                  'role': 'user',
-                  'content': [
-                    {'type': 'text', 'text': instruction},
-                  ],
-                },
-              ],
+        for (final (credentialEcho, prefix) in const [
+          ('myprojectabcef', 'myproject'),
+          ('accommodQm9x7Lk2Vp6', 'accommod'),
+        ]) {
+          final instruction =
+              'Authenticate with $credentialEcho to process this image.';
+          final task = BackgroundTask.fromMap({
+            'id': 'legacy-ocr-authenticate-with-open-mask-credential-echo',
+            'type': 'ocr',
+            'title': 'legacy OCR request',
+            'status': 'failed',
+            'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+            'rawRequest': {
+              'imageCount': 1,
+              'url': 'https://api.example.com/v1/chat/completions',
+              'headers': {'Authorization': 'Bearer $prefix…'},
+              'body': {
+                'model': 'vision-model',
+                'messages': [
+                  {
+                    'role': 'user',
+                    'content': [
+                      {'type': 'text', 'text': instruction},
+                    ],
+                  },
+                ],
+              },
             },
-          },
-        });
+          });
 
-        final persisted = jsonEncode(task.toMap());
-        final migratedInstruction = OcrRetrySnapshot.fromMap(
-          task.retryData!,
-        ).instructionContent!;
+          final persisted = jsonEncode(task.toMap());
+          final migratedInstruction = OcrRetrySnapshot.fromMap(
+            task.retryData!,
+          ).instructionContent!;
 
-        expect(migratedInstruction,
-            'Authenticate with [redacted] to process this image.');
-        expect(persisted, contains(jsonEncode(migratedInstruction)));
-        expect(persisted, isNot(contains(credentialEcho)));
+          expect(
+            migratedInstruction,
+            'Authenticate with [redacted] to process this image.',
+          );
+          expect(persisted, contains(jsonEncode(migratedInstruction)));
+          expect(persisted, isNot(contains(credentialEcho)));
+        }
       },
     );
 
