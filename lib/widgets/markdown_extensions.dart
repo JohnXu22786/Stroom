@@ -1149,6 +1149,7 @@ _MermaidFenceInfo _unclosedFenceInfo(
 class StreamingFenceInfoCache {
   _MermaidFenceInfo? _info;
   int _textLength = 0;
+  int _pendingLineStart = 0;
   bool _textEndedWithCarriageReturn = false;
   String _markerSuffix = '';
   bool _pendingLineCanCloseFence = false;
@@ -1171,8 +1172,11 @@ class StreamingFenceInfoCache {
     }
     if (text.length == _textLength) return cached;
 
-    var appended = text.substring(_textLength);
-    if (_textEndedWithCarriageReturn && appended.startsWith('\n')) {
+    final rawAppended = text.substring(_textLength);
+    var appended = rawAppended;
+    final splitCarriageReturnLineFeed =
+        _textEndedWithCarriageReturn && appended.startsWith('\n');
+    if (splitCarriageReturnLineFeed) {
       // The CR was already normalized at the previous chunk boundary.
       appended = appended.substring(1);
     }
@@ -1198,7 +1202,6 @@ class StreamingFenceInfoCache {
         !normalizedAppended.contains('\n') &&
         !cached.trailingLineClosedFence &&
         canReuseFenceState) {
-      cached.pendingLine.append(normalizedAppended);
       if (cached.fenceChar != null && cached.hasUnfencedIndentedCode) {
         cached.normalizedTailSource?.append(normalizedAppended);
         cached.normalizedContainerTailSource?.append(normalizedAppended);
@@ -1213,17 +1216,23 @@ class StreamingFenceInfoCache {
       _markerSuffix = _suffixAfterAppend(_markerSuffix, normalizedAppended);
       final updated = _copyWithPendingLine(cached, text);
       _info = updated;
+      _pendingLineStart = _trailingLineStartAfterAppend(
+        rawAppended,
+        _textLength,
+        _pendingLineStart,
+      );
       _textLength = text.length;
       _textEndedWithCarriageReturn = text.endsWith('\r');
       return updated;
     }
-    final resumedText = '${cached.pendingLine.toString()}$normalizedAppended';
+    final resumedText = '${_previousPendingLine(text)}$normalizedAppended';
     final updated = _scanFromStart(
       text,
       resume: checkpoint,
       resumeText: resumedText,
       cached: cached,
       normalizedAppended: normalizedAppended,
+      rawAppended: rawAppended,
     );
     _markerSuffix = _lastTwoRawCharacters(text);
     _setPendingLineFenceState(
@@ -1245,10 +1254,21 @@ class StreamingFenceInfoCache {
     _pendingFenceTrailingWhitespace = false;
     _pendingFencePrefixInvalid = fenceChar == null;
     _pendingLineCanCloseFence = fenceChar != null;
-    if (fenceChar == null) return;
-    for (final segment in line.segments) {
-      _extendPendingLineFenceState(segment, fenceChar, fenceLength);
+    if (fenceChar != null) {
+      for (final segment in line.segments) {
+        _extendPendingLineFenceState(segment, fenceChar, fenceLength);
+      }
     }
+    // Fence state above is sufficient for incremental checks. Keeping this
+    // full trailing line duplicates text already held by the streaming body.
+    line.clear();
+  }
+
+  String _previousPendingLine(String text) {
+    return text
+        .substring(_pendingLineStart, _textLength)
+        .replaceAll('\r\n', '\n')
+        .replaceAll('\r', '\n');
   }
 
   void _extendPendingLineFenceState(
@@ -1289,6 +1309,7 @@ class StreamingFenceInfoCache {
     String? resumeText,
     _MermaidFenceInfo? cached,
     String normalizedAppended = '',
+    String? rawAppended,
   }) {
     final info = _unclosedFenceInfo(
       text,
@@ -1334,6 +1355,13 @@ class StreamingFenceInfoCache {
       _info = info;
     }
     _textLength = text.length;
+    _pendingLineStart = resume == null
+        ? _trailingLineStart(text)
+        : _trailingLineStartAfterAppend(
+            rawAppended!,
+            _textLength - rawAppended.length,
+            _pendingLineStart,
+          );
     _textEndedWithCarriageReturn = text.endsWith('\r');
     _markerSuffix = _lastTwoRawCharacters(text);
     return _info!;
@@ -1381,6 +1409,29 @@ class StreamingFenceInfoCache {
 
   static String _lastTwoRawCharacters(String text) =>
       text.length <= 2 ? text : text.substring(text.length - 2);
+
+  static int _trailingLineStart(String text) {
+    final lastLineFeed = text.lastIndexOf('\n');
+    final lastCarriageReturn = text.lastIndexOf('\r');
+    return (lastLineFeed > lastCarriageReturn
+            ? lastLineFeed
+            : lastCarriageReturn) +
+        1;
+  }
+
+  static int _trailingLineStartAfterAppend(
+    String appended,
+    int previousTextLength,
+    int previousLineStart,
+  ) {
+    final lastLineFeed = appended.lastIndexOf('\n');
+    final lastCarriageReturn = appended.lastIndexOf('\r');
+    final lastLineBreak =
+        lastLineFeed > lastCarriageReturn ? lastLineFeed : lastCarriageReturn;
+    return lastLineBreak < 0
+        ? previousLineStart
+        : previousTextLength + lastLineBreak + 1;
+  }
 }
 
 bool _mayContainFenceMarker(String text) =>
