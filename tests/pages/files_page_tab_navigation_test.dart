@@ -56,6 +56,19 @@ void main() {
       expect(find.text('Done'), findsOneWidget);
     });
 
+    testWidgets('localizes reorder controls in Simplified Chinese', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      await tester.longPress(find.byKey(const Key('files_tab_bar_gesture')));
+      await tester.pumpAndSettle();
+      expect(find.text('排序标签'), findsOneWidget);
+      expect(find.text('取消'), findsOneWidget);
+      expect(find.text('确定'), findsOneWidget);
+    });
+
     testWidgets('double-tap on same tab increments reset signal', (
       tester,
     ) async {
