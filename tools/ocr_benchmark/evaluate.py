@@ -316,7 +316,12 @@ def _is_credential_like_setting_name(key: str) -> bool:
 
 
 def _contains_credential_like_value(value: str) -> bool:
-    decoded_value = unquote(value)
+    decoded_value = value
+    while True:
+        next_value = unquote(decoded_value)
+        if next_value == decoded_value:
+            break
+        decoded_value = next_value
     if any(pattern.search(decoded_value) for pattern in OPAQUE_CREDENTIAL_PATTERNS):
         return True
     if re.search(r"(?i)\b(?:bearer|basic)\s+\S+", decoded_value):
