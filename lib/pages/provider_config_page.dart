@@ -1214,8 +1214,6 @@ class _McpConfigCard extends StatelessWidget {
                               color: cs.onSurfaceVariant.withValues(alpha: 0.7),
                               fontStyle: FontStyle.italic,
                             ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
                           ),
                         ],
                         if (mcpDescription != null &&
