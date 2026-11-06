@@ -153,23 +153,35 @@ void main() {
           english,
           entry.key,
           description,
+          isVendor: true,
         );
         final englishHint = localizedProviderPresetApiKeyHint(
           english,
           entry.key,
           hint,
+          isVendor: true,
         );
         expect(englishDescription, isNot(description), reason: entry.key);
         expect(englishHint, isNot(hint), reason: entry.key);
         expect(englishDescription, isNotEmpty, reason: entry.key);
         expect(englishHint, isNotEmpty, reason: entry.key);
         expect(
-          localizedProviderPresetDescription(chinese, entry.key, description),
+          localizedProviderPresetDescription(
+            chinese,
+            entry.key,
+            description,
+            isVendor: true,
+          ),
           chineseDescriptions[entry.key],
           reason: entry.key,
         );
         expect(
-          localizedProviderPresetApiKeyHint(chinese, entry.key, hint),
+          localizedProviderPresetApiKeyHint(
+            chinese,
+            entry.key,
+            hint,
+            isVendor: true,
+          ),
           chineseHints[entry.key],
           reason: entry.key,
         );
@@ -180,19 +192,50 @@ void main() {
       final english = await AppLocalizations.delegate.load(const Locale('en'));
 
       expect(
-        localizedProviderPresetDescription(english, 'Exa', 'My custom notes'),
+        localizedProviderPresetDescription(
+          english,
+          'Exa',
+          'My custom notes',
+          isVendor: false,
+        ),
         'My custom notes',
+      );
+      expect(
+        localizedProviderPresetDescription(
+          english,
+          'Exa',
+          presets['Exa']!.$1,
+          isVendor: false,
+        ),
+        presets['Exa']!.$1,
+        reason: 'a custom provider named Exa must keep its own description',
       );
       expect(
         localizedProviderPresetApiKeyHint(
           english,
           'Exa',
           'Use our internal credential vault',
+          isVendor: false,
         ),
         'Use our internal credential vault',
       );
       expect(
-        localizedProviderPresetDescription(english, 'Custom Provider', 'Text'),
+        localizedProviderPresetApiKeyHint(
+          english,
+          'Exa',
+          presets['Exa']!.$2,
+          isVendor: false,
+        ),
+        presets['Exa']!.$2,
+        reason: 'a custom provider named Exa must keep its own hint',
+      );
+      expect(
+        localizedProviderPresetDescription(
+          english,
+          'Custom Provider',
+          'Text',
+          isVendor: false,
+        ),
         'Text',
       );
     });
