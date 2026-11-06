@@ -45,12 +45,12 @@ jobs:
 
           allowed = {"android", "ios", "linux", "macos-arm64", "macos-x64", "web", "windows"}
           selected = os.environ["PLATFORMS"].split(",")
+          if os.environ["INCLUDE_RELEASE_NOTES"] not in {"true", "false"}:
+              raise SystemExit("Invalid include_release_notes input")
           if selected == ["all"]:
               raise SystemExit(0)
           if not selected or any(item not in allowed for item in selected) or len(set(selected)) != len(selected):
               raise SystemExit("Invalid platforms input; use all or a unique comma-separated platform list")
-          if os.environ["INCLUDE_RELEASE_NOTES"] not in {"true", "false"}:
-              raise SystemExit("Invalid include_release_notes input")
           PY
       - id: extract-version
         run: |

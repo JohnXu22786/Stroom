@@ -23,9 +23,8 @@ void main() {
   group('decodeCompressedReleaseNotes', () {
     test('decodes zlib-compressed UTF-8 release notes', () {
       final notes = 'Stroom v0.5.2 更新内容';
-      final encoded = base64Encode(utf8.encode(notes));
       final compressed = base64Encode(
-        ZLibEncoder().convert(base64Decode(encoded)),
+        ZLibEncoder().convert(utf8.encode(notes)),
       );
 
       expect(decodeCompressedReleaseNotes(compressed), notes);
@@ -33,6 +32,7 @@ void main() {
 
     test('returns empty text for invalid compressed input', () {
       expect(decodeCompressedReleaseNotes('!!!not-base64!!!'), '');
+      expect(decodeCompressedReleaseNotes(base64Encode([1, 2, 3])), '');
     });
   });
 
