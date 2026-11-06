@@ -359,6 +359,32 @@
   "conversationCloseTemporary": "关闭临时对话",
   "taskListTitle": "任务列表",
   "taskListEmpty": "暂无任务",
+  "unifiedTaskListTabAll": "全部",
+  "unifiedTaskListTabInProgress": "进行中",
+  "unifiedTaskListTabCompleted": "已完成",
+  "unifiedTaskListTabFailed": "失败",
+  "unifiedTaskListTabStopped": "已停止",
+  "unifiedTaskListConfirmClear": "确认清除",
+  "unifiedTaskListConfirmClearFailedMessage": "确定要清除所有失败任务吗？",
+  "unifiedTaskListConfirmClearAllMessage": "确定要清除所有任务吗？此操作不可撤销。",
+  "unifiedTaskListCancel": "取消",
+  "unifiedTaskListConfirm": "确定",
+  "unifiedTaskListClearCompleted": "清除已完成",
+  "unifiedTaskListClearFailed": "清除失败任务",
+  "unifiedTaskListClearAll": "清除所有",
+  "unifiedTaskListRestoreInProgress": "正在恢复任务流记录…",
+  "unifiedTaskListRestoreFailed": "任务流记录读取失败，任务操作已暂停",
+  "unifiedTaskListClearIncomplete": "清除未完成：{error}",
+  "unifiedTaskListCancellationStillRunning": "任务流取消后仍在运行",
+  "unifiedTaskListCancellationSaveFailed": "无法保存任务流的取消状态，请重试清除。",
+  "unifiedTaskListRemovalSaveFailed": "无法保存任务流记录的删除状态，请重试清除。",
+  "@unifiedTaskListClearIncomplete": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "@homeTaskFlowManage": {
     "description": "Number of task flows on the home screen",
     "placeholders": {

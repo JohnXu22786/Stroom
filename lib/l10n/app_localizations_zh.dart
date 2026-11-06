@@ -1243,6 +1243,65 @@ class AppLocalizationsZh extends AppLocalizations {
   String get taskListEmpty => '暂无任务';
 
   @override
+  String get unifiedTaskListTabAll => '全部';
+
+  @override
+  String get unifiedTaskListTabInProgress => '进行中';
+
+  @override
+  String get unifiedTaskListTabCompleted => '已完成';
+
+  @override
+  String get unifiedTaskListTabFailed => '失败';
+
+  @override
+  String get unifiedTaskListTabStopped => '已停止';
+
+  @override
+  String get unifiedTaskListConfirmClear => '确认清除';
+
+  @override
+  String get unifiedTaskListConfirmClearFailedMessage => '确定要清除所有失败任务吗？';
+
+  @override
+  String get unifiedTaskListConfirmClearAllMessage => '确定要清除所有任务吗？此操作不可撤销。';
+
+  @override
+  String get unifiedTaskListCancel => '取消';
+
+  @override
+  String get unifiedTaskListConfirm => '确定';
+
+  @override
+  String get unifiedTaskListClearCompleted => '清除已完成';
+
+  @override
+  String get unifiedTaskListClearFailed => '清除失败任务';
+
+  @override
+  String get unifiedTaskListClearAll => '清除所有';
+
+  @override
+  String get unifiedTaskListRestoreInProgress => '正在恢复任务流记录…';
+
+  @override
+  String get unifiedTaskListRestoreFailed => '任务流记录读取失败，任务操作已暂停';
+
+  @override
+  String unifiedTaskListClearIncomplete(String error) {
+    return '清除未完成：$error';
+  }
+
+  @override
+  String get unifiedTaskListCancellationStillRunning => '任务流取消后仍在运行';
+
+  @override
+  String get unifiedTaskListCancellationSaveFailed => '无法保存任务流的取消状态，请重试清除。';
+
+  @override
+  String get unifiedTaskListRemovalSaveFailed => '无法保存任务流记录的删除状态，请重试清除。';
+
+  @override
   String get chatAutoContinuePrompt => '如果还没完成，请继续。';
 
   @override
@@ -9919,6 +9978,65 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get taskListEmpty => '暂无任务';
+
+  @override
+  String get unifiedTaskListTabAll => '全部';
+
+  @override
+  String get unifiedTaskListTabInProgress => '进行中';
+
+  @override
+  String get unifiedTaskListTabCompleted => '已完成';
+
+  @override
+  String get unifiedTaskListTabFailed => '失败';
+
+  @override
+  String get unifiedTaskListTabStopped => '已停止';
+
+  @override
+  String get unifiedTaskListConfirmClear => '确认清除';
+
+  @override
+  String get unifiedTaskListConfirmClearFailedMessage => '确定要清除所有失败任务吗？';
+
+  @override
+  String get unifiedTaskListConfirmClearAllMessage => '确定要清除所有任务吗？此操作不可撤销。';
+
+  @override
+  String get unifiedTaskListCancel => '取消';
+
+  @override
+  String get unifiedTaskListConfirm => '确定';
+
+  @override
+  String get unifiedTaskListClearCompleted => '清除已完成';
+
+  @override
+  String get unifiedTaskListClearFailed => '清除失败任务';
+
+  @override
+  String get unifiedTaskListClearAll => '清除所有';
+
+  @override
+  String get unifiedTaskListRestoreInProgress => '正在恢复任务流记录…';
+
+  @override
+  String get unifiedTaskListRestoreFailed => '任务流记录读取失败，任务操作已暂停';
+
+  @override
+  String unifiedTaskListClearIncomplete(String error) {
+    return '清除未完成：$error';
+  }
+
+  @override
+  String get unifiedTaskListCancellationStillRunning => '任务流取消后仍在运行';
+
+  @override
+  String get unifiedTaskListCancellationSaveFailed => '无法保存任务流的取消状态，请重试清除。';
+
+  @override
+  String get unifiedTaskListRemovalSaveFailed => '无法保存任务流记录的删除状态，请重试清除。';
 
   @override
   String get chatAutoContinuePrompt => '如果还没完成，请继续。';

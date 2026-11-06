@@ -2254,6 +2254,120 @@ abstract class AppLocalizations {
   /// **'No tasks'**
   String get taskListEmpty;
 
+  /// No description provided for @unifiedTaskListTabAll.
+  ///
+  /// In en, this message translates to:
+  /// **'All'**
+  String get unifiedTaskListTabAll;
+
+  /// No description provided for @unifiedTaskListTabInProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'In progress'**
+  String get unifiedTaskListTabInProgress;
+
+  /// No description provided for @unifiedTaskListTabCompleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Completed'**
+  String get unifiedTaskListTabCompleted;
+
+  /// No description provided for @unifiedTaskListTabFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed'**
+  String get unifiedTaskListTabFailed;
+
+  /// No description provided for @unifiedTaskListTabStopped.
+  ///
+  /// In en, this message translates to:
+  /// **'Stopped'**
+  String get unifiedTaskListTabStopped;
+
+  /// No description provided for @unifiedTaskListConfirmClear.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm clear'**
+  String get unifiedTaskListConfirmClear;
+
+  /// No description provided for @unifiedTaskListConfirmClearFailedMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Are you sure you want to clear all failed tasks?'**
+  String get unifiedTaskListConfirmClearFailedMessage;
+
+  /// No description provided for @unifiedTaskListConfirmClearAllMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Are you sure you want to clear all tasks? This action cannot be undone.'**
+  String get unifiedTaskListConfirmClearAllMessage;
+
+  /// No description provided for @unifiedTaskListCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get unifiedTaskListCancel;
+
+  /// No description provided for @unifiedTaskListConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm'**
+  String get unifiedTaskListConfirm;
+
+  /// No description provided for @unifiedTaskListClearCompleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear completed tasks'**
+  String get unifiedTaskListClearCompleted;
+
+  /// No description provided for @unifiedTaskListClearFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear failed tasks'**
+  String get unifiedTaskListClearFailed;
+
+  /// No description provided for @unifiedTaskListClearAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear all tasks'**
+  String get unifiedTaskListClearAll;
+
+  /// No description provided for @unifiedTaskListRestoreInProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'Restoring task flow records…'**
+  String get unifiedTaskListRestoreInProgress;
+
+  /// No description provided for @unifiedTaskListRestoreFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not read task flow records; task actions are paused'**
+  String get unifiedTaskListRestoreFailed;
+
+  /// No description provided for @unifiedTaskListClearIncomplete.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear incomplete: {error}'**
+  String unifiedTaskListClearIncomplete(String error);
+
+  /// No description provided for @unifiedTaskListCancellationStillRunning.
+  ///
+  /// In en, this message translates to:
+  /// **'The task flow is still running after cancellation.'**
+  String get unifiedTaskListCancellationStillRunning;
+
+  /// No description provided for @unifiedTaskListCancellationSaveFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save the task flow cancellation state. Please retry clearing.'**
+  String get unifiedTaskListCancellationSaveFailed;
+
+  /// No description provided for @unifiedTaskListRemovalSaveFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save deletion of task flow records. Please retry clearing.'**
+  String get unifiedTaskListRemovalSaveFailed;
+
   /// No description provided for @chatAutoContinuePrompt.
   ///
   /// In en, this message translates to:

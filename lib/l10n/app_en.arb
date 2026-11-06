@@ -359,6 +359,32 @@
   "conversationCloseTemporary": "Close temporary conversation",
   "taskListTitle": "Task list",
   "taskListEmpty": "No tasks",
+  "unifiedTaskListTabAll": "All",
+  "unifiedTaskListTabInProgress": "In progress",
+  "unifiedTaskListTabCompleted": "Completed",
+  "unifiedTaskListTabFailed": "Failed",
+  "unifiedTaskListTabStopped": "Stopped",
+  "unifiedTaskListConfirmClear": "Confirm clear",
+  "unifiedTaskListConfirmClearFailedMessage": "Are you sure you want to clear all failed tasks?",
+  "unifiedTaskListConfirmClearAllMessage": "Are you sure you want to clear all tasks? This action cannot be undone.",
+  "unifiedTaskListCancel": "Cancel",
+  "unifiedTaskListConfirm": "Confirm",
+  "unifiedTaskListClearCompleted": "Clear completed tasks",
+  "unifiedTaskListClearFailed": "Clear failed tasks",
+  "unifiedTaskListClearAll": "Clear all tasks",
+  "unifiedTaskListRestoreInProgress": "Restoring task flow records…",
+  "unifiedTaskListRestoreFailed": "Could not read task flow records; task actions are paused",
+  "unifiedTaskListClearIncomplete": "Clear incomplete: {error}",
+  "unifiedTaskListCancellationStillRunning": "The task flow is still running after cancellation.",
+  "unifiedTaskListCancellationSaveFailed": "Could not save the task flow cancellation state. Please retry clearing.",
+  "unifiedTaskListRemovalSaveFailed": "Could not save deletion of task flow records. Please retry clearing.",
+  "@unifiedTaskListClearIncomplete": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "@homeTaskFlowManage": {
     "description": "Number of task flows on the home screen",
     "placeholders": {

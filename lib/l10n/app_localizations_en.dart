@@ -1325,6 +1325,71 @@ class AppLocalizationsEn extends AppLocalizations {
   String get taskListEmpty => 'No tasks';
 
   @override
+  String get unifiedTaskListTabAll => 'All';
+
+  @override
+  String get unifiedTaskListTabInProgress => 'In progress';
+
+  @override
+  String get unifiedTaskListTabCompleted => 'Completed';
+
+  @override
+  String get unifiedTaskListTabFailed => 'Failed';
+
+  @override
+  String get unifiedTaskListTabStopped => 'Stopped';
+
+  @override
+  String get unifiedTaskListConfirmClear => 'Confirm clear';
+
+  @override
+  String get unifiedTaskListConfirmClearFailedMessage =>
+      'Are you sure you want to clear all failed tasks?';
+
+  @override
+  String get unifiedTaskListConfirmClearAllMessage =>
+      'Are you sure you want to clear all tasks? This action cannot be undone.';
+
+  @override
+  String get unifiedTaskListCancel => 'Cancel';
+
+  @override
+  String get unifiedTaskListConfirm => 'Confirm';
+
+  @override
+  String get unifiedTaskListClearCompleted => 'Clear completed tasks';
+
+  @override
+  String get unifiedTaskListClearFailed => 'Clear failed tasks';
+
+  @override
+  String get unifiedTaskListClearAll => 'Clear all tasks';
+
+  @override
+  String get unifiedTaskListRestoreInProgress => 'Restoring task flow records…';
+
+  @override
+  String get unifiedTaskListRestoreFailed =>
+      'Could not read task flow records; task actions are paused';
+
+  @override
+  String unifiedTaskListClearIncomplete(String error) {
+    return 'Clear incomplete: $error';
+  }
+
+  @override
+  String get unifiedTaskListCancellationStillRunning =>
+      'The task flow is still running after cancellation.';
+
+  @override
+  String get unifiedTaskListCancellationSaveFailed =>
+      'Could not save the task flow cancellation state. Please retry clearing.';
+
+  @override
+  String get unifiedTaskListRemovalSaveFailed =>
+      'Could not save deletion of task flow records. Please retry clearing.';
+
+  @override
   String get chatAutoContinuePrompt => 'Continue if not finished.';
 
   @override
@@ -10481,6 +10546,71 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get taskListEmpty => 'No tasks';
+
+  @override
+  String get unifiedTaskListTabAll => 'All';
+
+  @override
+  String get unifiedTaskListTabInProgress => 'In progress';
+
+  @override
+  String get unifiedTaskListTabCompleted => 'Completed';
+
+  @override
+  String get unifiedTaskListTabFailed => 'Failed';
+
+  @override
+  String get unifiedTaskListTabStopped => 'Stopped';
+
+  @override
+  String get unifiedTaskListConfirmClear => 'Confirm clear';
+
+  @override
+  String get unifiedTaskListConfirmClearFailedMessage =>
+      'Are you sure you want to clear all failed tasks?';
+
+  @override
+  String get unifiedTaskListConfirmClearAllMessage =>
+      'Are you sure you want to clear all tasks? This action cannot be undone.';
+
+  @override
+  String get unifiedTaskListCancel => 'Cancel';
+
+  @override
+  String get unifiedTaskListConfirm => 'Confirm';
+
+  @override
+  String get unifiedTaskListClearCompleted => 'Clear completed tasks';
+
+  @override
+  String get unifiedTaskListClearFailed => 'Clear failed tasks';
+
+  @override
+  String get unifiedTaskListClearAll => 'Clear all tasks';
+
+  @override
+  String get unifiedTaskListRestoreInProgress => 'Restoring task flow records…';
+
+  @override
+  String get unifiedTaskListRestoreFailed =>
+      'Could not read task flow records; task actions are paused';
+
+  @override
+  String unifiedTaskListClearIncomplete(String error) {
+    return 'Clear incomplete: $error';
+  }
+
+  @override
+  String get unifiedTaskListCancellationStillRunning =>
+      'The task flow is still running after cancellation.';
+
+  @override
+  String get unifiedTaskListCancellationSaveFailed =>
+      'Could not save the task flow cancellation state. Please retry clearing.';
+
+  @override
+  String get unifiedTaskListRemovalSaveFailed =>
+      'Could not save deletion of task flow records. Please retry clearing.';
 
   @override
   String get chatAutoContinuePrompt => 'Continue if not finished.';
