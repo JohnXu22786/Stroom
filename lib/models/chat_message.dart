@@ -143,6 +143,7 @@ class ChatMessage {
   final List<Attachment> attachments;
   final bool isStreaming;
   final bool isError;
+
   /// Legacy single-string reasoning, derived from sections when not stored.
   final String? _reasoningContent;
   String? get reasoningContent =>
@@ -488,7 +489,7 @@ class ChatMessage {
     final errorBlocks = hasCanonicalSections
         ? blocks?.whereType<ErrorBlock>().toList()
         : blocks;
-    final savedReasoningContent = reasoningContent;
+    final savedReasoningContent = _reasoningContent;
     return {
       'id': id,
       'role': role,
@@ -683,6 +684,7 @@ class ChatMessage {
     List<Attachment>? attachments,
     bool? isStreaming,
     bool? isError,
+    bool stripRawData = false,
     String? reasoningContent,
     Map<String, dynamic>? rawRequest,
     Map<String, dynamic>? rawResponse,
@@ -704,8 +706,8 @@ class ChatMessage {
         isStreaming: isStreaming ?? this.isStreaming,
         isError: isError ?? this.isError,
         reasoningContent: reasoningContent ?? _reasoningContent,
-        rawRequest: rawRequest ?? this.rawRequest,
-        rawResponse: rawResponse ?? this.rawResponse,
+        rawRequest: stripRawData ? null : rawRequest ?? this.rawRequest,
+        rawResponse: stripRawData ? null : rawResponse ?? this.rawResponse,
         toolCalls: toolCalls ?? this.toolCalls,
         reasoningSections: reasoningSections ?? this.reasoningSections,
         textSections: textSections ?? this.textSections,
