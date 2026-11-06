@@ -1151,11 +1151,23 @@ class StreamingFenceInfoCache {
   int _textLength = 0;
   bool _textEndedWithCarriageReturn = false;
   String _markerSuffix = '';
+  bool _pendingLineCanCloseFence = false;
+  int _pendingFenceLeadingSpaces = 0;
+  int _pendingFenceMarkerRun = 0;
+  bool _pendingFenceHasMarker = false;
+  bool _pendingFenceTrailingWhitespace = false;
+  bool _pendingFencePrefixInvalid = false;
 
   _MermaidFenceInfo _infoFor(String text) {
     final cached = _info;
     if (cached == null || text.length < _textLength) {
-      return _scanFromStart(text);
+      final updated = _scanFromStart(text);
+      _setPendingLineFenceState(
+        updated.pendingLine,
+        updated.fenceChar,
+        updated.fenceLength,
+      );
+      return updated;
     }
     if (text.length == _textLength) return cached;
 
@@ -1172,7 +1184,14 @@ class StreamingFenceInfoCache {
             cached.fenceQuoteDepth == 0 &&
             cached.fenceListIndent == 0 &&
             cached.fenceInnerQuoteDepth == 0);
-    if (!_mayContainFenceMarker('$_markerSuffix$normalizedAppended') &&
+    final markerCannotCloseFence = cached.fenceChar != null &&
+        checkpoint.inFence &&
+        cached.fenceQuoteDepth == 0 &&
+        cached.fenceListIndent == 0 &&
+        cached.fenceInnerQuoteDepth == 0 &&
+        !_pendingLineCanCloseFence;
+    if ((!_mayContainFenceMarker('$_markerSuffix$normalizedAppended') ||
+            markerCannotCloseFence) &&
         !normalizedAppended.contains('\n') &&
         !cached.trailingLineClosedFence &&
         canReuseFenceState) {
@@ -1180,6 +1199,13 @@ class StreamingFenceInfoCache {
       if (cached.fenceChar != null && cached.hasUnfencedIndentedCode) {
         cached.normalizedTailSource?.append(normalizedAppended);
         cached.normalizedContainerTailSource?.append(normalizedAppended);
+      }
+      if (canReuseFenceState) {
+        _extendPendingLineFenceState(
+          normalizedAppended,
+          cached.fenceChar,
+          cached.fenceLength,
+        );
       }
       _markerSuffix = _suffixAfterAppend(_markerSuffix, normalizedAppended);
       final updated = _copyWithPendingLine(cached, text);
@@ -1197,7 +1223,61 @@ class StreamingFenceInfoCache {
       normalizedAppended: normalizedAppended,
     );
     _markerSuffix = _lastTwoRawCharacters(text);
+    _setPendingLineFenceState(
+      updated.pendingLine,
+      updated.fenceChar,
+      updated.fenceLength,
+    );
     return updated;
+  }
+
+  void _setPendingLineFenceState(
+    _SegmentedText line,
+    String? fenceChar,
+    int fenceLength,
+  ) {
+    _pendingFenceLeadingSpaces = 0;
+    _pendingFenceMarkerRun = 0;
+    _pendingFenceHasMarker = false;
+    _pendingFenceTrailingWhitespace = false;
+    _pendingFencePrefixInvalid = fenceChar == null;
+    _pendingLineCanCloseFence = fenceChar != null;
+    if (fenceChar == null) return;
+    for (final segment in line.segments) {
+      _extendPendingLineFenceState(segment, fenceChar, fenceLength);
+    }
+  }
+
+  void _extendPendingLineFenceState(
+    String appended,
+    String? fenceChar,
+    int fenceLength,
+  ) {
+    if (fenceChar == null || _pendingFencePrefixInvalid) return;
+    final markerCodeUnit = fenceChar.codeUnitAt(0);
+    for (var offset = 0; offset < appended.length; offset++) {
+      final codeUnit = appended.codeUnitAt(offset);
+      if (!_pendingFenceHasMarker) {
+        if (codeUnit == 0x20 && _pendingFenceLeadingSpaces < 4) {
+          _pendingFenceLeadingSpaces++;
+        } else if (_pendingFenceLeadingSpaces > 3 ||
+            codeUnit != markerCodeUnit) {
+          _pendingFencePrefixInvalid = true;
+        } else {
+          _pendingFenceHasMarker = true;
+          _pendingFenceMarkerRun = 1;
+        }
+      } else if (codeUnit == markerCodeUnit &&
+          !_pendingFenceTrailingWhitespace) {
+        if (_pendingFenceMarkerRun < fenceLength) _pendingFenceMarkerRun++;
+      } else if (_isTrimWhitespace(codeUnit) &&
+          _pendingFenceMarkerRun >= fenceLength) {
+        _pendingFenceTrailingWhitespace = true;
+      } else {
+        _pendingFencePrefixInvalid = true;
+      }
+    }
+    _pendingLineCanCloseFence = !_pendingFencePrefixInvalid;
   }
 
   _MermaidFenceInfo _scanFromStart(
