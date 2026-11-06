@@ -2050,8 +2050,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   Future<void> _takePhotoWithSystemCamera() async {
     var importGeneration = _imageImportGeneration;
     var importPending = false;
-    var previousImportCommit = Future<void>.value();
-    Completer<void>? importCommit;
+    final previousImportCommit = _imageImportCommitTail;
+    final cameraCommit = Completer<void>();
+    _imageImportCommitTail = cameraCommit.future;
     try {
       final picker = ImagePicker();
       final mode = _imageImportMode;
@@ -2074,10 +2075,6 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         return;
       }
 
-      previousImportCommit = _imageImportCommitTail;
-      final cameraCommit = Completer<void>();
-      importCommit = cameraCommit;
-      _imageImportCommitTail = cameraCommit.future;
       final bytes = await file.readAsBytes();
       if (!mounted || importGeneration != _imageImportGeneration) return;
       final payload = await _prepareImagePayload(bytes);
@@ -2112,8 +2109,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         );
       }
     } finally {
-      final commit = importCommit;
-      if (commit != null && !commit.isCompleted) commit.complete();
+      if (!cameraCommit.isCompleted) cameraCommit.complete();
       if (importPending) _finishImageImport();
     }
   }
@@ -2227,8 +2223,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   Future<void> _pickFromAppAlbum() async {
     var importGeneration = _imageImportGeneration;
     var importPending = false;
-    var previousImportCommit = Future<void>.value();
-    Completer<void>? importCommit;
+    final previousImportCommit = _imageImportCommitTail;
+    final albumCommit = Completer<void>();
+    _imageImportCommitTail = albumCommit.future;
     try {
       final result = await showAppAlbumPickerDialog(context);
       if (!mounted ||
@@ -2237,10 +2234,6 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           importGeneration != _imageImportGeneration) {
         return;
       }
-      previousImportCommit = _imageImportCommitTail;
-      final albumCommit = Completer<void>();
-      importCommit = albumCommit;
-      _imageImportCommitTail = albumCommit.future;
       _beginImageImport();
       importPending = true;
       await previousImportCommit;
@@ -2274,8 +2267,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                 .ocrChooseImageFailed(e.toString()))));
       }
     } finally {
-      final commit = importCommit;
-      if (commit != null && !commit.isCompleted) commit.complete();
+      if (!albumCommit.isCompleted) albumCommit.complete();
       if (importPending) _finishImageImport();
     }
   }

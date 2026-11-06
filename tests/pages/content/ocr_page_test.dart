@@ -877,7 +877,7 @@ void main() {
   );
 
   testWidgets(
-    'camera choice accepted after gallery selection commits after the gallery',
+    'camera picker invoked first commits before a later gallery picker',
     (tester) async {
       final validBytes = _createValidOcrTestImage().bytes;
       final pendingCameraPicker = Completer<XFile?>();
@@ -900,18 +900,12 @@ void main() {
       await tester.tap(find.text('相册选择'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('从系统相册选择'));
-      await _pumpUntil(
-        tester,
-        () => find.text('已选 1 张图片').evaluate().isNotEmpty,
-      );
+      await tester.pump();
       expect(
-        tester
-            .widget<ImageGridItem>(
-              find.byKey(const ValueKey('ocr_grid_item_0')),
-            )
-            .image
-            .sourceName,
-        'gallery.png',
+        find.text('已选 1 张图片'),
+        findsNothing,
+        reason:
+            'the later gallery import must wait for the earlier camera slot',
       );
 
       pendingCameraPicker.complete(
@@ -929,7 +923,7 @@ void main() {
             )
             .image
             .sourceName,
-        'gallery.png',
+        isNull,
       );
       expect(
         tester
@@ -938,7 +932,7 @@ void main() {
             )
             .image
             .sourceName,
-        isNull,
+        'gallery.png',
       );
       expect(tester.takeException(), isNull);
     },
