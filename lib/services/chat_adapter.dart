@@ -814,6 +814,7 @@ class ChatAdapter {
   Stream<ChatEvent> sendStreamWithTools(
     String text, {
     required List<ChatMessage> history,
+    RequestContentCache? contentCache,
     bool reasoning = false,
     String reasoningEffort = 'medium',
     Map<String, String> reasoningParamValues = const {},
@@ -822,6 +823,11 @@ class ChatAdapter {
     String convId = '',
     Assistant? assistant,
     ProviderEntriesState? entriesState,
+    void Function()? onToolCallIntent,
+    void Function(String text)? onTextDelta,
+    void Function(Map<String, dynamic> body)? onRequestBody,
+    String? Function()? takeCompletedToolCallRound,
+    String? Function()? takeCompletedToolCallReasoning,
   }) {
     final svc = convId.isNotEmpty
         ? getOrCreateService(convId,
@@ -833,11 +839,17 @@ class ChatAdapter {
     return svc.sendStreamWithTools(
       text,
       history: history,
+      contentCache: contentCache,
       reasoning: reasoning,
       reasoningEffort: reasoningEffort,
       reasoningParamValues: reasoningParamValues,
       customParamValues: customParamValues,
       tools: tools,
+      onToolCallIntent: onToolCallIntent,
+      onTextDelta: onTextDelta,
+      onRequestBody: onRequestBody,
+      takeCompletedToolCallRound: takeCompletedToolCallRound,
+      takeCompletedToolCallReasoning: takeCompletedToolCallReasoning,
     );
   }
 

@@ -391,6 +391,7 @@
       }
     }
   },
+  "chatAutoContinuePrompt": "如果还没完成，请继续。",
   "chatSearchCurrent": "搜索当前对话...",
   "chatSearchAll": "搜索所有对话...",
   "searchPrevious": "上一个",
@@ -533,6 +534,7 @@
   "chatVideoLoadFailed": "视频加载失败",
   "chatHtmlLoading": "加载 HTML 预览...",
   "chatPreviewLoadFailed": "加载失败",
+  "albumPickerLoadFailed": "加载应用内相册失败",
   "chatHtmlPreview": "HTML 预览",
   "chatMermaidLoading": "加载图表预览...",
   "chatMermaidPreview": "Mermaid 预览",
@@ -647,6 +649,14 @@
   "taskFlowUiFileTooLarge": "「{name}」超过 {limit} MB，请选择较小文件",
   "taskFlowUiFileUnreadable": "「{name}」为空或无法读取",
   "taskFlowUiSomeFilesMissing": "部分文件不存在，已跳过",
+  "taskFlowUiSelectedFilesUnavailable": "有 {count} 个已选文件无法找到或读取，请重新选择全部文件。",
+  "@taskFlowUiSelectedFilesUnavailable": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "taskFlowUiQueuedOne": "任务流已加入队列",
   "taskFlowUiQueuedMany": "已将 {count} 个任务流加入队列",
   "taskFlowUiRunTitle": "本次运行",
@@ -4618,5 +4628,8 @@
   "browserCookiesDeletedOne": "已删除 Cookie",
   "browserCookiesDeleteFailed": "删除失败，请重试",
   "browserCookiesEmptyValue": "（空值）",
-  "platformTutorialPageTitle": "平台教程"
+  "platformTutorialPageTitle": "平台教程",
+  "catcatchWebViewRecoveryGuidance": "自动获取网页资源连续超时。请在此页面登录或设置用户脚本；检测到媒体资源后，点击“继续流程”。",
+  "browserRecoveryContinue": "继续流程",
+  "browserRecoveryOpenPage": "打开恢复页面"
 }

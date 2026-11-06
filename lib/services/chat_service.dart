@@ -165,11 +165,11 @@ class ChatService {
   /// `if (_isCancelledByUser) break` 正常退出（否则每次"停止"都泄漏
   /// 一个持 MB 级闭包的挂起微任务）。
   Completer<void>? _roundCompleter;
-  String _reasoningBuffer = '';
+  final StringBuffer _reasoningBuffer = StringBuffer();
 
   /// Accumulated visible content from the current streaming round,
   /// preserved for tool call chain reconstruction per DeepSeek spec.
-  String _contentBuffer = '';
+  final StringBuffer _contentBuffer = StringBuffer();
 
   /// Tracks how much of [_reasoningBuffer] was accumulated in previous rounds,
   /// so we can extract only the current round's reasoning for the assistant message.
@@ -237,6 +237,15 @@ class ChatService {
 
   Map<String, dynamic>? get lastRequestBody =>
       _lastRequestBody ?? _provider?.lastRequestBody;
+
+  /// Release the per-service request body after the stream manager has
+  /// copied it into the finalized message's rawRequest snapshot.
+  void releaseLastRequestBody(Map<String, dynamic>? requestBody) {
+    if (requestBody != null && identical(_lastRequestBody, requestBody)) {
+      _lastRequestBody = null;
+    }
+  }
+
   Map<String, dynamic>? get lastResponseData =>
       _lastResponseData ?? _provider?.lastResponseData;
   Map<String, String>? get lastRequestHeaders =>

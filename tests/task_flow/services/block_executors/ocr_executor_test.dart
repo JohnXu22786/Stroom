@@ -20,6 +20,7 @@ import 'package:stroom/task_flow/providers/task_flow_execution_provider.dart';
 import 'package:stroom/task_flow/services/block_executors/ocr_executor.dart';
 import 'package:stroom/utils/file_manifest.dart';
 import 'package:stroom/utils/text_manifest.dart';
+import 'package:stroom/utils/web_file_store.dart';
 
 Uint8List _validPng() => img.encodePng(img.Image(width: 2, height: 2));
 
@@ -72,6 +73,7 @@ void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     ManifestDatabase.enableTestMode();
+    WebFileStore.enableTestMode();
     FileManifest.invalidateCache();
     TextManifest.invalidateCache();
     executions = TaskFlowExecutionNotifier();
@@ -90,6 +92,7 @@ void main() {
   tearDown(() {
     if (executions.mounted) executions.dispose();
     background.dispose();
+    WebFileStore.disableTestMode();
   });
 
   ProviderEntriesState providerForOcr({
@@ -147,6 +150,66 @@ void main() {
 
     expect(result, 'recognized text');
     expect(requestFormat, 'png');
+  });
+
+  test('OCR reads image bytes from a WebFileStore key', () async {
+    const key = 'attachments/taskflow_image.png';
+    final bytes = _validPng();
+    await WebFileStore.write(key, bytes);
+    Uint8List? requestedBytes;
+    String? requestFormat;
+
+    final result = await executeOcrBlock(
+      block: ocrBlock(),
+      def: BlockTypeDefinition.ocr,
+      input: key,
+      execId: execId,
+      execNotifier: executions,
+      flowSubTask: subTask,
+      bgNotifier: background,
+      providerEntries: providerForOcr(),
+      requestOcr: (payload, format) async {
+        requestedBytes = payload;
+        requestFormat = format;
+        return 'recognized web image';
+      },
+    );
+
+    expect(result, 'recognized web image');
+    expect(requestedBytes, bytes);
+    expect(requestFormat, 'png');
+  });
+
+  test('OCR rejects oversized WebFileStore input before request dispatch',
+      () async {
+    const key = 'attachments/oversized_taskflow_image.png';
+    await WebFileStore.write(key, Uint8List(800 * 1024));
+    var requested = false;
+
+    await expectLater(
+      executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: key,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(requestSizeBudgetBytes: 1024 * 1024),
+        requestOcr: (_, _) async {
+          requested = true;
+          return 'unexpected request';
+        },
+      ),
+      throwsA(isA<BlockExecutionException>().having(
+        (error) => error.message,
+        'message',
+        contains('OCR 输入图片超过OCR 请求大小预算'),
+      )),
+    );
+
+    expect(requested, isFalse);
+    expect(background.state.single.status, TaskStatus.failed);
   });
 
   test(

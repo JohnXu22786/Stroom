@@ -1510,19 +1510,26 @@ const _legacyOcrNaturalCarefulInstructionActions = {
   'write',
 };
 
-bool _legacyOcrIsNaturalCarefullyObjectPhrase(String prefix, String text) =>
-    const {'read', 'check'}.contains(
-      prefix.toLowerCase(),
-    ) &&
-    RegExp(
-      r'^(?:the|this|that|these|those|a|an|my|your|our|their|his|her|its)\s+'
-      r'(?!authorization\b|auth\b|api[\s_-]*key\b|keys?\b|credentials?\b|tokens?\b|secrets?\b|passwords?\b)'
-      r'[\p{L}\p{M}\p{N}]+(?:[-_][\p{L}\p{M}\p{N}]+)*'
-      r'(?:\s+(?!authorization\b|auth\b|api[\s_-]*key\b|keys?\b|credentials?\b|tokens?\b|secrets?\b|passwords?\b)'
-      r'[\p{L}\p{M}\p{N}]+(?:[-_][\p{L}\p{M}\p{N}]+)*)*[.!?]?$',
-      caseSensitive: false,
-      unicode: true,
-    ).hasMatch(text);
+bool _legacyOcrIsNaturalCarefullyObjectPhrase(String prefix, String text) {
+  if (!const {'read', 'check'}.contains(prefix.toLowerCase())) return false;
+
+  final isSecretLabel = RegExp(
+    r'^(?:(?:the|this|that|these|those|a|an|my|your|our|their|his|her|its)\s+)?'
+    r'secret\s+label\s+carefully[.!?]?$',
+    caseSensitive: false,
+    unicode: true,
+  ).hasMatch(text);
+  return isSecretLabel ||
+      RegExp(
+        r'^(?:the|this|that|these|those|a|an|my|your|our|their|his|her|its)\s+'
+        r'(?!authorization\b|auth\b|api[\s_-]*key\b|keys?\b|credentials?\b|tokens?\b|secrets?\b|passwords?\b)'
+        r'[\p{L}\p{M}\p{N}]+(?:[-_][\p{L}\p{M}\p{N}]+)*'
+        r'(?:\s+(?!authorization\b|auth\b|api[\s_-]*key\b|keys?\b|credentials?\b|tokens?\b|secrets?\b|passwords?\b)'
+        r'[\p{L}\p{M}\p{N}]+(?:[-_][\p{L}\p{M}\p{N}]+)*)*[.!?]?$',
+        caseSensitive: false,
+        unicode: true,
+      ).hasMatch(text);
+}
 
 bool _legacyOcrHasNaturalConnectorAfterLineBreak(
   String text,
@@ -2192,7 +2199,7 @@ bool _legacyOcrHasSafeRedactedInstruction(
 }) {
   if (!text.contains('[redacted]')) return false;
   final safeActionLead = RegExp(
-    r'^\s*(?:for accurate OCR,\s*)?(?:(?:(?:can|could|would)\s+you\s+)?(?:please\s+)?)?(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|extract|interpret|count|find|search|locate|transcribe|translate|classify|explain|process|show|tell|check|look|scan|ocr|decode|record)\b.*\[redacted\]',
+    r'^\s*(?:for accurate OCR,\s*)?(?:(?:(?:can|could|would)\s+you\s+)?(?:please\s+)?)?(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|extract|interpret|count|find|search|locate|transcribe|translate|classify|calculate|explain|process|show|tell|check|look|scan|ocr|decode|record)\b.*\[redacted\]',
     caseSensitive: false,
     dotAll: true,
   ).hasMatch(text);
@@ -2229,7 +2236,7 @@ bool _legacyOcrHasSafeRedactedInstruction(
     dotAll: true,
   ).hasMatch(text);
   final safeReceiptContextAction = RegExp(
-    r'^\s*this\s+is\s+a\s+receipt[.!?]\s*(?:please\s+)?(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|extract|interpret|count|find|search|locate|transcribe|translate|classify|explain|process|show|tell|check|look|scan|ocr|decode|record)\b.*\[redacted\]',
+    r'^\s*this\s+is\s+a\s+receipt[.!?]\s*(?:please\s+)?(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|extract|interpret|count|find|search|locate|transcribe|translate|classify|calculate|explain|process|show|tell|check|look|scan|ocr|decode|record)\b.*\[redacted\]',
     caseSensitive: false,
     dotAll: true,
   ).hasMatch(text);
@@ -2239,7 +2246,7 @@ bool _legacyOcrHasSafeRedactedInstruction(
     dotAll: true,
   ).hasMatch(text);
   final bareRedactedAction = RegExp(
-    r'^\s*(?:please\s+)?(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|extract|interpret|count|find|search|locate|transcribe|translate|classify|explain|process|show|tell|check|look|scan|ocr|decode)\s+\[redacted\]\s*[.!?]?\s*$',
+    r'^\s*(?:please\s+)?(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|extract|interpret|count|find|search|locate|transcribe|translate|classify|calculate|explain|process|show|tell|check|look|scan|ocr|decode)\s+\[redacted\]\s*[.!?]?\s*$',
     caseSensitive: false,
   ).hasMatch(text);
   return (safeActionLead && (!bareRedactedAction || allowBareAction)) ||
@@ -2602,7 +2609,7 @@ String _legacyOcrRedactMaskedCredentialEchoes(
                 caseSensitive: false,
               ).hasMatch(beforeEcho);
       final hasSafeInstructionLead = RegExp(
-            r'^\s*(?:for accurate OCR,\s*)?(?:(?:can|could|would)\s+you\s+)?(?:please\s+)?(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|extract|interpret|count|find|search|transcribe|translate|classify|explain|process|show|tell|check|look|scan|ocr|decode)\s+(?:(?:the|this|that|these|those|a|an)\s+)?[a-z0-9]+\s+',
+            r'^\s*(?:for accurate OCR,\s*)?(?:(?:can|could|would)\s+you\s+)?(?:please\s+)?(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|extract|interpret|count|find|search|transcribe|translate|classify|calculate|explain|process|show|tell|check|look|scan|ocr|decode)\s+(?:(?:the|this|that|these|those|a|an)\s+)?[a-z0-9]+\s+',
             caseSensitive: false,
           ).hasMatch(beforeEcho) ||
           RegExp(
@@ -2612,7 +2619,7 @@ String _legacyOcrRedactMaskedCredentialEchoes(
           naturalCarefulInstructionLead ||
           readFromOcrSourcePrompt ||
           RegExp(
-            r'^\s*(?:for accurate OCR,\s*)?(?:(?:can|could|would)\s+you\s+)?(?:please\s+)?(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|extract|interpret|count|find|search|transcribe|translate|classify|explain|process|show|tell|check|look|scan|ocr|decode)\s*:\s*$',
+            r'^\s*(?:for accurate OCR,\s*)?(?:(?:can|could|would)\s+you\s+)?(?:please\s+)?(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|extract|interpret|count|find|search|transcribe|translate|classify|calculate|explain|process|show|tell|check|look|scan|ocr|decode)\s*:\s*$',
             caseSensitive: false,
           ).hasMatch(beforeEcho) ||
           RegExp(
@@ -2806,6 +2813,7 @@ bool _legacyOcrHasOrdinaryNaturalPromptContext(
         caseSensitive: false,
       ).hasMatch(after);
   final naturalImperativePrompt = const {
+        'accommodate',
         'recognize',
         'interpret',
         'calculate',
@@ -2911,12 +2919,28 @@ bool _legacyOcrHasOrdinaryNaturalPromptContext(
       ).hasMatch(after);
   final naturalReadCharacterPrompt =
       _legacyOcrIsNaturalReadCharacterPrompt(naturalWord, before);
+  final naturalSecretaryInstructionPrompt =
+      const {'secretary', 'secretaries'}.contains(naturalWord) &&
+          RegExp(
+            r'\b(?:please\s+)?ask(?:\s+(?:the|this|that|these|those|a|an))?$',
+            caseSensitive: false,
+          ).hasMatch(before) &&
+          (after.isEmpty ||
+              RegExp(r'^[a-z]+\b', caseSensitive: false).hasMatch(after) ||
+              RegExp(r'^[.!?]$', caseSensitive: false).hasMatch(after));
   final naturalNounInstructionPrompt = RegExp(
         r'\b(?:please\s+)?(?:describe|review|examine|include|provide|extract|read\s+about|use)(?:\s+(?:the|this|that|these|those|a|an))?$',
         caseSensitive: false,
       ).hasMatch(before) &&
       (after.isEmpty ||
           RegExp(r'^[a-z]+\b', caseSensitive: false).hasMatch(after));
+  final naturalCooperateImperativePrompt = naturalWord == 'cooperate' &&
+      RegExp(r'^(?:please\s*)?$', caseSensitive: false).hasMatch(before) &&
+      (after.isEmpty ||
+          RegExp(
+            r'^(?:[.!?]|[a-z]+(?:\s+[a-z]+)*(?:[.!?])?)$',
+            caseSensitive: false,
+          ).hasMatch(after));
   final naturalSecretPluralKeepPrompt = isNaturalSecretPlural &&
       RegExp(r'\b(?:please\s+)?keep$', caseSensitive: false).hasMatch(before) &&
       (after.isEmpty ||
@@ -2956,7 +2980,9 @@ bool _legacyOcrHasOrdinaryNaturalPromptContext(
           readHandwritingInstructionPrompt ||
           readNaturalNounInstructionPrompt ||
           naturalImperativePrompt ||
+          naturalSecretaryInstructionPrompt ||
           naturalNounInstructionPrompt ||
+          naturalCooperateImperativePrompt ||
           naturalSecretPluralPrompt ||
           naturalDefinitionQuestion ||
           naturalNounSentence);

@@ -67,6 +67,11 @@ final assistantProvider =
   return notifier;
 });
 
+/// Completes after assistants have been read from persistence.
+final assistantInitialLoadProvider = FutureProvider<void>((ref) async {
+  await ref.watch(assistantProvider.notifier).ready;
+});
+
 class AssistantsNotifier extends StateNotifier<List<Assistant>> {
   AssistantsNotifier() : super([]);
 

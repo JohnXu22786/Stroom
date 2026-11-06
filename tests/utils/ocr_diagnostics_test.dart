@@ -227,6 +227,44 @@ void main() {
     }
   });
 
+  test(
+    'X-Auth header secrets exclude echoed diagnostics but keep safe IDs',
+    () {
+      const credential = 'opaque-user-secret-192';
+      const safeRequestId = 'req-safe-after-x-auth-192';
+      final rawRequest = {
+        'method': 'POST',
+        'requestId': credential,
+        'headers': {'X-Auth': credential},
+      };
+      final credentialValues =
+          OcrDiagnosticSnapshot.credentialValuesFromRequest(rawRequest);
+      final request = OcrDiagnosticSnapshot.sanitizeRequest(rawRequest)!;
+      final echoedResponse = OcrDiagnosticSnapshot.sanitizeResponse(
+        {
+          'statusCode': 401,
+          'requestId': credential,
+          'data': {'id': credential},
+        },
+        excludedValues: credentialValues,
+      )!;
+      final safeResponse = OcrDiagnosticSnapshot.sanitizeResponse(
+        {'statusCode': 429, 'requestId': safeRequestId},
+        excludedValues: credentialValues,
+      )!;
+      final diagnostics = jsonEncode([request, echoedResponse, safeResponse]);
+
+      expect(credentialValues, contains(credential));
+      expect(request, {'method': 'POST'});
+      expect(echoedResponse, {'statusCode': 401});
+      expect(safeResponse, {
+        'statusCode': 429,
+        'requestId': safeRequestId,
+      });
+      expect(diagnostics, isNot(contains(credential)));
+    },
+  );
+
   test('request secret and private key headers exclude echoed response IDs',
       () {
     for (final entry in [

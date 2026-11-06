@@ -75,6 +75,30 @@ void main() {
       expect(capturedUrl, equals('https://cdn.example.com/video.mp4'));
     });
 
+    testWidgets('disables capture confirmation while a result is pending',
+        (tester) async {
+      var captureCalled = false;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: DraggableFloatingPanel(
+              detectedUrls: const ['https://cdn.example.com/video.mp4'],
+              confirmEnabled: false,
+              onConfirmCapture: (_) => captureCalled = true,
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.textContaining('video.mp4'));
+      await tester.pumpAndSettle();
+      final button = tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, '确认捕获'),
+      );
+      expect(button.onPressed, isNull);
+      expect(captureCalled, isFalse);
+    });
+
     testWidgets('supports selecting different URL then confirming',
         (tester) async {
       String? capturedUrl;

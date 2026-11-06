@@ -8,6 +8,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../l10n/app_localizations.dart';
 import '../catcatch/engine/js_hook_script.dart';
+import '../catcatch/engine/webview_sniffer.dart'
+    show HeadedRecoveryAttemptSchedule, WebViewSniffer;
 import '../catcatch/widgets/draggable_floating_panel.dart';
 import '../services/browser_cookie_service.dart';
 
@@ -269,6 +271,7 @@ class UserScript {
 
 class BrowserPage extends StatefulWidget {
   final String initialUrl;
+  final bool recoveryMode;
 
   /// Builds a test body with the real capture callback, without a native WebView.
   @visibleForTesting
@@ -277,11 +280,30 @@ class BrowserPage extends StatefulWidget {
   const BrowserPage({
     super.key,
     this.initialUrl = 'https://www.google.com',
+    this.recoveryMode = false,
     this.testBodyBuilder,
   });
 
   @override
   State<BrowserPage> createState() => _BrowserPageState();
+}
+
+class BrowserRecoveryResult {
+  final List<String> mediaUrls;
+  final Map<String, String> mimeTypesByUrl;
+  final Map<String, String> initiatorsByUrl;
+  final String pageUrl;
+  final String? pageTitle;
+  final Map<String, String> cookieHeadersByUrl;
+
+  const BrowserRecoveryResult({
+    required this.mediaUrls,
+    required this.mimeTypesByUrl,
+    required this.initiatorsByUrl,
+    required this.pageUrl,
+    required this.cookieHeadersByUrl,
+    this.pageTitle,
+  });
 }
 
 class _BrowserPageState extends State<BrowserPage> {
@@ -290,6 +312,13 @@ class _BrowserPageState extends State<BrowserPage> {
   bool _isLoading = false;
   double _progress = 0;
   Timer? _mainFrameErrorTimer;
+  Timer? _recoveryTimeoutTimer;
+  Timer? _recoveryNavigationFallbackTimer;
+  final _recoveryAttempts = HeadedRecoveryAttemptSchedule();
+  bool _recoveryCanContinue = false;
+  bool _recoveryContinuationInProgress = false;
+  bool _recoveryRetriesPaused = false;
+  bool _recoveryReloadAwaitingNavigation = false;
   String? _pendingMainFrameErrorUrl;
   List<UserScript> _scripts = [];
 
@@ -302,6 +331,8 @@ class _BrowserPageState extends State<BrowserPage> {
 
   /// URLs detected by the JS hook in the WebView.
   final List<String> _detectedUrls = [];
+  final Map<String, String> _recoveryMimeTypesByUrl = {};
+  final Map<String, String> _recoveryInitiatorsByUrl = {};
 
   /// Whether the cat-catch hook has been injected for the current page.
   bool _catCatchHookInjected = false;
@@ -375,12 +406,121 @@ class _BrowserPageState extends State<BrowserPage> {
   @override
   void dispose() {
     _cancelPendingMainFrameError();
+    _recoveryTimeoutTimer?.cancel();
+    _recoveryNavigationFallbackTimer?.cancel();
     _urlController.dispose();
 
-    // Queue the final preference decision after any in-flight toggle.
     unawaited(BrowserCookieService.handleBrowserClose());
 
     super.dispose();
+  }
+
+  void _startRecoveryTimeout() {
+    if (!widget.recoveryMode ||
+        _recoveryRetriesPaused ||
+        _recoveryTimeoutTimer != null ||
+        !_recoveryAttempts.hasRemainingAttempts) {
+      return;
+    }
+    final attemptIndex = _recoveryAttempts.startNextAttempt()!;
+    final timeout = WebViewSniffer.headedRecoveryTimeouts[attemptIndex];
+    _recoveryTimeoutTimer = Timer(timeout, () async {
+      if (!mounted) return;
+      _recoveryTimeoutTimer = null;
+      if (_recoveryRetriesPaused) return;
+      if (_recoveryAttempts.hasRemainingAttempts) {
+        _recoveryReloadAwaitingNavigation = true;
+        try {
+          await _webViewController?.reload();
+        } catch (e) {
+          debugPrint('[BrowserPage] recovery reload failed: $e');
+        }
+        // Give the platform a short window to report the new load. The normal
+        // timeout starts in onLoadStart; this fallback bounds reloads that do
+        // not produce a navigation callback. A late callback restarts the same
+        // attempt's full timeout from its actual start.
+        if (mounted && _recoveryReloadAwaitingNavigation) {
+          _recoveryNavigationFallbackTimer = Timer(
+            const Duration(seconds: 2),
+            () {
+              _recoveryNavigationFallbackTimer = null;
+              if (mounted &&
+                  !_recoveryRetriesPaused &&
+                  _recoveryReloadAwaitingNavigation) {
+                _startRecoveryTimeout();
+              }
+            },
+          );
+        }
+      } else {
+        setState(() => _recoveryCanContinue = true);
+      }
+    });
+  }
+
+  void _pauseRecoveryRetriesForUserAction() {
+    if (!widget.recoveryMode || _recoveryRetriesPaused) return;
+    _recoveryRetriesPaused = true;
+    _recoveryTimeoutTimer?.cancel();
+    _recoveryTimeoutTimer = null;
+    _recoveryNavigationFallbackTimer?.cancel();
+    _recoveryNavigationFallbackTimer = null;
+    _recoveryReloadAwaitingNavigation = false;
+  }
+
+  Future<void> _continueRecovery({String? selectedMediaUrl}) async {
+    if (_recoveryContinuationInProgress) return;
+    setState(() => _recoveryContinuationInProgress = true);
+    final controller = _webViewController;
+    final pageUrl = _currentUrl.isEmpty ? widget.initialUrl : _currentUrl;
+    final detectedMediaUrls = List<String>.of(_detectedUrls);
+    final mediaUrls = selectedMediaUrl == null
+        ? detectedMediaUrls
+        : detectedMediaUrls.where((url) => url == selectedMediaUrl).toList();
+    final mimeTypesByUrl = Map<String, String>.of(_recoveryMimeTypesByUrl)
+      ..removeWhere((url, _) => !mediaUrls.contains(url));
+    final initiatorsByUrl = Map<String, String>.of(_recoveryInitiatorsByUrl)
+      ..removeWhere((url, _) => !mediaUrls.contains(url));
+    String? title;
+    final cookieHeadersByUrl = <String, String>{};
+    if (controller != null) {
+      try {
+        title = await controller.getTitle();
+      } catch (_) {}
+    }
+    for (final mediaUrl in mediaUrls) {
+      final mediaUri = Uri.tryParse(mediaUrl);
+      if (mediaUri == null ||
+          !mediaUri.hasAuthority ||
+          !{'http', 'https'}.contains(mediaUri.scheme) ||
+          cookieHeadersByUrl.containsKey(mediaUrl)) {
+        continue;
+      }
+      try {
+        final cookies = await CookieManager.instance().getCookies(
+          url: WebUri(mediaUrl),
+        );
+        if (cookies.isNotEmpty) {
+          cookieHeadersByUrl[mediaUrl] = cookies
+              .map((cookie) => '${cookie.name}=${cookie.value}')
+              .join('; ');
+        }
+      } catch (e) {
+        debugPrint('[BrowserPage] recovery cookie read failed: $e');
+      }
+    }
+    if (!mounted) return;
+    Navigator.pop(
+      context,
+      BrowserRecoveryResult(
+        mediaUrls: List<String>.unmodifiable(mediaUrls),
+        mimeTypesByUrl: Map.unmodifiable(mimeTypesByUrl),
+        initiatorsByUrl: Map.unmodifiable(initiatorsByUrl),
+        pageUrl: pageUrl,
+        pageTitle: title,
+        cookieHeadersByUrl: Map.unmodifiable(cookieHeadersByUrl),
+      ),
+    );
   }
 
   Future<void> _loadScripts() async {
@@ -461,6 +601,8 @@ class _BrowserPageState extends State<BrowserPage> {
       final data = jsonDecode(message) as Map<String, dynamic>;
       final url = data['url'] as String?;
       if (url == null || url.isEmpty) return;
+      final mimeType = data['mimeType'] as String?;
+      final initiator = data['initiator'] as String?;
 
       debugPrint('[BrowserPage] CatCatch sniffed: $url');
       setState(() {
@@ -468,7 +610,18 @@ class _BrowserPageState extends State<BrowserPage> {
         if (!_detectedUrls.contains(url)) {
           _detectedUrls.add(url);
         }
+        if (widget.recoveryMode && mimeType != null && mimeType.isNotEmpty) {
+          _recoveryMimeTypesByUrl.putIfAbsent(url, () => mimeType);
+        }
+        if (widget.recoveryMode && initiator != null && initiator.isNotEmpty) {
+          _recoveryInitiatorsByUrl.putIfAbsent(url, () => initiator);
+        }
+        if (widget.recoveryMode) _recoveryCanContinue = true;
       });
+      if (widget.recoveryMode) {
+        _recoveryTimeoutTimer?.cancel();
+        _recoveryTimeoutTimer = null;
+      }
     } catch (e) {
       debugPrint('[BrowserPage] CatCatch message parse error: $e');
     }
@@ -476,24 +629,29 @@ class _BrowserPageState extends State<BrowserPage> {
 
   /// User tapped "Confirm Capture" on the floating panel.
   ///
-  /// Contract: the captured URL is handed back to the page that pushed this
-  /// one via `Navigator.pop(selectedUrl)`. The caller (catcatch_page) is
-  /// expected to await the push result and pre-fill the download form.
+  /// Recovery routes return a typed recovery result; normal browser routes
+  /// return the selected URL so their caller can pre-fill the download form.
   void _onConfirmCapture(String selectedUrl) {
     debugPrint('[BrowserPage] User confirmed capture: $selectedUrl');
+    if (widget.recoveryMode) {
+      _pauseRecoveryRetriesForUserAction();
+      unawaited(_continueRecovery(selectedMediaUrl: selectedUrl));
+      return;
+    }
     final navigator = Navigator.of(context);
     if (navigator.canPop()) {
       navigator.pop<String>(selectedUrl);
     }
   }
 
-  /// Reset detected URLs for a new page load.
+  /// Reset per-page detection state for a new page load.
   /// The panel visibility is NOT reset here — it persists across page
   /// navigations until the user manually closes it. The detection epoch
-  /// bumps so the panel drops any selection from the previous page.
+  /// bumps so the panel drops any selection from the previous page. Recovery
+  /// URLs stay available across sign-in redirects and manual navigation.
   void _resetDetection() {
     setState(() {
-      _detectedUrls.clear();
+      if (!widget.recoveryMode) _detectedUrls.clear();
       _catCatchHookInjected = false;
       _detectionEpoch++;
     });
@@ -541,6 +699,7 @@ class _BrowserPageState extends State<BrowserPage> {
   }
 
   Future<void> _goToUrl(String url) async {
+    _pauseRecoveryRetriesForUserAction();
     final controller = _webViewController;
     if (controller == null) return;
     final previousAddress = _urlController.text;
@@ -598,6 +757,7 @@ class _BrowserPageState extends State<BrowserPage> {
         titleSpacing: 4,
         title: TextField(
           controller: _urlController,
+          onChanged: (_) => _pauseRecoveryRetriesForUserAction(),
           style: const TextStyle(fontSize: 14),
           decoration: InputDecoration(
             hintText: l10n.browserAddressHint,
@@ -619,12 +779,42 @@ class _BrowserPageState extends State<BrowserPage> {
           onSubmitted: _goToUrl,
         ),
         actions: [
+          if (widget.recoveryMode)
+            TextButton.icon(
+              onPressed: _recoveryCanContinue &&
+                      _detectedUrls.isNotEmpty &&
+                      !_recoveryContinuationInProgress
+                  ? _continueRecovery
+                  : null,
+              icon: const Icon(Icons.play_arrow),
+              label: Text(l10n.browserRecoveryContinue),
+            ),
           IconButton(
             icon: const Icon(Icons.extension, size: 20),
             tooltip: l10n.browserUserScripts,
-            onPressed: _showScriptManager,
+            onPressed: () {
+              _pauseRecoveryRetriesForUserAction();
+              _showScriptManager();
+            },
           ),
         ],
+        bottom: widget.recoveryMode
+            ? PreferredSize(
+                preferredSize: const Size.fromHeight(44),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      l10n.catcatchWebViewRecoveryGuidance,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+                ),
+              )
+            : null,
       ),
       body: LayoutBuilder(
         builder: (context, constraints) {
@@ -638,90 +828,112 @@ class _BrowserPageState extends State<BrowserPage> {
                 children: [
                   if (_isLoading) LinearProgressIndicator(value: _progress),
                   Expanded(
-                    child: InAppWebView(
-                      // The initial page is loaded explicitly in onWebViewCreated
-                      // after the native cookie store is prepared for the selected
-                      // retention mode.
-                      initialUrlRequest: null,
-                      initialSettings:
-                          _buildSettings(isDesktopMode: _isDesktopMode),
-                      onWebViewCreated: (controller) async {
-                        _webViewController = controller;
+                    child: Listener(
+                      onPointerDown: (_) =>
+                          _pauseRecoveryRetriesForUserAction(),
+                      child: InAppWebView(
+                        // The initial page is loaded explicitly in onWebViewCreated
+                        // after the native cookie store is prepared for the selected
+                        // retention mode.
+                        initialUrlRequest: null,
+                        initialSettings:
+                            _buildSettings(isDesktopMode: _isDesktopMode),
+                        onWebViewCreated: (controller) async {
+                          _webViewController = controller;
 
-                        // Register JavaScript handler for CatCatchChannel.
-                        // The web platform of flutter_inappwebview does not
-                        // implement addJavaScriptHandler (UnimplementedError);
-                        // guard it so the initial URL load below still runs
-                        // on web — only the message bridge is unavailable.
-                        try {
-                          controller.addJavaScriptHandler(
-                            handlerName: 'CatCatchChannel',
-                            callback: (args) {
-                              if (args.isNotEmpty && args.first is String) {
-                                _onCatCatchMessage(args.first as String);
-                              }
-                            },
-                          );
-                        } catch (e) {
-                          debugPrint(
-                              '[BrowserPage] JS handler bridge unavailable: $e');
-                        }
+                          // Register JavaScript handler for CatCatchChannel.
+                          // The web platform of flutter_inappwebview does not
+                          // implement addJavaScriptHandler (UnimplementedError);
+                          // guard it so the initial URL load below still runs
+                          // on web — only the message bridge is unavailable.
+                          try {
+                            controller.addJavaScriptHandler(
+                              handlerName: 'CatCatchChannel',
+                              callback: (args) {
+                                if (args.isNotEmpty && args.first is String) {
+                                  _onCatCatchMessage(args.first as String);
+                                }
+                              },
+                            );
+                          } catch (e) {
+                            debugPrint(
+                                '[BrowserPage] JS handler bridge unavailable: $e');
+                          }
 
-                        // Clear stale native cookies when retention is disabled,
-                        // or restore persisted cookies when it is enabled, before
-                        // the first page load. If native cleanup fails, skip the
-                        // first navigation rather than sending stale cookies.
-                        try {
-                          await navigateBrowserPageAfterCookiePreparation(
-                            prepareCookies: _ensureCookieStorePrepared,
-                            loadUrl: () async {
-                              if (!mounted) return;
-                              await controller.loadUrl(
-                                urlRequest:
-                                    URLRequest(url: WebUri(widget.initialUrl)),
-                              );
-                            },
-                          );
-                        } catch (e) {
-                          debugPrint('[BrowserPage] initial load failed: $e');
-                        }
-                      },
-                      onLoadStart: (controller, url) {
-                        final urlString = url.toString();
-                        _cancelPendingMainFrameError();
-                        // Record the requested host before a redirect replaces
-                        // it with the final URL reported by onLoadStop.
-                        noteBrowserPageNavigationUrl(urlString);
-                        _activeNavigationUrl = urlString;
-                        setState(() {
-                          _isLoading = true;
-                          _progress = 0;
-                        });
-                        _currentUrl = urlString;
-                        _urlController.text = urlString;
-                        // Reset detection for new page
-                        _resetDetection();
-                        // Inject cat-catch hook as early as possible
-                        _injectCatCatchHook(urlString);
-                      },
-                      onLoadStop: (controller, url) {
-                        _cancelPendingMainFrameError();
-                        setState(() => _isLoading = false);
-                        _currentUrl = url.toString();
-                        // Track the host so cookies can be persisted/displayed
-                        // even on platforms without CookieManager.getAllCookies.
-                        noteBrowserPageNavigationUrl(url.toString());
-                        _injectScripts();
-                        // Re-inject cat-catch hook if somehow missed or if an
-                        // earlier injection was for a previous page
-                        if (!_catCatchHookInjected ||
-                            _catCatchHookInjectedFor != url.toString()) {
-                          _injectCatCatchHook(url.toString());
-                        }
-                        // Persist cookies after page load (if retention enabled)
-                        _persistCookies();
-                        // Also run a DOM scan after page load
-                        _safeEvaluate('''
+                          // Clear stale native cookies when retention is disabled,
+                          // or restore persisted cookies when it is enabled, before
+                          // the first page load. If native cleanup fails, skip the
+                          // first navigation rather than sending stale cookies.
+                          try {
+                            await navigateBrowserPageAfterCookiePreparation(
+                              prepareCookies: _ensureCookieStorePrepared,
+                              loadUrl: () async {
+                                if (!mounted) return;
+                                await controller.loadUrl(
+                                  urlRequest: URLRequest(
+                                      url: WebUri(widget.initialUrl)),
+                                );
+                              },
+                            );
+                          } catch (e) {
+                            debugPrint('[BrowserPage] initial load failed: $e');
+                          }
+                        },
+                        onLoadStart: (controller, url) {
+                          final urlString = url.toString();
+                          _cancelPendingMainFrameError();
+                          // Record the requested host before a redirect replaces
+                          // it with the final URL reported by onLoadStop.
+                          noteBrowserPageNavigationUrl(urlString);
+                          _activeNavigationUrl = urlString;
+                          setState(() {
+                            _isLoading = true;
+                            _progress = 0;
+                          });
+                          _currentUrl = urlString;
+                          _urlController.text = urlString;
+                          if (_recoveryReloadAwaitingNavigation) {
+                            _recoveryReloadAwaitingNavigation = false;
+                            _recoveryNavigationFallbackTimer?.cancel();
+                            _recoveryNavigationFallbackTimer = null;
+                          }
+                          // A new load consumes the next headed recovery
+                          // attempt. Redirects while an attempt is active keep
+                          // its original timeout instead of replaying it.
+                          _startRecoveryTimeout();
+                          // Reset detection for new page
+                          _resetDetection();
+                          // Inject cat-catch hook as early as possible
+                          _injectCatCatchHook(urlString);
+                        },
+                        onLoadStop: (controller, url) {
+                          _cancelPendingMainFrameError();
+                          setState(() {
+                            _isLoading = false;
+                            if (widget.recoveryMode &&
+                                _detectedUrls.isNotEmpty) {
+                              _recoveryCanContinue = true;
+                            }
+                          });
+                          if (_detectedUrls.isNotEmpty) {
+                            _recoveryTimeoutTimer?.cancel();
+                            _recoveryTimeoutTimer = null;
+                          }
+                          _currentUrl = url.toString();
+                          // Track the host so cookies can be persisted/displayed
+                          // even on platforms without CookieManager.getAllCookies.
+                          noteBrowserPageNavigationUrl(url.toString());
+                          _injectScripts();
+                          // Re-inject cat-catch hook if somehow missed or if an
+                          // earlier injection was for a previous page
+                          if (!_catCatchHookInjected ||
+                              _catCatchHookInjectedFor != url.toString()) {
+                            _injectCatCatchHook(url.toString());
+                          }
+                          // Persist cookies after page load (if retention enabled)
+                          _persistCookies();
+                          // Also run a DOM scan after page load
+                          _safeEvaluate('''
 (function() {
   document.querySelectorAll('video, audio').forEach(function(el) {
     var src = el.currentSrc || el.src || '';
@@ -736,31 +948,32 @@ class _BrowserPageState extends State<BrowserPage> {
   });
 })();
 ''');
-                      },
-                      onReceivedError: (controller, request, error) {
-                        _handleMainFrameError(request);
-                      },
-                      onReceivedHttpError: (controller, request, response) {
-                        // HTTP error responses can still load a body; progress
-                        // is completed by onLoadStop.
-                      },
-                      shouldOverrideUrlLoading: (controller, action) async {
-                        if (action.isForMainFrame) {
-                          _cancelPendingMainFrameError();
-                          _activeNavigationUrl = trackBrowserPageRedirectUrl(
-                            action.request.url?.toString(),
-                          );
-                        }
-                        return NavigationActionPolicy.ALLOW;
-                      },
-                      onProgressChanged: (controller, progress) {
-                        final nextProgress = progress / 100.0;
-                        if (nextProgress > _progress &&
-                            _pendingMainFrameErrorUrl != null) {
-                          _scheduleMainFrameErrorTimeout();
-                        }
-                        setState(() => _progress = nextProgress);
-                      },
+                        },
+                        onReceivedError: (controller, request, error) {
+                          _handleMainFrameError(request);
+                        },
+                        onReceivedHttpError: (controller, request, response) {
+                          // HTTP error responses can still load a body; progress
+                          // is completed by onLoadStop.
+                        },
+                        shouldOverrideUrlLoading: (controller, action) async {
+                          if (action.isForMainFrame) {
+                            _cancelPendingMainFrameError();
+                            _activeNavigationUrl = trackBrowserPageRedirectUrl(
+                              action.request.url?.toString(),
+                            );
+                          }
+                          return NavigationActionPolicy.ALLOW;
+                        },
+                        onProgressChanged: (controller, progress) {
+                          final nextProgress = progress / 100.0;
+                          if (nextProgress > _progress &&
+                              _pendingMainFrameErrorUrl != null) {
+                            _scheduleMainFrameErrorTimeout();
+                          }
+                          setState(() => _progress = nextProgress);
+                        },
+                      ),
                     ),
                   ),
                 ],
@@ -782,13 +995,14 @@ class _BrowserPageState extends State<BrowserPage> {
                   child: DraggableFloatingPanel(
                     key: const ValueKey('catcatch_panel'),
                     visible: true,
+                    confirmEnabled: !_recoveryContinuationInProgress,
                     detectionEpoch: _detectionEpoch,
                     detectedUrls: _detectedUrls,
                     onConfirmCapture: _onConfirmCapture,
                     onClose: () {
                       setState(() {
                         _catCatchPanelVisible = false;
-                        _detectedUrls.clear();
+                        if (!widget.recoveryMode) _detectedUrls.clear();
                       });
                     },
                     onDragUpdate: (delta) {
@@ -826,15 +1040,24 @@ class _BrowserPageState extends State<BrowserPage> {
           children: [
             IconButton(
               icon: const Icon(Icons.arrow_back),
-              onPressed: () => _webViewController?.goBack(),
+              onPressed: () {
+                _pauseRecoveryRetriesForUserAction();
+                _webViewController?.goBack();
+              },
             ),
             IconButton(
               icon: const Icon(Icons.arrow_forward),
-              onPressed: () => _webViewController?.goForward(),
+              onPressed: () {
+                _pauseRecoveryRetriesForUserAction();
+                _webViewController?.goForward();
+              },
             ),
             IconButton(
               icon: const Icon(Icons.refresh),
-              onPressed: () => _webViewController?.reload(),
+              onPressed: () {
+                _pauseRecoveryRetriesForUserAction();
+                _webViewController?.reload();
+              },
             ),
             // Desktop / Mobile UA toggle
             IconButton(
@@ -846,6 +1069,7 @@ class _BrowserPageState extends State<BrowserPage> {
                   ? l10n.browserSwitchToMobile
                   : l10n.browserSwitchToDesktop,
               onPressed: () async {
+                _pauseRecoveryRetriesForUserAction();
                 final controller = _webViewController;
                 if (controller == null) return;
                 final messenger = ScaffoldMessenger.of(context);

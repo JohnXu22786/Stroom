@@ -391,6 +391,7 @@
       }
     }
   },
+  "chatAutoContinuePrompt": "Continue if not finished.",
   "chatSearchCurrent": "Search this conversation...",
   "chatSearchAll": "Search all conversations...",
   "searchPrevious": "Previous match",
@@ -533,6 +534,7 @@
   "chatVideoLoadFailed": "Unable to load video",
   "chatHtmlLoading": "Loading HTML preview...",
   "chatPreviewLoadFailed": "Preview failed to load",
+  "albumPickerLoadFailed": "Unable to load the app album",
   "chatHtmlPreview": "HTML preview",
   "chatMermaidLoading": "Loading chart preview...",
   "chatMermaidPreview": "Mermaid preview",
@@ -647,6 +649,14 @@
   "taskFlowUiFileTooLarge": "“{name}” exceeds {limit} MB. Choose a smaller file.",
   "taskFlowUiFileUnreadable": "“{name}” is empty or unreadable",
   "taskFlowUiSomeFilesMissing": "Some files are missing and were skipped",
+  "taskFlowUiSelectedFilesUnavailable": "Unable to access {count} selected file(s). Please select all files again.",
+  "@taskFlowUiSelectedFilesUnavailable": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "taskFlowUiQueuedOne": "Task flow added to the queue",
   "taskFlowUiQueuedMany": "Added {count} task flows to the queue",
   "taskFlowUiRunTitle": "This Run",
@@ -832,6 +842,8 @@
   "unifiedTaskPauseAudio": "Pause audio",
   "catcatchFlowActionNotStarted": "Flow action did not start. Check the flow status and try again.",
   "catcatchFlowActionFailed": "Flow action failed: {error}",
+  "catcatchWebViewRecoveryGuidance": "Automatic page scanning timed out. Sign in or configure a user script on this page; after media is detected, choose Continue flow.",
+  "browserRecoveryContinue": "Continue flow",
   "catcatchSkipped": "Skipped (nothing to process)",
   "catcatchRetryStep": "Retry this step",
   "catcatchCollapseSegments": "Hide {count} segments",
@@ -4618,5 +4630,6 @@
   "browserCookiesDeletedOne": "Cookie deleted",
   "browserCookiesDeleteFailed": "Could not delete. Try again.",
   "browserCookiesEmptyValue": "(empty value)",
-  "platformTutorialPageTitle": "Platform tutorials"
+  "platformTutorialPageTitle": "Platform tutorials",
+  "browserRecoveryOpenPage": "Open recovery page"
 }

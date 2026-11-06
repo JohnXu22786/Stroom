@@ -2254,6 +2254,12 @@ abstract class AppLocalizations {
   /// **'No tasks'**
   String get taskListEmpty;
 
+  /// No description provided for @chatAutoContinuePrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue if not finished.'**
+  String get chatAutoContinuePrompt;
+
   /// No description provided for @chatSearchCurrent.
   ///
   /// In en, this message translates to:
@@ -2782,6 +2788,12 @@ abstract class AppLocalizations {
   /// **'Preview failed to load'**
   String get chatPreviewLoadFailed;
 
+  /// No description provided for @albumPickerLoadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to load the app album'**
+  String get albumPickerLoadFailed;
+
   /// No description provided for @chatHtmlPreview.
   ///
   /// In en, this message translates to:
@@ -3273,6 +3285,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Some files are missing and were skipped'**
   String get taskFlowUiSomeFilesMissing;
+
+  /// No description provided for @taskFlowUiSelectedFilesUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to access {count} selected file(s). Please select all files again.'**
+  String taskFlowUiSelectedFilesUnavailable(int count);
 
   /// No description provided for @taskFlowUiQueuedOne.
   ///
@@ -4383,6 +4401,15 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Flow action failed: {error}'**
   String catcatchFlowActionFailed(Object error);
+
+  /// Guidance shown when CatCatch needs interactive browser recovery.
+  String get catcatchWebViewRecoveryGuidance;
+
+  /// Continue the paused CatCatch flow from the interactive browser.
+  String get browserRecoveryContinue;
+
+  /// Reopen the interactive browser recovery page.
+  String get browserRecoveryOpenPage;
 
   /// No description provided for @catcatchSkipped.
   ///

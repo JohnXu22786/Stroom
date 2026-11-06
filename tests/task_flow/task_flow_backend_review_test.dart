@@ -75,6 +75,7 @@ class _ManualDownloads extends CatCatchNotifier {
     final id = taskId!;
     idsByUrl[url] = id;
     final confirming = url.endsWith('/confirm');
+    final recovering = url.endsWith('/recovery');
     state = [
       ...state,
       catcatch.CatCatchTask(
@@ -82,6 +83,9 @@ class _ManualDownloads extends CatCatchNotifier {
         url: url,
         expectedDurationSec: expectedDurationSec,
         createdAt: DateTime(2026),
+        status: recovering
+            ? catcatch.TaskStatus.paused
+            : catcatch.TaskStatus.running,
         detectedMedia: [
           url.endsWith('/unclassified')
               ? const MediaResource(
@@ -100,6 +104,8 @@ class _ManualDownloads extends CatCatchNotifier {
           if (flowManagedSelection)
             catcatch.CatCatchTask.flowManagedSelectionKey: 'true',
           if (confirming) 'pendingConfirm': 'special_format',
+          if (recovering)
+            catcatch.CatCatchTask.webViewRecoveryRequiredKey: 'true',
           if (deferSingleResourceSelection)
             'deferSingleResourceSelection': 'true',
         },
@@ -176,6 +182,21 @@ class _GatedNotifier extends TaskFlowExecutionNotifier {
       await release.future;
     }
     return saved;
+  }
+}
+
+class _FailNextRunningPersistNotifier extends TaskFlowExecutionNotifier {
+  bool failNextRunningPersist = false;
+
+  @override
+  Future<bool> persist() {
+    if (failNextRunningPersist &&
+        state.any(
+            (execution) => execution.status == FlowExecutionStatus.running)) {
+      failNextRunningPersist = false;
+      return Future.value(false);
+    }
+    return super.persist();
   }
 }
 
@@ -970,6 +991,137 @@ void main() {
     expect(await selecting.timeout(const Duration(seconds: 3)), isTrue);
     expect(heldAtSelection, [true]);
     expect(downloads.selected, [firstTaskId]);
+  });
+
+  test('browser recovery wait releases its slot and Continue reacquires it',
+      () async {
+    flow = TaskFlowDefinition(
+      id: 'flow',
+      blocks: [TaskFlowBlock(typeKey: BlockType.catcatch)],
+    );
+    _ManualDownloads? downloads;
+    final container = make(
+      scheduler: TaskFlowScheduler(coreCount: 2),
+      downloads: (ref) {
+        downloads = _ManualDownloads(ref);
+        return downloads!;
+      },
+    );
+    final service = container.read(taskFlowExecutionServiceProvider);
+    final scheduler = container.read(taskFlowSchedulerProvider);
+    final id = (await service.launchFlowMany(
+      'flow',
+      [const FlowRunInput(text: 'https://example.com/recovery')],
+    ))
+        .single;
+    await _waitFor(
+      () =>
+          downloads?.idsByUrl.containsKey('https://example.com/recovery') ??
+          false,
+      'browser recovery CatCatch task creation',
+    );
+    final taskId = downloads!.idsByUrl['https://example.com/recovery']!;
+    await _waitFor(
+      () => !scheduler.holds(id),
+      'browser recovery wait releases the flow slot',
+    );
+    await _waitFor(
+      () =>
+          container
+              .read(taskFlowExecutionsProvider.notifier)
+              .execution(id)
+              ?.status ==
+          FlowExecutionStatus.paused,
+      'browser recovery marks the live flow paused while waiting',
+    );
+
+    final continued = await service.performManualCatCatchAction(
+      taskId,
+      false,
+      (notifier) => (notifier as _ManualDownloads).finish(taskId),
+    );
+
+    expect(continued, isTrue);
+    expect(scheduler.holds(id), isTrue);
+    expect(
+      container.read(taskFlowExecutionsProvider.notifier).execution(id)!.status,
+      isNot(FlowExecutionStatus.paused),
+    );
+    await _waitFor(
+      () => container
+          .read(taskFlowExecutionsProvider.notifier)
+          .execution(id)!
+          .isTerminal,
+      'browser recovery flow completes',
+    );
+  });
+
+  test('browser recovery Continue does not act if flow resume cannot persist',
+      () async {
+    flow = TaskFlowDefinition(
+      id: 'flow',
+      blocks: [TaskFlowBlock(typeKey: BlockType.catcatch)],
+    );
+    final notifier = _FailNextRunningPersistNotifier();
+    _ManualDownloads? downloads;
+    final container = make(
+      notifier: notifier,
+      scheduler: TaskFlowScheduler(coreCount: 2),
+      downloads: (ref) {
+        downloads = _ManualDownloads(ref);
+        return downloads!;
+      },
+    );
+    final service = container.read(taskFlowExecutionServiceProvider);
+    final scheduler = container.read(taskFlowSchedulerProvider);
+    final id = (await service.launchFlowMany(
+      'flow',
+      [const FlowRunInput(text: 'https://example.com/recovery')],
+    ))
+        .single;
+    await _waitFor(
+      () =>
+          downloads?.idsByUrl.containsKey('https://example.com/recovery') ??
+          false,
+      'browser recovery CatCatch task creation',
+    );
+    final taskId = downloads!.idsByUrl['https://example.com/recovery']!;
+    await _waitFor(
+      () => !scheduler.holds(id),
+      'browser recovery wait releases the flow slot',
+    );
+    await _waitFor(
+      () =>
+          container
+              .read(taskFlowExecutionsProvider.notifier)
+              .execution(id)
+              ?.status ==
+          FlowExecutionStatus.paused,
+      'browser recovery marks the live flow paused while waiting',
+    );
+
+    notifier.failNextRunningPersist = true;
+    var actionCalled = false;
+    final continued = await service.performManualCatCatchAction(
+      taskId,
+      false,
+      (notifier) {
+        actionCalled = true;
+        (notifier as _ManualDownloads).finish(taskId);
+      },
+    );
+
+    expect(continued, isFalse);
+    expect(actionCalled, isFalse);
+    expect(scheduler.holds(id), isFalse);
+    expect(
+      container.read(taskFlowExecutionsProvider.notifier).execution(id)!.status,
+      FlowExecutionStatus.paused,
+    );
+    expect(
+      downloads!.tasksForTest.firstWhere((task) => task.id == taskId).status,
+      catcatch.TaskStatus.paused,
+    );
   });
 
   test('deferred single unclassified resource can be selected', () async {

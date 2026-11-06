@@ -686,6 +686,13 @@ def _table_rows(
                 ):
                     continue
             normalized_cells = tuple(cells)
+            if (
+                not has_leading_pipe
+                and not has_trailing_pipe
+                and normalized_cells in (known_prose_rows or set())
+                and normalized_cells not in (matching_rows or set())
+            ):
+                continue
             is_compact_pipe_row = (
                 allow_compact_pipe_row_without_context
                 and not has_leading_pipe
@@ -833,22 +840,6 @@ def _table_matches(
 ) -> bool:
     allow_tsv = output_format == "plain_text"
     expected_rows = _table_rows(expected, allow_tsv=allow_tsv)
-    if not expected_rows:
-        return normalize_text(expected) in normalize_text(actual)
-    expected_column_count = max(len(row) for row in expected_rows)
-    known_prose_rows = set()
-    if gold_text is not None:
-        for line in gold_text.splitlines():
-            stripped = line.strip()
-            raw_cells = _split_pipe_cells(stripped)
-            if stripped.startswith("|"):
-                raw_cells = raw_cells[1:]
-            if _has_unescaped_trailing_pipe(stripped):
-                raw_cells = raw_cells[:-1]
-            if len(raw_cells) > 1:
-                known_prose_rows.add(
-                    tuple(normalize_text(cell) for cell in raw_cells)
-                )
     if formula_text:
         canonical_formula = _canonical_formula(formula_text, output_format)
         strip_markdown_markup = output_format in {"markdown", "table"}
@@ -861,19 +852,78 @@ def _table_matches(
                 formula_text=formula_text,
             )
 
+        def is_formula_line(value: str) -> bool:
+            stripped = value.strip()
+            if matches_formula_row(stripped):
+                return True
+            if stripped.startswith("|") and _has_unescaped_trailing_pipe(stripped):
+                parsed_row = _table_rows(stripped, 1)
+                return len(parsed_row) == 1 and matches_formula_row(
+                    parsed_row[0][0]
+                )
+            return False
+
+    if not expected_rows:
+        candidates = [actual]
+        if formula_text:
+            table_lines = actual.splitlines()
+            for line_index, line in enumerate(table_lines):
+                if is_formula_line(line):
+                    candidates.append(
+                        "\n".join(
+                            table_lines[:line_index] + table_lines[line_index + 1 :]
+                        )
+                    )
+                    break
+        normalized_expected = normalize_text(expected)
+        expected_row = (normalized_expected,)
+        for candidate in candidates:
+            if normalized_expected == normalize_text(candidate):
+                return True
+
+            candidate_rows = []
+            for line in candidate.splitlines():
+                if not line.strip():
+                    continue
+                rows = _table_rows(
+                    line,
+                    1,
+                    matching_rows={expected_row},
+                    allow_markdown_separator_rows=True,
+                    prefer_markdown_separator_rows=(
+                        output_format in {"markdown", "table"}
+                    ),
+                )
+                if rows:
+                    candidate_rows.extend(rows)
+                elif output_format in {"markdown", "table"} and (
+                    _is_table_separator_row(line, 1)
+                ):
+                    continue
+                else:
+                    break
+            else:
+                if candidate_rows == [expected_row]:
+                    return True
+        return False
+    expected_column_count = max(len(row) for row in expected_rows)
+    known_prose_rows = set()
+    if gold_text is not None:
+        for line in gold_text.splitlines():
+            stripped = line.strip()
+            raw_cells = _split_pipe_cells(stripped)
+            if stripped.startswith("|"):
+                raw_cells = raw_cells[1:]
+            if _has_unescaped_trailing_pipe(stripped):
+                raw_cells = raw_cells[:-1]
+            if len(raw_cells) > 1:
+                prose_row = tuple(normalize_text(cell) for cell in raw_cells)
+                if prose_row not in expected_rows:
+                    known_prose_rows.add(prose_row)
+    if formula_text:
         table_lines = actual.splitlines()
         for line_index, line in enumerate(table_lines):
-            stripped = line.strip()
-            formula_row = matches_formula_row(stripped)
-            if (
-                not formula_row
-                and stripped.startswith("|")
-                and _has_unescaped_trailing_pipe(stripped)
-            ):
-                parsed_row = _table_rows(stripped, 1)
-                if len(parsed_row) == 1:
-                    formula_row = matches_formula_row(parsed_row[0][0])
-            if formula_row:
+            if is_formula_line(line):
                 candidate_lines = table_lines[:line_index] + table_lines[
                     line_index + 1 :
                 ]
@@ -973,11 +1023,32 @@ def _strip_latex_markup(value: str) -> str:
     def has_binary_operator(operand: str) -> bool:
         return re.search(r"\S\s*[-−+*/·×=<>≤≥]\s*\S", operand) is not None
 
+    def is_fully_parenthesized(operand: str) -> bool:
+        if not operand.startswith("(") or not operand.endswith(")"):
+            return False
+
+        depth = 0
+        index = 0
+        while index < len(operand):
+            if operand[index] == "\\":
+                index += 2
+                continue
+            if operand[index] == "(":
+                depth += 1
+            elif operand[index] == ")":
+                depth -= 1
+                if depth < 0:
+                    return False
+                if depth == 0:
+                    return index == len(operand) - 1
+            index += 1
+        return False
+
     def fraction_text(numerator: str, denominator: str) -> str:
         def group_if_compound(operand: str) -> str:
             operand = operand.strip()
-            if has_binary_operator(operand) and not (
-                operand.startswith("(") and operand.endswith(")")
+            if has_binary_operator(operand) and not is_fully_parenthesized(
+                operand
             ):
                 return f"({operand})"
             return operand
@@ -1003,6 +1074,36 @@ def _strip_latex_markup(value: str) -> str:
                     return value[opening_index + 1 : index], index + 1
             index += 1
         return None
+
+    def root_operand(value: str, start_index: int) -> tuple[str, int] | None:
+        group = braced_group(value, start_index)
+        if group is not None:
+            return group
+        if start_index >= len(value) or value[start_index] in "{}":
+            return None
+
+        fraction_match = fraction_command.match(value, start_index)
+        if fraction_match is not None:
+            numerator_group = braced_group(value, fraction_match.end())
+            if numerator_group is not None:
+                next_index = numerator_group[1]
+                while next_index < len(value) and value[next_index].isspace():
+                    next_index += 1
+                denominator_group = braced_group(value, next_index)
+                if denominator_group is not None:
+                    end_index = denominator_group[1]
+                    return value[start_index:end_index], end_index
+
+        end_index = start_index + 1
+        if value[start_index] == "\\":
+            if end_index >= len(value):
+                return None
+            if value[end_index].isalpha():
+                while end_index < len(value) and value[end_index].isalpha():
+                    end_index += 1
+            else:
+                end_index += 1
+        return value[start_index:end_index], end_index
 
     def replace_fractions(value: str) -> str:
         output = []
@@ -1051,7 +1152,7 @@ def _strip_latex_markup(value: str) -> str:
                 if match.group(1) is None
                 else indexed_root_symbols.get(match.group(1))
             )
-            operand_group = braced_group(value, match.end())
+            operand_group = root_operand(value, match.end())
             if root_symbol is None or operand_group is None:
                 output.append(value[index : match.end()])
                 index = match.end()
@@ -1059,8 +1160,8 @@ def _strip_latex_markup(value: str) -> str:
 
             operand, end_index = operand_group
             operand = replace_roots(replace_fractions(operand)).strip()
-            if has_binary_operator(operand) and not (
-                operand.startswith("(") and operand.endswith(")")
+            if has_binary_operator(operand) and not is_fully_parenthesized(
+                operand
             ):
                 operand = f"({operand})"
             output.append(f"{root_symbol}{operand}")
@@ -1069,8 +1170,8 @@ def _strip_latex_markup(value: str) -> str:
 
     while True:
         previous = text
-        text = replace_fractions(text)
         text = replace_roots(text)
+        text = replace_fractions(text)
         if text == previous:
             break
 

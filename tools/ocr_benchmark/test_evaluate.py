@@ -604,6 +604,93 @@ class EvaluateTests(unittest.TestCase):
         self.assertEqual(metrics["formula_fidelity"]["value"], 0)
         self.assertEqual(metrics["formula_fidelity"]["pending"], 0)
 
+    def test_unstructured_single_cell_table_requires_exact_prediction(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "single-cell-table",
+                    "gold_text": "xy",
+                    "table_text": "xy",
+                    "categories": ["table"],
+                }
+            ]
+        }
+
+        for output_format in ("plain_text", "markdown", "table", "latex"):
+            cases = [
+                ("xy", 1),
+                ("xyz", 0),
+                ("prefix xy suffix", 0),
+            ]
+            if output_format in {"markdown", "table"}:
+                cases.append(("| xy |", 1))
+            for text, expected_fidelity in cases:
+                with self.subTest(output_format=output_format, text=text):
+                    input_data = predictions(
+                        [{"fixture_id": "single-cell-table", "text": text}]
+                    )
+                    input_data["run"]["output_format"] = output_format
+
+                    report = evaluate_predictions(manifest, input_data)
+
+                    self.assertEqual(
+                        report["metrics"]["table_fidelity"]["value"],
+                        expected_fidelity,
+                    )
+
+    def test_unstructured_single_cell_table_ignores_annotated_formula(self):
+        table = "xy"
+        formula = "x = 1"
+        report = evaluate_predictions(
+            {
+                "fixtures": [
+                    {
+                        "id": "single-cell-table-with-formula",
+                        "gold_text": f"{table}\n{formula}",
+                        "table_text": table,
+                        "formula_text": formula,
+                        "categories": ["table", "formula"],
+                    }
+                ]
+            },
+            predictions(
+                [
+                    {
+                        "fixture_id": "single-cell-table-with-formula",
+                        "text": f"{table}\n{formula}",
+                    }
+                ]
+            ),
+        )
+
+        self.assertEqual(report["metrics"]["table_fidelity"]["value"], 1)
+
+    def test_unstructured_single_cell_table_can_match_annotated_formula(self):
+        table_and_formula = "x = 1"
+        report = evaluate_predictions(
+            {
+                "fixtures": [
+                    {
+                        "id": "single-cell-formula-table",
+                        "gold_text": table_and_formula,
+                        "table_text": table_and_formula,
+                        "formula_text": table_and_formula,
+                        "categories": ["table", "formula"],
+                    }
+                ]
+            },
+            predictions(
+                [
+                    {
+                        "fixture_id": "single-cell-formula-table",
+                        "text": table_and_formula,
+                    }
+                ]
+            ),
+        )
+
+        self.assertEqual(report["metrics"]["table_fidelity"]["value"], 1)
+
     def test_missing_or_null_prediction_text_keeps_content_metrics_pending(self):
         report = evaluate_predictions(
             small_manifest(),
@@ -2331,6 +2418,78 @@ class EvaluateTests(unittest.TestCase):
                     report["metrics"]["table_fidelity"]["value"], 1
                 )
 
+    def test_unannotated_pipe_prose_after_table_does_not_reduce_fidelity(self):
+        table = "Name | Value\nFirst | 1"
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "table-with-unannotated-pipe-prose",
+                    "gold_text": f"{table}\nThe relation is a | b",
+                    "table_text": table,
+                    "categories": ["english", "table"],
+                }
+            ]
+        }
+        for output_format, text in (
+            ("plain_text", f"{table}\nThe relation is a | b"),
+            (
+                "markdown",
+                "| Name | Value |\n"
+                "| --- | --- |\n"
+                "| First | 1 |\n"
+                "The relation is a | b",
+            ),
+            ("table", f"{table}\nThe relation is a | b"),
+        ):
+            with self.subTest(output_format=output_format):
+                input_data = predictions(
+                    [
+                        {
+                            "fixture_id": "table-with-unannotated-pipe-prose",
+                            "text": text,
+                        }
+                    ]
+                )
+                input_data["run"]["output_format"] = output_format
+
+                report = evaluate_predictions(manifest, input_data)
+
+                self.assertEqual(
+                    report["metrics"]["table_fidelity"]["value"], 1
+                )
+
+    def test_framed_extra_row_matching_unannotated_prose_is_rejected(self):
+        table = "Name | Value\nFirst | 1"
+        input_data = predictions(
+            [
+                {
+                    "fixture_id": "table-with-framed-extra-prose-row",
+                    "text": (
+                        "| Name | Value |\n"
+                        "| --- | --- |\n"
+                        "| First | 1 |\n"
+                        "| The relation is a | b |"
+                    ),
+                }
+            ]
+        )
+        input_data["run"]["output_format"] = "markdown"
+        report = evaluate_predictions(
+            {
+                "fixtures": [
+                    {
+                        "id": "table-with-framed-extra-prose-row",
+                        "gold_text": f"{table}\nThe relation is a | b",
+                        "table_text": table,
+                        "categories": ["english", "table"],
+                    }
+                ]
+            },
+            input_data,
+        )
+
+        self.assertEqual(report["metrics"]["table_fidelity"]["value"], 0)
+
     def test_one_word_label_in_pipe_prose_after_table_does_not_reduce_fidelity(self):
         table = "Code | Count\nP-12 | 3"
         manifest = {
@@ -2593,6 +2752,61 @@ class EvaluateTests(unittest.TestCase):
         self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 1)
         self.assertEqual(report["metrics"]["character_error_rate"]["value"], 0)
 
+    def test_latex_unbraced_square_root_is_scored_against_its_display_transcription(
+        self,
+    ):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "unbraced-square-root",
+                    "gold_text": "Square root of x\n√x",
+                    "formula_text": "√x",
+                    "categories": ["english", "formula"],
+                }
+            ]
+        }
+        input_data = predictions(
+            [
+                {
+                    "fixture_id": "unbraced-square-root",
+                    "text": r"Square root of x $\sqrt x$",
+                }
+            ]
+        )
+        input_data["run"]["output_format"] = "latex"
+
+        report = evaluate_predictions(manifest, input_data)
+
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 1)
+        self.assertEqual(report["metrics"]["character_error_rate"]["value"], 0)
+
+    def test_latex_unbraced_square_root_preserves_fraction_operand_grouping(self):
+        formula = "√(1/2)"
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "unbraced-fraction-square-root",
+                    "gold_text": formula,
+                    "formula_text": formula,
+                    "categories": ["formula"],
+                }
+            ]
+        }
+        input_data = predictions(
+            [
+                {
+                    "fixture_id": "unbraced-fraction-square-root",
+                    "text": r"$\sqrt\frac{1}{2}$",
+                }
+            ]
+        )
+        input_data["run"]["output_format"] = "latex"
+
+        report = evaluate_predictions(manifest, input_data)
+
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 1)
+        self.assertEqual(report["metrics"]["character_error_rate"]["value"], 0)
+
     def test_latex_compound_square_root_preserves_operand_grouping(self):
         formula = "√(x+1)"
         manifest = {
@@ -2680,6 +2894,58 @@ class EvaluateTests(unittest.TestCase):
         }
         input_data = predictions(
             [{"fixture_id": "compound-fraction", "text": r"$\frac{x+1}{2}$"}]
+        )
+        input_data["run"]["output_format"] = "latex"
+
+        report = evaluate_predictions(manifest, input_data)
+
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 1)
+        self.assertEqual(report["metrics"]["character_error_rate"]["value"], 0)
+
+    def test_latex_fraction_keeps_grouping_for_parenthesized_compound_operand(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "parenthesized-compound-fraction",
+                    "gold_text": "((a)+(b))/c",
+                    "formula_text": "((a)+(b))/c",
+                    "categories": ["formula"],
+                }
+            ]
+        }
+        input_data = predictions(
+            [
+                {
+                    "fixture_id": "parenthesized-compound-fraction",
+                    "text": r"$\frac{(a)+(b)}{c}$",
+                }
+            ]
+        )
+        input_data["run"]["output_format"] = "latex"
+
+        report = evaluate_predictions(manifest, input_data)
+
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 1)
+        self.assertEqual(report["metrics"]["character_error_rate"]["value"], 0)
+
+    def test_latex_sqrt_keeps_grouping_for_parenthesized_compound_operand(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "parenthesized-compound-root",
+                    "gold_text": "√((a)+(b))",
+                    "formula_text": "√((a)+(b))",
+                    "categories": ["formula"],
+                }
+            ]
+        }
+        input_data = predictions(
+            [
+                {
+                    "fixture_id": "parenthesized-compound-root",
+                    "text": r"$\sqrt{(a)+(b)}$",
+                }
+            ]
         )
         input_data["run"]["output_format"] = "latex"
 

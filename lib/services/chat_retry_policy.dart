@@ -1,15 +1,18 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:dio/dio.dart';
 
 const String kAutoContinuationMessage = 'Continue if not finished.';
 
-/// Retry policy for streaming HTTP 429 rate limits.
+/// Retry policy for actual HTTP 429 throttling responses.
 ///
-/// Four retries follow the initial request. The backoff starts at 500 ms,
-/// doubles for each retry, and is capped at five seconds. Jitter spreads
-/// concurrent clients across the upper half of each interval.
+/// Five retries follow the initial request. The delay schedule is based on
+/// OpenCode CLI's 2/4/8/10/10 second backoff and adds approximately ±20%
+/// jitter. The ten-second cap applies to the nominal schedule before jitter.
+/// A valid Retry-After value is a minimum delay, bounded to fifteen minutes.
 class RateLimitRetryPolicy {
   final int maxRetries;
   final Duration initialDelay;
@@ -18,10 +21,10 @@ class RateLimitRetryPolicy {
   final bool jitter;
 
   const RateLimitRetryPolicy({
-    this.maxRetries = 4,
-    this.initialDelay = const Duration(milliseconds: 500),
-    this.maxDelay = const Duration(seconds: 5),
-    this.maxRetryAfter = const Duration(minutes: 1),
+    this.maxRetries = 5,
+    this.initialDelay = const Duration(seconds: 2),
+    this.maxDelay = const Duration(seconds: 10),
+    this.maxRetryAfter = const Duration(minutes: 15),
     this.jitter = true,
   });
 
@@ -30,10 +33,39 @@ class RateLimitRetryPolicy {
     final rawMs = initialDelay.inMilliseconds * multiplier;
     final cappedMs = math.min(rawMs, maxDelay.inMilliseconds).toInt();
     if (!jitter) return Duration(milliseconds: cappedMs);
-    final fraction =
-        (randomValue ?? math.Random().nextDouble()).clamp(0.5, 1.0);
-    return Duration(milliseconds: (cappedMs * fraction).round());
+    final jitterMultiplier = _jitterMultiplier(randomValue);
+    return Duration(milliseconds: (cappedMs * jitterMultiplier).round());
   }
+}
+
+/// Retry schedule for recognized network interruptions during chat streams.
+class TransportRetryPolicy {
+  final int maxRetries;
+  final Duration initialDelay;
+  final Duration maxDelay;
+  final bool jitter;
+
+  const TransportRetryPolicy({
+    this.maxRetries = 5,
+    this.initialDelay = const Duration(seconds: 2),
+    this.maxDelay = const Duration(seconds: 30),
+    this.jitter = true,
+  });
+
+  Duration delayForRetry(int retryNumber, {double? randomValue}) {
+    final multiplier = math.pow(2, retryNumber - 1).toInt();
+    final rawMs = initialDelay.inMilliseconds * multiplier;
+    final cappedMs = math.min(rawMs, maxDelay.inMilliseconds).toInt();
+    if (!jitter) return Duration(milliseconds: cappedMs);
+    final jitteredMs = (cappedMs * _jitterMultiplier(randomValue)).round();
+    return Duration(
+        milliseconds: math.min(jitteredMs, maxDelay.inMilliseconds));
+  }
+}
+
+double _jitterMultiplier(double? randomValue) {
+  final value = (randomValue ?? math.Random().nextDouble()).clamp(0.0, 1.0);
+  return 0.8 + value * 0.4;
 }
 
 /// Retries a failed stream only when its HTTP response is 429 and no event
@@ -42,6 +74,8 @@ Stream<T> retryRateLimitedStream<T>(
   Stream<T> Function() createStream, {
   RateLimitRetryPolicy policy = const RateLimitRetryPolicy(),
   Future<void> Function(Duration duration)? delay,
+  Future<void>? cancellation,
+  bool Function()? isCancelled,
 }) async* {
   var retries = 0;
   while (true) {
@@ -53,21 +87,123 @@ Stream<T> retryRateLimitedStream<T>(
       }
       return;
     } catch (error) {
-      if (emittedEvent ||
+      if (isCancelled?.call() == true ||
+          emittedEvent ||
           retries >= policy.maxRetries ||
-          !_isRateLimit(error)) {
+          !await _isRateLimit(error)) {
         rethrow;
       }
       retries++;
-      final wait = _retryAfter(error, maximum: policy.maxRetryAfter) ??
-          policy.delayForRetry(retries);
-      await (delay?.call(wait) ?? Future<void>.delayed(wait));
+      final retryAfter = _retryAfter(error, maximum: policy.maxRetryAfter);
+      final backoff = policy.delayForRetry(retries);
+      final wait =
+          retryAfter != null && retryAfter > backoff ? retryAfter : backoff;
+      await waitForRetryOrCancellation(
+        wait,
+        delay: delay,
+        cancellation: cancellation,
+      );
+      if (isCancelled?.call() == true) rethrow;
     }
   }
 }
 
-bool _isRateLimit(Object error) =>
-    error is DioException && error.response?.statusCode == 429;
+/// Waits for a retry delay, returning early when [cancellation] completes.
+/// The default timer is cancelled when possible; injected delays are raced
+/// against the cancellation signal for deterministic tests.
+Future<void> waitForRetryOrCancellation(
+  Duration duration, {
+  Future<void> Function(Duration duration)? delay,
+  Future<void>? cancellation,
+}) async {
+  if (cancellation == null) {
+    await (delay?.call(duration) ?? Future<void>.delayed(duration));
+    return;
+  }
+  if (delay != null) {
+    await Future.any<void>([delay(duration), cancellation]);
+    return;
+  }
+
+  final completed = Completer<void>();
+  final timer = Timer(duration, () {
+    if (!completed.isCompleted) completed.complete();
+  });
+  cancellation.then((_) {
+    if (!completed.isCompleted) completed.complete();
+  });
+  await completed.future;
+  timer.cancel();
+}
+
+Future<bool> _isRateLimit(Object error) async {
+  if (error is! DioException || error.response?.statusCode != 429) return false;
+  final responseData = error.response?.data;
+  final responseBody = responseData is ResponseBody
+      ? await _readResponseBody(responseData)
+      : _flattenErrorDetails(responseData);
+  final details = [
+    responseBody,
+    error.response?.statusMessage ?? '',
+    error.message ?? '',
+  ].join(' ').toLowerCase();
+  const nonThrottleMarkers = [
+    'insufficient_quota',
+    'quota',
+    'billing',
+    'payment',
+    'account_limit',
+    'account limit',
+    'account_cap',
+    'account cap',
+    'account usage limit',
+    'account usage cap',
+    'hard_limit',
+    'usage_limit',
+    'credits',
+    'invalid_request',
+    'invalid_parameter',
+    'invalid_api_key',
+    'authentication_error',
+    'unauthorized',
+    'permission_denied',
+    'validation_error',
+    'bad_request',
+    'server_error',
+    'internal_error',
+    'internal server error',
+  ];
+  if (nonThrottleMarkers.any(details.contains)) return false;
+  const throttleMarkers = [
+    'rate_limit',
+    'rate limit',
+    'too many requests',
+    'throttl',
+  ];
+  return throttleMarkers.any(details.contains);
+}
+
+Future<String> _readResponseBody(ResponseBody body) async {
+  try {
+    final bytes = await body.stream.fold<List<int>>(
+      <int>[],
+      (buffer, chunk) => buffer..addAll(chunk),
+    );
+    return utf8.decode(bytes, allowMalformed: true).toLowerCase();
+  } catch (_) {
+    return '';
+  }
+}
+
+String _flattenErrorDetails(Object? value) {
+  if (value is Map) {
+    return value.entries
+        .map((entry) => '${entry.key} ${_flattenErrorDetails(entry.value)}')
+        .join(' ');
+  }
+  if (value is Iterable) return value.map(_flattenErrorDetails).join(' ');
+  return value?.toString() ?? '';
+}
 
 Duration? _retryAfter(Object error, {required Duration maximum}) {
   if (error is! DioException) return null;
@@ -180,7 +316,14 @@ bool shouldAutoContinueStream({
   required bool hasPartialOutput,
   bool hasToolHistory = false,
 }) {
-  if (!hasPartialOutput || hasToolHistory || error == null) return false;
+  if (!hasPartialOutput || hasToolHistory) return false;
+  return isRetryableTransportFailure(error);
+}
+
+/// True only for transport-level failures that can be retried without replaying
+/// a completed request, validation failure, or server response.
+bool isRetryableTransportFailure(Object? error) {
+  if (error == null) return false;
   if (error is DioException) {
     if (error.response?.statusCode != null) return false;
     return switch (error.type) {
@@ -198,8 +341,13 @@ bool shouldAutoContinueStream({
 
 bool _isNetworkTransportCause(Object? error) {
   if (error is TimeoutException) return true;
-  final type = error?.runtimeType.toString();
-  if (type == 'SocketException') return true;
-  return type == 'HttpException' &&
-      error.toString().toLowerCase().contains('connection closed');
+  if (error is SocketException) return true;
+  if (error is HttpException) {
+    final message = error.message.toLowerCase();
+    return message.contains('connection closed') ||
+        message.contains('connection reset') ||
+        message.contains('connection aborted') ||
+        message.contains('connection broken');
+  }
+  return false;
 }

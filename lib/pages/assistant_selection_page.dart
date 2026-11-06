@@ -22,6 +22,29 @@ part 'assistant_selection_page_edit_params_tab.dart';
 part 'assistant_selection_page_add_custom_param.dart';
 part 'assistant_selection_page_edit_custom_param.dart';
 
+/// Carries whether the retained chat tab is currently visible to its routes.
+/// Offstage routes stay mounted, so loading animations must pause in the
+/// background to let the surrounding UI settle.
+class ChatTabVisibility extends InheritedWidget {
+  const ChatTabVisibility({
+    required this.isVisible,
+    required super.child,
+    super.key,
+  });
+
+  final bool isVisible;
+
+  static bool of(BuildContext context) =>
+      context
+          .dependOnInheritedWidgetOfExactType<ChatTabVisibility>()
+          ?.isVisible ??
+      true;
+
+  @override
+  bool updateShouldNotify(ChatTabVisibility oldWidget) =>
+      isVisible != oldWidget.isVisible;
+}
+
 /// First page in the chat flow: select an assistant.
 /// Displays assistants in a grid of cards, similar to Cherry Studio's design.
 class AssistantSelectionPage extends ConsumerWidget {
@@ -30,6 +53,7 @@ class AssistantSelectionPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final assistants = ref.watch(assistantProvider);
+    final isLoading = ref.watch(assistantInitialLoadProvider).isLoading;
     final cs = Theme.of(context).colorScheme;
     final pressHighlightColor = cs.primary.withValues(alpha: 0.02);
     final dragHighlightColor = cs.primary.withValues(alpha: 0.06);
@@ -56,82 +80,89 @@ class AssistantSelectionPage extends ConsumerWidget {
           ),
         ],
       ),
-      body: assistants.isEmpty
-          ? Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.smart_toy_outlined,
-                    size: 64,
-                    color: cs.onSurfaceVariant.withValues(alpha: 0.4),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    AppLocalizations.of(context)!.assistantEmptyState,
-                    style: TextStyle(color: cs.onSurfaceVariant),
-                  ),
-                  const SizedBox(height: 16),
-                  FilledButton.icon(
-                    icon: const Icon(Icons.add),
-                    label: Text(AppLocalizations.of(context)!.assistantCreate),
-                    onPressed: () => _showCreateAssistantDialog(context, ref),
-                  ),
-                ],
-              ),
+      body: isLoading
+          ? TickerMode(
+              enabled: TickerMode.of(context) && ChatTabVisibility.of(context),
+              child: const Center(child: CircularProgressIndicator()),
             )
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // 与话题页一致的提示文案：新加入的长按拖拽手势需要被发现
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Center(
-                      child: Text(
-                        AppLocalizations.of(context)!.assistantReorderHint,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: cs.onSurfaceVariant.withValues(alpha: 0.5),
+          : assistants.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.smart_toy_outlined,
+                        size: 64,
+                        color: cs.onSurfaceVariant.withValues(alpha: 0.4),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        AppLocalizations.of(context)!.assistantEmptyState,
+                        style: TextStyle(color: cs.onSurfaceVariant),
+                      ),
+                      const SizedBox(height: 16),
+                      FilledButton.icon(
+                        icon: const Icon(Icons.add),
+                        label:
+                            Text(AppLocalizations.of(context)!.assistantCreate),
+                        onPressed: () =>
+                            _showCreateAssistantDialog(context, ref),
+                      ),
+                    ],
+                  ),
+                )
+              : SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // 与话题页一致的提示文案：新加入的长按拖拽手势需要被发现
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Center(
+                          child: Text(
+                            AppLocalizations.of(context)!.assistantReorderHint,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: cs.onSurfaceVariant.withValues(alpha: 0.5),
+                            ),
+                          ),
                         ),
                       ),
-                    ),
+                      DragSortArea(
+                        // 与旧 GridView 相同的几何：
+                        // SliverGridDelegateWithMaxCrossAxisExtent(
+                        //   maxCrossAxisExtent: 220, spacing: 12, aspectRatio: 0.85)
+                        wrap: false,
+                        grid: true,
+                        gridMaxCrossAxisExtent: 220,
+                        gridCrossAxisSpacing: 12,
+                        gridMainAxisSpacing: 12,
+                        gridChildAspectRatio: 0.85,
+                        dragDelay: const Duration(milliseconds: 600),
+                        dragHighlightColor: dragHighlightColor,
+                        draggedItemOpacity: 0.88,
+                        values: [for (final a in assistants) a.id],
+                        onReorder: (from, to) => ref
+                            .read(assistantProvider.notifier)
+                            .reorderAssistant(from, to),
+                        itemBuilder: (context, index, id) {
+                          final assistant = assistants[index];
+                          return AssistantCard(
+                            assistant: assistant,
+                            pressHighlightColor: pressHighlightColor,
+                            onTap: () =>
+                                _onAssistantSelected(context, ref, assistant),
+                            // 长按已让给拖拽排序，编辑/删除入口移到卡片右上角 ⋮
+                            onMenu: () =>
+                                _showAssistantMenu(context, ref, assistant),
+                          );
+                        },
+                      ),
+                    ],
                   ),
-                  DragSortArea(
-                    // 与旧 GridView 相同的几何：
-                    // SliverGridDelegateWithMaxCrossAxisExtent(
-                    //   maxCrossAxisExtent: 220, spacing: 12, aspectRatio: 0.85)
-                    wrap: false,
-                    grid: true,
-                    gridMaxCrossAxisExtent: 220,
-                    gridCrossAxisSpacing: 12,
-                    gridMainAxisSpacing: 12,
-                    gridChildAspectRatio: 0.85,
-                    dragDelay: const Duration(milliseconds: 600),
-                    dragHighlightColor: dragHighlightColor,
-                    draggedItemOpacity: 0.88,
-                    values: [for (final a in assistants) a.id],
-                    onReorder: (from, to) => ref
-                        .read(assistantProvider.notifier)
-                        .reorderAssistant(from, to),
-                    itemBuilder: (context, index, id) {
-                      final assistant = assistants[index];
-                      return AssistantCard(
-                        assistant: assistant,
-                        pressHighlightColor: pressHighlightColor,
-                        onTap: () =>
-                            _onAssistantSelected(context, ref, assistant),
-                        // 长按已让给拖拽排序，编辑/删除入口移到卡片右上角 ⋮
-                        onMenu: () =>
-                            _showAssistantMenu(context, ref, assistant),
-                      );
-                    },
-                  ),
-                ],
-              ),
-            ),
+                ),
     );
   }
 

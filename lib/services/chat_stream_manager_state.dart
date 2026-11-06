@@ -66,14 +66,23 @@ class StreamResult {
 
 class _ConversationStreamState {
   final String convId;
+  Map<String, dynamic>? requestBodySnapshot;
   bool cancelledByUser = false;
+  bool toolCallStarted = false;
+  final Completer<void> cancellationSignal = Completer<void>();
+
+  void cancelByUser() {
+    cancelledByUser = true;
+    if (!cancellationSignal.isCompleted) cancellationSignal.complete();
+  }
 
   /// Guards against overlapping periodic persist calls from the timer.
   bool _isPersisting = false;
   Future<void>? _periodicPersistFuture;
   String? streamingMsgId;
   Future<bool> Function(ChatMessage continuation)? onContinuation;
-  ChatMessage? pendingContinuation;
+  final List<ChatMessage> pendingContinuations = [];
+  final Set<ChatMessage> deliveringContinuations = {};
   // The text sections are the canonical live representation. Completed
   // sections are immutable strings, and only the current section remains a
   // mutable buffer. This lets throttled snapshots reuse sealed sections
@@ -113,7 +122,22 @@ class _ConversationStreamState {
   String get _reasoningSnapshot =>
       _reasoningBufferSnapshot ??= _reasoningBuffer.toString();
   String get reasoningBuffer => _reasoningSnapshot;
-  List<String> _reasoningSections = [];
+  final StringBuffer _pendingReasoningDelta = StringBuffer();
+  int _reasoningUpdateSequence = 0;
+  int get currentReasoningSectionIndex => _reasoningSections.length;
+
+  StreamingReasoningAppend? takeReasoningAppend() {
+    if (_pendingReasoningDelta.isEmpty) return null;
+    final append = StreamingReasoningAppend(
+      sequence: _reasoningUpdateSequence++,
+      sectionIndex: currentReasoningSectionIndex,
+      text: _pendingReasoningDelta.toString(),
+    );
+    _pendingReasoningDelta.clear();
+    return append;
+  }
+
+  final List<String> _reasoningSections = [];
   bool _reasoningSectionActive = false;
   List<String> get reasoningSections => [
         ..._reasoningSections,
@@ -127,12 +151,14 @@ class _ConversationStreamState {
       _reasoningSections.removeLast();
     }
     _reasoningBuffer.write(text);
+    _pendingReasoningDelta.write(text);
     _reasoningBufferSnapshot = null;
     _reasoningSectionActive = true;
   }
 
   void endReasoningSection() {
-    _reasoningSections = reasoningSections..add('');
+    if (_reasoningSectionActive) _reasoningSections.add(_reasoningSnapshot);
+    _reasoningSections.add('');
     _reasoningBuffer.clear();
     _reasoningBufferSnapshot = null;
     _reasoningSectionActive = false;
@@ -178,6 +204,37 @@ class _ConversationStreamState {
     final delta = _pendingTextDelta.toString();
     _pendingTextDelta.clear();
     return delta;
+  }
+
+  bool _serviceStartedTextChunk = false;
+  String? _completedServiceTextChunk;
+  String? _completedToolCallReasoning;
+
+  String startTextChunkFromService() {
+    _serviceStartedTextChunk = true;
+    return _completedServiceTextChunk = startTextChunk();
+  }
+
+  String? takeCompletedToolCallRound() {
+    final completed = _completedServiceTextChunk;
+    _completedServiceTextChunk = null;
+    return completed;
+  }
+
+  String? takeCompletedToolCallReasoning() {
+    final completed = _completedToolCallReasoning;
+    _completedToolCallReasoning = null;
+    return completed;
+  }
+
+  void setCompletedToolCallReasoning(String reasoning) {
+    _completedToolCallReasoning = reasoning;
+  }
+
+  bool takeServiceStartedTextChunk() {
+    final started = _serviceStartedTextChunk;
+    _serviceStartedTextChunk = false;
+    return started;
   }
 
   void appendText(String text) {
@@ -397,8 +454,9 @@ class _ConversationStreamState {
     }
   }
 
-  void startTextChunk() {
-    _completedTextChunks.add(_currentTextChunk.toString());
+  String startTextChunk() {
+    final completed = _currentTextChunk.toString();
+    _completedTextChunks.add(completed);
     _currentTextChunk = StringBuffer();
     _pendingTextDelta.clear();
     _currentChunkHasMarkdownSyntax = false;
@@ -419,6 +477,7 @@ class _ConversationStreamState {
     _closedLinkLabelAtLineStart = false;
     _linkScannerAtLineStart = true;
     _linkScannerLineSpaces = 0;
+    return completed;
   }
 
   bool get currentTextChunkIsNotEmpty => _currentTextChunk.length > 0;
