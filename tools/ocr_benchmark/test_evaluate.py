@@ -536,7 +536,7 @@ class EvaluateTests(unittest.TestCase):
         input_data["run"]["settings"] = {
             "temperature": 0.2,
             "region": "test-region",
-            "endpoint": "https://host.example/?region=west",
+            "endpoint": "https://host.example/?%2572egion=west",
             "monkey": "ordinary-word",
             "token_budget": 8192,
             "max_tokens": 2048,
@@ -545,6 +545,15 @@ class EvaluateTests(unittest.TestCase):
         report = evaluate_predictions(small_manifest(), input_data)
 
         self.assertEqual(report["run"]["settings"], input_data["run"]["settings"])
+
+    def test_double_encoded_credential_like_query_key_is_rejected(self):
+        input_data = predictions([])
+        input_data["run"]["settings"] = {
+            "endpoint": "https://host.example/?%2574oken=redacted-test-value"
+        }
+
+        with self.assertRaises(EvaluationError):
+            evaluate_predictions(small_manifest(), input_data)
 
     def test_credential_like_setting_values_are_rejected(self):
         for value in (
