@@ -1647,6 +1647,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatPreviewLoadFailed => 'Preview failed to load';
 
   @override
+  String get albumPickerLoadFailed => 'Unable to load the app album';
+
+  @override
   String get chatHtmlPreview => 'HTML preview';
 
   @override
@@ -10337,6 +10340,9 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get chatPreviewLoadFailed => 'Preview failed to load';
+
+  @override
+  String get albumPickerLoadFailed => 'Unable to load the app album';
 
   @override
   String get chatHtmlPreview => 'HTML preview';

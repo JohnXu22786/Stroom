@@ -533,6 +533,7 @@
   "chatVideoLoadFailed": "视频加载失败",
   "chatHtmlLoading": "加载 HTML 预览...",
   "chatPreviewLoadFailed": "加载失败",
+  "albumPickerLoadFailed": "加载应用内相册失败",
   "chatHtmlPreview": "HTML 预览",
   "chatMermaidLoading": "加载图表预览...",
   "chatMermaidPreview": "Mermaid 预览",

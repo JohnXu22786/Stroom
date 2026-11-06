@@ -533,6 +533,7 @@
   "chatVideoLoadFailed": "Unable to load video",
   "chatHtmlLoading": "Loading HTML preview...",
   "chatPreviewLoadFailed": "Preview failed to load",
+  "albumPickerLoadFailed": "Unable to load the app album",
   "chatHtmlPreview": "HTML preview",
   "chatMermaidLoading": "Loading chart preview...",
   "chatMermaidPreview": "Mermaid preview",

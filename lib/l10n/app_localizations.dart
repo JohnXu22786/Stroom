@@ -2782,6 +2782,12 @@ abstract class AppLocalizations {
   /// **'Preview failed to load'**
   String get chatPreviewLoadFailed;
 
+  /// No description provided for @albumPickerLoadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to load the app album'**
+  String get albumPickerLoadFailed;
+
   /// No description provided for @chatHtmlPreview.
   ///
   /// In en, this message translates to:
