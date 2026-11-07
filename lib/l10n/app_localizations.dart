@@ -2128,6 +2128,60 @@ abstract class AppLocalizations {
   /// **'New conversation'**
   String get conversationNew;
 
+  /// No description provided for @conversationSelectTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a conversation'**
+  String get conversationSelectTitle;
+
+  /// No description provided for @topicSelectionEmptyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'No conversations yet'**
+  String get topicSelectionEmptyTitle;
+
+  /// No description provided for @topicSelectionEmptyMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Create a new conversation to get started'**
+  String get topicSelectionEmptyMessage;
+
+  /// No description provided for @topicSelectionNewTopic.
+  ///
+  /// In en, this message translates to:
+  /// **'New conversation'**
+  String get topicSelectionNewTopic;
+
+  /// No description provided for @topicSelectionNoAssistant.
+  ///
+  /// In en, this message translates to:
+  /// **'No assistant selected'**
+  String get topicSelectionNoAssistant;
+
+  /// No description provided for @topicSelectionBackToAssistants.
+  ///
+  /// In en, this message translates to:
+  /// **'Back to assistant selection'**
+  String get topicSelectionBackToAssistants;
+
+  /// No description provided for @topicSelectionEditAssistant.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit assistant'**
+  String get topicSelectionEditAssistant;
+
+  /// No description provided for @topicSelectionReorderHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Long-press and drag to reorder conversations'**
+  String get topicSelectionReorderHint;
+
+  /// No description provided for @conversationDeleteNamed.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete conversation “{title}”? This cannot be undone.'**
+  String conversationDeleteNamed(String title);
+
   /// No description provided for @conversationDeleteTitle.
   ///
   /// In en, this message translates to:
@@ -8469,6 +8523,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Assistant marketplace'**
   String get assistantMarketTooltip;
+
+  /// No description provided for @assistantDefaultPrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'You are a helpful AI assistant. Answer the user\'s questions clearly and helpfully.'**
+  String get assistantDefaultPrompt;
 
   /// No description provided for @assistantCreateNew.
   ///

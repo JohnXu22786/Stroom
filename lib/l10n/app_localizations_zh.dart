@@ -1173,6 +1173,35 @@ class AppLocalizationsZh extends AppLocalizations {
   String get conversationNew => '新对话';
 
   @override
+  String get conversationSelectTitle => '选择对话';
+
+  @override
+  String get topicSelectionEmptyTitle => '暂无对话';
+
+  @override
+  String get topicSelectionEmptyMessage => '创建一个新对话开始对话';
+
+  @override
+  String get topicSelectionNewTopic => '新话题';
+
+  @override
+  String get topicSelectionNoAssistant => '未选择助手';
+
+  @override
+  String get topicSelectionBackToAssistants => '返回选择助手';
+
+  @override
+  String get topicSelectionEditAssistant => '编辑助手';
+
+  @override
+  String get topicSelectionReorderHint => '长按拖拽即可调整对话顺序';
+
+  @override
+  String conversationDeleteNamed(String title) {
+    return '确定要删除对话“$title”吗？此操作无法撤销。';
+  }
+
+  @override
   String get conversationDeleteTitle => '删除对话';
 
   @override
@@ -4766,6 +4795,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get assistantMarketTooltip => '助手市场';
+
+  @override
+  String get assistantDefaultPrompt => '你是一个有帮助的AI助手。请用中文回答用户的问题。';
 
   @override
   String get assistantCreateNew => '新建助手';
@@ -10288,6 +10320,35 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get conversationNew => '新对话';
 
   @override
+  String get conversationSelectTitle => '选择对话';
+
+  @override
+  String get topicSelectionEmptyTitle => '暂无对话';
+
+  @override
+  String get topicSelectionEmptyMessage => '创建一个新对话开始对话';
+
+  @override
+  String get topicSelectionNewTopic => '新话题';
+
+  @override
+  String get topicSelectionNoAssistant => '未选择助手';
+
+  @override
+  String get topicSelectionBackToAssistants => '返回选择助手';
+
+  @override
+  String get topicSelectionEditAssistant => '编辑助手';
+
+  @override
+  String get topicSelectionReorderHint => '长按拖拽即可调整对话顺序';
+
+  @override
+  String conversationDeleteNamed(String title) {
+    return '确定要删除对话“$title”吗？此操作无法撤销。';
+  }
+
+  @override
   String get conversationDeleteTitle => '删除对话';
 
   @override
@@ -13881,6 +13942,9 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get assistantMarketTooltip => '助手市场';
+
+  @override
+  String get assistantDefaultPrompt => '你是一个有帮助的AI助手。请用中文回答用户的问题。';
 
   @override
   String get assistantCreateNew => '新建助手';

@@ -18,46 +18,7 @@ Widget createTestApp({
   String? selectedAssistantId,
   List<Conversation>? conversations,
   String? activeConversationId,
-}) {
-  SharedPreferences.setMockInitialValues({});
-  return ProviderScope(
-    overrides: [
-      if (assistants != null)
-        assistantProvider.overrideWith((ref) {
-          final notifier = AssistantsNotifier();
-          notifier.state = assistants;
-          return notifier;
-        }),
-      if (selectedAssistantId != null)
-        selectedAssistantIdProvider.overrideWith((ref) => selectedAssistantId),
-      conversationsProvider.overrideWith((ref) {
-        final notifier = ConversationsNotifier(ref);
-        if (conversations != null) {
-          notifier.state = conversations;
-        }
-        return notifier;
-      }),
-      if (activeConversationId != null)
-        activeConversationIdProvider.overrideWith(
-          (ref) => activeConversationId,
-        ),
-    ],
-    child: const MaterialApp(
-      locale: Locale('zh', 'CN'),
-      supportedLocales: AppLocalizations.supportedLocales,
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      home: TopicSelectionPage(),
-    ),
-  );
-}
-
-/// Creates a test app simulating the chat tab's nested Navigator structure,
-/// starting at the (merged) TopicSelectionPage with pre-selected assistant.
-Widget createMergedTopicTestApp({
-  List<Assistant>? assistants,
-  String? selectedAssistantId,
-  List<Conversation>? conversations,
-  String? activeConversationId,
+  Locale locale = const Locale('zh', 'CN'),
 }) {
   SharedPreferences.setMockInitialValues({});
   return ProviderScope(
@@ -83,7 +44,48 @@ Widget createMergedTopicTestApp({
         ),
     ],
     child: MaterialApp(
-      locale: const Locale('zh', 'CN'),
+      locale: locale,
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      home: TopicSelectionPage(),
+    ),
+  );
+}
+
+/// Creates a test app simulating the chat tab's nested Navigator structure,
+/// starting at the (merged) TopicSelectionPage with pre-selected assistant.
+Widget createMergedTopicTestApp({
+  List<Assistant>? assistants,
+  String? selectedAssistantId,
+  List<Conversation>? conversations,
+  String? activeConversationId,
+  Locale locale = const Locale('zh', 'CN'),
+}) {
+  SharedPreferences.setMockInitialValues({});
+  return ProviderScope(
+    overrides: [
+      if (assistants != null)
+        assistantProvider.overrideWith((ref) {
+          final notifier = AssistantsNotifier();
+          notifier.state = assistants;
+          return notifier;
+        }),
+      if (selectedAssistantId != null)
+        selectedAssistantIdProvider.overrideWith((ref) => selectedAssistantId),
+      conversationsProvider.overrideWith((ref) {
+        final notifier = ConversationsNotifier(ref);
+        if (conversations != null) {
+          notifier.state = conversations;
+        }
+        return notifier;
+      }),
+      if (activeConversationId != null)
+        activeConversationIdProvider.overrideWith(
+          (ref) => activeConversationId,
+        ),
+    ],
+    child: MaterialApp(
+      locale: locale,
       supportedLocales: AppLocalizations.supportedLocales,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       home: Navigator(
@@ -115,6 +117,44 @@ Widget createMergedTopicTestApp({
 }
 
 void main() {
+  group('Topic selection localization', () {
+    for (final locale in [const Locale('en', 'US'), const Locale('zh', 'CN')]) {
+      testWidgets('localizes selection controls and empty state for $locale', (
+        tester,
+      ) async {
+        await tester.pumpWidget(createTestApp(
+          locale: locale,
+          assistants: [
+            Assistant(
+              id: 'localized-assistant',
+              name: 'Assistant',
+              prompt: 'Keep this prompt unchanged',
+              emoji: '🤖',
+            ),
+          ],
+          selectedAssistantId: 'localized-assistant',
+        ));
+        await tester.pump();
+
+        final l10n = AppLocalizations.of(
+          tester.element(find.byType(TopicSelectionPage)),
+        )!;
+        expect(find.text(l10n.conversationSelectTitle), findsOneWidget);
+        expect(find.byTooltip(l10n.conversationSearch), findsOneWidget);
+        expect(find.text(l10n.topicSelectionEmptyTitle), findsOneWidget);
+        expect(find.text(l10n.topicSelectionEmptyMessage), findsOneWidget);
+        expect(
+          find.widgetWithText(FilledButton, l10n.topicSelectionNewTopic),
+          findsOneWidget,
+        );
+
+        await tester.tap(find.byTooltip(l10n.conversationSearch));
+        await tester.pumpAndSettle();
+        expect(find.text(l10n.searchPanelHint), findsOneWidget);
+      });
+    }
+  });
+
   testWidgets('search panel uses localized labels', (tester) async {
     await tester.pumpWidget(MaterialApp(
       supportedLocales: AppLocalizations.supportedLocales,

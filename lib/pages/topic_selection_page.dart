@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 
 import '../pages/assistant_selection_page.dart';
 import '../providers/assistant_provider.dart';
@@ -57,21 +58,22 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
 
   Future<void> _batchDelete() async {
     if (_selectedIds.isEmpty) return;
+    final l10n = AppLocalizations.of(context)!;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('删除对话'),
-        content: Text('确定要删除选中的 ${_selectedIds.length} 个对话吗？此操作无法撤销。'),
+        title: Text(l10n.conversationDeleteTitle),
+        content: Text(l10n.conversationDeleteMany(_selectedIds.length)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('取消'),
+            child: Text(l10n.actionCancel),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
             style: TextButton.styleFrom(
                 foregroundColor: Theme.of(context).colorScheme.error),
-            child: const Text('删除'),
+            child: Text(l10n.actionDelete),
           ),
         ],
       ),
@@ -115,19 +117,21 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
   }
 
   void _deleteTopic(Conversation topic) async {
+    final l10n = AppLocalizations.of(context)!;
     final convs = ref.read(conversationsProvider);
     final conv = convs.where((c) => c.id == topic.id).firstOrNull;
 
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('删除对话'),
-        content:
-            Text('确定要删除对话「${topic.title.isEmpty ? '新对话' : topic.title}」吗？'),
+        title: Text(l10n.conversationDeleteTitle),
+        content: Text(l10n.conversationDeleteNamed(
+          topic.title.isEmpty ? l10n.conversationNew : topic.title,
+        )),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
+            child: Text(l10n.actionCancel),
           ),
           TextButton(
             onPressed: () {
@@ -135,7 +139,7 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
             },
             style: TextButton.styleFrom(
                 foregroundColor: Theme.of(context).colorScheme.error),
-            child: const Text('删除'),
+            child: Text(l10n.actionDelete),
           ),
         ],
       ),
@@ -169,16 +173,17 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
   }
 
   void _renameTopic(String id, String currentTitle) {
+    final l10n = AppLocalizations.of(context)!;
     final controller = TextEditingController(text: currentTitle);
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('重命名对话'),
+        title: Text(l10n.conversationRename),
         content: TextField(
           controller: controller,
           autofocus: true,
-          decoration: const InputDecoration(
-            hintText: '输入新名称',
+          decoration: InputDecoration(
+            hintText: l10n.conversationRenameHint,
             border: OutlineInputBorder(),
           ),
           onSubmitted: (value) {
@@ -197,7 +202,7 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
               controller.dispose();
               Navigator.of(ctx).pop();
             },
-            child: const Text('取消'),
+            child: Text(l10n.actionCancel),
           ),
           TextButton(
             onPressed: () {
@@ -210,7 +215,7 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
               controller.dispose();
               Navigator.of(ctx).pop();
             },
-            child: const Text('确定'),
+            child: Text(l10n.actionConfirm),
           ),
         ],
       ),
@@ -255,6 +260,7 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
   }
 
   Widget _buildEmptyState(ColorScheme cs) {
+    final l10n = AppLocalizations.of(context)!;
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -263,11 +269,11 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
               size: 48, color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
           const SizedBox(height: 16),
           Text(
-            '暂无对话',
+            l10n.topicSelectionEmptyTitle,
             style: TextStyle(color: cs.onSurfaceVariant),
           ),
           const SizedBox(height: 8),
-          Text('创建一个新对话开始对话',
+          Text(l10n.topicSelectionEmptyMessage,
               style: TextStyle(
                   fontSize: 13,
                   color: cs.onSurfaceVariant.withValues(alpha: 0.7))),
@@ -278,6 +284,7 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final selectedAssistant = ref.watch(selectedAssistantProvider);
     final conversations = ref.watch(conversationsProvider);
     final isLoading = ref.watch(conversationsInitialLoadProvider).isLoading;
@@ -291,7 +298,9 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
     return Scaffold(
       backgroundColor: cs.surface,
       appBar: AppBar(
-        title: Text(_selectionMode ? '已选 ${_selectedIds.length} 个' : '选择对话'),
+        title: Text(_selectionMode
+            ? l10n.conversationSelected(_selectedIds.length)
+            : l10n.conversationSelectTitle),
         centerTitle: false,
         elevation: 0,
         backgroundColor: cs.surface,
@@ -299,20 +308,20 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
           if (!_selectionMode)
             IconButton(
               icon: const Icon(Icons.search),
-              tooltip: '搜索',
+              tooltip: l10n.conversationSearch,
               onPressed: _showSearchPanel,
             ),
           if (_selectionMode)
             IconButton(
               icon: const Icon(Icons.delete),
-              tooltip: '删除选中',
+              tooltip: l10n.conversationDeleteSelected,
               onPressed: _selectedIds.isNotEmpty ? _batchDelete : null,
             ),
           IconButton(
             icon: Icon(
               _selectionMode ? Icons.close : Icons.checklist,
             ),
-            tooltip: _selectionMode ? '取消选择' : '选择',
+            tooltip: _selectionMode ? l10n.actionUnselect : l10n.actionSelect,
             onPressed: _toggleSelectionMode,
           ),
         ],
@@ -326,7 +335,8 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                       size: 48,
                       color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
                   const SizedBox(height: 16),
-                  Text('未选择助手', style: TextStyle(color: cs.onSurfaceVariant)),
+                  Text(l10n.topicSelectionNoAssistant,
+                      style: TextStyle(color: cs.onSurfaceVariant)),
                   const SizedBox(height: 16),
                   FilledButton(
                     onPressed: () {
@@ -334,7 +344,7 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                           null;
                       Navigator.pop(context);
                     },
-                    child: const Text('返回选择助手'),
+                    child: Text(l10n.topicSelectionBackToAssistants),
                   ),
                 ],
               ),
@@ -387,7 +397,7 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                       ),
                       IconButton(
                         icon: const Icon(Icons.tune, size: 20),
-                        tooltip: '编辑助手',
+                        tooltip: l10n.topicSelectionEditAssistant,
                         onPressed: () {
                           showAssistantFullEditDialog(
                               context, ref, selectedAssistant);
@@ -402,7 +412,7 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
                   child: Text(
-                    '长按拖拽即可调整对话顺序',
+                    l10n.topicSelectionReorderHint,
                     style: TextStyle(
                       fontSize: 12,
                       color: cs.onSurfaceVariant.withValues(alpha: 0.5),
@@ -517,7 +527,7 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                         width: double.infinity,
                         child: FilledButton.icon(
                           icon: const Icon(Icons.add),
-                          label: const Text('新话题'),
+                          label: Text(l10n.topicSelectionNewTopic),
                           onPressed: _createNewTopic,
                         ),
                       ),
