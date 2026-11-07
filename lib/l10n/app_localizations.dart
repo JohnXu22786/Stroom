@@ -4787,6 +4787,18 @@ abstract class AppLocalizations {
   /// **'Audio separation'**
   String get unifiedTaskTypeAudioSeparation;
 
+  /// No description provided for @backgroundTaskGeneratedOcrTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'OCR: {basename}'**
+  String backgroundTaskGeneratedOcrTitle(Object basename);
+
+  /// No description provided for @backgroundTaskGeneratedAudioSeparationTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio separation: {basename}'**
+  String backgroundTaskGeneratedAudioSeparationTitle(Object basename);
+
   /// No description provided for @unifiedTaskTypeChat.
   ///
   /// In en, this message translates to:
