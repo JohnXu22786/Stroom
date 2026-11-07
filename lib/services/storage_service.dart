@@ -47,7 +47,7 @@ class AppStorage {
     if (!await file.exists()) return null;
     return file
         .openRead(0, end)
-        .transform(utf8.decoder(allowMalformed: true))
+        .transform(const Utf8Decoder(allowMalformed: true))
         .transform(const LineSplitter());
   }
 
