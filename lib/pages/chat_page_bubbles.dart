@@ -900,22 +900,32 @@ extension _ChatPageBubblesExt on _ChatPageState {
             }
             return s.text;
           }
-          final activeMarkdownText = isActiveStreamingMarkdown
+          // Reading the published snapshot copies the entire growing chunk.
+          // Keep that work on paths that need the complete source; the
+          // incremental Markdown widget gets it lazily through its recovery
+          // callback when it mounts or loses append events.
+          final activeSearchPreviewKey = '$messageId:${s.chunkIndex}';
+          final existingActiveSearchPreview =
+              isActiveStreamingMarkdown && hasSearchMatch
+                  ? _liveMarkdownSearchPreviews[activeSearchPreviewKey]
+                  : null;
+          final activeMarkdownText = isActiveStreamingMarkdown &&
+                  hasSearchMatch &&
+                  !(existingActiveSearchPreview?.exceedsBudget ?? false)
               ? materializeActiveMarkdownChunk()
               : s.text;
-          final activeSearchPreview =
-              isActiveStreamingMarkdown && hasSearchMatch
-                  ? _liveMarkdownSearchPreviews.putIfAbsent(
-                      '$messageId:${s.chunkIndex}',
-                      () => _LiveMarkdownSearchPreview(
-                        activeMarkdownText,
-                        initialUpdates: _liveMarkdownAppendCounts[
-                                '$messageId:${s.chunkIndex}'] ??
-                            0,
-                        lastSequence: s.liveMarkdownSequence,
-                      ),
-                    )
-                  : null;
+          final activeSearchPreview = isActiveStreamingMarkdown && hasSearchMatch
+              ? existingActiveSearchPreview ??
+                  _liveMarkdownSearchPreviews.putIfAbsent(
+                    activeSearchPreviewKey,
+                    () => _LiveMarkdownSearchPreview(
+                      activeMarkdownText,
+                      initialUpdates:
+                          _liveMarkdownAppendCounts[activeSearchPreviewKey] ?? 0,
+                      lastSequence: s.liveMarkdownSequence,
+                    ),
+                  )
+              : null;
           final useRawActiveSearchPreview =
               activeSearchPreview?.exceedsBudget ?? false;
           final messageMarkdownConfig = buildMessageMarkdownConfig(
@@ -964,7 +974,7 @@ extension _ChatPageBubblesExt on _ChatPageState {
                               ? ValueKey(
                                   'streaming-markdown:$messageId:${s.chunkIndex}')
                               : null,
-                          data: activeMarkdownText,
+                          data: s.text,
                           selectable: true,
                           shrinkWrap: true,
                           physics: const NeverScrollableScrollPhysics(),

@@ -239,17 +239,24 @@ extension _ChatPageListenersExt on _ChatPageState {
         _liveMarkdownSearchPreviews[previewKey] = preview;
       } else if (preview.lastSequence != null &&
           next.sequence > preview.lastSequence! + 1) {
-        final chunks =
-            ref.read(chatStreamManagerProvider).publishedTextChunksFor(convId);
-        final publishedText = next.chunkIndex < chunks.length
-            ? chunks[next.chunkIndex]
-            : '${seed}${next.text}';
-        preview = _LiveMarkdownSearchPreview(
-          publishedText,
-          initialUpdates: appendCount,
-          lastSequence: next.sequence,
-        );
-        _liveMarkdownSearchPreviews[previewKey] = preview;
+        if (preview.length > _LiveMarkdownSearchPreview._maxLength) {
+          // Once raw preview has switched to a bounded excerpt, keep its
+          // beginning and advance the tail with this delta instead of
+          // rematerializing the full published chunk for gap recovery.
+          preview.append(next.text, sequence: next.sequence);
+        } else {
+          final chunks =
+              ref.read(chatStreamManagerProvider).publishedTextChunksFor(convId);
+          final publishedText = next.chunkIndex < chunks.length
+              ? chunks[next.chunkIndex]
+              : '${seed}${next.text}';
+          preview = _LiveMarkdownSearchPreview(
+            publishedText,
+            initialUpdates: appendCount,
+            lastSequence: next.sequence,
+          );
+          _liveMarkdownSearchPreviews[previewKey] = preview;
+        }
       } else {
         preview.append(next.text, sequence: next.sequence);
       }
