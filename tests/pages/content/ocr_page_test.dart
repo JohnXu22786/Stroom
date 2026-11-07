@@ -2637,10 +2637,10 @@ void main() {
               'instructionIndex': 1,
             },
             backgroundTasksNotifier: backgroundTasks,
-            testInstructionsNotifierBuilder: (ref) =>
-                instructionsNotifier = _InstructionsLoadAlwaysFailsNotifier(ref),
-            testImagePayloadPreparer: (bytes) async =>
-                OcrImagePayload(bytes: bytes, format: 'png', width: 1, height: 1),
+            testInstructionsNotifierBuilder: (ref) => instructionsNotifier =
+                _InstructionsLoadAlwaysFailsNotifier(ref),
+            testImagePayloadPreparer: (bytes) async => OcrImagePayload(
+                bytes: bytes, format: 'png', width: 1, height: 1),
           ),
         );
         await tester.pumpAndSettle();
