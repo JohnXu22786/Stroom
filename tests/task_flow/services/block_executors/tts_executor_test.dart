@@ -6,8 +6,10 @@ import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/widgets.dart' show Locale;
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/providers/locale_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/providers/task_provider.dart';
 import 'package:stroom/services/storage_service.dart';
@@ -151,6 +153,51 @@ void main() {
     expect(task.customParams?[flowTemporaryBlockIdKey], block.id);
     expect(task.customParams?.containsKey('saveFolder'), isFalse);
     expect(await WebFileStore.read(output), audio);
+  });
+
+  test('failed TTS task uses fallback only when its error is null', () async {
+    final fallback = appLocalizationsForLocale(const Locale('zh', 'CN'))
+        .notificationBannerTaskFailedHeading;
+    for (final (error, expected) in <(String?, String)>[
+      (null, fallback),
+      ('provider detail: HTTP 503', 'provider detail: HTTP 503'),
+    ]) {
+      final synthesis = Completer<Uint8List>();
+      tasks.debugSynthesize = (_, _, _) => synthesis.future;
+      final execution = executeTtsBlock(
+        block: TaskFlowBlock(
+          id: 'tts-block',
+          typeKey: BlockType.tts,
+          params: {
+            'modelRef': {
+              'configId': config.id,
+              'modelId': config.models.single.id,
+            },
+          },
+        ),
+        def: BlockTypeDefinition.tts,
+        input: 'Failure case',
+        execId: executionId,
+        execNotifier: executions,
+        flowSubTask: flowSubTask,
+        taskListNotifier: tasks,
+        providerEntries: providers,
+        taskFailedFallback: fallback,
+      );
+      final task = container.read(taskListProvider).first;
+      // The background synthesis stays pending while the executor observes
+      // this failed task state.
+      tasks.state = [task.copyWith(status: TaskStatus.failed, error: error)];
+
+      await expectLater(
+        execution,
+        throwsA(isA<BlockExecutionException>().having(
+          (exception) => exception.message,
+          'message',
+          expected,
+        )),
+      );
+    }
   });
 
   for (final action in ['pause', 'cancel']) {

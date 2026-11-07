@@ -19,6 +19,7 @@ import '../../providers/assistant_provider.dart';
 import '../../providers/background_task_provider.dart';
 import '../../providers/chat_manager_provider.dart';
 import '../../providers/conversation_provider.dart';
+import '../../providers/locale_provider.dart';
 import '../../providers/provider_config.dart';
 import '../../providers/task_provider.dart';
 import '../../providers/tts_state_provider.dart';
@@ -1344,6 +1345,9 @@ class TaskFlowExecutionService {
           videoFolder: temporaryOutput ? '' : block.params['videoFolder'] ?? '',
           audioFolder: temporaryOutput ? '' : block.params['audioFolder'] ?? '',
           temporaryOutput: temporaryOutput,
+          taskFailedFallback: appLocalizationsForLocale(
+            _ref.read(localeProvider),
+          ).notificationBannerTaskFailedHeading,
           // Per-run duration from the run-mode input box wins over the
           // block's configured duration (0 = use the configured value).
           durationSecOverride: inputDurationSec,
@@ -1431,6 +1435,9 @@ class TaskFlowExecutionService {
               taskListNotifier: taskListNotifier,
               providerEntries: providerEntries,
               temporaryOutput: temporaryOutput,
+              taskFailedFallback: appLocalizationsForLocale(
+                _ref.read(localeProvider),
+              ).notificationBannerTaskFailedHeading,
             ),
             def.outputType);
       case BlockType.chat:

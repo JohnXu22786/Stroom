@@ -32,6 +32,7 @@ Future<String> executeCatCatchBlock({
   String videoFolder = '',
   String audioFolder = '',
   bool temporaryOutput = false,
+  String? taskFailedFallback,
 
   /// Per-run duration (seconds) from the run-mode input box. When > 0 it
   /// overrides the block's configured `durationSec`; 0 = use the block's
@@ -385,7 +386,7 @@ Future<String> executeCatCatchBlock({
         TaskStatus.failed,
       );
       throw BlockExecutionException(
-        task.error ?? '任务失败',
+        task.error ?? taskFailedFallback ?? 'Task failed',
         blockType: def.typeKey.name,
         blockTitle: def.label,
       );

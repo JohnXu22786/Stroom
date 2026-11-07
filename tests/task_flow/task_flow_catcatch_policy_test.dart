@@ -1,10 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/widgets.dart' show Locale;
 import 'package:path/path.dart' as p;
 import 'package:mocktail/mocktail.dart';
 import 'package:stroom/catcatch/models/catcatch_task.dart' as catcatch;
 import 'package:stroom/catcatch/models/media_resource.dart';
 import 'package:stroom/catcatch/providers/catcatch_provider.dart';
 import 'package:stroom/providers/task_provider_shared.dart';
+import 'package:stroom/providers/locale_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/task_flow/services/task_flow_validator.dart';
 import 'package:stroom/utils/provider_models.dart';
@@ -483,6 +485,69 @@ void main() {
       ),
       isTrue,
     );
+  });
+
+  test('failed CatCatch task uses fallback only when its error is null',
+      () async {
+    final fallback = appLocalizationsForLocale(const Locale('zh', 'CN'))
+        .notificationBannerTaskFailedHeading;
+    for (final (error, expected) in <(String?, String)>[
+      (null, fallback),
+      ('provider detail: HTTP 503', 'provider detail: HTTP 503'),
+    ]) {
+      final notifier = _Notifier();
+      final executions = TaskFlowExecutionNotifier();
+      final execId = executions.addExecution(flowId: 'flow', flowName: 'Flow');
+      final subTask = FlowSubTask(
+        blockTypeKey: 'catcatch',
+        blockLabel: '下载',
+        subTaskId: 'pending',
+        subTaskType: 'catcatch',
+        status: TaskStatus.waiting,
+      );
+      executions.addSubTask(execId, subTask);
+      late String taskId;
+      when(() => notifier.addTask(any(), any(),
+          taskId: any(named: 'taskId'),
+          flowManagedSelection: any(named: 'flowManagedSelection'),
+          deferSingleResourceSelection:
+              any(named: 'deferSingleResourceSelection'))).thenAnswer(
+        (invocation) {
+          taskId = invocation.namedArguments[#taskId] as String;
+          return taskId;
+        },
+      );
+      when(() => notifier.state).thenAnswer((_) => [
+            catcatch.CatCatchTask(
+              id: taskId,
+              url: 'https://x',
+              expectedDurationSec: 0,
+              createdAt: DateTime(2026),
+              status: catcatch.TaskStatus.failed,
+              error: error,
+            ),
+          ]);
+
+      await expectLater(
+        executeCatCatchBlock(
+          def: BlockTypeDefinition.catcatch,
+          block: TaskFlowBlock(typeKey: BlockType.catcatch),
+          input: 'https://x',
+          execId: execId,
+          execNotifier: executions,
+          flowSubTask: subTask,
+          catcatchNotifier: notifier,
+          taskFailedFallback: fallback,
+          pollInterval: const Duration(milliseconds: 1),
+        ),
+        throwsA(isA<BlockExecutionException>().having(
+          (exception) => exception.message,
+          'message',
+          expected,
+        )),
+      );
+      executions.dispose();
+    }
   });
 
   test('automatic with prompt includes compatible split-track choices',
