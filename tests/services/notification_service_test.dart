@@ -181,5 +181,8 @@ void main() {
         expect(find.text('OCR report'), findsOneWidget);
       }
     }
+
+    await tester.pump(const Duration(seconds: 4));
+    await tester.pumpAndSettle();
   });
 }
