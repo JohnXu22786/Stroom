@@ -61,7 +61,7 @@ extension _ChatPageListenersExt on _ChatPageState {
       _chatSegments[msgId] = updated;
       if (!(_isReasoningCompletedForMsg[msgId] ?? false)) {
         _isReasoningCompletedForMsg[msgId] = true;
-        _updateStreamingMessage(msgId, '');
+        _convertStreamingPlaceholderToTextMessage(msgId);
         _rebuildLiveSegments(msgId);
         final rebuilt =
             List<MessageSegment>.of(_chatSegments[msgId] ?? const []);
@@ -177,7 +177,7 @@ extension _ChatPageListenersExt on _ChatPageState {
       // Switch the placeholder to the normal assistant bubble without
       // copying the growing reply into the chat controller. Text is rendered
       // from the live segments below.
-      _updateStreamingMessage(msgId, '');
+      _convertStreamingPlaceholderToTextMessage(msgId);
       if (!reasoningWasCompleted || !_updateLiveTextSegment(msgId, next)) {
         _rebuildLiveSegments(msgId);
       }
@@ -260,6 +260,7 @@ extension _ChatPageListenersExt on _ChatPageState {
         _reasoningContents.clear();
         _finalizedMessages.clear();
         _isReasoningCompletedForMsg.clear();
+        _convertedStreamingPlaceholderIds.clear();
         manager.activateConversation(next);
         // Schedule loads for conversation switches and for an initial
         // null→ID restoration that the first _initialize load could not see.
@@ -450,6 +451,32 @@ extension _ChatPageListenersExt on _ChatPageState {
         id: msgId,
         authorId: _aiUser.id,
         text: content,
+        createdAt: DateTime.now(),
+      ),
+    );
+    _refreshStreamingBubble(msgId);
+  }
+
+  /// Converts a stream placeholder once, avoiding controller scans on later
+  /// text-section updates. A missing controller message is retried on the
+  /// next provider update; an already-normal message is remembered for this
+  /// page session, which also covers streaming re-entry.
+  void _convertStreamingPlaceholderToTextMessage(String msgId) {
+    if (!mounted || _convertedStreamingPlaceholderIds.contains(msgId)) return;
+    final placeholder = _controller?.messages
+        .where(
+          (message) => message.id == msgId,
+        )
+        .firstOrNull;
+    if (placeholder == null) return;
+    _convertedStreamingPlaceholderIds.add(msgId);
+    if (placeholder is! TextStreamMessage) return;
+    _controller?.updateMessage(
+      placeholder,
+      Message.text(
+        id: msgId,
+        authorId: _aiUser.id,
+        text: '',
         createdAt: DateTime.now(),
       ),
     );

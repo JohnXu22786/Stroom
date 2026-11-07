@@ -198,6 +198,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// - true + streaming = "推理过程" (reasoning done, text being streamed)
   final Map<String, bool> _isReasoningCompletedForMsg = {};
 
+  /// Message IDs whose streaming placeholder has already been converted to a
+  /// normal text message by the live text-section listener.
+  final Set<String> _convertedStreamingPlaceholderIds = {};
+
   /// 是否展开"上下文已压缩"banner 的摘要预览。
   bool _showCompactionSummary = false;
 
