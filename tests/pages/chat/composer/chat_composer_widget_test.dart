@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/widgets/chat_attachment_panel.dart';
@@ -14,7 +15,10 @@ import 'package:stroom/providers/provider_config.dart';
 
 /// Helper that creates a MaterialApp wrapped in ProviderScope with
 /// all providers needed to render ChatPage.
-Widget createChatTestApp({String? activeConversationId}) {
+Widget createChatTestApp({
+  String? activeConversationId,
+  Locale locale = const Locale('zh', 'CN'),
+}) {
   SharedPreferences.setMockInitialValues({});
   return ProviderScope(
     overrides: [
@@ -29,7 +33,7 @@ Widget createChatTestApp({String? activeConversationId}) {
       }),
     ],
     child: MaterialApp(
-        locale: const Locale('zh', 'CN'),
+        locale: locale,
         supportedLocales: AppLocalizations.supportedLocales,
         localizationsDelegates: const [
           AppLocalizations.delegate,
@@ -42,6 +46,34 @@ Widget createChatTestApp({String? activeConversationId}) {
 }
 
 void main() {
+  testWidgets('camera error feedback is localized and keeps platform detail', (
+    tester,
+  ) async {
+    const imagePickerChannel = MethodChannel('plugins.flutter.io/image_picker');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(imagePickerChannel, (call) async {
+      throw PlatformException(
+        code: 'camera_unavailable',
+        message: 'camera hardware detail',
+      );
+    });
+    addTearDown(
+      () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(imagePickerChannel, null),
+    );
+
+    await tester.pumpWidget(
+      createChatTestApp(locale: const Locale('en', 'US')),
+    );
+    await tester.pump();
+    await tester.tap(find.byIcon(Icons.attach_file_outlined));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Take photo'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Could not take a photo:'), findsOneWidget);
+    expect(find.textContaining('camera hardware detail'), findsOneWidget);
+  });
   testWidgets('chat attachment panel uses localized labels', (tester) async {
     await tester.pumpWidget(MaterialApp(
       supportedLocales: AppLocalizations.supportedLocales,

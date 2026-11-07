@@ -1,48 +1,87 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/widgets.dart';
 import 'package:stroom/pages/chat/utils/format_chat_error.dart';
+
+String formatChatErrorMessageInChinese(Object error) =>
+    formatChatErrorMessage(error, locale: const Locale('zh', 'CN'));
 
 void main() {
   group('formatChatErrorMessage', () {
+    test('localizes app framing while preserving network details', () {
+      const details =
+          'SocketException: Connection refused https://api.example.test/v1';
+
+      final english = formatChatErrorMessage(
+        Exception(details),
+        locale: const Locale('en', 'US'),
+      );
+      final chinese = formatChatErrorMessage(
+        Exception(details),
+        locale: const Locale('zh', 'CN'),
+      );
+
+      expect(english, contains('Network connection failed'));
+      expect(english, contains(details));
+      expect(chinese, contains('网络连接失败'));
+      expect(chinese, contains(details));
+
+      const providerDetails = 'provider=Demo https://api.example.test';
+      final providerError = formatChatErrorMessage(
+        Exception('请先配置聊天供应商: $providerDetails'),
+        locale: const Locale('en', 'US'),
+      );
+      const apiKeyDetails = 'provider=Demo https://api.example.test';
+      final apiKeyError = formatChatErrorMessage(
+        Exception('API key not configured: $apiKeyDetails'),
+        locale: const Locale('zh', 'CN'),
+      );
+      expect(providerError, isNot(contains('请先配置聊天供应商')));
+      expect(providerError, contains(providerDetails));
+      expect(apiKeyError, isNot(contains('API key not configured')));
+      expect(apiKeyError, contains(apiKeyDetails));
+    });
+
     test('returns "未配置聊天供应商" message for adapter not configured', () {
-      final result = formatChatErrorMessage(Exception('请先配置聊天供应商'));
+      final result = formatChatErrorMessageInChinese(Exception('请先配置聊天供应商'));
       expect(result, contains('错误:'));
       expect(result, contains('聊天 API 未配置'));
     });
 
     test('returns "API key not configured" message', () {
       final result =
-          formatChatErrorMessage(Exception('API key not configured'));
+          formatChatErrorMessageInChinese(Exception('API key not configured'));
       expect(result, contains('错误:'));
       expect(result, contains('API Key 未配置'));
     });
 
     test('returns network error message for SocketException', () {
-      final result = formatChatErrorMessage(
+      final result = formatChatErrorMessageInChinese(
           Exception('SocketException: Connection refused'));
       expect(result, contains('错误:'));
       expect(result, contains('网络连接失败'));
     });
 
     test('returns timeout message for timeout errors', () {
-      final result = formatChatErrorMessage(Exception('timeout'));
+      final result = formatChatErrorMessageInChinese(Exception('timeout'));
       expect(result, contains('错误:'));
       expect(result, contains('连接超时'));
     });
 
     test('returns raw HTTP error message', () {
       final result =
-          formatChatErrorMessage(Exception('HTTP 401: Unauthorized'));
+          formatChatErrorMessageInChinese(Exception('HTTP 401: Unauthorized'));
       expect(result, contains('错误:'));
       expect(result, contains('HTTP 401'));
     });
 
     test('returns generic error for unknown errors', () {
-      final result = formatChatErrorMessage(Exception('Some unknown error'));
+      final result =
+          formatChatErrorMessageInChinese(Exception('Some unknown error'));
       expect(result, '错误: Exception: Some unknown error');
     });
 
     test('handles string error input', () {
-      final result = formatChatErrorMessage('直接错误字符串');
+      final result = formatChatErrorMessageInChinese('直接错误字符串');
       expect(result, '错误: 直接错误字符串');
     });
   });

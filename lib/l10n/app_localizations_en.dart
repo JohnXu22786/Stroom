@@ -1878,6 +1878,93 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatErrorBack => 'Back';
 
   @override
+  String get chatErrorPrefix => 'Error: ';
+
+  @override
+  String get chatErrorProviderNotConfigured =>
+      'Chat API is not configured. Open Settings to configure a provider.';
+
+  @override
+  String get chatErrorApiKeyNotConfigured =>
+      'API key is not configured. Check Settings.';
+
+  @override
+  String get chatErrorServerConnection =>
+      'Unable to connect to the server. Check your network connection and API address.';
+
+  @override
+  String get chatErrorNetworkConnection =>
+      'Network connection failed. Check your network connection.';
+
+  @override
+  String get chatErrorTimeout =>
+      'Connection timed out. The server did not respond.';
+
+  @override
+  String chatAttachmentImportFailed(String error) {
+    return 'Import failed: $error';
+  }
+
+  @override
+  String chatAttachmentCameraFailed(String error) {
+    return 'Could not take a photo: $error';
+  }
+
+  @override
+  String chatAttachmentGalleryUnsupportedPlatform(
+    String platform,
+    String error,
+  ) {
+    return '$platform does not support device gallery access: $error';
+  }
+
+  @override
+  String get chatAttachmentWebPlatform => 'Web browser';
+
+  @override
+  String get chatAttachmentCurrentPlatform => 'This device';
+
+  @override
+  String get chatAttachmentGalleryPermissionHint =>
+      'Grant photo library access permission and try again.';
+
+  @override
+  String get chatAttachmentBrowserPermissionHint =>
+      'Allow this website to access files in your browser settings.';
+
+  @override
+  String get chatAttachmentGalleryFallbackHint =>
+      'Check that your device supports gallery selection.';
+
+  @override
+  String chatAttachmentImageImportFailed(String error, String userHint) {
+    return 'Could not import image: $error\n$userHint';
+  }
+
+  @override
+  String chatAttachmentFileUnsupportedPlatform(String platform, String error) {
+    return '$platform does not support file selection: $error';
+  }
+
+  @override
+  String get chatAttachmentFilePermissionHint =>
+      'Grant file access permission and try again.';
+
+  @override
+  String get chatAttachmentFileFallbackHint =>
+      'Check that your device supports file selection.';
+
+  @override
+  String chatAttachmentFileImportFailed(String error, String userHint) {
+    return 'Could not import file: $error\n$userHint';
+  }
+
+  @override
+  String chatAttachmentImported(String fileName) {
+    return 'Imported $fileName';
+  }
+
+  @override
   String get chatDataDetails => 'Data details';
 
   @override
@@ -11980,6 +12067,93 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get chatErrorBack => 'Back';
+
+  @override
+  String get chatErrorPrefix => 'Error: ';
+
+  @override
+  String get chatErrorProviderNotConfigured =>
+      'Chat API is not configured. Open Settings to configure a provider.';
+
+  @override
+  String get chatErrorApiKeyNotConfigured =>
+      'API key is not configured. Check Settings.';
+
+  @override
+  String get chatErrorServerConnection =>
+      'Unable to connect to the server. Check your network connection and API address.';
+
+  @override
+  String get chatErrorNetworkConnection =>
+      'Network connection failed. Check your network connection.';
+
+  @override
+  String get chatErrorTimeout =>
+      'Connection timed out. The server did not respond.';
+
+  @override
+  String chatAttachmentImportFailed(String error) {
+    return 'Import failed: $error';
+  }
+
+  @override
+  String chatAttachmentCameraFailed(String error) {
+    return 'Could not take a photo: $error';
+  }
+
+  @override
+  String chatAttachmentGalleryUnsupportedPlatform(
+    String platform,
+    String error,
+  ) {
+    return '$platform does not support device gallery access: $error';
+  }
+
+  @override
+  String get chatAttachmentWebPlatform => 'Web browser';
+
+  @override
+  String get chatAttachmentCurrentPlatform => 'This device';
+
+  @override
+  String get chatAttachmentGalleryPermissionHint =>
+      'Grant photo library access permission and try again.';
+
+  @override
+  String get chatAttachmentBrowserPermissionHint =>
+      'Allow this website to access files in your browser settings.';
+
+  @override
+  String get chatAttachmentGalleryFallbackHint =>
+      'Check that your device supports gallery selection.';
+
+  @override
+  String chatAttachmentImageImportFailed(String error, String userHint) {
+    return 'Could not import image: $error\n$userHint';
+  }
+
+  @override
+  String chatAttachmentFileUnsupportedPlatform(String platform, String error) {
+    return '$platform does not support file selection: $error';
+  }
+
+  @override
+  String get chatAttachmentFilePermissionHint =>
+      'Grant file access permission and try again.';
+
+  @override
+  String get chatAttachmentFileFallbackHint =>
+      'Check that your device supports file selection.';
+
+  @override
+  String chatAttachmentFileImportFailed(String error, String userHint) {
+    return 'Could not import file: $error\n$userHint';
+  }
+
+  @override
+  String chatAttachmentImported(String fileName) {
+    return 'Imported $fileName';
+  }
 
   @override
   String get chatDataDetails => 'Data details';

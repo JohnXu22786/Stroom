@@ -1767,6 +1767,83 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chatErrorBack => '返回';
 
   @override
+  String get chatErrorPrefix => '错误: ';
+
+  @override
+  String get chatErrorProviderNotConfigured => '聊天 API 尚未配置，请前往设置页面配置';
+
+  @override
+  String get chatErrorApiKeyNotConfigured => 'API Key 尚未配置，请检查设置';
+
+  @override
+  String get chatErrorServerConnection => '无法连接到服务器，请检查网络连接和 API 地址';
+
+  @override
+  String get chatErrorNetworkConnection => '网络连接失败，请检查网络连接';
+
+  @override
+  String get chatErrorTimeout => '连接超时，服务器无响应';
+
+  @override
+  String chatAttachmentImportFailed(String error) {
+    return '导入失败: $error';
+  }
+
+  @override
+  String chatAttachmentCameraFailed(String error) {
+    return '拍照失败: $error';
+  }
+
+  @override
+  String chatAttachmentGalleryUnsupportedPlatform(
+    String platform,
+    String error,
+  ) {
+    return '$platform不支持设备相册功能: $error';
+  }
+
+  @override
+  String get chatAttachmentWebPlatform => 'Web浏览器';
+
+  @override
+  String get chatAttachmentCurrentPlatform => '当前设备';
+
+  @override
+  String get chatAttachmentGalleryPermissionHint => '请授予相册访问权限后重试';
+
+  @override
+  String get chatAttachmentBrowserPermissionHint => '请在浏览器设置中允许此网站访问文件';
+
+  @override
+  String get chatAttachmentGalleryFallbackHint => '请检查设备是否支持相册选择功能';
+
+  @override
+  String chatAttachmentImageImportFailed(String error, String userHint) {
+    return '导入图片失败: $error\n$userHint';
+  }
+
+  @override
+  String chatAttachmentFileUnsupportedPlatform(String platform, String error) {
+    return '$platform不支持文件选择功能: $error';
+  }
+
+  @override
+  String get chatAttachmentFilePermissionHint => '请授予文件访问权限后重试';
+
+  @override
+  String get chatAttachmentFileFallbackHint => '请确保设备支持文件选择功能';
+
+  @override
+  String chatAttachmentFileImportFailed(String error, String userHint) {
+    return '导入文件失败: $error\n$userHint';
+  }
+
+  @override
+  String chatAttachmentImported(String fileName) {
+    return '已导入 $fileName';
+  }
+
+  @override
   String get chatDataDetails => '数据详情';
 
   @override
@@ -11341,6 +11418,83 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get chatErrorBack => '返回';
+
+  @override
+  String get chatErrorPrefix => '错误: ';
+
+  @override
+  String get chatErrorProviderNotConfigured => '聊天 API 尚未配置，请前往设置页面配置';
+
+  @override
+  String get chatErrorApiKeyNotConfigured => 'API Key 尚未配置，请检查设置';
+
+  @override
+  String get chatErrorServerConnection => '无法连接到服务器，请检查网络连接和 API 地址';
+
+  @override
+  String get chatErrorNetworkConnection => '网络连接失败，请检查网络连接';
+
+  @override
+  String get chatErrorTimeout => '连接超时，服务器无响应';
+
+  @override
+  String chatAttachmentImportFailed(String error) {
+    return '导入失败: $error';
+  }
+
+  @override
+  String chatAttachmentCameraFailed(String error) {
+    return '拍照失败: $error';
+  }
+
+  @override
+  String chatAttachmentGalleryUnsupportedPlatform(
+    String platform,
+    String error,
+  ) {
+    return '$platform不支持设备相册功能: $error';
+  }
+
+  @override
+  String get chatAttachmentWebPlatform => 'Web浏览器';
+
+  @override
+  String get chatAttachmentCurrentPlatform => '当前设备';
+
+  @override
+  String get chatAttachmentGalleryPermissionHint => '请授予相册访问权限后重试';
+
+  @override
+  String get chatAttachmentBrowserPermissionHint => '请在浏览器设置中允许此网站访问文件';
+
+  @override
+  String get chatAttachmentGalleryFallbackHint => '请检查设备是否支持相册选择功能';
+
+  @override
+  String chatAttachmentImageImportFailed(String error, String userHint) {
+    return '导入图片失败: $error\n$userHint';
+  }
+
+  @override
+  String chatAttachmentFileUnsupportedPlatform(String platform, String error) {
+    return '$platform不支持文件选择功能: $error';
+  }
+
+  @override
+  String get chatAttachmentFilePermissionHint => '请授予文件访问权限后重试';
+
+  @override
+  String get chatAttachmentFileFallbackHint => '请确保设备支持文件选择功能';
+
+  @override
+  String chatAttachmentFileImportFailed(String error, String userHint) {
+    return '导入文件失败: $error\n$userHint';
+  }
+
+  @override
+  String chatAttachmentImported(String fileName) {
+    return '已导入 $fileName';
+  }
 
   @override
   String get chatDataDetails => '数据详情';

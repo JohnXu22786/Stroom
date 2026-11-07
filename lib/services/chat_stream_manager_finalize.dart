@@ -164,7 +164,10 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
             (textChunks.any((chunk) => chunk.isNotEmpty) ||
                 state.reasoningSections.any((section) => section.isNotEmpty))) {
           blocks.add(ErrorBlock(
-            message: formatChatErrorMessage(streamError),
+            message: formatChatErrorMessage(
+              streamError,
+              locale: _ref?.read(localeProvider),
+            ),
           ));
         }
         final msg = ChatMessage(
