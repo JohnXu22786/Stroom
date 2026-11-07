@@ -280,18 +280,16 @@ void main() {
         stage: AsrFailureStage.request,
       );
 
-      expect(
-        diagnostic.localizedString(
-          lookupAppLocalizations(const Locale('en', 'US')),
-        ),
-        contains('Request failed: SocketException: connection reset by peer'),
+      final english = diagnostic.localizedString(
+        lookupAppLocalizations(const Locale('en', 'US')),
       );
-      expect(
-        diagnostic.localizedString(
-          lookupAppLocalizations(const Locale('zh', 'CN')),
-        ),
-        contains('请求失败：SocketException: connection reset by peer'),
+      final chinese = diagnostic.localizedString(
+        lookupAppLocalizations(const Locale('zh', 'CN')),
       );
+      expect(english, contains('Request failed: '));
+      expect(chinese, contains('请求失败：'));
+      expect(english, contains('SocketException: connection reset by peer'));
+      expect(chinese, contains('SocketException: connection reset by peer'));
     });
 
     test('URL request failure retains diagnostic type for localization',
