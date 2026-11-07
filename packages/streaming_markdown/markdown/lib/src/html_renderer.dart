@@ -94,7 +94,7 @@ class HtmlRenderer implements NodeVisitor {
   final bool _tagfilterEnabled;
 
   HtmlRenderer({bool enableTagfilter = false})
-    : _tagfilterEnabled = enableTagfilter;
+      : _tagfilterEnabled = enableTagfilter;
 
   String render(List<Node> nodes) {
     buffer = StringBuffer();
@@ -204,13 +204,13 @@ class HtmlRenderer implements NodeVisitor {
   // As said in the specification, this process should happen when rendering
   // HTML output, so there should not be a dedicated syntax for this extension.
   String _filterTags(String content) => content.replaceAll(
-    RegExp(
-      '<(?=(?:'
-      'title|textarea|style|xmp|iframe|noembed|noframes|script|plaintext'
-      ')>)',
-      caseSensitive: false,
-      multiLine: true,
-    ),
-    '&lt;',
-  );
+        RegExp(
+          '<(?=(?:'
+          'title|textarea|style|xmp|iframe|noembed|noframes|script|plaintext'
+          ')>)',
+          caseSensitive: false,
+          multiLine: true,
+        ),
+        '&lt;',
+      );
 }

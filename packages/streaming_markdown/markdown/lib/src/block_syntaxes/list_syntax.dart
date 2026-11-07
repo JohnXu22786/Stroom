@@ -75,8 +75,7 @@ abstract class ListSyntax extends BlockSyntax {
     final match = pattern.firstMatch(parser.current.content);
     final ordered = match![1] != null;
 
-    final taskListParserEnabled =
-        this is UnorderedListWithCheckboxSyntax ||
+    final taskListParserEnabled = this is UnorderedListWithCheckboxSyntax ||
         this is OrderedListWithCheckboxSyntax;
     final items = <ListItem>[];
     var childLines = <Line>[];
@@ -121,8 +120,7 @@ abstract class ListSyntax extends BlockSyntax {
     int? blankLines;
 
     while (!parser.isDone) {
-      final currentIndent =
-          parser.current.content.indentation() +
+      final currentIndent = parser.current.content.indentation() +
           (parser.current.tabRemaining ?? 0);
 
       if (parser.current.isBlankLine) {
@@ -209,8 +207,7 @@ abstract class ListSyntax extends BlockSyntax {
           // any indentation past the required whitespace character.
           indent = precedingWhitespaces;
         } else {
-          indent =
-              precedingWhitespaces +
+          indent = precedingWhitespaces +
               contentWhitespances +
               (parser.current.tabRemaining ?? 0);
         }
@@ -267,7 +264,7 @@ abstract class ListSyntax extends BlockSyntax {
       final itemElement = checkboxToInsert == null
           ? Element('li', children)
           : (Element('li', _addCheckbox(children, checkboxToInsert))
-              ..attributes['class'] = taskListClass);
+            ..attributes['class'] = taskListClass);
 
       itemNodes.add(itemElement);
       anyEmptyLinesBetweenBlocks =

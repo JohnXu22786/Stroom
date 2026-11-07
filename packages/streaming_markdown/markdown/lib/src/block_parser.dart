@@ -160,10 +160,11 @@ class BlockParser {
   List<Node> parseLines({
     BlockSyntax? parentSyntax,
     bool disabledSetextHeading = false,
-  }) => parseLinesWithRanges(
-    parentSyntax: parentSyntax,
-    disabledSetextHeading: disabledSetextHeading,
-  ).map((block) => block.node).toList();
+  }) =>
+      parseLinesWithRanges(
+        parentSyntax: parentSyntax,
+        disabledSetextHeading: disabledSetextHeading,
+      ).map((block) => block.node).toList();
 
   /// Parses blocks like [parseLines] and reports the source line interval for
   /// each top-level node. The interval is half-open: [startLine] is inclusive

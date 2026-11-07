@@ -79,10 +79,8 @@ class AlertBlockSyntax extends BlockSyntax {
   @override
   Node parse(BlockParser parser) {
     // Parse the alert type from the first line.
-    final type = pattern
-        .firstMatch(parser.current.content)!
-        .group(1)!
-        .toLowerCase();
+    final type =
+        pattern.firstMatch(parser.current.content)!.group(1)!.toLowerCase();
     parser.advance();
     final childLines = parseChildLines(parser);
     // Recursively parse the contents of the alert.

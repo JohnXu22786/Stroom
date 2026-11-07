@@ -19,8 +19,7 @@ import '../patterns.dart';
 /// TODO(srawlins): improve accuracy while ensuring performance, once
 /// Markdown benchmarking is more mature.
 class InlineHtmlSyntax extends TextSyntax {
-  static const _pattern =
-      '(?:$namedTagDefinition)'
+  static const _pattern = '(?:$namedTagDefinition)'
       // Or
       '|'
       // HTML comment, see
@@ -40,5 +39,5 @@ class InlineHtmlSyntax extends TextSyntax {
       r'(<!\[CDATA\[[^]*?\]\]>)';
 
   InlineHtmlSyntax()
-    : super(_pattern, startCharacter: $lt, caseSensitive: true);
+      : super(_pattern, startCharacter: $lt, caseSensitive: true);
 }

@@ -224,8 +224,7 @@ class DelimiterRun implements Delimiter {
   /// Unicode whitespace.
   // See https://spec.commonmark.org/0.30/#unicode-whitespace-character.
   // Unicode Zs: https://www.compart.com/en/unicode/category.
-  static const unicodeWhitespace =
-      '\u0020\u0009\u000A\u000C\u000D'
+  static const unicodeWhitespace = '\u0020\u0009\u000A\u000C\u000D'
       '\u00A0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008'
       '\u2009\u200A\u202F\u205F\u3000';
 
@@ -264,13 +263,11 @@ class DelimiterRun implements Delimiter {
     required bool isPrecededByPunctuation,
     required bool isFollowedByPunctuation,
     required this.allowIntraWord,
-  }) : canOpen =
-           isLeftFlanking &&
-           (!isRightFlanking || allowIntraWord || isPrecededByPunctuation),
-       canClose =
-           isRightFlanking &&
-           (!isLeftFlanking || allowIntraWord || isFollowedByPunctuation),
-       isActive = true;
+  })  : canOpen = isLeftFlanking &&
+            (!isRightFlanking || allowIntraWord || isPrecededByPunctuation),
+        canClose = isRightFlanking &&
+            (!isLeftFlanking || allowIntraWord || isFollowedByPunctuation),
+        isActive = true;
 
   /// Tries to parse a delimiter run from [runStart] (inclusive) to [runEnd]
   /// (exclusive).
@@ -294,8 +291,7 @@ class DelimiterRun implements Delimiter {
     } else {
       final preceding = parser.source.substring(runStart - 1, runStart);
       precededByWhitespace = unicodeWhitespace.contains(preceding);
-      precededByPunctuation =
-          !precededByWhitespace &&
+      precededByPunctuation = !precededByWhitespace &&
           unicodePunctuationPattern.hasMatch(preceding);
     }
 
@@ -305,23 +301,20 @@ class DelimiterRun implements Delimiter {
     } else {
       final following = parser.source.substring(runEnd, runEnd + 1);
       followedByWhitespace = unicodeWhitespace.contains(following);
-      followedByPunctuation =
-          !followedByWhitespace &&
+      followedByPunctuation = !followedByWhitespace &&
           unicodePunctuationPattern.hasMatch(following);
     }
 
     // If it is a left-flanking delimiter run, see
     // https://spec.commonmark.org/0.30/#left-flanking-delimiter-run.
-    final isLeftFlanking =
-        !followedByWhitespace &&
+    final isLeftFlanking = !followedByWhitespace &&
         (!followedByPunctuation ||
             precededByWhitespace ||
             precededByPunctuation);
 
     // If it is a right-flanking delimiter run, see
     // https://spec.commonmark.org/0.30/#right-flanking-delimiter-run.
-    final isRightFlanking =
-        !precededByWhitespace &&
+    final isRightFlanking = !precededByWhitespace &&
         (!precededByPunctuation ||
             followedByWhitespace ||
             followedByPunctuation);
@@ -343,7 +336,6 @@ class DelimiterRun implements Delimiter {
   }
 
   @override
-  String toString() =>
-      '<char: $char, length: $length, canOpen: $canOpen, '
+  String toString() => '<char: $char, length: $length, canOpen: $canOpen, '
       'canClose: $canClose>';
 }

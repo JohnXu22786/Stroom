@@ -43,7 +43,7 @@ class AutolinkExtensionSyntax extends InlineSyntax {
       r'[-_.+a-z0-9]+@(?:[-_a-z0-9]+\.)+[-_a-z0-9]*[a-z0-9]';
 
   AutolinkExtensionSyntax()
-    : super('($_linkPattern)|($_emailPattern)', caseSensitive: false);
+      : super('($_linkPattern)|($_emailPattern)', caseSensitive: false);
 
   @override
   bool tryMatch(InlineParser parser, [int? startMatchPos]) {

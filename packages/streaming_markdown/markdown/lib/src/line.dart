@@ -41,5 +41,5 @@ class Line {
   final bool isBlankLine;
 
   Line(this.content, {this.tabRemaining})
-    : isBlankLine = emptyPattern.hasMatch(content);
+      : isBlankLine = emptyPattern.hasMatch(content);
 }

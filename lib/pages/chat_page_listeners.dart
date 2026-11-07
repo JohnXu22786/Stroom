@@ -199,12 +199,21 @@ extension _ChatPageListenersExt on _ChatPageState {
         .whereType<TextSegment>()
         .where((segment) => segment.chunkIndex == next.chunkIndex)
         .lastOrNull;
+    final existingFragments = existingText?.liveTextFragments;
+    final canSeedFragments = existingFragments != null &&
+        existingFragments.fold<int>(
+              0,
+              (length, fragment) => length + fragment.length,
+            ) <=
+            _LiveMarkdownSearchPreview._maxLength;
     final seed = existingText == null ||
             existingText.liveMarkdownAppend != null ||
-            existingText.liveTextFragments != null ||
-            existingText.text.length > _LiveMarkdownSearchPreview._maxLength
+            (existingFragments != null && !canSeedFragments) ||
+            (existingFragments == null &&
+                existingText.text.length >
+                    _LiveMarkdownSearchPreview._maxLength)
         ? ''
-        : existingText.text;
+        : existingFragments?.join() ?? existingText.text;
     final previewKey = '$msgId:${next.chunkIndex}';
     final priorAppendCount = _liveMarkdownAppendCounts[previewKey] ?? 0;
     final managerAppendCount =
@@ -218,17 +227,31 @@ extension _ChatPageListenersExt on _ChatPageState {
       var preview = _liveMarkdownSearchPreviews[previewKey];
       if (preview == null) {
         final chunks =
-            ref.read(chatStreamManagerProvider).textChunksFor(convId);
+            ref.read(chatStreamManagerProvider).publishedTextChunksFor(convId);
         final initialText = next.chunkIndex < chunks.length
             ? chunks[next.chunkIndex]
             : '$seed${next.text}';
         preview = _LiveMarkdownSearchPreview(
           initialText,
           initialUpdates: appendCount,
+          lastSequence: next.sequence,
+        );
+        _liveMarkdownSearchPreviews[previewKey] = preview;
+      } else if (preview.lastSequence != null &&
+          next.sequence > preview.lastSequence! + 1) {
+        final chunks =
+            ref.read(chatStreamManagerProvider).publishedTextChunksFor(convId);
+        final publishedText = next.chunkIndex < chunks.length
+            ? chunks[next.chunkIndex]
+            : '${seed}${next.text}';
+        preview = _LiveMarkdownSearchPreview(
+          publishedText,
+          initialUpdates: appendCount,
+          lastSequence: next.sequence,
         );
         _liveMarkdownSearchPreviews[previewKey] = preview;
       } else {
-        preview.append(next.text);
+        preview.append(next.text, sequence: next.sequence);
       }
     } else {
       _liveMarkdownSearchPreviews.remove(previewKey);

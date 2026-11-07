@@ -267,8 +267,23 @@ class MarkdownWidgetState extends State<MarkdownWidget> {
             widget.incrementalAppend == null);
     final hasNewDelta = widget.incrementalAppend != null &&
         widget.incrementalSequence != _lastIncrementalSequence;
+    final skippedDeltas = sameSession &&
+        widget.incrementalSequence != null &&
+        _lastIncrementalSequence != null &&
+        widget.incrementalSequence! > _lastIncrementalSequence! + 1;
 
-    if (sameSession && _streamSession != null && hasNewDelta) {
+    if (sameSession && _streamSession != null && skippedDeltas) {
+      // Provider notifications and Flutter rebuilds can coalesce. If one or
+      // more append events were replaced before this widget updated, rebuild
+      // from the published chunk snapshot so the skipped bytes remain visible.
+      final update = _streamSession!.reset(
+        widget.fullTextOnInvalidation!.call(),
+        config: widget.config,
+        updatesAlreadyReceived: widget.incrementalInitialUpdateCount,
+      );
+      _lastIncrementalSequence = widget.incrementalSequence;
+      _applyStreamUpdate(update);
+    } else if (sameSession && _streamSession != null && hasNewDelta) {
       final update = _streamSession!.append(
         widget.incrementalAppend!,
         fullTextOnInvalidation: widget.fullTextOnInvalidation!,

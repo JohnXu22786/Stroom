@@ -126,10 +126,9 @@ extension _ChatPageStreamingExt on _ChatPageState {
     _isStreamingActive = true;
     _streamingMsgId = msgId;
     try {
-      final restoredTextChunks = manager.textChunksFor(activeConvId);
+      final restoredTextChunks = manager.publishedTextChunksFor(activeConvId);
       final restoredChunkIndex = restoredTextChunks.length - 1;
-      final restoredAppendCount =
-          manager.textChunkAppendCountFor(activeConvId);
+      final restoredAppendCount = manager.textChunkAppendCountFor(activeConvId);
       final appendCountKey = '$msgId:$restoredChunkIndex';
       final priorAppendCount = _liveMarkdownAppendCounts[appendCountKey] ?? 0;
       if (restoredAppendCount > priorAppendCount) {

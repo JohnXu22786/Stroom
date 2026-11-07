@@ -270,6 +270,22 @@ class ChatStreamManager {
   List<String> textChunksFor(String convId) =>
       _streams[convId]?.textChunks ?? const [];
 
+  /// Text chunks whose append events have already been drained to consumers.
+  /// Reattached page snapshots use this view so pending throttled bytes are
+  /// added exactly once when their append event is published.
+  List<String> publishedTextChunksFor(String convId) =>
+      _streams[convId]?.publishedTextChunks ?? const [];
+
+  /// Published text for a specific chunk, excluding any currently buffered
+  /// delta that has not yet been sent to append-event consumers.
+  String? publishedTextChunkFor(String convId, int chunkIndex) {
+    final chunks = _streams[convId]?.publishedTextChunks;
+    if (chunks == null || chunkIndex < 0 || chunkIndex >= chunks.length) {
+      return null;
+    }
+    return chunks[chunkIndex];
+  }
+
   /// Number of nonempty text deltas already published for the current chunk.
   /// Used to preserve the Markdown live-preview budget when a ChatPage
   /// reattaches to a stream that continued in the background.

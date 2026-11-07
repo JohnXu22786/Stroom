@@ -414,17 +414,22 @@ class _LiveMarkdownSearchPreview {
   final List<String> fragments = [];
   int length = 0;
   int updates = 0;
+  int? lastSequence;
 
   _LiveMarkdownSearchPreview(
     String initialText, {
     int initialUpdates = 0,
+    this.lastSequence,
   }) : updates = initialUpdates {
     _append(initialText, countUpdate: false);
   }
 
   bool get exceedsBudget => length > _maxLength || updates > _maxUpdates;
 
-  void append(String text) => _append(text, countUpdate: true);
+  void append(String text, {int? sequence}) {
+    _append(text, countUpdate: true);
+    lastSequence = sequence ?? lastSequence;
+  }
 
   void _append(String text, {required bool countUpdate}) {
     if (text.isEmpty) return;
@@ -641,11 +646,10 @@ extension _ChatPageBubblesExt on _ChatPageState {
               final convId =
                   streamingConvId ?? ref.read(activeConversationIdProvider);
               if (convId != null && s.chunkIndex != null) {
-                final chunks =
-                    ref.read(chatStreamManagerProvider).textChunksFor(convId);
-                if (s.chunkIndex! < chunks.length) {
-                  return chunks[s.chunkIndex!];
-                }
+                final publishedText = ref
+                    .read(chatStreamManagerProvider)
+                    .publishedTextChunkFor(convId, s.chunkIndex!);
+                if (publishedText != null) return publishedText;
               }
               return '$seed$append';
             }
@@ -669,6 +673,7 @@ extension _ChatPageBubblesExt on _ChatPageState {
                 () => _LiveMarkdownSearchPreview(
                   materializeMarkdownChunk(),
                   initialUpdates: _liveMarkdownAppendCounts[previewKey] ?? 0,
+                  lastSequence: s.liveMarkdownSequence,
                 ),
               );
               if (searchPreview.exceedsBudget) {
@@ -796,17 +801,31 @@ extension _ChatPageBubblesExt on _ChatPageState {
               messageId == _streamingMsgId &&
               segmentIndex == lastTextSegmentIndex &&
               s.chunkIndex != null;
-          final activeSearchPreview = isActiveStreamingMarkdown && hasSearchMatch
-              ? _liveMarkdownSearchPreviews.putIfAbsent(
-                  '$messageId:${s.chunkIndex}',
-                  () => _LiveMarkdownSearchPreview(
-                    s.text,
-                    initialUpdates: _liveMarkdownAppendCounts[
-                          '$messageId:${s.chunkIndex}'] ??
-                        0,
-                  ),
-                )
-              : null;
+          String materializeActiveMarkdownChunk() {
+            if (streamingConvId != null && s.chunkIndex != null) {
+              final publishedText = ref
+                  .read(chatStreamManagerProvider)
+                  .publishedTextChunkFor(streamingConvId, s.chunkIndex!);
+              if (publishedText != null) return publishedText;
+            }
+            return s.text;
+          }
+          final activeMarkdownText = isActiveStreamingMarkdown
+              ? materializeActiveMarkdownChunk()
+              : s.text;
+          final activeSearchPreview =
+              isActiveStreamingMarkdown && hasSearchMatch
+                  ? _liveMarkdownSearchPreviews.putIfAbsent(
+                      '$messageId:${s.chunkIndex}',
+                      () => _LiveMarkdownSearchPreview(
+                        activeMarkdownText,
+                        initialUpdates: _liveMarkdownAppendCounts[
+                                '$messageId:${s.chunkIndex}'] ??
+                            0,
+                        lastSequence: s.liveMarkdownSequence,
+                      ),
+                    )
+                  : null;
           final useRawActiveSearchPreview =
               activeSearchPreview?.exceedsBudget ?? false;
           final messageMarkdownConfig = buildMessageMarkdownConfig(
@@ -814,7 +833,7 @@ extension _ChatPageBubblesExt on _ChatPageState {
             conversationIsStreaming: isStreaming,
             streamingMsgId: _streamingMsgId,
             messageId: messageId,
-            streamingText: s.text,
+            streamingText: activeMarkdownText,
             streamingFenceInfoCache: streamingFenceInfoCache,
           );
           if (cached != null &&
@@ -829,63 +848,66 @@ extension _ChatPageBubblesExt on _ChatPageState {
                   ? SelectableText.rich(
                       TextSpan(
                         children: [
-                          for (final fragment
-                              in activeSearchPreview!.fragments)
+                          for (final fragment in activeSearchPreview!.fragments)
                             TextSpan(text: fragment),
                         ],
                       ),
                       style: Theme.of(context).textTheme.bodyMedium,
                     )
                   : hasSearchMatch
-                  ? MarkdownWidget(
-                      data: s.text,
-                      selectable: true,
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      config: messageMarkdownConfig,
-                      markdownGenerator: buildSearchMarkdownGenerator(
-                        query: _searchQuery,
-                        messageFirstMatchIndex: messageFirstMatchIndex,
-                        occurrenceOffset: occurrenceOffset,
-                        currentMatchIndex: _currentMatchIndex,
-                      ),
-                    )
-                  : MarkdownWidget(
-                      key: isActiveStreamingMarkdown
-                          ? ValueKey(
-                              'streaming-markdown:$messageId:${s.chunkIndex}')
-                          : null,
-                      data: s.text,
-                      selectable: true,
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      incremental: isActiveStreamingMarkdown,
-                      incrementalKey: isActiveStreamingMarkdown
-                          ? '$messageId:${s.chunkIndex}:$isDark'
-                          : null,
-                      incrementalInitialUpdateCount: isActiveStreamingMarkdown
-                          ? _liveMarkdownAppendCounts[
-                                  '$messageId:${s.chunkIndex}'] ??
-                              0
-                          : 0,
-                      activeConfigBuilder: isActiveStreamingMarkdown
-                          ? (activeText) => buildMessageMarkdownConfig(
-                                isDark: isDark,
-                                conversationIsStreaming: isStreaming,
-                                streamingMsgId: _streamingMsgId,
-                                messageId: messageId,
-                                streamingText: activeText,
-                                streamingFenceInfoCache:
-                                    streamingFenceInfoCache,
-                              )
-                          : null,
-                      // Per-segment streaming config: each segment
-                      // is parsed by its OWN MarkdownWidget, so the
-                      // fence-completion check must run against that
-                      // segment's text.
-                      config: messageMarkdownConfig,
-                      markdownGenerator: markdownGenerator,
-                    ),
+                      ? MarkdownWidget(
+                          data: activeMarkdownText,
+                          selectable: true,
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          config: messageMarkdownConfig,
+                          markdownGenerator: buildSearchMarkdownGenerator(
+                            query: _searchQuery,
+                            messageFirstMatchIndex: messageFirstMatchIndex,
+                            occurrenceOffset: occurrenceOffset,
+                            currentMatchIndex: _currentMatchIndex,
+                          ),
+                        )
+                      : MarkdownWidget(
+                          key: isActiveStreamingMarkdown
+                              ? ValueKey(
+                                  'streaming-markdown:$messageId:${s.chunkIndex}')
+                              : null,
+                          data: activeMarkdownText,
+                          selectable: true,
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          incremental: isActiveStreamingMarkdown,
+                          incrementalKey: isActiveStreamingMarkdown
+                              ? '$messageId:${s.chunkIndex}:$isDark'
+                              : null,
+                          incrementalInitialUpdateCount:
+                              isActiveStreamingMarkdown
+                                  ? _liveMarkdownAppendCounts[
+                                          '$messageId:${s.chunkIndex}'] ??
+                                      0
+                                  : 0,
+                          fullTextOnInvalidation: isActiveStreamingMarkdown
+                              ? materializeActiveMarkdownChunk
+                              : null,
+                          activeConfigBuilder: isActiveStreamingMarkdown
+                              ? (activeText) => buildMessageMarkdownConfig(
+                                    isDark: isDark,
+                                    conversationIsStreaming: isStreaming,
+                                    streamingMsgId: _streamingMsgId,
+                                    messageId: messageId,
+                                    streamingText: activeText,
+                                    streamingFenceInfoCache:
+                                        streamingFenceInfoCache,
+                                  )
+                              : null,
+                          // Per-segment streaming config: each segment
+                          // is parsed by its OWN MarkdownWidget, so the
+                          // fence-completion check must run against that
+                          // segment's text.
+                          config: messageMarkdownConfig,
+                          markdownGenerator: markdownGenerator,
+                        ),
             );
             widgets.add(textWidget);
             if (cacheKey != null) {

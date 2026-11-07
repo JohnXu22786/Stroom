@@ -73,7 +73,8 @@ class ColorSwatchSyntax extends InlineSyntax {
         Text(code),
         Element.withTag('span')
           ..attributes['style'] = 'background-color:$code;',
-      ])..attributes['class'] = 'gfm-color_chip',
+      ])
+        ..attributes['class'] = 'gfm-color_chip',
     );
 
     return true;

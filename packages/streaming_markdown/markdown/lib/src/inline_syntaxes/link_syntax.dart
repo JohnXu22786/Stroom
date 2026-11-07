@@ -32,8 +32,8 @@ class LinkSyntax extends DelimiterSyntax {
     Resolver? linkResolver,
     String pattern = r'\[',
     int startCharacter = $lbracket,
-  }) : linkResolver = (linkResolver ?? ((String _, [String? _]) => null)),
-       super(pattern, startCharacter: startCharacter);
+  })  : linkResolver = (linkResolver ?? ((String _, [String? _]) => null)),
+        super(pattern, startCharacter: startCharacter);
 
   @override
   Iterable<Node>? close(

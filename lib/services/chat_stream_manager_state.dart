@@ -197,6 +197,18 @@ class _ConversationStreamState {
     ]);
   }
 
+  /// Text visible to append-event consumers, excluding bytes still waiting in
+  /// the current throttle buffer. Reattached renderers seed from this snapshot
+  /// so a later drain cannot append the same pending bytes twice.
+  List<String> get publishedTextChunks {
+    final current = _currentTextChunk.toString();
+    final publishedLength = current.length - _pendingTextDelta.length;
+    return List<String>.unmodifiable([
+      ..._completedTextChunks,
+      current.substring(0, publishedLength),
+    ]);
+  }
+
   bool get hasTextContent =>
       _completedTextChunks.any((section) => section.isNotEmpty) ||
       _currentTextChunk.length > 0;

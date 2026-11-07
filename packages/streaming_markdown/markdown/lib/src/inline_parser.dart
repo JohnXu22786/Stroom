@@ -23,8 +23,8 @@ import 'inline_syntaxes/text_syntax.dart';
 /// Maintains the internal state needed to parse inline span elements in
 /// Markdown.
 class InlineParser {
-  static final List<InlineSyntax>
-  _defaultSyntaxes = List<InlineSyntax>.unmodifiable(<InlineSyntax>[
+  static final List<InlineSyntax> _defaultSyntaxes =
+      List<InlineSyntax>.unmodifiable(<InlineSyntax>[
     EmailAutolinkSyntax(),
     AutolinkSyntax(),
     LineBreakSyntax(),

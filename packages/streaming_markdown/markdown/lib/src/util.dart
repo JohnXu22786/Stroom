@@ -16,8 +16,9 @@ final _oneOrMoreWhitespacePattern = RegExp('[ \n\r\t]+');
 /// Escapes (`"`), (`<`), (`>`) and (`&`) characters.
 /// Escapes (`'`) if [escapeApos] is `true`.
 String escapeHtml(String html, {bool escapeApos = true}) => HtmlEscape(
-  HtmlEscapeMode(escapeApos: escapeApos, escapeLtGt: true, escapeQuot: true),
-).convert(html);
+      HtmlEscapeMode(
+          escapeApos: escapeApos, escapeLtGt: true, escapeQuot: true),
+    ).convert(html);
 
 /// Escapes (`"`), (`<`) and (`>`) characters.
 String escapeHtmlAttribute(String text) =>
