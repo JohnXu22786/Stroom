@@ -3405,6 +3405,51 @@ void main() {
     );
 
     test(
+      'legacy OCR instruction migration redacts a short password echo after a newline',
+      () {
+        const credential = 'passwordabc123';
+        const instruction = 'The password\nabc123';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-password-short-newline-key-echo',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer password…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+          'retryData': OcrRetrySnapshot.capture(
+            images: const [],
+            instructionContent: instruction,
+          ).toMap(),
+        });
+        final persisted = jsonEncode(task.toMap());
+        final serializedRetryData = (jsonDecode(persisted)
+            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          'The [redacted]',
+        );
+        expect(serializedRetryData['instructionContent'], 'The [redacted]');
+        expect(persisted, isNot(contains(credential)));
+        expect(persisted, isNot(contains('abc123')));
+      },
+    );
+
+    test(
       'legacy OCR instruction migration redacts a lowercase line-broken documentation credential echo',
       () {
         const apiKey = 'documentationfoobarxyz';

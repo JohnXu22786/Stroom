@@ -1415,11 +1415,11 @@ String _legacyOcrLineBreakContinuationAfterOpenMaskPrefix(
   }
   if (prefix.toLowerCase() == 'password') {
     // A common word can be a masked key prefix; only bridge a newline when
-    // the following token also has substantial alphabetic and numeric runs.
+    // the following token has a mixed alphanumeric credential shape.
     return r'(?:[\r\n]+[ \t]*'
-        r'(?=(?=(?:[0-9]*[a-zA-Z]){4})'
-        r'(?=(?:[a-zA-Z]*[0-9]){4})'
-        r'[a-zA-Z0-9]{10,}(?=$|[^a-zA-Z0-9])))?';
+        r'(?=(?=(?:[0-9]*[a-zA-Z]){2})'
+        r'(?=(?:[a-zA-Z]*[0-9]){2})'
+        r'[a-zA-Z0-9]{6,}(?=$|[^a-zA-Z0-9])))?';
   }
   return '';
 }
@@ -1453,15 +1453,16 @@ String? _legacyOcrRedactPasswordCredentialEchoAcrossLineBreak(
     final pattern = RegExp(
       '(^|[^a-zA-Z0-9])${RegExp.escape(prefix)}'
       r'[\r\n]+[ \t]*'
-      r'([a-zA-Z0-9_./+=~-]{10,})(?=$|[^a-zA-Z0-9_./+=~-])',
+      r'([a-zA-Z0-9_./+=~-]{6,})(?=$|[^a-zA-Z0-9_./+=~-])',
       caseSensitive: false,
     );
     final match = pattern.firstMatch(text);
     final token = match?.group(2);
     if (match != null &&
         token != null &&
-        RegExp(r'[a-zA-Z]').allMatches(token).length >= 4 &&
-        RegExp(r'[0-9]').allMatches(token).length >= 4) {
+        token.length >= 6 &&
+        RegExp(r'[a-zA-Z]').allMatches(token).length >= 2 &&
+        RegExp(r'[0-9]').allMatches(token).length >= 2) {
       return text.replaceRange(
         match.start,
         match.end,
