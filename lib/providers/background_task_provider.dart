@@ -1036,8 +1036,16 @@ bool _legacyOcrHasWhitespaceSplitMaskedDocumentationEcho(
       caseSensitive: true,
     );
     for (final match in pattern.allMatches(text)) {
+      final naturalPromptLength =
+          _legacyOcrNaturalReadDocumentationBlueprintPromptLength(
+        text.substring(0, match.start),
+        match.group(2)!,
+      );
+      final echoSuffix = naturalPromptLength == null
+          ? match.group(2)!
+          : match.group(2)!.substring(naturalPromptLength);
       if (_legacyOcrMaskedDocumentationCredentialEchoLength(
-            match.group(2)!,
+            echoSuffix,
             value,
           ) >
           0) {
@@ -1046,6 +1054,18 @@ bool _legacyOcrHasWhitespaceSplitMaskedDocumentationEcho(
     }
   }
   return false;
+}
+
+int? _legacyOcrNaturalReadDocumentationBlueprintPromptLength(
+  String before,
+  String suffix,
+) {
+  if (!RegExp(r'\bread\s+the\s*$', caseSensitive: false).hasMatch(before)) {
+    return null;
+  }
+  return RegExp(r'^\s*blueprints\b', caseSensitive: false)
+      .firstMatch(suffix)
+      ?.end;
 }
 
 int _legacyOcrMaskedDocumentationCredentialEchoLength(
@@ -1838,7 +1858,7 @@ bool _legacyOcrHasDocumentationCredentialEchoAcrossLineBreak(
 ) {
   if (prefix.toLowerCase() != 'documentation' ||
       RegExp(
-        r'^\s*please\s+review\s+the\s+documentation[\r\n]+\s*(?:carefully|visually)[.!?]?\s*$',
+        r'^\s*please\s+review\s+(?:all\s+)?the\s+documentation[\r\n]+\s*(?:carefully|visually)[.!?]?\s*$',
         caseSensitive: false,
       ).hasMatch(text)) {
     return false;
@@ -3216,14 +3236,33 @@ String _legacyOcrRedactWhitespaceSplitMaskedDocumentationEchoes(
       caseSensitive: true,
     );
     sanitized = sanitized.replaceAllMapped(pattern, (match) {
+      final suffix = match.group(4)!;
+      final naturalPromptLength =
+          _legacyOcrNaturalReadDocumentationBlueprintPromptLength(
+        text.substring(0, match.start),
+        suffix,
+      );
+      final echoSuffix = naturalPromptLength == null
+          ? suffix
+          : suffix.substring(naturalPromptLength);
       final credentialEnd = _legacyOcrMaskedDocumentationCredentialEchoLength(
-        match.group(4)!,
+        echoSuffix,
         value,
       );
       if (credentialEnd == 0) {
         return match.group(0)!;
       }
-      final safeTrailingText = match.group(4)!.substring(credentialEnd);
+      if (naturalPromptLength != null) {
+        final leadingWhitespace = echoSuffix.substring(
+          0,
+          echoSuffix.length - echoSuffix.trimLeft().length,
+        );
+        final safeTrailingText = echoSuffix.substring(credentialEnd);
+        return '${match.group(1)}${match.group(2)}${match.group(3)}'
+            '${suffix.substring(0, naturalPromptLength)}'
+            '$leadingWhitespace[redacted]$safeTrailingText';
+      }
+      final safeTrailingText = suffix.substring(credentialEnd);
       return '${match.group(1)}[redacted]$safeTrailingText';
     });
   }
