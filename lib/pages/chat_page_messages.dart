@@ -196,6 +196,9 @@ extension _ChatPageMessagesExt on _ChatPageState {
     _history.clear();
     _chatSegments.clear();
     _streamingSearchOccurrenceCache.clear();
+    _legacyFullReplySnapshots.clear();
+    _legacyFullReplySequences.clear();
+    _legacyFullReplyGenerations.clear();
     _reasoningContents.clear();
     _finalizedMessages.clear();
     _convertedStreamingPlaceholderIds.clear();
@@ -500,6 +503,9 @@ extension _ChatPageMessagesExt on _ChatPageState {
         ..addAll(loadedReasoningContents);
       _finalizedMessages.clear();
       _convertedStreamingPlaceholderIds.clear();
+      _legacyFullReplySnapshots.clear();
+      _legacyFullReplySequences.clear();
+      _legacyFullReplyGenerations.clear();
       _streamingMsgId = null;
       _messageKeys.clear();
       _expandedErrors.clear();

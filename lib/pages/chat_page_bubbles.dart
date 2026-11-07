@@ -861,7 +861,16 @@ extension _ChatPageBubblesExt on _ChatPageState {
               '$messageId:${s.chunkIndex}',
               StreamingFenceInfoCache.new,
             );
+            final searchSourceConvId =
+                streamingConvId ?? ref.read(activeConversationIdProvider);
             String materializeMarkdownChunk() {
+              final legacySnapshot = searchSourceConvId == null
+                  ? null
+                  : _legacyFullReplySnapshots[
+                      '$searchSourceConvId:$messageId'];
+              if (legacySnapshot != null && s.chunkIndex == 0) {
+                return legacySnapshot;
+              }
               final convId =
                   streamingConvId ?? ref.read(activeConversationIdProvider);
               if (convId != null && s.chunkIndex != null) {
@@ -872,9 +881,12 @@ extension _ChatPageBubblesExt on _ChatPageState {
               }
               return '$seed$append';
             }
+            final legacyRenderGeneration = searchSourceConvId == null
+                ? 0
+                : _legacyFullReplyGenerations[
+                        '$searchSourceConvId:$messageId'] ??
+                    0;
 
-            final searchSourceConvId =
-                streamingConvId ?? ref.read(activeConversationIdProvider);
             final searchSourceLength =
                 searchSourceConvId != null && s.chunkIndex != null
                     ? ref
@@ -884,6 +896,12 @@ extension _ChatPageBubblesExt on _ChatPageState {
                           s.chunkIndex!,
                         )
                     : 0;
+            final legacySnapshot = searchSourceConvId == null
+                ? null
+                : _legacyFullReplySnapshots[
+                    '$searchSourceConvId:$messageId'];
+            final effectiveSearchSourceLength =
+                legacySnapshot?.length ?? searchSourceLength;
 
             if (hasSearchMatch &&
                 !(isStreaming &&
@@ -896,7 +914,7 @@ extension _ChatPageBubblesExt on _ChatPageState {
                   .putIfAbsent(cacheKey, _StreamingSearchOccurrenceCount.new);
               final appendCount = occurrenceCounter.countForAppend(
                 append,
-                searchSourceLength,
+                effectiveSearchSourceLength,
                 lowerQuery,
                 sequence: s.liveMarkdownSequence,
               );
@@ -915,7 +933,7 @@ extension _ChatPageBubblesExt on _ChatPageState {
                 () {
                   final initialUpdates =
                       _liveMarkdownAppendCounts[previewKey] ?? 0;
-                  if (searchSourceLength >
+                  if (effectiveSearchSourceLength >
                           _LiveMarkdownSearchPreview._maxLength &&
                       searchSourceConvId != null &&
                       s.chunkIndex != null) {
@@ -993,7 +1011,8 @@ extension _ChatPageBubblesExt on _ChatPageState {
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
                   incremental: true,
-                  incrementalKey: '$messageId:${s.chunkIndex}:$isDark',
+                  incrementalKey:
+                      '$messageId:${s.chunkIndex}:$isDark:$legacyRenderGeneration',
                   incrementalAppend: append,
                   incrementalSequence: s.liveMarkdownSequence,
                   incrementalInitialUpdateCount:

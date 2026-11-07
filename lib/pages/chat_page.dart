@@ -224,6 +224,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
       {};
   final Map<String, int> _liveMarkdownAppendCounts = {};
   final Map<String, List<String>> _livePlainTextFragments = {};
+  final Map<String, String> _legacyFullReplySnapshots = {};
+  final Map<String, int> _legacyFullReplySequences = {};
+  final Map<String, int> _legacyFullReplyGenerations = {};
 
   String? _streamingMsgId;
   final Object _streamPageOwner = Object();
