@@ -16621,7 +16621,7 @@ abstract class AppLocalizations {
   /// Status shown while the log list retries loading.
   ///
   /// In en, this message translates to:
-  /// **'{count, plural, other{Refreshing automatically (attempt {count})...}}'**
+  /// **'{count, plural, =1{Refreshing automatically (attempt {count})...} other{Refreshing automatically (attempts {count})...}}'**
   String appLogAutoRefresh(int count);
 
   /// No description provided for @appLogWillBeCreated.

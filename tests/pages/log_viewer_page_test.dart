@@ -59,6 +59,20 @@ void main() {
               : '日志保留期限：只保留最近 15 天的日志，超过 15 天会自动清理。'),
           findsOneWidget,
         );
+        final appLocalizations =
+            AppLocalizations.of(tester.element(find.byType(LogViewerPage)))!;
+        expect(
+          appLocalizations.appLogAutoRefresh(1),
+          isEnglish
+              ? 'Refreshing automatically (attempt 1)...'
+              : '自动刷新中 (第 1 次)...',
+        );
+        expect(
+          appLocalizations.appLogAutoRefresh(2),
+          isEnglish
+              ? 'Refreshing automatically (attempts 2)...'
+              : '自动刷新中 (第 2 次)...',
+        );
       }
     });
 
@@ -103,7 +117,7 @@ void main() {
         expect(find.text(rawContent), findsOneWidget);
 
         await tester.tap(find.byTooltip(isEnglish ? 'Copy all' : '复制全文'));
-        await tester.pump();
+        await tester.pumpAndSettle();
         final copyCall = platformCalls
             .where((call) => call.method == 'Clipboard.setData')
             .lastOrNull;

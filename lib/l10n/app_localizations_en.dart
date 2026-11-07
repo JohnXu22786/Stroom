@@ -10005,7 +10005,8 @@ class AppLocalizationsEn extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Refreshing automatically (attempt $count)...',
+      other: 'Refreshing automatically (attempts $count)...',
+      one: 'Refreshing automatically (attempt $count)...',
     );
     return '$_temp0';
   }
@@ -20105,7 +20106,8 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Refreshing automatically (attempt $count)...',
+      other: 'Refreshing automatically (attempts $count)...',
+      one: 'Refreshing automatically (attempt $count)...',
     );
     return '$_temp0';
   }

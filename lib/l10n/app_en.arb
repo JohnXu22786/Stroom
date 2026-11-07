@@ -5666,7 +5666,7 @@
   },
   "appLogWebUnsupported": "Local logs are not supported on web",
   "appLogNoFiles": "No log files yet",
-  "appLogAutoRefresh": "{count, plural, other{Refreshing automatically (attempt {count})...}}",
+  "appLogAutoRefresh": "{count, plural, =1{Refreshing automatically (attempt {count})...} other{Refreshing automatically (attempts {count})...}}",
   "@appLogAutoRefresh": {
     "description": "Status shown while the log list retries loading.",
     "placeholders": {
