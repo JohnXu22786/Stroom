@@ -232,8 +232,7 @@ extension _ChatPageListenersExt on _ChatPageState {
     if (next == prior) return;
 
     final isAppend = next.startsWith(prior);
-    final sequence = (_legacyFullReplySequences[key] ?? 0) +
-        (isAppend ? 1 : 2);
+    final sequence = (_legacyFullReplySequences[key] ?? 0) + (isAppend ? 1 : 2);
     _legacyFullReplySnapshots[key] = next;
     _legacyFullReplySequences[key] = sequence;
 
@@ -293,10 +292,10 @@ extension _ChatPageListenersExt on _ChatPageState {
     final managerAppendCount =
         ref.read(chatStreamManagerProvider).textChunkAppendCountFor(convId);
     final nextAppendCount = priorAppendCount + 1;
-    final appendCount = legacySnapshot == null &&
-            managerAppendCount > nextAppendCount
-        ? managerAppendCount
-        : nextAppendCount;
+    final appendCount =
+        legacySnapshot == null && managerAppendCount > nextAppendCount
+            ? managerAppendCount
+            : nextAppendCount;
     _liveMarkdownAppendCounts[previewKey] = appendCount;
     if (_isSearching) {
       var preview = _liveMarkdownSearchPreviews[previewKey];

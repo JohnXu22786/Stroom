@@ -866,8 +866,7 @@ extension _ChatPageBubblesExt on _ChatPageState {
             String materializeMarkdownChunk() {
               final legacySnapshot = searchSourceConvId == null
                   ? null
-                  : _legacyFullReplySnapshots[
-                      '$searchSourceConvId:$messageId'];
+                  : _legacyFullReplySnapshots['$searchSourceConvId:$messageId'];
               if (legacySnapshot != null && s.chunkIndex == 0) {
                 return legacySnapshot;
               }
@@ -881,6 +880,7 @@ extension _ChatPageBubblesExt on _ChatPageState {
               }
               return '$seed$append';
             }
+
             final legacyRenderGeneration = searchSourceConvId == null
                 ? 0
                 : _legacyFullReplyGenerations[
@@ -898,8 +898,7 @@ extension _ChatPageBubblesExt on _ChatPageState {
                     : 0;
             final legacySnapshot = searchSourceConvId == null
                 ? null
-                : _legacyFullReplySnapshots[
-                    '$searchSourceConvId:$messageId'];
+                : _legacyFullReplySnapshots['$searchSourceConvId:$messageId'];
             final effectiveSearchSourceLength =
                 legacySnapshot?.length ?? searchSourceLength;
 
