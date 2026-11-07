@@ -150,7 +150,7 @@ void main() {
 
         await tester.tap(find.byTooltip(l10n.conversationSearch));
         await tester.pumpAndSettle();
-        expect(find.text(l10n.conversationSearchHint), findsOneWidget);
+        expect(find.text(l10n.searchPanelHint), findsOneWidget);
       });
     }
   });
