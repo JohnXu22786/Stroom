@@ -5912,5 +5912,9 @@
       }
     }
   },
-  "appLogCopyDone": "Copied all log content"
+  "appLogCopyDone": "Copied all log content",
+  "iosContinuedTaskTitle": "Background task",
+  "@iosContinuedTaskTitle": {
+    "description": "Title shown in iOS continued-task system UI."
+  }
 }

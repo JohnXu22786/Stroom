@@ -46,11 +46,11 @@ class IosContinuedTaskService {
   ///
   /// 幂等：原生侧在已有激活任务时跳过提交；任务被系统终止后
   /// 下一次同步会自动重新建立保护（App 回到前台时）。
-  Future<void> submit({String? title}) async {
+  Future<void> submit({required String title}) async {
     if (!isSupported) return;
     try {
       await _channel.invokeMethod('submit', {
-        'title': title ?? 'Stroom 后台任务',
+        'title': title,
       });
     } catch (e) {
       debugPrint('[IosContinuedTask] submit failed: $e');
