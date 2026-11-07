@@ -6012,5 +6012,12 @@
   "mermaidCatalogActionAddRequirement": "添加需求",
   "mermaidCatalogActionAddElement": "添加元素",
   "mermaidCatalogActionAddVerification": "添加验证",
-  "mermaidCatalogGanttDependencyBaseTask": "依赖基准任务",  "mermaidCatalogGanttDependentTaskName": "后续任务"
+  "mermaidCatalogGanttDependencyBaseTask": "依赖基准任务",  "mermaidCatalogGanttDependentTaskName": "后续任务",
+  "startupMigrationTitle": "数据格式升级完成",
+  "startupMigrationBody": "数据已迁移到新版格式。请重启应用以使用新版本。",
+  "startupMigrationExit": "退出应用",
+  "startupMigrationRestart": "立即重启",
+  "startupRecoveryTitle": "应用启动异常",
+  "startupRecoveryFallbackMessage": "启动过程中遇到数据格式问题，已自动修复，请重试。",
+  "startupRecoveryRetry": "重试"
 }

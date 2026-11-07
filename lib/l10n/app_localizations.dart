@@ -63,7 +63,7 @@ import 'app_localizations_zh.dart';
 /// property.
 abstract class AppLocalizations {
   AppLocalizations(String locale)
-    : localeName = intl.Intl.canonicalizedLocale(locale.toString());
+      : localeName = intl.Intl.canonicalizedLocale(locale.toString());
 
   final String localeName;
 
@@ -86,11 +86,11 @@ abstract class AppLocalizations {
   /// of delegates is preferred or required.
   static const List<LocalizationsDelegate<dynamic>> localizationsDelegates =
       <LocalizationsDelegate<dynamic>>[
-        delegate,
-        GlobalMaterialLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-      ];
+    delegate,
+    GlobalMaterialLocalizations.delegate,
+    GlobalCupertinoLocalizations.delegate,
+    GlobalWidgetsLocalizations.delegate,
+  ];
 
   /// A list of this localizations delegate's supported locales.
   static const List<Locale> supportedLocales = <Locale>[
@@ -17550,6 +17550,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Follow-up task'**
   String get mermaidCatalogGanttDependentTaskName;
+
+  /// No description provided for @startupMigrationTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Data format upgrade complete'**
+  String get startupMigrationTitle;
+
+  /// No description provided for @startupMigrationBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Your data has been migrated to the new format. Restart the app to use the updated version.'**
+  String get startupMigrationBody;
+
+  /// No description provided for @startupMigrationExit.
+  ///
+  /// In en, this message translates to:
+  /// **'Exit app'**
+  String get startupMigrationExit;
+
+  /// No description provided for @startupMigrationRestart.
+  ///
+  /// In en, this message translates to:
+  /// **'Restart now'**
+  String get startupMigrationRestart;
+
+  /// No description provided for @startupRecoveryTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'App startup error'**
+  String get startupRecoveryTitle;
+
+  /// No description provided for @startupRecoveryFallbackMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'A data format issue was encountered during startup and repaired automatically. Please try again.'**
+  String get startupRecoveryFallbackMessage;
+
+  /// No description provided for @startupRecoveryRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get startupRecoveryRetry;
 }
 
 class _AppLocalizationsDelegate

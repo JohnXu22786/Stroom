@@ -10016,6 +10016,27 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get mermaidCatalogGanttDependentTaskName => '后续任务';
+
+  @override
+  String get startupMigrationTitle => '数据格式升级完成';
+
+  @override
+  String get startupMigrationBody => '数据已迁移到新版格式。请重启应用以使用新版本。';
+
+  @override
+  String get startupMigrationExit => '退出应用';
+
+  @override
+  String get startupMigrationRestart => '立即重启';
+
+  @override
+  String get startupRecoveryTitle => '应用启动异常';
+
+  @override
+  String get startupRecoveryFallbackMessage => '启动过程中遇到数据格式问题，已自动修复，请重试。';
+
+  @override
+  String get startupRecoveryRetry => '重试';
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).
@@ -20029,4 +20050,25 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get mermaidCatalogGanttDependentTaskName => '后续任务';
+
+  @override
+  String get startupMigrationTitle => '数据格式升级完成';
+
+  @override
+  String get startupMigrationBody => '数据已迁移到新版格式。请重启应用以使用新版本。';
+
+  @override
+  String get startupMigrationExit => '退出应用';
+
+  @override
+  String get startupMigrationRestart => '立即重启';
+
+  @override
+  String get startupRecoveryTitle => '应用启动异常';
+
+  @override
+  String get startupRecoveryFallbackMessage => '启动过程中遇到数据格式问题，已自动修复，请重试。';
+
+  @override
+  String get startupRecoveryRetry => '重试';
 }
