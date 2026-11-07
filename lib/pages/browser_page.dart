@@ -169,29 +169,74 @@ InAppWebViewSettings _buildSettings({required bool isDesktopMode}) {
 class UserScript {
   final String name;
   final String code;
-  final List<String> matches;
 
-  UserScript({required this.name, required this.code, required this.matches});
+  UserScript({
+    required this.name,
+    required String code,
+    List<String>? matches,
+  }) : code = matches == null ? code : _migrateLegacyMatches(code, matches);
+
+  /// Match rules declared in the userscript metadata block.
+  ///
+  /// An empty list means the script has no `@match` restrictions and runs on
+  /// every page.
+  List<String> get matches => _parseMatchMetadata(code);
 
   Map<String, dynamic> toMap() => {
         'name': name,
         'code': code,
-        'matches': matches,
       };
 
-  factory UserScript.fromMap(Map<String, dynamic> map) => UserScript(
-        name: map['name'] as String? ?? '',
-        code: map['code'] as String? ?? '',
-        matches: (map['matches'] as List?)?.cast<String>() ?? [],
-      );
+  factory UserScript.fromMap(Map<String, dynamic> map) {
+    final legacyMatches = map['matches'];
+    return UserScript(
+      name: map['name'] is String ? map['name'] as String : '',
+      code: map['code'] is String ? map['code'] as String : '',
+      matches: legacyMatches is List
+          ? legacyMatches.whereType<String>().toList()
+          : null,
+    );
+  }
+
+  static List<String> _parseMatchMetadata(String code) {
+    final start = code.indexOf('// ==UserScript==');
+    if (start < 0) return const [];
+    final end = code.indexOf('// ==/UserScript==', start);
+    if (end < 0) return const [];
+    final header = code.substring(start, end);
+    final matchLine = RegExp(r'^//[ \t]*@match(?:[ \t]+(.*?))?[ \t]*$');
+    final patterns = <String>[];
+    for (final line in header.split('\n')) {
+      final match = matchLine.firstMatch(line.trim());
+      if (match != null) patterns.add(match.group(1)?.trim() ?? '');
+    }
+    return patterns;
+  }
+
+  static String _migrateLegacyMatches(String code, List<String> matches) {
+    final additions = matches.map((match) => match.trim()).toList();
+
+    final start = code.indexOf('// ==UserScript==');
+    final end = start < 0 ? -1 : code.indexOf('// ==/UserScript==', start);
+    final metadata = additions.map((match) => '// @match $match').join('\n');
+    if (start >= 0 && end >= 0) {
+      if (metadata.isEmpty) return code;
+      return '${code.substring(0, end)}\n$metadata\n${code.substring(end)}';
+    }
+    if (additions.isEmpty) return code;
+
+    final header = '// ==UserScript==\n$metadata\n// ==/UserScript==\n';
+    return '$header${code.isEmpty ? '' : '\n$code'}';
+  }
 
   /// Whether [url] matches any of this script's match patterns
   /// (e.g. `*://*.example.com/*`).
   ///
-  /// An empty match list — or an empty pattern — means "run everywhere".
+  /// No `@match` metadata — or an empty `@match` value — means "run everywhere".
   bool matchesUrl(String url) {
-    if (matches.isEmpty) return true;
-    for (final pattern in matches) {
+    final patterns = matches;
+    if (patterns.isEmpty) return true;
+    for (final pattern in patterns) {
       final trimmed = pattern.trim();
       if (trimmed.isEmpty) return true;
       if (_urlMatchesPattern(url, trimmed)) return true;
@@ -530,10 +575,14 @@ class _BrowserPageState extends State<BrowserPage> {
       if (raw == null) return;
       final decoded = jsonDecode(raw);
       if (decoded is! List) return;
+      final needsMigration = decoded.any(
+        (entry) => entry is Map && entry.containsKey('matches'),
+      );
       _scripts = decoded
           .whereType<Map<String, dynamic>>()
           .map(UserScript.fromMap)
           .toList();
+      if (needsMigration) await _saveScripts();
     } catch (e) {
       debugPrint('_loadScripts failed: $e');
     }
@@ -1300,22 +1349,18 @@ class _ScriptEditDialog extends StatefulWidget {
 class _ScriptEditDialogState extends State<_ScriptEditDialog> {
   late TextEditingController _nameCtrl;
   late TextEditingController _codeCtrl;
-  late TextEditingController _matchesCtrl;
 
   @override
   void initState() {
     super.initState();
     _nameCtrl = TextEditingController(text: widget.script.name);
     _codeCtrl = TextEditingController(text: widget.script.code);
-    _matchesCtrl =
-        TextEditingController(text: widget.script.matches.join('\n'));
   }
 
   @override
   void dispose() {
     _nameCtrl.dispose();
     _codeCtrl.dispose();
-    _matchesCtrl.dispose();
     super.dispose();
   }
 
@@ -1351,17 +1396,6 @@ class _ScriptEditDialogState extends State<_ScriptEditDialog> {
                 ),
                 style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _matchesCtrl,
-                maxLines: 3,
-                decoration: InputDecoration(
-                  labelText: l10n.browserMatchUrls,
-                  border: OutlineInputBorder(),
-                  hintText: l10n.browserScriptMatchHint,
-                  isDense: true,
-                ),
-              ),
             ],
           ),
         ),
@@ -1378,11 +1412,6 @@ class _ScriptEditDialogState extends State<_ScriptEditDialog> {
               UserScript(
                 name: _nameCtrl.text,
                 code: _codeCtrl.text,
-                matches: _matchesCtrl.text
-                    .split('\n')
-                    .map((l) => l.trim())
-                    .where((l) => l.isNotEmpty)
-                    .toList(),
               ),
             );
           },
