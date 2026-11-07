@@ -454,7 +454,7 @@ Future<String> _fetchUserscript(String sourceUrl) async {
           mediaType == 'text/plain' ||
           mediaType == 'application/octet-stream');
   if ((isJson && !isJavaScriptMime) ||
-      looksLikeError ||
+      (looksLikeError && !isJavaScriptMime) ||
       (isPlainTextMime && !(hasUserscriptHeader && hasUserscriptEnd))) {
     throw const FormatException('notScript');
   }
