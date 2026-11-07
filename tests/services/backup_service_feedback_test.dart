@@ -33,7 +33,7 @@ class _MissingBackupPicker extends FilePickerPlatform {
       _MissingBackupFile();
 }
 
-final class _MissingBackupFile extends PlatformFile {
+base class _MissingBackupFile extends PlatformFile {
   @override
   String get name => 'missing.zip';
 

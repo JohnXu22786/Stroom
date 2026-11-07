@@ -1396,6 +1396,7 @@
       }
     }
   },
+  "batchDlgPresetWriteFailed": "The preset could not be saved.",
   "batchDlgDeleteFailed": "Delete failed: {error}",
   "@batchDlgDeleteFailed": {
     "placeholders": {

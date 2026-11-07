@@ -4022,6 +4022,9 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get batchDlgPresetWriteFailed => 'The preset could not be saved.';
+
+  @override
   String batchDlgDeleteFailed(String error) {
     return 'Delete failed: $error';
   }
@@ -13884,6 +13887,9 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String batchDlgSaveFailed(String error) {
     return 'Save failed: $error';
   }
+
+  @override
+  String get batchDlgPresetWriteFailed => 'The preset could not be saved.';
 
   @override
   String batchDlgDeleteFailed(String error) {
