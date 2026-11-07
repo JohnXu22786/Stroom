@@ -1,6 +1,6 @@
 // 供应商设置面板推理参数部分（从模型页完整移植）测试：
 // - 推理开关 / 推理力度 / 附加推理参数三段结构
-// - 无开关时推理力度添加按钮禁用
+// - 推理力度与附加参数可独立于推理开关配置
 // - 供应商级推理力度允许仅填参数名（选项值可选）
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -209,7 +209,7 @@ void main() {
       expect(find.text('添加推理参数'), findsOneWidget);
     });
 
-    testWidgets('effort add button disabled until a toggle exists', (
+    testWidgets('effort add button works without a toggle', (
       tester,
     ) async {
       await _openAndSave(tester, config: _baseConfig(), tapSave: false);
@@ -220,7 +220,57 @@ void main() {
           matching: find.byType(TextButton),
         ),
       );
-      expect(addEffortButton.onPressed, isNull, reason: '无推理开关时不可添加推理力度');
+      expect(addEffortButton.onPressed, isNotNull);
+      await tester.tap(find.text('添加推理力度'));
+      await tester.pumpAndSettle();
+      expect(find.byIcon(Icons.tune), findsOneWidget);
+    });
+
+    testWidgets('saves provider effort and extra params without a toggle', (
+      tester,
+    ) async {
+      final saved = await _openAndSave(
+        tester,
+        config: ProviderConfigItem(
+          providerName: 'Test Provider',
+          host: 'https://api.example.com/v1',
+          key: 'sk-test',
+          reasoningParams: [
+            ReasoningParam(
+              paramName: 'reasoning_effort',
+              isEffortParam: true,
+              options: ['low', 'high'],
+            ),
+            ReasoningParam(
+              paramName: 'thinking.budget',
+              options: ['1024', '4096'],
+            ),
+          ],
+        ),
+      );
+
+      expect(saved, isNotNull);
+      expect(saved!.reasoningParams.map((param) => param.paramName), [
+        'reasoning_effort',
+        'thinking.budget',
+      ]);
+    });
+
+    testWidgets('rejects an unusable extra param without a toggle', (
+      tester,
+    ) async {
+      final saved = await _openAndSave(
+        tester,
+        config: ProviderConfigItem(
+          providerName: 'Test Provider',
+          host: 'https://api.example.com/v1',
+          key: 'sk-test',
+          reasoningParams: [ReasoningParam(paramName: 'thinking.budget')],
+        ),
+      );
+
+      expect(saved, isNull);
+      expect(find.text('推理参数必须至少添加一个选项值。'), findsOneWidget);
     });
 
     testWidgets('provider-level effort param with name only is persisted', (

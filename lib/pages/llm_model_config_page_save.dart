@@ -140,23 +140,6 @@ extension _SaveExt on _LlmModelConfigPageState {
     }
 
     // 验证推理参数（全量：页面工作副本即最终保存内容）
-    final toggleParam = _toggleReasoningParam;
-    final hasNonToggleParams = _reasoningParams.any(
-      (p) => !p.isReasoningToggle && p.paramName.trim().isNotEmpty,
-    );
-
-    // Check 1: If there are any reasoning params, the toggle must exist and be filled
-    if (hasNonToggleParams &&
-        (toggleParam == null || !toggleParam.isFilledToggle)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(AppLocalizations.of(context)!.modelReasoningIncomplete),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return;
-    }
-
     // Check 2: 附加推理参数（非力度、非布尔）若填写了参数名，必须至少
     // 有一个选项值。推理力度参数例外：勾选块允许全部取消；布尔类型
     // 无参数值（聊天面板提供开/关切换）。
