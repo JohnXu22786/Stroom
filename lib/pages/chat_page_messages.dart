@@ -198,6 +198,7 @@ extension _ChatPageMessagesExt on _ChatPageState {
     _streamingSearchOccurrenceCache.clear();
     _reasoningContents.clear();
     _finalizedMessages.clear();
+    _convertedStreamingPlaceholderIds.clear();
     _streamingMsgId = null;
     _isStreamingActive = false;
     _messageKeys.clear();
@@ -498,6 +499,7 @@ extension _ChatPageMessagesExt on _ChatPageState {
         ..clear()
         ..addAll(loadedReasoningContents);
       _finalizedMessages.clear();
+      _convertedStreamingPlaceholderIds.clear();
       _streamingMsgId = null;
       _messageKeys.clear();
       _expandedErrors.clear();

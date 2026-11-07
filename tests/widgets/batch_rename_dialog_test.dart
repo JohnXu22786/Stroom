@@ -220,7 +220,11 @@ void main() {
     Future<void> saveWithName(String name) async {
       await tester.tap(find.widgetWithText(TextButton, 'Save preset'));
       await tester.pumpAndSettle();
-      await tester.enterText(find.byType(TextField), name);
+      final presetNameField = find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byType(TextField),
+      );
+      await tester.enterText(presetNameField, name);
       await tester.tap(find.widgetWithText(FilledButton, 'Save'));
       await tester.pumpAndSettle();
     }
