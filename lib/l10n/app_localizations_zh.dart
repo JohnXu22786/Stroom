@@ -9198,10 +9198,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get mermaidEditorSwapPreviewAndEditor => '交换预览和编辑面板';
 
   @override
-  String get mermaidEditorCodeLabel => '代码';
+  String get mermaidEditorCodeLabel => 'Mermaid 代码';
 
   @override
   String get mermaidEditorCodeHint => '输入 Mermaid 代码...';
+
+  @override
+  String get mermaidEditorSplitCodeLabel => '代码';
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).
@@ -18397,8 +18400,11 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get mermaidEditorSwapPreviewAndEditor => '交换预览和编辑面板';
 
   @override
-  String get mermaidEditorCodeLabel => '代码';
+  String get mermaidEditorCodeLabel => 'Mermaid 代码';
 
   @override
   String get mermaidEditorCodeHint => '输入 Mermaid 代码...';
+
+  @override
+  String get mermaidEditorSplitCodeLabel => '代码';
 }

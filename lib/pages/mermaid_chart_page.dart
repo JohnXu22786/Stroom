@@ -909,7 +909,7 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
               Icon(Icons.code, size: 14, color: cs.onSurfaceVariant),
               const SizedBox(width: 4),
               Text(
-                AppLocalizations.of(context)!.mermaidEditorCodeLabel,
+                AppLocalizations.of(context)!.mermaidEditorSplitCodeLabel,
                 style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
               ),
               const Expanded(child: Divider(thickness: 0.5)),

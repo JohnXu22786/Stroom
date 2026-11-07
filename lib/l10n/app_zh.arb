@@ -5493,6 +5493,7 @@
     }
   },
   "mermaidEditorSwapPreviewAndEditor": "交换预览和编辑面板",
-  "mermaidEditorCodeLabel": "代码",
-  "mermaidEditorCodeHint": "输入 Mermaid 代码..."
+  "mermaidEditorCodeLabel": "Mermaid 代码",
+  "mermaidEditorCodeHint": "输入 Mermaid 代码...",
+  "mermaidEditorSplitCodeLabel": "代码"
 }

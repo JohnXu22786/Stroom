@@ -16143,7 +16143,7 @@ abstract class AppLocalizations {
   /// No description provided for @mermaidEditorCodeLabel.
   ///
   /// In en, this message translates to:
-  /// **'Code'**
+  /// **'Mermaid code'**
   String get mermaidEditorCodeLabel;
 
   /// No description provided for @mermaidEditorCodeHint.
@@ -16151,6 +16151,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Enter Mermaid code...'**
   String get mermaidEditorCodeHint;
+
+  /// No description provided for @mermaidEditorSplitCodeLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Code'**
+  String get mermaidEditorSplitCodeLabel;
 }
 
 class _AppLocalizationsDelegate

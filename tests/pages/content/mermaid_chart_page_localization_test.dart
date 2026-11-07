@@ -15,6 +15,7 @@ Widget _buildTestApp({String? initialCode}) {
       supportedLocales: AppLocalizations.supportedLocales,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       home: MermaidChartPage(
+        key: ValueKey(initialCode),
         initialCode: initialCode,
         initialShowPreview: false,
       ),
@@ -41,7 +42,7 @@ void main() {
       expect(find.text('Mermaid Chart Editor'), findsOneWidget);
       expect(find.byTooltip('Switch view mode'), findsOneWidget);
       expect(find.byTooltip('Save to Text Storage'), findsOneWidget);
-      expect(find.text('Code'), findsOneWidget);
+      expect(find.text('Mermaid code'), findsOneWidget);
       expect(
         (tester.widget<TextField>(find.byType(TextField))).controller!.text,
         source,

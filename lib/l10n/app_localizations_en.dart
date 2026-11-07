@@ -9701,10 +9701,13 @@ class AppLocalizationsEn extends AppLocalizations {
       'Swap preview and editor panels';
 
   @override
-  String get mermaidEditorCodeLabel => 'Code';
+  String get mermaidEditorCodeLabel => 'Mermaid code';
 
   @override
   String get mermaidEditorCodeHint => 'Enter Mermaid code...';
+
+  @override
+  String get mermaidEditorSplitCodeLabel => 'Code';
 }
 
 /// The translations for English, as used in the United States (`en_US`).
@@ -19403,8 +19406,11 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
       'Swap preview and editor panels';
 
   @override
-  String get mermaidEditorCodeLabel => 'Code';
+  String get mermaidEditorCodeLabel => 'Mermaid code';
 
   @override
   String get mermaidEditorCodeHint => 'Enter Mermaid code...';
+
+  @override
+  String get mermaidEditorSplitCodeLabel => 'Code';
 }
