@@ -486,6 +486,9 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
       final byId = {
         for (final conversation in conversations) conversation.id: conversation,
       };
+      final messageIndexesByConversationId = <String, Map<String, int>>{};
+      final indexedMessagesByConversationId =
+          <String, List<ChatMessage>>{};
       await for (final line in _readStreamCheckpointRecords(
         webKeys: webKeys,
         nativePath: nativeJournalPath,
@@ -556,9 +559,20 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
                   messages: [],
                 );
           }
-          final checkpointMessageExists = conversation.messages.any(
-            (message) => message.id == messageId,
-          );
+          var messageIndexes = messageIndexesByConversationId[conversationId];
+          if (messageIndexes == null ||
+              !identical(
+                indexedMessagesByConversationId[conversationId],
+                conversation.messages,
+              )) {
+            messageIndexes =
+                _buildCheckpointMessageIndex(conversation.messages);
+            messageIndexesByConversationId[conversationId] = messageIndexes;
+            indexedMessagesByConversationId[conversationId] =
+                conversation.messages;
+          }
+          final checkpointMessageExists =
+              messageIndexes.containsKey(messageId);
           final checkpointUpdatedAt =
               DateTime.tryParse(record['updatedAt'] as String? ?? '');
           final checkpointMetadataIsCurrent = checkpointUpdatedAt != null &&
@@ -574,14 +588,15 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
             conversation,
             baseConversationRaw is Map ? baseConversationRaw['messages'] : null,
             deletedMessages[conversationId] ?? const <String>{},
+            messageIndexes,
           );
           _mergeCheckpointHistoryMessages(
             conversation,
             record['historyMessages'],
             deletedMessages[conversationId] ?? const <String>{},
+            messageIndexes,
           );
-          final existingIndex = conversation.messages
-              .indexWhere((message) => message.id == messageId);
+          final existingIndex = messageIndexes[messageId] ?? -1;
           final existing =
               existingIndex < 0 ? null : conversation.messages[existingIndex];
           final textSections = existing?.textSections?.toList() ??
@@ -679,6 +694,7 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
           );
           if (existingIndex < 0) {
             conversation.messages.add(message);
+            messageIndexes[messageId] = conversation.messages.length - 1;
           } else {
             conversation.messages[existingIndex] = message;
           }
@@ -807,10 +823,19 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
     return textOffset == text.length;
   }
 
+  Map<String, int> _buildCheckpointMessageIndex(List<ChatMessage> messages) {
+    final indexes = <String, int>{};
+    for (var index = 0; index < messages.length; index++) {
+      indexes.putIfAbsent(messages[index].id, () => index);
+    }
+    return indexes;
+  }
+
   void _mergeCheckpointHistoryMessages(
     Conversation conversation,
     dynamic rawMessages,
     Set<String> deletedMessageIds,
+    Map<String, int> messageIndexes,
   ) {
     if (rawMessages is! List) return;
     for (final raw in rawMessages) {
@@ -818,17 +843,20 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
       try {
         final message = ChatMessage.fromMap(Map<String, dynamic>.from(raw));
         if (deletedMessageIds.contains(message.id)) continue;
-        if (conversation.messages
-            .any((existing) => existing.id == message.id)) {
-          continue;
-        }
+        if (messageIndexes.containsKey(message.id)) continue;
         final insertionIndex = conversation.messages.indexWhere(
           (existing) => existing.createdAt.isAfter(message.createdAt),
         );
         if (insertionIndex < 0) {
           conversation.messages.add(message);
+          messageIndexes[message.id] = conversation.messages.length - 1;
         } else {
           conversation.messages.insert(insertionIndex, message);
+          for (final id in messageIndexes.keys.toList()) {
+            final index = messageIndexes[id]!;
+            if (index >= insertionIndex) messageIndexes[id] = index + 1;
+          }
+          messageIndexes[message.id] = insertionIndex;
         }
       } catch (e) {
         debugPrint(
