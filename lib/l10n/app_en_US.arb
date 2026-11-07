@@ -582,6 +582,7 @@
   "chatSaveFailed": "Save failed: {error}",
   "chatSavedToAppFiles": "Saved to app files: {path}",
   "chatSelectModel": "Select a model",
+  "chatModelFallback": "Model",
   "chatNoModelsAvailable": "No models available",
   "chatAvailableTools": "Available tools",
   "chatNoToolsAvailable": "No tools available",

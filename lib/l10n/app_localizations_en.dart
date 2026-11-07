@@ -1758,6 +1758,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatSelectModel => 'Select a model';
 
   @override
+  String get chatModelFallback => 'Model';
+
+  @override
   String get chatNoModelsAvailable => 'No models available';
 
   @override
@@ -11857,6 +11860,9 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get chatSelectModel => 'Select a model';
+
+  @override
+  String get chatModelFallback => 'Model';
 
   @override
   String get chatNoModelsAvailable => 'No models available';

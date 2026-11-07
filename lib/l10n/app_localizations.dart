@@ -2972,6 +2972,12 @@ abstract class AppLocalizations {
   /// **'Select a model'**
   String get chatSelectModel;
 
+  /// No description provided for @chatModelFallback.
+  ///
+  /// In en, this message translates to:
+  /// **'Model'**
+  String get chatModelFallback;
+
   /// No description provided for @chatNoModelsAvailable.
   ///
   /// In en, this message translates to:
