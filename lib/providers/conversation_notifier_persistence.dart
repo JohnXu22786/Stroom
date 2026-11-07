@@ -487,8 +487,7 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
         for (final conversation in conversations) conversation.id: conversation,
       };
       final messageIndexesByConversationId = <String, Map<String, int>>{};
-      final indexedMessagesByConversationId =
-          <String, List<ChatMessage>>{};
+      final indexedMessagesByConversationId = <String, List<ChatMessage>>{};
       await for (final line in _readStreamCheckpointRecords(
         webKeys: webKeys,
         nativePath: nativeJournalPath,
