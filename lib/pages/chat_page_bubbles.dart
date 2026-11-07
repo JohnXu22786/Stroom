@@ -936,6 +936,19 @@ extension _ChatPageBubblesExt on _ChatPageState {
                           _LiveMarkdownSearchPreview._maxLength &&
                       searchSourceConvId != null &&
                       s.chunkIndex != null) {
+                    if (legacySnapshot != null && s.chunkIndex == 0) {
+                      final previewHalfLength =
+                          _LiveMarkdownSearchPreview._previewHalfLength;
+                      return _LiveMarkdownSearchPreview.fromExcerpt(
+                        legacySnapshot.substring(0, previewHalfLength),
+                        legacySnapshot.substring(
+                          legacySnapshot.length - previewHalfLength,
+                        ),
+                        sourceLength: legacySnapshot.length,
+                        initialUpdates: initialUpdates,
+                        lastSequence: s.liveMarkdownSequence,
+                      );
+                    }
                     final excerpt = ref
                         .read(chatStreamManagerProvider)
                         .publishedTextChunkExcerptFor(
