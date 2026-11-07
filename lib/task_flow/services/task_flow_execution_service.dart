@@ -1407,6 +1407,8 @@ class TaskFlowExecutionService {
               bgNotifier: bgNotifier,
               providerEntries: providerEntries,
               cancelToken: _activeRequestCancelTokens[execId],
+              localizations:
+                  appLocalizationsForLocale(_ref.read(localeProvider)),
             ),
             def.outputType);
       case BlockType.ocr:

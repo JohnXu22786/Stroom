@@ -10598,6 +10598,137 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get startupRecoveryRetry => 'Retry';
+
+  @override
+  String asrFailureDiagnosticFormat(
+    Object category,
+    Object stage,
+    Object chunk,
+    Object message,
+  ) {
+    return 'ASR $category at $stage$chunk: $message';
+  }
+
+  @override
+  String asrFailureChunkPosition(Object index, Object count) {
+    return ', chunk $index/$count';
+  }
+
+  @override
+  String asrFailureRequestFailed(Object detail) {
+    return 'Request failed: $detail';
+  }
+
+  @override
+  String asrChunkAllFailed(Object count) {
+    return 'Chunked transcription failed ($count chunks, none succeeded)';
+  }
+
+  @override
+  String asrChunkIncomplete(Object succeeded, Object count) {
+    return 'Chunked transcription is incomplete ($succeeded/$count chunks succeeded)';
+  }
+
+  @override
+  String asrChunkSucceeded(Object detail) {
+    return 'Succeeded: $detail';
+  }
+
+  @override
+  String asrChunkFailed(Object detail) {
+    return 'Failed: $detail';
+  }
+
+  @override
+  String asrChunkUncertain(Object detail) {
+    return 'Outcome uncertain: $detail';
+  }
+
+  @override
+  String asrChunkDetails(
+    Object index,
+    Object start,
+    Object end,
+    Object status,
+  ) {
+    return 'Chunk $index ($start–${end}s) $status';
+  }
+
+  @override
+  String asrChunkCheckpointFailure(Object detail) {
+    return 'Saving chunk status failed: $detail';
+  }
+
+  @override
+  String get asrChunkUncertainGuidance =>
+      'Request outcome is uncertain. Retrying has stopped to avoid duplicate submissions. Select the audio again to create a new task.';
+
+  @override
+  String asrFailureChunkIndex(Object index) {
+    return ', chunk $index';
+  }
+
+  @override
+  String get asrChunkDetailsSeparator => '; ';
+
+  @override
+  String asrRecognitionFailed(Object detail) {
+    return 'ASR recognition failed: $detail';
+  }
+
+  @override
+  String get asrFailureCategoryAuthentication => 'authentication';
+
+  @override
+  String get asrFailureCategoryRateLimit => 'rate limit';
+
+  @override
+  String get asrFailureCategorySizeLimit => 'size limit';
+
+  @override
+  String get asrFailureCategoryNetwork => 'network';
+
+  @override
+  String get asrFailureCategoryResponseParsing => 'response parsing';
+
+  @override
+  String get asrFailureCategoryLocalProcessing => 'local processing';
+
+  @override
+  String get asrFailureCategoryProvider => 'provider';
+
+  @override
+  String get asrFailureCategoryUnknown => 'unknown';
+
+  @override
+  String get asrFailureStagePreprocessing => 'preprocessing';
+
+  @override
+  String get asrFailureStageEncoding => 'encoding';
+
+  @override
+  String get asrFailureStageValidation => 'validation';
+
+  @override
+  String get asrFailureStageRequest => 'request';
+
+  @override
+  String get asrFailureStageUploading => 'uploading';
+
+  @override
+  String get asrFailureStageWaiting => 'waiting';
+
+  @override
+  String get asrFailureStageReceiving => 'receiving';
+
+  @override
+  String get asrFailureStageResponse => 'response';
+
+  @override
+  String get asrFailureStageParsing => 'parsing';
+
+  @override
+  String get asrFailureStageStorage => 'storage';
 }
 
 /// The translations for English, as used in the United States (`en_US`).
@@ -21193,4 +21324,135 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get startupRecoveryRetry => 'Retry';
+
+  @override
+  String asrFailureDiagnosticFormat(
+    Object category,
+    Object stage,
+    Object chunk,
+    Object message,
+  ) {
+    return 'ASR $category at $stage$chunk: $message';
+  }
+
+  @override
+  String asrFailureChunkPosition(Object index, Object count) {
+    return ', chunk $index/$count';
+  }
+
+  @override
+  String asrFailureRequestFailed(Object detail) {
+    return 'Request failed: $detail';
+  }
+
+  @override
+  String asrChunkAllFailed(Object count) {
+    return 'Chunked transcription failed ($count chunks, none succeeded)';
+  }
+
+  @override
+  String asrChunkIncomplete(Object succeeded, Object count) {
+    return 'Chunked transcription is incomplete ($succeeded/$count chunks succeeded)';
+  }
+
+  @override
+  String asrChunkSucceeded(Object detail) {
+    return 'Succeeded: $detail';
+  }
+
+  @override
+  String asrChunkFailed(Object detail) {
+    return 'Failed: $detail';
+  }
+
+  @override
+  String asrChunkUncertain(Object detail) {
+    return 'Outcome uncertain: $detail';
+  }
+
+  @override
+  String asrChunkDetails(
+    Object index,
+    Object start,
+    Object end,
+    Object status,
+  ) {
+    return 'Chunk $index ($start–${end}s) $status';
+  }
+
+  @override
+  String asrChunkCheckpointFailure(Object detail) {
+    return 'Saving chunk status failed: $detail';
+  }
+
+  @override
+  String get asrChunkUncertainGuidance =>
+      'Request outcome is uncertain. Retrying has stopped to avoid duplicate submissions. Select the audio again to create a new task.';
+
+  @override
+  String asrFailureChunkIndex(Object index) {
+    return ', chunk $index';
+  }
+
+  @override
+  String get asrChunkDetailsSeparator => '; ';
+
+  @override
+  String asrRecognitionFailed(Object detail) {
+    return 'ASR recognition failed: $detail';
+  }
+
+  @override
+  String get asrFailureCategoryAuthentication => 'authentication';
+
+  @override
+  String get asrFailureCategoryRateLimit => 'rate limit';
+
+  @override
+  String get asrFailureCategorySizeLimit => 'size limit';
+
+  @override
+  String get asrFailureCategoryNetwork => 'network';
+
+  @override
+  String get asrFailureCategoryResponseParsing => 'response parsing';
+
+  @override
+  String get asrFailureCategoryLocalProcessing => 'local processing';
+
+  @override
+  String get asrFailureCategoryProvider => 'provider';
+
+  @override
+  String get asrFailureCategoryUnknown => 'unknown';
+
+  @override
+  String get asrFailureStagePreprocessing => 'preprocessing';
+
+  @override
+  String get asrFailureStageEncoding => 'encoding';
+
+  @override
+  String get asrFailureStageValidation => 'validation';
+
+  @override
+  String get asrFailureStageRequest => 'request';
+
+  @override
+  String get asrFailureStageUploading => 'uploading';
+
+  @override
+  String get asrFailureStageWaiting => 'waiting';
+
+  @override
+  String get asrFailureStageReceiving => 'receiving';
+
+  @override
+  String get asrFailureStageResponse => 'response';
+
+  @override
+  String get asrFailureStageParsing => 'parsing';
+
+  @override
+  String get asrFailureStageStorage => 'storage';
 }

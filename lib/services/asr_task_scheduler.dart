@@ -1020,8 +1020,10 @@ class AsrTaskScheduler {
           await _writeRetryData(job);
         } catch (_) {}
       }
+      final formattedError =
+          formatAsrTaskFailure(error, notifier.localizations);
       final safeError = AsrRetryConfigSnapshot.sanitizeDiagnosticText(
-        '$error',
+        formattedError,
         configuredApiKey: config.apiKey,
       );
       for (var index = 0; index < task.steps.length; index++) {

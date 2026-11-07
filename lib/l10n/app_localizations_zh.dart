@@ -10040,6 +10040,136 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get startupRecoveryRetry => '重试';
+
+  @override
+  String asrFailureDiagnosticFormat(
+    Object category,
+    Object stage,
+    Object chunk,
+    Object message,
+  ) {
+    return 'ASR $category（$stage）$chunk：$message';
+  }
+
+  @override
+  String asrFailureChunkPosition(Object index, Object count) {
+    return '，第 $index/$count 段';
+  }
+
+  @override
+  String asrFailureRequestFailed(Object detail) {
+    return '请求失败：$detail';
+  }
+
+  @override
+  String asrChunkAllFailed(Object count) {
+    return '分段转写全部失败（共 $count 段，均未成功）';
+  }
+
+  @override
+  String asrChunkIncomplete(Object succeeded, Object count) {
+    return '分段转写未完成（$succeeded/$count 段成功）';
+  }
+
+  @override
+  String asrChunkSucceeded(Object detail) {
+    return '成功：$detail';
+  }
+
+  @override
+  String asrChunkFailed(Object detail) {
+    return '失败：$detail';
+  }
+
+  @override
+  String asrChunkUncertain(Object detail) {
+    return '结果不确定：$detail';
+  }
+
+  @override
+  String asrChunkDetails(
+    Object index,
+    Object start,
+    Object end,
+    Object status,
+  ) {
+    return '第 $index 段（$start–$end 秒）$status';
+  }
+
+  @override
+  String asrChunkCheckpointFailure(Object detail) {
+    return '保存分段状态失败：$detail';
+  }
+
+  @override
+  String get asrChunkUncertainGuidance => '请求结果不确定。为避免重复提交，已停止重试。请重新选择音频后新建任务。';
+
+  @override
+  String asrFailureChunkIndex(Object index) {
+    return '，分段 $index';
+  }
+
+  @override
+  String get asrChunkDetailsSeparator => '；';
+
+  @override
+  String asrRecognitionFailed(Object detail) {
+    return '语音识别失败：$detail';
+  }
+
+  @override
+  String get asrFailureCategoryAuthentication => '认证失败';
+
+  @override
+  String get asrFailureCategoryRateLimit => '请求过于频繁';
+
+  @override
+  String get asrFailureCategorySizeLimit => '文件过大';
+
+  @override
+  String get asrFailureCategoryNetwork => '网络';
+
+  @override
+  String get asrFailureCategoryResponseParsing => '响应解析';
+
+  @override
+  String get asrFailureCategoryLocalProcessing => '本地处理';
+
+  @override
+  String get asrFailureCategoryProvider => '服务商';
+
+  @override
+  String get asrFailureCategoryUnknown => '未知';
+
+  @override
+  String get asrFailureStagePreprocessing => '预处理';
+
+  @override
+  String get asrFailureStageEncoding => '编码';
+
+  @override
+  String get asrFailureStageValidation => '验证';
+
+  @override
+  String get asrFailureStageRequest => '请求';
+
+  @override
+  String get asrFailureStageUploading => '上传';
+
+  @override
+  String get asrFailureStageWaiting => '等待';
+
+  @override
+  String get asrFailureStageReceiving => '接收响应';
+
+  @override
+  String get asrFailureStageResponse => '响应';
+
+  @override
+  String get asrFailureStageParsing => '解析';
+
+  @override
+  String get asrFailureStageStorage => '保存';
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).
@@ -20077,4 +20207,134 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get startupRecoveryRetry => '重试';
+
+  @override
+  String asrFailureDiagnosticFormat(
+    Object category,
+    Object stage,
+    Object chunk,
+    Object message,
+  ) {
+    return 'ASR $category（$stage）$chunk：$message';
+  }
+
+  @override
+  String asrFailureChunkPosition(Object index, Object count) {
+    return '，第 $index/$count 段';
+  }
+
+  @override
+  String asrFailureRequestFailed(Object detail) {
+    return '请求失败：$detail';
+  }
+
+  @override
+  String asrChunkAllFailed(Object count) {
+    return '分段转写全部失败（共 $count 段，均未成功）';
+  }
+
+  @override
+  String asrChunkIncomplete(Object succeeded, Object count) {
+    return '分段转写未完成（$succeeded/$count 段成功）';
+  }
+
+  @override
+  String asrChunkSucceeded(Object detail) {
+    return '成功：$detail';
+  }
+
+  @override
+  String asrChunkFailed(Object detail) {
+    return '失败：$detail';
+  }
+
+  @override
+  String asrChunkUncertain(Object detail) {
+    return '结果不确定：$detail';
+  }
+
+  @override
+  String asrChunkDetails(
+    Object index,
+    Object start,
+    Object end,
+    Object status,
+  ) {
+    return '第 $index 段（$start–$end 秒）$status';
+  }
+
+  @override
+  String asrChunkCheckpointFailure(Object detail) {
+    return '保存分段状态失败：$detail';
+  }
+
+  @override
+  String get asrChunkUncertainGuidance => '请求结果不确定。为避免重复提交，已停止重试。请重新选择音频后新建任务。';
+
+  @override
+  String asrFailureChunkIndex(Object index) {
+    return '，分段 $index';
+  }
+
+  @override
+  String get asrChunkDetailsSeparator => '；';
+
+  @override
+  String asrRecognitionFailed(Object detail) {
+    return '语音识别失败：$detail';
+  }
+
+  @override
+  String get asrFailureCategoryAuthentication => '认证失败';
+
+  @override
+  String get asrFailureCategoryRateLimit => '请求过于频繁';
+
+  @override
+  String get asrFailureCategorySizeLimit => '文件过大';
+
+  @override
+  String get asrFailureCategoryNetwork => '网络';
+
+  @override
+  String get asrFailureCategoryResponseParsing => '响应解析';
+
+  @override
+  String get asrFailureCategoryLocalProcessing => '本地处理';
+
+  @override
+  String get asrFailureCategoryProvider => '服务商';
+
+  @override
+  String get asrFailureCategoryUnknown => '未知';
+
+  @override
+  String get asrFailureStagePreprocessing => '预处理';
+
+  @override
+  String get asrFailureStageEncoding => '编码';
+
+  @override
+  String get asrFailureStageValidation => '验证';
+
+  @override
+  String get asrFailureStageRequest => '请求';
+
+  @override
+  String get asrFailureStageUploading => '上传';
+
+  @override
+  String get asrFailureStageWaiting => '等待';
+
+  @override
+  String get asrFailureStageReceiving => '接收响应';
+
+  @override
+  String get asrFailureStageResponse => '响应';
+
+  @override
+  String get asrFailureStageParsing => '解析';
+
+  @override
+  String get asrFailureStageStorage => '保存';
 }
