@@ -5643,5 +5643,12 @@
   "catCatchWebInstallExtension": "Install the CatCatch browser extension and try again.",
   "catCatchWebAuthorAttribution": "Author: 笨笨猫 (xifangczy). Free and open source.",
   "catCatchWebOfficialWarning": "Make sure it is the author’s version; avoid paid or imitation versions.",
-  "catCatchWebGitHubAddress": "GitHub: https://github.com/xifangczy/cat-catch"
+  "catCatchWebGitHubAddress": "GitHub: https://github.com/xifangczy/cat-catch",
+  "catCatchLoginRequired": "This feature requires a signed-in account. Sign in using the browser in the top-right corner.",
+  "catCatchNoUsableMedia": "No usable media resource was found. Check the URL and make sure the website is reachable.",
+  "catCatchRedownloadFileMissing": "The download failed because the downloaded file is missing.",
+  "catCatchRedownloadPathEmpty": "The download failed because the downloaded file path is empty.",
+  "catCatchWebBrowserRequired": "This page cannot expose its resources without a browser environment. Try using the feature on mobile or desktop, or paste a direct video or audio file URL.",
+  "catCatchPlaylistNoSegments": "The playlist has no downloadable segments.",
+  "catCatchDownloadedSourceMissing": "The downloaded source file is missing. Please download it again."
 }

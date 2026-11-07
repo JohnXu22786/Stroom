@@ -16533,6 +16533,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'GitHub: https://github.com/xifangczy/cat-catch'**
   String get catCatchWebGitHubAddress;
+
+  /// No description provided for @catCatchLoginRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'This feature requires a signed-in account. Sign in using the browser in the top-right corner.'**
+  String get catCatchLoginRequired;
+
+  /// No description provided for @catCatchNoUsableMedia.
+  ///
+  /// In en, this message translates to:
+  /// **'No usable media resource was found. Check the URL and make sure the website is reachable.'**
+  String get catCatchNoUsableMedia;
+
+  /// No description provided for @catCatchRedownloadFileMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'The download failed because the downloaded file is missing.'**
+  String get catCatchRedownloadFileMissing;
+
+  /// No description provided for @catCatchRedownloadPathEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'The download failed because the downloaded file path is empty.'**
+  String get catCatchRedownloadPathEmpty;
+
+  /// No description provided for @catCatchWebBrowserRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'This page cannot expose its resources without a browser environment. Try using the feature on mobile or desktop, or paste a direct video or audio file URL.'**
+  String get catCatchWebBrowserRequired;
+
+  /// No description provided for @catCatchPlaylistNoSegments.
+  ///
+  /// In en, this message translates to:
+  /// **'The playlist has no downloadable segments.'**
+  String get catCatchPlaylistNoSegments;
+
+  /// No description provided for @catCatchDownloadedSourceMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'The downloaded source file is missing. Please download it again.'**
+  String get catCatchDownloadedSourceMissing;
 }
 
 class _AppLocalizationsDelegate

@@ -9,6 +9,7 @@ import '../../utils/retry_helper.dart';
 
 import 'package:dio/dio.dart';
 
+import '../../providers/locale_provider.dart';
 import '../config/default_rules.dart';
 import '../models/catcatch_task.dart';
 import '../models/media_resource.dart';
@@ -87,7 +88,8 @@ class TaskExecutor {
       );
     } catch (e) {
       if (e is UnsupportedError) {
-        throw Exception('此功能需要登录账户后使用，请使用右上角浏览器内登录功能');
+        throw Exception(
+            appLocalizationsForLocale(locale).catCatchLoginRequired);
       }
       rethrow;
     }
@@ -144,6 +146,7 @@ class TaskExecutor {
               steps: steps,
               onUpdate: onUpdate,
               cancelToken: cancelToken,
+              locale: locale,
             );
             detectedMedia = detectedResources;
             // Update local task with page title so downstream steps can use it
@@ -232,7 +235,9 @@ class TaskExecutor {
             selectedMedia ??=
                 detectedMedia.isNotEmpty ? detectedMedia.first : null;
             if (selectedMedia == null) {
-              throw Exception('未能获取到可用媒体资源，请检查URL是否正确以及目标网站是否可达');
+              throw Exception(
+                appLocalizationsForLocale(locale).catCatchNoUsableMedia,
+              );
             }
             final autoDetail =
                 detectedMedia.length == 1 ? '剩余1个结果，自动进入下载' : '自动选择第1个结果，进入下载';
@@ -299,7 +304,10 @@ class TaskExecutor {
                 locale: locale,
               );
               if (downloadedFilePath == null || downloadedFilePath.isEmpty) {
-                throw Exception('重新下载失败，下载文件不存在');
+                throw Exception(
+                  appLocalizationsForLocale(locale)
+                      .catCatchRedownloadFileMissing,
+                );
               }
               // 更新任务状态中的下载路径
               onUpdate(task.copyWith(downloadedFilePath: downloadedFilePath));
@@ -307,7 +315,9 @@ class TaskExecutor {
 
             final localPath = downloadedFilePath;
             if (localPath == null || localPath.isEmpty) {
-              throw Exception('重新下载失败，下载文件路径为空');
+              throw Exception(
+                appLocalizationsForLocale(locale).catCatchRedownloadPathEmpty,
+              );
             }
 
             // Only formats that actually need MP4 conversion require
@@ -358,6 +368,7 @@ class TaskExecutor {
               inputPath: localPath,
               onUpdate: onUpdate,
               cancelToken: cancelToken,
+              locale: locale,
             );
             break;
           case StepType.saving:
@@ -448,6 +459,7 @@ class TaskExecutor {
     required List<StepStatus> steps,
     required void Function(CatCatchTask) onUpdate,
     CancelToken? cancelToken,
+    Locale? locale,
   }) async {
     var capturedPageTitle = task.title;
 
@@ -506,8 +518,7 @@ class TaskExecutor {
         // Skip WebView sniffing and fail with a clear message instead.
         if (kIsWeb) {
           throw Exception(
-            '网页无法直接获取资源（需要浏览器环境），请尝试在移动端或桌面端使用该功能。'
-            '或者直接粘贴视频/音频文件的直链地址。',
+            appLocalizationsForLocale(locale).catCatchWebBrowserRequired,
           );
         }
         debugPrint(
@@ -564,8 +575,7 @@ class TaskExecutor {
         // Skip WebView sniffing and fail with a clear message instead.
         if (kIsWeb) {
           throw Exception(
-            '网页无法直接获取资源（需要浏览器环境），请尝试在移动端或桌面端使用该功能。'
-            '或者直接粘贴视频/音频文件的直链地址。',
+            appLocalizationsForLocale(locale).catCatchWebBrowserRequired,
           );
         }
         var (webViewResources, pageTitle) = await _fallbackToWebView(
@@ -815,7 +825,9 @@ class TaskExecutor {
     CancelToken? cancelToken,
     Locale? locale,
   }) async {
-    if (media == null) throw Exception('未能获取到可用媒体资源，请检查URL是否正确以及目标网站是否可达');
+    if (media == null) {
+      throw Exception(appLocalizationsForLocale(locale).catCatchNoUsableMedia);
+    }
 
     // Web 端无法绕过 CORS 下载，引导用户安装浏览器扩展
     if (kIsWeb) {
@@ -837,7 +849,11 @@ class TaskExecutor {
           final segmentResources = detectedMedia
               .where((m) => !m.isPlaylist && m.initiator == media.url)
               .toList();
-          if (segmentResources.isEmpty) throw Exception('播放列表没有可下载的分段');
+          if (segmentResources.isEmpty) {
+            throw Exception(
+              appLocalizationsForLocale(locale).catCatchPlaylistNoSegments,
+            );
+          }
           final segments = segmentResources.map((m) => m.url).toList();
           final segmentRanges = segmentResources.map((m) {
             final start = m.byteRangeStart;
@@ -948,10 +964,14 @@ class TaskExecutor {
     required String inputPath,
     required void Function(CatCatchTask) onUpdate,
     CancelToken? cancelToken,
+    Locale? locale,
   }) async {
     // 防御性检查
     if (!File(inputPath).existsSync()) {
-      throw FileSystemException('下载源文件不存在，请重新下载', inputPath);
+      throw FileSystemException(
+        appLocalizationsForLocale(locale).catCatchDownloadedSourceMissing,
+        inputPath,
+      );
     }
     final appDirPath = await AppStorage.directory;
     final outputDir = p.join(appDirPath, 'catcatch', 'converted');
