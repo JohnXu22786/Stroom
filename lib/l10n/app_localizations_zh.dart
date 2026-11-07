@@ -8387,7 +8387,6 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get browserScriptCode => '脚本代码 (JavaScript)';
 
-
   @override
   String get browserAddScriptMethod => '选择添加方式';
 
@@ -8422,7 +8421,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get browserScriptImportInvalidUrl => '请输入有效的 HTTPS URL。';
 
   @override
-  String get browserScriptImportUnsupportedUrl => '请使用 Greasy Fork 的 .user.js 地址或 GitHub Raw 地址。';
+  String get browserScriptImportUnsupportedUrl =>
+      '请使用 Greasy Fork 的 .user.js 地址或 GitHub Raw 地址。';
 
   @override
   String get browserScriptImportRedirectedUrl => '该 URL 跳转到了不受支持或不安全的地址。';
@@ -17885,7 +17885,6 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   @override
   String get browserScriptCode => '脚本代码 (JavaScript)';
 
-
   @override
   String get browserAddScriptMethod => '选择添加方式';
 
@@ -17920,7 +17919,8 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get browserScriptImportInvalidUrl => '请输入有效的 HTTPS URL。';
 
   @override
-  String get browserScriptImportUnsupportedUrl => '请使用 Greasy Fork 的 .user.js 地址或 GitHub Raw 地址。';
+  String get browserScriptImportUnsupportedUrl =>
+      '请使用 Greasy Fork 的 .user.js 地址或 GitHub Raw 地址。';
 
   @override
   String get browserScriptImportRedirectedUrl => '该 URL 跳转到了不受支持或不安全的地址。';

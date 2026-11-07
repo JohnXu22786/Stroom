@@ -14912,7 +14912,6 @@ abstract class AppLocalizations {
   /// No description provided for @browserScriptImportHttpError.
   String browserScriptImportHttpError(Object status);
 
-
   /// No description provided for @browserCancel.
   ///
   /// In en, this message translates to:

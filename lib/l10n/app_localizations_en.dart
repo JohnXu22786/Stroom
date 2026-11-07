@@ -8834,7 +8834,6 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get browserScriptCode => 'Script code (JavaScript)';
 
-
   @override
   String get browserAddScriptMethod => 'Choose how to add a script';
 
@@ -8848,7 +8847,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get browserScriptTrustWarningTitle => 'Only import scripts you trust';
 
   @override
-  String get browserScriptTrustWarning => 'Only add scripts you trust, or they may leak data. Scripts can read or modify webpage content.';
+  String get browserScriptTrustWarning =>
+      'Only add scripts you trust, or they may leak data. Scripts can read or modify webpage content.';
 
   @override
   String get browserContinue => 'Continue';
@@ -8869,16 +8869,20 @@ class AppLocalizationsEn extends AppLocalizations {
   String get browserScriptImportInvalidUrl => 'Enter a valid HTTPS URL.';
 
   @override
-  String get browserScriptImportUnsupportedUrl => 'Use a Greasy Fork .user.js URL or a GitHub Raw URL.';
+  String get browserScriptImportUnsupportedUrl =>
+      'Use a Greasy Fork .user.js URL or a GitHub Raw URL.';
 
   @override
-  String get browserScriptImportRedirectedUrl => 'The URL redirected to an unsupported or insecure address.';
+  String get browserScriptImportRedirectedUrl =>
+      'The URL redirected to an unsupported or insecure address.';
 
   @override
-  String get browserScriptImportNotScript => 'The response is empty or does not appear to be a JavaScript script.';
+  String get browserScriptImportNotScript =>
+      'The response is empty or does not appear to be a JavaScript script.';
 
   @override
-  String get browserScriptImportNetworkError => 'Could not fetch the script. Check the URL and your connection.';
+  String get browserScriptImportNetworkError =>
+      'Could not fetch the script. Check the URL and your connection.';
 
   @override
   String browserScriptImportHttpError(Object status) {
@@ -18852,7 +18856,6 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   @override
   String get browserScriptCode => 'Script code (JavaScript)';
 
-
   @override
   String get browserAddScriptMethod => 'Choose how to add a script';
 
@@ -18866,7 +18869,8 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String get browserScriptTrustWarningTitle => 'Only import scripts you trust';
 
   @override
-  String get browserScriptTrustWarning => 'Only add scripts you trust, or they may leak data. Scripts can read or modify webpage content.';
+  String get browserScriptTrustWarning =>
+      'Only add scripts you trust, or they may leak data. Scripts can read or modify webpage content.';
 
   @override
   String get browserContinue => 'Continue';
@@ -18887,16 +18891,20 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String get browserScriptImportInvalidUrl => 'Enter a valid HTTPS URL.';
 
   @override
-  String get browserScriptImportUnsupportedUrl => 'Use a Greasy Fork .user.js URL or a GitHub Raw URL.';
+  String get browserScriptImportUnsupportedUrl =>
+      'Use a Greasy Fork .user.js URL or a GitHub Raw URL.';
 
   @override
-  String get browserScriptImportRedirectedUrl => 'The URL redirected to an unsupported or insecure address.';
+  String get browserScriptImportRedirectedUrl =>
+      'The URL redirected to an unsupported or insecure address.';
 
   @override
-  String get browserScriptImportNotScript => 'The response is empty or does not appear to be a JavaScript script.';
+  String get browserScriptImportNotScript =>
+      'The response is empty or does not appear to be a JavaScript script.';
 
   @override
-  String get browserScriptImportNetworkError => 'Could not fetch the script. Check the URL and your connection.';
+  String get browserScriptImportNetworkError =>
+      'Could not fetch the script. Check the URL and your connection.';
 
   @override
   String browserScriptImportHttpError(Object status) {

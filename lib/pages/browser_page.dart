@@ -321,8 +321,8 @@ String? _userscriptMetadataName(String code) {
   final end = code.indexOf('// ==/UserScript==', start);
   if (end < 0) return null;
   final header = code.substring(start, end);
-  final nameLine = RegExp(
-      r'^//[ \t]*@name(?::[A-Za-z0-9-]+)?(?:[ \t]+(.*?))?[ \t]*$');
+  final nameLine =
+      RegExp(r'^//[ \t]*@name(?::[A-Za-z0-9-]+)?(?:[ \t]+(.*?))?[ \t]*$');
   for (final line in header.split('\n')) {
     final match = nameLine.firstMatch(line.trim());
     final name = match?.group(1)?.trim();
@@ -331,40 +331,8 @@ String? _userscriptMetadataName(String code) {
   return null;
 }
 
-String _normalizeUserscriptUrl(String value) {
-  final uri = Uri.tryParse(value.trim());
-  if (uri == null ||
-      uri.scheme.toLowerCase() != 'https' ||
-      uri.host.isEmpty ||
-      uri.port != 443 ||
-      uri.userInfo.isNotEmpty) {
-    throw const FormatException('invalidUrl');
-  }
-  final host = uri.host.toLowerCase();
-  if (host == 'github.com') {
-    final parts = uri.pathSegments;
-    final blobIndex = parts.indexOf('blob');
-    if (blobIndex == 2 && parts.length > 4) {
-      final rawPath = [...parts.take(2), ...parts.skip(3)].join('/');
-      return Uri.https('raw.githubusercontent.com', '/$rawPath').toString();
-    }
-  }
-  final isGreasyFork = host == 'greasyfork.org' ||
-      host == 'www.greasyfork.org' ||
-      host == 'update.greasyfork.org';
-  final isGithubRaw = host == 'raw.githubusercontent.com';
-  if ((!isGreasyFork && !isGithubRaw) ||
-      (isGreasyFork && !uri.path.toLowerCase().endsWith('.user.js'))) {
-    throw const FormatException('unsupportedUrl');
-  }
-  if (host == 'greasyfork.org' || host == 'www.greasyfork.org') {
-    return uri.replace(host: 'update.greasyfork.org').toString();
-  }
-  return uri.toString();
-}
-
 Future<String> _fetchUserscript(String sourceUrl) async {
-  var uri = Uri.parse(_normalizeUserscriptUrl(sourceUrl));
+  var uri = Uri.parse(normalizeUserscriptUrl(sourceUrl));
   bool isTrustedUri(Uri candidate) {
     final host = candidate.host.toLowerCase();
     return candidate.scheme == 'https' &&
@@ -385,8 +353,7 @@ Future<String> _fetchUserscript(String sourceUrl) async {
       }
       uri = response.responseUrl;
     }
-    final status = response.statusCode;
-    if (status < 300 || status >= 400) break;
+    if (!response.isRedirect) break;
     final location = response.location;
     if (location == null || redirects == 5) {
       throw const FormatException('redirectedUrl');
@@ -398,66 +365,12 @@ Future<String> _fetchUserscript(String sourceUrl) async {
     }
     if (!isTrustedUri(uri)) throw const FormatException('redirectedUrl');
   }
-  if (response == null ||
-      response.statusCode < 200 ||
-      response.statusCode >= 300 ||
-      !isTrustedUri(uri)) {
+  if (response == null || !response.isSuccess || !isTrustedUri(uri)) {
     throw const FormatException('redirectedUrl');
   }
   final source = response.body;
-  if (source == null || source.trim().isEmpty) {
-    throw const FormatException('notScript');
-  }
-  final contentType = response.contentType?.toLowerCase();
-  final mediaType = contentType?.split(';').first.trim();
-  const javaScriptMimeTypes = {
-    'application/javascript',
-    'text/javascript',
-    'application/ecmascript',
-    'text/ecmascript',
-    'application/x-ecmascript',
-    'text/x-ecmascript',
-    'application/x-javascript',
-    'text/x-javascript',
-  };
-  if (mediaType == 'text/html' ||
-      (mediaType != null &&
-          !javaScriptMimeTypes.contains(mediaType) &&
-          mediaType != 'text/plain' &&
-          mediaType != 'application/octet-stream') ||
-      RegExp(r'^\s*<(?:!doctype\s+html|html\b)', caseSensitive: false)
-          .hasMatch(source)) {
-    throw const FormatException('notScript');
-  }
-  final hasUserscriptHeader = RegExp(
-          r'^\s*// ==UserScript==\s*$',
-          multiLine: true)
-      .hasMatch(source);
-  final hasUserscriptEnd = RegExp(
-          r'^\s*// ==/UserScript==\s*$',
-          multiLine: true)
-      .hasMatch(source);
-  final isJavaScriptMime = javaScriptMimeTypes.contains(mediaType);
-  var isJson = false;
-  try {
-    jsonDecode(source);
-    isJson = true;
-  } on FormatException {
-    // JavaScript source isn't necessarily valid JSON.
-  }
-  final looksLikeError = RegExp(
-    r'^\s*(?:access denied|permission denied|unauthorized|forbidden|not found|error\b|failed\b|request failed|cannot get\b|could not\b|bad gateway|service unavailable|rate limit\b|too many requests|http\s+\d{3})',
-    caseSensitive: false,
-  ).hasMatch(source);
-  final isPlainTextMime = !isJavaScriptMime &&
-      (mediaType == null ||
-          mediaType == 'text/plain' ||
-          mediaType == 'application/octet-stream');
-  if ((isJson && !isJavaScriptMime) ||
-      (looksLikeError && !isJavaScriptMime) ||
-      (isPlainTextMime && !(hasUserscriptHeader && hasUserscriptEnd))) {
-    throw const FormatException('notScript');
-  }
+  if (source == null) throw const FormatException('notScript');
+  validateUserscriptResponse(source, contentType: response.contentType);
   return source;
 }
 
@@ -1684,7 +1597,8 @@ class _ScriptImportDialogState extends State<_ScriptImportDialog> {
     } on UserscriptHttpException catch (e) {
       if (!mounted) return;
       final l10n = AppLocalizations.of(context)!;
-      setState(() => _error = l10n.browserScriptImportHttpError('${e.statusCode}'));
+      setState(
+          () => _error = l10n.browserScriptImportHttpError('${e.statusCode}'));
     } catch (_) {
       if (!mounted) return;
       setState(() => _error =
@@ -1725,7 +1639,8 @@ class _ScriptImportDialogState extends State<_ScriptImportDialog> {
               if (_error != null) ...[
                 const SizedBox(height: 8),
                 Text(_error!,
-                    style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                    style:
+                        TextStyle(color: Theme.of(context).colorScheme.error)),
               ],
               if (source != null) ...[
                 const SizedBox(height: 12),

@@ -15,9 +15,16 @@ Future<UserscriptHttpResponse> fetchUserscriptHttp(String url) async {
     if (statusCode != null) throw UserscriptHttpException(statusCode);
     rethrow;
   }
+  return mapUserscriptDioResponse(response, Uri.parse(url));
+}
+
+UserscriptHttpResponse mapUserscriptDioResponse(
+  Response<String> response,
+  Uri requestUri,
+) {
   return UserscriptHttpResponse(
     statusCode: response.statusCode ?? 0,
-    responseUrl: Uri.parse(url),
+    responseUrl: requestUri,
     location: response.headers.value('location'),
     contentType: response.headers.value(Headers.contentTypeHeader),
     body: response.data,
