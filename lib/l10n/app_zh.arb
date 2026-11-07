@@ -490,6 +490,15 @@
   "mediaSegment": "分片",
   "mediaPlaylist": "播放列表",
   "mediaFullVideo": "整片",
+  "homeMediaDurationHoursMinutesSeconds": "{hours}时{minutes}分{seconds}秒",
+  "@homeMediaDurationHoursMinutesSeconds": {
+    "description": "媒体时长，包含小时、分钟和秒",
+    "placeholders": {
+      "hours": {"type": "int"},
+      "minutes": {"type": "int"},
+      "seconds": {"type": "int"}
+    }
+  },
   "mediaDuration": "时长：{value}",
   "mediaResolution": "分辨率：{width}x{height}",
   "mediaPreview": "预览",

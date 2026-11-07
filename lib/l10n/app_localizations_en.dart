@@ -1639,6 +1639,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get mediaFullVideo => 'Full video';
 
   @override
+  String homeMediaDurationHoursMinutesSeconds(
+    int hours,
+    int minutes,
+    int seconds,
+  ) {
+    return '$hours hr $minutes min $seconds sec';
+  }
+
+  @override
   String mediaDuration(String value) {
     return 'Duration: $value';
   }
@@ -11510,6 +11519,15 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get mediaFullVideo => 'Full video';
+
+  @override
+  String homeMediaDurationHoursMinutesSeconds(
+    int hours,
+    int minutes,
+    int seconds,
+  ) {
+    return '$hours hr $minutes min $seconds sec';
+  }
 
   @override
   String mediaDuration(String value) {
