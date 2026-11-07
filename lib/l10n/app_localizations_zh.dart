@@ -7278,6 +7278,9 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get audioSeparationTaskFailurePrefix => '音频提取失败: ';
+
+  @override
   String get audioSeparationEngineMissing => '未检测到音频分离引擎';
 
   @override
@@ -17310,6 +17313,9 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String audioSeparationChooseVideoFailure(String error) {
     return '选择视频失败: $error';
   }
+
+  @override
+  String get audioSeparationTaskFailurePrefix => '音频提取失败: ';
 
   @override
   String get audioSeparationEngineMissing => '未检测到音频分离引擎';

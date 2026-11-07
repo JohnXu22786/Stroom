@@ -4204,6 +4204,7 @@
       }
     }
   },
+  "audioSeparationTaskFailurePrefix": "音频提取失败: ",
   "audioSeparationEngineMissing": "未检测到音频分离引擎",
   "audioSeparationEngineMissingHelp": "请重启应用或检查应用资源完整性。",
   "audioSeparationNoVideoSelected": "暂未选择视频文件",

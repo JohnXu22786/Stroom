@@ -109,6 +109,10 @@ jobs:
           while IFS= read -r file; do
             [ -z "$file" ] && continue
             case "$file" in
+              lib/l10n/app_localizations_en.dart|\
+              lib/l10n/app_localizations_zh.dart)
+                test_f="tests/pages/content/audio_separation_test.dart"
+                ;;
               lib/catcatch/engine/js_hook_script.dart)
                 test_f="tests/catcatch/js_hook_script_test.cjs"
                 ;;

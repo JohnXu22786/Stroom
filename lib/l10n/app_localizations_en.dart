@@ -7642,6 +7642,9 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get audioSeparationTaskFailurePrefix => 'Audio extraction failed: ';
+
+  @override
   String get audioSeparationEngineMissing =>
       'Audio separation engine not detected';
 
@@ -18232,6 +18235,9 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String audioSeparationChooseVideoFailure(String error) {
     return 'Failed to choose video: $error';
   }
+
+  @override
+  String get audioSeparationTaskFailurePrefix => 'Audio extraction failed: ';
 
   @override
   String get audioSeparationEngineMissing =>
