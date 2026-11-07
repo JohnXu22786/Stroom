@@ -4437,6 +4437,111 @@ void main() {
     });
 
     testWidgets(
+      'instruction dialog localizes its controls and keeps user content intact',
+      (tester) async {
+        final entry = _createOcrEntry(withModels: true);
+
+        await tester.pumpWidget(
+          _buildTestApp(entries: [entry], locale: const Locale('en', 'US')),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('ocr_instruction_manage_btn')));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Manage recognition instructions'), findsOneWidget);
+        expect(
+          find.text(
+            'These instructions apply to all recognition models. If none is '
+            'selected, only the image is sent.',
+          ),
+          findsOneWidget,
+        );
+        expect(find.text('No instructions yet'), findsOneWidget);
+        expect(find.text('Close'), findsOneWidget);
+        await tester.tap(find.text('Add instruction'));
+        await tester.pumpAndSettle();
+        expect(find.text('Instruction name (optional)'), findsOneWidget);
+        expect(find.text('Instruction content'), findsOneWidget);
+        expect(find.text('Cancel'), findsOneWidget);
+        expect(find.text('Save'), findsOneWidget);
+
+        const instructionName = 'Invoice extraction';
+        const instructionContent = 'Keep every amount exactly as entered.';
+        await tester.enterText(
+          find.widgetWithText(TextField, 'Instruction name (optional)'),
+          instructionName,
+        );
+        await tester.enterText(
+          find.widgetWithText(TextField, 'Instruction content'),
+          instructionContent,
+        );
+        await tester.pump();
+        await tester.tap(find.text('Save'));
+        await tester.pumpAndSettle();
+
+        expect(find.text(instructionName), findsOneWidget);
+        expect(find.text(instructionContent), findsOneWidget);
+        expect(find.byTooltip('Edit instruction'), findsOneWidget);
+        expect(find.byTooltip('Delete instruction'), findsOneWidget);
+        await tester.tap(find.byTooltip('Edit instruction'));
+        await tester.pumpAndSettle();
+        expect(find.text('Edit instruction'), findsOneWidget);
+        expect(
+          tester
+              .widget<TextField>(
+                find.widgetWithText(TextField, 'Instruction content'),
+              )
+              .controller!
+              .text,
+          instructionContent,
+        );
+        await tester.tap(find.text('Cancel'));
+        await tester.pumpAndSettle();
+        expect(find.text(instructionName), findsOneWidget);
+        expect(find.text(instructionContent), findsOneWidget);
+
+        await tester.tap(find.text('Close'));
+        await tester.pumpAndSettle();
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+
+        await tester.pumpWidget(
+          _buildTestApp(
+            entries: [entry],
+            locale: const Locale('zh', 'CN'),
+            ocrInstructions: const [
+              OcrInstruction(name: '我的识别名称', content: '保持原始提示文字'),
+            ],
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('ocr_instruction_manage_btn')));
+        await tester.pumpAndSettle();
+
+        expect(find.text('管理识别指令'), findsOneWidget);
+        expect(find.text('这些指令是通用设置，适用于所有识别模型。未选择指令时，仅发送图片。'), findsOneWidget);
+        expect(find.text('我的识别名称'), findsOneWidget);
+        expect(find.text('保持原始提示文字'), findsOneWidget);
+        expect(find.byTooltip('编辑指令'), findsOneWidget);
+        expect(find.byTooltip('删除指令'), findsOneWidget);
+        await tester.tap(find.byTooltip('编辑指令'));
+        await tester.pumpAndSettle();
+        expect(find.text('编辑指令'), findsOneWidget);
+        expect(find.widgetWithText(TextField, '指令名称（可选）'), findsOneWidget);
+        expect(find.text('指令内容'), findsOneWidget);
+        expect(find.text('取消'), findsOneWidget);
+        expect(find.text('保存'), findsOneWidget);
+        expect(
+          tester
+              .widget<TextField>(find.widgetWithText(TextField, '指令内容'))
+              .controller!
+              .text,
+          '保持原始提示文字',
+        );
+      },
+    );
+
+    testWidgets(
       'adding an instruction via manage dialog shows it in dropdown',
       (tester) async {
         final entry = _createOcrEntry(withModels: true);

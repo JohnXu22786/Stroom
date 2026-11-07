@@ -448,6 +448,31 @@ class AppLocalizationsZh extends AppLocalizations {
   String get ocrManageInstructions => '管理识别指令';
 
   @override
+  String get ocrInstructionManageGuidance =>
+      '这些指令是通用设置，适用于所有识别模型。未选择指令时，仅发送图片。';
+
+  @override
+  String get ocrInstructionManageEmpty => '暂无指令';
+
+  @override
+  String get ocrInstructionEditTooltip => '编辑指令';
+
+  @override
+  String get ocrInstructionDeleteTooltip => '删除指令';
+
+  @override
+  String get ocrInstructionAdd => '添加指令';
+
+  @override
+  String get ocrInstructionEditorEditTitle => '编辑指令';
+
+  @override
+  String get ocrInstructionNameLabel => '指令名称（可选）';
+
+  @override
+  String get ocrInstructionContentLabel => '指令内容';
+
+  @override
   String get ocrBatchMode => '批量方式';
 
   @override
@@ -9663,6 +9688,31 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get ocrManageInstructions => '管理识别指令';
+
+  @override
+  String get ocrInstructionManageGuidance =>
+      '这些指令是通用设置，适用于所有识别模型。未选择指令时，仅发送图片。';
+
+  @override
+  String get ocrInstructionManageEmpty => '暂无指令';
+
+  @override
+  String get ocrInstructionEditTooltip => '编辑指令';
+
+  @override
+  String get ocrInstructionDeleteTooltip => '删除指令';
+
+  @override
+  String get ocrInstructionAdd => '添加指令';
+
+  @override
+  String get ocrInstructionEditorEditTitle => '编辑指令';
+
+  @override
+  String get ocrInstructionNameLabel => '指令名称（可选）';
+
+  @override
+  String get ocrInstructionContentLabel => '指令内容';
 
   @override
   String get ocrBatchMode => '批量方式';
