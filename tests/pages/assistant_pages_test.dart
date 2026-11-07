@@ -15,7 +15,10 @@ import 'package:stroom/providers/assistant_provider.dart';
 import 'package:stroom/widgets/llm/assistant_avatar.dart';
 
 /// Creates a test app wrapped in ProviderScope with optional overrides.
-Widget createTestApp({List<Assistant>? assistants}) {
+Widget createTestApp({
+  List<Assistant>? assistants,
+  Locale locale = const Locale('zh', 'CN'),
+}) {
   SharedPreferences.setMockInitialValues({});
   return ProviderScope(
     overrides: [
@@ -34,7 +37,7 @@ Widget createTestApp({List<Assistant>? assistants}) {
         }),
     ],
     child: MaterialApp(
-      locale: const Locale('zh', 'CN'),
+      locale: locale,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       home: AssistantSelectionPage(),
@@ -55,6 +58,36 @@ BuiltInPrompt _firstLocalizedPrompt(WidgetTester tester) {
 }
 
 void main() {
+  group('New assistant default prompt localization', () {
+    for (final locale in [const Locale('en', 'US'), const Locale('zh', 'CN')]) {
+      testWidgets('uses the localized seed for $locale', (tester) async {
+        await tester.pumpWidget(createTestApp(locale: locale));
+        await tester.pumpAndSettle();
+
+        final selectionContext = tester.element(
+          find.byType(AssistantSelectionPage),
+        );
+        await tester.tap(
+          find.byTooltip(
+            AppLocalizations.of(selectionContext)!.assistantCreateNew,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final dialogContext = tester.element(find.byType(AlertDialog));
+        final expectedSeed =
+            AppLocalizations.of(dialogContext)!.assistantDefaultPrompt;
+        expect(
+          find.byWidgetPredicate(
+            (widget) =>
+                widget is TextField && widget.controller?.text == expectedSeed,
+          ),
+          findsOneWidget,
+        );
+      });
+    }
+  });
+
   group('EmojiPicker adaptive width', () {
     /// Find the emoji GridView inside the dialog (padding EdgeInsets.only(top: 4))
     Finder findEmojiGrid() {

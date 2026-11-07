@@ -1254,6 +1254,37 @@ class AppLocalizationsEn extends AppLocalizations {
   String get conversationNew => 'New conversation';
 
   @override
+  String get conversationSelectTitle => 'Choose a conversation';
+
+  @override
+  String get topicSelectionEmptyTitle => 'No conversations yet';
+
+  @override
+  String get topicSelectionEmptyMessage =>
+      'Create a new conversation to get started';
+
+  @override
+  String get topicSelectionNewTopic => 'New conversation';
+
+  @override
+  String get topicSelectionNoAssistant => 'No assistant selected';
+
+  @override
+  String get topicSelectionBackToAssistants => 'Back to assistant selection';
+
+  @override
+  String get topicSelectionEditAssistant => 'Edit assistant';
+
+  @override
+  String get topicSelectionReorderHint =>
+      'Long-press and drag to reorder conversations';
+
+  @override
+  String conversationDeleteNamed(String title) {
+    return 'Delete conversation “$title”? This cannot be undone.';
+  }
+
+  @override
   String get conversationDeleteTitle => 'Delete conversation';
 
   @override
@@ -5001,6 +5032,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get assistantMarketTooltip => 'Assistant marketplace';
+
+  @override
+  String get assistantDefaultPrompt =>
+      'You are a helpful AI assistant. Answer the user\'s questions clearly and helpfully.';
 
   @override
   String get assistantCreateNew => 'Create assistant';
@@ -10865,6 +10900,37 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String get conversationNew => 'New conversation';
 
   @override
+  String get conversationSelectTitle => 'Choose a conversation';
+
+  @override
+  String get topicSelectionEmptyTitle => 'No conversations yet';
+
+  @override
+  String get topicSelectionEmptyMessage =>
+      'Create a new conversation to get started';
+
+  @override
+  String get topicSelectionNewTopic => 'New conversation';
+
+  @override
+  String get topicSelectionNoAssistant => 'No assistant selected';
+
+  @override
+  String get topicSelectionBackToAssistants => 'Back to assistant selection';
+
+  @override
+  String get topicSelectionEditAssistant => 'Edit assistant';
+
+  @override
+  String get topicSelectionReorderHint =>
+      'Long-press and drag to reorder conversations';
+
+  @override
+  String conversationDeleteNamed(String title) {
+    return 'Delete conversation “$title”? This cannot be undone.';
+  }
+
+  @override
   String get conversationDeleteTitle => 'Delete conversation';
 
   @override
@@ -14612,6 +14678,10 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get assistantMarketTooltip => 'Assistant marketplace';
+
+  @override
+  String get assistantDefaultPrompt =>
+      'You are a helpful AI assistant. Answer the user\'s questions clearly and helpfully.';
 
   @override
   String get assistantCreateNew => 'Create assistant';

@@ -180,7 +180,7 @@ class AssistantSelectionPage extends ConsumerWidget {
   void _showCreateAssistantDialog(BuildContext context, WidgetRef ref) {
     final nameController = TextEditingController();
     final promptController = TextEditingController(
-      text: '你是一个有帮助的AI助手。请用中文回答用户的问题。',
+      text: AppLocalizations.of(context)!.assistantDefaultPrompt,
     );
     String selectedEmoji = '🤖';
     final descriptionController = TextEditingController();
