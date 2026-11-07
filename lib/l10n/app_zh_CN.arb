@@ -5650,5 +5650,146 @@
   "catCatchRedownloadPathEmpty": "重新下载失败，下载文件路径为空。",
   "catCatchWebBrowserRequired": "网页无法在没有浏览器环境的情况下直接获取资源，请尝试在移动端或桌面端使用该功能，或者直接粘贴视频/音频文件的直链地址。",
   "catCatchPlaylistNoSegments": "播放列表没有可下载的分段。",
-  "catCatchDownloadedSourceMissing": "下载源文件不存在，请重新下载。"
+  "catCatchDownloadedSourceMissing": "下载源文件不存在，请重新下载。",
+  "appLogPageTitle": "应用日志",
+  "appLogRefresh": "刷新",
+  "appLogCleanupOldLogs": "清理旧日志",
+  "appLogCleanupDone": "旧日志已清理",
+  "appLogRetentionNotice": "日志保留期限：只保留最近 {days} 天的日志，超过 {days} 天会自动清理。",
+  "@appLogRetentionNotice": {
+    "description": "Explains the automatic log retention policy.",
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "appLogWebUnsupported": "Web 平台不支持本地日志",
+  "appLogNoFiles": "暂无日志文件",
+  "appLogAutoRefresh": "{count, plural, other{正在自动刷新（第 {count} 次）...}}",
+  "@appLogAutoRefresh": {
+    "description": "Status shown while the log list retries loading.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "appLogWillBeCreated": "应用运行后将自动生成日志",
+  "appLogExport": "导出",
+  "appLogDelete": "删除",
+  "appLogConfirmDeleteTitle": "确认删除",
+  "appLogConfirmDeleteMessage": "确定要删除日志文件 \"{fileName}\" 吗？",
+  "@appLogConfirmDeleteMessage": {
+    "description": "Confirmation message for deleting a log file.",
+    "placeholders": {
+      "fileName": {
+        "type": "String"
+      }
+    }
+  },
+  "appLogCancel": "取消",
+  "appLogLoadFilesError": "加载日志文件列表失败: {error}",
+  "@appLogLoadFilesError": {
+    "description": "Error shown when loading the log file list fails.",
+    "placeholders": {
+      "error": {
+        "type": "Object"
+      }
+    }
+  },
+  "appLogReadFileUnreadable": "日志文件 \"{fileName}\" 存在但无法读取，可能文件已损坏",
+  "@appLogReadFileUnreadable": {
+    "description": "Error shown when an existing log file cannot be read.",
+    "placeholders": {
+      "fileName": {
+        "type": "String"
+      }
+    }
+  },
+  "appLogReadFileMissing": "日志文件 \"{fileName}\" 不存在，可能已被清理",
+  "@appLogReadFileMissing": {
+    "description": "Error shown when a log file is missing.",
+    "placeholders": {
+      "fileName": {
+        "type": "String"
+      }
+    }
+  },
+  "appLogReadFileError": "读取日志文件失败: {error}",
+  "@appLogReadFileError": {
+    "description": "Error shown when reading a log file fails.",
+    "placeholders": {
+      "error": {
+        "type": "Object"
+      }
+    }
+  },
+  "appLogDeleteDone": "已删除: {fileName}",
+  "@appLogDeleteDone": {
+    "description": "Status shown after deleting a log file.",
+    "placeholders": {
+      "fileName": {
+        "type": "String"
+      }
+    }
+  },
+  "appLogDeleteError": "删除失败: {error}",
+  "@appLogDeleteError": {
+    "description": "Error shown when deleting a log file fails.",
+    "placeholders": {
+      "error": {
+        "type": "Object"
+      }
+    }
+  },
+  "appLogExportMissing": "日志文件 \"{fileName}\" 不存在",
+  "@appLogExportMissing": {
+    "description": "Error shown when the log file to export is missing.",
+    "placeholders": {
+      "fileName": {
+        "type": "String"
+      }
+    }
+  },
+  "appLogPathCopied": "已复制路径: {filePath}",
+  "@appLogPathCopied": {
+    "description": "Status shown after copying a log file path.",
+    "placeholders": {
+      "filePath": {
+        "type": "String"
+      }
+    }
+  },
+  "appLogExportError": "导出失败: {error}",
+  "@appLogExportError": {
+    "description": "Error shown when exporting a log file fails.",
+    "placeholders": {
+      "error": {
+        "type": "Object"
+      }
+    }
+  },
+  "appLogLineCount": "共 {count} 行",
+  "@appLogLineCount": {
+    "description": "Number of lines in the log file.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "appLogCopyAll": "复制全文",
+  "appLogStructuredView": "结构化视图",
+  "appLogRawView": "原始视图",
+  "appLogCopyError": "复制失败: {error}",
+  "@appLogCopyError": {
+    "description": "Error shown when copying log content fails.",
+    "placeholders": {
+      "error": {
+        "type": "Object"
+      }
+    }
+  },
+  "appLogCopyDone": "已复制全部日志内容"
 }

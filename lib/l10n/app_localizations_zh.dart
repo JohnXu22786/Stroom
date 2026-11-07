@@ -9456,6 +9456,126 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get catCatchDownloadedSourceMissing => '下载源文件不存在，请重新下载。';
+
+  @override
+  String get appLogPageTitle => '应用日志';
+
+  @override
+  String get appLogRefresh => '刷新';
+
+  @override
+  String get appLogCleanupOldLogs => '清理旧日志';
+
+  @override
+  String get appLogCleanupDone => '旧日志已清理';
+
+  @override
+  String appLogRetentionNotice(int days) {
+    return '日志保留期限：只保留最近 $days 天的日志，超过 $days 天会自动清理。';
+  }
+
+  @override
+  String get appLogWebUnsupported => 'Web 平台不支持本地日志';
+
+  @override
+  String get appLogNoFiles => '暂无日志文件';
+
+  @override
+  String appLogAutoRefresh(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '正在自动刷新（第 $count 次）...',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get appLogWillBeCreated => '应用运行后将自动生成日志';
+
+  @override
+  String get appLogExport => '导出';
+
+  @override
+  String get appLogDelete => '删除';
+
+  @override
+  String get appLogConfirmDeleteTitle => '确认删除';
+
+  @override
+  String appLogConfirmDeleteMessage(String fileName) {
+    return '确定要删除日志文件 \"$fileName\" 吗？';
+  }
+
+  @override
+  String get appLogCancel => '取消';
+
+  @override
+  String appLogLoadFilesError(Object error) {
+    return '加载日志文件列表失败: $error';
+  }
+
+  @override
+  String appLogReadFileUnreadable(String fileName) {
+    return '日志文件 \"$fileName\" 存在但无法读取，可能文件已损坏';
+  }
+
+  @override
+  String appLogReadFileMissing(String fileName) {
+    return '日志文件 \"$fileName\" 不存在，可能已被清理';
+  }
+
+  @override
+  String appLogReadFileError(Object error) {
+    return '读取日志文件失败: $error';
+  }
+
+  @override
+  String appLogDeleteDone(String fileName) {
+    return '已删除: $fileName';
+  }
+
+  @override
+  String appLogDeleteError(Object error) {
+    return '删除失败: $error';
+  }
+
+  @override
+  String appLogExportMissing(String fileName) {
+    return '日志文件 \"$fileName\" 不存在';
+  }
+
+  @override
+  String appLogPathCopied(String filePath) {
+    return '已复制路径: $filePath';
+  }
+
+  @override
+  String appLogExportError(Object error) {
+    return '导出失败: $error';
+  }
+
+  @override
+  String appLogLineCount(int count) {
+    return '共 $count 行';
+  }
+
+  @override
+  String get appLogCopyAll => '复制全文';
+
+  @override
+  String get appLogStructuredView => '结构化视图';
+
+  @override
+  String get appLogRawView => '原始视图';
+
+  @override
+  String appLogCopyError(Object error) {
+    return '复制失败: $error';
+  }
+
+  @override
+  String get appLogCopyDone => '已复制全部日志内容';
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).
@@ -18909,4 +19029,124 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get catCatchDownloadedSourceMissing => '下载源文件不存在，请重新下载。';
+
+  @override
+  String get appLogPageTitle => '应用日志';
+
+  @override
+  String get appLogRefresh => '刷新';
+
+  @override
+  String get appLogCleanupOldLogs => '清理旧日志';
+
+  @override
+  String get appLogCleanupDone => '旧日志已清理';
+
+  @override
+  String appLogRetentionNotice(int days) {
+    return '日志保留期限：只保留最近 $days 天的日志，超过 $days 天会自动清理。';
+  }
+
+  @override
+  String get appLogWebUnsupported => 'Web 平台不支持本地日志';
+
+  @override
+  String get appLogNoFiles => '暂无日志文件';
+
+  @override
+  String appLogAutoRefresh(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '正在自动刷新（第 $count 次）...',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get appLogWillBeCreated => '应用运行后将自动生成日志';
+
+  @override
+  String get appLogExport => '导出';
+
+  @override
+  String get appLogDelete => '删除';
+
+  @override
+  String get appLogConfirmDeleteTitle => '确认删除';
+
+  @override
+  String appLogConfirmDeleteMessage(String fileName) {
+    return '确定要删除日志文件 \"$fileName\" 吗？';
+  }
+
+  @override
+  String get appLogCancel => '取消';
+
+  @override
+  String appLogLoadFilesError(Object error) {
+    return '加载日志文件列表失败: $error';
+  }
+
+  @override
+  String appLogReadFileUnreadable(String fileName) {
+    return '日志文件 \"$fileName\" 存在但无法读取，可能文件已损坏';
+  }
+
+  @override
+  String appLogReadFileMissing(String fileName) {
+    return '日志文件 \"$fileName\" 不存在，可能已被清理';
+  }
+
+  @override
+  String appLogReadFileError(Object error) {
+    return '读取日志文件失败: $error';
+  }
+
+  @override
+  String appLogDeleteDone(String fileName) {
+    return '已删除: $fileName';
+  }
+
+  @override
+  String appLogDeleteError(Object error) {
+    return '删除失败: $error';
+  }
+
+  @override
+  String appLogExportMissing(String fileName) {
+    return '日志文件 \"$fileName\" 不存在';
+  }
+
+  @override
+  String appLogPathCopied(String filePath) {
+    return '已复制路径: $filePath';
+  }
+
+  @override
+  String appLogExportError(Object error) {
+    return '导出失败: $error';
+  }
+
+  @override
+  String appLogLineCount(int count) {
+    return '共 $count 行';
+  }
+
+  @override
+  String get appLogCopyAll => '复制全文';
+
+  @override
+  String get appLogStructuredView => '结构化视图';
+
+  @override
+  String get appLogRawView => '原始视图';
+
+  @override
+  String appLogCopyError(Object error) {
+    return '复制失败: $error';
+  }
+
+  @override
+  String get appLogCopyDone => '已复制全部日志内容';
 }
