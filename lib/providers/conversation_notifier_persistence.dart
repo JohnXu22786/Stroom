@@ -46,8 +46,8 @@ class _ReplayMessageSections {
     required this.messageId,
     required List<String> textSections,
     required List<String> reasoningSections,
-  })  : text = _ReplaySectionDeltas(textSections),
-        reasoning = _ReplaySectionDeltas(reasoningSections);
+  }) : text = _ReplaySectionDeltas(textSections),
+       reasoning = _ReplaySectionDeltas(reasoningSections);
 }
 
 class _ReplaySectionDeltas {
@@ -56,11 +56,13 @@ class _ReplaySectionDeltas {
   final List<int> _lengthsBySection;
 
   _ReplaySectionDeltas(List<String> initialSections)
-      : sections = initialSections,
-        _chunksBySection =
-            initialSections.map((section) => <String>[section]).toList(),
-        _lengthsBySection =
-            initialSections.map((section) => section.length).toList();
+    : sections = initialSections,
+      _chunksBySection = initialSections
+          .map((section) => <String>[section])
+          .toList(),
+      _lengthsBySection = initialSections
+          .map((section) => section.length)
+          .toList();
 
   bool apply(dynamic rawDeltas) {
     if (rawDeltas is! List) return false;
@@ -110,8 +112,37 @@ class _ReplaySectionDeltas {
   }
 
   List<String> materialize() => [
-        for (final chunks in _chunksBySection) chunks.join(),
-      ];
+    for (final chunks in _chunksBySection) chunks.join(),
+  ];
+}
+
+void _finalizeReplayMessageSections(
+  List<Conversation> conversations,
+  Iterable<_ReplayMessageSections> replayedMessageSections,
+) {
+  final byId = {
+    for (final conversation in conversations) conversation.id: conversation,
+  };
+  for (final sections in replayedMessageSections) {
+    if (!sections.shouldFinalize) continue;
+    final conversation = byId[sections.conversationId];
+    if (conversation == null) continue;
+    final messageIndexes = <String, int>{};
+    for (var index = 0; index < conversation.messages.length; index++) {
+      messageIndexes.putIfAbsent(conversation.messages[index].id, () => index);
+    }
+    final messageIndex = messageIndexes[sections.messageId];
+    if (messageIndex == null) continue;
+    conversation.messages[messageIndex] = conversation.messages[messageIndex]
+        .copyWith(
+          textSections: sections.text.sections.isEmpty
+              ? null
+              : sections.text.materialize(),
+          reasoningSections: sections.reasoning.sections.isEmpty
+              ? null
+              : sections.reasoning.materialize(),
+        );
+  }
 }
 
 bool _sectionChunksMatchAt(
@@ -127,9 +158,8 @@ bool _sectionChunksMatchAt(
     final chunkEnd = chunkStart + chunk.length;
     if (chunkEnd > offset && chunkStart < offset + text.length) {
       final startInChunk = offset > chunkStart ? offset - chunkStart : 0;
-      final count = (chunkEnd < offset + text.length
-              ? chunkEnd
-              : offset + text.length) -
+      final count =
+          (chunkEnd < offset + text.length ? chunkEnd : offset + text.length) -
           (chunkStart + startInChunk);
       if (chunk.substring(startInChunk, startInChunk + count) !=
           text.substring(textOffset, textOffset + count)) {
@@ -176,7 +206,9 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
   }
 
   void _addPendingMessageDeletions(
-      String conversationId, Iterable<String> ids) {
+    String conversationId,
+    Iterable<String> ids,
+  ) {
     _pendingMessageDeletionIds
         .putIfAbsent(conversationId, () => <String>{})
         .addAll(ids);
@@ -305,8 +337,10 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
   }
 
   Future<void> _appendMessageRestorations(
-      String conversationId, Iterable<String> ids,
-      {bool insidePersistenceQueue = false}) async {
+    String conversationId,
+    Iterable<String> ids, {
+    bool insidePersistenceQueue = false,
+  }) async {
     final restoredIds = ids.toSet();
     _addPendingMessageRestorations(conversationId, restoredIds);
     final preferenceSaved = await _persistPendingRestoredMessages();
@@ -345,7 +379,8 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
       for (final entry in _pendingRestoredConversations.entries)
         if (createdAtById[entry.key] == entry.value.split('|').first &&
             entry.value.split('|').length > 1)
-          entry.key: DateTime.tryParse(entry.value.split('|').last) ??
+          entry.key:
+              DateTime.tryParse(entry.value.split('|').last) ??
               DateTime.fromMillisecondsSinceEpoch(0),
     };
   }
@@ -364,24 +399,26 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
               ..sort();
         persistedLastTimestamp = existingKeys.isEmpty
             ? 0
-            : int.tryParse(existingKeys.last.substring(
-                  _streamJournalWebPrefix.length,
-                )) ??
-                0;
+            : int.tryParse(
+                    existingKeys.last.substring(_streamJournalWebPrefix.length),
+                  ) ??
+                  0;
       }
       final previousTimestamp =
           persistedLastTimestamp > _lastWebJournalTimestamp
-              ? persistedLastTimestamp
-              : _lastWebJournalTimestamp;
-      _lastWebJournalTimestamp =
-          now > previousTimestamp ? now : previousTimestamp + 1;
+          ? persistedLastTimestamp
+          : _lastWebJournalTimestamp;
+      _lastWebJournalTimestamp = now > previousTimestamp
+          ? now
+          : previousTimestamp + 1;
       if (!await prefs.setInt(
         _webStreamJournalTimestampKey,
         _lastWebJournalTimestamp,
       )) {
         throw StateError('Failed to persist web stream journal sequence');
       }
-      final key = '$_streamJournalWebPrefix'
+      final key =
+          '$_streamJournalWebPrefix'
           '${_lastWebJournalTimestamp.toString().padLeft(20, '0')}';
       final bytes = Uint8List.fromList(utf8.encode(jsonEncode(checkpoint)));
       await WebFileStore.write(key, bytes);
@@ -412,8 +449,9 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
     if (conversationId is String &&
         messageId is String &&
         messageId.isNotEmpty) {
-      _streamCheckpointKeys
-          .add(_streamCheckpointKey(conversationId, messageId));
+      _streamCheckpointKeys.add(
+        _streamCheckpointKey(conversationId, messageId),
+      );
     }
     if (!_streamCheckpointReplayInProgress) {
       _streamCheckpointKeyIndexIsCurrent = true;
@@ -424,9 +462,12 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
     final current = _coalescedStreamPersist;
     if (current != null) current.accepting = false;
     final write = _persistQueue.then((_) => _appendStreamCheckpoint(record));
-    _persistQueue = write.then((_) {}, onError: (Object error, StackTrace st) {
-      debugPrint('Failed to queue conversation persistence: $error');
-    });
+    _persistQueue = write.then(
+      (_) {},
+      onError: (Object error, StackTrace st) {
+        debugPrint('Failed to queue conversation persistence: $error');
+      },
+    );
     await write;
   }
 
@@ -471,6 +512,7 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
         const <String, Set<String>>{},
   }) async {
     final refreshCheckpointIndex = !_streamCheckpointKeyIndexIsCurrent;
+    final replayedMessageSections = <String, _ReplayMessageSections>{};
     if (refreshCheckpointIndex) {
       _streamCheckpointReplayInProgress = true;
     }
@@ -480,8 +522,9 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
           ? await WebFileStore.keysWithPrefix(_streamJournalWebPrefix)
           : null;
       webKeys?.sort();
-      final nativeJournalPath =
-          !kIsWeb && _streamJournalPresent ? await _streamJournalPath() : null;
+      final nativeJournalPath = !kIsWeb && _streamJournalPresent
+          ? await _streamJournalPath()
+          : null;
       final nativeJournalEnd = nativeJournalPath == null
           ? null
           : await AppStorage.durableFileLength(nativeJournalPath);
@@ -500,8 +543,9 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
           final kind = decoded['kind'];
           if (kind == 'conversationsDeleted') {
             final ids = decoded['conversationIds'];
-            final deletedAt =
-                DateTime.tryParse(decoded['deletedAt'] as String? ?? '');
+            final deletedAt = DateTime.tryParse(
+              decoded['deletedAt'] as String? ?? '',
+            );
             if (ids is List) {
               for (final id in ids.whereType<String>()) {
                 deletedConversations.add(id);
@@ -516,8 +560,9 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
           if (kind == 'conversationDeleted') {
             deletedConversations.add(conversationId);
             recreatedConversations.remove(conversationId);
-            final deletedAt =
-                DateTime.tryParse(decoded['deletedAt'] as String? ?? '');
+            final deletedAt = DateTime.tryParse(
+              decoded['deletedAt'] as String? ?? '',
+            );
             if (deletedAt != null) {
               deletedConversationAt[conversationId] = deletedAt;
             }
@@ -528,8 +573,9 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
             deletedConversations.remove(conversationId);
             deletedConversationAt.remove(conversationId);
             deletedMessages.remove(conversationId);
-            final createdAt =
-                DateTime.tryParse(decoded['createdAt'] as String? ?? '');
+            final createdAt = DateTime.tryParse(
+              decoded['createdAt'] as String? ?? '',
+            );
             if (createdAt != null) {
               recreatedConversations[conversationId] = createdAt;
             }
@@ -598,7 +644,6 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
       final messageIndexesByConversationId = <String, Map<String, int>>{};
       final indexedMessagesByConversationId = <String, List<ChatMessage>>{};
       final unorderedMessageConversationIds = <String>{};
-      final replayedMessageSections = <String, _ReplayMessageSections>{};
       await for (final line in _readStreamCheckpointRecords(
         webKeys: webKeys,
         nativePath: nativeJournalPath,
@@ -620,11 +665,13 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
               (deletedMessages[conversationId]?.contains(messageId) ?? false)) {
             continue;
           }
-          _streamCheckpointKeys
-              .add(_streamCheckpointKey(conversationId, messageId));
+          _streamCheckpointKeys.add(
+            _streamCheckpointKey(conversationId, messageId),
+          );
           final recreatedAt = recreatedConversations[conversationId];
-          final checkpointCreatedAt =
-              DateTime.tryParse(record['createdAt'] as String? ?? '');
+          final checkpointCreatedAt = DateTime.tryParse(
+            record['createdAt'] as String? ?? '',
+          );
           if (recreatedAt != null &&
               checkpointCreatedAt != null &&
               checkpointCreatedAt.isBefore(recreatedAt)) {
@@ -651,9 +698,11 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
             final conversationCreatedAt = DateTime.tryParse(
               record['conversationCreatedAt'] as String? ?? '',
             );
-            final checkpointUpdatedAt =
-                DateTime.tryParse(record['updatedAt'] as String? ?? '');
-            conversation = baseConversation ??
+            final checkpointUpdatedAt = DateTime.tryParse(
+              record['updatedAt'] as String? ?? '',
+            );
+            conversation =
+                baseConversation ??
                 Conversation(
                   id: conversationId,
                   title: '',
@@ -665,7 +714,7 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
                   ),
                   temporaryExpiryVersion:
                       record['temporaryExpiryVersion'] as int? ??
-                          kTemporaryConversationDurationVersion,
+                      kTemporaryConversationDurationVersion,
                   messages: [],
                 );
           }
@@ -675,8 +724,9 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
                 indexedMessagesByConversationId[conversationId],
                 conversation.messages,
               )) {
-            messageIndexes =
-                _buildCheckpointMessageIndex(conversation.messages);
+            messageIndexes = _buildCheckpointMessageIndex(
+              conversation.messages,
+            );
             messageIndexesByConversationId[conversationId] = messageIndexes;
             indexedMessagesByConversationId[conversationId] =
                 conversation.messages;
@@ -687,11 +737,14 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
             }
           }
           final checkpointMessageExists = messageIndexes.containsKey(messageId);
-          final checkpointUpdatedAt =
-              DateTime.tryParse(record['updatedAt'] as String? ?? '');
-          final checkpointMetadataIsCurrent = checkpointUpdatedAt != null &&
+          final checkpointUpdatedAt = DateTime.tryParse(
+            record['updatedAt'] as String? ?? '',
+          );
+          final checkpointMetadataIsCurrent =
+              checkpointUpdatedAt != null &&
               !checkpointUpdatedAt.isBefore(conversation.updatedAt);
-          final checkpointIsCurrent = checkpointUpdatedAt != null &&
+          final checkpointIsCurrent =
+              checkpointUpdatedAt != null &&
               (!checkpointMessageExists || checkpointMetadataIsCurrent);
           if (!checkpointIsCurrent) continue;
           if (needsToAddConversation) {
@@ -713,19 +766,22 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
             unorderedMessageConversationIds.contains(conversationId),
           );
           final existingIndex = messageIndexes[messageId] ?? -1;
-          final existing =
-              existingIndex < 0 ? null : conversation.messages[existingIndex];
+          final existing = existingIndex < 0
+              ? null
+              : conversation.messages[existingIndex];
           final messageKey = _streamCheckpointKey(conversationId, messageId);
           final sections = replayedMessageSections.putIfAbsent(
             messageKey,
             () => _ReplayMessageSections(
               conversationId: conversationId,
               messageId: messageId,
-              textSections: existing?.textSections?.toList() ??
+              textSections:
+                  existing?.textSections?.toList() ??
                   (existing != null && existing.content.isNotEmpty
                       ? <String>[existing.content]
                       : <String>[]),
-              reasoningSections: existing?.reasoningSections?.toList() ??
+              reasoningSections:
+                  existing?.reasoningSections?.toList() ??
                   (existing?.reasoningContent == null
                       ? <String>[]
                       : <String>[existing!.reasoningContent!]),
@@ -744,8 +800,9 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
           if (checkpointMetadataIsCurrent && record['isTemporary'] is bool) {
             final isTemporary = record['isTemporary'] as bool;
             final expiryRaw = record['temporaryExpiresAt'];
-            final expiry =
-                expiryRaw is String ? DateTime.tryParse(expiryRaw) : null;
+            final expiry = expiryRaw is String
+                ? DateTime.tryParse(expiryRaw)
+                : null;
             final expiryVersion = record['temporaryExpiryVersion'];
             if (conversation.isTemporary != isTemporary ||
                 conversation.temporaryExpiresAt != expiry ||
@@ -767,7 +824,8 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
               calls[call.id] = call;
             }
           }
-          final callsChanged = existing == null ||
+          final callsChanged =
+              existing == null ||
               jsonEncode(calls.values.map((call) => call.toMap()).toList()) !=
                   jsonEncode(
                     (existing.toolCalls ?? const <ToolCallData>[])
@@ -777,16 +835,19 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
           final roundStartsRaw = record['toolCallRoundStarts'];
           final roundStarts =
               roundStartsRaw is List && roundStartsRaw.isNotEmpty
-                  ? roundStartsRaw.whereType<int>().toList()
-                  : existing?.toolCallRoundStarts;
-          final roundStartsChanged = existing == null ||
+              ? roundStartsRaw.whereType<int>().toList()
+              : existing?.toolCallRoundStarts;
+          final roundStartsChanged =
+              existing == null ||
               jsonEncode(roundStarts) !=
                   jsonEncode(existing.toolCallRoundStarts);
-          final recordCreatedAt =
-              DateTime.tryParse(record['createdAt'] as String? ?? '');
+          final recordCreatedAt = DateTime.tryParse(
+            record['createdAt'] as String? ?? '',
+          );
           final textChanged = sections.text.apply(record['textDeltas']);
-          final reasoningChanged =
-              sections.reasoning.apply(record['reasoningDeltas']);
+          final reasoningChanged = sections.reasoning.apply(
+            record['reasoningDeltas'],
+          );
           if (existing != null &&
               !textChanged &&
               !reasoningChanged &&
@@ -813,14 +874,16 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
                 ? null
                 : sections.reasoning.sections,
             toolCalls: calls.isEmpty ? null : calls.values.toList(),
-            toolCallRoundStarts:
-                roundStarts?.isEmpty ?? true ? null : roundStarts,
+            toolCallRoundStarts: roundStarts?.isEmpty ?? true
+                ? null
+                : roundStarts,
             contentFromTextSections: true,
           );
           if (existingIndex < 0) {
             if (conversation.messages.isNotEmpty &&
-                conversation.messages.last.createdAt
-                    .isAfter(message.createdAt)) {
+                conversation.messages.last.createdAt.isAfter(
+                  message.createdAt,
+                )) {
               unorderedMessageConversationIds.add(conversationId);
             }
             conversation.messages.add(message);
@@ -832,23 +895,10 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
           debugPrint('Skipping invalid conversation stream checkpoint: $e');
         }
       }
-      for (final sections in replayedMessageSections.values) {
-        if (!sections.shouldFinalize) continue;
-        final conversation = byId[sections.conversationId];
-        if (conversation == null) continue;
-        final messageIndexes = _buildCheckpointMessageIndex(conversation.messages);
-        final messageIndex = messageIndexes[sections.messageId];
-        if (messageIndex == null) continue;
-        conversation.messages[messageIndex] =
-            conversation.messages[messageIndex].copyWith(
-          textSections: sections.text.sections.isEmpty
-              ? null
-              : sections.text.materialize(),
-          reasoningSections: sections.reasoning.sections.isEmpty
-              ? null
-              : sections.reasoning.materialize(),
-        );
-      }
+      _finalizeReplayMessageSections(
+        conversations,
+        replayedMessageSections.values,
+      );
       if (refreshCheckpointIndex) {
         _streamCheckpointKeyIndexIsCurrent = true;
       }
@@ -857,6 +907,10 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
         _streamCheckpointKeyIndexIsCurrent = false;
       }
       debugPrint('Failed to replay conversation stream checkpoints: $e');
+      _finalizeReplayMessageSections(
+        conversations,
+        replayedMessageSections.values,
+      );
       if (strict) rethrow;
     } finally {
       if (refreshCheckpointIndex) {
@@ -955,9 +1009,7 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
           messageIndexes[message.id] = insertionIndex;
         }
       } catch (e) {
-        debugPrint(
-          'Skipping invalid history message in stream checkpoint: $e',
-        );
+        debugPrint('Skipping invalid history message in stream checkpoint: $e');
       }
     }
   }
@@ -977,8 +1029,9 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
       final prefs = await SharedPreferences.getInstance();
       _streamJournalPresent =
           prefs.getBool(_nativeStreamJournalPresentKey) ?? false;
-      final pendingRestoresJson =
-          prefs.getString(_pendingRestoredConversationKey);
+      final pendingRestoresJson = prefs.getString(
+        _pendingRestoredConversationKey,
+      );
       if (pendingRestoresJson != null) {
         try {
           final decoded = jsonDecode(pendingRestoresJson);
@@ -995,8 +1048,9 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
           debugPrint('Failed to decode pending conversation restores: $e');
         }
       }
-      final pendingMessageRestoresJson =
-          prefs.getString(_pendingRestoredMessageKey);
+      final pendingMessageRestoresJson = prefs.getString(
+        _pendingRestoredMessageKey,
+      );
       if (pendingMessageRestoresJson != null) {
         try {
           final decoded = jsonDecode(pendingMessageRestoresJson);
@@ -1006,8 +1060,9 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
               ..addAll({
                 for (final entry in decoded.entries)
                   if (entry.key is String && entry.value is List)
-                    entry.key as String:
-                        (entry.value as List).whereType<String>().toSet(),
+                    entry.key as String: (entry.value as List)
+                        .whereType<String>()
+                        .toSet(),
               });
           }
         } catch (e) {
@@ -1037,8 +1092,9 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
                         .subtract(const Duration(hours: 23));
                     conversation.temporaryExpiryVersion =
                         kTemporaryConversationDurationVersion;
-                    item['temporaryExpiresAt'] =
-                        conversation.temporaryExpiresAt!.toIso8601String();
+                    item['temporaryExpiresAt'] = conversation
+                        .temporaryExpiresAt!
+                        .toIso8601String();
                     item['temporaryExpiryVersion'] =
                         kTemporaryConversationDurationVersion;
                     migratedTemporaryExpiries = true;
@@ -1090,8 +1146,9 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
               final inMemory = state;
               if (inMemory.isNotEmpty) {
                 final diskIds = conversations.map((c) => c.id).toSet();
-                final extra =
-                    inMemory.where((c) => !diskIds.contains(c.id)).toList();
+                final extra = inMemory
+                    .where((c) => !diskIds.contains(c.id))
+                    .toList();
                 loadedConversations = pinnedFirstStable([
                   ...extra,
                   ...conversations,
@@ -1154,8 +1211,9 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
         };
         final replayStartingMessageIds = {
           for (final conversation in state)
-            conversation.id:
-                conversation.messages.map((message) => message.id).toSet(),
+            conversation.id: conversation.messages
+                .map((message) => message.id)
+                .toSet(),
         };
         final restored = await _replayStreamCheckpoints(
           loadedConversations ?? state,
@@ -1197,10 +1255,12 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
                 )) {
               final startingMessageIds =
                   replayStartingMessageIds[current.id] ?? const <String>{};
-              final currentMessageIds =
-                  current.messages.map((message) => message.id).toSet();
-              final removedMessageIds =
-                  startingMessageIds.difference(currentMessageIds);
+              final currentMessageIds = current.messages
+                  .map((message) => message.id)
+                  .toSet();
+              final removedMessageIds = startingMessageIds.difference(
+                currentMessageIds,
+              );
               if (removedMessageIds.isNotEmpty) {
                 replayed.messages.removeWhere(
                   (message) => removedMessageIds.contains(message.id),
@@ -1226,7 +1286,8 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
           final orderedConversations = pinnedFirstStable(finalConversations);
           final activeId = prefs.getString('active_conversation_id');
           final currentActiveId = _ref.read(activeConversationIdProvider);
-          final hasCurrentActiveConversation = currentActiveId != null &&
+          final hasCurrentActiveConversation =
+              currentActiveId != null &&
               orderedConversations.any((c) => c.id == currentActiveId);
           if (!hasCurrentActiveConversation &&
               activeId != null &&
@@ -1340,11 +1401,12 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
       );
 
       // Enforce the cap: keep only the N most recent backups.
-      final backupKeys = prefs
-          .getKeys()
-          .where((k) => k.startsWith('conversations.corrupt.'))
-          .toList()
-        ..sort();
+      final backupKeys =
+          prefs
+              .getKeys()
+              .where((k) => k.startsWith('conversations.corrupt.'))
+              .toList()
+            ..sort();
       while (backupKeys.length > _maxCorruptBackups) {
         final oldest = backupKeys.removeAt(0);
         await prefs.remove(oldest);
@@ -1417,9 +1479,7 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
 
     final queued = _CoalescedStreamPersist({key: checkpoint});
     _coalescedStreamPersist = queued;
-    final write = _persistQueue.then(
-      (_) => _drainStreamCheckpoints(queued),
-    );
+    final write = _persistQueue.then((_) => _drainStreamCheckpoints(queued));
     _persistQueue = write.then(
       (_) {},
       onError: (Object error, StackTrace st) {
@@ -1430,7 +1490,8 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
   }
 
   Future<void> _drainStreamCheckpoints(
-      _CoalescedStreamPersist checkpoint) async {
+    _CoalescedStreamPersist checkpoint,
+  ) async {
     try {
       while (true) {
         final deltas = checkpoint.checkpoints;
@@ -1497,9 +1558,12 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
     final write = _persistQueue.then((_) => _persistSnapshot(snapshot));
     // Keep the queue usable after an unexpected write error. Callers still
     // await their own write and receive its error.
-    _persistQueue = write.then((_) {}, onError: (Object error, StackTrace st) {
-      debugPrint('Failed to queue conversation persistence: $error');
-    });
+    _persistQueue = write.then(
+      (_) {},
+      onError: (Object error, StackTrace st) {
+        debugPrint('Failed to queue conversation persistence: $error');
+      },
+    );
     return write;
   }
 
@@ -1531,8 +1595,9 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
           snapshot,
           onlyKnownConversations: true,
           strict: true,
-          pendingRestoredConversations:
-              _pendingRestoredConversationsFor(snapshot),
+          pendingRestoredConversations: _pendingRestoredConversationsFor(
+            snapshot,
+          ),
           pendingRestoredMessageIds: _pendingMessageRestorationIds,
         );
       } catch (e) {
