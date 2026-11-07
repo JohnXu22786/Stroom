@@ -61,6 +61,23 @@ class _InterceptorWithCallback extends Interceptor {
   }
 }
 
+class _CountingAdapter implements HttpClientAdapter {
+  int requestCount = 0;
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    requestCount++;
+    return ResponseBody.fromString('{}', 200);
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
 const _testOcrConfig = OcrConfig(
   model: 'gpt-4o',
   apiKey: 'test-key',
@@ -379,11 +396,30 @@ void main() {
         const config = OcrConfig(model: 'gpt-4o', apiKey: 'test-key', host: '');
         final service = OcrService(config: config);
         expect(
-          () =>
-              service.recognize(imageBytes: Uint8List(0), imageFormat: 'jpeg'),
+          () => service.recognize(
+            imageBytes: Uint8List.fromList([1]),
+            imageFormat: 'jpeg',
+          ),
           throwsA(isA<Exception>()),
         );
       });
+
+      test(
+        'recognize rejects empty image bytes before sending a request',
+        () async {
+          final adapter = _CountingAdapter();
+          final dio = Dio()..httpClientAdapter = adapter;
+          final service = OcrService(config: _testOcrConfig, dio: dio);
+
+          await expectLater(
+            service.recognize(imageBytes: Uint8List(0), imageFormat: 'jpeg'),
+            throwsA(isA<ArgumentError>()),
+          );
+
+          expect(adapter.requestCount, 0);
+          service.close();
+        },
+      );
 
       test('recognizeBatch throws on empty list', () async {
         const config = OcrConfig(
