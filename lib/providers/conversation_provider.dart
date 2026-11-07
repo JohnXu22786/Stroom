@@ -539,6 +539,13 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
   /// persistence operation establishes an ordering barrier.
   _CoalescedStreamPersist? _coalescedStreamPersist;
 
+  /// Message IDs with checkpoint records that still need to be replayed or
+  /// invalidated by an explicit history edit.
+  final Set<String> _streamCheckpointKeys = <String>{};
+  bool _streamCheckpointKeyIndexIsCurrent = false;
+  final Map<String, Set<String>> _pendingMessageDeletionIds = {};
+  final Map<String, Set<String>> _pendingMessageRestorationIds = {};
+
   /// Conversations whose deletion rollback marker could not be appended.
   /// Persist their creation timestamps so replay can keep the matching
   /// restored records until the journal is successfully cleared.

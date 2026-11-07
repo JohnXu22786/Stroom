@@ -411,30 +411,98 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
   Future<void> updateMessages(String conversationId, List<ChatMessage> messages,
       {bool resetTemporaryCountdown = false}) async {
     if (!mounted) return;
-    final current = state.where((c) => c.id == conversationId).firstOrNull;
+    var current = state.where((c) => c.id == conversationId).firstOrNull;
     if (current != null) {
+      List<String> checkpointedRemovedIds() {
+        final nextIds = messages.map((message) => message.id).toSet();
+        return current!.messages
+            .where((message) => !nextIds.contains(message.id))
+            .where(
+                (message) => _hasStreamCheckpoint(conversationId, message.id))
+            .map((message) => message.id)
+            .toList();
+      }
+
+      var removedIds = checkpointedRemovedIds();
+      final supersededRestorations =
+          (_pendingMessageRestorationIds[conversationId] ?? <String>{})
+              .intersection(removedIds.toSet());
+
       final previousMessages = List<ChatMessage>.from(current.messages);
-      final nextIds = messages.map((message) => message.id).toSet();
-      final removedIds = current.messages
-          .where((message) => !nextIds.contains(message.id))
-          .map((message) => message.id)
-          .toList();
       _replaceMessages(conversationId, messages,
           resetTemporaryCountdown: resetTemporaryCountdown);
       if (removedIds.isNotEmpty) {
+        _addPendingMessageDeletions(conversationId, removedIds);
         try {
           await _appendJournalBarrier({
             'kind': 'messageDeleted',
             'conversationId': conversationId,
             'messageIds': removedIds,
           });
+          final latestIds = state
+              .where((conversation) => conversation.id == conversationId)
+              .expand((conversation) => conversation.messages)
+              .map((message) => message.id)
+              .toSet();
+          final restoredDuringDelete =
+              removedIds.where(latestIds.contains).toList();
+          if (restoredDuringDelete.isNotEmpty) {
+            await _appendMessageRestorations(
+              conversationId,
+              restoredDuringDelete,
+            );
+          }
+          final restorationsToClear =
+              supersededRestorations.difference(restoredDuringDelete.toSet());
+          if (restorationsToClear.isNotEmpty) {
+            _removePendingMessageRestorations(
+              conversationId,
+              restorationsToClear,
+            );
+            if (!await _persistPendingRestoredMessages()) {
+              _addPendingMessageRestorations(
+                conversationId,
+                restorationsToClear,
+              );
+              throw StateError(
+                'Failed to persist message deletion after restore',
+              );
+            }
+          }
+          _removePendingMessageDeletions(conversationId, removedIds);
         } catch (_) {
           final latest = state.where((c) => c.id == conversationId).firstOrNull;
           if (mounted &&
               latest != null &&
-              identical(latest.messages, messages)) {
+              identical(latest.messages, messages) &&
+              (_pendingMessageDeletionIds[conversationId]
+                      ?.containsAll(removedIds) ??
+                  false)) {
             _replaceMessages(conversationId, previousMessages,
                 resetTemporaryCountdown: false);
+            try {
+              await _appendMessageRestorations(conversationId, removedIds);
+            } catch (restoreError) {
+              debugPrint(
+                'Failed to persist message deletion rollback: $restoreError',
+              );
+            }
+          } else if (mounted && latest != null) {
+            final latestIds =
+                latest.messages.map((message) => message.id).toSet();
+            final restoredIds = removedIds
+                .where((messageId) => latestIds.contains(messageId))
+                .toList();
+            if (restoredIds.isNotEmpty) {
+              try {
+                await _appendMessageRestorations(conversationId, restoredIds);
+              } catch (restoreError) {
+                debugPrint(
+                  'Failed to persist concurrent message restoration: '
+                  '$restoreError',
+                );
+              }
+            }
           }
           rethrow;
         }

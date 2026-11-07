@@ -16,6 +16,8 @@ const String _streamJournalFileName = 'conversation_stream_checkpoints.jsonl';
 const String _streamJournalWebPrefix = 'conversation_stream_checkpoints/';
 const String _pendingRestoredConversationKey =
     'conversation_stream_pending_restores';
+const String _pendingRestoredMessageKey =
+    'conversation_stream_pending_message_restores';
 const String _webStreamJournalTimestampKey =
     'conversation_stream_checkpoint_last_timestamp';
 int _lastWebJournalTimestamp = 0;
@@ -31,6 +33,61 @@ class _CoalescedStreamPersist {
 }
 
 extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
+  String _streamCheckpointKey(String conversationId, String messageId) =>
+      jsonEncode([conversationId, messageId]);
+
+  bool _hasStreamCheckpoint(String conversationId, String messageId) {
+    if (!_streamCheckpointKeyIndexIsCurrent) return true;
+    final key = _streamCheckpointKey(conversationId, messageId);
+    return _streamCheckpointKeys.contains(key) ||
+        (_coalescedStreamPersist?.checkpoints.containsKey(key) ?? false);
+  }
+
+  void _addPendingMessageDeletions(
+      String conversationId, Iterable<String> ids) {
+    _pendingMessageDeletionIds
+        .putIfAbsent(conversationId, () => <String>{})
+        .addAll(ids);
+  }
+
+  void _removePendingMessageDeletions(
+    String conversationId,
+    Iterable<String> ids,
+  ) {
+    final pending = _pendingMessageDeletionIds[conversationId];
+    if (pending == null) return;
+    pending.removeAll(ids);
+    if (pending.isEmpty) _pendingMessageDeletionIds.remove(conversationId);
+  }
+
+  Future<void> _persistPendingMessageDeletions() async {
+    for (final entry in _pendingMessageDeletionIds.entries.toList()) {
+      final ids = Set<String>.from(entry.value);
+      if (ids.isEmpty) continue;
+      final currentMessages = state
+          .where((conversation) => conversation.id == entry.key)
+          .expand((conversation) => conversation.messages)
+          .map((message) => message.id)
+          .toSet();
+      final restoredIds = ids.intersection(currentMessages);
+      if (restoredIds.isNotEmpty) {
+        await _appendMessageRestorations(
+          entry.key,
+          restoredIds,
+          insidePersistenceQueue: true,
+        );
+      }
+      ids.removeAll(restoredIds);
+      if (ids.isEmpty) continue;
+      await _appendStreamCheckpoint({
+        'kind': 'messageDeleted',
+        'conversationId': entry.key,
+        'messageIds': ids.toList(),
+      });
+      _removePendingMessageDeletions(entry.key, ids);
+    }
+  }
+
   Future<bool> _persistPendingRestoredConversations() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -56,6 +113,92 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
     } catch (e) {
       debugPrint('Failed to clear restored conversation markers: $e');
       return false;
+    }
+  }
+
+  Future<bool> _persistPendingRestoredMessages() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (_pendingMessageRestorationIds.isEmpty) {
+        return prefs.remove(_pendingRestoredMessageKey);
+      }
+      return prefs.setString(
+        _pendingRestoredMessageKey,
+        jsonEncode({
+          for (final entry in _pendingMessageRestorationIds.entries)
+            entry.key: entry.value.toList(),
+        }),
+      );
+    } catch (e) {
+      debugPrint('Failed to persist restored message markers: $e');
+      return false;
+    }
+  }
+
+  Future<bool> _clearPendingRestoredMessageMarker() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getString(_pendingRestoredMessageKey) == null) {
+        _pendingMessageRestorationIds.clear();
+        return true;
+      }
+      final removed = await prefs.remove(_pendingRestoredMessageKey);
+      if (removed) _pendingMessageRestorationIds.clear();
+      return removed;
+    } catch (e) {
+      debugPrint('Failed to clear restored message markers: $e');
+      return false;
+    }
+  }
+
+  void _addPendingMessageRestorations(
+    String conversationId,
+    Iterable<String> ids,
+  ) {
+    _pendingMessageRestorationIds
+        .putIfAbsent(conversationId, () => <String>{})
+        .addAll(ids);
+  }
+
+  Set<String> _removePendingMessageRestorations(
+    String conversationId,
+    Iterable<String> ids,
+  ) {
+    final pending = _pendingMessageRestorationIds[conversationId];
+    if (pending == null) return <String>{};
+    final removed = pending.intersection(ids.toSet());
+    pending.removeAll(removed);
+    if (pending.isEmpty) _pendingMessageRestorationIds.remove(conversationId);
+    return removed;
+  }
+
+  Future<void> _appendMessageRestorations(
+      String conversationId, Iterable<String> ids,
+      {bool insidePersistenceQueue = false}) async {
+    final restoredIds = ids.toSet();
+    _addPendingMessageRestorations(conversationId, restoredIds);
+    final preferenceSaved = await _persistPendingRestoredMessages();
+    var journalSaved = false;
+    final record = <String, dynamic>{
+      'kind': 'messageRestored',
+      'conversationId': conversationId,
+      'messageIds': restoredIds.toList(),
+    };
+    try {
+      if (insidePersistenceQueue) {
+        await _appendStreamCheckpoint(record);
+      } else {
+        await _appendJournalBarrier(record);
+      }
+      journalSaved = true;
+    } catch (e) {
+      debugPrint('Failed to append restored message marker: $e');
+    }
+    if (journalSaved || preferenceSaved) {
+      _removePendingMessageDeletions(conversationId, restoredIds);
+    }
+    if (!preferenceSaved && !journalSaved) {
+      throw StateError('Failed to persist restored message markers');
     }
   }
 
@@ -110,12 +253,27 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
           '${_lastWebJournalTimestamp.toString().padLeft(20, '0')}';
       final bytes = Uint8List.fromList(utf8.encode(jsonEncode(checkpoint)));
       await WebFileStore.write(key, bytes);
+      _rememberAppendedStreamCheckpoint(checkpoint);
       return;
     }
     await AppStorage.appendDurableLine(
       await _streamJournalPath(),
       jsonEncode(checkpoint),
     );
+    _rememberAppendedStreamCheckpoint(checkpoint);
+  }
+
+  void _rememberAppendedStreamCheckpoint(Map<String, dynamic> record) {
+    if (record['kind'] != null) return;
+    final conversationId = record['conversationId'];
+    final messageId = record['messageId'];
+    if (conversationId is String &&
+        messageId is String &&
+        messageId.isNotEmpty) {
+      _streamCheckpointKeys
+          .add(_streamCheckpointKey(conversationId, messageId));
+    }
+    _streamCheckpointKeyIndexIsCurrent = true;
   }
 
   Future<void> _appendJournalBarrier(Map<String, dynamic> record) async {
@@ -132,9 +290,17 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
     try {
       if (kIsWeb) {
         await WebFileStore.deleteByPrefix(_streamJournalWebPrefix);
+        _streamCheckpointKeys.clear();
+        _streamCheckpointKeyIndexIsCurrent = true;
         return true;
       }
-      return AppStorage.deleteStorageFile(await _streamJournalPath());
+      final deleted =
+          await AppStorage.deleteStorageFile(await _streamJournalPath());
+      if (deleted) {
+        _streamCheckpointKeys.clear();
+        _streamCheckpointKeyIndexIsCurrent = true;
+      }
+      return deleted;
     } catch (e) {
       debugPrint('Failed to clear conversation stream checkpoints: $e');
       return false;
@@ -147,6 +313,8 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
     bool strict = false,
     Map<String, DateTime> pendingRestoredConversations =
         const <String, DateTime>{},
+    Map<String, Set<String>> pendingRestoredMessageIds =
+        const <String, Set<String>>{},
   }) async {
     try {
       conversations = List<Conversation>.from(conversations);
@@ -166,6 +334,7 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
             await AppStorage.readDurableLines(await _streamJournalPath()) ??
                 <String>[];
       }
+      _streamCheckpointKeyIndexIsCurrent = true;
       final deletedConversations = <String>{};
       final deletedConversationAt = <String, DateTime>{};
       final deletedMessages = <String, Set<String>>{};
@@ -221,6 +390,13 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
                   .putIfAbsent(conversationId, () => <String>{})
                   .add(decoded['messageId'] as String);
             }
+          } else if (kind == 'messageRestored') {
+            final messageIds = decoded['messageIds'];
+            if (messageIds is List) {
+              deletedMessages[conversationId]?.removeAll(
+                messageIds.whereType<String>(),
+              );
+            }
           } else if (kind == null &&
               deletedConversations.contains(conversationId)) {
             final createdAt = DateTime.tryParse(
@@ -247,6 +423,9 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
           deletedConversationAt.remove(entry.key);
         }
       }
+      for (final entry in pendingRestoredMessageIds.entries) {
+        deletedMessages[entry.key]?.removeAll(entry.value);
+      }
       conversations.removeWhere((conversation) {
         final deletedAt = deletedConversationAt[conversation.id];
         return deletedConversations.contains(conversation.id) &&
@@ -258,6 +437,25 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
         conversation.messages.removeWhere(
           (message) => deletedForConversation.contains(message.id),
         );
+      }
+      for (final line in records) {
+        try {
+          final decoded = jsonDecode(line);
+          if (decoded is! Map || decoded['kind'] != null) continue;
+          final conversationId = decoded['conversationId'];
+          final messageId = decoded['messageId'];
+          if (conversationId is! String ||
+              messageId is! String ||
+              messageId.isEmpty ||
+              deletedConversations.contains(conversationId) ||
+              (deletedMessages[conversationId]?.contains(messageId) ?? false)) {
+            continue;
+          }
+          _streamCheckpointKeys
+              .add(_streamCheckpointKey(conversationId, messageId));
+        } catch (_) {
+          // Invalid records do not represent replayable stream checkpoints.
+        }
       }
       final byId = {
         for (final conversation in conversations) conversation.id: conversation,
@@ -607,6 +805,25 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
           debugPrint('Failed to decode pending conversation restores: $e');
         }
       }
+      final pendingMessageRestoresJson =
+          prefs.getString(_pendingRestoredMessageKey);
+      if (pendingMessageRestoresJson != null) {
+        try {
+          final decoded = jsonDecode(pendingMessageRestoresJson);
+          if (decoded is Map) {
+            _pendingMessageRestorationIds
+              ..clear()
+              ..addAll({
+                for (final entry in decoded.entries)
+                  if (entry.key is String && entry.value is List)
+                    entry.key as String:
+                        (entry.value as List).whereType<String>().toSet(),
+              });
+          }
+        } catch (e) {
+          debugPrint('Failed to decode pending message restores: $e');
+        }
+      }
       final json = prefs.getString('conversations');
       if (json != null && json.isNotEmpty) {
         try {
@@ -747,6 +964,7 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
           pendingRestoredConversations: _pendingRestoredConversationsFor(
             loadedConversations ?? state,
           ),
+          pendingRestoredMessageIds: _pendingMessageRestorationIds,
         );
         if (mounted) {
           final replayedById = {
@@ -976,19 +1194,16 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
     }
 
     final current = _coalescedStreamPersist;
+    final key = _streamCheckpointKey(
+      checkpoint['conversationId'] as String,
+      checkpoint['messageId'] as String,
+    );
+    _streamCheckpointKeys.add(key);
     if (current != null && current.accepting) {
-      final key = jsonEncode([
-        checkpoint['conversationId'],
-        checkpoint['messageId'],
-      ]);
       current.checkpoints = {...current.checkpoints, key: checkpoint};
       return current.completion.future;
     }
 
-    final key = jsonEncode([
-      checkpoint['conversationId'],
-      checkpoint['messageId'],
-    ]);
     final queued = _CoalescedStreamPersist({key: checkpoint});
     _coalescedStreamPersist = queued;
     final write = _persistQueue.then(
@@ -1090,18 +1305,31 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
     // before writing it. If the journal cannot be read, keep the prior good
     // canonical save and leave the journal intact for startup recovery.
     try {
-      snapshot = await _replayStreamCheckpoints(
-        snapshot,
-        onlyKnownConversations: true,
-        strict: true,
-        pendingRestoredConversations:
-            _pendingRestoredConversationsFor(snapshot),
-      );
+      if (_pendingMessageDeletionIds.isNotEmpty) {
+        await _persistPendingMessageDeletions();
+      }
     } catch (e) {
-      debugPrint(
-        'Failed to merge stream checkpoints into conversation save: $e',
-      );
+      debugPrint('Failed to persist pending message deletion markers: $e');
       return false;
+    }
+    if (!_streamCheckpointKeyIndexIsCurrent ||
+        _streamCheckpointKeys.isNotEmpty ||
+        _pendingMessageRestorationIds.isNotEmpty) {
+      try {
+        snapshot = await _replayStreamCheckpoints(
+          snapshot,
+          onlyKnownConversations: true,
+          strict: true,
+          pendingRestoredConversations:
+              _pendingRestoredConversationsFor(snapshot),
+          pendingRestoredMessageIds: _pendingMessageRestorationIds,
+        );
+      } catch (e) {
+        debugPrint(
+          'Failed to merge stream checkpoints into conversation save: $e',
+        );
+        return false;
+      }
     }
 
     // Tier 1: full save
@@ -1116,6 +1344,7 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
       }
       if (await _clearStreamCheckpoints()) {
         await _clearPendingRestoredConversationMarker();
+        await _clearPendingRestoredMessageMarker();
       }
       await AppLogService.debug(
         'ConversationsNotifier',
@@ -1173,6 +1402,7 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
       }
       if (await _clearStreamCheckpoints()) {
         await _clearPendingRestoredConversationMarker();
+        await _clearPendingRestoredMessageMarker();
       }
       await AppLogService.warning(
         'ConversationsNotifier',
