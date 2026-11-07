@@ -1,8 +1,91 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/browser_page.dart';
 
 // Tests for the UserScript match-rule engine used by BrowserPage._injectScripts.
 void main() {
+  group('UserScript settings and metadata', () {
+    test('legacy storage remains enabled and has a manual origin', () {
+      final script = UserScript.fromMap({'name': 'legacy', 'code': 'run();'});
+
+      expect(script.enabled, isTrue);
+      expect(script.origin, 'manual');
+      expect(script.id, isNotEmpty);
+    });
+
+    test('new manual and imported scripts use the expected enable defaults', () {
+      final manual = UserScript(name: 'manual', code: 'run();');
+      final imported = UserScript(
+        name: 'imported',
+        code: 'run();',
+        enabled: false,
+        origin: 'https://raw.githubusercontent.com/a/b/main/script.js',
+      );
+
+      expect(manual.enabled, isTrue);
+      expect(manual.origin, 'manual');
+      expect(imported.enabled, isFalse);
+      expect(imported.origin, startsWith('https://'));
+    });
+
+    test('enable state, origin, and @version survive persistence', () {
+      const source = '''
+// ==UserScript==
+// @version 2.4.1
+// ==/UserScript==
+run();
+''';
+      final imported = UserScript(
+        name: 'imported',
+        code: source,
+        enabled: false,
+        origin: 'https://raw.githubusercontent.com/a/b/main/script.js',
+      );
+      final restored = UserScript.fromMap(imported.toMap());
+
+      expect(restored.enabled, isFalse);
+      expect(restored.origin, imported.origin);
+      expect(restored.id, imported.id);
+      expect(restored.version, '2.4.1');
+    });
+
+    test('disabled scripts are excluded from injection eligibility', () {
+      final disabled = UserScript(
+        name: 'disabled',
+        code: 'run();',
+        enabled: false,
+      );
+      final enabled = UserScript(name: 'enabled', code: 'run();');
+
+      expect(disabled.shouldRunAt('https://example.com/'), isFalse);
+      expect(enabled.shouldRunAt('https://example.com/'), isTrue);
+    });
+
+    test('manager changes inject only newly enabled or edited scripts', () {
+      final existing = UserScript(name: 'existing', code: 'existing();');
+      final disabled = UserScript(
+        name: 'newly enabled',
+        code: 'newlyEnabled();',
+        enabled: false,
+      );
+      final enabled = UserScript(
+        id: disabled.id,
+        name: disabled.name,
+        code: disabled.code,
+        enabled: true,
+      );
+
+      final toInject = scriptsToInjectAfterManagerChange(
+        previous: [existing, disabled],
+        updated: [existing, enabled],
+        currentUrl: 'https://example.com/',
+      );
+
+      expect(toInject.map((script) => script.id), [disabled.id]);
+    });
+  });
+
   group('UserScript.matchesUrl', () {
     test('empty matches list means "run everywhere"', () {
       final script = UserScript(name: 'x', code: 'y', matches: []);
@@ -205,5 +288,37 @@ void main() {
       expect(script.matchesUrl('https://x.bar.com/'), isTrue);
       expect(script.matchesUrl('https://x.baz.com/'), isFalse);
     });
+  });
+
+  testWidgets('deletion requires explicit confirmation', (tester) async {
+    bool? confirmed;
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () => confirmBrowserUserScriptDeletion(context)
+                  .then((value) => confirmed = value),
+              child: const Text('Open deletion prompt'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Open deletion prompt'));
+    await tester.pumpAndSettle();
+    expect(find.text('Delete script?'), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(confirmed, isFalse);
+
+    await tester.tap(find.text('Open deletion prompt'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+    expect(confirmed, isTrue);
   });
 }

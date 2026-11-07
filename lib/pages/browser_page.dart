@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
 
 import '../l10n/app_localizations.dart';
 import '../catcatch/engine/js_hook_script.dart';
@@ -168,14 +169,25 @@ InAppWebViewSettings _buildSettings({required bool isDesktopMode}) {
 }
 
 class UserScript {
+  final String id;
   final String name;
   final String code;
+  final bool enabled;
+
+  /// `manual` for user-authored scripts, or the source URL for imports.
+  final String origin;
 
   UserScript({
+    String? id,
     required this.name,
     required String code,
     List<String>? matches,
-  }) : code = matches == null ? code : _migrateLegacyMatches(code, matches);
+    this.enabled = true,
+    this.origin = 'manual',
+  })  : id = id ?? const Uuid().v4(),
+        code = matches == null ? code : _migrateLegacyMatches(code, matches);
+
+  String? get version => _userscriptMetadataValue(code, 'version');
 
   /// Match rules declared in the userscript metadata block.
   ///
@@ -183,16 +195,26 @@ class UserScript {
   /// every page.
   List<String> get matches => _parseMatchMetadata(code);
 
+  bool shouldRunAt(String url) => enabled && code.isNotEmpty && matchesUrl(url);
+
   Map<String, dynamic> toMap() => {
+        'id': id,
         'name': name,
         'code': code,
+        'enabled': enabled,
+        'origin': origin,
       };
 
   factory UserScript.fromMap(Map<String, dynamic> map) {
     final legacyMatches = map['matches'];
     return UserScript(
+      id: map['id'] is String ? map['id'] as String : null,
       name: map['name'] is String ? map['name'] as String : '',
       code: map['code'] is String ? map['code'] as String : '',
+      enabled: map['enabled'] is bool ? map['enabled'] as bool : true,
+      origin: map['origin'] is String && (map['origin'] as String).isNotEmpty
+          ? map['origin'] as String
+          : 'manual',
       matches: legacyMatches is List
           ? legacyMatches.whereType<String>().toList()
           : null,
@@ -315,6 +337,35 @@ class UserScript {
   }
 }
 
+@visibleForTesting
+List<UserScript> scriptsToInjectAfterManagerChange({
+  required List<UserScript> previous,
+  required List<UserScript> updated,
+  required String currentUrl,
+}) {
+  final previousById = {for (final script in previous) script.id: script};
+  return updated.where((script) {
+    final prior = previousById[script.id];
+    return script.shouldRunAt(currentUrl) &&
+        (prior == null || !prior.enabled || prior.code != script.code);
+  }).toList();
+}
+
+String? _userscriptMetadataValue(String code, String key) {
+  final start = code.indexOf('// ==UserScript==');
+  if (start < 0) return null;
+  final end = code.indexOf('// ==/UserScript==', start);
+  if (end < 0) return null;
+  final header = code.substring(start, end);
+  final linePattern = RegExp(
+      '^//[ \\t]*@${RegExp.escape(key)}(?:[ \\t]+(.*?))?[ \\t]*$');
+  for (final line in header.split('\n')) {
+    final value = linePattern.firstMatch(line.trim())?.group(1)?.trim();
+    if (value != null && value.isNotEmpty) return value;
+  }
+  return null;
+}
+
 String? _userscriptMetadataName(String code) {
   final start = code.indexOf('// ==UserScript==');
   if (start < 0) return null;
@@ -426,6 +477,9 @@ class _BrowserPageState extends State<BrowserPage> {
   bool _recoveryReloadAwaitingNavigation = false;
   String? _pendingMainFrameErrorUrl;
   List<UserScript> _scripts = [];
+  final ValueNotifier<Set<String>> _scriptRuntimeErrors =
+      ValueNotifier<Set<String>>({});
+  final Set<String> _scriptInjectionsInFlight = {};
 
   /// Whether to use desktop user agent.
   bool _isDesktopMode = false;
@@ -514,6 +568,7 @@ class _BrowserPageState extends State<BrowserPage> {
     _recoveryTimeoutTimer?.cancel();
     _recoveryNavigationFallbackTimer?.cancel();
     _urlController.dispose();
+    _scriptRuntimeErrors.dispose();
 
     unawaited(BrowserCookieService.handleBrowserClose());
 
@@ -636,7 +691,11 @@ class _BrowserPageState extends State<BrowserPage> {
       final decoded = jsonDecode(raw);
       if (decoded is! List) return;
       final needsMigration = decoded.any(
-        (entry) => entry is Map && entry.containsKey('matches'),
+        (entry) => entry is Map &&
+            (entry.containsKey('matches') ||
+                !entry.containsKey('id') ||
+                !entry.containsKey('enabled') ||
+                !entry.containsKey('origin')),
       );
       _scripts = decoded
           .whereType<Map<String, dynamic>>()
@@ -661,12 +720,101 @@ class _BrowserPageState extends State<BrowserPage> {
   /// Injects all user scripts whose match rules apply to [_currentUrl].
   /// An empty match list means "run everywhere".
   void _injectScripts() {
-    if (_webViewController == null) return;
+    Future<void> injectionChain = Future.value();
     for (final script in _scripts) {
-      if (script.code.isEmpty) continue;
-      if (!script.matchesUrl(_currentUrl)) continue;
-      _safeEvaluate(script.code);
+      if (!script.shouldRunAt(_currentUrl)) continue;
+      injectionChain = injectionChain.then((_) => _injectUserScript(script));
     }
+    unawaited(injectionChain);
+  }
+
+  Future<void> _injectUserScript(UserScript script) async {
+    final controller = _webViewController;
+    if (controller == null || !script.shouldRunAt(_currentUrl)) return;
+    final injectionUrl = _currentUrl;
+    final injectionKey = '${script.id}\n$injectionUrl';
+    if (!_scriptInjectionsInFlight.add(injectionKey)) return;
+    final errorSource = 'stroom-userscript-${script.id}.js';
+    String? evaluatedCode;
+    final monitor = '''
+(function() {
+  var errorScriptId = ${jsonEncode(script.id)};
+  var errorSource = ${jsonEncode(errorSource)};
+  var listeners = window.__stroomUserScriptErrorListeners ||
+      (window.__stroomUserScriptErrorListeners = {});
+  function reportError() {
+    try {
+      window.flutter_inappwebview.callHandler('UserScriptError', errorScriptId);
+    } catch (_) {}
+  }
+  if (!listeners[errorScriptId]) {
+    var onError = function(event) {
+      if (event.filename === errorSource) reportError();
+    };
+    var onUnhandledRejection = function(event) {
+      var reason = event.reason;
+      var stack = reason && reason.stack ? String(reason.stack) : '';
+      if (stack.indexOf(errorSource) >= 0) reportError();
+    };
+    window.addEventListener('error', onError);
+    window.addEventListener('unhandledrejection', onUnhandledRejection);
+    listeners[errorScriptId] = true;
+  }
+})();
+''';
+    try {
+      await controller.evaluateJavascript(source: monitor);
+      UserScript? currentScript;
+      for (final candidate in _scripts) {
+        if (candidate.id == script.id) {
+          currentScript = candidate;
+          break;
+        }
+      }
+      if (controller != _webViewController ||
+          injectionUrl != _currentUrl ||
+          currentScript == null ||
+          !currentScript.shouldRunAt(_currentUrl)) {
+        return;
+      }
+      evaluatedCode = currentScript.code;
+      await controller.evaluateJavascript(
+        source: '$evaluatedCode\n//# sourceURL=$errorSource',
+      );
+      _clearScriptRuntimeError(script.id);
+    } catch (_) {
+      debugPrint('[BrowserPage] user-script evaluation failed');
+      if (injectionUrl == _currentUrl && controller == _webViewController) {
+        _markScriptRuntimeError(script.id);
+      }
+    } finally {
+      _scriptInjectionsInFlight.remove(injectionKey);
+      UserScript? latestScript;
+      for (final candidate in _scripts) {
+        if (candidate.id == script.id) {
+          latestScript = candidate;
+          break;
+        }
+      }
+      if (injectionUrl == _currentUrl &&
+          latestScript != null &&
+          latestScript.shouldRunAt(_currentUrl) &&
+          evaluatedCode != latestScript.code) {
+        unawaited(_injectUserScript(latestScript));
+      }
+    }
+  }
+
+  void _markScriptRuntimeError(String scriptId) {
+    if (!mounted) return;
+    if (_scriptRuntimeErrors.value.contains(scriptId)) return;
+    _scriptRuntimeErrors.value = {..._scriptRuntimeErrors.value, scriptId};
+  }
+
+  void _clearScriptRuntimeError(String scriptId) {
+    if (!mounted) return;
+    if (!_scriptRuntimeErrors.value.contains(scriptId)) return;
+    _scriptRuntimeErrors.value = {..._scriptRuntimeErrors.value}..remove(scriptId);
   }
 
   /// Runs [source] in the WebView, swallowing errors that occur when the
@@ -674,8 +822,8 @@ class _BrowserPageState extends State<BrowserPage> {
   void _safeEvaluate(String source) {
     final controller = _webViewController;
     if (controller == null) return;
-    controller.evaluateJavascript(source: source).catchError((Object e) {
-      debugPrint('[BrowserPage] evaluateJavascript error: $e');
+    controller.evaluateJavascript(source: source).catchError((_) {
+      debugPrint('[BrowserPage] evaluateJavascript failed');
     });
   }
 
@@ -967,6 +1115,20 @@ class _BrowserPageState extends State<BrowserPage> {
                           } catch (e) {
                             debugPrint(
                                 '[BrowserPage] JS handler bridge unavailable: $e');
+                          }
+
+                          try {
+                            controller.addJavaScriptHandler(
+                              handlerName: 'UserScriptError',
+                              callback: (args) {
+                                if (args.isNotEmpty && args.first is String) {
+                                  _markScriptRuntimeError(args.first as String);
+                                }
+                              },
+                            );
+                          } catch (e) {
+                            debugPrint(
+                                '[BrowserPage] User-script error bridge unavailable: $e');
                           }
 
                           // Clear stale native cookies when retention is disabled,
@@ -1276,10 +1438,27 @@ class _BrowserPageState extends State<BrowserPage> {
       isScrollControlled: true,
       builder: (ctx) => _ScriptManagerSheet(
         scripts: _scripts,
+        runtimeErrors: _scriptRuntimeErrors,
         onScriptsChanged: (scripts) {
+          final updatedById = {for (final script in scripts) script.id: script};
+          for (final previous in _scripts) {
+            final updated = updatedById[previous.id];
+            if (updated == null ||
+                !updated.enabled ||
+                updated.code != previous.code) {
+              _clearScriptRuntimeError(previous.id);
+            }
+          }
+          final scriptsToInject = scriptsToInjectAfterManagerChange(
+            previous: _scripts,
+            updated: scripts,
+            currentUrl: _currentUrl,
+          );
           setState(() => _scripts = scripts);
           _saveScripts();
-          _injectScripts();
+          for (final script in scriptsToInject) {
+            unawaited(_injectUserScript(script));
+          }
         },
       ),
     );
@@ -1287,15 +1466,38 @@ class _BrowserPageState extends State<BrowserPage> {
 }
 
 // =============================================================================
-// Script Manager (unchanged from original)
+// Script Manager
 // =============================================================================
+
+Future<bool?> confirmBrowserUserScriptDeletion(BuildContext context) {
+  final l10n = AppLocalizations.of(context)!;
+  return showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text(l10n.browserDeleteScriptTitle),
+      content: Text(l10n.browserDeleteScriptConfirmation),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: Text(l10n.browserCancel),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, true),
+          child: Text(l10n.browserScriptDelete),
+        ),
+      ],
+    ),
+  );
+}
 
 class _ScriptManagerSheet extends StatefulWidget {
   final List<UserScript> scripts;
+  final ValueListenable<Set<String>> runtimeErrors;
   final void Function(List<UserScript>) onScriptsChanged;
 
   const _ScriptManagerSheet({
     required this.scripts,
+    required this.runtimeErrors,
     required this.onScriptsChanged,
   });
 
@@ -1335,32 +1537,71 @@ class _ScriptManagerSheetState extends State<_ScriptManagerSheet> {
               ],
             ),
             Expanded(
-              child: _scripts.isEmpty
-                  ? Center(
-                      child: Text(l10n.browserNoScripts),
-                    )
-                  : ListView.builder(
+              child: ValueListenableBuilder<Set<String>>(
+                valueListenable: widget.runtimeErrors,
+                builder: (context, runtimeErrors, _) => _scripts.isEmpty
+                    ? Center(
+                        child: Text(l10n.browserNoScripts),
+                      )
+                    : ListView.builder(
                       itemCount: _scripts.length,
                       itemBuilder: (ctx, i) {
                         final s = _scripts[i];
+                        final details = <String>[
+                          if (runtimeErrors.contains(s.id))
+                            l10n.browserScriptRuntimeError,
+                          s.enabled
+                              ? l10n.browserScriptEnabled
+                              : l10n.browserScriptDisabled,
+                          s.origin == 'manual'
+                              ? l10n.browserScriptOriginManual
+                              : s.origin,
+                          if (s.version != null)
+                            l10n.browserScriptVersion(s.version!),
+                          l10n.browserScriptMatchCount(s.matches.length),
+                        ];
                         return ListTile(
                           title: Text(s.name.isNotEmpty
                               ? s.name
                               : l10n.browserUnnamedScript),
                           subtitle: Text(
-                              l10n.browserScriptMatchCount(s.matches.length)),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.delete_outline,
-                                color: Colors.red),
-                            onPressed: () {
-                              setState(() => _scripts.removeAt(i));
-                              _notifyChanged();
-                            },
+                            details.join(' · '),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: runtimeErrors.contains(s.id)
+                                ? TextStyle(
+                                    color: Theme.of(context).colorScheme.error)
+                                : null,
+                          ),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Switch(
+                                value: s.enabled,
+                                onChanged: (enabled) {
+                                  setState(() => _scripts[i] = UserScript(
+                                        id: s.id,
+                                        name: s.name,
+                                        code: s.code,
+                                        enabled: enabled,
+                                        origin: s.origin,
+                                      ));
+                                  _notifyChanged();
+                                },
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.delete_outline,
+                                    color: Colors.red),
+                                tooltip: l10n.browserScriptDelete,
+                                onPressed: () => _confirmDeleteScript(i),
+                              ),
+                            ],
                           ),
                           onTap: () => _editScript(i),
                         );
                       },
                     ),
+              ),
             ),
           ],
         ),
@@ -1455,6 +1696,13 @@ class _ScriptManagerSheetState extends State<_ScriptManagerSheet> {
   void _notifyChanged() {
     widget.onScriptsChanged(List.from(_scripts));
   }
+
+  Future<void> _confirmDeleteScript(int index) async {
+    final confirmed = await confirmBrowserUserScriptDeletion(context);
+    if (confirmed != true || !mounted) return;
+    setState(() => _scripts.removeAt(index));
+    _notifyChanged();
+  }
 }
 
 class _ScriptEditDialog extends StatefulWidget {
@@ -1535,6 +1783,9 @@ class _ScriptEditDialogState extends State<_ScriptEditDialog> {
                         ? _nameCtrl.text.trim()
                         : l10n.browserUnnamedScript),
                 code: _codeCtrl.text,
+                id: script.id,
+                enabled: script.enabled,
+                origin: script.origin,
               ),
             );
           },
@@ -1687,7 +1938,12 @@ class _ScriptImportDialogState extends State<_ScriptImportDialog> {
               ? null
               : () => Navigator.pop(
                     context,
-                    UserScript(name: name!, code: source),
+                    UserScript(
+                      name: name!,
+                      code: source,
+                      enabled: false,
+                      origin: _urlCtrl.text.trim(),
+                    ),
                   ),
           child: Text(l10n.browserSave),
         ),
