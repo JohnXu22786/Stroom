@@ -14,7 +14,10 @@ import 'package:stroom/providers/provider_config.dart';
 
 /// Helper that creates a MaterialApp wrapped in ProviderScope with
 /// all providers needed to render ChatPage.
-Widget createChatTestApp({String? activeConversationId}) {
+Widget createChatTestApp({
+  String? activeConversationId,
+  Locale locale = const Locale('zh', 'CN'),
+}) {
   SharedPreferences.setMockInitialValues({});
   return ProviderScope(
     overrides: [
@@ -29,7 +32,7 @@ Widget createChatTestApp({String? activeConversationId}) {
       }),
     ],
     child: MaterialApp(
-        locale: const Locale('zh', 'CN'),
+        locale: locale,
         supportedLocales: AppLocalizations.supportedLocales,
         localizationsDelegates: const [
           AppLocalizations.delegate,
@@ -42,6 +45,29 @@ Widget createChatTestApp({String? activeConversationId}) {
 }
 
 void main() {
+  test('edited-image failure localization preserves exception detail', () {
+    const details = 'disk write detail';
+    final english = lookupAppLocalizations(const Locale('en', 'US'));
+    final chinese = lookupAppLocalizations(const Locale('zh', 'CN'));
+
+    expect(
+      english.chatAttachmentCameraFailed(details),
+      contains(details),
+    );
+    expect(
+      chinese.chatAttachmentCameraFailed(details),
+      contains(details),
+    );
+    expect(
+      english.chatAttachmentEditedImageSaveFailed(details),
+      contains(details),
+    );
+    expect(
+      chinese.chatAttachmentEditedImageSaveFailed(details),
+      contains(details),
+    );
+  });
+
   testWidgets('chat attachment panel uses localized labels', (tester) async {
     await tester.pumpWidget(MaterialApp(
       supportedLocales: AppLocalizations.supportedLocales,

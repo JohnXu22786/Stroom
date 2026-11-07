@@ -620,6 +620,104 @@
   "chatInfoSize": "Size",
   "chatInfoPath": "Path",
   "chatErrorBack": "Back",
+  "chatErrorPrefix": "Error: ",
+  "chatErrorCancelled": "Output was interrupted by the user",
+  "chatErrorProviderNotConfigured": "Chat API is not configured. Open Settings to configure a provider.",
+  "chatErrorApiKeyNotConfigured": "API key is not configured. Check Settings.",
+  "chatErrorServerConnection": "Unable to connect to the server. Check your network connection and API address.",
+  "chatErrorNetworkConnection": "Network connection failed. Check your network connection.",
+  "chatErrorTimeout": "Connection timed out. The server did not respond.",
+  "chatAttachmentImportFailed": "Import failed: {error}",
+  "@chatAttachmentImportFailed": {
+    "description": "Localized chat attachment feedback",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "chatAttachmentCameraFailed": "Could not take a photo: {error}",
+  "@chatAttachmentCameraFailed": {
+    "description": "Localized chat attachment feedback",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "chatAttachmentGalleryUnsupportedPlatform": "{platform} does not support device gallery access: {error}",
+  "@chatAttachmentGalleryUnsupportedPlatform": {
+    "description": "Localized chat attachment feedback",
+    "placeholders": {
+      "platform": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "chatAttachmentWebPlatform": "Web browser",
+  "chatAttachmentCurrentPlatform": "This device",
+  "chatAttachmentGalleryPermissionHint": "Grant photo library access permission and try again.",
+  "chatAttachmentBrowserPermissionHint": "Allow this website to access files in your browser settings.",
+  "chatAttachmentGalleryFallbackHint": "Check that your device supports gallery selection.",
+  "chatAttachmentImageImportFailed": "Could not import image: {error}\n{userHint}",
+  "@chatAttachmentImageImportFailed": {
+    "description": "Localized chat attachment feedback",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      },
+      "userHint": {
+        "type": "String"
+      }
+    }
+  },
+  "chatAttachmentFileUnsupportedPlatform": "{platform} does not support file selection: {error}",
+  "@chatAttachmentFileUnsupportedPlatform": {
+    "description": "Localized chat attachment feedback",
+    "placeholders": {
+      "platform": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "chatAttachmentFilePermissionHint": "Grant file access permission and try again.",
+  "chatAttachmentFileFallbackHint": "Check that your device supports file selection.",
+  "chatAttachmentFileImportFailed": "Could not import file: {error}\n{userHint}",
+  "@chatAttachmentFileImportFailed": {
+    "description": "Localized chat attachment feedback",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      },
+      "userHint": {
+        "type": "String"
+      }
+    }
+  },
+  "chatAttachmentImported": "Imported {fileName}",
+  "@chatAttachmentImported": {
+    "description": "Localized chat attachment feedback",
+    "placeholders": {
+      "fileName": {
+        "type": "String"
+      }
+    }
+  },
+  "chatAttachmentEditedImageSaveFailed": "Could not save the edited image: {error}",
+  "@chatAttachmentEditedImageSaveFailed": {
+    "description": "Localized chat attachment feedback",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "chatDataDetails": "Data details",
   "chatAudioPreviewClose": "Close",
   "@chatSavedToPath": {

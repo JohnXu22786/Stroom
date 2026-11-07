@@ -3200,6 +3200,141 @@ abstract class AppLocalizations {
   /// **'Back'**
   String get chatErrorBack;
 
+  /// No description provided for @chatErrorPrefix.
+  ///
+  /// In en, this message translates to:
+  /// **'Error: '**
+  String get chatErrorPrefix;
+
+  /// No description provided for @chatErrorCancelled.
+  ///
+  /// In en, this message translates to:
+  /// **'Output was interrupted by the user'**
+  String get chatErrorCancelled;
+
+  /// No description provided for @chatErrorProviderNotConfigured.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat API is not configured. Open Settings to configure a provider.'**
+  String get chatErrorProviderNotConfigured;
+
+  /// No description provided for @chatErrorApiKeyNotConfigured.
+  ///
+  /// In en, this message translates to:
+  /// **'API key is not configured. Check Settings.'**
+  String get chatErrorApiKeyNotConfigured;
+
+  /// No description provided for @chatErrorServerConnection.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to connect to the server. Check your network connection and API address.'**
+  String get chatErrorServerConnection;
+
+  /// No description provided for @chatErrorNetworkConnection.
+  ///
+  /// In en, this message translates to:
+  /// **'Network connection failed. Check your network connection.'**
+  String get chatErrorNetworkConnection;
+
+  /// No description provided for @chatErrorTimeout.
+  ///
+  /// In en, this message translates to:
+  /// **'Connection timed out. The server did not respond.'**
+  String get chatErrorTimeout;
+
+  /// Localized chat attachment feedback
+  ///
+  /// In en, this message translates to:
+  /// **'Import failed: {error}'**
+  String chatAttachmentImportFailed(String error);
+
+  /// Localized chat attachment feedback
+  ///
+  /// In en, this message translates to:
+  /// **'Could not take a photo: {error}'**
+  String chatAttachmentCameraFailed(String error);
+
+  /// Localized chat attachment feedback
+  ///
+  /// In en, this message translates to:
+  /// **'{platform} does not support device gallery access: {error}'**
+  String chatAttachmentGalleryUnsupportedPlatform(
+    String platform,
+    String error,
+  );
+
+  /// No description provided for @chatAttachmentWebPlatform.
+  ///
+  /// In en, this message translates to:
+  /// **'Web browser'**
+  String get chatAttachmentWebPlatform;
+
+  /// No description provided for @chatAttachmentCurrentPlatform.
+  ///
+  /// In en, this message translates to:
+  /// **'This device'**
+  String get chatAttachmentCurrentPlatform;
+
+  /// No description provided for @chatAttachmentGalleryPermissionHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Grant photo library access permission and try again.'**
+  String get chatAttachmentGalleryPermissionHint;
+
+  /// No description provided for @chatAttachmentBrowserPermissionHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow this website to access files in your browser settings.'**
+  String get chatAttachmentBrowserPermissionHint;
+
+  /// No description provided for @chatAttachmentGalleryFallbackHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Check that your device supports gallery selection.'**
+  String get chatAttachmentGalleryFallbackHint;
+
+  /// Localized chat attachment feedback
+  ///
+  /// In en, this message translates to:
+  /// **'Could not import image: {error}\n{userHint}'**
+  String chatAttachmentImageImportFailed(String error, String userHint);
+
+  /// Localized chat attachment feedback
+  ///
+  /// In en, this message translates to:
+  /// **'{platform} does not support file selection: {error}'**
+  String chatAttachmentFileUnsupportedPlatform(String platform, String error);
+
+  /// No description provided for @chatAttachmentFilePermissionHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Grant file access permission and try again.'**
+  String get chatAttachmentFilePermissionHint;
+
+  /// No description provided for @chatAttachmentFileFallbackHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Check that your device supports file selection.'**
+  String get chatAttachmentFileFallbackHint;
+
+  /// Localized chat attachment feedback
+  ///
+  /// In en, this message translates to:
+  /// **'Could not import file: {error}\n{userHint}'**
+  String chatAttachmentFileImportFailed(String error, String userHint);
+
+  /// Localized chat attachment feedback
+  ///
+  /// In en, this message translates to:
+  /// **'Imported {fileName}'**
+  String chatAttachmentImported(String fileName);
+
+  /// Localized chat attachment feedback
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save the edited image: {error}'**
+  String chatAttachmentEditedImageSaveFailed(String error);
+
   /// No description provided for @chatDataDetails.
   ///
   /// In en, this message translates to:
@@ -14887,51 +15022,99 @@ abstract class AppLocalizations {
   String get browserScriptCode;
 
   /// No description provided for @browserAddScriptMethod.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose how to add a script'**
   String get browserAddScriptMethod;
 
   /// No description provided for @browserImportFromUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Import from URL'**
   String get browserImportFromUrl;
 
   /// No description provided for @browserEnterManually.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter manually'**
   String get browserEnterManually;
 
   /// No description provided for @browserScriptTrustWarningTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Only import scripts you trust'**
   String get browserScriptTrustWarningTitle;
 
   /// No description provided for @browserScriptTrustWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'Only add scripts you trust, or they may leak data. Scripts can read or modify webpage content.'**
   String get browserScriptTrustWarning;
 
   /// No description provided for @browserContinue.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
   String get browserContinue;
 
   /// No description provided for @browserManualUserscriptLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Tampermonkey userscript'**
   String get browserManualUserscriptLabel;
 
   /// No description provided for @browserScriptImportUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Script URL'**
   String get browserScriptImportUrl;
 
   /// No description provided for @browserScriptImportFetch.
+  ///
+  /// In en, this message translates to:
+  /// **'Fetch preview'**
   String get browserScriptImportFetch;
 
   /// No description provided for @browserScriptPreview.
+  ///
+  /// In en, this message translates to:
+  /// **'Script source preview'**
   String get browserScriptPreview;
 
   /// No description provided for @browserScriptImportInvalidUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a valid HTTPS URL.'**
   String get browserScriptImportInvalidUrl;
 
   /// No description provided for @browserScriptImportUnsupportedUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Use a Greasy Fork .user.js URL or a GitHub Raw URL.'**
   String get browserScriptImportUnsupportedUrl;
 
   /// No description provided for @browserScriptImportRedirectedUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'The URL redirected to an unsupported or insecure address.'**
   String get browserScriptImportRedirectedUrl;
 
   /// No description provided for @browserScriptImportNotScript.
+  ///
+  /// In en, this message translates to:
+  /// **'The response is empty or does not appear to be a JavaScript script.'**
   String get browserScriptImportNotScript;
 
   /// No description provided for @browserScriptImportNetworkError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not fetch the script. Check the URL and your connection.'**
   String get browserScriptImportNetworkError;
 
   /// No description provided for @browserScriptImportHttpError.
+  ///
+  /// In en, this message translates to:
+  /// **'The server returned HTTP {status}.'**
   String browserScriptImportHttpError(Object status);
 
   /// No description provided for @browserCancel.

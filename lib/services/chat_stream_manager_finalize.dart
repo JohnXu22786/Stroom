@@ -159,13 +159,20 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
           toolCallRoundStarts: state.toolCallRoundStarts,
         );
         if (wasCancelled) {
-          blocks.add(const ErrorBlock(message: '用户中断了输出'));
+          final cancelledMessage =
+              appLocalizationsForLocale(_ref?.read(localeProvider))
+                  .chatErrorCancelled;
+          blocks.add(ErrorBlock(message: cancelledMessage));
         } else if (hadStreamError &&
             (textChunks.any((chunk) => chunk.isNotEmpty) ||
                 state.reasoningSections.any((section) => section.isNotEmpty))) {
-          blocks.add(ErrorBlock(
-            message: formatChatErrorMessage(streamError),
-          ));
+          final errorMessage = _ref == null
+              ? formatChatErrorMessage(streamError)
+              : formatChatErrorMessage(
+                  streamError,
+                  locale: _ref?.read(localeProvider),
+                );
+          blocks.add(ErrorBlock(message: errorMessage));
         }
         final msg = ChatMessage(
           role: 'assistant',

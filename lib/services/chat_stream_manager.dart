@@ -666,7 +666,9 @@ class ChatStreamManager {
         // 用友好错误格式化（分类中文提示 + 保留原始异常）：
         // 未配置供应商/网络失败/超时等给出可操作的提示。
         // 保留已经流出的正文或思考内容，并把错误作为独立尾部块显示。
-        final errorText = formatChatErrorMessage(e);
+        final errorText = _ref == null
+            ? formatChatErrorMessage(e)
+            : formatChatErrorMessage(e, locale: _ref?.read(localeProvider));
         final partial = state.fullReply;
         if (partial.isEmpty) {
           state.fullReply = errorText;

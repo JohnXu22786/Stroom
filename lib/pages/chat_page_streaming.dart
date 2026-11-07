@@ -725,7 +725,9 @@ extension _ChatPageStreamingExt on _ChatPageState {
         _liveMarkdownAppendCounts
             .removeWhere((key, _) => key.startsWith('$stoppedMsgId:'));
         if (!segments.any((segment) => segment is ErrorSegment)) {
-          segments.add(ErrorSegment('用户中断了输出'));
+          segments.add(
+            ErrorSegment(AppLocalizations.of(context)!.chatErrorCancelled),
+          );
         }
         _chatSegments[stoppedMsgId] = segments;
         _controller?.updateMessage(

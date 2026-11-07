@@ -1,39 +1,110 @@
 import 'dart:convert';
 
+import 'package:flutter/widgets.dart';
+import 'package:stroom/providers/locale_provider.dart'
+    show appLocalizationsForLocale;
+
 import '../../../utils/data_sanitizer.dart';
 
 /// 格式化聊天错误信息，分类显示友好的提示并保留原始错误
-String formatChatErrorMessage(Object error) {
+String formatChatErrorMessage(
+  Object error, {
+  Locale? locale = const Locale('zh', 'CN'),
+}) {
+  final l10n = appLocalizationsForLocale(locale);
   final errorStr = error.toString();
 
   if (errorStr.contains('请先配置聊天供应商')) {
-    return '错误: 聊天 API 未配置，请先前往设置页面配置';
+    final details = _detailsAroundKnownMessage(
+      errorStr,
+      '请先配置聊天供应商',
+    );
+    return _withDetails(
+      '${l10n.chatErrorPrefix}${l10n.chatErrorProviderNotConfigured}',
+      details,
+    );
   }
 
   if (errorStr.contains('API key not configured')) {
-    return '错误: API Key 未配置，请检查设置';
+    final details = _detailsAroundKnownMessage(
+      errorStr,
+      'API key not configured',
+    );
+    return _withDetails(
+      '${l10n.chatErrorPrefix}${l10n.chatErrorApiKeyNotConfigured}',
+      details,
+    );
   }
 
   if (errorStr.contains('无法连接到服务器') || errorStr.contains('连接错误')) {
-    return '错误: 无法连接到服务器，请检查网络连接和 API 地址\n$errorStr';
+    final details = _detailsAroundFirstKnownMessage(errorStr, [
+      '无法连接到服务器，请检查网络连接和 API 地址',
+      '无法连接到服务器',
+      '连接错误',
+    ]);
+    return _withDetails(
+      '${l10n.chatErrorPrefix}${l10n.chatErrorServerConnection}',
+      details ?? errorStr,
+    );
   }
 
   if (errorStr.contains('SocketException') ||
       errorStr.contains('Connection refused') ||
       errorStr.contains('连接失败')) {
-    return '错误: 网络连接失败，请检查网络连接\n$errorStr';
+    final details = _detailsAroundFirstKnownMessage(errorStr, [
+      '网络连接失败，请检查网络连接',
+      '网络连接失败',
+      '连接失败',
+    ]);
+    return _withDetails(
+      '${l10n.chatErrorPrefix}${l10n.chatErrorNetworkConnection}',
+      details ?? errorStr,
+    );
   }
 
   if (errorStr.contains('timeout') || errorStr.contains('超时')) {
-    return '错误: 连接超时，服务器无响应\n$errorStr';
+    final details = _detailsAroundFirstKnownMessage(errorStr, [
+      '连接超时，服务器无响应',
+      '连接超时',
+    ]);
+    return _withDetails(
+      '${l10n.chatErrorPrefix}${l10n.chatErrorTimeout}',
+      details ?? errorStr,
+    );
   }
 
   if (errorStr.contains('HTTP ')) {
-    return '错误: $errorStr';
+    return '${l10n.chatErrorPrefix}$errorStr';
   }
 
-  return '错误: $errorStr';
+  return '${l10n.chatErrorPrefix}$errorStr';
 }
+
+String _detailsAroundKnownMessage(String error, String knownMessage) {
+  final messageStart = error.indexOf(knownMessage);
+  final messageEnd = messageStart + knownMessage.length;
+  final before = error.substring(0, messageStart);
+  final after =
+      error.substring(messageEnd).replaceFirst(RegExp(r'^\s*[:：-]\s*'), '');
+  final details = '$before$after';
+  final trimmedDetails = details.trim();
+  return trimmedDetails == 'Exception:' ? '' : details;
+}
+
+String? _detailsAroundFirstKnownMessage(
+  String error,
+  List<String> knownMessages,
+) {
+  for (final knownMessage in knownMessages) {
+    if (error.contains(knownMessage)) {
+      return _detailsAroundKnownMessage(error, knownMessage);
+    }
+  }
+  return null;
+}
+
+String _withDetails(String message, String details) =>
+    details.isEmpty ? message : '$message\n$details';
 
 /// 格式化 API 错误响应值（如响应体）用于错误气泡与详情弹窗展示。
 ///
