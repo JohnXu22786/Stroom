@@ -43,13 +43,13 @@ String _localizedBackgroundTaskTitle(
 
   final (prefix, localize) = switch (task.type) {
     BackgroundTaskType.ocr => (
-      '文字识别_',
-      strings.backgroundTaskGeneratedOcrTitle,
-    ),
+        '文字识别_',
+        strings.backgroundTaskGeneratedOcrTitle,
+      ),
     BackgroundTaskType.audioSeparation => (
-      '音频分离_',
-      strings.backgroundTaskGeneratedAudioSeparationTitle,
-    ),
+        '音频分离_',
+        strings.backgroundTaskGeneratedAudioSeparationTitle,
+      ),
     _ => (null, null),
   };
   if (prefix == null || localize == null || !task.title.startsWith(prefix)) {
