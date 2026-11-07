@@ -233,7 +233,9 @@ class CustomTTSProvider extends BaseTTSProvider {
         if (chunk.isNotEmpty) yield chunk;
       }
     } on DioException catch (e) {
-      debugPrint('CustomTTSProvider: 流式失败，回退到非流式: ${_parseDioError(e)}');
+      debugPrint(
+        'CustomTTSProvider: 流式失败，回退到非流式: ${e.message ?? e.toString()}',
+      );
       // 移除 stream 参数，避免非流式请求中包含 stream: true
       final sanitizedParams = params != null
           ? Map<String, dynamic>.from(params)
@@ -247,7 +249,7 @@ class CustomTTSProvider extends BaseTTSProvider {
     final strings = appLocalizationsForLocale(_locale);
     final String origMsg = e.type == DioExceptionType.cancel
         ? e.error?.toString() ?? e.message ?? ''
-        : e.message ?? '';
+        : e.message ?? e.error?.toString() ?? '';
     final String extra =
         origMsg.isNotEmpty ? strings.ttsErrorOriginalError(origMsg) : '';
     switch (e.type) {
@@ -306,7 +308,7 @@ class CustomTTSProvider extends BaseTTSProvider {
         if (e.type == DioExceptionType.connectionError && kIsWeb) {
           return strings.ttsErrorWebNetworkGuidance(extra);
         }
-        return strings.ttsErrorNetwork(e.message ?? '');
+        return strings.ttsErrorNetwork(e.message ?? e.error?.toString() ?? '');
     }
   }
 }

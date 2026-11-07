@@ -274,7 +274,7 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
         }
       }
       final strings = appLocalizationsForLocale(ref.read(localeProvider));
-      final String origMsg = e.message ?? '';
+      final String origMsg = e.message ?? e.error?.toString() ?? '';
       final String extra =
           origMsg.isNotEmpty ? strings.ttsErrorOriginalError(origMsg) : '';
       String errorMsg;
@@ -289,7 +289,9 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
           errorMsg = kIsWeb
               ? strings.ttsErrorWebConnectionGuidance(extra)
               : strings.ttsErrorConnectionFailed(
-                  e.message ?? strings.ttsErrorUnknownNetwork,
+                  e.message ??
+                      e.error?.toString() ??
+                      strings.ttsErrorUnknownNetwork,
                 );
           break;
         case DioExceptionType.badResponse:

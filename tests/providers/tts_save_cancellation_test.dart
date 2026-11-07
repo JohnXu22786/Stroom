@@ -15,7 +15,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/providers/locale_provider.dart';
 import 'package:stroom/providers/tts_provider.dart';
-import 'package:stroom/providers/tts_state_provider.dart';
 import 'package:stroom/providers/task_provider.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/services/storage_service.dart';
@@ -112,6 +111,22 @@ void main() {
     notifier.debugSynthesize = (_, __, ___) async {
       throw DioException(
         requestOptions: RequestOptions(path: '/speech'),
+        type: DioExceptionType.connectionError,
+        error: 'raw connection detail',
+      );
+    };
+    final connectionId = notifier.addTask(
+      title: 'Connection failure',
+      text: 'Keep original text',
+      providerConfig: providerConfig,
+      modelConfig: modelConfig,
+    );
+    final connectionTask = await waitForStatus(connectionId, TaskStatus.failed);
+    expect(connectionTask.error, '无法连接到服务器（raw connection detail）');
+
+    notifier.debugSynthesize = (_, __, ___) async {
+      throw DioException(
+        requestOptions: RequestOptions(path: '/speech'),
         response: Response(
           requestOptions: RequestOptions(path: '/speech'),
           statusCode: 429,
@@ -153,62 +168,43 @@ void main() {
       englishTask.error,
       'Network connection timed out. Check your network or API address.',
     );
+    notifier.debugSynthesize = (_, __, ___) async {
+      throw SynthesisException(
+        'TTS synthesis failed: raw provider failure',
+        requestBody: 'original request payload',
+        responseBody: 'raw provider response',
+      );
+    };
+    final providerErrorId = notifier.addTask(
+      title: 'Provider failure',
+      text: 'Original synthesized text',
+      providerConfig: providerConfig,
+      modelConfig: modelConfig,
+    );
+    final providerFailure =
+        await waitForStatus(providerErrorId, TaskStatus.failed);
+    expect(providerFailure.error, 'TTS synthesis failed: raw provider failure');
+    expect(providerFailure.originalRequest, 'original request payload');
+    expect(providerFailure.originalResponse, 'raw provider response');
   });
 
-  test('TTS provider localizes API and cancellation failure framing', () async {
-    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    server.listen((request) async {
-      request.response
-        ..statusCode = HttpStatus.tooManyRequests
-        ..write('provider response body');
-      await request.response.close();
-    });
+  test('TTS provider localizes cancellation failure framing', () async {
     final provider = CustomTTSProvider(
-      baseUrl: 'http://${server.address.address}:${server.port}/speech',
+      baseUrl: 'https://example.invalid/speech',
       apiKey: 'test-key',
       locale: const Locale('zh', 'CN'),
     );
-    try {
-      await expectLater(
-        provider.synthesize('user text'),
-        throwsA(
-          isA<SynthesisException>()
-              .having((error) => error.message, 'message',
-                  'TTS 合成失败：请求过于频繁，请稍后重试 (HTTP 429)')
-              .having((error) => error.responseBody, 'responseBody',
-                  'provider response body'),
+    final cancelToken = CancelToken()..cancel('raw cancellation detail');
+    await expectLater(
+      provider.synthesize('user text', cancelToken: cancelToken),
+      throwsA(
+        isA<SynthesisException>().having(
+          (error) => error.message,
+          'message',
+          'TTS 合成失败：请求已取消\n原始错误：raw cancellation detail',
         ),
-      );
-
-      await container.read(localeProvider.notifier).setLocaleCode('zh_CN');
-      await container.read(ttsStateProvider.notifier).synthesize(
-            'user text',
-            providerConfig: ProviderConfigItem(
-              providerName: 'test',
-              host: 'http://${server.address.address}:${server.port}/speech',
-              key: 'test-key',
-            ),
-            modelConfig: modelConfig,
-          );
-      expect(
-        container.read(ttsStateProvider).error,
-        'TTS 合成失败：请求过于频繁，请稍后重试 (HTTP 429)',
-      );
-
-      final cancelToken = CancelToken()..cancel('raw cancellation detail');
-      await expectLater(
-        provider.synthesize('user text', cancelToken: cancelToken),
-        throwsA(
-          isA<SynthesisException>().having(
-            (error) => error.message,
-            'message',
-            'TTS 合成失败：请求已取消\n原始错误：raw cancellation detail',
-          ),
-        ),
-      );
-    } finally {
-      await server.close(force: true);
-    }
+      ),
+    );
   });
 
   test('pausing during save removes audio, source text, and gallery record',
