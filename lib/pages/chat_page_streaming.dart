@@ -266,6 +266,7 @@ extension _ChatPageStreamingExt on _ChatPageState {
 
     _isStreamingActive = false;
     _streamingMsgId = null;
+    if (msgId != null) _convertedStreamingPlaceholderIds.remove(msgId);
     _detachStreamPage();
     final convId = ref.read(activeConversationIdProvider);
     try {
@@ -466,6 +467,7 @@ extension _ChatPageStreamingExt on _ChatPageState {
     if (shouldApplyStreamResult) {
       _streamingMsgId = null;
       _isStreamingActive = false;
+      _convertedStreamingPlaceholderIds.remove(aiMsgId);
     }
 
     // Clean up local streaming state and providers. Do not clear providers
@@ -649,6 +651,9 @@ extension _ChatPageStreamingExt on _ChatPageState {
     final convId = ref.read(activeConversationIdProvider);
     _isStreamingActive = false;
     _streamingMsgId = null;
+    if (stoppedMsgId != null) {
+      _convertedStreamingPlaceholderIds.remove(stoppedMsgId);
+    }
     try {
       ref.read(chatStreamManagerProvider).cancel(convId);
       // Render the partial response and interruption error immediately. The
