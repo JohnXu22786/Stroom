@@ -9809,6 +9809,64 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get sseRequestCancelled => 'Request cancelled';
+
+  @override
+  String get startupSafetyTitle => 'Data safety protection';
+
+  @override
+  String get startupSafetyExportButton => 'Export data';
+
+  @override
+  String get startupSafetyExitButton => 'Exit app';
+
+  @override
+  String get startupSafetyUpdateButton => 'Update app';
+
+  @override
+  String get startupSafetyCheckingUpdates => 'Checking for updates...';
+
+  @override
+  String get startupSafetyUpToDate => 'You\'re up to date';
+
+  @override
+  String startupSafetyNewerDataVersion(String version) {
+    return 'This data was created by a newer version of the app ($version).\n\nThis app version cannot safely read the data. Install the latest version to continue. Your data has not been changed.';
+  }
+
+  @override
+  String get startupSafetyStatusUnreadable =>
+      'The data safety status could not be confirmed (the status marker could not be read or was invalid).\n\nTo avoid overwriting a possible frozen state, startup has been blocked without repairing data or migrating formats. First export your data file, then exit the app, repair the status marker, and try again.';
+
+  @override
+  String startupSafetyMigrationFailedNoChanges(String part) {
+    return 'Data format migration failed ($part).\n\nTo protect your data, no changes were made. Return to the previous app version, or wait for a fixed version before upgrading.';
+  }
+
+  @override
+  String startupSafetyMigrationFailedRestored(String part) {
+    return 'Data format migration failed ($part).\n\nYour data was restored to its pre-migration state. To protect it, return to the previous app version, or wait for a fixed version before upgrading.';
+  }
+
+  @override
+  String get startupSafetyDataCorrupted =>
+      'Data is damaged and could not be repaired automatically.\n\nThe app has been frozen to prevent further damage. Export your data file, then import it manually or reinstall.';
+
+  @override
+  String get startupSafetyPreferencesUnavailable =>
+      'The app could not read preferences required for startup checks, so startup has been blocked to protect your data.\n\nCheck storage space or permissions, then reopen the app.';
+
+  @override
+  String get startupSafetyValidationUnavailable =>
+      'The app could not complete its startup data-safety check, so startup has been blocked to protect your data.\n\nCheck browser settings, then reopen the app.';
+
+  @override
+  String startupSafetyCheckFailed(String detail) {
+    return 'Startup check failed: $detail';
+  }
+
+  @override
+  String get startupSafetyStatusUnreadableAfterChecks =>
+      'The data safety status could not be confirmed after startup checks (the status marker could not be read or was invalid).\n\nStartup has stopped to avoid making further data changes. Export your data file, exit the app, repair the status marker, and try again.';
 }
 
 /// The translations for English, as used in the United States (`en_US`).
@@ -19615,4 +19673,62 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get sseRequestCancelled => 'Request cancelled';
+
+  @override
+  String get startupSafetyTitle => 'Data safety protection';
+
+  @override
+  String get startupSafetyExportButton => 'Export data';
+
+  @override
+  String get startupSafetyExitButton => 'Exit app';
+
+  @override
+  String get startupSafetyUpdateButton => 'Update app';
+
+  @override
+  String get startupSafetyCheckingUpdates => 'Checking for updates...';
+
+  @override
+  String get startupSafetyUpToDate => 'You\'re up to date';
+
+  @override
+  String startupSafetyNewerDataVersion(String version) {
+    return 'This data was created by a newer version of the app ($version).\n\nThis app version cannot safely read the data. Install the latest version to continue. Your data has not been changed.';
+  }
+
+  @override
+  String get startupSafetyStatusUnreadable =>
+      'The data safety status could not be confirmed (the status marker could not be read or was invalid).\n\nTo avoid overwriting a possible frozen state, startup has been blocked without repairing data or migrating formats. First export your data file, then exit the app, repair the status marker, and try again.';
+
+  @override
+  String startupSafetyMigrationFailedNoChanges(String part) {
+    return 'Data format migration failed ($part).\n\nTo protect your data, no changes were made. Return to the previous app version, or wait for a fixed version before upgrading.';
+  }
+
+  @override
+  String startupSafetyMigrationFailedRestored(String part) {
+    return 'Data format migration failed ($part).\n\nYour data was restored to its pre-migration state. To protect it, return to the previous app version, or wait for a fixed version before upgrading.';
+  }
+
+  @override
+  String get startupSafetyDataCorrupted =>
+      'Data is damaged and could not be repaired automatically.\n\nThe app has been frozen to prevent further damage. Export your data file, then import it manually or reinstall.';
+
+  @override
+  String get startupSafetyPreferencesUnavailable =>
+      'The app could not read preferences required for startup checks, so startup has been blocked to protect your data.\n\nCheck storage space or permissions, then reopen the app.';
+
+  @override
+  String get startupSafetyValidationUnavailable =>
+      'The app could not complete its startup data-safety check, so startup has been blocked to protect your data.\n\nCheck browser settings, then reopen the app.';
+
+  @override
+  String startupSafetyCheckFailed(String detail) {
+    return 'Startup check failed: $detail';
+  }
+
+  @override
+  String get startupSafetyStatusUnreadableAfterChecks =>
+      'The data safety status could not be confirmed after startup checks (the status marker could not be read or was invalid).\n\nStartup has stopped to avoid making further data changes. Export your data file, exit the app, repair the status marker, and try again.';
 }

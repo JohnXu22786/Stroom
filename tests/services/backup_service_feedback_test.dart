@@ -117,8 +117,14 @@ void main() {
 
   testWidgets('backup service export success and errors follow the app locale',
       (tester) async {
-    final tempDir = await Directory.systemTemp.createTemp('backup_feedback_');
-    addTearDown(() => tempDir.delete(recursive: true));
+    // testWidgets uses FakeAsync, which does not complete real dart:io work.
+    final tempDir = await tester.runAsync(
+      () => Directory.systemTemp.createTemp('backup_feedback_'),
+    );
+    if (tempDir == null) fail('Could not create the backup test directory.');
+    addTearDown(() async {
+      await tester.runAsync(() => tempDir.delete(recursive: true));
+    });
     const selectorChannel = MethodChannel('plugins.flutter.io/file_selector');
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
@@ -195,9 +201,11 @@ void main() {
       pickerFailure =
           PlatformException(code: 'test', message: 'export picker detail');
       expect(
-        await BackupService.exportBackup(
-          navigatorKey.currentContext!,
-          selection: emptySelection,
+        await tester.runAsync(
+          () => BackupService.exportBackup(
+            navigatorKey.currentContext!,
+            selection: emptySelection,
+          ),
         ),
         isFalse,
       );
@@ -210,9 +218,11 @@ void main() {
       const providerDetail = 'provider detail: SAF URI 未配置，无法写入备份文件';
       pickerFailure = PlatformException(code: 'test', message: providerDetail);
       expect(
-        await BackupService.exportBackup(
-          navigatorKey.currentContext!,
-          selection: emptySelection,
+        await tester.runAsync(
+          () => BackupService.exportBackup(
+            navigatorKey.currentContext!,
+            selection: emptySelection,
+          ),
         ),
         isFalse,
       );
@@ -225,9 +235,11 @@ void main() {
         BackupLocationManager.noBackupDirectoryWriteErrorMessage,
       );
       expect(
-        await BackupService.exportBackup(
-          navigatorKey.currentContext!,
-          selection: emptySelection,
+        await tester.runAsync(
+          () => BackupService.exportBackup(
+            navigatorKey.currentContext!,
+            selection: emptySelection,
+          ),
         ),
         isFalse,
       );

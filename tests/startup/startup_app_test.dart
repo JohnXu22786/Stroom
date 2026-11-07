@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/l10n/app_localizations.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:stroom/providers/locale_provider.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/application.dart';
@@ -135,11 +135,85 @@ void main() {
   });
 
   group('StartupApp - restart dialog flow', () {
+    testWidgets('safety block copy follows the saved app locale',
+        (tester) async {
+      tester.platformDispatcher.localeTestValue = const Locale('en', 'US');
+      addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+      SharedPreferences.setMockInitialValues({
+        localePreferenceKey: 'zh_CN',
+        'data_format_versions': jsonEncode({
+          for (final part in DataParts.all)
+            part: part == 'chat'
+                ? DataParts.currentVersions[part]! + 1
+                : DataParts.currentVersions[part],
+        }),
+      });
+      AppStorage.resetCache();
+
+      await tester.pumpWidget(const ProviderScope(child: StartupApp()));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.pump();
+
+      expect(find.text('数据安全保护'), findsOneWidget);
+      final l10n = AppLocalizations.of(
+        tester.element(find.text('数据安全保护')),
+      )!;
+      final currentChatVersion = DataParts.currentVersions['chat']!;
+      final newerVersion =
+          'chat v${currentChatVersion + 1} > v$currentChatVersion';
+
+      expect(l10n.localeName, 'zh_CN');
+      expect(find.text(l10n.startupSafetyExportButton), findsOneWidget);
+      expect(find.text(l10n.startupSafetyExitButton), findsOneWidget);
+      expect(find.text(l10n.startupSafetyUpdateButton), findsOneWidget);
+      expect(
+        find.text(l10n.startupSafetyNewerDataVersion(newerVersion)),
+        findsOneWidget,
+      );
+      expect(l10n.startupSafetyCheckingUpdates, '正在检查更新...');
+      expect(l10n.startupSafetyUpToDate, '已是最新版本');
+    });
+
+    testWidgets('safety block matches the app locale fallback', (tester) async {
+      tester.platformDispatcher.localeTestValue = const Locale('zh', 'TW');
+      addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+      SharedPreferences.setMockInitialValues({
+        'data_format_versions': jsonEncode({
+          for (final part in DataParts.all)
+            part: part == 'chat'
+                ? DataParts.currentVersions[part]! + 1
+                : DataParts.currentVersions[part],
+        }),
+      });
+      AppStorage.resetCache();
+
+      await tester.pumpWidget(const ProviderScope(child: StartupApp()));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.pump();
+
+      expect(find.text('Data safety protection'), findsOneWidget);
+      final l10n = AppLocalizations.of(
+        tester.element(find.text('Data safety protection')),
+      )!;
+      final currentChatVersion = DataParts.currentVersions['chat']!;
+      final newerVersion =
+          'chat v${currentChatVersion + 1} > v$currentChatVersion';
+
+      expect(l10n.localeName, 'en_US');
+      expect(
+        find.text(l10n.startupSafetyNewerDataVersion(newerVersion)),
+        findsOneWidget,
+      );
+    });
+
     testWidgets(
         'migration restart dialog survives the back button and '
         'dismissal proceeds to the main app', (tester) async {
       // 旧版本数据 → 启动序列执行迁移 → 弹出「数据格式升级完成」对话框。
       SharedPreferences.setMockInitialValues({
+        localePreferenceKey: 'zh_CN',
         'data_format_version': 0,
         'provider_entries': jsonEncode([
           {'id': 'p1', 'type': 'llm', 'name': 'P1', 'configs': []},
@@ -161,6 +235,13 @@ void main() {
       await tester.pump();
       // 启动页先显示。
       expect(find.byType(StartupPage), findsOneWidget);
+      final startupApp = tester.widget<MaterialApp>(find.byType(MaterialApp));
+      expect(startupApp.locale, const Locale('zh', 'CN'));
+      expect(
+        AppLocalizations.of(tester.element(find.byType(StartupPage)))
+            ?.localeName,
+        'zh_CN',
+      );
 
       // 推进启动序列（最小显示 1.5s + 各检查延时 + 完成态 0.6s）。
       // 迁移链路包含大量真实文件 I/O（备份 ZIP 创建/清理），而

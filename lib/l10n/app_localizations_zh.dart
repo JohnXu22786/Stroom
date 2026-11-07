@@ -9303,6 +9303,64 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get sseRequestCancelled => '请求已取消';
+
+  @override
+  String get startupSafetyTitle => '数据安全保护';
+
+  @override
+  String get startupSafetyExportButton => '导出数据';
+
+  @override
+  String get startupSafetyExitButton => '退出应用';
+
+  @override
+  String get startupSafetyUpdateButton => '更新应用';
+
+  @override
+  String get startupSafetyCheckingUpdates => '正在检查更新...';
+
+  @override
+  String get startupSafetyUpToDate => '已是最新版本';
+
+  @override
+  String startupSafetyNewerDataVersion(String version) {
+    return '数据由更新版本的应用创建（$version）。\n\n当前版本无法安全读取这些数据。请安装最新版本的应用后再继续，数据未做任何改动。';
+  }
+
+  @override
+  String get startupSafetyStatusUnreadable =>
+      '无法确认数据安全状态（状态标记无法读取或格式无效）。\n\n为避免覆盖可能存在的冻结状态，应用已阻止启动，未执行数据修复或格式迁移。请先导出数据文件，然后退出应用并修复状态标记后重试。';
+
+  @override
+  String startupSafetyMigrationFailedNoChanges(String part) {
+    return '数据格式迁移失败（$part）。\n\n为保护数据，未做任何改动。请回退到旧版本应用，或等待修复版本发布后再升级。';
+  }
+
+  @override
+  String startupSafetyMigrationFailedRestored(String part) {
+    return '数据格式迁移失败（$part）。\n\n已自动恢复到迁移前的数据。为保护数据，请回退到旧版本应用，或等待修复版本发布后再升级。';
+  }
+
+  @override
+  String get startupSafetyDataCorrupted =>
+      '数据损坏且无法自动修复。\n\n应用已冻结以防止进一步破坏。请先导出数据文件，然后手动导入或重新安装。';
+
+  @override
+  String get startupSafetyPreferencesUnavailable =>
+      '无法读取启动检查所需的偏好设置，应用已阻止继续启动以保护数据。\n\n请检查存储空间或权限后重新打开应用。';
+
+  @override
+  String get startupSafetyValidationUnavailable =>
+      '无法完成启动数据安全检查，应用已阻止继续启动以保护数据。\n\n请检查浏览器设置后重新打开应用。';
+
+  @override
+  String startupSafetyCheckFailed(String detail) {
+    return '启动检查失败：$detail';
+  }
+
+  @override
+  String get startupSafetyStatusUnreadableAfterChecks =>
+      '完成启动数据检查后，仍无法确认数据安全状态（状态标记无法读取或格式无效）。\n\n为避免继续改动数据，应用已停止启动。请先导出数据文件，然后退出应用并修复状态标记后重试。';
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).
@@ -18603,4 +18661,62 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get sseRequestCancelled => '请求已取消';
+
+  @override
+  String get startupSafetyTitle => '数据安全保护';
+
+  @override
+  String get startupSafetyExportButton => '导出数据';
+
+  @override
+  String get startupSafetyExitButton => '退出应用';
+
+  @override
+  String get startupSafetyUpdateButton => '更新应用';
+
+  @override
+  String get startupSafetyCheckingUpdates => '正在检查更新...';
+
+  @override
+  String get startupSafetyUpToDate => '已是最新版本';
+
+  @override
+  String startupSafetyNewerDataVersion(String version) {
+    return '数据由更新版本的应用创建（$version）。\n\n当前版本无法安全读取这些数据。请安装最新版本的应用后再继续，数据未做任何改动。';
+  }
+
+  @override
+  String get startupSafetyStatusUnreadable =>
+      '无法确认数据安全状态（状态标记无法读取或格式无效）。\n\n为避免覆盖可能存在的冻结状态，应用已阻止启动，未执行数据修复或格式迁移。请先导出数据文件，然后退出应用并修复状态标记后重试。';
+
+  @override
+  String startupSafetyMigrationFailedNoChanges(String part) {
+    return '数据格式迁移失败（$part）。\n\n为保护数据，未做任何改动。请回退到旧版本应用，或等待修复版本发布后再升级。';
+  }
+
+  @override
+  String startupSafetyMigrationFailedRestored(String part) {
+    return '数据格式迁移失败（$part）。\n\n已自动恢复到迁移前的数据。为保护数据，请回退到旧版本应用，或等待修复版本发布后再升级。';
+  }
+
+  @override
+  String get startupSafetyDataCorrupted =>
+      '数据损坏且无法自动修复。\n\n应用已冻结以防止进一步破坏。请先导出数据文件，然后手动导入或重新安装。';
+
+  @override
+  String get startupSafetyPreferencesUnavailable =>
+      '无法读取启动检查所需的偏好设置，应用已阻止继续启动以保护数据。\n\n请检查存储空间或权限后重新打开应用。';
+
+  @override
+  String get startupSafetyValidationUnavailable =>
+      '无法完成启动数据安全检查，应用已阻止继续启动以保护数据。\n\n请检查浏览器设置后重新打开应用。';
+
+  @override
+  String startupSafetyCheckFailed(String detail) {
+    return '启动检查失败：$detail';
+  }
+
+  @override
+  String get startupSafetyStatusUnreadableAfterChecks =>
+      '完成启动数据检查后，仍无法确认数据安全状态（状态标记无法读取或格式无效）。\n\n为避免继续改动数据，应用已停止启动。请先导出数据文件，然后退出应用并修复状态标记后重试。';
 }
