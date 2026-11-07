@@ -488,6 +488,7 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
       };
       final messageIndexesByConversationId = <String, Map<String, int>>{};
       final indexedMessagesByConversationId = <String, List<ChatMessage>>{};
+      final unorderedMessageConversationIds = <String>{};
       await for (final line in _readStreamCheckpointRecords(
         webKeys: webKeys,
         nativePath: nativeJournalPath,
@@ -569,9 +570,13 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
             messageIndexesByConversationId[conversationId] = messageIndexes;
             indexedMessagesByConversationId[conversationId] =
                 conversation.messages;
+            if (_checkpointMessagesAreOrdered(conversation.messages)) {
+              unorderedMessageConversationIds.remove(conversationId);
+            } else {
+              unorderedMessageConversationIds.add(conversationId);
+            }
           }
-          final checkpointMessageExists =
-              messageIndexes.containsKey(messageId);
+          final checkpointMessageExists = messageIndexes.containsKey(messageId);
           final checkpointUpdatedAt =
               DateTime.tryParse(record['updatedAt'] as String? ?? '');
           final checkpointMetadataIsCurrent = checkpointUpdatedAt != null &&
@@ -588,12 +593,14 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
             baseConversationRaw is Map ? baseConversationRaw['messages'] : null,
             deletedMessages[conversationId] ?? const <String>{},
             messageIndexes,
+            unorderedMessageConversationIds.contains(conversationId),
           );
           _mergeCheckpointHistoryMessages(
             conversation,
             record['historyMessages'],
             deletedMessages[conversationId] ?? const <String>{},
             messageIndexes,
+            unorderedMessageConversationIds.contains(conversationId),
           );
           final existingIndex = messageIndexes[messageId] ?? -1;
           final existing =
@@ -692,6 +699,11 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
             contentFromTextSections: true,
           );
           if (existingIndex < 0) {
+            if (conversation.messages.isNotEmpty &&
+                conversation.messages.last.createdAt
+                    .isAfter(message.createdAt)) {
+              unorderedMessageConversationIds.add(conversationId);
+            }
             conversation.messages.add(message);
             messageIndexes[messageId] = conversation.messages.length - 1;
           } else {
@@ -830,11 +842,38 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
     return indexes;
   }
 
+  bool _checkpointMessagesAreOrdered(List<ChatMessage> messages) {
+    for (var index = 1; index < messages.length; index++) {
+      if (messages[index - 1].createdAt.isAfter(messages[index].createdAt)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  int _checkpointHistoryInsertionIndex(
+    List<ChatMessage> messages,
+    DateTime createdAt,
+  ) {
+    var low = 0;
+    var high = messages.length;
+    while (low < high) {
+      final middle = low + ((high - low) >> 1);
+      if (messages[middle].createdAt.isAfter(createdAt)) {
+        high = middle;
+      } else {
+        low = middle + 1;
+      }
+    }
+    return low < messages.length ? low : -1;
+  }
+
   void _mergeCheckpointHistoryMessages(
     Conversation conversation,
     dynamic rawMessages,
     Set<String> deletedMessageIds,
     Map<String, int> messageIndexes,
+    bool messageOrderIsUnsorted,
   ) {
     if (rawMessages is! List) return;
     for (final raw in rawMessages) {
@@ -843,18 +882,22 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
         final message = ChatMessage.fromMap(Map<String, dynamic>.from(raw));
         if (deletedMessageIds.contains(message.id)) continue;
         if (messageIndexes.containsKey(message.id)) continue;
-        final insertionIndex = conversation.messages.indexWhere(
-          (existing) => existing.createdAt.isAfter(message.createdAt),
-        );
+        final insertionIndex = messageOrderIsUnsorted
+            ? conversation.messages.indexWhere(
+                (existing) => existing.createdAt.isAfter(message.createdAt),
+              )
+            : _checkpointHistoryInsertionIndex(
+                conversation.messages,
+                message.createdAt,
+              );
         if (insertionIndex < 0) {
           conversation.messages.add(message);
           messageIndexes[message.id] = conversation.messages.length - 1;
         } else {
           conversation.messages.insert(insertionIndex, message);
-          for (final id in messageIndexes.keys.toList()) {
-            final index = messageIndexes[id]!;
-            if (index >= insertionIndex) messageIndexes[id] = index + 1;
-          }
+          messageIndexes.updateAll(
+            (id, index) => index >= insertionIndex ? index + 1 : index,
+          );
           messageIndexes[message.id] = insertionIndex;
         }
       } catch (e) {
