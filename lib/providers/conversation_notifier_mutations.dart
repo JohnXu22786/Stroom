@@ -410,6 +410,11 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
   /// 延长临时对话的生命周期）。
   Future<void> updateMessages(String conversationId, List<ChatMessage> messages,
       {bool resetTemporaryCountdown = false}) async {
+    // Checkpoint tombstones can only be derived safely after startup replay has
+    // indexed the journal. Without this barrier, an early edit treats every
+    // removed message as checkpointed and may perform journal I/O while the
+    // initial load is still merging the same conversation.
+    await ready;
     if (!mounted) return;
     var current = state.where((c) => c.id == conversationId).firstOrNull;
     if (current != null) {
