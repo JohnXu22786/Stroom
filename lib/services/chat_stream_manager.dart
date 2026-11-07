@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
 import 'package:flutter_riverpod/flutter_riverpod.dart' show Ref;
 import 'package:flutter_riverpod/legacy.dart'
@@ -15,7 +16,8 @@ import '../providers/chat_stream_provider.dart';
 import '../providers/context_management_provider.dart';
 import '../providers/conversation_provider.dart';
 import '../providers/system_assistant_provider.dart';
-import '../providers/locale_provider.dart';
+import '../providers/locale_provider.dart'
+    show appLocalizationsForLocale, localeProvider;
 import '../providers/provider_config.dart';
 import 'app_log_service.dart';
 import 'chat_adapter.dart';
@@ -28,7 +30,6 @@ import 'chat_retry_policy.dart'
         isRetryableTransportFailure,
         shouldAutoContinueStream,
         waitForRetryOrCancellation;
-import '../l10n/app_localizations.dart' show appLocalizationsForLocale;
 
 // ============================================================================
 // ChatStreamManager — 对话流式请求管理器

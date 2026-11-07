@@ -100,7 +100,7 @@ extension _ChatStreamManagerEventsExt on ChatStreamManager {
           status: ToolCallStatus.running,
         );
         state.toolCalls.add(toolCallData);
-        state.accumulatedToolCalls.add(toolCallData);
+        state.addAccumulatedToolCall(toolCallData);
         // Start a new text chunk at tool call boundary so that
         // assistant speech is interleaved between tool call rounds
         // rather than all appearing at the end.
@@ -147,16 +147,13 @@ extension _ChatStreamManagerEventsExt on ChatStreamManager {
             break;
           }
         }
-        for (var i = 0; i < state.accumulatedToolCalls.length; i++) {
-          if (state.accumulatedToolCalls[i].id == e.toolCallId) {
-            state.accumulatedToolCalls[i] =
-                state.accumulatedToolCalls[i].copyWith(
-              status: ToolCallStatus.completed,
-              result: e.result,
-            );
-            break;
-          }
-        }
+        state.updateAccumulatedToolCall(
+          e.toolCallId,
+          (call) => call.copyWith(
+            status: ToolCallStatus.completed,
+            result: e.result,
+          ),
+        );
         _pushToProvider(convId, streamingToolCallsProvider,
             List<ToolCallData>.from(state.toolCalls));
     }
