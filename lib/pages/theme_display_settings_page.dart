@@ -24,11 +24,14 @@ class _ThemeDisplaySettingsPageState
     final strings = AppLocalizations.of(context)!;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('主题与显示'), centerTitle: true),
+      appBar: AppBar(
+        title: Text(strings.themeDisplaySettingsTitle),
+        centerTitle: true,
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          _buildSectionHeader(context, '主题'),
+          _buildSectionHeader(context, strings.themeDisplayThemeSection),
           Card(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -37,7 +40,7 @@ class _ThemeDisplaySettingsPageState
                   _buildThemeModeTile(
                     icon: Icons.light_mode,
                     iconColor: Colors.amber,
-                    title: '浅色模式',
+                    title: strings.themeModeLight,
                     value: ThemeMode.light,
                     groupValue: themeMode,
                     onSelected: themeNotifier.setLight,
@@ -46,7 +49,7 @@ class _ThemeDisplaySettingsPageState
                   _buildThemeModeTile(
                     icon: Icons.dark_mode,
                     iconColor: Colors.indigo,
-                    title: '深色模式',
+                    title: strings.themeModeDark,
                     value: ThemeMode.dark,
                     groupValue: themeMode,
                     onSelected: themeNotifier.setDark,
@@ -55,7 +58,7 @@ class _ThemeDisplaySettingsPageState
                   _buildThemeModeTile(
                     icon: Icons.settings_suggest,
                     iconColor: Colors.grey,
-                    title: '跟随系统',
+                    title: strings.themeModeSystem,
                     value: ThemeMode.system,
                     groupValue: themeMode,
                     onSelected: themeNotifier.setSystem,

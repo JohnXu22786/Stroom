@@ -16,6 +16,21 @@ class AppLocalizationsEn extends AppLocalizations {
   String get followSystemLanguage => 'Follow system';
 
   @override
+  String get themeDisplaySettingsTitle => 'Theme & Display';
+
+  @override
+  String get themeDisplayThemeSection => 'Theme';
+
+  @override
+  String get themeModeLight => 'Light mode';
+
+  @override
+  String get themeModeDark => 'Dark mode';
+
+  @override
+  String get themeModeSystem => 'Follow system';
+
+  @override
   String get languageNameEnglish => 'English';
 
   @override
@@ -9719,6 +9734,21 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get followSystemLanguage => 'Follow system';
+
+  @override
+  String get themeDisplaySettingsTitle => 'Theme & Display';
+
+  @override
+  String get themeDisplayThemeSection => 'Theme';
+
+  @override
+  String get themeModeLight => 'Light mode';
+
+  @override
+  String get themeModeDark => 'Dark mode';
+
+  @override
+  String get themeModeSystem => 'Follow system';
 
   @override
   String get languageNameEnglish => 'English';
