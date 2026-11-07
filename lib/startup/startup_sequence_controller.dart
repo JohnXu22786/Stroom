@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart' show debugPrint, immutable;
 
+import '../l10n/app_localizations.dart';
+import '../providers/locale_provider.dart';
 import '../services/app_log_service.dart';
 import '../services/data_migration_service.dart';
 import '../services/data_safety_manager.dart';
@@ -49,6 +51,11 @@ class StartupSequenceController {
   static const int _minimumDisplayMs = 1500;
   static const int _statusVisibilityDelayMs = 150;
 
+  StartupSequenceController({AppLocalizations Function()? localizations})
+      : _localizations =
+            localizations ?? (() => appLocalizationsForLocale(null));
+
+  final AppLocalizations Function() _localizations;
   final StreamController<StartupCheckProgress> _events =
       StreamController<StartupCheckProgress>.broadcast(sync: true);
   bool _hasRun = false;
@@ -80,6 +87,7 @@ class StartupSequenceController {
       throw StateError('StartupSequenceController can only run once.');
     }
     _hasRun = true;
+    final l10n = _localizations();
     final stopwatch = Stopwatch()..start();
 
     try {
@@ -104,9 +112,7 @@ class StartupSequenceController {
       if (versionAhead != null) {
         debugPrint(
             '[StartupSequenceController] Data version is ahead: $versionAhead');
-        final blocked = '数据由更新版本的应用创建（$versionAhead）。\n\n'
-            '当前版本无法安全读取这些数据。请安装最新版本的应用，'
-            '数据未做任何改动。';
+        final blocked = l10n.startupSafetyNewerDataVersion(versionAhead);
         _publish('', '', isWorking: false, blockedMessage: blocked);
         return StartupCheckOutcome(blockedMessage: blocked);
       }
@@ -115,16 +121,12 @@ class StartupSequenceController {
       if (repairResult.skippedDueToFreeze || repairResult.frozen) {
         final status = await DataSafetyManager.loadStatus();
         final blocked = repairResult.statusUnreadable || status.isUnreadable
-            ? '无法确认数据安全状态（状态标记无法读取或格式无效）。\n\n'
-                '为避免覆盖可能存在的冻结状态，应用已阻止启动，未执行数据修复或格式迁移。'
-                '请先使用「导出数据」保存数据文件，然后退出应用并修复状态标记后重试。'
+            ? l10n.startupSafetyStatusUnreadable
             : (status.failedMigration != null)
-                ? '数据格式迁移失败（${status.failedMigration}）。\n\n'
-                    '为保护数据未做任何改动。请回退到旧版本应用，'
-                    '或等待修复版本发布后再升级。'
-                : '数据损坏且无法自动修复。\n\n'
-                    '应用已冻结以防止进一步破坏。请使用「导出数据」'
-                    '保存数据文件，然后手动导入或重新安装。';
+                ? l10n.startupSafetyMigrationFailedNoChanges(
+                    status.failedMigration!,
+                  )
+                : l10n.startupSafetyDataCorrupted;
         _publish('', '', isWorking: false, blockedMessage: blocked);
         return StartupCheckOutcome(blockedMessage: blocked);
       }
@@ -162,16 +164,12 @@ class StartupSequenceController {
       final postMigrationStatus = await DataSafetyManager.loadStatus();
       if (postMigrationStatus.isFrozen || postMigrationStatus.isUnreadable) {
         final blocked = postMigrationStatus.isUnreadable
-            ? '无法确认数据安全状态（状态标记无法读取或格式无效）。\n\n'
-                '应用已停止继续启动。请先使用「导出数据」保存数据文件，'
-                '然后退出应用并修复状态标记后重试。'
+            ? l10n.startupSafetyStatusUnreadableAfterChecks
             : (postMigrationStatus.failedMigration != null)
-                ? '数据格式迁移失败（${postMigrationStatus.failedMigration}）。\n\n'
-                    '已自动恢复到迁移前的数据。为保护数据，请回退到旧版本应用，'
-                    '或等待修复版本发布后再升级。'
-                : '数据损坏且无法自动修复。\n\n'
-                    '应用已冻结以防止进一步破坏。请使用「导出数据」'
-                    '保存数据文件，然后手动导入或重新安装。';
+                ? l10n.startupSafetyMigrationFailedRestored(
+                    postMigrationStatus.failedMigration!,
+                  )
+                : l10n.startupSafetyDataCorrupted;
         debugPrint('[StartupSequenceController] Migration left data frozen');
         _publish('', '', isWorking: false, blockedMessage: blocked);
         return StartupCheckOutcome(blockedMessage: blocked);
@@ -295,14 +293,12 @@ class StartupSequenceController {
       if (error is StartupDataValidationUnavailable ||
           error is StartupPreferencesUnavailable) {
         final blocked = error is StartupPreferencesUnavailable
-            ? '无法读取启动检查所需的偏好设置，应用已阻止继续启动以保护数据。'
-                '\n\n请检查存储空间或权限后重新打开应用。'
-            : '无法完成启动数据安全检查，应用已阻止继续启动以保护数据。'
-                '\n\n请检查浏览器设置并重新打开应用。';
+            ? l10n.startupSafetyPreferencesUnavailable
+            : l10n.startupSafetyValidationUnavailable;
         _publish('', '', isWorking: false, blockedMessage: blocked);
         return StartupCheckOutcome(blockedMessage: blocked);
       }
-      final message = '启动检查失败: ${error.toString()}';
+      final message = l10n.startupSafetyCheckFailed(error.toString());
       _publish(message, '', isWorking: false, blockedMessage: message);
       return StartupCheckOutcome(
         failure: error.toString(),

@@ -32,6 +32,9 @@ class BackupLocationManager {
   BackupLocationManager._();
 
   static const String _androidSafUriKey = 'backup_saf_uri';
+  static const String noBackupDirectorySelectedMessage = '尚未选择备份目录，请在启动流程中授权';
+  static const String noBackupDirectoryWriteErrorMessage =
+      'SAF URI 未配置，无法写入备份文件';
 
   /// 测试专用：覆盖剩余空间查询（null 表示不覆盖，使用真实查询）。
   @visibleForTesting
@@ -181,7 +184,7 @@ class BackupLocationManager {
           if (uri != null) {
             return 'Documents/Stroom/AutoBackups';
           }
-          return '尚未选择备份目录，请在启动流程中授权';
+          return noBackupDirectorySelectedMessage;
         }
       } catch (e) {
         debugPrint('[BackupLocationManager] getDisplayPath 检查 Android 失败: $e');
@@ -492,7 +495,7 @@ class BackupLocationManager {
         if (Platform.isAndroid) {
           final uri = await _getSavedSafUri();
           if (uri == null) {
-            throw Exception('SAF URI 未配置，无法写入备份文件');
+            throw Exception(noBackupDirectoryWriteErrorMessage);
           }
           await _safChannel.invokeMethod<void>('writeFile', {
             'uri': uri,
@@ -544,7 +547,7 @@ class BackupLocationManager {
         if (Platform.isAndroid) {
           final uri = await _getSavedSafUri();
           if (uri == null) {
-            throw Exception('SAF URI 未配置，无法写入备份文件');
+            throw Exception(noBackupDirectoryWriteErrorMessage);
           }
           await _safChannel.invokeMethod<void>('writeFileFromPath', {
             'uri': uri,

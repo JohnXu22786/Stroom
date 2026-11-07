@@ -4262,6 +4262,10 @@
   "backupRestoreExportFailed": "Export failed: {error}",
   "backupRestoreApkgRequired": "Select an .apkg file",
   "backupRestoreImportFailed": "Import failed: {error}",
+  "backupServiceExportSavedTo": "Backup saved to: {location}",
+  "backupServiceExportFailed": "Backup failed: {error}",
+  "backupServiceRestoreFailed": "Restore failed: {error}",
+  "backupServiceNoBackupFolderSelected": "No backup folder has been selected. Authorize one during startup.",
   "backupRestoreRestoreSuccessTitle": "Data Restored",
   "backupRestoreRestoredMessage": "Data was restored from the backup. Restart the app to use the restored data.",
   "backupRestoreExitApp": "Quit App",
@@ -4344,6 +4348,21 @@
       "error": {
         "type": "String"
       }
+    }
+  },
+  "@backupServiceExportSavedTo": {
+    "placeholders": {
+      "location": { "type": "String" }
+    }
+  },
+  "@backupServiceExportFailed": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "@backupServiceRestoreFailed": {
+    "placeholders": {
+      "error": { "type": "String" }
     }
   },
   "@backupRestoreSkippedCategories": {
@@ -5546,5 +5565,40 @@
     }
   },
   "sseNetworkConnectionUnavailable": "Network request failed: unable to connect to server",
-  "sseRequestCancelled": "Request cancelled"
+  "sseRequestCancelled": "Request cancelled",
+  "startupSafetyTitle": "Data safety protection",
+  "startupSafetyExportButton": "Export data",
+  "startupSafetyExitButton": "Exit app",
+  "startupSafetyUpdateButton": "Update app",
+  "startupSafetyCheckingUpdates": "Checking for updates...",
+  "startupSafetyUpToDate": "You're up to date",
+  "startupSafetyNewerDataVersion": "This data was created by a newer version of the app ({version}).\n\nThis app version cannot safely read the data. Install the latest version to continue. Your data has not been changed.",
+  "@startupSafetyNewerDataVersion": {
+    "placeholders": {
+        "version": {"type": "String"}
+    }
+  },
+  "startupSafetyStatusUnreadable": "The data safety status could not be confirmed (the status marker could not be read or was invalid).\n\nTo avoid overwriting a possible frozen state, startup has been blocked without repairing data or migrating formats. First export your data file, then exit the app, repair the status marker, and try again.",
+  "startupSafetyMigrationFailedNoChanges": "Data format migration failed ({part}).\n\nTo protect your data, no changes were made. Return to the previous app version, or wait for a fixed version before upgrading.",
+  "@startupSafetyMigrationFailedNoChanges": {
+    "placeholders": {
+        "part": {"type": "String"}
+    }
+  },
+  "startupSafetyMigrationFailedRestored": "Data format migration failed ({part}).\n\nYour data was restored to its pre-migration state. To protect it, return to the previous app version, or wait for a fixed version before upgrading.",
+  "@startupSafetyMigrationFailedRestored": {
+    "placeholders": {
+        "part": {"type": "String"}
+    }
+  },
+  "startupSafetyDataCorrupted": "Data is damaged and could not be repaired automatically.\n\nThe app has been frozen to prevent further damage. Export your data file, then import it manually or reinstall.",
+  "startupSafetyPreferencesUnavailable": "The app could not read preferences required for startup checks, so startup has been blocked to protect your data.\n\nCheck storage space or permissions, then reopen the app.",
+  "startupSafetyValidationUnavailable": "The app could not complete its startup data-safety check, so startup has been blocked to protect your data.\n\nCheck browser settings, then reopen the app.",
+  "startupSafetyCheckFailed": "Startup check failed: {detail}",
+  "@startupSafetyCheckFailed": {
+    "placeholders": {
+        "detail": {"type": "String"}
+    }
+  },
+  "startupSafetyStatusUnreadableAfterChecks": "The data safety status could not be confirmed after startup checks (the status marker could not be read or was invalid).\n\nStartup has stopped to avoid making further data changes. Export your data file, exit the app, repair the status marker, and try again."
 }

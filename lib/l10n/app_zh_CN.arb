@@ -4260,6 +4260,10 @@
   "backupRestoreExportFailed": "导出失败: {error}",
   "backupRestoreApkgRequired": "请选择 .apkg 格式的文件",
   "backupRestoreImportFailed": "导入失败: {error}",
+  "backupServiceExportSavedTo": "备份已保存到: {location}",
+  "backupServiceExportFailed": "备份失败: {error}",
+  "backupServiceRestoreFailed": "恢复失败: {error}",
+  "backupServiceNoBackupFolderSelected": "尚未选择备份目录，请在启动流程中授权",
   "backupRestoreRestoreSuccessTitle": "数据恢复成功",
   "backupRestoreRestoredMessage": "数据已从备份中恢复。请重启应用以使用恢复的数据。",
   "backupRestoreExitApp": "退出应用",
@@ -4342,6 +4346,21 @@
       "error": {
         "type": "String"
       }
+    }
+  },
+  "@backupServiceExportSavedTo": {
+    "placeholders": {
+      "location": { "type": "String" }
+    }
+  },
+  "@backupServiceExportFailed": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "@backupServiceRestoreFailed": {
+    "placeholders": {
+      "error": { "type": "String" }
     }
   },
   "@backupRestoreSkippedCategories": {
@@ -5546,5 +5565,40 @@
     }
   },
   "sseNetworkConnectionUnavailable": "网络请求失败：无法连接到服务器",
-  "sseRequestCancelled": "请求已取消"
+  "sseRequestCancelled": "请求已取消",
+  "startupSafetyTitle": "数据安全保护",
+  "startupSafetyExportButton": "导出数据",
+  "startupSafetyExitButton": "退出应用",
+  "startupSafetyUpdateButton": "更新应用",
+  "startupSafetyCheckingUpdates": "正在检查更新...",
+  "startupSafetyUpToDate": "已是最新版本",
+  "startupSafetyNewerDataVersion": "数据由更新版本的应用创建（{version}）。\n\n当前版本无法安全读取这些数据。请安装最新版本的应用后再继续，数据未做任何改动。",
+  "@startupSafetyNewerDataVersion": {
+    "placeholders": {
+        "version": {"type": "String"}
+    }
+  },
+  "startupSafetyStatusUnreadable": "无法确认数据安全状态（状态标记无法读取或格式无效）。\n\n为避免覆盖可能存在的冻结状态，应用已阻止启动，未执行数据修复或格式迁移。请先导出数据文件，然后退出应用并修复状态标记后重试。",
+  "startupSafetyMigrationFailedNoChanges": "数据格式迁移失败（{part}）。\n\n为保护数据，未做任何改动。请回退到旧版本应用，或等待修复版本发布后再升级。",
+  "@startupSafetyMigrationFailedNoChanges": {
+    "placeholders": {
+        "part": {"type": "String"}
+    }
+  },
+  "startupSafetyMigrationFailedRestored": "数据格式迁移失败（{part}）。\n\n已自动恢复到迁移前的数据。为保护数据，请回退到旧版本应用，或等待修复版本发布后再升级。",
+  "@startupSafetyMigrationFailedRestored": {
+    "placeholders": {
+        "part": {"type": "String"}
+    }
+  },
+  "startupSafetyDataCorrupted": "数据损坏且无法自动修复。\n\n应用已冻结以防止进一步破坏。请先导出数据文件，然后手动导入或重新安装。",
+  "startupSafetyPreferencesUnavailable": "无法读取启动检查所需的偏好设置，应用已阻止继续启动以保护数据。\n\n请检查存储空间或权限后重新打开应用。",
+  "startupSafetyValidationUnavailable": "无法完成启动数据安全检查，应用已阻止继续启动以保护数据。\n\n请检查浏览器设置后重新打开应用。",
+  "startupSafetyCheckFailed": "启动检查失败：{detail}",
+  "@startupSafetyCheckFailed": {
+    "placeholders": {
+        "detail": {"type": "String"}
+    }
+  },
+  "startupSafetyStatusUnreadableAfterChecks": "完成启动数据检查后，仍无法确认数据安全状态（状态标记无法读取或格式无效）。\n\n为避免继续改动数据，应用已停止启动。请先导出数据文件，然后退出应用并修复状态标记后重试。"
 }

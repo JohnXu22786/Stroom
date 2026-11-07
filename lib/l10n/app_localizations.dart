@@ -13672,6 +13672,30 @@ abstract class AppLocalizations {
   /// **'Import failed: {error}'**
   String backupRestoreImportFailed(String error);
 
+  /// No description provided for @backupServiceExportSavedTo.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup saved to: {location}'**
+  String backupServiceExportSavedTo(String location);
+
+  /// No description provided for @backupServiceExportFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup failed: {error}'**
+  String backupServiceExportFailed(String error);
+
+  /// No description provided for @backupServiceRestoreFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore failed: {error}'**
+  String backupServiceRestoreFailed(String error);
+
+  /// No description provided for @backupServiceNoBackupFolderSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'No backup folder has been selected. Authorize one during startup.'**
+  String get backupServiceNoBackupFolderSelected;
+
   /// No description provided for @backupRestoreRestoreSuccessTitle.
   ///
   /// In en, this message translates to:
@@ -16295,6 +16319,96 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Request cancelled'**
   String get sseRequestCancelled;
+
+  /// No description provided for @startupSafetyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Data safety protection'**
+  String get startupSafetyTitle;
+
+  /// No description provided for @startupSafetyExportButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Export data'**
+  String get startupSafetyExportButton;
+
+  /// No description provided for @startupSafetyExitButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Exit app'**
+  String get startupSafetyExitButton;
+
+  /// No description provided for @startupSafetyUpdateButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Update app'**
+  String get startupSafetyUpdateButton;
+
+  /// No description provided for @startupSafetyCheckingUpdates.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking for updates...'**
+  String get startupSafetyCheckingUpdates;
+
+  /// No description provided for @startupSafetyUpToDate.
+  ///
+  /// In en, this message translates to:
+  /// **'You\'re up to date'**
+  String get startupSafetyUpToDate;
+
+  /// No description provided for @startupSafetyNewerDataVersion.
+  ///
+  /// In en, this message translates to:
+  /// **'This data was created by a newer version of the app ({version}).\n\nThis app version cannot safely read the data. Install the latest version to continue. Your data has not been changed.'**
+  String startupSafetyNewerDataVersion(String version);
+
+  /// No description provided for @startupSafetyStatusUnreadable.
+  ///
+  /// In en, this message translates to:
+  /// **'The data safety status could not be confirmed (the status marker could not be read or was invalid).\n\nTo avoid overwriting a possible frozen state, startup has been blocked without repairing data or migrating formats. First export your data file, then exit the app, repair the status marker, and try again.'**
+  String get startupSafetyStatusUnreadable;
+
+  /// No description provided for @startupSafetyMigrationFailedNoChanges.
+  ///
+  /// In en, this message translates to:
+  /// **'Data format migration failed ({part}).\n\nTo protect your data, no changes were made. Return to the previous app version, or wait for a fixed version before upgrading.'**
+  String startupSafetyMigrationFailedNoChanges(String part);
+
+  /// No description provided for @startupSafetyMigrationFailedRestored.
+  ///
+  /// In en, this message translates to:
+  /// **'Data format migration failed ({part}).\n\nYour data was restored to its pre-migration state. To protect it, return to the previous app version, or wait for a fixed version before upgrading.'**
+  String startupSafetyMigrationFailedRestored(String part);
+
+  /// No description provided for @startupSafetyDataCorrupted.
+  ///
+  /// In en, this message translates to:
+  /// **'Data is damaged and could not be repaired automatically.\n\nThe app has been frozen to prevent further damage. Export your data file, then import it manually or reinstall.'**
+  String get startupSafetyDataCorrupted;
+
+  /// No description provided for @startupSafetyPreferencesUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'The app could not read preferences required for startup checks, so startup has been blocked to protect your data.\n\nCheck storage space or permissions, then reopen the app.'**
+  String get startupSafetyPreferencesUnavailable;
+
+  /// No description provided for @startupSafetyValidationUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'The app could not complete its startup data-safety check, so startup has been blocked to protect your data.\n\nCheck browser settings, then reopen the app.'**
+  String get startupSafetyValidationUnavailable;
+
+  /// No description provided for @startupSafetyCheckFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Startup check failed: {detail}'**
+  String startupSafetyCheckFailed(String detail);
+
+  /// No description provided for @startupSafetyStatusUnreadableAfterChecks.
+  ///
+  /// In en, this message translates to:
+  /// **'The data safety status could not be confirmed after startup checks (the status marker could not be read or was invalid).\n\nStartup has stopped to avoid making further data changes. Export your data file, exit the app, repair the status marker, and try again.'**
+  String get startupSafetyStatusUnreadableAfterChecks;
 }
 
 class _AppLocalizationsDelegate
