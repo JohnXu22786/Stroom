@@ -120,6 +120,84 @@ Future<void> _tapBlock(WidgetTester tester, String value) async {
 
 void main() {
   group('LlmModelConfigPage reasoning option blocks', () {
+    testWidgets('can add model extra params without a reasoning toggle', (
+      tester,
+    ) async {
+      await _pumpAndSave(
+        tester,
+        model: ModelConfig(
+          name: 'No toggle model',
+          modelId: 'no-toggle-model',
+          typeConfig: {'context': 4096},
+        ),
+        tapSave: false,
+      );
+
+      final addButton = tester.widget<TextButton>(
+        find.ancestor(
+          of: find.text('添加推理参数'),
+          matching: find.byType(TextButton),
+        ),
+      );
+      expect(addButton.onPressed, isNotNull);
+    });
+
+    testWidgets('saves model effort params without a reasoning toggle', (
+      tester,
+    ) async {
+      final saved = await _pumpAndSave(
+        tester,
+        model: ModelConfig(
+          name: 'No toggle model',
+          modelId: 'no-toggle-model',
+          typeConfig: {'context': 4096},
+          reasoningParams: [
+            ReasoningParam(
+              paramName: 'reasoning_effort',
+              isEffortParam: true,
+              options: ['low', 'high'],
+            ),
+          ],
+        ),
+      );
+
+      expect(saved, isNotNull);
+      expect(
+        saved!.reasoningParams.single.paramName,
+        'reasoning_effort',
+      );
+    });
+
+    testWidgets('inherits provider boolean effort without a reasoning toggle', (
+      tester,
+    ) async {
+      final saved = await _pumpAndSave(
+        tester,
+        model: ModelConfig(
+          name: 'Boolean effort model',
+          modelId: 'boolean-effort-model',
+          typeConfig: {'context': 4096},
+        ),
+        provider: ProviderConfigItem(
+          providerName: 'No toggle provider',
+          reasoningParams: [
+            ReasoningParam(
+              paramName: 'thinking.budget',
+              type: 'boolean',
+              isEffortParam: true,
+            ),
+          ],
+        ),
+      );
+
+      expect(saved, isNotNull);
+      expect(
+        saved!.reasoningParams.single.paramName,
+        'thinking.budget',
+      );
+      expect(saved.reasoningParams.single.type, 'boolean');
+    });
+
     testWidgets(
         'provider effort values show as blocks, none selected by '
         'default', (tester) async {

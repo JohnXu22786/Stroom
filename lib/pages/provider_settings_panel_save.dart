@@ -124,22 +124,20 @@ extension _ProviderSettingsPanelSaveExt on _ProviderSettingsPanelState {
     }
 
     // Validate reasoning params
-    final toggleParam = _toggleReasoningParam;
-    final hasNonToggleParams = _reasoningParams.any(
-      (p) => !p.isReasoningToggle && p.paramName.trim().isNotEmpty,
-    );
-
-    if (hasNonToggleParams &&
-        (toggleParam == null || !toggleParam.isFilledToggle)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            AppLocalizations.of(context)!.providerReasoningIncomplete,
+    for (final param in _reasoningParams) {
+      if (param.isReasoningToggle || param.isEffortParam) continue;
+      if (param.type == 'boolean') continue;
+      if (param.paramName.trim().isNotEmpty && param.options.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context)!.modelReasoningOptionsRequired,
+            ),
+            behavior: SnackBarBehavior.floating,
           ),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return false;
+        );
+        return false;
+      }
     }
 
     for (final param in _reasoningParams) {

@@ -300,15 +300,15 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     return false;
   }
 
-  /// 与 initState 的「没有就不显示」一致：供应商的名称式力度参数
-  /// （仅参数名、无选项值）且模型没有自己的力度参数时，把它从列表
-  /// 中移除。基线比较必须镜像工作副本的同一处理，否则打开未修改
-  /// 的页面也会弹「放弃修改」。
+  /// 与 initState 的「没有就不显示」一致：供应商的不可用名称式力度参数
+  /// 且模型没有自己的力度参数时，把它从列表中移除。布尔力度参数没有
+  /// options，但仍然可用，因此保留。基线比较必须镜像工作副本的同一
+  /// 处理，否则打开未修改的页面也会弹「放弃修改」。
   void _removeNameOnlyProviderEffort(List<ReasoningParam> params) {
     final providerEffort = findEffortParam(
       widget.provider?.reasoningParams ?? [],
     );
-    if (providerEffort == null || providerEffort.options.isNotEmpty) return;
+    if (providerEffort == null || providerEffort.isUsable) return;
     final modelEffort = findEffortParam(widget.model?.reasoningParams ?? []);
     if (modelEffort != null) return;
     params.removeWhere((p) => p.isEffortParam);
@@ -591,13 +591,12 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
       m?.reasoningParams ?? [],
     );
 
-    // 「没有就不显示」：供应商的力度参数未设置任何选项值（仅参数名）
-    // 且模型也没有自己的力度参数时，模型页不显示它——力度区只在有值
-    // （供应商或模型）时出现，用户可在模型页自建。
+    // 「没有就不显示」：供应商的力度参数不可用且模型也没有自己的
+    // 力度参数时，模型页不显示它；boolean 力度参数没有 options 但可用。
     final providerEffort = findEffortParam(provider?.reasoningParams ?? []);
     final modelEffortParam = findEffortParam(m?.reasoningParams ?? []);
     if (modelEffortParam == null &&
-        (providerEffort == null || providerEffort.options.isEmpty)) {
+        (providerEffort == null || !providerEffort.isUsable)) {
       _reasoningParams.removeWhere((p) => p.isEffortParam);
     }
 

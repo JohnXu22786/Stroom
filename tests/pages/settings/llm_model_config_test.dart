@@ -307,7 +307,7 @@ void main() {
     });
 
     testWidgets(
-      'save with no toggle when additional params exist shows error',
+      'save with no toggle when additional params exist succeeds',
       (tester) async {
         // Create a model with non-toggle params but no toggle
         final model = ModelConfig(
@@ -336,16 +336,12 @@ void main() {
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 100));
 
-        // Click save - should fail because toggle is required when other params exist
+        // A usable effort param can be saved without a separate toggle.
         await tester.tap(find.text('保存'));
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 100));
 
-        // Should show error about missing or incomplete toggle
-        expect(
-          find.textContaining('请先完整填写推理开关，其他推理参数才能生效'),
-          findsWidgets,
-        );
+        expect(find.textContaining('请先完整填写推理开关，其他推理参数才能生效'), findsNothing);
       },
     );
   });
@@ -439,7 +435,7 @@ void main() {
       expect(find.text('推理参数错误'), findsNothing);
     });
 
-    testWidgets('effort card shows disabled state until toggle is complete', (
+    testWidgets('effort card remains editable when toggle is incomplete', (
       tester,
     ) async {
       await tester.pumpWidget(
@@ -469,21 +465,16 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
 
-      // The effort card should show helper text since toggle is not complete
-      await tester.scrollUntilVisible(
-        find.text('请先完整填写推理开关，再配置推理力度。'),
-        200,
-        scrollable: find.byType(Scrollable).first,
+      expect(find.text('请先完整填写推理开关，再配置推理力度。'), findsNothing);
+      final lastEffortField = find.descendant(
+        of: find.byType(TextFormField).last,
+        matching: find.byType(EditableText),
       );
-      await tester.pump();
-      expect(find.text('请先完整填写推理开关，再配置推理力度。'), findsOneWidget);
-      // The effort card header "推理力度" should use blue (primary) color, not gray
-      final effortHeader = find.text('推理力度');
-      expect(effortHeader, findsOneWidget);
+      expect(tester.widget<EditableText>(lastEffortField).readOnly, isFalse);
     });
 
     testWidgets(
-      '"添加推理力度" button always visible, becomes enabled after toggle added',
+      '"添加推理力度" button works without toggle',
       (tester) async {
         await tester.pumpWidget(
           MaterialApp(
@@ -496,30 +487,18 @@ void main() {
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 100));
 
-        // Without toggle, "添加推理力度" button should exist (always visible) but be disabled
         expect(find.text('添加推理力度'), findsOneWidget);
 
-        // Find the TextButton and verify it's disabled (onPressed null)
         final addEffortButton = find.widgetWithText(TextButton, '添加推理力度');
         final buttonWidget = tester.widget<TextButton>(addEffortButton);
-        expect(buttonWidget.onPressed, isNull);
-
-        // Add toggle
-        await tester.tap(find.text('添加推理开关'));
+        expect(buttonWidget.onPressed, isNotNull);
+        await tester.ensureVisible(addEffortButton);
+        await tester.pump();
+        await tester.tap(find.text('添加推理力度'));
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 50));
 
-        // Now "添加推理力度" button should be enabled
-        await tester.scrollUntilVisible(
-          find.text('添加推理力度'),
-          200,
-          scrollable: find.byType(Scrollable).first,
-        );
-        await tester.pump();
-        expect(find.text('添加推理力度'), findsOneWidget);
-        final addEffortButton2 = find.widgetWithText(TextButton, '添加推理力度');
-        final buttonWidget2 = tester.widget<TextButton>(addEffortButton2);
-        expect(buttonWidget2.onPressed, isNotNull);
+        expect(find.byIcon(Icons.tune), findsOneWidget);
       },
     );
 

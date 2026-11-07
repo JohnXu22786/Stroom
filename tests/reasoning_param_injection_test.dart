@@ -65,6 +65,49 @@ class _MockProvider extends BaseChatProvider {
 
 void main() {
   group('reasoning params with ReasoningParam model', () {
+    test('provider effort params work without injecting a reasoning toggle',
+        () async {
+      final provider = _MockProvider();
+      final modelConfig = ModelConfig(
+        name: 'Test',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+      );
+      final providerConfig = ProviderConfigItem(
+        providerName: 'Test provider',
+        reasoningParams: [
+          ReasoningParam(
+            paramName: 'reasoning_effort',
+            isEffortParam: true,
+            options: ['low', 'high'],
+          ),
+          ReasoningParam(
+            paramName: 'thinking.budget',
+            options: ['1024', '4096'],
+          ),
+        ],
+      );
+      final service = ChatService(
+        provider: provider,
+        modelConfig: modelConfig,
+        providerConfig: providerConfig,
+      );
+
+      await for (final _ in service.sendStream(
+        'Hi',
+        history: [],
+        reasoning: true,
+        reasoningParamValues: {
+          'reasoning_effort': 'high',
+          'thinking.budget': '4096',
+        },
+      )) {}
+
+      final body = provider.lastRequestBody!;
+      expect(body['reasoning_effort'], 'high');
+      expect(body['thinking'], {'budget': '4096'});
+    });
+
     test('reasoning toggle sends onValue when global toggle is ON', () async {
       final provider = _MockProvider();
       final modelConfig = ModelConfig(

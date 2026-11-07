@@ -211,18 +211,6 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
         .toList();
   }
 
-  bool get _isToggleComplete {
-    final toggle = _toggleReasoningParam;
-    if (toggle == null) return false;
-    // boolean 类型开关只需参数名（开/关值由聊天面板提供）
-    if (toggle.type == 'boolean') {
-      return toggle.paramName.trim().isNotEmpty;
-    }
-    return toggle.paramName.trim().isNotEmpty &&
-        (toggle.onValue != null && toggle.onValue!.trim().isNotEmpty) &&
-        (toggle.offValue != null && toggle.offValue!.trim().isNotEmpty);
-  }
-
   /// 判断 [param] 的当前参数名是否与「本供应商其他已填写参数」或
   /// 自定义参数重名（除自身外）。
   bool _isReasoningParamNameDuplicate(ReasoningParam param) {
@@ -289,16 +277,16 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
           icon: Icon(
             Icons.add,
             size: 16,
-            color: _toggleReasoningParam != null ? null : Colors.grey,
+            color: null,
           ),
           label: Text(
             AppLocalizations.of(context)!.providerAddReasoningParam,
             style: TextStyle(
               fontSize: 13,
-              color: _toggleReasoningParam != null ? null : Colors.grey,
+              color: null,
             ),
           ),
-          onPressed: _toggleReasoningParam != null ? _addReasoningParam : null,
+          onPressed: _addReasoningParam,
         ),
       ),
       const SizedBox(height: 24),
@@ -462,14 +450,14 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
 
   /// Builds the reasoning effort section (mirrors the model config page).
   /// If an effort param exists, shows the effort card. Otherwise, shows the
-  /// "添加推理力度" button, which is disabled (gray) when no toggle exists.
+  /// "添加推理力度" button.
   Widget _buildReasoningEffortSection(ColorScheme cs) {
     final effort = _effortReasoningParam;
     if (effort != null) {
       return _buildReasoningEffortCard(effort, cs);
     }
-    // No effort param — show add button (always visible, disabled if no toggle)
-    final hasToggle = _toggleReasoningParam != null;
+    // Effort configuration is independent of whether the provider supports an
+    // explicit reasoning toggle.
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Center(
@@ -477,16 +465,16 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
           icon: Icon(
             Icons.add,
             size: 16,
-            color: hasToggle ? null : Colors.grey,
+            color: null,
           ),
           label: Text(
             AppLocalizations.of(context)!.providerAddReasoningEffort,
             style: TextStyle(
               fontSize: 13,
-              color: hasToggle ? null : Colors.grey,
+              color: null,
             ),
           ),
-          onPressed: hasToggle ? _addEffortReasoningParam : null,
+          onPressed: _addEffortReasoningParam,
         ),
       ),
     );
@@ -498,7 +486,6 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
   /// a name-only effort param defers its value to the model config /
   /// chat panel selection.
   Widget _buildReasoningEffortCard(ReasoningParam effort, ColorScheme cs) {
-    final toggleComplete = _isToggleComplete;
     final isDuplicate = _isReasoningParamNameDuplicate(effort);
 
     return Card(
@@ -536,13 +523,11 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
             const SizedBox(height: 8),
             TextFormField(
               initialValue: effort.paramName,
-              readOnly: !toggleComplete,
+              readOnly: false,
               decoration: InputDecoration(
                 labelText: AppLocalizations.of(context)!.providerParamNameLabel,
-                hintText: toggleComplete
-                    ? AppLocalizations.of(context)!
-                        .providerParamNameHint('reasoning_effort')
-                    : AppLocalizations.of(context)!.providerToggleRequiredHint,
+                hintText: AppLocalizations.of(context)!
+                    .providerParamNameHint('reasoning_effort'),
                 border: const OutlineInputBorder(),
                 isDense: true,
                 errorText: isDuplicate
@@ -571,7 +556,7 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
               TextFormField(
                 initialValue:
                     effort.options.isNotEmpty ? effort.options.first : '',
-                readOnly: !toggleComplete,
+                readOnly: false,
                 maxLines: 5,
                 decoration: InputDecoration(
                   labelText:
@@ -620,7 +605,7 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
                   value,
                   effort,
                   cs,
-                  editable: toggleComplete,
+                  editable: true,
                 ),
               ),
               const SizedBox(height: 4),
@@ -630,23 +615,10 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
                   AppLocalizations.of(context)!.providerAddOption,
                   style: const TextStyle(fontSize: 13),
                 ),
-                onPressed: toggleComplete
-                    ? () => _addOptionToParam(_reasoningParams.indexOf(effort))
-                    : null,
+                onPressed: () =>
+                    _addOptionToParam(_reasoningParams.indexOf(effort)),
               ),
             ],
-            if (!toggleComplete)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(
-                  AppLocalizations.of(context)!
-                      .providerReasoningEffortLockedHint,
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: cs.onSurfaceVariant.withValues(alpha: 0.7),
-                  ),
-                ),
-              ),
           ],
         ),
       ),
