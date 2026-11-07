@@ -450,7 +450,11 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       _retryInstructionSnapshot = snapshot.instructionContent;
     } else if (snapshot.legacyInstructionIndex != null) {
       _pendingRetryInstructionIndex = snapshot.legacyInstructionIndex;
-      unawaited(_resolvePendingRetryInstruction());
+      unawaited(
+        _resolvePendingRetryInstruction().catchError((Object error) {
+          _handleRetryInstructionLoadFailure(error);
+        }),
+      );
     }
 
     OcrRetryRestoreResult restored;
@@ -576,6 +580,20 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     // displaying the pending-derived value — it must reflect the resolved
     // index even when it equals the current selection.
     setState(() => _selectedInstructionIndex = idx);
+  }
+
+  void _handleRetryInstructionLoadFailure(Object error) {
+    if (!mounted) return;
+    final message = AppLocalizations.of(context)!.ocrReadInstructionFailed;
+    final alreadyReported = _errorMessage == message;
+    if (alreadyReported) return;
+    setState(() {
+      _ocrStarting = false;
+      _isProcessing = false;
+      _isPreparingRetryData = false;
+      _errorMessage = message;
+    });
+    debugPrint('[OCR] Failed to restore retry instruction: $error');
   }
 
   @override
@@ -2833,16 +2851,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       try {
         await _resolvePendingRetryInstruction();
       } catch (error) {
-        if (mounted) {
-          setState(() {
-            _ocrStarting = false;
-            _isProcessing = false;
-            _isPreparingRetryData = false;
-            _errorMessage =
-                AppLocalizations.of(context)!.ocrReadInstructionFailed;
-          });
-        }
-        debugPrint('[OCR] Failed to restore retry instruction: $error');
+        _handleRetryInstructionLoadFailure(error);
         return;
       }
     }
