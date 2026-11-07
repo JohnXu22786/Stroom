@@ -8,10 +8,13 @@ import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/text_manifest.dart';
 import 'package:stroom/widgets/folder_picker_dialog.dart';
 
-Widget _buildTestApp({String? initialCode}) {
+Widget _buildTestApp({
+  String? initialCode,
+  Locale locale = const Locale('en', 'US'),
+}) {
   return ProviderScope(
     child: MaterialApp(
-      locale: const Locale('en', 'US'),
+      locale: locale,
       supportedLocales: AppLocalizations.supportedLocales,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       home: MermaidChartPage(
@@ -70,38 +73,37 @@ void main() {
     },
   );
 
-  testWidgets(
-    'English save guidance and filename validation are localized',
-    (tester) async {
-      await tester.pumpWidget(_buildTestApp(initialCode: 'graph TD\n  A-->B'));
-      await tester.pumpAndSettle();
+  testWidgets('English save guidance and filename validation are localized', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_buildTestApp(initialCode: 'graph TD\n  A-->B'));
+    await tester.pumpAndSettle();
 
-      await tester.tap(find.byTooltip('Save to Text Storage'));
-      await tester.pumpAndSettle();
-      expect(find.text('Save chart'), findsOneWidget);
-      expect(
-        find.text('Choose or create a folder to save the .mmd chart file'),
-        findsOneWidget,
-      );
-      expect(
-        find.text('Enter a filename (.mmd added automatically)'),
-        findsOneWidget,
-      );
-      expect(find.byType(FolderPickerDialog), findsOneWidget);
+    await tester.tap(find.byTooltip('Save to Text Storage'));
+    await tester.pumpAndSettle();
+    expect(find.text('Save chart'), findsOneWidget);
+    expect(
+      find.text('Choose or create a folder to save the .mmd chart file'),
+      findsOneWidget,
+    );
+    expect(
+      find.text('Enter a filename (.mmd added automatically)'),
+      findsOneWidget,
+    );
+    expect(find.byType(FolderPickerDialog), findsOneWidget);
 
-      final fileNameField = find.byWidgetPredicate(
-        (widget) =>
-            widget is TextField &&
-            widget.decoration?.hintText ==
-                'Enter a filename (.mmd added automatically)',
-      );
-      await tester.enterText(fileNameField, '');
-      await tester.tap(find.text('Done'));
-      await tester.pumpAndSettle();
-      expect(find.text('Filename cannot be empty'), findsOneWidget);
-      expect(find.byType(FolderPickerDialog), findsNothing);
-    },
-  );
+    final fileNameField = find.byWidgetPredicate(
+      (widget) =>
+          widget is TextField &&
+          widget.decoration?.hintText ==
+              'Enter a filename (.mmd added automatically)',
+    );
+    await tester.enterText(fileNameField, '');
+    await tester.tap(find.text('Done'));
+    await tester.pumpAndSettle();
+    expect(find.text('Filename cannot be empty'), findsOneWidget);
+    expect(find.byType(FolderPickerDialog), findsNothing);
+  });
 
   testWidgets('English empty-content validation is localized', (tester) async {
     await tester.pumpWidget(_buildTestApp(initialCode: ''));
@@ -114,5 +116,19 @@ void main() {
       findsOneWidget,
     );
     expect(find.byType(FolderPickerDialog), findsNothing);
+  });
+
+  testWidgets('Chinese locale preserves existing diagram text', (tester) async {
+    const source = 'graph TD\n  用户自己的节点[保留已有标签]';
+    await tester.pumpWidget(
+      _buildTestApp(initialCode: source, locale: const Locale('zh', 'CN')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('图表制作'), findsOneWidget);
+    expect(
+      (tester.widget<TextField>(find.byType(TextField))).controller!.text,
+      source,
+    );
   });
 }
