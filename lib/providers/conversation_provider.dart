@@ -544,6 +544,7 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
   final Set<String> _streamCheckpointKeys = <String>{};
   bool _streamCheckpointKeyIndexIsCurrent = false;
   bool _streamJournalPresent = false;
+  bool _streamCheckpointReplayInProgress = false;
   final Map<String, Set<String>> _pendingMessageDeletionIds = {};
   final Map<String, Set<String>> _pendingUnindexedMessageDeletionIds = {};
   final Map<String, Set<String>> _pendingMessageRestorationIds = {};
