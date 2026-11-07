@@ -1727,6 +1727,86 @@ void main() {
     );
 
     test(
+      'legacy OCR migration preserves MyProjectManagement prose with a masked bearer prefix',
+      () {
+        const instruction = 'Please review the MyProjectManagement guide.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-myprojectmanagement-prose',
+          'type': 'ocr',
+          'title': 'failed OCR task',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer myproject…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+        final restoredTask = BackgroundTask.fromMap(
+          jsonDecode(persisted) as Map<String, dynamic>,
+        );
+
+        expect(
+          OcrRetrySnapshot.fromMap(restoredTask.retryData!).instructionContent,
+          instruction,
+        );
+        expect(persisted, contains(instruction));
+        expect(persisted, isNot(contains('Authorization')));
+        expect(persisted, isNot(contains('myproject…')));
+        expect(persisted, isNot(contains('[redacted]')));
+      },
+    );
+
+    test(
+      'legacy OCR migration still redacts MyProjectManagement used as a credential',
+      () {
+        const instruction = 'Please use MyProjectManagement for the request';
+        const sanitizedInstruction = 'Please use [redacted] for the request';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-myprojectmanagement-credential-echo',
+          'type': 'ocr',
+          'title': 'failed OCR task',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer myproject…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          sanitizedInstruction,
+        );
+        expect(persisted, contains(sanitizedInstruction));
+        expect(persisted, isNot(contains(instruction)));
+      },
+    );
+
+    test(
       'legacy Authorization masks preserve ordinary secrets reading instructions',
       () {
         const instruction = 'Read the secrets in this image.';
