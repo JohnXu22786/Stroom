@@ -1036,12 +1036,10 @@ bool _legacyOcrHasWhitespaceSplitMaskedDocumentationEcho(
       caseSensitive: true,
     );
     for (final match in pattern.allMatches(text)) {
-      if (RegExp(
-            r'\bread\s+the\s*$',
-            caseSensitive: false,
-          ).hasMatch(text.substring(0, match.start)) &&
-          RegExp(r'^\s+blueprints\s*[.!?]?\s*$', caseSensitive: false)
-              .hasMatch(match.group(2)!)) {
+      if (_legacyOcrIsNaturalReadDocumentationBlueprintPrompt(
+        text.substring(0, match.start),
+        match.group(2)!,
+      )) {
         continue;
       }
       if (_legacyOcrMaskedDocumentationCredentialEchoLength(
@@ -1055,6 +1053,14 @@ bool _legacyOcrHasWhitespaceSplitMaskedDocumentationEcho(
   }
   return false;
 }
+
+bool _legacyOcrIsNaturalReadDocumentationBlueprintPrompt(
+  String before,
+  String suffix,
+) =>
+    RegExp(r'\bread\s+the\s*$', caseSensitive: false).hasMatch(before) &&
+    RegExp(r'^\s+blueprints\s*[.!?]?\s*$', caseSensitive: false)
+        .hasMatch(suffix);
 
 int _legacyOcrMaskedDocumentationCredentialEchoLength(
   String suffix,
@@ -3224,6 +3230,12 @@ String _legacyOcrRedactWhitespaceSplitMaskedDocumentationEchoes(
       caseSensitive: true,
     );
     sanitized = sanitized.replaceAllMapped(pattern, (match) {
+      if (_legacyOcrIsNaturalReadDocumentationBlueprintPrompt(
+        text.substring(0, match.start),
+        match.group(4)!,
+      )) {
+        return match.group(0)!;
+      }
       final credentialEnd = _legacyOcrMaskedDocumentationCredentialEchoLength(
         match.group(4)!,
         value,

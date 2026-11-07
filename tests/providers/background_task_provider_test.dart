@@ -16324,8 +16324,7 @@ void main() {
     test(
       'preserves line-broken documentation prose after a masked prefix',
       () {
-        const instruction =
-            'Please review all the documentation\ncarefully.';
+        const instruction = 'Please review all the documentation\ncarefully.';
         final task = BackgroundTask.fromMap({
           'id': 'legacy-ocr-documentation-all-carefully-line-break',
           'type': 'ocr',
