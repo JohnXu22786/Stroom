@@ -121,14 +121,18 @@ void _finalizeReplayMessageSections(
   final byId = {
     for (final conversation in conversations) conversation.id: conversation,
   };
+  final messageIndexesByConversationId = <String, Map<String, int>>{};
   for (final sections in replayedMessageSections) {
     if (!sections.shouldFinalize) continue;
     final conversation = byId[sections.conversationId];
     if (conversation == null) continue;
-    final messageIndexes = <String, int>{};
-    for (var index = 0; index < conversation.messages.length; index++) {
-      messageIndexes.putIfAbsent(conversation.messages[index].id, () => index);
-    }
+    final messageIndexes = messageIndexesByConversationId.putIfAbsent(
+      conversation.id,
+      () => {
+        for (var index = 0; index < conversation.messages.length; index++)
+          conversation.messages[index].id: index,
+      },
+    );
     final messageIndex = messageIndexes[sections.messageId];
     if (messageIndex == null) continue;
     conversation.messages[messageIndex] =
