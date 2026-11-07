@@ -358,7 +358,7 @@ String? _userscriptMetadataValue(String code, String key) {
   if (end < 0) return null;
   final header = code.substring(start, end);
   final linePattern = RegExp(
-      '^//[ \\t]*@${RegExp.escape(key)}(?:[ \\t]+(.*?))?[ \\t]*$');
+      '^//[ \\t]*@${RegExp.escape(key)}(?:[ \\t]+(.*?))?[ \\t]*\$');
   for (final line in header.split('\n')) {
     final value = linePattern.firstMatch(line.trim())?.group(1)?.trim();
     if (value != null && value.isNotEmpty) return value;
