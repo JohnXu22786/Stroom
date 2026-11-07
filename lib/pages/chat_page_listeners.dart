@@ -257,6 +257,24 @@ extension _ChatPageListenersExt on _ChatPageState {
 
     final isAppend = next.startsWith(prior);
     final sequence = (_legacyFullReplySequences[key] ?? 0) + (isAppend ? 1 : 2);
+    if (prior.isEmpty) {
+      final segments = _chatSegments[msgId];
+      if (segments?.any(
+              (segment) => segment is TextSegment && segment.chunkIndex == 0) ==
+          true) {
+        final previewKey = '$msgId:0';
+        _liveMarkdownSearchPreviews.remove(previewKey);
+        _liveMarkdownAppendCounts.remove(previewKey);
+        _streamingSearchOccurrenceCache.remove('$msgId:live-chunk:0');
+        _streamingFenceInfoCaches.remove(previewKey);
+        _legacyFullReplyGenerations[key] =
+            (_legacyFullReplyGenerations[key] ?? 0) + 1;
+        _chatSegments[msgId] = segments!
+            .where(
+                (segment) => segment is! TextSegment || segment.chunkIndex != 0)
+            .toList();
+      }
+    }
     _legacyFullReplySnapshots[key] = next;
     _legacyFullReplySequences[key] = sequence;
 
