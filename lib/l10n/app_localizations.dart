@@ -16437,6 +16437,102 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'The data safety status could not be confirmed after startup checks (the status marker could not be read or was invalid).\n\nStartup has stopped to avoid making further data changes. Export your data file, exit the app, repair the status marker, and try again.'**
   String get startupSafetyStatusUnreadableAfterChecks;
+
+  /// No description provided for @catCatchConnectionTimeout.
+  ///
+  /// In en, this message translates to:
+  /// **'Connection timed out. Check your network or server status.'**
+  String get catCatchConnectionTimeout;
+
+  /// No description provided for @catCatchSendTimeout.
+  ///
+  /// In en, this message translates to:
+  /// **'The request timed out while sending.'**
+  String get catCatchSendTimeout;
+
+  /// No description provided for @catCatchReceiveTimeout.
+  ///
+  /// In en, this message translates to:
+  /// **'The response timed out because the server is taking too long.'**
+  String get catCatchReceiveTimeout;
+
+  /// No description provided for @catCatchCannotConnect.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not connect to the server.'**
+  String get catCatchCannotConnect;
+
+  /// No description provided for @catCatchConnectionError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not connect to the server. Check that the URL is correct.'**
+  String get catCatchConnectionError;
+
+  /// No description provided for @catCatchBadCertificate.
+  ///
+  /// In en, this message translates to:
+  /// **'The server certificate could not be verified.'**
+  String get catCatchBadCertificate;
+
+  /// No description provided for @catCatchBadResponse.
+  ///
+  /// In en, this message translates to:
+  /// **'The server returned an error (HTTP {statusCode})'**
+  String catCatchBadResponse(int statusCode);
+
+  /// No description provided for @catCatchRequestCancelled.
+  ///
+  /// In en, this message translates to:
+  /// **'The request was cancelled.'**
+  String get catCatchRequestCancelled;
+
+  /// No description provided for @catCatchNetworkError.
+  ///
+  /// In en, this message translates to:
+  /// **'Network error: {message}'**
+  String catCatchNetworkError(String message);
+
+  /// No description provided for @catCatchUnknownError.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown error'**
+  String get catCatchUnknownError;
+
+  /// No description provided for @catCatchOriginalError.
+  ///
+  /// In en, this message translates to:
+  /// **'Original error: {message}'**
+  String catCatchOriginalError(String message);
+
+  /// No description provided for @catCatchWebDownloadHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Web browsers cannot download media files directly.'**
+  String get catCatchWebDownloadHint;
+
+  /// No description provided for @catCatchWebInstallExtension.
+  ///
+  /// In en, this message translates to:
+  /// **'Install the CatCatch browser extension and try again.'**
+  String get catCatchWebInstallExtension;
+
+  /// No description provided for @catCatchWebAuthorAttribution.
+  ///
+  /// In en, this message translates to:
+  /// **'Author: 笨笨猫 (xifangczy). Free and open source.'**
+  String get catCatchWebAuthorAttribution;
+
+  /// No description provided for @catCatchWebOfficialWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'Make sure it is the author’s version; avoid paid or imitation versions.'**
+  String get catCatchWebOfficialWarning;
+
+  /// No description provided for @catCatchWebGitHubAddress.
+  ///
+  /// In en, this message translates to:
+  /// **'GitHub: https://github.com/xifangczy/cat-catch'**
+  String get catCatchWebGitHubAddress;
 }
 
 class _AppLocalizationsDelegate

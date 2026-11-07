@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
+import 'package:flutter/widgets.dart' show Locale;
 import 'package:path/path.dart' as p;
 
 import '../../services/storage_service.dart';
@@ -32,6 +33,7 @@ class TaskExecutor {
     required void Function(CatCatchTask updated) onUpdate,
     CancelToken? cancelToken,
     Dio Function()? playlistDioFactory,
+    Locale? locale,
   }) async {
     return _executeSteps(
       task: task,
@@ -39,6 +41,7 @@ class TaskExecutor {
       onUpdate: onUpdate,
       cancelToken: cancelToken,
       playlistDioFactory: playlistDioFactory,
+      locale: locale,
     );
   }
 
@@ -49,6 +52,7 @@ class TaskExecutor {
     required void Function(CatCatchTask updated) onUpdate,
     CancelToken? cancelToken,
     Dio Function()? playlistDioFactory,
+    Locale? locale,
   }) async {
     try {
       var stepIndex = StepType.values.indexOf(fromStep);
@@ -79,6 +83,7 @@ class TaskExecutor {
         onUpdate: onUpdate,
         cancelToken: cancelToken,
         playlistDioFactory: playlistDioFactory,
+        locale: locale,
       );
     } catch (e) {
       if (e is UnsupportedError) {
@@ -95,6 +100,7 @@ class TaskExecutor {
     required void Function(CatCatchTask updated) onUpdate,
     CancelToken? cancelToken,
     Dio Function()? playlistDioFactory,
+    Locale? locale,
   }) async {
     return _executeStepsInternal(
       task: task,
@@ -102,6 +108,7 @@ class TaskExecutor {
       onUpdate: onUpdate,
       cancelToken: cancelToken,
       playlistDioFactory: playlistDioFactory,
+      locale: locale,
     );
   }
 
@@ -112,6 +119,7 @@ class TaskExecutor {
     required void Function(CatCatchTask updated) onUpdate,
     CancelToken? cancelToken,
     Dio Function()? playlistDioFactory,
+    Locale? locale,
   }) async {
     final steps = List<StepStatus>.from(task.steps);
     ensureExecutorSteps(steps);
@@ -270,6 +278,7 @@ class TaskExecutor {
               detectedMedia: detectedMedia,
               onUpdate: onUpdate,
               cancelToken: cancelToken,
+              locale: locale,
             );
             break;
           case StepType.converting:
@@ -287,6 +296,7 @@ class TaskExecutor {
                 detectedMedia: detectedMedia,
                 onUpdate: onUpdate,
                 cancelToken: cancelToken,
+                locale: locale,
               );
               if (downloadedFilePath == null || downloadedFilePath.isEmpty) {
                 throw Exception('重新下载失败，下载文件不存在');
@@ -407,7 +417,7 @@ class TaskExecutor {
       debugPrint('[TaskExecutor] Task failed: $e\n$s');
       // Format DioException with user-friendly Chinese message
       if (e is DioException) {
-        taskError = formatDioError(e);
+        taskError = formatDioError(e, locale: locale);
       } else {
         taskError = e.toString();
       }
@@ -803,12 +813,13 @@ class TaskExecutor {
     required List<MediaResource> detectedMedia,
     required void Function(CatCatchTask updated) onUpdate,
     CancelToken? cancelToken,
+    Locale? locale,
   }) async {
     if (media == null) throw Exception('未能获取到可用媒体资源，请检查URL是否正确以及目标网站是否可达');
 
     // Web 端无法绕过 CORS 下载，引导用户安装浏览器扩展
     if (kIsWeb) {
-      throw Exception(webDownloadHint);
+      throw Exception(webDownloadHint(locale: locale));
     }
 
     final referer = media.initiator;

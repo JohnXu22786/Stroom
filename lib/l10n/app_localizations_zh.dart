@@ -9379,6 +9379,61 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get startupSafetyStatusUnreadableAfterChecks =>
       '完成启动数据检查后，仍无法确认数据安全状态（状态标记无法读取或格式无效）。\n\n为避免继续改动数据，应用已停止启动。请先导出数据文件，然后退出应用并修复状态标记后重试。';
+
+  @override
+  String get catCatchConnectionTimeout => '连接超时，请检查网络或服务器状态';
+
+  @override
+  String get catCatchSendTimeout => '发送请求超时';
+
+  @override
+  String get catCatchReceiveTimeout => '接收响应超时，服务器响应过慢';
+
+  @override
+  String get catCatchCannotConnect => '无法连接到服务器。';
+
+  @override
+  String get catCatchConnectionError => '无法连接到服务器，请检查 URL 是否正确';
+
+  @override
+  String get catCatchBadCertificate => '服务器证书验证失败';
+
+  @override
+  String catCatchBadResponse(int statusCode) {
+    return '服务器返回错误 (HTTP $statusCode)';
+  }
+
+  @override
+  String get catCatchRequestCancelled => '请求已取消';
+
+  @override
+  String catCatchNetworkError(String message) {
+    return '网络错误：$message';
+  }
+
+  @override
+  String get catCatchUnknownError => '未知错误';
+
+  @override
+  String catCatchOriginalError(String message) {
+    return '原始错误：$message';
+  }
+
+  @override
+  String get catCatchWebDownloadHint => 'Web 端不支持直接下载媒体文件。';
+
+  @override
+  String get catCatchWebInstallExtension => '请安装浏览器扩展「CatCatch（猫抓）」后再试。';
+
+  @override
+  String get catCatchWebAuthorAttribution => '作者：笨笨猫（xifangczy），完全免费开源。';
+
+  @override
+  String get catCatchWebOfficialWarning => '请认准作者，避免下载到付费版/山寨版。';
+
+  @override
+  String get catCatchWebGitHubAddress =>
+      'GitHub 地址: https://github.com/xifangczy/cat-catch';
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).
@@ -18755,4 +18810,59 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   @override
   String get startupSafetyStatusUnreadableAfterChecks =>
       '完成启动数据检查后，仍无法确认数据安全状态（状态标记无法读取或格式无效）。\n\n为避免继续改动数据，应用已停止启动。请先导出数据文件，然后退出应用并修复状态标记后重试。';
+
+  @override
+  String get catCatchConnectionTimeout => '连接超时，请检查网络或服务器状态';
+
+  @override
+  String get catCatchSendTimeout => '发送请求超时';
+
+  @override
+  String get catCatchReceiveTimeout => '接收响应超时，服务器响应过慢';
+
+  @override
+  String get catCatchCannotConnect => '无法连接到服务器。';
+
+  @override
+  String get catCatchConnectionError => '无法连接到服务器，请检查 URL 是否正确';
+
+  @override
+  String get catCatchBadCertificate => '服务器证书验证失败';
+
+  @override
+  String catCatchBadResponse(int statusCode) {
+    return '服务器返回错误 (HTTP $statusCode)';
+  }
+
+  @override
+  String get catCatchRequestCancelled => '请求已取消';
+
+  @override
+  String catCatchNetworkError(String message) {
+    return '网络错误：$message';
+  }
+
+  @override
+  String get catCatchUnknownError => '未知错误';
+
+  @override
+  String catCatchOriginalError(String message) {
+    return '原始错误：$message';
+  }
+
+  @override
+  String get catCatchWebDownloadHint => 'Web 端不支持直接下载媒体文件。';
+
+  @override
+  String get catCatchWebInstallExtension => '请安装浏览器扩展「CatCatch（猫抓）」后再试。';
+
+  @override
+  String get catCatchWebAuthorAttribution => '作者：笨笨猫（xifangczy），完全免费开源。';
+
+  @override
+  String get catCatchWebOfficialWarning => '请认准作者，避免下载到付费版/山寨版。';
+
+  @override
+  String get catCatchWebGitHubAddress =>
+      'GitHub 地址: https://github.com/xifangczy/cat-catch';
 }

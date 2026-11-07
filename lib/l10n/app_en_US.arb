@@ -5612,5 +5612,36 @@
         "detail": {"type": "String"}
     }
   },
-  "startupSafetyStatusUnreadableAfterChecks": "The data safety status could not be confirmed after startup checks (the status marker could not be read or was invalid).\n\nStartup has stopped to avoid making further data changes. Export your data file, exit the app, repair the status marker, and try again."
+  "startupSafetyStatusUnreadableAfterChecks": "The data safety status could not be confirmed after startup checks (the status marker could not be read or was invalid).\n\nStartup has stopped to avoid making further data changes. Export your data file, exit the app, repair the status marker, and try again.",
+  "catCatchConnectionTimeout": "Connection timed out. Check your network or server status.",
+  "catCatchSendTimeout": "The request timed out while sending.",
+  "catCatchReceiveTimeout": "The response timed out because the server is taking too long.",
+  "catCatchCannotConnect": "Could not connect to the server.",
+  "catCatchConnectionError": "Could not connect to the server. Check that the URL is correct.",
+  "catCatchBadCertificate": "The server certificate could not be verified.",
+  "catCatchBadResponse": "The server returned an error (HTTP {statusCode})",
+  "@catCatchBadResponse": {
+    "placeholders": {
+      "statusCode": {"type": "int"}
+    }
+  },
+  "catCatchRequestCancelled": "The request was cancelled.",
+  "catCatchNetworkError": "Network error: {message}",
+  "@catCatchNetworkError": {
+    "placeholders": {
+      "message": {"type": "String"}
+    }
+  },
+  "catCatchUnknownError": "Unknown error",
+  "catCatchOriginalError": "Original error: {message}",
+  "@catCatchOriginalError": {
+    "placeholders": {
+      "message": {"type": "String"}
+    }
+  },
+  "catCatchWebDownloadHint": "Web browsers cannot download media files directly.",
+  "catCatchWebInstallExtension": "Install the CatCatch browser extension and try again.",
+  "catCatchWebAuthorAttribution": "Author: 笨笨猫 (xifangczy). Free and open source.",
+  "catCatchWebOfficialWarning": "Make sure it is the author’s version; avoid paid or imitation versions.",
+  "catCatchWebGitHubAddress": "GitHub: https://github.com/xifangczy/cat-catch"
 }
