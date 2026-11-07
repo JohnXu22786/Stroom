@@ -357,8 +357,8 @@ String? _userscriptMetadataValue(String code, String key) {
   final end = code.indexOf('// ==/UserScript==', start);
   if (end < 0) return null;
   final header = code.substring(start, end);
-  final linePattern = RegExp(
-      '^//[ \\t]*@${RegExp.escape(key)}(?:[ \\t]+(.*?))?[ \\t]*\$');
+  final linePattern =
+      RegExp('^//[ \\t]*@${RegExp.escape(key)}(?:[ \\t]+(.*?))?[ \\t]*\$');
   for (final line in header.split('\n')) {
     final value = linePattern.firstMatch(line.trim())?.group(1)?.trim();
     if (value != null && value.isNotEmpty) return value;
@@ -691,7 +691,8 @@ class _BrowserPageState extends State<BrowserPage> {
       final decoded = jsonDecode(raw);
       if (decoded is! List) return;
       final needsMigration = decoded.any(
-        (entry) => entry is Map &&
+        (entry) =>
+            entry is Map &&
             (entry.containsKey('matches') ||
                 !entry.containsKey('id') ||
                 !entry.containsKey('enabled') ||
@@ -814,7 +815,8 @@ class _BrowserPageState extends State<BrowserPage> {
   void _clearScriptRuntimeError(String scriptId) {
     if (!mounted) return;
     if (!_scriptRuntimeErrors.value.contains(scriptId)) return;
-    _scriptRuntimeErrors.value = {..._scriptRuntimeErrors.value}..remove(scriptId);
+    _scriptRuntimeErrors.value = {..._scriptRuntimeErrors.value}
+      ..remove(scriptId);
   }
 
   /// Runs [source] in the WebView, swallowing errors that occur when the
@@ -1544,63 +1546,64 @@ class _ScriptManagerSheetState extends State<_ScriptManagerSheet> {
                         child: Text(l10n.browserNoScripts),
                       )
                     : ListView.builder(
-                      itemCount: _scripts.length,
-                      itemBuilder: (ctx, i) {
-                        final s = _scripts[i];
-                        final details = <String>[
-                          if (runtimeErrors.contains(s.id))
-                            l10n.browserScriptRuntimeError,
-                          s.enabled
-                              ? l10n.browserScriptEnabled
-                              : l10n.browserScriptDisabled,
-                          s.origin == 'manual'
-                              ? l10n.browserScriptOriginManual
-                              : s.origin,
-                          if (s.version != null)
-                            l10n.browserScriptVersion(s.version!),
-                          l10n.browserScriptMatchCount(s.matches.length),
-                        ];
-                        return ListTile(
-                          title: Text(s.name.isNotEmpty
-                              ? s.name
-                              : l10n.browserUnnamedScript),
-                          subtitle: Text(
-                            details.join(' · '),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: runtimeErrors.contains(s.id)
-                                ? TextStyle(
-                                    color: Theme.of(context).colorScheme.error)
-                                : null,
-                          ),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Switch(
-                                value: s.enabled,
-                                onChanged: (enabled) {
-                                  setState(() => _scripts[i] = UserScript(
-                                        id: s.id,
-                                        name: s.name,
-                                        code: s.code,
-                                        enabled: enabled,
-                                        origin: s.origin,
-                                      ));
-                                  _notifyChanged();
-                                },
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.delete_outline,
-                                    color: Colors.red),
-                                tooltip: l10n.browserScriptDelete,
-                                onPressed: () => _confirmDeleteScript(i),
-                              ),
-                            ],
-                          ),
-                          onTap: () => _editScript(i),
-                        );
-                      },
-                    ),
+                        itemCount: _scripts.length,
+                        itemBuilder: (ctx, i) {
+                          final s = _scripts[i];
+                          final details = <String>[
+                            if (runtimeErrors.contains(s.id))
+                              l10n.browserScriptRuntimeError,
+                            s.enabled
+                                ? l10n.browserScriptEnabled
+                                : l10n.browserScriptDisabled,
+                            s.origin == 'manual'
+                                ? l10n.browserScriptOriginManual
+                                : s.origin,
+                            if (s.version != null)
+                              l10n.browserScriptVersion(s.version!),
+                            l10n.browserScriptMatchCount(s.matches.length),
+                          ];
+                          return ListTile(
+                            title: Text(s.name.isNotEmpty
+                                ? s.name
+                                : l10n.browserUnnamedScript),
+                            subtitle: Text(
+                              details.join(' · '),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: runtimeErrors.contains(s.id)
+                                  ? TextStyle(
+                                      color:
+                                          Theme.of(context).colorScheme.error)
+                                  : null,
+                            ),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Switch(
+                                  value: s.enabled,
+                                  onChanged: (enabled) {
+                                    setState(() => _scripts[i] = UserScript(
+                                          id: s.id,
+                                          name: s.name,
+                                          code: s.code,
+                                          enabled: enabled,
+                                          origin: s.origin,
+                                        ));
+                                    _notifyChanged();
+                                  },
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.delete_outline,
+                                      color: Colors.red),
+                                  tooltip: l10n.browserScriptDelete,
+                                  onPressed: () => _confirmDeleteScript(i),
+                                ),
+                              ],
+                            ),
+                            onTap: () => _editScript(i),
+                          );
+                        },
+                      ),
               ),
             ),
           ],

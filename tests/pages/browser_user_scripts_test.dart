@@ -14,7 +14,8 @@ void main() {
       expect(script.id, isNotEmpty);
     });
 
-    test('new manual and imported scripts use the expected enable defaults', () {
+    test('new manual and imported scripts use the expected enable defaults',
+        () {
       final manual = UserScript(name: 'manual', code: 'run();');
       final imported = UserScript(
         name: 'imported',
