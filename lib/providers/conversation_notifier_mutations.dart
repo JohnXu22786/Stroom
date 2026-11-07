@@ -316,6 +316,7 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
       } else {
         c.temporaryExpiresAt = null;
       }
+      c.updatedAt = DateTime.now();
       return c;
     }).toList();
     _syncTemporaryTimer();

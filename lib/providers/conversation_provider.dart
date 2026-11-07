@@ -15,7 +15,6 @@ import '../models/chat_message.dart';
 import '../models/tool_call.dart';
 import '../services/app_log_service.dart';
 import '../services/attachment_storage.dart';
-import '../services/conversation_stream_journal_store.dart';
 import '../services/storage_service.dart';
 import '../utils/web_file_store.dart';
 import 'assistant_provider.dart';

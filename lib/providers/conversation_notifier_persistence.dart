@@ -16,6 +16,8 @@ const String _streamJournalFileName = 'conversation_stream_checkpoints.jsonl';
 const String _streamJournalWebPrefix = 'conversation_stream_checkpoints/';
 const String _pendingRestoredConversationKey =
     'conversation_stream_pending_restores';
+const String _webStreamJournalTimestampKey =
+    'conversation_stream_checkpoint_last_timestamp';
 int _lastWebJournalTimestamp = 0;
 
 /// Latest snapshot and completion shared by periodic stream checkpoints that
@@ -79,15 +81,38 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
   Future<void> _appendStreamCheckpoint(Map<String, dynamic> checkpoint) async {
     if (kIsWeb) {
       final now = DateTime.now().microsecondsSinceEpoch;
+      final prefs = await SharedPreferences.getInstance();
+      var persistedLastTimestamp = prefs.getInt(_webStreamJournalTimestampKey);
+      if (persistedLastTimestamp == null) {
+        final existingKeys =
+            await WebFileStore.keysWithPrefix(_streamJournalWebPrefix)
+              ..sort();
+        persistedLastTimestamp = existingKeys.isEmpty
+            ? 0
+            : int.tryParse(existingKeys.last.substring(
+                  _streamJournalWebPrefix.length,
+                )) ??
+                0;
+      }
+      final previousTimestamp =
+          persistedLastTimestamp > _lastWebJournalTimestamp
+              ? persistedLastTimestamp
+              : _lastWebJournalTimestamp;
       _lastWebJournalTimestamp =
-          now > _lastWebJournalTimestamp ? now : _lastWebJournalTimestamp + 1;
+          now > previousTimestamp ? now : previousTimestamp + 1;
+      if (!await prefs.setInt(
+        _webStreamJournalTimestampKey,
+        _lastWebJournalTimestamp,
+      )) {
+        throw StateError('Failed to persist web stream journal sequence');
+      }
       final key = '$_streamJournalWebPrefix'
           '${_lastWebJournalTimestamp.toString().padLeft(20, '0')}';
       final bytes = Uint8List.fromList(utf8.encode(jsonEncode(checkpoint)));
       await WebFileStore.write(key, bytes);
       return;
     }
-    await ConversationStreamJournalStore.append(
+    await AppStorage.appendDurableLine(
       await _streamJournalPath(),
       jsonEncode(checkpoint),
     );
@@ -109,7 +134,7 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
         await WebFileStore.deleteByPrefix(_streamJournalWebPrefix);
         return true;
       }
-      return ConversationStreamJournalStore.delete(await _streamJournalPath());
+      return AppStorage.deleteStorageFile(await _streamJournalPath());
     } catch (e) {
       debugPrint('Failed to clear conversation stream checkpoints: $e');
       return false;
@@ -132,13 +157,14 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
         records = <String>[];
         for (final key in keys) {
           final bytes = await WebFileStore.read(key);
-          if (bytes != null) records.add(utf8.decode(bytes));
+          if (bytes != null) {
+            records.add(utf8.decode(bytes, allowMalformed: true));
+          }
         }
       } else {
-        records = await ConversationStreamJournalStore.readLines(
-              await _streamJournalPath(),
-            ) ??
-            <String>[];
+        records =
+            await AppStorage.readDurableLines(await _streamJournalPath()) ??
+                <String>[];
       }
       final deletedConversations = <String>{};
       final deletedConversationAt = <String, DateTime>{};
@@ -305,9 +331,10 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
           );
           final checkpointUpdatedAt =
               DateTime.tryParse(record['updatedAt'] as String? ?? '');
+          final checkpointMetadataIsCurrent = checkpointUpdatedAt != null &&
+              !checkpointUpdatedAt.isBefore(conversation.updatedAt);
           final checkpointIsCurrent = checkpointUpdatedAt != null &&
-              (!checkpointMessageExists ||
-                  !checkpointUpdatedAt.isBefore(conversation.updatedAt));
+              (!checkpointMessageExists || checkpointMetadataIsCurrent);
           if (!checkpointIsCurrent) continue;
           if (needsToAddConversation) {
             conversations.add(conversation);
@@ -346,11 +373,12 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
             for (final call in existing?.toolCalls ?? const <ToolCallData>[])
               call.id: call,
           };
-          if (checkpointUpdatedAt!.isAfter(conversation.updatedAt)) {
+          if (checkpointMetadataIsCurrent &&
+              checkpointUpdatedAt!.isAfter(conversation.updatedAt)) {
             conversation.updatedAt = checkpointUpdatedAt;
           }
           var conversationMetadataChanged = false;
-          if (record['isTemporary'] is bool) {
+          if (checkpointMetadataIsCurrent && record['isTemporary'] is bool) {
             final isTemporary = record['isTemporary'] as bool;
             final expiryRaw = record['temporaryExpiresAt'];
             final expiry =
@@ -460,11 +488,26 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
         chunks.add(text);
         lengthsBySection[section] = currentLength + text.length;
         changed = true;
-      } else if (offset < currentLength &&
-          _sectionChunksMatchAt(chunks, offset, text, currentLength)) {
-        // A crash after appending the canonical snapshot but before deleting
-        // the journal can replay the same delta. Treat that write as done.
-        continue;
+      } else if (offset < currentLength) {
+        // A later coalesced checkpoint can overlap a delta already appended
+        // by an in-flight write. Match the saved prefix, then append only its
+        // not-yet-replayed suffix.
+        var overlapLength = currentLength - offset;
+        if (overlapLength > text.length) overlapLength = text.length;
+        if (_sectionChunksMatchAt(
+          chunks,
+          offset,
+          text.substring(0, overlapLength),
+          currentLength,
+        )) {
+          if (overlapLength < text.length) {
+            final suffix = text.substring(overlapLength);
+            chunks.add(suffix);
+            lengthsBySection[section] = currentLength + suffix.length;
+            changed = true;
+          }
+          continue;
+        }
       }
     }
     for (var i = 0; i < sections.length; i++) {
@@ -753,12 +796,14 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
           }
           final orderedConversations = pinnedFirstStable(finalConversations);
           final activeId = prefs.getString('active_conversation_id');
-          if (activeId != null &&
+          final currentActiveId = _ref.read(activeConversationIdProvider);
+          final hasCurrentActiveConversation = currentActiveId != null &&
+              orderedConversations.any((c) => c.id == currentActiveId);
+          if (!hasCurrentActiveConversation &&
+              activeId != null &&
               orderedConversations.any((c) => c.id == activeId)) {
-            if (_ref.read(activeConversationIdProvider) == null) {
-              _ref.read(activeConversationIdProvider.notifier).state = activeId;
-            }
-          } else if (_ref.read(activeConversationIdProvider) == activeId) {
+            _ref.read(activeConversationIdProvider.notifier).state = activeId;
+          } else if (currentActiveId != null && !hasCurrentActiveConversation) {
             _ref.read(activeConversationIdProvider.notifier).state = null;
           }
           state = orderedConversations;
