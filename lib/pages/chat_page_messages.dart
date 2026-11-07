@@ -518,6 +518,7 @@ extension _ChatPageMessagesExt on _ChatPageState {
           _performSearch(searchQuery);
         }
       } else {
+        _liveMarkdownSearchPreviews.clear();
         _searchTextController.clear();
         _isSearching = false;
         _searchQuery = '';

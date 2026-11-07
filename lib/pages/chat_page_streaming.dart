@@ -79,6 +79,10 @@ extension _ChatPageStreamingExt on _ChatPageState {
           .removeWhere((key, _) => key.startsWith('$msgId:'));
       _livePlainTextFragments
           .removeWhere((key, _) => key.startsWith('$msgId:'));
+      _liveMarkdownSearchPreviews
+          .removeWhere((key, _) => key.startsWith('$msgId:'));
+      _liveMarkdownAppendCounts
+          .removeWhere((key, _) => key.startsWith('$msgId:'));
       manager.detachStreamPage(
         convId,
         msgId,
@@ -122,6 +126,14 @@ extension _ChatPageStreamingExt on _ChatPageState {
     _isStreamingActive = true;
     _streamingMsgId = msgId;
     try {
+      final restoredTextChunks = manager.publishedTextChunksFor(activeConvId);
+      final restoredChunkIndex = restoredTextChunks.length - 1;
+      final restoredAppendCount = manager.textChunkAppendCountFor(activeConvId);
+      final appendCountKey = '$msgId:$restoredChunkIndex';
+      final priorAppendCount = _liveMarkdownAppendCounts[appendCountKey] ?? 0;
+      if (restoredAppendCount > priorAppendCount) {
+        _liveMarkdownAppendCounts[appendCountKey] = restoredAppendCount;
+      }
       ref.read(isStreamingProvider(activeConvId).notifier).state = true;
       ref.read(streamingMsgIdProvider(activeConvId).notifier).state = msgId;
       ref
@@ -132,8 +144,7 @@ extension _ChatPageStreamingExt on _ChatPageState {
       // roundStarts is set BEFORE toolCalls so that the toolCalls listener's
       // synchronous _rebuildLiveSegments reads the fresh round boundary.
       ref.read(streamingTextSectionsProvider(activeConvId).notifier).state =
-          List<String>.from(
-              ref.read(chatStreamManagerProvider).textChunksFor(activeConvId));
+          List<String>.from(restoredTextChunks);
       ref
               .read(streamingToolCallRoundStartsProvider(activeConvId).notifier)
               .state =
@@ -293,6 +304,12 @@ extension _ChatPageStreamingExt on _ChatPageState {
     // reload will replace _chatSegments from the persisted message (which
     // carries toolCallRoundStarts, so multi-tool grouping is correct).
     if (msgId != null) _finalizedMessages.add(msgId);
+    if (msgId != null) {
+      _liveMarkdownSearchPreviews
+          .removeWhere((key, _) => key.startsWith('$msgId:'));
+      _liveMarkdownAppendCounts
+          .removeWhere((key, _) => key.startsWith('$msgId:'));
+    }
     // Reload from DB. _loadConversationMessages is now unguarded because
     // _isStreamingActive is false. It clears _chatSegments / _finalizedMessages
     // and rebuilds from the persisted message (including toolCallRoundStarts).
@@ -577,6 +594,10 @@ extension _ChatPageStreamingExt on _ChatPageState {
         .removeWhere((key, _) => key.startsWith('${msg.id}:'));
     _livePlainTextFragments
         .removeWhere((key, _) => key.startsWith('${msg.id}:'));
+    _liveMarkdownSearchPreviews
+        .removeWhere((key, _) => key.startsWith('${msg.id}:'));
+    _liveMarkdownAppendCounts
+        .removeWhere((key, _) => key.startsWith('${msg.id}:'));
     final rebuiltBlocks = legacyToBlocks(
       reasoningSections: msg.reasoningSections ?? [],
       textChunks: msg.textSections ?? [],
@@ -621,6 +642,25 @@ extension _ChatPageStreamingExt on _ChatPageState {
           ref.read(streamingToolCallRoundStartsProvider(convId)),
     );
 
+    // Markdown updates arrive as deltas without publishing a full text-section
+    // snapshot on every throttle tick. Preserve the active renderer segment
+    // when unrelated reasoning/tool providers trigger a segment rebuild.
+    final activeMarkdown = (_chatSegments[msgId] ?? const <MessageSegment>[])
+        .whereType<TextSegment>()
+        .where((segment) => segment.liveMarkdownAppend != null);
+    for (final liveSegment in activeMarkdown) {
+      final index = segments.lastIndexWhere(
+        (segment) =>
+            segment is TextSegment &&
+            segment.chunkIndex == liveSegment.chunkIndex,
+      );
+      if (index >= 0) {
+        segments[index] = liveSegment;
+      } else {
+        segments.add(liveSegment);
+      }
+    }
+
     _chatSegments[msgId] = segments;
   }
 
@@ -663,8 +703,27 @@ extension _ChatPageStreamingExt on _ChatPageState {
       if (stoppedMsgId != null && convId != null && _controller != null) {
         final partial =
             ref.read(chatStreamManagerProvider).fullReplyFor(convId);
+        final textChunks =
+            ref.read(chatStreamManagerProvider).textChunksFor(convId);
         final segments =
             List<MessageSegment>.from(_chatSegments[stoppedMsgId] ?? const []);
+        for (var i = 0; i < segments.length; i++) {
+          final segment = segments[i];
+          if (segment is TextSegment &&
+              segment.liveMarkdownAppend != null &&
+              segment.chunkIndex != null &&
+              segment.chunkIndex! < textChunks.length) {
+            segments[i] = TextSegment(
+              textChunks[segment.chunkIndex!],
+              chunkIndex: segment.chunkIndex,
+            );
+          }
+        }
+        _chatSegments[stoppedMsgId] = segments;
+        _liveMarkdownSearchPreviews
+            .removeWhere((key, _) => key.startsWith('$stoppedMsgId:'));
+        _liveMarkdownAppendCounts
+            .removeWhere((key, _) => key.startsWith('$stoppedMsgId:'));
         if (!segments.any((segment) => segment is ErrorSegment)) {
           segments.add(ErrorSegment('用户中断了输出'));
         }

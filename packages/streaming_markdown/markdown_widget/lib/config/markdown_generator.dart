@@ -1,0 +1,131 @@
+import 'package:flutter/material.dart';
+import 'package:markdown/markdown.dart' as m;
+
+import '../widget/blocks/leaf/heading.dart';
+import '../widget/span_node.dart';
+import '../widget/widget_visitor.dart';
+import 'configs.dart';
+import 'toc.dart';
+
+typedef HeadingNodeFilter = bool Function(HeadingNode toc);
+
+///use [MarkdownGenerator] to transform markdown data to [Widget] list, so you can render it by any type of [ListView]
+class MarkdownGenerator {
+  final Iterable<m.InlineSyntax> inlineSyntaxList;
+  final Iterable<m.BlockSyntax> blockSyntaxList;
+  final EdgeInsets linesMargin;
+  final List<SpanNodeGeneratorWithTag> generators;
+  final SpanNodeAcceptCallback? onNodeAccepted;
+  final m.ExtensionSet? extensionSet;
+  final TextNodeGenerator? textGenerator;
+  final SpanNodeBuilder? spanNodeBuilder;
+  final RichTextBuilder? richTextBuilder;
+  final RegExp? splitRegExp;
+  final HeadingNodeFilter headingNodeFilter;
+
+  /// Use [headingNodeFilter] to filter the levels of headings you want to show.
+  /// e.g.
+  /// ```dart
+  /// (HeadingNode node) => {'h1', 'h2'}.contains(node.headingConfig.tag)
+  /// ```
+  MarkdownGenerator({
+    this.inlineSyntaxList = const [],
+    this.blockSyntaxList = const [],
+    this.linesMargin = const EdgeInsets.symmetric(vertical: 8),
+    this.generators = const [],
+    this.onNodeAccepted,
+    this.extensionSet,
+    this.textGenerator,
+    this.spanNodeBuilder,
+    this.richTextBuilder,
+    this.splitRegExp,
+    headingNodeFilter,
+  }) : headingNodeFilter = headingNodeFilter ?? allowAll;
+
+  ///convert [data] to widgets
+  ///[onTocList] can provider [Toc] list
+  List<Widget> buildWidgets(
+    String data, {
+    ValueCallback<List<Toc>>? onTocList,
+    MarkdownConfig? config,
+  }) {
+    final mdConfig = config ?? MarkdownConfig.defaultConfig;
+    final m.Document document = m.Document(
+      extensionSet: extensionSet ?? m.ExtensionSet.gitHubFlavored,
+      encodeHtml: false,
+      inlineSyntaxes: inlineSyntaxList,
+      blockSyntaxes: blockSyntaxList,
+    );
+    final regExp = splitRegExp ?? WidgetVisitor.defaultSplitRegExp;
+    final List<String> lines = data.split(regExp);
+    final List<m.Node> nodes = document.parseLines(lines);
+    return buildWidgetsFromNodes(nodes, onTocList: onTocList, config: mdConfig);
+  }
+
+  /// Converts already parsed nodes to widgets using the same visitor and
+  /// generator configuration as [buildWidgets]. This is used by a live
+  /// streaming session to keep widgets for sealed blocks and replace only the
+  /// active block's widgets.
+  List<Widget> buildWidgetsFromNodes(
+    List<m.Node> nodes, {
+    ValueCallback<List<Toc>>? onTocList,
+    MarkdownConfig? config,
+  }) {
+    final mdConfig = config ?? MarkdownConfig.defaultConfig;
+    final regExp = splitRegExp ?? WidgetVisitor.defaultSplitRegExp;
+    final List<Toc> tocList = [];
+    final visitor = WidgetVisitor(
+      config: mdConfig,
+      generators: generators,
+      textGenerator: textGenerator,
+      richTextBuilder: richTextBuilder,
+      splitRegExp: regExp,
+      onNodeAccepted: (node, index) {
+        onNodeAccepted?.call(node, index);
+        if (node is HeadingNode && headingNodeFilter(node)) {
+          final listLength = tocList.length;
+          tocList.add(
+            Toc(node: node, widgetIndex: index, selfIndex: listLength),
+          );
+        }
+      },
+    );
+    final spans = visitor.visit(nodes);
+    onTocList?.call(tocList);
+    final List<Widget> widgets = [];
+    for (var span in spans) {
+      final textSpan = spanNodeBuilder?.call(span) ?? span.build();
+      final richText = richTextBuilder?.call(textSpan) ?? Text.rich(textSpan);
+      widgets.add(Padding(padding: linesMargin, child: richText));
+    }
+    return widgets;
+  }
+
+  /// Builds a source-preserving live preview without invoking the Markdown
+  /// parser. Streaming sessions use this only after one unresolved block grows
+  /// past their incremental parse budget; the finalized document is rendered
+  /// through [buildWidgets] and receives the complete Markdown semantics.
+  List<Widget> buildPlainTextPreview(
+    List<String> fragments, {
+    MarkdownConfig? config,
+  }) {
+    if (fragments.isEmpty) return const [];
+    final mdConfig = config ?? MarkdownConfig.defaultConfig;
+    final sourceSpan = TextSpan(
+      style: mdConfig.p.textStyle,
+      children: [for (final fragment in fragments) TextSpan(text: fragment)],
+    );
+    return [
+      Padding(
+        padding: linesMargin,
+        child: richTextBuilder?.call(sourceSpan) ?? Text.rich(sourceSpan),
+      ),
+    ];
+  }
+
+  static bool allowAll(HeadingNode toc) => true;
+}
+
+typedef SpanNodeBuilder = TextSpan Function(SpanNode spanNode);
+
+typedef RichTextBuilder = Widget Function(InlineSpan span);
