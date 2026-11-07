@@ -2829,11 +2829,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get unifiedTaskTypeAudioSeparation => 'Audio separation';
 
   @override
-  String backgroundTaskGeneratedOcrTitle(Object basename) => 'OCR: $basename';
+  String backgroundTaskGeneratedOcrTitle(Object basename) {
+    return 'OCR: $basename';
+  }
 
   @override
-  String backgroundTaskGeneratedAudioSeparationTitle(Object basename) =>
-      'Audio separation: $basename';
+  String backgroundTaskGeneratedAudioSeparationTitle(Object basename) {
+    return 'Audio separation: $basename';
+  }
 
   @override
   String get unifiedTaskTypeChat => 'Assistant chat';
@@ -8934,7 +8937,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get browserScriptOriginManual => 'Added manually';
 
   @override
-  String browserScriptVersion(String version) => '@version $version';
+  String browserScriptVersion(Object version) {
+    return '@version $version';
+  }
 
   @override
   String get browserScriptEnabled => 'Enabled';
@@ -10287,6 +10292,286 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get iosContinuedTaskTitle => 'Background task';
+
+  @override
+  String get mermaidCatalogTypeFlowchart => 'Flowchart';
+
+  @override
+  String get mermaidCatalogDescriptionFlowchart =>
+      'Flowchart — show steps, branches, and loops';
+
+  @override
+  String get mermaidCatalogTypeSequenceDiagram => 'Sequence diagram';
+
+  @override
+  String get mermaidCatalogDescriptionSequenceDiagram =>
+      'Sequence diagram — show interactions between participants';
+
+  @override
+  String get mermaidCatalogTypeClassDiagram => 'Class diagram';
+
+  @override
+  String get mermaidCatalogDescriptionClassDiagram =>
+      'Class diagram — show relationships between class attributes and methods';
+
+  @override
+  String get mermaidCatalogTypeStateDiagram => 'State diagram';
+
+  @override
+  String get mermaidCatalogDescriptionStateDiagram =>
+      'State diagram — show state transitions';
+
+  @override
+  String get mermaidCatalogTypeErDiagram => 'ER diagram';
+
+  @override
+  String get mermaidCatalogDescriptionErDiagram =>
+      'ER diagram — show entity relationships';
+
+  @override
+  String get mermaidCatalogTypeGantt => 'Gantt chart';
+
+  @override
+  String get mermaidCatalogDescriptionGantt =>
+      'Gantt chart — show a project timeline';
+
+  @override
+  String get mermaidCatalogTypePie => 'Pie chart';
+
+  @override
+  String get mermaidCatalogDescriptionPie =>
+      'Pie chart — show proportional data';
+
+  @override
+  String get mermaidCatalogTypeJourney => 'User journey';
+
+  @override
+  String get mermaidCatalogDescriptionJourney =>
+      'User journey — show a user experience flow';
+
+  @override
+  String get mermaidCatalogTypeGitGraph => 'Git graph';
+
+  @override
+  String get mermaidCatalogDescriptionGitGraph =>
+      'Git graph — show branches and commits';
+
+  @override
+  String get mermaidCatalogTypeMindmap => 'Mind map';
+
+  @override
+  String get mermaidCatalogDescriptionMindmap => 'Mind map — show a hierarchy';
+
+  @override
+  String get mermaidCatalogTypeTimeline => 'Timeline';
+
+  @override
+  String get mermaidCatalogDescriptionTimeline =>
+      'Timeline — show events in chronological order';
+
+  @override
+  String get mermaidCatalogTypeBlock => 'Block diagram';
+
+  @override
+  String get mermaidCatalogDescriptionBlock =>
+      'Block diagram — show block layout and relationships';
+
+  @override
+  String get mermaidCatalogTypeRequirement => 'Requirement diagram';
+
+  @override
+  String get mermaidCatalogDescriptionRequirement =>
+      'Requirement diagram — show requirements and implementation relationships';
+
+  @override
+  String get mermaidCatalogTemplateFlowchart =>
+      'graph TD\n  A[Start]\n  B[Process step]\n  C<MERMAID_OPEN_BRACE>Condition<MERMAID_CLOSE_BRACE>\n  D[End]\n\n  A --> B\n  B --> C\n  C -->|Yes| D\n  C -->|No| B';
+
+  @override
+  String get mermaidCatalogTemplateSequenceDiagram =>
+      'sequenceDiagram\n  participant \"User\" as 用户\n  participant \"System\" as 系统\n  participant \"Database\" as 数据库\n\n  用户->>系统: Send request\n  系统->>数据库: Query data\n  数据库-->>系统: Return result\n  系统-->>用户: Show result';
+
+  @override
+  String get mermaidCatalogTemplateClassDiagram =>
+      'classDiagram\n  class Person <MERMAID_OPEN_BRACE>\n    +String name\n    +int age\n    +getName() String\n    +setName(String name) void\n  <MERMAID_CLOSE_BRACE>\n  class Student <MERMAID_OPEN_BRACE>\n    +String studentId\n    +study() void\n  <MERMAID_CLOSE_BRACE>\n  class Teacher <MERMAID_OPEN_BRACE>\n    +String teacherId\n    +teach() void\n  <MERMAID_CLOSE_BRACE>\n  Student --|> Person\n  Teacher --|> Person';
+
+  @override
+  String get mermaidCatalogTemplateStateDiagram =>
+      'stateDiagram-v2\n  state \"Pending\" as 待处理\n  state \"Processing\" as 处理中\n  state \"Completed\" as 已完成\n  state \"Failed\" as 失败\n  [*] --> 待处理\n  待处理 --> 处理中\n  处理中 --> 已完成\n  处理中 --> 失败\n  失败 --> 待处理\n  已完成 --> [*]';
+
+  @override
+  String get mermaidCatalogTemplateErDiagram =>
+      'erDiagram\n  CUSTOMER ||--o<MERMAID_OPEN_BRACE> ORDER : places\n  ORDER ||--|<MERMAID_OPEN_BRACE> ORDER_ITEM : contains\n  PRODUCT ||--o<MERMAID_OPEN_BRACE> ORDER_ITEM : includes\n  CUSTOMER <MERMAID_OPEN_BRACE>\n    int id PK\n    string name\n    string email\n  <MERMAID_CLOSE_BRACE>\n  ORDER <MERMAID_OPEN_BRACE>\n    int id PK\n    int customer_id FK\n    date order_date\n  <MERMAID_CLOSE_BRACE>\n  PRODUCT <MERMAID_OPEN_BRACE>\n    int id PK\n    string name\n    float price\n  <MERMAID_CLOSE_BRACE>';
+
+  @override
+  String get mermaidCatalogTemplateGantt =>
+      'gantt\n  title Project Gantt chart\n  dateFormat  YYYY-MM-DD\n  axisFormat  %m/%d\n\n  section Requirements\n  Requirements analysis :a1, 2024-01-01, 14d\n  Prototype design     :a2, after a1, 10d\n\n  section Development\n  Frontend development  :b1, after a2, 20d\n  Backend development  :b2, after a2, 20d\n  API integration      :b3, after b1, 7d\n\n  section Testing\n  Feature testing      :c1, after b3, 10d\n  Deployment           :c2, after c1, 3d';
+
+  @override
+  String get mermaidCatalogTemplatePie =>
+      'pie showData\n  title Data distribution\n  \"Category A\" : 40\n  \"Category B\" : 25\n  \"Category C\" : 20\n  \"Category D\" : 15';
+
+  @override
+  String get mermaidCatalogTemplateJourney =>
+      'journey\n  title User registration\n  section Sign-up\n    Open sign-up page: 5: User\n    Enter information: 3: User\n    Submit request: 4: User\n  section Verification\n    Receive code: 3: System\n    Enter code: 4: User\n    Verification succeeds: 5: System, User';
+
+  @override
+  String get mermaidCatalogTemplateGitGraph =>
+      'gitGraph\n  commit id: \"初始提交\"\n  commit id: \"添加功能A\"\n  branch develop\n  checkout develop\n  commit id: \"开发新功能\"\n  commit id: \"修复bug\"\n  checkout main\n  merge develop\n  commit id: \"发布v1.0\"';
+
+  @override
+  String get mermaidCatalogTemplateMindmap =>
+      'mindmap\n  root((Project management))\n    Requirements\n      Functional\n      Non-functional\n    Development\n      Frontend\n      Backend\n    Testing\n      Unit tests\n      Integration tests\n    Deployment\n      Test environment\n      Production environment';
+
+  @override
+  String get mermaidCatalogTemplateTimeline =>
+      'timeline\n  title Project milestones\n  2024-Q1 : Requirements research : Plan confirmed\n  2024-Q2 : Development : Features implemented\n  2024-Q3 : Testing : Bug fixes : Performance tuning\n  2024-Q4 : Deployment : Operations and maintenance';
+
+  @override
+  String get mermaidCatalogTemplateBlock =>
+      'block-beta\n  columns 3\n  A[\"Requirements\"] B[\"Development\"] C[\"Testing\"]\n  D[\"Deployment\"] E[\"Operations\"] F[\"Monitoring\"]\n  A --> B\n  B --> C\n  C --> D\n  D --> E\n  E --> F';
+
+  @override
+  String get mermaidCatalogTemplateRequirement =>
+      'requirementDiagram\n  requirement 用户登录 <MERMAID_OPEN_BRACE>\n    id: 1\n    text: A user can sign in with an account and password\n    risk: medium\n    verifyMethod: test\n  <MERMAID_CLOSE_BRACE>\n  element 登录页面 <MERMAID_OPEN_BRACE>\n    type: UI\n  <MERMAID_CLOSE_BRACE>\n  element 认证服务 <MERMAID_OPEN_BRACE>\n    type: Service\n  <MERMAID_CLOSE_BRACE>\n  登录页面 - satisfies -> 用户登录\n  认证服务 - verifies -> 用户登录';
+
+  @override
+  String get mermaidCatalogDefaultFileName => 'My chart';
+
+  @override
+  String get mermaidCatalogActionAddNode => 'Add node';
+
+  @override
+  String get mermaidCatalogActionAddDecision => 'Add decision';
+
+  @override
+  String get mermaidCatalogActionAddEdge => 'Add edge';
+
+  @override
+  String get mermaidCatalogActionAddSubgraph => 'Add subgraph';
+
+  @override
+  String get mermaidCatalogActionAddParticipant => 'Add participant';
+
+  @override
+  String get mermaidCatalogActionAddRequest => 'Add request';
+
+  @override
+  String get mermaidCatalogActionAddResponse => 'Add response';
+
+  @override
+  String get mermaidCatalogActionAddNote => 'Add note';
+
+  @override
+  String get mermaidCatalogActionAddClass => 'Add class';
+
+  @override
+  String get mermaidCatalogActionAddInheritance => 'Add inheritance';
+
+  @override
+  String get mermaidCatalogActionAddRelationship => 'Add relationship';
+
+  @override
+  String get mermaidCatalogActionAddAggregation => 'Add aggregation';
+
+  @override
+  String get mermaidCatalogActionAddState => 'Add state';
+
+  @override
+  String get mermaidCatalogActionAddTransition => 'Add transition';
+
+  @override
+  String get mermaidCatalogActionAddStart => 'Add start';
+
+  @override
+  String get mermaidCatalogActionAddEnd => 'Add end';
+
+  @override
+  String get mermaidCatalogActionAddEntity => 'Add entity';
+
+  @override
+  String get mermaidCatalogActionAddOneToMany => 'Add one-to-many';
+
+  @override
+  String get mermaidCatalogActionAddManyToMany => 'Add many-to-many';
+
+  @override
+  String get mermaidCatalogActionAddOneToOne => 'Add one-to-one';
+
+  @override
+  String get mermaidCatalogActionAddPhase => 'Add phase';
+
+  @override
+  String get mermaidCatalogActionAddTask => 'Add task';
+
+  @override
+  String get mermaidCatalogActionAddDependentTask => 'Add dependent task';
+
+  @override
+  String get mermaidCatalogActionAddMilestone => 'Add milestone';
+
+  @override
+  String get mermaidCatalogActionAddCategory => 'Add category';
+
+  @override
+  String get mermaidCatalogActionAddTitle => 'Add title';
+
+  @override
+  String get mermaidCatalogActionAddSystemTask => 'Add system task';
+
+  @override
+  String get mermaidCatalogActionAddMultiPersonTask => 'Add multi-person task';
+
+  @override
+  String get mermaidCatalogActionAddCommit => 'Add commit';
+
+  @override
+  String get mermaidCatalogActionCreateBranch => 'Create branch';
+
+  @override
+  String get mermaidCatalogActionSwitchBranch => 'Switch branch';
+
+  @override
+  String get mermaidCatalogActionMergeBranch => 'Merge branch';
+
+  @override
+  String get mermaidCatalogActionAddBranch => 'Add branch';
+
+  @override
+  String get mermaidCatalogActionAddChildBranch => 'Add child branch';
+
+  @override
+  String get mermaidCatalogActionAddTopic => 'Add topic';
+
+  @override
+  String get mermaidCatalogActionAddPeriod => 'Add period';
+
+  @override
+  String get mermaidCatalogActionAddBlock => 'Add block';
+
+  @override
+  String get mermaidCatalogActionAddColumns => 'Add columns';
+
+  @override
+  String get mermaidCatalogActionAddConnection => 'Add connection';
+
+  @override
+  String get mermaidCatalogActionAddChildBlock => 'Add child block';
+
+  @override
+  String get mermaidCatalogActionAddRequirement => 'Add requirement';
+
+  @override
+  String get mermaidCatalogActionAddElement => 'Add element';
+
+  @override
+  String get mermaidCatalogActionAddVerification => 'Add verification';
+
+  @override
+  String get mermaidCatalogGanttDependencyBaseTask => 'Dependency base task';
+
+  @override
+  String get mermaidCatalogGanttDependentTaskName => 'Follow-up task';
 }
 
 /// The translations for English, as used in the United States (`en_US`).
@@ -13113,11 +13398,14 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String get unifiedTaskTypeAudioSeparation => 'Audio separation';
 
   @override
-  String backgroundTaskGeneratedOcrTitle(Object basename) => 'OCR: $basename';
+  String backgroundTaskGeneratedOcrTitle(Object basename) {
+    return 'OCR: $basename';
+  }
 
   @override
-  String backgroundTaskGeneratedAudioSeparationTitle(Object basename) =>
-      'Audio separation: $basename';
+  String backgroundTaskGeneratedAudioSeparationTitle(Object basename) {
+    return 'Audio separation: $basename';
+  }
 
   @override
   String get unifiedTaskTypeChat => 'Assistant chat';
@@ -19218,7 +19506,9 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String get browserScriptOriginManual => 'Added manually';
 
   @override
-  String browserScriptVersion(String version) => '@version $version';
+  String browserScriptVersion(Object version) {
+    return '@version $version';
+  }
 
   @override
   String get browserScriptEnabled => 'Enabled';
@@ -20571,4 +20861,284 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get iosContinuedTaskTitle => 'Background task';
+
+  @override
+  String get mermaidCatalogTypeFlowchart => 'Flowchart';
+
+  @override
+  String get mermaidCatalogDescriptionFlowchart =>
+      'Flowchart — show steps, branches, and loops';
+
+  @override
+  String get mermaidCatalogTypeSequenceDiagram => 'Sequence diagram';
+
+  @override
+  String get mermaidCatalogDescriptionSequenceDiagram =>
+      'Sequence diagram — show interactions between participants';
+
+  @override
+  String get mermaidCatalogTypeClassDiagram => 'Class diagram';
+
+  @override
+  String get mermaidCatalogDescriptionClassDiagram =>
+      'Class diagram — show relationships between class attributes and methods';
+
+  @override
+  String get mermaidCatalogTypeStateDiagram => 'State diagram';
+
+  @override
+  String get mermaidCatalogDescriptionStateDiagram =>
+      'State diagram — show state transitions';
+
+  @override
+  String get mermaidCatalogTypeErDiagram => 'ER diagram';
+
+  @override
+  String get mermaidCatalogDescriptionErDiagram =>
+      'ER diagram — show entity relationships';
+
+  @override
+  String get mermaidCatalogTypeGantt => 'Gantt chart';
+
+  @override
+  String get mermaidCatalogDescriptionGantt =>
+      'Gantt chart — show a project timeline';
+
+  @override
+  String get mermaidCatalogTypePie => 'Pie chart';
+
+  @override
+  String get mermaidCatalogDescriptionPie =>
+      'Pie chart — show proportional data';
+
+  @override
+  String get mermaidCatalogTypeJourney => 'User journey';
+
+  @override
+  String get mermaidCatalogDescriptionJourney =>
+      'User journey — show a user experience flow';
+
+  @override
+  String get mermaidCatalogTypeGitGraph => 'Git graph';
+
+  @override
+  String get mermaidCatalogDescriptionGitGraph =>
+      'Git graph — show branches and commits';
+
+  @override
+  String get mermaidCatalogTypeMindmap => 'Mind map';
+
+  @override
+  String get mermaidCatalogDescriptionMindmap => 'Mind map — show a hierarchy';
+
+  @override
+  String get mermaidCatalogTypeTimeline => 'Timeline';
+
+  @override
+  String get mermaidCatalogDescriptionTimeline =>
+      'Timeline — show events in chronological order';
+
+  @override
+  String get mermaidCatalogTypeBlock => 'Block diagram';
+
+  @override
+  String get mermaidCatalogDescriptionBlock =>
+      'Block diagram — show block layout and relationships';
+
+  @override
+  String get mermaidCatalogTypeRequirement => 'Requirement diagram';
+
+  @override
+  String get mermaidCatalogDescriptionRequirement =>
+      'Requirement diagram — show requirements and implementation relationships';
+
+  @override
+  String get mermaidCatalogTemplateFlowchart =>
+      'graph TD\n  A[Start]\n  B[Process step]\n  C<MERMAID_OPEN_BRACE>Condition<MERMAID_CLOSE_BRACE>\n  D[End]\n\n  A --> B\n  B --> C\n  C -->|Yes| D\n  C -->|No| B';
+
+  @override
+  String get mermaidCatalogTemplateSequenceDiagram =>
+      'sequenceDiagram\n  participant \"User\" as 用户\n  participant \"System\" as 系统\n  participant \"Database\" as 数据库\n\n  用户->>系统: Send request\n  系统->>数据库: Query data\n  数据库-->>系统: Return result\n  系统-->>用户: Show result';
+
+  @override
+  String get mermaidCatalogTemplateClassDiagram =>
+      'classDiagram\n  class Person <MERMAID_OPEN_BRACE>\n    +String name\n    +int age\n    +getName() String\n    +setName(String name) void\n  <MERMAID_CLOSE_BRACE>\n  class Student <MERMAID_OPEN_BRACE>\n    +String studentId\n    +study() void\n  <MERMAID_CLOSE_BRACE>\n  class Teacher <MERMAID_OPEN_BRACE>\n    +String teacherId\n    +teach() void\n  <MERMAID_CLOSE_BRACE>\n  Student --|> Person\n  Teacher --|> Person';
+
+  @override
+  String get mermaidCatalogTemplateStateDiagram =>
+      'stateDiagram-v2\n  state \"Pending\" as 待处理\n  state \"Processing\" as 处理中\n  state \"Completed\" as 已完成\n  state \"Failed\" as 失败\n  [*] --> 待处理\n  待处理 --> 处理中\n  处理中 --> 已完成\n  处理中 --> 失败\n  失败 --> 待处理\n  已完成 --> [*]';
+
+  @override
+  String get mermaidCatalogTemplateErDiagram =>
+      'erDiagram\n  CUSTOMER ||--o<MERMAID_OPEN_BRACE> ORDER : places\n  ORDER ||--|<MERMAID_OPEN_BRACE> ORDER_ITEM : contains\n  PRODUCT ||--o<MERMAID_OPEN_BRACE> ORDER_ITEM : includes\n  CUSTOMER <MERMAID_OPEN_BRACE>\n    int id PK\n    string name\n    string email\n  <MERMAID_CLOSE_BRACE>\n  ORDER <MERMAID_OPEN_BRACE>\n    int id PK\n    int customer_id FK\n    date order_date\n  <MERMAID_CLOSE_BRACE>\n  PRODUCT <MERMAID_OPEN_BRACE>\n    int id PK\n    string name\n    float price\n  <MERMAID_CLOSE_BRACE>';
+
+  @override
+  String get mermaidCatalogTemplateGantt =>
+      'gantt\n  title Project Gantt chart\n  dateFormat  YYYY-MM-DD\n  axisFormat  %m/%d\n\n  section Requirements\n  Requirements analysis :a1, 2024-01-01, 14d\n  Prototype design     :a2, after a1, 10d\n\n  section Development\n  Frontend development  :b1, after a2, 20d\n  Backend development  :b2, after a2, 20d\n  API integration      :b3, after b1, 7d\n\n  section Testing\n  Feature testing      :c1, after b3, 10d\n  Deployment           :c2, after c1, 3d';
+
+  @override
+  String get mermaidCatalogTemplatePie =>
+      'pie showData\n  title Data distribution\n  \"Category A\" : 40\n  \"Category B\" : 25\n  \"Category C\" : 20\n  \"Category D\" : 15';
+
+  @override
+  String get mermaidCatalogTemplateJourney =>
+      'journey\n  title User registration\n  section Sign-up\n    Open sign-up page: 5: User\n    Enter information: 3: User\n    Submit request: 4: User\n  section Verification\n    Receive code: 3: System\n    Enter code: 4: User\n    Verification succeeds: 5: System, User';
+
+  @override
+  String get mermaidCatalogTemplateGitGraph =>
+      'gitGraph\n  commit id: \"初始提交\"\n  commit id: \"添加功能A\"\n  branch develop\n  checkout develop\n  commit id: \"开发新功能\"\n  commit id: \"修复bug\"\n  checkout main\n  merge develop\n  commit id: \"发布v1.0\"';
+
+  @override
+  String get mermaidCatalogTemplateMindmap =>
+      'mindmap\n  root((Project management))\n    Requirements\n      Functional\n      Non-functional\n    Development\n      Frontend\n      Backend\n    Testing\n      Unit tests\n      Integration tests\n    Deployment\n      Test environment\n      Production environment';
+
+  @override
+  String get mermaidCatalogTemplateTimeline =>
+      'timeline\n  title Project milestones\n  2024-Q1 : Requirements research : Plan confirmed\n  2024-Q2 : Development : Features implemented\n  2024-Q3 : Testing : Bug fixes : Performance tuning\n  2024-Q4 : Deployment : Operations and maintenance';
+
+  @override
+  String get mermaidCatalogTemplateBlock =>
+      'block-beta\n  columns 3\n  A[\"Requirements\"] B[\"Development\"] C[\"Testing\"]\n  D[\"Deployment\"] E[\"Operations\"] F[\"Monitoring\"]\n  A --> B\n  B --> C\n  C --> D\n  D --> E\n  E --> F';
+
+  @override
+  String get mermaidCatalogTemplateRequirement =>
+      'requirementDiagram\n  requirement 用户登录 <MERMAID_OPEN_BRACE>\n    id: 1\n    text: A user can sign in with an account and password\n    risk: medium\n    verifyMethod: test\n  <MERMAID_CLOSE_BRACE>\n  element 登录页面 <MERMAID_OPEN_BRACE>\n    type: UI\n  <MERMAID_CLOSE_BRACE>\n  element 认证服务 <MERMAID_OPEN_BRACE>\n    type: Service\n  <MERMAID_CLOSE_BRACE>\n  登录页面 - satisfies -> 用户登录\n  认证服务 - verifies -> 用户登录';
+
+  @override
+  String get mermaidCatalogDefaultFileName => 'My chart';
+
+  @override
+  String get mermaidCatalogActionAddNode => 'Add node';
+
+  @override
+  String get mermaidCatalogActionAddDecision => 'Add decision';
+
+  @override
+  String get mermaidCatalogActionAddEdge => 'Add edge';
+
+  @override
+  String get mermaidCatalogActionAddSubgraph => 'Add subgraph';
+
+  @override
+  String get mermaidCatalogActionAddParticipant => 'Add participant';
+
+  @override
+  String get mermaidCatalogActionAddRequest => 'Add request';
+
+  @override
+  String get mermaidCatalogActionAddResponse => 'Add response';
+
+  @override
+  String get mermaidCatalogActionAddNote => 'Add note';
+
+  @override
+  String get mermaidCatalogActionAddClass => 'Add class';
+
+  @override
+  String get mermaidCatalogActionAddInheritance => 'Add inheritance';
+
+  @override
+  String get mermaidCatalogActionAddRelationship => 'Add relationship';
+
+  @override
+  String get mermaidCatalogActionAddAggregation => 'Add aggregation';
+
+  @override
+  String get mermaidCatalogActionAddState => 'Add state';
+
+  @override
+  String get mermaidCatalogActionAddTransition => 'Add transition';
+
+  @override
+  String get mermaidCatalogActionAddStart => 'Add start';
+
+  @override
+  String get mermaidCatalogActionAddEnd => 'Add end';
+
+  @override
+  String get mermaidCatalogActionAddEntity => 'Add entity';
+
+  @override
+  String get mermaidCatalogActionAddOneToMany => 'Add one-to-many';
+
+  @override
+  String get mermaidCatalogActionAddManyToMany => 'Add many-to-many';
+
+  @override
+  String get mermaidCatalogActionAddOneToOne => 'Add one-to-one';
+
+  @override
+  String get mermaidCatalogActionAddPhase => 'Add phase';
+
+  @override
+  String get mermaidCatalogActionAddTask => 'Add task';
+
+  @override
+  String get mermaidCatalogActionAddDependentTask => 'Add dependent task';
+
+  @override
+  String get mermaidCatalogActionAddMilestone => 'Add milestone';
+
+  @override
+  String get mermaidCatalogActionAddCategory => 'Add category';
+
+  @override
+  String get mermaidCatalogActionAddTitle => 'Add title';
+
+  @override
+  String get mermaidCatalogActionAddSystemTask => 'Add system task';
+
+  @override
+  String get mermaidCatalogActionAddMultiPersonTask => 'Add multi-person task';
+
+  @override
+  String get mermaidCatalogActionAddCommit => 'Add commit';
+
+  @override
+  String get mermaidCatalogActionCreateBranch => 'Create branch';
+
+  @override
+  String get mermaidCatalogActionSwitchBranch => 'Switch branch';
+
+  @override
+  String get mermaidCatalogActionMergeBranch => 'Merge branch';
+
+  @override
+  String get mermaidCatalogActionAddBranch => 'Add branch';
+
+  @override
+  String get mermaidCatalogActionAddChildBranch => 'Add child branch';
+
+  @override
+  String get mermaidCatalogActionAddTopic => 'Add topic';
+
+  @override
+  String get mermaidCatalogActionAddPeriod => 'Add period';
+
+  @override
+  String get mermaidCatalogActionAddBlock => 'Add block';
+
+  @override
+  String get mermaidCatalogActionAddColumns => 'Add columns';
+
+  @override
+  String get mermaidCatalogActionAddConnection => 'Add connection';
+
+  @override
+  String get mermaidCatalogActionAddChildBlock => 'Add child block';
+
+  @override
+  String get mermaidCatalogActionAddRequirement => 'Add requirement';
+
+  @override
+  String get mermaidCatalogActionAddElement => 'Add element';
+
+  @override
+  String get mermaidCatalogActionAddVerification => 'Add verification';
+
+  @override
+  String get mermaidCatalogGanttDependencyBaseTask => 'Dependency base task';
+
+  @override
+  String get mermaidCatalogGanttDependentTaskName => 'Follow-up task';
 }

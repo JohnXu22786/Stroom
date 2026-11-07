@@ -63,7 +63,7 @@ import 'app_localizations_zh.dart';
 /// property.
 abstract class AppLocalizations {
   AppLocalizations(String locale)
-      : localeName = intl.Intl.canonicalizedLocale(locale.toString());
+    : localeName = intl.Intl.canonicalizedLocale(locale.toString());
 
   final String localeName;
 
@@ -86,11 +86,11 @@ abstract class AppLocalizations {
   /// of delegates is preferred or required.
   static const List<LocalizationsDelegate<dynamic>> localizationsDelegates =
       <LocalizationsDelegate<dynamic>>[
-    delegate,
-    GlobalMaterialLocalizations.delegate,
-    GlobalCupertinoLocalizations.delegate,
-    GlobalWidgetsLocalizations.delegate,
-  ];
+        delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+      ];
 
   /// A list of this localizations delegate's supported locales.
   static const List<Locale> supportedLocales = <Locale>[
@@ -14999,20 +14999,52 @@ abstract class AppLocalizations {
   /// **'{count, plural, one{{count} matching rule} other{{count} matching rules}}'**
   String browserScriptMatchCount(num count);
 
+  /// No description provided for @browserScriptOriginManual.
+  ///
+  /// In en, this message translates to:
+  /// **'Added manually'**
   String get browserScriptOriginManual;
 
-  String browserScriptVersion(String version);
+  /// No description provided for @browserScriptVersion.
+  ///
+  /// In en, this message translates to:
+  /// **'@version {version}'**
+  String browserScriptVersion(Object version);
 
+  /// No description provided for @browserScriptEnabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Enabled'**
   String get browserScriptEnabled;
 
+  /// No description provided for @browserScriptDisabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Disabled'**
   String get browserScriptDisabled;
 
+  /// No description provided for @browserScriptRuntimeError.
+  ///
+  /// In en, this message translates to:
+  /// **'This script encountered a runtime error. Check its code and page compatibility.'**
   String get browserScriptRuntimeError;
 
+  /// No description provided for @browserScriptDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
   String get browserScriptDelete;
 
+  /// No description provided for @browserDeleteScriptTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete script?'**
   String get browserDeleteScriptTitle;
 
+  /// No description provided for @browserDeleteScriptConfirmation.
+  ///
+  /// In en, this message translates to:
+  /// **'This script will be removed from this browser. This action cannot be undone.'**
   String get browserDeleteScriptConfirmation;
 
   /// No description provided for @browserEditScript.
@@ -17008,6 +17040,516 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Background task'**
   String get iosContinuedTaskTitle;
+
+  /// No description provided for @mermaidCatalogTypeFlowchart.
+  ///
+  /// In en, this message translates to:
+  /// **'Flowchart'**
+  String get mermaidCatalogTypeFlowchart;
+
+  /// No description provided for @mermaidCatalogDescriptionFlowchart.
+  ///
+  /// In en, this message translates to:
+  /// **'Flowchart — show steps, branches, and loops'**
+  String get mermaidCatalogDescriptionFlowchart;
+
+  /// No description provided for @mermaidCatalogTypeSequenceDiagram.
+  ///
+  /// In en, this message translates to:
+  /// **'Sequence diagram'**
+  String get mermaidCatalogTypeSequenceDiagram;
+
+  /// No description provided for @mermaidCatalogDescriptionSequenceDiagram.
+  ///
+  /// In en, this message translates to:
+  /// **'Sequence diagram — show interactions between participants'**
+  String get mermaidCatalogDescriptionSequenceDiagram;
+
+  /// No description provided for @mermaidCatalogTypeClassDiagram.
+  ///
+  /// In en, this message translates to:
+  /// **'Class diagram'**
+  String get mermaidCatalogTypeClassDiagram;
+
+  /// No description provided for @mermaidCatalogDescriptionClassDiagram.
+  ///
+  /// In en, this message translates to:
+  /// **'Class diagram — show relationships between class attributes and methods'**
+  String get mermaidCatalogDescriptionClassDiagram;
+
+  /// No description provided for @mermaidCatalogTypeStateDiagram.
+  ///
+  /// In en, this message translates to:
+  /// **'State diagram'**
+  String get mermaidCatalogTypeStateDiagram;
+
+  /// No description provided for @mermaidCatalogDescriptionStateDiagram.
+  ///
+  /// In en, this message translates to:
+  /// **'State diagram — show state transitions'**
+  String get mermaidCatalogDescriptionStateDiagram;
+
+  /// No description provided for @mermaidCatalogTypeErDiagram.
+  ///
+  /// In en, this message translates to:
+  /// **'ER diagram'**
+  String get mermaidCatalogTypeErDiagram;
+
+  /// No description provided for @mermaidCatalogDescriptionErDiagram.
+  ///
+  /// In en, this message translates to:
+  /// **'ER diagram — show entity relationships'**
+  String get mermaidCatalogDescriptionErDiagram;
+
+  /// No description provided for @mermaidCatalogTypeGantt.
+  ///
+  /// In en, this message translates to:
+  /// **'Gantt chart'**
+  String get mermaidCatalogTypeGantt;
+
+  /// No description provided for @mermaidCatalogDescriptionGantt.
+  ///
+  /// In en, this message translates to:
+  /// **'Gantt chart — show a project timeline'**
+  String get mermaidCatalogDescriptionGantt;
+
+  /// No description provided for @mermaidCatalogTypePie.
+  ///
+  /// In en, this message translates to:
+  /// **'Pie chart'**
+  String get mermaidCatalogTypePie;
+
+  /// No description provided for @mermaidCatalogDescriptionPie.
+  ///
+  /// In en, this message translates to:
+  /// **'Pie chart — show proportional data'**
+  String get mermaidCatalogDescriptionPie;
+
+  /// No description provided for @mermaidCatalogTypeJourney.
+  ///
+  /// In en, this message translates to:
+  /// **'User journey'**
+  String get mermaidCatalogTypeJourney;
+
+  /// No description provided for @mermaidCatalogDescriptionJourney.
+  ///
+  /// In en, this message translates to:
+  /// **'User journey — show a user experience flow'**
+  String get mermaidCatalogDescriptionJourney;
+
+  /// No description provided for @mermaidCatalogTypeGitGraph.
+  ///
+  /// In en, this message translates to:
+  /// **'Git graph'**
+  String get mermaidCatalogTypeGitGraph;
+
+  /// No description provided for @mermaidCatalogDescriptionGitGraph.
+  ///
+  /// In en, this message translates to:
+  /// **'Git graph — show branches and commits'**
+  String get mermaidCatalogDescriptionGitGraph;
+
+  /// No description provided for @mermaidCatalogTypeMindmap.
+  ///
+  /// In en, this message translates to:
+  /// **'Mind map'**
+  String get mermaidCatalogTypeMindmap;
+
+  /// No description provided for @mermaidCatalogDescriptionMindmap.
+  ///
+  /// In en, this message translates to:
+  /// **'Mind map — show a hierarchy'**
+  String get mermaidCatalogDescriptionMindmap;
+
+  /// No description provided for @mermaidCatalogTypeTimeline.
+  ///
+  /// In en, this message translates to:
+  /// **'Timeline'**
+  String get mermaidCatalogTypeTimeline;
+
+  /// No description provided for @mermaidCatalogDescriptionTimeline.
+  ///
+  /// In en, this message translates to:
+  /// **'Timeline — show events in chronological order'**
+  String get mermaidCatalogDescriptionTimeline;
+
+  /// No description provided for @mermaidCatalogTypeBlock.
+  ///
+  /// In en, this message translates to:
+  /// **'Block diagram'**
+  String get mermaidCatalogTypeBlock;
+
+  /// No description provided for @mermaidCatalogDescriptionBlock.
+  ///
+  /// In en, this message translates to:
+  /// **'Block diagram — show block layout and relationships'**
+  String get mermaidCatalogDescriptionBlock;
+
+  /// No description provided for @mermaidCatalogTypeRequirement.
+  ///
+  /// In en, this message translates to:
+  /// **'Requirement diagram'**
+  String get mermaidCatalogTypeRequirement;
+
+  /// No description provided for @mermaidCatalogDescriptionRequirement.
+  ///
+  /// In en, this message translates to:
+  /// **'Requirement diagram — show requirements and implementation relationships'**
+  String get mermaidCatalogDescriptionRequirement;
+
+  /// No description provided for @mermaidCatalogTemplateFlowchart.
+  ///
+  /// In en, this message translates to:
+  /// **'graph TD\n  A[Start]\n  B[Process step]\n  C<MERMAID_OPEN_BRACE>Condition<MERMAID_CLOSE_BRACE>\n  D[End]\n\n  A --> B\n  B --> C\n  C -->|Yes| D\n  C -->|No| B'**
+  String get mermaidCatalogTemplateFlowchart;
+
+  /// No description provided for @mermaidCatalogTemplateSequenceDiagram.
+  ///
+  /// In en, this message translates to:
+  /// **'sequenceDiagram\n  participant \"User\" as 用户\n  participant \"System\" as 系统\n  participant \"Database\" as 数据库\n\n  用户->>系统: Send request\n  系统->>数据库: Query data\n  数据库-->>系统: Return result\n  系统-->>用户: Show result'**
+  String get mermaidCatalogTemplateSequenceDiagram;
+
+  /// No description provided for @mermaidCatalogTemplateClassDiagram.
+  ///
+  /// In en, this message translates to:
+  /// **'classDiagram\n  class Person <MERMAID_OPEN_BRACE>\n    +String name\n    +int age\n    +getName() String\n    +setName(String name) void\n  <MERMAID_CLOSE_BRACE>\n  class Student <MERMAID_OPEN_BRACE>\n    +String studentId\n    +study() void\n  <MERMAID_CLOSE_BRACE>\n  class Teacher <MERMAID_OPEN_BRACE>\n    +String teacherId\n    +teach() void\n  <MERMAID_CLOSE_BRACE>\n  Student --|> Person\n  Teacher --|> Person'**
+  String get mermaidCatalogTemplateClassDiagram;
+
+  /// No description provided for @mermaidCatalogTemplateStateDiagram.
+  ///
+  /// In en, this message translates to:
+  /// **'stateDiagram-v2\n  state \"Pending\" as 待处理\n  state \"Processing\" as 处理中\n  state \"Completed\" as 已完成\n  state \"Failed\" as 失败\n  [*] --> 待处理\n  待处理 --> 处理中\n  处理中 --> 已完成\n  处理中 --> 失败\n  失败 --> 待处理\n  已完成 --> [*]'**
+  String get mermaidCatalogTemplateStateDiagram;
+
+  /// No description provided for @mermaidCatalogTemplateErDiagram.
+  ///
+  /// In en, this message translates to:
+  /// **'erDiagram\n  CUSTOMER ||--o<MERMAID_OPEN_BRACE> ORDER : places\n  ORDER ||--|<MERMAID_OPEN_BRACE> ORDER_ITEM : contains\n  PRODUCT ||--o<MERMAID_OPEN_BRACE> ORDER_ITEM : includes\n  CUSTOMER <MERMAID_OPEN_BRACE>\n    int id PK\n    string name\n    string email\n  <MERMAID_CLOSE_BRACE>\n  ORDER <MERMAID_OPEN_BRACE>\n    int id PK\n    int customer_id FK\n    date order_date\n  <MERMAID_CLOSE_BRACE>\n  PRODUCT <MERMAID_OPEN_BRACE>\n    int id PK\n    string name\n    float price\n  <MERMAID_CLOSE_BRACE>'**
+  String get mermaidCatalogTemplateErDiagram;
+
+  /// No description provided for @mermaidCatalogTemplateGantt.
+  ///
+  /// In en, this message translates to:
+  /// **'gantt\n  title Project Gantt chart\n  dateFormat  YYYY-MM-DD\n  axisFormat  %m/%d\n\n  section Requirements\n  Requirements analysis :a1, 2024-01-01, 14d\n  Prototype design     :a2, after a1, 10d\n\n  section Development\n  Frontend development  :b1, after a2, 20d\n  Backend development  :b2, after a2, 20d\n  API integration      :b3, after b1, 7d\n\n  section Testing\n  Feature testing      :c1, after b3, 10d\n  Deployment           :c2, after c1, 3d'**
+  String get mermaidCatalogTemplateGantt;
+
+  /// No description provided for @mermaidCatalogTemplatePie.
+  ///
+  /// In en, this message translates to:
+  /// **'pie showData\n  title Data distribution\n  \"Category A\" : 40\n  \"Category B\" : 25\n  \"Category C\" : 20\n  \"Category D\" : 15'**
+  String get mermaidCatalogTemplatePie;
+
+  /// No description provided for @mermaidCatalogTemplateJourney.
+  ///
+  /// In en, this message translates to:
+  /// **'journey\n  title User registration\n  section Sign-up\n    Open sign-up page: 5: User\n    Enter information: 3: User\n    Submit request: 4: User\n  section Verification\n    Receive code: 3: System\n    Enter code: 4: User\n    Verification succeeds: 5: System, User'**
+  String get mermaidCatalogTemplateJourney;
+
+  /// No description provided for @mermaidCatalogTemplateGitGraph.
+  ///
+  /// In en, this message translates to:
+  /// **'gitGraph\n  commit id: \"初始提交\"\n  commit id: \"添加功能A\"\n  branch develop\n  checkout develop\n  commit id: \"开发新功能\"\n  commit id: \"修复bug\"\n  checkout main\n  merge develop\n  commit id: \"发布v1.0\"'**
+  String get mermaidCatalogTemplateGitGraph;
+
+  /// No description provided for @mermaidCatalogTemplateMindmap.
+  ///
+  /// In en, this message translates to:
+  /// **'mindmap\n  root((Project management))\n    Requirements\n      Functional\n      Non-functional\n    Development\n      Frontend\n      Backend\n    Testing\n      Unit tests\n      Integration tests\n    Deployment\n      Test environment\n      Production environment'**
+  String get mermaidCatalogTemplateMindmap;
+
+  /// No description provided for @mermaidCatalogTemplateTimeline.
+  ///
+  /// In en, this message translates to:
+  /// **'timeline\n  title Project milestones\n  2024-Q1 : Requirements research : Plan confirmed\n  2024-Q2 : Development : Features implemented\n  2024-Q3 : Testing : Bug fixes : Performance tuning\n  2024-Q4 : Deployment : Operations and maintenance'**
+  String get mermaidCatalogTemplateTimeline;
+
+  /// No description provided for @mermaidCatalogTemplateBlock.
+  ///
+  /// In en, this message translates to:
+  /// **'block-beta\n  columns 3\n  A[\"Requirements\"] B[\"Development\"] C[\"Testing\"]\n  D[\"Deployment\"] E[\"Operations\"] F[\"Monitoring\"]\n  A --> B\n  B --> C\n  C --> D\n  D --> E\n  E --> F'**
+  String get mermaidCatalogTemplateBlock;
+
+  /// No description provided for @mermaidCatalogTemplateRequirement.
+  ///
+  /// In en, this message translates to:
+  /// **'requirementDiagram\n  requirement 用户登录 <MERMAID_OPEN_BRACE>\n    id: 1\n    text: A user can sign in with an account and password\n    risk: medium\n    verifyMethod: test\n  <MERMAID_CLOSE_BRACE>\n  element 登录页面 <MERMAID_OPEN_BRACE>\n    type: UI\n  <MERMAID_CLOSE_BRACE>\n  element 认证服务 <MERMAID_OPEN_BRACE>\n    type: Service\n  <MERMAID_CLOSE_BRACE>\n  登录页面 - satisfies -> 用户登录\n  认证服务 - verifies -> 用户登录'**
+  String get mermaidCatalogTemplateRequirement;
+
+  /// No description provided for @mermaidCatalogDefaultFileName.
+  ///
+  /// In en, this message translates to:
+  /// **'My chart'**
+  String get mermaidCatalogDefaultFileName;
+
+  /// No description provided for @mermaidCatalogActionAddNode.
+  ///
+  /// In en, this message translates to:
+  /// **'Add node'**
+  String get mermaidCatalogActionAddNode;
+
+  /// No description provided for @mermaidCatalogActionAddDecision.
+  ///
+  /// In en, this message translates to:
+  /// **'Add decision'**
+  String get mermaidCatalogActionAddDecision;
+
+  /// No description provided for @mermaidCatalogActionAddEdge.
+  ///
+  /// In en, this message translates to:
+  /// **'Add edge'**
+  String get mermaidCatalogActionAddEdge;
+
+  /// No description provided for @mermaidCatalogActionAddSubgraph.
+  ///
+  /// In en, this message translates to:
+  /// **'Add subgraph'**
+  String get mermaidCatalogActionAddSubgraph;
+
+  /// No description provided for @mermaidCatalogActionAddParticipant.
+  ///
+  /// In en, this message translates to:
+  /// **'Add participant'**
+  String get mermaidCatalogActionAddParticipant;
+
+  /// No description provided for @mermaidCatalogActionAddRequest.
+  ///
+  /// In en, this message translates to:
+  /// **'Add request'**
+  String get mermaidCatalogActionAddRequest;
+
+  /// No description provided for @mermaidCatalogActionAddResponse.
+  ///
+  /// In en, this message translates to:
+  /// **'Add response'**
+  String get mermaidCatalogActionAddResponse;
+
+  /// No description provided for @mermaidCatalogActionAddNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Add note'**
+  String get mermaidCatalogActionAddNote;
+
+  /// No description provided for @mermaidCatalogActionAddClass.
+  ///
+  /// In en, this message translates to:
+  /// **'Add class'**
+  String get mermaidCatalogActionAddClass;
+
+  /// No description provided for @mermaidCatalogActionAddInheritance.
+  ///
+  /// In en, this message translates to:
+  /// **'Add inheritance'**
+  String get mermaidCatalogActionAddInheritance;
+
+  /// No description provided for @mermaidCatalogActionAddRelationship.
+  ///
+  /// In en, this message translates to:
+  /// **'Add relationship'**
+  String get mermaidCatalogActionAddRelationship;
+
+  /// No description provided for @mermaidCatalogActionAddAggregation.
+  ///
+  /// In en, this message translates to:
+  /// **'Add aggregation'**
+  String get mermaidCatalogActionAddAggregation;
+
+  /// No description provided for @mermaidCatalogActionAddState.
+  ///
+  /// In en, this message translates to:
+  /// **'Add state'**
+  String get mermaidCatalogActionAddState;
+
+  /// No description provided for @mermaidCatalogActionAddTransition.
+  ///
+  /// In en, this message translates to:
+  /// **'Add transition'**
+  String get mermaidCatalogActionAddTransition;
+
+  /// No description provided for @mermaidCatalogActionAddStart.
+  ///
+  /// In en, this message translates to:
+  /// **'Add start'**
+  String get mermaidCatalogActionAddStart;
+
+  /// No description provided for @mermaidCatalogActionAddEnd.
+  ///
+  /// In en, this message translates to:
+  /// **'Add end'**
+  String get mermaidCatalogActionAddEnd;
+
+  /// No description provided for @mermaidCatalogActionAddEntity.
+  ///
+  /// In en, this message translates to:
+  /// **'Add entity'**
+  String get mermaidCatalogActionAddEntity;
+
+  /// No description provided for @mermaidCatalogActionAddOneToMany.
+  ///
+  /// In en, this message translates to:
+  /// **'Add one-to-many'**
+  String get mermaidCatalogActionAddOneToMany;
+
+  /// No description provided for @mermaidCatalogActionAddManyToMany.
+  ///
+  /// In en, this message translates to:
+  /// **'Add many-to-many'**
+  String get mermaidCatalogActionAddManyToMany;
+
+  /// No description provided for @mermaidCatalogActionAddOneToOne.
+  ///
+  /// In en, this message translates to:
+  /// **'Add one-to-one'**
+  String get mermaidCatalogActionAddOneToOne;
+
+  /// No description provided for @mermaidCatalogActionAddPhase.
+  ///
+  /// In en, this message translates to:
+  /// **'Add phase'**
+  String get mermaidCatalogActionAddPhase;
+
+  /// No description provided for @mermaidCatalogActionAddTask.
+  ///
+  /// In en, this message translates to:
+  /// **'Add task'**
+  String get mermaidCatalogActionAddTask;
+
+  /// No description provided for @mermaidCatalogActionAddDependentTask.
+  ///
+  /// In en, this message translates to:
+  /// **'Add dependent task'**
+  String get mermaidCatalogActionAddDependentTask;
+
+  /// No description provided for @mermaidCatalogActionAddMilestone.
+  ///
+  /// In en, this message translates to:
+  /// **'Add milestone'**
+  String get mermaidCatalogActionAddMilestone;
+
+  /// No description provided for @mermaidCatalogActionAddCategory.
+  ///
+  /// In en, this message translates to:
+  /// **'Add category'**
+  String get mermaidCatalogActionAddCategory;
+
+  /// No description provided for @mermaidCatalogActionAddTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Add title'**
+  String get mermaidCatalogActionAddTitle;
+
+  /// No description provided for @mermaidCatalogActionAddSystemTask.
+  ///
+  /// In en, this message translates to:
+  /// **'Add system task'**
+  String get mermaidCatalogActionAddSystemTask;
+
+  /// No description provided for @mermaidCatalogActionAddMultiPersonTask.
+  ///
+  /// In en, this message translates to:
+  /// **'Add multi-person task'**
+  String get mermaidCatalogActionAddMultiPersonTask;
+
+  /// No description provided for @mermaidCatalogActionAddCommit.
+  ///
+  /// In en, this message translates to:
+  /// **'Add commit'**
+  String get mermaidCatalogActionAddCommit;
+
+  /// No description provided for @mermaidCatalogActionCreateBranch.
+  ///
+  /// In en, this message translates to:
+  /// **'Create branch'**
+  String get mermaidCatalogActionCreateBranch;
+
+  /// No description provided for @mermaidCatalogActionSwitchBranch.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch branch'**
+  String get mermaidCatalogActionSwitchBranch;
+
+  /// No description provided for @mermaidCatalogActionMergeBranch.
+  ///
+  /// In en, this message translates to:
+  /// **'Merge branch'**
+  String get mermaidCatalogActionMergeBranch;
+
+  /// No description provided for @mermaidCatalogActionAddBranch.
+  ///
+  /// In en, this message translates to:
+  /// **'Add branch'**
+  String get mermaidCatalogActionAddBranch;
+
+  /// No description provided for @mermaidCatalogActionAddChildBranch.
+  ///
+  /// In en, this message translates to:
+  /// **'Add child branch'**
+  String get mermaidCatalogActionAddChildBranch;
+
+  /// No description provided for @mermaidCatalogActionAddTopic.
+  ///
+  /// In en, this message translates to:
+  /// **'Add topic'**
+  String get mermaidCatalogActionAddTopic;
+
+  /// No description provided for @mermaidCatalogActionAddPeriod.
+  ///
+  /// In en, this message translates to:
+  /// **'Add period'**
+  String get mermaidCatalogActionAddPeriod;
+
+  /// No description provided for @mermaidCatalogActionAddBlock.
+  ///
+  /// In en, this message translates to:
+  /// **'Add block'**
+  String get mermaidCatalogActionAddBlock;
+
+  /// No description provided for @mermaidCatalogActionAddColumns.
+  ///
+  /// In en, this message translates to:
+  /// **'Add columns'**
+  String get mermaidCatalogActionAddColumns;
+
+  /// No description provided for @mermaidCatalogActionAddConnection.
+  ///
+  /// In en, this message translates to:
+  /// **'Add connection'**
+  String get mermaidCatalogActionAddConnection;
+
+  /// No description provided for @mermaidCatalogActionAddChildBlock.
+  ///
+  /// In en, this message translates to:
+  /// **'Add child block'**
+  String get mermaidCatalogActionAddChildBlock;
+
+  /// No description provided for @mermaidCatalogActionAddRequirement.
+  ///
+  /// In en, this message translates to:
+  /// **'Add requirement'**
+  String get mermaidCatalogActionAddRequirement;
+
+  /// No description provided for @mermaidCatalogActionAddElement.
+  ///
+  /// In en, this message translates to:
+  /// **'Add element'**
+  String get mermaidCatalogActionAddElement;
+
+  /// No description provided for @mermaidCatalogActionAddVerification.
+  ///
+  /// In en, this message translates to:
+  /// **'Add verification'**
+  String get mermaidCatalogActionAddVerification;
+
+  /// No description provided for @mermaidCatalogGanttDependencyBaseTask.
+  ///
+  /// In en, this message translates to:
+  /// **'Dependency base task'**
+  String get mermaidCatalogGanttDependencyBaseTask;
+
+  /// No description provided for @mermaidCatalogGanttDependentTaskName.
+  ///
+  /// In en, this message translates to:
+  /// **'Follow-up task'**
+  String get mermaidCatalogGanttDependentTaskName;
 }
 
 class _AppLocalizationsDelegate

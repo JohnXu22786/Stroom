@@ -1,7 +1,153 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations_en.dart';
+import 'package:stroom/l10n/app_localizations_zh.dart';
 import 'package:stroom/utils/mermaid_templates.dart';
 
 void main() {
+  group('Mermaid catalog localization', () {
+    test(
+      'localizes diagram type labels and descriptions in English and Chinese',
+      () {
+        final english = MermaidTemplates.getAllTypes(AppLocalizationsEnUs());
+        final chinese = MermaidTemplates.getAllTypes(AppLocalizationsZhCn());
+        final englishFlowchart = english.singleWhere(
+          (type) => type.id == 'flowchart',
+        );
+        final chineseFlowchart = chinese.singleWhere(
+          (type) => type.id == 'flowchart',
+        );
+
+        expect(englishFlowchart.label, 'Flowchart');
+        expect(
+          englishFlowchart.description,
+          contains('steps, branches, and loops'),
+        );
+        expect(chineseFlowchart.label, '流程图');
+        expect(chineseFlowchart.description, contains('展示步骤'));
+        expect(englishFlowchart.id, chineseFlowchart.id);
+        expect(englishFlowchart.keyword, chineseFlowchart.keyword);
+      },
+    );
+
+    test('localizes starter and inserted snippet text while keeping syntax and IDs', () {
+      final english = AppLocalizationsEnUs();
+      final chinese = AppLocalizationsZhCn();
+      final englishTemplate = MermaidTemplates.getTemplate(
+        'flowchart',
+        strings: english,
+      );
+      final chineseTemplate = MermaidTemplates.getTemplate(
+        'flowchart',
+        strings: chinese,
+      );
+      final englishSnippet = MermaidTemplates.getSnippets(
+        'flowchart',
+        strings: english,
+      ).first.$2;
+      final chineseSnippet = MermaidTemplates.getSnippets(
+        'flowchart',
+        strings: chinese,
+      ).first.$2;
+
+      expect(englishTemplate, contains('graph TD'));
+      expect(englishTemplate, contains('A[Start]'));
+      expect(englishTemplate, contains('A --> B'));
+      expect(chineseTemplate, contains('A[开始]'));
+      expect(chineseTemplate, contains('A --> B'));
+      final englishStateTemplate = MermaidTemplates.getTemplate(
+        'stateDiagram',
+        strings: english,
+      );
+      expect(englishStateTemplate, contains('state "Pending" as 待处理'));
+      expect(englishStateTemplate, contains('待处理 --> 处理中'));
+      expect(
+        MermaidTemplates.getTemplate('sequenceDiagram', strings: english),
+        contains('participant "User" as 用户'),
+      );
+      final englishJourneyTemplate = MermaidTemplates.getTemplate(
+        'journey',
+        strings: english,
+      );
+      expect(englishJourneyTemplate, contains(': 5: User'));
+      expect(englishJourneyTemplate, contains(': 3: System'));
+      final englishSubgraphSnippet = MermaidTemplates.getSnippets(
+        'flowchart',
+        strings: english,
+      ).elementAt(3).$2;
+      expect(englishSubgraphSnippet, contains('subgraph 子图名称 [Subgraph]'));
+      expect(englishSnippet, '  NewNode[New node]');
+      expect(chineseSnippet, '  NewNode[新节点]');
+      expect(
+        MermaidTemplates.getSnippets(
+          'sequenceDiagram',
+          strings: english,
+        ).first.$2,
+        'participant "New participant" as 新参与者',
+      );
+      expect(
+        MermaidTemplates.getSnippets('classDiagram', strings: english).first.$2,
+        contains('class "New class" as 新类'),
+      );
+      expect(
+        MermaidTemplates.getSnippets('classDiagram', strings: english).first.$2,
+        contains('+String attribute'),
+      );
+      expect(
+        MermaidTemplates.getSnippets(
+          'classDiagram',
+          strings: english,
+        ).elementAt(2).$2,
+        contains('class "Class A" as 类A'),
+      );
+      expect(
+        MermaidTemplates.getSnippets(
+          'classDiagram',
+          strings: english,
+        ).elementAt(3).$2,
+        contains('class "Whole" as 整体'),
+      );
+      expect(
+        MermaidTemplates.getSnippets(
+          'stateDiagram',
+          strings: english,
+        ).elementAt(1).$2,
+        contains('state "State 1" as 状态1'),
+      );
+      expect(
+        MermaidTemplates.getSnippets(
+          'classDiagram',
+          strings: english,
+        ).elementAt(1).$2,
+        contains('class "Child" as 子类'),
+      );
+      expect(
+        MermaidTemplates.getSnippets(
+          'journey',
+          strings: english,
+        ).elementAt(2).$2,
+        contains(': 5: System'),
+      );
+      expect(
+        MermaidTemplates.getTemplate('unknown', strings: english),
+        isEmpty,
+      );
+    });
+
+    test('localizing catalog does not rewrite user-authored Mermaid code', () {
+      const userCode = 'graph TD\n  KeepMyNode[My saved label]';
+      final inserted = MermaidTemplates.insertSnippet(
+        userCode,
+        MermaidTemplates.getSnippets(
+          'flowchart',
+          strings: AppLocalizationsEnUs(),
+        ).first.$2,
+      );
+
+      expect(inserted, startsWith(userCode));
+      expect(inserted, contains('KeepMyNode[My saved label]'));
+    });
+  });
+
   group('MermaidTemplates - getTemplate with unknown type', () {
     test('returns empty string for unknown type', () {
       final template = MermaidTemplates.getTemplate('unknown');
@@ -57,10 +203,12 @@ void main() {
     type: Service
   }''';
       final snippets = MermaidTemplates.getSnippets('requirement', code: code);
-      final relationshipSnippet =
-          snippets.singleWhere((snippet) => snippet.$1 == '添加关联').$2;
-      final verificationSnippet =
-          snippets.singleWhere((snippet) => snippet.$1 == '添加验证').$2;
+      final relationshipSnippet = snippets
+          .singleWhere((snippet) => snippet.$1 == '添加关联')
+          .$2;
+      final verificationSnippet = snippets
+          .singleWhere((snippet) => snippet.$1 == '添加验证')
+          .$2;
 
       expect(relationshipSnippet, '  web_portal - satisfies -> account_access');
       expect(verificationSnippet, '  auth_api - verifies -> account_access');
@@ -125,10 +273,12 @@ void main() {
       const code = '''gantt
   dateFormat  YYYY/MM/DD''';
       final snippets = MermaidTemplates.getSnippets('gantt', code: code);
-      final taskSnippet =
-          snippets.singleWhere((snippet) => snippet.$1 == '添加任务').$2;
-      final milestoneSnippet =
-          snippets.singleWhere((snippet) => snippet.$1 == '添加里程碑').$2;
+      final taskSnippet = snippets
+          .singleWhere((snippet) => snippet.$1 == '添加任务')
+          .$2;
+      final milestoneSnippet = snippets
+          .singleWhere((snippet) => snippet.$1 == '添加里程碑')
+          .$2;
 
       expect(taskSnippet, matches(RegExp(r'^  新任务 :\d{4}/\d{2}/\d{2}, 7d$')));
       expect(
@@ -141,10 +291,12 @@ void main() {
       const code = '''gantt
   dateFormat  Do MMM YYYY''';
       final snippets = MermaidTemplates.getSnippets('gantt', code: code);
-      final taskSnippet =
-          snippets.singleWhere((snippet) => snippet.$1 == '添加任务').$2;
-      final milestoneSnippet =
-          snippets.singleWhere((snippet) => snippet.$1 == '添加里程碑').$2;
+      final taskSnippet = snippets
+          .singleWhere((snippet) => snippet.$1 == '添加任务')
+          .$2;
+      final milestoneSnippet = snippets
+          .singleWhere((snippet) => snippet.$1 == '添加里程碑')
+          .$2;
       const ordinalDate = r'\d{1,2}(?:st|nd|rd|th) [A-Z][a-z]{2} \d{4}';
 
       expect(taskSnippet, matches(RegExp('^  新任务 :$ordinalDate, 7d\$')));
@@ -167,45 +319,47 @@ void main() {
       expect(template.split('\n'), contains('  branch $mergeTarget'));
     });
 
-    test('merge snippet targets an existing branch for each GitGraph setup',
-        () {
-      final scenarios = [
-        (
-          code: '''gitGraph
+    test(
+      'merge snippet targets an existing branch for each GitGraph setup',
+      () {
+        final scenarios = [
+          (
+            code: '''gitGraph
   commit id: "初始提交"
   branch feature
   checkout main''',
-          expectedTarget: 'feature',
-          existingBranches: <String>{'main', 'feature'},
-        ),
-        (
-          code: '''%%{init: { 'gitGraph': { 'mainBranchName': 'trunk' } } }%%
+            expectedTarget: 'feature',
+            existingBranches: <String>{'main', 'feature'},
+          ),
+          (
+            code: '''%%{init: { 'gitGraph': { 'mainBranchName': 'trunk' } } }%%
 gitGraph
   commit id: "初始提交"
   branch feature
   checkout feature''',
-          expectedTarget: 'trunk',
-          existingBranches: <String>{'trunk', 'feature'},
-        ),
-        (
-          code: '''%%{init: { 'gitGraph': { 'mainBranchName': 'develop' } } }%%
+            expectedTarget: 'trunk',
+            existingBranches: <String>{'trunk', 'feature'},
+          ),
+          (
+            code:
+                '''%%{init: { 'gitGraph': { 'mainBranchName': 'develop' } } }%%
 gitGraph
   commit id: "初始提交"
   branch feature''',
-          expectedTarget: 'feature',
-          existingBranches: <String>{'develop', 'feature'},
-        ),
-        (
-          code: '''%% mainBranchName: develop
+            expectedTarget: 'feature',
+            existingBranches: <String>{'develop', 'feature'},
+          ),
+          (
+            code: '''%% mainBranchName: develop
 gitGraph
   commit id: "mainBranchName: develop"
   branch feature
   checkout main''',
-          expectedTarget: 'feature',
-          existingBranches: <String>{'main', 'feature'},
-        ),
-        (
-          code: '''---
+            expectedTarget: 'feature',
+            existingBranches: <String>{'main', 'feature'},
+          ),
+          (
+            code: '''---
 config:
   gitGraph:
     mainBranchName: trunk
@@ -214,41 +368,42 @@ gitGraph
   commit id: "初始提交"
   branch feature
   checkout feature''',
-          expectedTarget: 'trunk',
-          existingBranches: <String>{'trunk', 'feature'},
-        ),
-        (
-          code: '''---
+            expectedTarget: 'trunk',
+            existingBranches: <String>{'trunk', 'feature'},
+          ),
+          (
+            code: '''---
 config: { gitGraph: { mainBranchName: trunk } }
 ---
 gitGraph
   commit id: "初始提交"
   branch feature
   checkout feature''',
-          expectedTarget: 'trunk',
-          existingBranches: <String>{'trunk', 'feature'},
-        ),
-      ];
+            expectedTarget: 'trunk',
+            existingBranches: <String>{'trunk', 'feature'},
+          ),
+        ];
 
-      for (final scenario in scenarios) {
-        final mergeSnippet = MermaidTemplates.getSnippets(
-          'gitGraph',
-          code: scenario.code,
-        ).singleWhere((snippet) => snippet.$1 == '合并分支').$2;
-        final insertedCode = MermaidTemplates.insertSnippet(
-          scenario.code,
-          mergeSnippet,
-        );
-        final mergeCommand = insertedCode
-            .split('\n')
-            .singleWhere((line) => line.trim().startsWith('merge '));
-        final mergeTarget = mergeCommand.trim().split(RegExp(r'\s+')).last;
+        for (final scenario in scenarios) {
+          final mergeSnippet = MermaidTemplates.getSnippets(
+            'gitGraph',
+            code: scenario.code,
+          ).singleWhere((snippet) => snippet.$1 == '合并分支').$2;
+          final insertedCode = MermaidTemplates.insertSnippet(
+            scenario.code,
+            mergeSnippet,
+          );
+          final mergeCommand = insertedCode
+              .split('\n')
+              .singleWhere((line) => line.trim().startsWith('merge '));
+          final mergeTarget = mergeCommand.trim().split(RegExp(r'\s+')).last;
 
-        expect(scenario.code, isNot(contains('branch develop')));
-        expect(scenario.existingBranches, contains(mergeTarget));
-        expect(mergeTarget, scenario.expectedTarget);
-      }
-    });
+          expect(scenario.code, isNot(contains('branch develop')));
+          expect(scenario.existingBranches, contains(mergeTarget));
+          expect(mergeTarget, scenario.expectedTarget);
+        }
+      },
+    );
 
     test('merge snippet avoids the first declared branch when checked out', () {
       const code = '''gitGraph
@@ -279,9 +434,9 @@ gitGraph
       'adds a topic under the existing root without adding another root',
       () {
         final template = MermaidTemplates.getTemplate('mindmap');
-        final addTopicSnippet = MermaidTemplates.getSnippets(
-          'mindmap',
-        ).singleWhere((snippet) => snippet.$1 == '添加主题').$2;
+        final addTopicSnippet = MermaidTemplates.getSnippets('mindmap')
+            .singleWhere((snippet) => snippet.$1 == '添加主题')
+            .$2;
         final insertedCode = MermaidTemplates.insertSnippet(
           template,
           addTopicSnippet,

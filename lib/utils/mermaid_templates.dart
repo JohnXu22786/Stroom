@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 
 /// Describes a mermaid diagram type with display info
 class MermaidDiagramType {
@@ -31,11 +32,102 @@ class MermaidTemplates {
   // ---------------------------------------------------------------------------
 
   /// Returns the [MermaidDiagramType] list (all supported types).
-  static List<MermaidDiagramType> getAllTypes() => _types;
+  static List<MermaidDiagramType> getAllTypes([AppLocalizations? strings]) {
+    if (strings == null) return _types;
+    return _types
+        .map((type) {
+          final localized = switch (type.id) {
+            'flowchart' => (
+              strings.mermaidCatalogTypeFlowchart,
+              strings.mermaidCatalogDescriptionFlowchart,
+            ),
+            'sequenceDiagram' => (
+              strings.mermaidCatalogTypeSequenceDiagram,
+              strings.mermaidCatalogDescriptionSequenceDiagram,
+            ),
+            'classDiagram' => (
+              strings.mermaidCatalogTypeClassDiagram,
+              strings.mermaidCatalogDescriptionClassDiagram,
+            ),
+            'stateDiagram' => (
+              strings.mermaidCatalogTypeStateDiagram,
+              strings.mermaidCatalogDescriptionStateDiagram,
+            ),
+            'erDiagram' => (
+              strings.mermaidCatalogTypeErDiagram,
+              strings.mermaidCatalogDescriptionErDiagram,
+            ),
+            'gantt' => (
+              strings.mermaidCatalogTypeGantt,
+              strings.mermaidCatalogDescriptionGantt,
+            ),
+            'pie' => (
+              strings.mermaidCatalogTypePie,
+              strings.mermaidCatalogDescriptionPie,
+            ),
+            'journey' => (
+              strings.mermaidCatalogTypeJourney,
+              strings.mermaidCatalogDescriptionJourney,
+            ),
+            'gitGraph' => (
+              strings.mermaidCatalogTypeGitGraph,
+              strings.mermaidCatalogDescriptionGitGraph,
+            ),
+            'mindmap' => (
+              strings.mermaidCatalogTypeMindmap,
+              strings.mermaidCatalogDescriptionMindmap,
+            ),
+            'timeline' => (
+              strings.mermaidCatalogTypeTimeline,
+              strings.mermaidCatalogDescriptionTimeline,
+            ),
+            'block' => (
+              strings.mermaidCatalogTypeBlock,
+              strings.mermaidCatalogDescriptionBlock,
+            ),
+            'requirement' => (
+              strings.mermaidCatalogTypeRequirement,
+              strings.mermaidCatalogDescriptionRequirement,
+            ),
+            _ => (type.label, type.description),
+          };
+          return MermaidDiagramType(
+            id: type.id,
+            label: localized.$1,
+            icon: type.icon,
+            description: localized.$2,
+            keyword: type.keyword,
+          );
+        })
+        .toList(growable: false);
+  }
 
   /// Returns a template string for the given [typeId].
   /// Returns empty string if the type is unknown.
-  static String getTemplate(String typeId) {
+  static String getTemplate(String typeId, {AppLocalizations? strings}) {
+    if (strings != null) {
+      final localized = switch (typeId) {
+        'flowchart' => strings.mermaidCatalogTemplateFlowchart,
+        'sequenceDiagram' => strings.mermaidCatalogTemplateSequenceDiagram,
+        'classDiagram' => strings.mermaidCatalogTemplateClassDiagram,
+        'stateDiagram' => strings.mermaidCatalogTemplateStateDiagram,
+        'erDiagram' => strings.mermaidCatalogTemplateErDiagram,
+        'gantt' => strings.mermaidCatalogTemplateGantt,
+        'pie' => strings.mermaidCatalogTemplatePie,
+        'journey' => strings.mermaidCatalogTemplateJourney,
+        'gitGraph' => strings.mermaidCatalogTemplateGitGraph,
+        'mindmap' => strings.mermaidCatalogTemplateMindmap,
+        'timeline' => strings.mermaidCatalogTemplateTimeline,
+        'block' => strings.mermaidCatalogTemplateBlock,
+        'requirement' => strings.mermaidCatalogTemplateRequirement,
+        _ => null,
+      };
+      if (localized != null) {
+        return localized
+            .replaceAll('<MERMAID_OPEN_BRACE>', '{')
+            .replaceAll('<MERMAID_CLOSE_BRACE>', '}');
+      }
+    }
     final generator = _generators[typeId];
     if (generator == null) return '';
     return generator();
@@ -59,22 +151,23 @@ class MermaidTemplates {
   ) {
     final patterns = switch (diagramTypeId) {
       'classDiagram' => (
-          r'^([ \t]*class[ \t]+)(\S+)(?=[ \t]*\{)',
-          r'^[ \t]*class[ \t]+(?:"[^"]+"[ \t]+as[ \t]+)?(\S+)(?=[ \t]*(?:\{|$))|^[ \t]*(\S+)(?:[ \t]+"[^"]+")?[ \t]+[<|>*o().-]+[ \t]+(?:"[^"]+"[ \t]+)?(\S+)(?:[ \t]*:.*)?$|^[ \t]*(\S+?)(?:[ \t]+"[^"]+")?[ \t]*(?=[<|>*o().-]*[-.])[<|>*o().-]+[ \t]*(?:"[^"]+"[ \t]+)?(\S+?)(?:[ \t]*:.*)?$',
-        ),
+        r'^([ \t]*class[ \t]+)(\S+)(?=[ \t]*\{)',
+        r'^[ \t]*class[ \t]+(?:"[^"]+"[ \t]+as[ \t]+)?(\S+)(?=[ \t]*(?:\{|$))|^[ \t]*(\S+)(?:[ \t]+"[^"]+")?[ \t]+[<|>*o().-]+[ \t]+(?:"[^"]+"[ \t]+)?(\S+)(?:[ \t]*:.*)?$|^[ \t]*(\S+?)(?:[ \t]+"[^"]+")?[ \t]*(?=[<|>*o().-]*[-.])[<|>*o().-]+[ \t]*(?:"[^"]+"[ \t]+)?(\S+?)(?:[ \t]*:.*)?$',
+      ),
       'erDiagram' => (
-          r'^([ \t]*)(\S+)(?=[ \t]*\{)',
-          r'^[ \t]*(?:(\S+?)[ \t]*(?=[|{}oO.-]*[-.])[|{}oO.-]+[ \t]*(\S+?)[ \t]*(?::.*)?$|(\S+)[ \t]*\{|(\S+)[ \t]+[|{}oO.-]+[ \t]+(\S+)[ \t]*:.*$)',
-        ),
+        r'^([ \t]*)(\S+)(?=[ \t]*\{)',
+        r'^[ \t]*(?:(\S+?)[ \t]*(?=[|{}oO.-]*[-.])[|{}oO.-]+[ \t]*(\S+?)[ \t]*(?::.*)?$|(\S+)[ \t]*\{|(\S+)[ \t]+[|{}oO.-]+[ \t]+(\S+)[ \t]*:.*$)',
+      ),
       'block' => (
-          r'^([ \t]*)(\S+)(?=\[)',
-          r'(?:^|[ \t;<>.=~|\-]|--[ox])(\S+)(?=\[)|(?:^|[ \t;<>.=~|\-]|--[ox]|block:)(NewBlock\d*)(?=[ \t;]|$|\(|\{|:\d+|[-=<>.~|])',
-        ),
+        r'^([ \t]*)(\S+)(?=\[)',
+        r'(?:^|[ \t;<>.=~|\-]|--[ox])(\S+)(?=\[)|(?:^|[ \t;<>.=~|\-]|--[ox]|block:)(NewBlock\d*)(?=[ \t;]|$|\(|\{|:\d+|[-=<>.~|])',
+      ),
       _ => null,
     };
     if (patterns == null) return snippet;
 
-    final snippetIdPattern = diagramTypeId == 'block' &&
+    final snippetIdPattern =
+        diagramTypeId == 'block' &&
             RegExp(r'^[ \t]*block[ \t]*\r?\n').hasMatch(snippet)
         ? RegExp(r'^([ \t]*)(\S+)(?=\[)', multiLine: true)
         : RegExp(patterns.$1);
@@ -152,8 +245,9 @@ class MermaidTemplates {
     final existingIds = <String>{};
     for (final line in code.split('\n')) {
       final flowchartSyntax = line.split('%%').first;
-      for (final existingSubgraphId
-          in subgraphIdPattern.allMatches(flowchartSyntax)) {
+      for (final existingSubgraphId in subgraphIdPattern.allMatches(
+        flowchartSyntax,
+      )) {
         existingIds.add(existingSubgraphId[1]!);
       }
     }
@@ -187,10 +281,12 @@ class MermaidTemplates {
         for (final match in nodeIdPattern.allMatches(statement)) {
           final before = statement.substring(0, match.start).trimRight();
           final after = statement.substring(match.end).trimLeft();
-          final startsNode = before.isEmpty ||
+          final startsNode =
+              before.isEmpty ||
               before.endsWith('&') ||
               RegExp(r'(?:[ox])?[-=.~<>]{2,}[ox]?$').hasMatch(before);
-          final endsNode = after.isEmpty ||
+          final endsNode =
+              after.isEmpty ||
               after.startsWith(RegExp(r'(?:[ox])?[-=.~<>]{2,}[ox]?')) ||
               after.startsWith(RegExp(r'^[\[({>@:]')) ||
               after.startsWith('&');
@@ -220,16 +316,11 @@ class MermaidTemplates {
       }
 
       if (char == '[' || char == '(' || char == '{') {
-        index = _skipDelimitedText(
-          line,
-          index,
-          char,
-          switch (char) {
-            '[' => ']',
-            '(' => ')',
-            _ => '}',
-          },
-        );
+        index = _skipDelimitedText(line, index, char, switch (char) {
+          '[' => ']',
+          '(' => ')',
+          _ => '}',
+        });
         buffer.write(' ');
         continue;
       }
@@ -256,7 +347,7 @@ class MermaidTemplates {
       final connectorMarkerChar = index > 0 ? line[index - 1] : '';
       final isMarkedConnector =
           (connectorMarkerChar == 'o' || connectorMarkerChar == 'x') &&
-              (index < 2 || !RegExp(r'[A-Za-z0-9_]').hasMatch(line[index - 2]));
+          (index < 2 || !RegExp(r'[A-Za-z0-9_]').hasMatch(line[index - 2]));
       final edgeLabelStart = !isMarkedConnector && (char == '-' || char == '=')
           ? edgeLabelStartPattern.matchAsPrefix(line, index)
           : null;
@@ -384,15 +475,14 @@ class MermaidTemplates {
     ).hasMatch(snippet);
     if (!isRequirementDiagram || !isRequirementSnippet) return snippet;
 
-    final idPattern = RegExp(
-      r'^([ \t]*id[ \t]*:[ \t]*)(\S+)',
-      multiLine: true,
-    );
+    final idPattern = RegExp(r'^([ \t]*id[ \t]*:[ \t]*)(\S+)', multiLine: true);
     final snippetId = idPattern.firstMatch(snippet);
     if (snippetId == null) return snippet;
 
-    final existingIds =
-        idPattern.allMatches(code).map((match) => match[2]!).toSet();
+    final existingIds = idPattern
+        .allMatches(code)
+        .map((match) => match[2]!)
+        .toSet();
     var nextId = 1;
     while (existingIds.contains('$nextId')) {
       nextId++;
@@ -409,7 +499,10 @@ class MermaidTemplates {
   ///
   /// If the chart has tasks but none has an ID, one is assigned to the last
   /// task that does not itself depend on another task.
-  static String insertGanttDependencyTask(String code) {
+  static String insertGanttDependencyTask(
+    String code, {
+    AppLocalizations? strings,
+  }) {
     final lines = code.split('\n');
     final dateFormat = _ganttDateFormat(code);
     final taskIds = <String>[];
@@ -441,8 +534,9 @@ class MermaidTemplates {
       }
     }
 
-    final dependencyId =
-        taskIds.isNotEmpty ? taskIds.last : _nextGanttTaskId(code);
+    final dependencyId = taskIds.isNotEmpty
+        ? taskIds.last
+        : _nextGanttTaskId(code);
     if (taskIds.isEmpty && lastRootTaskIndex >= 0) {
       lines[lastRootTaskIndex] = _addGanttTaskId(
         lines[lastRootTaskIndex],
@@ -451,21 +545,31 @@ class MermaidTemplates {
     }
 
     var updatedCode = lines.join('\n');
+    final dependencyTaskName = strings?.localeName.startsWith('en') == true
+        ? strings!.mermaidCatalogGanttDependencyBaseTask
+        : '依赖基准任务';
+    final followUpTaskName = strings?.localeName.startsWith('en') == true
+        ? strings!.mermaidCatalogGanttDependentTaskName
+        : '后续任务';
     if (taskIds.isEmpty && lastRootTaskIndex < 0) {
       final startDate = _ganttStartDate(code);
       updatedCode = insertSnippet(
         updatedCode,
-        '  依赖基准任务 :$dependencyId, $startDate, 1d',
+        '  $dependencyTaskName :$dependencyId, $startDate, 1d',
       );
     }
 
-    return insertSnippet(updatedCode, '  后续任务 :after $dependencyId, 5d');
+    return insertSnippet(
+      updatedCode,
+      '  $followUpTaskName :after $dependencyId, 5d',
+    );
   }
 
   static List<String>? _ganttTaskAttributes(String line, String dateFormat) {
     final commentIndex = line.indexOf('%%');
-    final taskLine =
-        commentIndex < 0 ? line : line.substring(0, commentIndex).trimRight();
+    final taskLine = commentIndex < 0
+        ? line
+        : line.substring(0, commentIndex).trimRight();
     final trimmedLine = taskLine.trim();
     if (trimmedLine.isEmpty ||
         trimmedLine.startsWith('%%') ||
@@ -513,15 +617,16 @@ class MermaidTemplates {
   }
 
   static bool _isGanttTaskTag(String attribute) => const {
-        'active',
-        'done',
-        'crit',
-        'milestone',
-      }.contains(attribute.toLowerCase());
+    'active',
+    'done',
+    'crit',
+    'milestone',
+  }.contains(attribute.toLowerCase());
 
   static List<String> _ganttTaskIds(List<String> attributes) {
-    final values =
-        attributes.where((attribute) => !_isGanttTaskTag(attribute)).toList();
+    final values = attributes
+        .where((attribute) => !_isGanttTaskTag(attribute))
+        .toList();
     if (values.length < 3 || !_isGanttTaskId(values.first)) {
       return const [];
     }
@@ -535,27 +640,28 @@ class MermaidTemplates {
       !_isGanttDependency(attribute);
 
   static bool _isGanttDuration(String attribute) => RegExp(
-        r'^\d+(?:\.\d+)?\s*(?:ms|[smhdwy])$',
-        caseSensitive: false,
-      ).hasMatch(attribute);
+    r'^\d+(?:\.\d+)?\s*(?:ms|[smhdwy])$',
+    caseSensitive: false,
+  ).hasMatch(attribute);
 
   static bool _isGanttDependency(String attribute) => RegExp(
-        r'^(?:after|until)\s+\S+',
-        caseSensitive: false,
-      ).hasMatch(attribute);
+    r'^(?:after|until)\s+\S+',
+    caseSensitive: false,
+  ).hasMatch(attribute);
 
   static bool _isGanttDirective(String line) => RegExp(
-        r'^(?:title|dateFormat|axisFormat|tickInterval|excludes|includes|'
-        r'todayMarker|weekday|weekend|accTitle|accDescr)\b',
-        caseSensitive: false,
-      ).hasMatch(line);
+    r'^(?:title|dateFormat|axisFormat|tickInterval|excludes|includes|'
+    r'todayMarker|weekday|weekend|accTitle|accDescr)\b',
+    caseSensitive: false,
+  ).hasMatch(line);
 
   static bool _isGanttExplicitDateRange(
     List<String> attributes,
     String dateFormat,
   ) {
-    final values =
-        attributes.where((attribute) => !_isGanttTaskTag(attribute)).toList();
+    final values = attributes
+        .where((attribute) => !_isGanttTaskTag(attribute))
+        .toList();
     return values.length == 2 &&
         values.every((value) => _isGanttDate(value, dateFormat));
   }
@@ -626,8 +732,9 @@ class MermaidTemplates {
 
   static String _addGanttTaskId(String line, String taskId) {
     final commentIndex = line.indexOf('%%');
-    final taskLine =
-        commentIndex < 0 ? line : line.substring(0, commentIndex).trimRight();
+    final taskLine = commentIndex < 0
+        ? line
+        : line.substring(0, commentIndex).trimRight();
     final separatorIndex = taskLine.indexOf(':');
     var fieldStart = separatorIndex + 1;
     var insertionIndex = taskLine.length;
@@ -643,7 +750,8 @@ class MermaidTemplates {
       fieldStart = commaIndex + 1;
     }
 
-    final updatedTaskLine = '${taskLine.substring(0, insertionIndex)}$taskId, '
+    final updatedTaskLine =
+        '${taskLine.substring(0, insertionIndex)}$taskId, '
         '${taskLine.substring(insertionIndex)}';
     if (commentIndex < 0) return updatedTaskLine;
 
@@ -660,13 +768,13 @@ class MermaidTemplates {
     final timezoneOffset = now.timeZoneOffset.inMinutes;
     final timezoneSign = timezoneOffset < 0 ? '-' : '+';
     final timezoneHours = (timezoneOffset.abs() ~/ 60).toString().padLeft(
-          2,
-          '0',
-        );
+      2,
+      '0',
+    );
     final timezoneMinutes = (timezoneOffset.abs() % 60).toString().padLeft(
-          2,
-          '0',
-        );
+      2,
+      '0',
+    );
     const shortMonthNames = [
       'Jan',
       'Feb',
@@ -1141,10 +1249,7 @@ class MermaidTemplates {
     final mainBranchNamePattern = RegExp(
       r'''["']?mainBranchName["']?\s*:\s*["']?([^\s"',}#]+)''',
     );
-    final initDirectives = RegExp(
-      r'%%\{\s*init\s*:\s*(.*?)\}%%',
-      dotAll: true,
-    );
+    final initDirectives = RegExp(r'%%\{\s*init\s*:\s*(.*?)\}%%', dotAll: true);
     final gitGraphConfigPattern = RegExp(
       r'''["']?gitGraph["']?\s*:\s*\{([^}]*)\}''',
       dotAll: true,
@@ -1172,9 +1277,8 @@ class MermaidTemplates {
         gitGraphIndent = -1;
       }
       if (gitGraphIndent < 0 &&
-          RegExp(r'''^["']?gitGraph["']?\s*:\s*(?:#.*)?$''').hasMatch(
-            trimmedLine,
-          )) {
+          RegExp(r'''^["']?gitGraph["']?\s*:\s*(?:#.*)?$''')
+              .hasMatch(trimmedLine)) {
         gitGraphIndent = indentation;
         continue;
       }
@@ -1227,6 +1331,123 @@ class MermaidTemplates {
   /// Returns a list of "snippet buttons" for a given diagram [typeId].
   /// Each entry is (label, snippetText).
   static List<(String label, String snippet)> getSnippets(
+    String typeId, {
+    String? code,
+    AppLocalizations? strings,
+  }) {
+    final snippets = _getSnippets(typeId, code: code);
+    if (strings == null || !strings.localeName.startsWith('en')) {
+      return snippets;
+    }
+    final labels = <String, String>{
+      '添加节点': strings.mermaidCatalogActionAddNode,
+      '添加菱形判断': strings.mermaidCatalogActionAddDecision,
+      '添加连接线': strings.mermaidCatalogActionAddEdge,
+      '添加子图': strings.mermaidCatalogActionAddSubgraph,
+      '添加参与者': strings.mermaidCatalogActionAddParticipant,
+      '添加请求': strings.mermaidCatalogActionAddRequest,
+      '添加响应': strings.mermaidCatalogActionAddResponse,
+      '添加备注': strings.mermaidCatalogActionAddNote,
+      '添加类': strings.mermaidCatalogActionAddClass,
+      '添加继承': strings.mermaidCatalogActionAddInheritance,
+      '添加关联': strings.mermaidCatalogActionAddRelationship,
+      '添加聚合': strings.mermaidCatalogActionAddAggregation,
+      '添加状态': strings.mermaidCatalogActionAddState,
+      '添加转换': strings.mermaidCatalogActionAddTransition,
+      '添加开始': strings.mermaidCatalogActionAddStart,
+      '添加结束': strings.mermaidCatalogActionAddEnd,
+      '添加实体': strings.mermaidCatalogActionAddEntity,
+      '添加一对多': strings.mermaidCatalogActionAddOneToMany,
+      '添加多对多': strings.mermaidCatalogActionAddManyToMany,
+      '添加一对一': strings.mermaidCatalogActionAddOneToOne,
+      '添加阶段': strings.mermaidCatalogActionAddPhase,
+      '添加任务': strings.mermaidCatalogActionAddTask,
+      '添加依赖任务': strings.mermaidCatalogActionAddDependentTask,
+      '添加里程碑': strings.mermaidCatalogActionAddMilestone,
+      '添加类别': strings.mermaidCatalogActionAddCategory,
+      '添加标题': strings.mermaidCatalogActionAddTitle,
+      '添加系统任务': strings.mermaidCatalogActionAddSystemTask,
+      '添加多人任务': strings.mermaidCatalogActionAddMultiPersonTask,
+      '添加提交': strings.mermaidCatalogActionAddCommit,
+      '创建分支': strings.mermaidCatalogActionCreateBranch,
+      '切换分支': strings.mermaidCatalogActionSwitchBranch,
+      '合并分支': strings.mermaidCatalogActionMergeBranch,
+      '添加分支': strings.mermaidCatalogActionAddBranch,
+      '添加子分支': strings.mermaidCatalogActionAddChildBranch,
+      '添加主题': strings.mermaidCatalogActionAddTopic,
+      '添加时间段': strings.mermaidCatalogActionAddPeriod,
+      '添加块': strings.mermaidCatalogActionAddBlock,
+      '添加列': strings.mermaidCatalogActionAddColumns,
+      '添加连接': strings.mermaidCatalogActionAddConnection,
+      '添加子块': strings.mermaidCatalogActionAddChildBlock,
+      '添加需求': strings.mermaidCatalogActionAddRequirement,
+      '添加元素': strings.mermaidCatalogActionAddElement,
+      '添加验证': strings.mermaidCatalogActionAddVerification,
+    };
+    const content = <(String, String), String>{
+      ('flowchart', '添加节点'): '  NewNode[New node]',
+      ('flowchart', '添加菱形判断'): '  Condition{Condition}',
+      ('flowchart', '添加子图'): 'subgraph 子图名称 [Subgraph]\n  Node1[Node 1]\nend',
+      ('sequenceDiagram', '添加请求'): 'A->>B: Request message',
+      ('sequenceDiagram', '添加响应'): 'B-->>A: Response message',
+      ('sequenceDiagram', '添加备注'): 'Note over A,B: Note',
+      ('sequenceDiagram', '添加参与者'): 'participant "New participant" as 新参与者',
+      ('classDiagram', '添加类'):
+          'class "New class" as 新类 {\n  +String attribute\n  +method() void\n}',
+      ('classDiagram', '添加继承'):
+          'class "Child" as 子类\nclass "Parent" as 父类\n子类 --|> 父类',
+      ('classDiagram', '添加关联'):
+          'class "Class A" as 类A\nclass "Class B" as 类B\n类A --> 类B',
+      ('classDiagram', '添加聚合'):
+          'class "Whole" as 整体\nclass "Part" as 部分\n整体 o-- 部分',
+      ('stateDiagram', '添加状态'): '  state "New state" as 新状态',
+      ('stateDiagram', '添加转换'):
+          '  state "State 1" as 状态1\n  state "State 2" as 状态2\n  状态1 --> 状态2',
+      ('stateDiagram', '添加开始'):
+          '  state "Initial state" as 初始状态\n  [*] --> 初始状态',
+      ('stateDiagram', '添加结束'): '  state "Final state" as 最终状态\n  最终状态 --> [*]',
+      ('erDiagram', '添加一对多'): '  实体A ||--o{ 实体B : owns',
+      ('erDiagram', '添加多对多'): '  实体A }o--o{ 实体B : relates',
+      ('erDiagram', '添加一对一'): '  实体A ||--|| 实体B : corresponds',
+      // Entity names are Mermaid identifiers; keep them stable across locales.
+      ('erDiagram', '添加实体'): '  新实体 {\n    int id PK\n    string name\n  }',
+      ('gantt', '添加阶段'): '  section New phase',
+      ('gantt', '添加任务'): '  New task :{date}, 7d',
+      ('gantt', '添加依赖任务'): '  Follow-up task :after a1, 5d',
+      ('gantt', '添加里程碑'): '  Milestone :milestone, {date}, 0d',
+      ('pie', '添加类别'): '  "New category" : 30',
+      ('pie', '添加标题'): 'title Pie chart title',
+      ('journey', '添加阶段'): '  section New phase',
+      ('journey', '添加任务'): '    New task: 3: User',
+      ('journey', '添加系统任务'): '    System process: 5: System',
+      ('journey', '添加多人任务'): '    Collaborative task: 4: User, System',
+      ('gitGraph', '添加提交'): '  commit id: "New commit"',
+      ('gitGraph', '添加分支'): '  branch 新分支',
+      ('gitGraph', '切换分支'): '  checkout 新分支',
+      ('mindmap', '添加分支'): '    New branch',
+      ('mindmap', '添加子分支'): '      Child branch',
+      ('mindmap', '添加主题'): '    New topic',
+      ('timeline', '添加时间段'): '  2024-Q1 : Event 1 : Event 2',
+      ('timeline', '添加标题'): 'title Timeline title',
+      ('block', '添加块'): '  NewBlock["New block"]',
+      ('block', '添加列'): '  columns 3',
+      ('block', '添加连接'): '  A --> B',
+      ('block', '添加子块'): '  block\n    A["Block A"]\n  end',
+      ('requirement', '添加需求'): '  requirement 新需求 {\n    id: 1\n    text: Requirement description\n  }',
+      ('requirement', '添加元素'): '  element 新元素 {\n    type: UI\n  }',
+    };
+    final date = _ganttStartDate(code ?? '');
+    return snippets
+        .map(
+          (item) => (
+            labels[item.$1] ?? item.$1,
+            (content[(typeId, item.$1)] ?? item.$2).replaceAll('{date}', date),
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  static List<(String label, String snippet)> _getSnippets(
     String typeId, {
     String? code,
   }) {

@@ -110,6 +110,7 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
   late EditorMode _editorMode;
   late final String _originalCode;
   bool _isCodeDirty = false;
+  bool _didInitializeCode = false;
 
   /// Whether the left/right panels in wide split mode are swapped.
   /// Wide mode occurs when the available space is wider than tall.
@@ -122,17 +123,28 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
   @override
   void initState() {
     super.initState();
-    _editorMode =
-        widget.initialShowPreview ? EditorMode.split : EditorMode.edit;
+    _editorMode = widget.initialShowPreview
+        ? EditorMode.split
+        : EditorMode.edit;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_didInitializeCode) return;
     if (widget.initialCode != null) {
       _codeController.text = widget.initialCode!;
       _selectedTypeId = _detectTypeFromCode(widget.initialCode!);
     } else {
-      _codeController.text = MermaidTemplates.getTemplate(_selectedTypeId);
+      _codeController.text = MermaidTemplates.getTemplate(
+        _selectedTypeId,
+        strings: AppLocalizations.of(context)!,
+      );
     }
     _originalCode = _codeController.text;
     _previewCode = _codeController.text.trim();
     _codeController.addListener(_onCodeChanged);
+    _didInitializeCode = true;
   }
 
   bool get _hasUnsavedChanges => _isCodeDirty;
@@ -225,7 +237,10 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
   // ---------------------------------------------------------------------------
 
   void _selectDiagramType(String typeId) {
-    final template = MermaidTemplates.getTemplate(typeId);
+    final template = MermaidTemplates.getTemplate(
+      typeId,
+      strings: AppLocalizations.of(context)!,
+    );
     setState(() {
       _selectedTypeId = typeId;
       _codeController.text = template;
@@ -240,10 +255,10 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
     final currentCode = _codeController.text;
     final snippetWithUniqueDiagramEntityId =
         MermaidTemplates.assignUniqueDiagramEntityId(
-      currentCode,
-      snippet,
-      _selectedTypeId,
-    );
+          currentCode,
+          snippet,
+          _selectedTypeId,
+        );
     final snippetWithUniqueFlowchartSubgraphId = _selectedTypeId == 'flowchart'
         ? MermaidTemplates.assignUniqueFlowchartSubgraphId(
             currentCode,
@@ -258,9 +273,9 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
         : snippetWithUniqueFlowchartSubgraphId;
     final snippetWithUniqueRequirementId =
         MermaidTemplates.assignUniqueRequirementId(
-      currentCode,
-      snippetWithUniqueFlowchartNodeIds,
-    );
+          currentCode,
+          snippetWithUniqueFlowchartNodeIds,
+        );
     final insertionPoint = currentCode.lastIndexOf('\n');
     if (insertionPoint >= 0) {
       final codeToPreserve = currentCode.endsWith('\n')
@@ -282,6 +297,7 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
   void _insertGanttDependencyTask() {
     final updatedCode = MermaidTemplates.insertGanttDependencyTask(
       _codeController.text,
+      strings: AppLocalizations.of(context)!,
     );
     _codeController.value = TextEditingValue(
       text: updatedCode,
@@ -361,7 +377,7 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
       // references it after showDialog returns.
       final existingRecord = widget.existingRecord;
       final fileNameController = TextEditingController(
-        text: existingRecord?.name ?? '我的图表',
+        text: existingRecord?.name ?? l10n.mermaidCatalogDefaultFileName,
       );
       final selectedFolder = await FolderPickerDialog.show(
         context,
@@ -412,7 +428,7 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
         return;
       }
 
-      final typeLabel = MermaidTemplates.getAllTypes()
+      final typeLabel = MermaidTemplates.getAllTypes(l10n)
           .firstWhere((t) => t.id == _selectedTypeId)
           .label;
 
@@ -421,38 +437,75 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
       final storageFileName = '$hash.txt';
 
       // Use user-provided filename (without extension for storage consistency)
-      final saveName =
-          existingRecord == null ? '$baseName-$typeLabel' : baseName;
+      final saveName = existingRecord == null
+          ? '$baseName-$typeLabel'
+          : baseName;
       widget.testOnlyBeforeChartFolderNameLock?.call();
-      final finalName = await MermaidFolderNameLock.withLock(
-        selectedFolder,
-        () async {
-          // Name selection and record publication must stay together so a
-          // concurrent Mermaid save sees the newly published name.
-          final records = await TextManifest.loadRecordsUncached();
-          var finalName = saveName;
-          var counter = 2;
-          bool hasNameConflict(TextRecord record) =>
-              record.id != existingRecord?.id &&
-              record.name == finalName &&
-              record.folder == selectedFolder;
-          while (records.any(hasNameConflict)) {
-            finalName = '$saveName ($counter)';
-            counter++;
-          }
+      final finalName = await MermaidFolderNameLock.withLock(selectedFolder, () async {
+        // Name selection and record publication must stay together so a
+        // concurrent Mermaid save sees the newly published name.
+        final records = await TextManifest.loadRecordsUncached();
+        var finalName = saveName;
+        var counter = 2;
+        bool hasNameConflict(TextRecord record) =>
+            record.id != existingRecord?.id &&
+            record.name == finalName &&
+            record.folder == selectedFolder;
+        while (records.any(hasNameConflict)) {
+          finalName = '$saveName ($counter)';
+          counter++;
+        }
 
-          await widget.testOnlyAfterChartNameAllocation?.call(finalName);
+        await widget.testOnlyAfterChartNameAllocation?.call(finalName);
 
-          if (existingRecord == null) {
-            await TextManifest.withRecordSaveLock(hash, () async {
+        if (existingRecord == null) {
+          await TextManifest.withRecordSaveLock(hash, () async {
+            await TextManifest.writeText(storageFileName, content);
+            try {
+              await TextManifest.addRecord(
+                TextRecord(
+                  name: finalName,
+                  hash: hash,
+                  format: 'mmd',
+                  createdAt: DateTime.now(),
+                  size: bytes.length,
+                  folder: selectedFolder,
+                  textLength: content.length,
+                ),
+              );
+            } catch (error, stackTrace) {
+              try {
+                await TextManifest.deleteFileIfUnreferenced(
+                  hash,
+                  storageFileName,
+                );
+              } catch (cleanupError) {
+                debugPrint(
+                  'Failed to clean up Mermaid chart file $storageFileName '
+                  'after record registration failed: $cleanupError',
+                );
+              }
+              Error.throwWithStackTrace(error, stackTrace);
+            }
+          });
+        } else {
+          final updated = await TextManifest.withRecordSaveLocks(
+            existingRecord.id,
+            hash,
+            () async {
               await TextManifest.writeText(storageFileName, content);
               try {
-                await TextManifest.addRecord(
+                await widget.testOnlyBeforeChartRecordUpdate?.call();
+                await TextManifest.updateRecord(
                   TextRecord(
+                    id: existingRecord.id,
                     name: finalName,
                     hash: hash,
-                    format: 'mmd',
-                    createdAt: DateTime.now(),
+                    format: existingRecord.format,
+                    createdAt: existingRecord.createdAt,
+                    modifiedAt: hash == existingRecord.hash
+                        ? existingRecord.modifiedAt
+                        : DateTime.now(),
                     size: bytes.length,
                     folder: selectedFolder,
                     textLength: content.length,
@@ -467,75 +520,36 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
                 } catch (cleanupError) {
                   debugPrint(
                     'Failed to clean up Mermaid chart file $storageFileName '
-                    'after record registration failed: $cleanupError',
+                    'after record update failed: $cleanupError',
                   );
                 }
+                TextManifest.invalidateCache();
                 Error.throwWithStackTrace(error, stackTrace);
               }
-            });
-          } else {
-            final updated = await TextManifest.withRecordSaveLocks(
-              existingRecord.id,
-              hash,
-              () async {
-                await TextManifest.writeText(storageFileName, content);
-                try {
-                  await widget.testOnlyBeforeChartRecordUpdate?.call();
-                  await TextManifest.updateRecord(
-                    TextRecord(
-                      id: existingRecord.id,
-                      name: finalName,
-                      hash: hash,
-                      format: existingRecord.format,
-                      createdAt: existingRecord.createdAt,
-                      modifiedAt: hash == existingRecord.hash
-                          ? existingRecord.modifiedAt
-                          : DateTime.now(),
-                      size: bytes.length,
-                      folder: selectedFolder,
-                      textLength: content.length,
-                    ),
-                  );
-                } catch (error, stackTrace) {
-                  try {
-                    await TextManifest.deleteFileIfUnreferenced(
-                      hash,
-                      storageFileName,
-                    );
-                  } catch (cleanupError) {
-                    debugPrint(
-                      'Failed to clean up Mermaid chart file $storageFileName '
-                      'after record update failed: $cleanupError',
-                    );
-                  }
-                  TextManifest.invalidateCache();
-                  Error.throwWithStackTrace(error, stackTrace);
-                }
-              },
-            );
-            if (!updated) {
-              throw StateError('The Mermaid chart was deleted before saving.');
-            }
-
-            if (hash != existingRecord.hash) {
-              try {
-                await TextManifest.deleteFileIfUnreferenced(
-                  existingRecord.hash,
-                  existingRecord.storagePath,
-                );
-              } catch (cleanupError) {
-                debugPrint(
-                  'Failed to clean up old Mermaid chart file '
-                  '${existingRecord.storagePath} after record update succeeded: '
-                  '$cleanupError',
-                );
-              }
-            }
+            },
+          );
+          if (!updated) {
+            throw StateError('The Mermaid chart was deleted before saving.');
           }
 
-          return finalName;
-        },
-      );
+          if (hash != existingRecord.hash) {
+            try {
+              await TextManifest.deleteFileIfUnreferenced(
+                existingRecord.hash,
+                existingRecord.storagePath,
+              );
+            } catch (cleanupError) {
+              debugPrint(
+                'Failed to clean up old Mermaid chart file '
+                '${existingRecord.storagePath} after record update succeeded: '
+                '$cleanupError',
+              );
+            }
+          }
+        }
+
+        return finalName;
+      });
 
       if (mounted) {
         setState(() {
@@ -580,10 +594,12 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final types = MermaidTemplates.getAllTypes();
+    final l10n = AppLocalizations.of(context)!;
+    final types = MermaidTemplates.getAllTypes(l10n);
     final snippets = MermaidTemplates.getSnippets(
       _selectedTypeId,
       code: _selectedTypeId == 'requirement' ? _codeController.text : null,
+      strings: l10n,
     );
 
     final scaffold = Scaffold(
@@ -606,8 +622,8 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
           else
             IconButton(
               icon: const Icon(Icons.save, size: 20),
-              tooltip:
-                  AppLocalizations.of(context)!.mermaidEditorSaveToTextStorage,
+              tooltip: AppLocalizations.of(context)!
+                  .mermaidEditorSaveToTextStorage,
               onPressed: _isSaveFlowActive ? null : _saveChart,
             ),
         ],
@@ -681,17 +697,17 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
                         onPressed: _isSaving
                             ? null
                             : () {
-                                if (_selectedTypeId == 'gantt' &&
-                                    label == '添加依赖任务') {
+                                if (_selectedTypeId == 'gantt' && index == 2) {
                                   _insertGanttDependencyTask();
                                 } else {
                                   if (_selectedTypeId == 'requirement' &&
-                                      (label == '添加关联' || label == '添加验证')) {
+                                      index >= 2) {
                                     final currentSnippet =
                                         MermaidTemplates.getSnippets(
-                                      'requirement',
-                                      code: _codeController.text,
-                                    )
+                                              'requirement',
+                                              code: _codeController.text,
+                                              strings: l10n,
+                                            )
                                             .firstWhere(
                                               (item) => item.$1 == label,
                                               orElse: () => (label, ''),
@@ -703,17 +719,18 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
                                   } else {
                                     final snippetToInsert =
                                         _selectedTypeId == 'gitGraph' &&
-                                                label == '合并分支'
-                                            ? MermaidTemplates.getSnippets(
+                                            index == 3
+                                        ? MermaidTemplates.getSnippets(
                                                 'gitGraph',
                                                 code: _codeController.text,
+                                                strings: l10n,
                                               )
-                                                .firstWhere(
-                                                  (item) => item.$1 == label,
-                                                  orElse: () => (label, ''),
-                                                )
-                                                .$2
-                                            : snippet;
+                                              .firstWhere(
+                                                (item) => item.$1 == label,
+                                                orElse: () => (label, ''),
+                                              )
+                                              .$2
+                                        : snippet;
                                     if (snippetToInsert.isNotEmpty) {
                                       _insertSnippet(snippetToInsert);
                                     }
@@ -805,8 +822,9 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
         }
 
         // Vertical layout for narrow split mode, edit mode, or preview mode
-        final editorHeight =
-            isSplitMode ? availableHeight * _splitEditorHeightRatio : 0.0;
+        final editorHeight = isSplitMode
+            ? availableHeight * _splitEditorHeightRatio
+            : 0.0;
 
         return Stack(
           children: [
