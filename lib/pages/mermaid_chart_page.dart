@@ -606,8 +606,8 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
           else
             IconButton(
               icon: const Icon(Icons.save, size: 20),
-              tooltip: AppLocalizations.of(context)!
-                  .mermaidEditorSaveToTextStorage,
+              tooltip:
+                  AppLocalizations.of(context)!.mermaidEditorSaveToTextStorage,
               onPressed: _isSaveFlowActive ? null : _saveChart,
             ),
         ],
