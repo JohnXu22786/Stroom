@@ -733,6 +733,22 @@ extension _ChatPageStreamingExt on _ChatPageState {
             );
           }
         }
+        final legacyKey = '$convId:$stoppedMsgId';
+        final legacySnapshot = _legacyFullReplySnapshots[legacyKey];
+        if (legacySnapshot != null) {
+          final textIndex = segments.lastIndexWhere(
+            (segment) => segment is TextSegment && segment.chunkIndex == 0,
+          );
+          final canonicalSegment = TextSegment(legacySnapshot, chunkIndex: 0);
+          if (textIndex >= 0) {
+            segments[textIndex] = canonicalSegment;
+          } else {
+            segments.add(canonicalSegment);
+          }
+          _legacyFullReplySnapshots.remove(legacyKey);
+          _legacyFullReplySequences.remove(legacyKey);
+          _legacyFullReplyGenerations.remove(legacyKey);
+        }
         _chatSegments[stoppedMsgId] = segments;
         _liveMarkdownSearchPreviews
             .removeWhere((key, _) => key.startsWith('$stoppedMsgId:'));
