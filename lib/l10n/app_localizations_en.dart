@@ -8834,11 +8834,56 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get browserScriptCode => 'Script code (JavaScript)';
 
-  @override
-  String get browserMatchUrls => 'URL patterns (one per line)';
 
   @override
-  String get browserScriptMatchHint => '*://*.example.com/*';
+  String get browserAddScriptMethod => 'Choose how to add a script';
+
+  @override
+  String get browserImportFromUrl => 'Import from URL';
+
+  @override
+  String get browserEnterManually => 'Enter manually';
+
+  @override
+  String get browserScriptTrustWarningTitle => 'Only import scripts you trust';
+
+  @override
+  String get browserScriptTrustWarning => 'Only add scripts you trust, or they may leak data. Scripts can read or modify webpage content.';
+
+  @override
+  String get browserContinue => 'Continue';
+
+  @override
+  String get browserManualUserscriptLabel => 'Tampermonkey userscript';
+
+  @override
+  String get browserScriptImportUrl => 'Script URL';
+
+  @override
+  String get browserScriptImportFetch => 'Fetch preview';
+
+  @override
+  String get browserScriptPreview => 'Script source preview';
+
+  @override
+  String get browserScriptImportInvalidUrl => 'Enter a valid HTTPS URL.';
+
+  @override
+  String get browserScriptImportUnsupportedUrl => 'Use a Greasy Fork .user.js URL or a GitHub Raw URL.';
+
+  @override
+  String get browserScriptImportRedirectedUrl => 'The URL redirected to an unsupported or insecure address.';
+
+  @override
+  String get browserScriptImportNotScript => 'The response is empty or does not appear to be a JavaScript script.';
+
+  @override
+  String get browserScriptImportNetworkError => 'Could not fetch the script. Check the URL and your connection.';
+
+  @override
+  String browserScriptImportHttpError(Object status) {
+    return 'The server returned HTTP $status.';
+  }
 
   @override
   String get browserCancel => 'Cancel';
@@ -18807,11 +18852,56 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   @override
   String get browserScriptCode => 'Script code (JavaScript)';
 
-  @override
-  String get browserMatchUrls => 'URL patterns (one per line)';
 
   @override
-  String get browserScriptMatchHint => '*://*.example.com/*';
+  String get browserAddScriptMethod => 'Choose how to add a script';
+
+  @override
+  String get browserImportFromUrl => 'Import from URL';
+
+  @override
+  String get browserEnterManually => 'Enter manually';
+
+  @override
+  String get browserScriptTrustWarningTitle => 'Only import scripts you trust';
+
+  @override
+  String get browserScriptTrustWarning => 'Only add scripts you trust, or they may leak data. Scripts can read or modify webpage content.';
+
+  @override
+  String get browserContinue => 'Continue';
+
+  @override
+  String get browserManualUserscriptLabel => 'Tampermonkey userscript';
+
+  @override
+  String get browserScriptImportUrl => 'Script URL';
+
+  @override
+  String get browserScriptImportFetch => 'Fetch preview';
+
+  @override
+  String get browserScriptPreview => 'Script source preview';
+
+  @override
+  String get browserScriptImportInvalidUrl => 'Enter a valid HTTPS URL.';
+
+  @override
+  String get browserScriptImportUnsupportedUrl => 'Use a Greasy Fork .user.js URL or a GitHub Raw URL.';
+
+  @override
+  String get browserScriptImportRedirectedUrl => 'The URL redirected to an unsupported or insecure address.';
+
+  @override
+  String get browserScriptImportNotScript => 'The response is empty or does not appear to be a JavaScript script.';
+
+  @override
+  String get browserScriptImportNetworkError => 'Could not fetch the script. Check the URL and your connection.';
+
+  @override
+  String browserScriptImportHttpError(Object status) {
+    return 'The server returned HTTP $status.';
+  }
 
   @override
   String get browserCancel => 'Cancel';

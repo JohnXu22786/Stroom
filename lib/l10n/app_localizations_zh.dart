@@ -8387,11 +8387,56 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get browserScriptCode => '脚本代码 (JavaScript)';
 
-  @override
-  String get browserMatchUrls => '匹配网址（每行一个）';
 
   @override
-  String get browserScriptMatchHint => '*://*.example.com/*';
+  String get browserAddScriptMethod => '选择添加方式';
+
+  @override
+  String get browserImportFromUrl => '从 URL 导入';
+
+  @override
+  String get browserEnterManually => '手动输入';
+
+  @override
+  String get browserScriptTrustWarningTitle => '只添加自己信任的脚本';
+
+  @override
+  String get browserScriptTrustWarning => '只添加自己信任的脚本，否则可能会泄露数据。脚本可以读取或修改网页内容。';
+
+  @override
+  String get browserContinue => '继续';
+
+  @override
+  String get browserManualUserscriptLabel => '油猴脚本 (Tampermonkey 用户脚本)';
+
+  @override
+  String get browserScriptImportUrl => '脚本 URL';
+
+  @override
+  String get browserScriptImportFetch => '获取预览';
+
+  @override
+  String get browserScriptPreview => '脚本源码预览';
+
+  @override
+  String get browserScriptImportInvalidUrl => '请输入有效的 HTTPS URL。';
+
+  @override
+  String get browserScriptImportUnsupportedUrl => '请使用 Greasy Fork 的 .user.js 地址或 GitHub Raw 地址。';
+
+  @override
+  String get browserScriptImportRedirectedUrl => '该 URL 跳转到了不受支持或不安全的地址。';
+
+  @override
+  String get browserScriptImportNotScript => '返回内容为空或看起来不是 JavaScript 脚本。';
+
+  @override
+  String get browserScriptImportNetworkError => '获取脚本失败，请检查 URL 和网络连接。';
+
+  @override
+  String browserScriptImportHttpError(Object status) {
+    return '服务器返回 HTTP $status。';
+  }
 
   @override
   String get browserCancel => '取消';
@@ -17840,11 +17885,56 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   @override
   String get browserScriptCode => '脚本代码 (JavaScript)';
 
-  @override
-  String get browserMatchUrls => '匹配网址（每行一个）';
 
   @override
-  String get browserScriptMatchHint => '*://*.example.com/*';
+  String get browserAddScriptMethod => '选择添加方式';
+
+  @override
+  String get browserImportFromUrl => '从 URL 导入';
+
+  @override
+  String get browserEnterManually => '手动输入';
+
+  @override
+  String get browserScriptTrustWarningTitle => '只添加自己信任的脚本';
+
+  @override
+  String get browserScriptTrustWarning => '只添加自己信任的脚本，否则可能会泄露数据。脚本可以读取或修改网页内容。';
+
+  @override
+  String get browserContinue => '继续';
+
+  @override
+  String get browserManualUserscriptLabel => '油猴脚本 (Tampermonkey 用户脚本)';
+
+  @override
+  String get browserScriptImportUrl => '脚本 URL';
+
+  @override
+  String get browserScriptImportFetch => '获取预览';
+
+  @override
+  String get browserScriptPreview => '脚本源码预览';
+
+  @override
+  String get browserScriptImportInvalidUrl => '请输入有效的 HTTPS URL。';
+
+  @override
+  String get browserScriptImportUnsupportedUrl => '请使用 Greasy Fork 的 .user.js 地址或 GitHub Raw 地址。';
+
+  @override
+  String get browserScriptImportRedirectedUrl => '该 URL 跳转到了不受支持或不安全的地址。';
+
+  @override
+  String get browserScriptImportNotScript => '返回内容为空或看起来不是 JavaScript 脚本。';
+
+  @override
+  String get browserScriptImportNetworkError => '获取脚本失败，请检查 URL 和网络连接。';
+
+  @override
+  String browserScriptImportHttpError(Object status) {
+    return '服务器返回 HTTP $status。';
+  }
 
   @override
   String get browserCancel => '取消';
