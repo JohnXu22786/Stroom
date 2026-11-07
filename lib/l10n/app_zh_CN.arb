@@ -1396,6 +1396,7 @@
       }
     }
   },
+  "batchDlgPresetWriteFailed": "无法保存方案",
   "batchDlgDeleteFailed": "删除失败：{error}",
   "@batchDlgDeleteFailed": {
     "placeholders": {

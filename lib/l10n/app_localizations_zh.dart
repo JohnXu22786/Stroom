@@ -3837,6 +3837,9 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get batchDlgPresetWriteFailed => '无法保存方案';
+
+  @override
   String batchDlgDeleteFailed(String error) {
     return '删除失败：$error';
   }
@@ -13193,6 +13196,9 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String batchDlgSaveFailed(String error) {
     return '保存失败：$error';
   }
+
+  @override
+  String get batchDlgPresetWriteFailed => '无法保存方案';
 
   @override
   String batchDlgDeleteFailed(String error) {

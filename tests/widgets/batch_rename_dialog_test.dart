@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/utils/file_record.dart';
 import 'package:stroom/utils/folder_path_utils.dart';
@@ -74,16 +75,35 @@ class _TestFileRecord
       );
 }
 
-Widget _buildTestApp(Widget body, {Size screenSize = const Size(800, 600)}) {
+Widget _buildTestApp(
+  Widget body, {
+  Size screenSize = const Size(800, 600),
+  Locale locale = const Locale('zh', 'CN'),
+}) {
   return MediaQuery(
     data: MediaQueryData(size: screenSize),
     child: MaterialApp(
-      locale: const Locale('zh', 'CN'),
+      locale: locale,
       supportedLocales: AppLocalizations.supportedLocales,
       home: Scaffold(body: body),
       localizationsDelegates: AppLocalizations.localizationsDelegates,
     ),
   );
+}
+
+class _PresetWriteBehaviorStore extends InMemorySharedPreferencesStore {
+  _PresetWriteBehaviorStore() : super.empty();
+
+  Object? failure;
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) async {
+    if (valueType == 'StringList' && failure != null) {
+      if (failure is bool) return failure! as bool;
+      throw failure!;
+    }
+    return super.setValue(valueType, key, value);
+  }
 }
 
 final sortConfig = SortConfig(
@@ -186,6 +206,44 @@ Future<void> _selectFiles(WidgetTester tester, List<String> ids) async {
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
+  testWidgets('保存方案只本地化精确的内置写入错误并保留其他详情', (tester) async {
+    final store = _PresetWriteBehaviorStore()..failure = false;
+    SharedPreferencesStorePlatform.instance = store;
+    await tester.pumpWidget(_buildTestApp(
+      _buildFileManagerView(records: [_TestFileRecord(id: 'preset-error')]),
+      locale: const Locale('en', 'US'),
+    ));
+    await _selectFiles(tester, ['preset-error']);
+    await tester.tap(find.byKey(const Key('fm_selection_rename_btn')));
+    await tester.pumpAndSettle();
+
+    Future<void> saveWithName(String name) async {
+      await tester.tap(find.widgetWithText(TextButton, 'Save preset'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), name);
+      await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+      await tester.pumpAndSettle();
+    }
+
+    await saveWithName('known failure');
+    expect(find.text('Save failed: The preset could not be saved.'),
+        findsOneWidget);
+
+    store.failure = Exception('保存方案失败; provider detail');
+    await saveWithName('unknown failure');
+    expect(
+      find.text('Save failed: Exception: 保存方案失败; provider detail'),
+      findsOneWidget,
+    );
+
+    store.failure = StateError('保存方案失败');
+    await saveWithName('matching provider failure');
+    expect(
+      find.text('Save failed: Bad state: 保存方案失败'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('窄屏放大字体时长错误报告仍可滚动和关闭', (tester) async {
     tester.view.physicalSize = const Size(360, 640);
     tester.view.devicePixelRatio = 1;

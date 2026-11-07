@@ -6856,6 +6856,12 @@ abstract class AppLocalizations {
   /// **'Save failed: {error}'**
   String batchDlgSaveFailed(String error);
 
+  /// No description provided for @batchDlgPresetWriteFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'The preset could not be saved.'**
+  String get batchDlgPresetWriteFailed;
+
   /// No description provided for @batchDlgDeleteFailed.
   ///
   /// In en, this message translates to:

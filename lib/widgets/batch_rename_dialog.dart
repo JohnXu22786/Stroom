@@ -327,8 +327,12 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
       await _loadPresets();
       if (mounted) setState(() => _notice = strings.batchDlgSavedName(name));
     } catch (e) {
-      if (mounted)
-        setState(() => _notice = strings.batchDlgSaveFailed(e.toString()));
+      if (mounted) {
+        final error = e is BatchRenamePresetWriteFailure
+            ? strings.batchDlgPresetWriteFailed
+            : e.toString();
+        setState(() => _notice = strings.batchDlgSaveFailed(error));
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }
