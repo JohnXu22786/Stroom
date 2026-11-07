@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
+import 'package:flutter/foundation.dart'
+    show debugPrint, kIsWeb, visibleForTesting;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:path/path.dart' as p;
@@ -15,6 +17,7 @@ import '../models/tool_call.dart';
 import '../services/app_log_service.dart';
 import '../services/attachment_storage.dart';
 import '../services/storage_service.dart';
+import '../utils/web_file_store.dart';
 import 'assistant_provider.dart';
 
 part 'conversation_notifier_persistence.dart';
@@ -600,7 +603,9 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
     try {
       await _appendJournalBarrier({
         'kind': 'conversationsDeleted',
-        'conversationIds': expired.map((conversation) => conversation.id).toList(),
+        'conversationIds': expired
+            .map((conversation) => conversation.id)
+            .toList(),
         'deletedAt': DateTime.now().toIso8601String(),
       });
     } catch (error) {

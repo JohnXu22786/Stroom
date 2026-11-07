@@ -289,7 +289,9 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
     try {
       await _appendJournalBarrier({
         'kind': 'conversationsDeleted',
-        'conversationIds': deleted.map((conversation) => conversation.id).toList(),
+        'conversationIds': deleted
+            .map((conversation) => conversation.id)
+            .toList(),
         'deletedAt': DateTime.now().toIso8601String(),
       });
     } catch (error) {
@@ -376,7 +378,9 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
       String conversationId,
       {required Map<String, dynamic> checkpoint,
       bool resetTemporaryCountdown = false}) async {
-    if (!state.any((conversation) => conversation.id == conversationId)) return;
+    if (!state.any((conversation) => conversation.id == conversationId)) {
+      return;
+    }
     final updatedAt = DateTime.now();
     checkpoint['updatedAt'] = updatedAt.toIso8601String();
     state = state.map((conversation) {

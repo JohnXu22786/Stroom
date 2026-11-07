@@ -13,6 +13,8 @@ part of 'conversation_provider.dart';
 /// repeatedly hit decode failures.
 const int _maxCorruptBackups = 3;
 const String _streamJournalFileName = 'conversation_stream_checkpoints.jsonl';
+const String _streamJournalWebPrefix = 'conversation_stream_checkpoints/';
+int _lastWebJournalTimestamp = 0;
 
 /// Latest snapshot and completion shared by periodic stream checkpoints that
 /// can safely supersede one another before the queue reaches them.
@@ -29,6 +31,16 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
       File(p.join(await AppStorage.directory, _streamJournalFileName));
 
   Future<void> _appendStreamCheckpoint(Map<String, dynamic> checkpoint) async {
+    if (kIsWeb) {
+      final now = DateTime.now().microsecondsSinceEpoch;
+      _lastWebJournalTimestamp =
+          now > _lastWebJournalTimestamp ? now : _lastWebJournalTimestamp + 1;
+      final key = '$_streamJournalWebPrefix'
+          '${_lastWebJournalTimestamp.toString().padLeft(20, '0')}';
+      final bytes = Uint8List.fromList(utf8.encode(jsonEncode(checkpoint)));
+      await WebFileStore.write(key, bytes);
+      return;
+    }
     final file = await _streamJournalFile();
     await file.parent.create(recursive: true);
     final separator = await _needsJournalSeparator(file) ? '\n' : '';
@@ -64,6 +76,10 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
 
   Future<void> _clearStreamCheckpoints() async {
     try {
+      if (kIsWeb) {
+        await WebFileStore.deleteByPrefix(_streamJournalWebPrefix);
+        return;
+      }
       final file = await _streamJournalFile();
       if (!await file.exists()) return;
       await file.delete();
@@ -78,10 +94,21 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
     bool strict = false,
   }) async {
     try {
-      final file = await _streamJournalFile();
-      if (!await file.exists()) return conversations;
       conversations = List<Conversation>.from(conversations);
-      final records = await file.readAsLines();
+      late final List<String> records;
+      if (kIsWeb) {
+        final keys = await WebFileStore.keysWithPrefix(_streamJournalWebPrefix)
+          ..sort();
+        records = <String>[];
+        for (final key in keys) {
+          final bytes = await WebFileStore.read(key);
+          if (bytes != null) records.add(utf8.decode(bytes));
+        }
+      } else {
+        final file = await _streamJournalFile();
+        if (!await file.exists()) return conversations;
+        records = await file.readAsLines();
+      }
       final deletedConversations = <String>{};
       final deletedConversationAt = <String, DateTime>{};
       final deletedMessages = <String, Set<String>>{};
@@ -111,7 +138,9 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
             recreatedConversations.remove(conversationId);
             final deletedAt =
                 DateTime.tryParse(decoded['deletedAt'] as String? ?? '');
-            if (deletedAt != null) deletedConversationAt[conversationId] = deletedAt;
+            if (deletedAt != null) {
+              deletedConversationAt[conversationId] = deletedAt;
+            }
           } else if (kind == 'conversationRestored') {
             deletedConversations.remove(conversationId);
             deletedConversationAt.remove(conversationId);
@@ -135,7 +164,8 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
                   .putIfAbsent(conversationId, () => <String>{})
                   .add(decoded['messageId'] as String);
             }
-          } else if (kind == null && deletedConversations.contains(conversationId)) {
+          } else if (kind == null &&
+              deletedConversations.contains(conversationId)) {
             final createdAt = DateTime.tryParse(
               decoded['conversationCreatedAt'] as String? ?? '',
             );
@@ -166,7 +196,8 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
         );
       }
       final byId = {
-        for (final conversation in conversations) conversation.id: conversation,
+        for (final conversation in conversations)
+          conversation.id: conversation,
       };
       for (final line in records) {
         if (line.isEmpty) continue;
@@ -182,7 +213,8 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
             continue;
           }
           if (deletedConversations.contains(conversationId) ||
-              (deletedMessages[conversationId]?.contains(messageId) ?? false)) {
+              (deletedMessages[conversationId]?.contains(messageId) ??
+                  false)) {
             continue;
           }
           final recreatedAt = recreatedConversations[conversationId];
@@ -217,6 +249,7 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
                 DateTime.tryParse(record['updatedAt'] as String? ?? '');
             conversation = baseConversation ?? Conversation(
               id: conversationId,
+              title: '',
               createdAt: conversationCreatedAt,
               updatedAt: checkpointUpdatedAt ?? conversationCreatedAt,
               isTemporary: record['isTemporary'] as bool? ?? false,
@@ -259,7 +292,10 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
           final textChanged =
               _replaySectionDeltas(textSections, record['textDeltas']);
           final reasoningChanged =
-              _replaySectionDeltas(reasoningSections, record['reasoningDeltas']);
+              _replaySectionDeltas(
+                reasoningSections,
+                record['reasoningDeltas'],
+              );
           final callsRaw = record['toolCalls'];
           final calls = <String, ToolCallData>{
             for (final call in existing?.toolCalls ?? const <ToolCallData>[])
@@ -317,7 +353,8 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
               ? roundStartsRaw.whereType<int>().toList()
               : existing?.toolCallRoundStarts;
           final roundStartsChanged = existing == null ||
-              jsonEncode(roundStarts) != jsonEncode(existing.toolCallRoundStarts);
+              jsonEncode(roundStarts) !=
+                  jsonEncode(existing.toolCallRoundStarts);
           if (existing != null &&
               !textChanged &&
               !reasoningChanged &&
@@ -364,15 +401,22 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
 
   bool _replaySectionDeltas(List<String> sections, dynamic rawDeltas) {
     if (rawDeltas is! List) return false;
-    final chunksBySection = sections.map((section) => <String>[section]).toList();
-    final lengthsBySection = sections.map((section) => section.length).toList();
+    final chunksBySection = sections
+        .map((section) => <String>[section])
+        .toList();
+    final lengthsBySection = sections
+        .map((section) => section.length)
+        .toList();
     var changed = false;
     for (final raw in rawDeltas) {
       if (raw is! Map) continue;
       final section = raw['section'];
       final offset = raw['offset'];
       final text = raw['text'];
-      if (section is! int || section < 0 || offset is! int || text is! String) {
+      if (section is! int ||
+          section < 0 ||
+          offset is! int ||
+          text is! String) {
         continue;
       }
       while (sections.length <= section) {
@@ -439,7 +483,8 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
       try {
         final message = ChatMessage.fromMap(Map<String, dynamic>.from(raw));
         if (deletedMessageIds.contains(message.id)) continue;
-        if (conversation.messages.any((existing) => existing.id == message.id)) {
+        if (conversation.messages
+            .any((existing) => existing.id == message.id)) {
           continue;
         }
         final insertionIndex = conversation.messages.indexWhere(
@@ -451,7 +496,9 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
           conversation.messages.insert(insertionIndex, message);
         }
       } catch (e) {
-        debugPrint('Skipping invalid history message in stream checkpoint: $e');
+        debugPrint(
+          'Skipping invalid history message in stream checkpoint: $e',
+        );
       }
     }
   }
@@ -870,7 +917,9 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
         strict: true,
       );
     } catch (e) {
-      debugPrint('Failed to merge stream checkpoints into conversation save: $e');
+      debugPrint(
+        'Failed to merge stream checkpoints into conversation save: $e',
+      );
       return false;
     }
 

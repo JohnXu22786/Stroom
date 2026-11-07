@@ -303,9 +303,12 @@ class _ConversationStreamState {
     final savedHistory = checkpoint['historyMessages'];
     final baseMessageIds = checkpoint['baseMessageIds'];
     if (baseMessageIds is List) {
-      _checkpointedHistoryMessageIds.addAll(baseMessageIds.whereType<String>());
+      _checkpointedHistoryMessageIds.addAll(
+        baseMessageIds.whereType<String>(),
+      );
     }
-    for (final raw in savedHistory is List ? savedHistory : const <dynamic>[]) {
+    for (final raw
+        in savedHistory is List ? savedHistory : const <dynamic>[]) {
       if (raw is Map && raw['id'] is String) {
         _checkpointedHistoryMessageIds.add(raw['id'] as String);
       }
@@ -342,7 +345,10 @@ class _ConversationStreamState {
       if (raw is! Map) continue;
       final index = raw['section'];
       final savedText = raw['text'];
-      if (index is! int || index < 0 || index >= pending.length || savedText is! String) {
+      if (index is! int ||
+          index < 0 ||
+          index >= pending.length ||
+          savedText is! String) {
         continue;
       }
       final current = pending[index].toString();
