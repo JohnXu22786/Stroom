@@ -40,11 +40,13 @@ void main() {
   late PathProviderPlatform originalPathProvider;
 
   setUp(() async {
-    temporaryDirectory =
-        await Directory.systemTemp.createTemp('startup_app_test_');
+    temporaryDirectory = await Directory.systemTemp.createTemp(
+      'startup_app_test_',
+    );
     originalPathProvider = PathProviderPlatform.instance;
-    PathProviderPlatform.instance =
-        _DocumentsDirectory(temporaryDirectory.path);
+    PathProviderPlatform.instance = _DocumentsDirectory(
+      temporaryDirectory.path,
+    );
     SharedPreferences.setMockInitialValues({});
     AppStorage.resetCache();
     // 迁移前备份需要可用的存储（JSON 测试模式）：
@@ -76,7 +78,7 @@ void main() {
             'id': 'conv1',
             'title': 'Test',
             'messages': [],
-            'createdAt': DateTime.now().toIso8601String()
+            'createdAt': DateTime.now().toIso8601String(),
           },
         ]),
       });
@@ -90,11 +92,17 @@ void main() {
       final prefs = await SharedPreferences.getInstance();
       final stored = await DataMigrationService.getStoredPartVersions();
       for (final entry in DataMigrationService.currentPartVersions.entries) {
-        expect(stored[entry.key], equals(entry.value),
-            reason: 'part ${entry.key}');
+        expect(
+          stored[entry.key],
+          equals(entry.value),
+          reason: 'part ${entry.key}',
+        );
       }
-      expect(prefs.containsKey('data_format_version'), isFalse,
-          reason: '旧全局 key 迁移后退役');
+      expect(
+        prefs.containsKey('data_format_version'),
+        isFalse,
+        reason: '旧全局 key 迁移后退役',
+      );
     });
 
     test('no migration needed when format version is current', () async {
@@ -138,14 +146,17 @@ void main() {
 
       // Validate data formats (does not involve crash recovery)
       final issues = await StartupCheckService.validateDataFormats();
-      expect(issues.where((i) => i.severity == StartupIssueSeverity.error),
-          isEmpty);
+      expect(
+        issues.where((i) => i.severity == StartupIssueSeverity.error),
+        isEmpty,
+      );
     });
   });
 
   group('StartupApp - restart dialog flow', () {
-    testWidgets('safety block copy follows the saved app locale',
-        (tester) async {
+    testWidgets('safety block copy follows the saved app locale', (
+      tester,
+    ) async {
       tester.platformDispatcher.localeTestValue = const Locale('en', 'US');
       addTearDown(tester.platformDispatcher.clearLocaleTestValue);
       SharedPreferences.setMockInitialValues({
@@ -163,9 +174,7 @@ void main() {
       await _pumpUntilVisible(tester, find.text('数据安全保护'));
 
       expect(find.text('数据安全保护'), findsOneWidget);
-      final l10n = AppLocalizations.of(
-        tester.element(find.text('数据安全保护')),
-      )!;
+      final l10n = AppLocalizations.of(tester.element(find.text('数据安全保护')))!;
       final currentChatVersion = DataParts.currentVersions['chat']!;
       final newerVersion =
           'chat v${currentChatVersion + 1} > v$currentChatVersion';
@@ -214,11 +223,103 @@ void main() {
     });
 
     testWidgets(
-        'migration restart dialog survives the back button and '
-        'dismissal proceeds to the main app', (tester) async {
-      // 旧版本数据 → 启动序列执行迁移 → 弹出「数据格式升级完成」对话框。
+      'migration restart dialog follows the saved Simplified Chinese locale, '
+      'survives back, and proceeds to the main app',
+      (tester) async {
+        tester.platformDispatcher.localeTestValue = const Locale('en', 'US');
+        addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+        // 旧版本数据 → 启动序列执行迁移 → 弹出本地化重启对话框。
+        SharedPreferences.setMockInitialValues({
+          localePreferenceKey: 'zh_CN',
+          'data_format_version': 0,
+          'provider_entries': jsonEncode([
+            {'id': 'p1', 'type': 'llm', 'name': 'P1', 'configs': []},
+          ]),
+          'conversations': jsonEncode([]),
+        });
+        AppStorage.resetCache();
+
+        // 移动端视口（HomePage 的 NavigationBar 仅在宽度 < 600 时渲染，
+        // 便于断言主应用接管界面）。
+        tester.view.physicalSize = const Size(400, 800);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        await tester.pumpWidget(const ProviderScope(child: StartupApp()));
+        await tester.pump();
+        // 启动页先显示。
+        expect(find.byType(StartupPage), findsOneWidget);
+        final startupApp = tester.widget<MaterialApp>(find.byType(MaterialApp));
+        expect(startupApp.locale, const Locale('zh', 'CN'));
+        expect(
+          AppLocalizations.of(tester.element(find.byType(StartupPage)))
+              ?.localeName,
+          'zh_CN',
+        );
+
+        // 推进启动序列（最小显示 1.5s + 各检查延时 + 完成态 0.6s）。
+        // 迁移链路包含大量真实文件 I/O（备份 ZIP 创建/清理），而
+        // testWidgets 的 FakeAsync 不驱动真实 I/O —— 用 runAsync 让
+        // 真实事件循环推进 I/O，再 pump 冲刷 fake 区间的微任务续体。
+        // 用轮询等待对话框出现（上限宽松，慢机器不 flaky）。
+        final zh = lookupAppLocalizations(const Locale('zh', 'CN'));
+        var dialogShown = false;
+        for (int i = 0; i < 300 && !dialogShown; i++) {
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 50)),
+          );
+          await tester.pump(const Duration(milliseconds: 50));
+          dialogShown = tester.any(find.text(zh.startupMigrationTitle));
+        }
+        expect(dialogShown, isTrue, reason: '迁移完成后必须显示重启对话框');
+        expect(find.text(zh.startupMigrationBody), findsOneWidget);
+        expect(find.text(zh.startupMigrationExit), findsOneWidget);
+        expect(find.text(zh.startupMigrationRestart), findsOneWidget);
+
+        // Android 系统返回键不能关闭对话框（PopScope(canPop: false)），
+        // 否则用户会永远停留在启动页。
+        await tester.binding.handlePopRoute();
+        await tester.pump();
+        expect(
+          find.text(zh.startupMigrationTitle),
+          findsOneWidget,
+          reason: '系统返回键不能关闭迁移重启对话框',
+        );
+
+        // 点击「退出应用」：移动端 SystemNavigator.pop() 在测试环境是
+        // no-op，进程存活 → 启动页必须继续渐出进入主应用，绝不停留。
+        await tester.tap(find.text(zh.startupMigrationExit));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 200));
+        await tester.pump(const Duration(milliseconds: 500));
+        await tester.pumpAndSettle(
+          const Duration(milliseconds: 50),
+          EnginePhase.sendSemanticsUpdate,
+          const Duration(seconds: 5),
+        );
+
+        expect(find.text(zh.startupMigrationTitle), findsNothing);
+        // 启动页（含 tagline）已从树中移除 → 主应用可见。
+        expect(find.text('你的学习助理'), findsNothing);
+        expect(
+          find.byType(NavigationBar),
+          findsOneWidget,
+          reason: '主应用（HomePage）应已接管界面',
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets('migration restart dialog follows the saved English locale', (
+      tester,
+    ) async {
+      tester.platformDispatcher.localeTestValue = const Locale('zh', 'CN');
+      addTearDown(tester.platformDispatcher.clearLocaleTestValue);
       SharedPreferences.setMockInitialValues({
-        localePreferenceKey: 'zh_CN',
+        localePreferenceKey: 'en_US',
         'data_format_version': 0,
         'provider_entries': jsonEncode([
           {'id': 'p1', 'type': 'llm', 'name': 'P1', 'configs': []},
@@ -227,65 +328,115 @@ void main() {
       });
       AppStorage.resetCache();
 
-      // 移动端视口（HomePage 的 NavigationBar 仅在宽度 < 600 时渲染，
-      // 便于断言主应用接管界面）。
-      tester.view.physicalSize = const Size(400, 800);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(() {
-        tester.view.resetPhysicalSize();
-        tester.view.resetDevicePixelRatio();
-      });
-
       await tester.pumpWidget(const ProviderScope(child: StartupApp()));
-      await tester.pump();
-      // 启动页先显示。
-      expect(find.byType(StartupPage), findsOneWidget);
-      final startupApp = tester.widget<MaterialApp>(find.byType(MaterialApp));
-      expect(startupApp.locale, const Locale('zh', 'CN'));
-      expect(
-        AppLocalizations.of(tester.element(find.byType(StartupPage)))
-            ?.localeName,
-        'zh_CN',
-      );
-
-      // 推进启动序列（最小显示 1.5s + 各检查延时 + 完成态 0.6s）。
-      // 迁移链路包含大量真实文件 I/O（备份 ZIP 创建/清理），而
-      // testWidgets 的 FakeAsync 不驱动真实 I/O —— 用 runAsync 让
-      // 真实事件循环推进 I/O，再 pump 冲刷 fake 区间的微任务续体。
-      // 用轮询等待对话框出现（上限宽松，慢机器不 flaky）。
+      final en = lookupAppLocalizations(const Locale('en', 'US'));
       var dialogShown = false;
       for (int i = 0; i < 300 && !dialogShown; i++) {
         await tester.runAsync(
-            () => Future<void>.delayed(const Duration(milliseconds: 50)));
+          () => Future<void>.delayed(const Duration(milliseconds: 50)),
+        );
         await tester.pump(const Duration(milliseconds: 50));
-        dialogShown = tester.any(find.text('数据格式升级完成'));
+        dialogShown = tester.any(find.text(en.startupMigrationTitle));
       }
-      expect(dialogShown, isTrue, reason: '迁移完成后必须显示重启对话框');
 
-      // Android 系统返回键不能关闭对话框（PopScope(canPop: false)），
-      // 否则用户会永远停留在启动页。
-      await tester.binding.handlePopRoute();
-      await tester.pump();
-      expect(find.text('数据格式升级完成'), findsOneWidget, reason: '系统返回键不能关闭迁移重启对话框');
-
-      // 点击「退出应用」：移动端 SystemNavigator.pop() 在测试环境是
-      // no-op，进程存活 → 启动页必须继续渐出进入主应用，绝不停留。
-      await tester.tap(find.text('退出应用'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 200));
-      await tester.pump(const Duration(milliseconds: 500));
-      await tester.pumpAndSettle(
-        const Duration(milliseconds: 50),
-        EnginePhase.sendSemanticsUpdate,
-        const Duration(seconds: 5),
+      expect(
+        dialogShown,
+        isTrue,
+        reason: 'migration dialog should use saved locale',
       );
-
-      expect(find.text('数据格式升级完成'), findsNothing);
-      // 启动页（含 tagline）已从树中移除 → 主应用可见。
-      expect(find.text('你的学习助理'), findsNothing);
-      expect(find.byType(NavigationBar), findsOneWidget,
-          reason: '主应用（HomePage）应已接管界面');
-      expect(tester.takeException(), isNull);
+      expect(find.text(en.startupMigrationBody), findsOneWidget);
+      expect(find.text(en.startupMigrationExit), findsOneWidget);
+      expect(find.text(en.startupMigrationRestart), findsOneWidget);
+      final dialog = tester.element(find.text(en.startupMigrationTitle));
+      expect(AppLocalizations.of(dialog)?.localeName, 'en_US');
     });
+
+    testWidgets(
+      'startup recovery fallback follows saved locale and preserves diagnostic text',
+      (tester) async {
+        tester.platformDispatcher.localeTestValue = const Locale('en', 'US');
+        addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+        SharedPreferences.setMockInitialValues({localePreferenceKey: 'zh_CN'});
+        final container = ProviderContainer();
+        addTearDown(container.dispose);
+        await container.read(localeProvider.notifier).load();
+
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: Consumer(
+              builder: (context, ref, _) => StartupErrorBoundary(
+                locale: ref.watch(localeProvider),
+                child: const _ThrowStartupDiagnostic(),
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+
+        final zh = lookupAppLocalizations(const Locale('zh', 'CN'));
+        expect(find.text(zh.startupRecoveryTitle), findsOneWidget);
+        expect(
+          find.text('Bad state: diagnostic stays verbatim'),
+          findsOneWidget,
+        );
+        expect(find.text(zh.startupRecoveryRetry), findsOneWidget);
+        expect(tester.takeException(), isNull);
+
+        await tester.pumpWidget(
+          StartupErrorBoundary(
+            locale: const Locale('zh', 'CN'),
+            child: const _ThrowEmptyStartupDiagnostic(),
+          ),
+        );
+        await tester.pump();
+        expect(find.text(zh.startupRecoveryFallbackMessage), findsOneWidget);
+        expect(find.text(zh.startupRecoveryRetry), findsOneWidget);
+        expect(tester.takeException(), isNull);
+
+        await container.read(localeProvider.notifier).setLocaleCode('en_US');
+        tester.platformDispatcher.localeTestValue = const Locale('zh', 'CN');
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: Consumer(
+              builder: (context, ref, _) => StartupErrorBoundary(
+                locale: ref.watch(localeProvider),
+                child: const _ThrowEmptyStartupDiagnostic(),
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+
+        final en = lookupAppLocalizations(const Locale('en', 'US'));
+        expect(find.text(en.startupRecoveryFallbackMessage), findsOneWidget);
+        expect(find.text(en.startupRecoveryRetry), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
   });
+}
+
+class _ThrowEmptyStartupDiagnostic extends StatelessWidget {
+  const _ThrowEmptyStartupDiagnostic();
+
+  @override
+  Widget build(BuildContext context) {
+    throw _EmptyStartupDiagnostic();
+  }
+}
+
+class _EmptyStartupDiagnostic implements Exception {
+  @override
+  String toString() => '';
+}
+
+class _ThrowStartupDiagnostic extends StatelessWidget {
+  const _ThrowStartupDiagnostic();
+
+  @override
+  Widget build(BuildContext context) {
+    throw StateError('diagnostic stays verbatim');
+  }
 }

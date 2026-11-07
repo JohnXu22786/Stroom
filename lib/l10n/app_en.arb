@@ -6012,5 +6012,12 @@
   "mermaidCatalogActionAddRequirement": "Add requirement",
   "mermaidCatalogActionAddElement": "Add element",
   "mermaidCatalogActionAddVerification": "Add verification",
-  "mermaidCatalogGanttDependencyBaseTask": "Dependency base task",  "mermaidCatalogGanttDependentTaskName": "Follow-up task"
+  "mermaidCatalogGanttDependencyBaseTask": "Dependency base task",  "mermaidCatalogGanttDependentTaskName": "Follow-up task",
+  "startupMigrationTitle": "Data format upgrade complete",
+  "startupMigrationBody": "Your data has been migrated to the new format. Restart the app to use the updated version.",
+  "startupMigrationExit": "Exit app",
+  "startupMigrationRestart": "Restart now",
+  "startupRecoveryTitle": "App startup error",
+  "startupRecoveryFallbackMessage": "A data format issue was encountered during startup and repaired automatically. Please try again.",
+  "startupRecoveryRetry": "Retry"
 }

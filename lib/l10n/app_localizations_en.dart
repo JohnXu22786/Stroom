@@ -10572,6 +10572,29 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get mermaidCatalogGanttDependentTaskName => 'Follow-up task';
+
+  @override
+  String get startupMigrationTitle => 'Data format upgrade complete';
+
+  @override
+  String get startupMigrationBody =>
+      'Your data has been migrated to the new format. Restart the app to use the updated version.';
+
+  @override
+  String get startupMigrationExit => 'Exit app';
+
+  @override
+  String get startupMigrationRestart => 'Restart now';
+
+  @override
+  String get startupRecoveryTitle => 'App startup error';
+
+  @override
+  String get startupRecoveryFallbackMessage =>
+      'A data format issue was encountered during startup and repaired automatically. Please try again.';
+
+  @override
+  String get startupRecoveryRetry => 'Retry';
 }
 
 /// The translations for English, as used in the United States (`en_US`).
@@ -21141,4 +21164,27 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get mermaidCatalogGanttDependentTaskName => 'Follow-up task';
+
+  @override
+  String get startupMigrationTitle => 'Data format upgrade complete';
+
+  @override
+  String get startupMigrationBody =>
+      'Your data has been migrated to the new format. Restart the app to use the updated version.';
+
+  @override
+  String get startupMigrationExit => 'Exit app';
+
+  @override
+  String get startupMigrationRestart => 'Restart now';
+
+  @override
+  String get startupRecoveryTitle => 'App startup error';
+
+  @override
+  String get startupRecoveryFallbackMessage =>
+      'A data format issue was encountered during startup and repaired automatically. Please try again.';
+
+  @override
+  String get startupRecoveryRetry => 'Retry';
 }

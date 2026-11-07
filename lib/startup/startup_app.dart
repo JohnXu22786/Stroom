@@ -76,9 +76,10 @@ class _StartupAppState extends ConsumerState<StartupApp>
       vsync: this,
       duration: const Duration(milliseconds: 400),
     );
-    _fadeAnimation = Tween<double>(begin: 1.0, end: 0.0).animate(
-      CurvedAnimation(parent: _fadeController, curve: Curves.easeOut),
-    );
+    _fadeAnimation = Tween<double>(
+      begin: 1.0,
+      end: 0.0,
+    ).animate(CurvedAnimation(parent: _fadeController, curve: Curves.easeOut));
     _fadeController.addStatusListener((status) {
       if (status == AnimationStatus.completed && mounted) {
         setState(() {
@@ -178,6 +179,7 @@ class _StartupAppState extends ConsumerState<StartupApp>
   Future<void> _showRestartDialog() async {
     final navContext = _overlayNavigatorKey.currentContext;
     if (navContext == null || !navContext.mounted) return;
+    final l10n = AppLocalizations.of(navContext)!;
     await showDialog<void>(
       context: navContext,
       barrierDismissible: false,
@@ -190,27 +192,24 @@ class _StartupAppState extends ConsumerState<StartupApp>
             children: [
               Icon(Icons.check_circle, color: Colors.green.shade600, size: 24),
               const SizedBox(width: 8),
-              const Text('数据格式升级完成'),
+              Text(l10n.startupMigrationTitle),
             ],
           ),
-          content: const Text(
-            '数据已迁移到新版格式。'
-            '请重启应用以使用新版本。',
-          ),
+          content: Text(l10n.startupMigrationBody),
           actions: [
             TextButton(
               onPressed: () {
                 Navigator.of(dialogContext).pop();
                 _exitApp();
               },
-              child: const Text('退出应用'),
+              child: Text(l10n.startupMigrationExit),
             ),
             FilledButton(
               onPressed: () {
                 Navigator.of(dialogContext).pop();
                 restartApp();
               },
-              child: const Text('立即重启'),
+              child: Text(l10n.startupMigrationRestart),
             ),
           ],
         ),
@@ -241,9 +240,10 @@ class _StartupAppState extends ConsumerState<StartupApp>
       textDirection: TextDirection.ltr,
       children: [
         if (_applicationReady)
-          const _AppErrorBoundary(
-            key: ValueKey('app_fade_boundary'),
-            child: Application(key: ValueKey('app_ready')),
+          StartupErrorBoundary(
+            key: const ValueKey('app_fade_boundary'),
+            locale: locale,
+            child: const Application(key: ValueKey('app_ready')),
           ),
 
         // 启动页覆盖层（检查完成后移除）
@@ -305,16 +305,21 @@ class _StartupAppState extends ConsumerState<StartupApp>
 /// check sequence completes but DURING the first render of the [Application]
 /// widget and its providers.  Once the error is handled, the user can press
 /// "重试" to rebuild the widget tree.
-class _AppErrorBoundary extends StatefulWidget {
+class StartupErrorBoundary extends StatefulWidget {
   final Widget child;
+  final Locale? locale;
 
-  const _AppErrorBoundary({super.key, required this.child});
+  const StartupErrorBoundary({
+    super.key,
+    required this.child,
+    required this.locale,
+  });
 
   @override
-  State<_AppErrorBoundary> createState() => _AppErrorBoundaryState();
+  State<StartupErrorBoundary> createState() => _StartupErrorBoundaryState();
 }
 
-class _AppErrorBoundaryState extends State<_AppErrorBoundary> {
+class _StartupErrorBoundaryState extends State<StartupErrorBoundary> {
   bool _hasError = false;
   String _errorMessage = '';
   int _retryGeneration = 0;
@@ -365,51 +370,60 @@ class _AppErrorBoundaryState extends State<_AppErrorBoundary> {
             // 兜底恢复界面，不会闪退
             child: MaterialApp(
               debugShowCheckedModeBanner: false,
+              locale: widget.locale,
+              localeResolutionCallback: (deviceLocale, _) =>
+                  resolveSystemLocale(deviceLocale ?? const Locale('en')),
+              supportedLocales: AppLocalizations.supportedLocales,
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
               theme: ThemeData(
                 useMaterial3: true,
                 colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
               ),
               home: Builder(
-                builder: (overlayContext) => Scaffold(
-                  body: Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.error_outline,
-                              size: 64, color: Colors.orange.shade400),
-                          const SizedBox(height: 16),
-                          Text(
-                            '应用启动异常',
-                            style: Theme.of(overlayContext)
-                                .textTheme
-                                .headlineSmall,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            _errorMessage.isNotEmpty
-                                ? _errorMessage
-                                : '启动过程中遇到数据格式问题，已自动修复，请重试。',
-                            textAlign: TextAlign.center,
-                            style: Theme.of(overlayContext)
-                                .textTheme
-                                .bodyMedium
-                                ?.copyWith(
-                                  color: Colors.grey.shade600,
-                                ),
-                          ),
-                          const SizedBox(height: 24),
-                          FilledButton.icon(
-                            onPressed: _onRetry,
-                            icon: const Icon(Icons.refresh),
-                            label: const Text('重试'),
-                          ),
-                        ],
+                builder: (overlayContext) {
+                  final l10n = AppLocalizations.of(overlayContext)!;
+                  return Scaffold(
+                    body: Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.error_outline,
+                              size: 64,
+                              color: Colors.orange.shade400,
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              l10n.startupRecoveryTitle,
+                              style: Theme.of(overlayContext)
+                                  .textTheme
+                                  .headlineSmall,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              _errorMessage.isNotEmpty
+                                  ? _errorMessage
+                                  : l10n.startupRecoveryFallbackMessage,
+                              textAlign: TextAlign.center,
+                              style: Theme.of(overlayContext)
+                                  .textTheme
+                                  .bodyMedium
+                                  ?.copyWith(color: Colors.grey.shade600),
+                            ),
+                            const SizedBox(height: 24),
+                            FilledButton.icon(
+                              onPressed: _onRetry,
+                              icon: const Icon(Icons.refresh),
+                              label: Text(l10n.startupRecoveryRetry),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                ),
+                  );
+                },
               ),
             ),
           ),
@@ -427,10 +441,7 @@ class _ErrorCatcher extends StatefulWidget {
   final Widget child;
   final Widget Function(Object error, StackTrace stack) onError;
 
-  const _ErrorCatcher({
-    required this.child,
-    required this.onError,
-  });
+  const _ErrorCatcher({required this.child, required this.onError});
 
   @override
   State<_ErrorCatcher> createState() => _ErrorCatcherState();
@@ -541,8 +552,11 @@ class _DataSafetyBlockPageState extends ConsumerState<_DataSafetyBlockPage> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.shield_outlined,
-                    size: 72, color: Colors.red.shade400),
+                Icon(
+                  Icons.shield_outlined,
+                  size: 72,
+                  color: Colors.red.shade400,
+                ),
                 const SizedBox(height: 16),
                 Text(
                   l10n.startupSafetyTitle,
@@ -552,10 +566,10 @@ class _DataSafetyBlockPageState extends ConsumerState<_DataSafetyBlockPage> {
                 Text(
                   widget.message,
                   textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Colors.grey.shade600,
-                        height: 1.6,
-                      ),
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodyMedium
+                      ?.copyWith(color: Colors.grey.shade600, height: 1.6),
                 ),
                 const SizedBox(height: 28),
                 Wrap(
@@ -563,9 +577,7 @@ class _DataSafetyBlockPageState extends ConsumerState<_DataSafetyBlockPage> {
                   spacing: 12,
                   runSpacing: 12,
                   children: [
-                    if (!kIsWeb) ...[
-                      _buildUpdateButton(),
-                    ],
+                    if (!kIsWeb) ...[_buildUpdateButton()],
                     OutlinedButton.icon(
                       onPressed: _exporting ? null : _exportData,
                       icon: _exporting
