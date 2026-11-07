@@ -603,9 +603,8 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
     try {
       await _appendJournalBarrier({
         'kind': 'conversationsDeleted',
-        'conversationIds': expired
-            .map((conversation) => conversation.id)
-            .toList(),
+        'conversationIds':
+            expired.map((conversation) => conversation.id).toList(),
         'deletedAt': DateTime.now().toIso8601String(),
       });
     } catch (error) {

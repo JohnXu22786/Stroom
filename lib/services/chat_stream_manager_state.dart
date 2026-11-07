@@ -307,8 +307,7 @@ class _ConversationStreamState {
         baseMessageIds.whereType<String>(),
       );
     }
-    for (final raw
-        in savedHistory is List ? savedHistory : const <dynamic>[]) {
+    for (final raw in savedHistory is List ? savedHistory : const <dynamic>[]) {
       if (raw is Map && raw['id'] is String) {
         _checkpointedHistoryMessageIds.add(raw['id'] as String);
       }
@@ -318,11 +317,9 @@ class _ConversationStreamState {
       for (final raw in savedToolCalls) {
         if (raw is! Map || raw['id'] is! String) continue;
         final id = raw['id'] as String;
-        final current = accumulatedToolCalls
-            .where((call) => call.id == id)
-            .firstOrNull;
-        if (current != null &&
-            jsonEncode(current.toMap()) == jsonEncode(raw)) {
+        final current =
+            accumulatedToolCalls.where((call) => call.id == id).firstOrNull;
+        if (current != null && jsonEncode(current.toMap()) == jsonEncode(raw)) {
           _dirtyToolCallIds.remove(id);
         }
       }

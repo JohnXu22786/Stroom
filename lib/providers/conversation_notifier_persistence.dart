@@ -196,8 +196,7 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
         );
       }
       final byId = {
-        for (final conversation in conversations)
-          conversation.id: conversation,
+        for (final conversation in conversations) conversation.id: conversation,
       };
       for (final line in records) {
         if (line.isEmpty) continue;
@@ -213,8 +212,7 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
             continue;
           }
           if (deletedConversations.contains(conversationId) ||
-              (deletedMessages[conversationId]?.contains(messageId) ??
-                  false)) {
+              (deletedMessages[conversationId]?.contains(messageId) ?? false)) {
             continue;
           }
           final recreatedAt = recreatedConversations[conversationId];
@@ -247,28 +245,27 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
             );
             final checkpointUpdatedAt =
                 DateTime.tryParse(record['updatedAt'] as String? ?? '');
-            conversation = baseConversation ?? Conversation(
-              id: conversationId,
-              title: '',
-              createdAt: conversationCreatedAt,
-              updatedAt: checkpointUpdatedAt ?? conversationCreatedAt,
-              isTemporary: record['isTemporary'] as bool? ?? false,
-              temporaryExpiresAt: DateTime.tryParse(
-                record['temporaryExpiresAt'] as String? ?? '',
-              ),
-              temporaryExpiryVersion:
-                  record['temporaryExpiryVersion'] as int? ??
-                      kTemporaryConversationDurationVersion,
-              messages: [],
-            );
+            conversation = baseConversation ??
+                Conversation(
+                  id: conversationId,
+                  title: '',
+                  createdAt: conversationCreatedAt,
+                  updatedAt: checkpointUpdatedAt ?? conversationCreatedAt,
+                  isTemporary: record['isTemporary'] as bool? ?? false,
+                  temporaryExpiresAt: DateTime.tryParse(
+                    record['temporaryExpiresAt'] as String? ?? '',
+                  ),
+                  temporaryExpiryVersion:
+                      record['temporaryExpiryVersion'] as int? ??
+                          kTemporaryConversationDurationVersion,
+                  messages: [],
+                );
             conversations.add(conversation);
             byId[conversationId] = conversation;
           }
           _mergeCheckpointHistoryMessages(
             conversation,
-            baseConversationRaw is Map
-                ? baseConversationRaw['messages']
-                : null,
+            baseConversationRaw is Map ? baseConversationRaw['messages'] : null,
             deletedMessages[conversationId] ?? const <String>{},
           );
           _mergeCheckpointHistoryMessages(
@@ -278,9 +275,8 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
           );
           final existingIndex = conversation.messages
               .indexWhere((message) => message.id == messageId);
-          final existing = existingIndex < 0
-              ? null
-              : conversation.messages[existingIndex];
+          final existing =
+              existingIndex < 0 ? null : conversation.messages[existingIndex];
           final textSections = existing?.textSections?.toList() ??
               (existing != null && existing.content.isNotEmpty
                   ? <String>[existing.content]
@@ -291,11 +287,10 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
                   : <String>[existing!.reasoningContent!]);
           final textChanged =
               _replaySectionDeltas(textSections, record['textDeltas']);
-          final reasoningChanged =
-              _replaySectionDeltas(
-                reasoningSections,
-                record['reasoningDeltas'],
-              );
+          final reasoningChanged = _replaySectionDeltas(
+            reasoningSections,
+            record['reasoningDeltas'],
+          );
           final callsRaw = record['toolCalls'];
           final calls = <String, ToolCallData>{
             for (final call in existing?.toolCalls ?? const <ToolCallData>[])
@@ -315,9 +310,8 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
           if (checkpointIsCurrent && record['isTemporary'] is bool) {
             final isTemporary = record['isTemporary'] as bool;
             final expiryRaw = record['temporaryExpiresAt'];
-            final expiry = expiryRaw is String
-                ? DateTime.tryParse(expiryRaw)
-                : null;
+            final expiry =
+                expiryRaw is String ? DateTime.tryParse(expiryRaw) : null;
             final expiryVersion = record['temporaryExpiryVersion'];
             if (conversation.isTemporary != isTemporary ||
                 conversation.temporaryExpiresAt != expiry ||
@@ -401,22 +395,16 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
 
   bool _replaySectionDeltas(List<String> sections, dynamic rawDeltas) {
     if (rawDeltas is! List) return false;
-    final chunksBySection = sections
-        .map((section) => <String>[section])
-        .toList();
-    final lengthsBySection = sections
-        .map((section) => section.length)
-        .toList();
+    final chunksBySection =
+        sections.map((section) => <String>[section]).toList();
+    final lengthsBySection = sections.map((section) => section.length).toList();
     var changed = false;
     for (final raw in rawDeltas) {
       if (raw is! Map) continue;
       final section = raw['section'];
       final offset = raw['offset'];
       final text = raw['text'];
-      if (section is! int ||
-          section < 0 ||
-          offset is! int ||
-          text is! String) {
+      if (section is! int || section < 0 || offset is! int || text is! String) {
         continue;
       }
       while (sections.length <= section) {
@@ -513,6 +501,7 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
     // 需要把合并结果落盘（见 finally）：否则"下次持久化前退出"
     // 会丢失新对话。
     var hadInMemoryMerge = false;
+    List<Conversation>? loadedConversations;
     try {
       final prefs = await SharedPreferences.getInstance();
       final json = prefs.getString('conversations');
@@ -593,10 +582,13 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
                 final diskIds = conversations.map((c) => c.id).toSet();
                 final extra =
                     inMemory.where((c) => !diskIds.contains(c.id)).toList();
-                state = pinnedFirstStable([...extra, ...conversations]);
+                loadedConversations = pinnedFirstStable([
+                  ...extra,
+                  ...conversations,
+                ]);
                 hadInMemoryMerge = true;
               } else {
-                state = pinnedFirstStable(conversations);
+                loadedConversations = pinnedFirstStable(conversations);
               }
             }
             await AppLogService.info(
@@ -629,8 +621,26 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
       }
 
       if (mounted) {
-        final restored = await _replayStreamCheckpoints(state);
-        if (mounted) state = restored;
+        final restored = await _replayStreamCheckpoints(
+          loadedConversations ?? state,
+        );
+        if (mounted) {
+          final replayedIds = restored.map((c) => c.id).toSet();
+          final extraInMemory =
+              state.where((c) => !replayedIds.contains(c.id)).toList();
+          if (extraInMemory.isNotEmpty) hadInMemoryMerge = true;
+          final finalConversations = extraInMemory.isEmpty
+              ? restored
+              : pinnedFirstStable([...extraInMemory, ...restored]);
+          final activeId = prefs.getString('active_conversation_id');
+          if (activeId != null &&
+              finalConversations.any((c) => c.id == activeId)) {
+            _ref.read(activeConversationIdProvider.notifier).state = activeId;
+          } else if (_ref.read(activeConversationIdProvider) == activeId) {
+            _ref.read(activeConversationIdProvider.notifier).state = null;
+          }
+          state = finalConversations;
+        }
       }
 
       // Auto-fix conversations with null assistantId on every load.
@@ -664,12 +674,14 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
         if (mounted) {
           final activeId = prefs.getString('active_conversation_id');
           if (activeId != null && state.any((c) => c.id == activeId)) {
-            _ref.read(activeConversationIdProvider.notifier).state = activeId;
             await AppLogService.info(
               'ConversationsNotifier',
               '恢复上次活跃对话: $activeId',
             );
           } else {
+            if (_ref.read(activeConversationIdProvider) == activeId) {
+              _ref.read(activeConversationIdProvider.notifier).state = null;
+            }
             await AppLogService.warning(
               'ConversationsNotifier',
               '未找到上次活跃对话或 activeId 为 null: activeId=$activeId',

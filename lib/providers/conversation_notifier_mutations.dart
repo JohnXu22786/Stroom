@@ -289,9 +289,8 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
     try {
       await _appendJournalBarrier({
         'kind': 'conversationsDeleted',
-        'conversationIds': deleted
-            .map((conversation) => conversation.id)
-            .toList(),
+        'conversationIds':
+            deleted.map((conversation) => conversation.id).toList(),
         'deletedAt': DateTime.now().toIso8601String(),
       });
     } catch (error) {
@@ -350,6 +349,7 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
   /// 延长临时对话的生命周期）。
   Future<void> updateMessages(String conversationId, List<ChatMessage> messages,
       {bool resetTemporaryCountdown = false}) async {
+    if (!mounted) return;
     final current = state.where((c) => c.id == conversationId).firstOrNull;
     if (current != null) {
       final nextIds = messages.map((message) => message.id).toSet();
@@ -357,6 +357,8 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
           .where((message) => !nextIds.contains(message.id))
           .map((message) => message.id)
           .toList();
+      _replaceMessages(conversationId, messages,
+          resetTemporaryCountdown: resetTemporaryCountdown);
       if (removedIds.isNotEmpty) {
         await _appendJournalBarrier({
           'kind': 'messageDeleted',
@@ -364,18 +366,18 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
           'messageIds': removedIds,
         });
       }
+    } else {
+      _replaceMessages(conversationId, messages,
+          resetTemporaryCountdown: resetTemporaryCountdown);
     }
     if (!mounted) return;
-    _replaceMessages(conversationId, messages,
-        resetTemporaryCountdown: resetTemporaryCountdown);
     await _persistNow();
   }
 
   /// Queues a supersedable periodic stream checkpoint journal entry.
   /// Consecutive checkpoints share one queued persistence task; explicit
   /// writes remain ordering barriers in the normal persistence path.
-  Future<void> updateMessagesPeriodically(
-      String conversationId,
+  Future<void> updateMessagesPeriodically(String conversationId,
       {required Map<String, dynamic> checkpoint,
       bool resetTemporaryCountdown = false}) async {
     if (!state.any((conversation) => conversation.id == conversationId)) {
