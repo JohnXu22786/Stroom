@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/widgets/topic_item.dart';
 
@@ -10,6 +11,8 @@ Widget _app({
 }) {
   return MaterialApp(
     theme: ThemeData(colorSchemeSeed: Colors.blue),
+    supportedLocales: AppLocalizations.supportedLocales,
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
     home: Scaffold(
       body: TopicItem(
         topic: Conversation(id: 'topic', title: 'Topic'),
