@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart'
@@ -16,6 +15,7 @@ import '../models/chat_message.dart';
 import '../models/tool_call.dart';
 import '../services/app_log_service.dart';
 import '../services/attachment_storage.dart';
+import '../services/conversation_stream_journal_store.dart';
 import '../services/storage_service.dart';
 import '../utils/web_file_store.dart';
 import 'assistant_provider.dart';
@@ -540,6 +540,11 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
   /// persistence operation establishes an ordering barrier.
   _CoalescedStreamPersist? _coalescedStreamPersist;
 
+  /// Conversations whose deletion rollback marker could not be appended.
+  /// Persist their creation timestamps so replay can keep the matching
+  /// restored records until the journal is successfully cleared.
+  final Map<String, String> _pendingRestoredConversations = <String, String>{};
+
   /// Resolves when saved conversations have been merged into memory. Producers
   /// using a deterministic ID must wait before replacing a prior attempt.
   Future<void> get ready => _initialLoad;
@@ -586,6 +591,7 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
 
   Future<void> _checkTemporaryExpiry() async {
     final now = DateTime.now();
+    final original = List<Conversation>.from(state);
     final expired = state
         .where(
           (c) =>
@@ -608,7 +614,7 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
         'deletedAt': DateTime.now().toIso8601String(),
       });
     } catch (error) {
-      state = pinnedFirstStable([...expired, ...state]);
+      state = _restoreDeletedConversationOrder(original, expired);
       _syncTemporaryTimer();
       debugPrint('Failed to record expired conversation deletion: $error');
       return;

@@ -14,6 +14,8 @@ part of 'conversation_provider.dart';
 const int _maxCorruptBackups = 3;
 const String _streamJournalFileName = 'conversation_stream_checkpoints.jsonl';
 const String _streamJournalWebPrefix = 'conversation_stream_checkpoints/';
+const String _pendingRestoredConversationKey =
+    'conversation_stream_pending_restores';
 int _lastWebJournalTimestamp = 0;
 
 /// Latest snapshot and completion shared by periodic stream checkpoints that
@@ -27,8 +29,52 @@ class _CoalescedStreamPersist {
 }
 
 extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
-  Future<File> _streamJournalFile() async =>
-      File(p.join(await AppStorage.directory, _streamJournalFileName));
+  Future<bool> _persistPendingRestoredConversations() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (_pendingRestoredConversations.isEmpty) {
+        return prefs.remove(_pendingRestoredConversationKey);
+      }
+      return prefs.setString(
+        _pendingRestoredConversationKey,
+        jsonEncode(_pendingRestoredConversations),
+      );
+    } catch (e) {
+      debugPrint('Failed to persist restored conversation markers: $e');
+      return false;
+    }
+  }
+
+  Future<bool> _clearPendingRestoredConversationMarker() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final removed = await prefs.remove(_pendingRestoredConversationKey);
+      if (removed) _pendingRestoredConversations.clear();
+      return removed;
+    } catch (e) {
+      debugPrint('Failed to clear restored conversation markers: $e');
+      return false;
+    }
+  }
+
+  Map<String, DateTime> _pendingRestoredConversationsFor(
+    List<Conversation> conversations,
+  ) {
+    final createdAtById = {
+      for (final conversation in conversations)
+        conversation.id: conversation.createdAt.toIso8601String(),
+    };
+    return {
+      for (final entry in _pendingRestoredConversations.entries)
+        if (createdAtById[entry.key] == entry.value.split('|').first &&
+            entry.value.split('|').length > 1)
+          entry.key: DateTime.tryParse(entry.value.split('|').last) ??
+              DateTime.fromMillisecondsSinceEpoch(0),
+    };
+  }
+
+  Future<String> _streamJournalPath() async =>
+      p.join(await AppStorage.directory, _streamJournalFileName);
 
   Future<void> _appendStreamCheckpoint(Map<String, dynamic> checkpoint) async {
     if (kIsWeb) {
@@ -41,27 +87,10 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
       await WebFileStore.write(key, bytes);
       return;
     }
-    final file = await _streamJournalFile();
-    await file.parent.create(recursive: true);
-    final separator = await _needsJournalSeparator(file) ? '\n' : '';
-    await file.writeAsString(
-      '$separator${jsonEncode(checkpoint)}\n',
-      mode: FileMode.append,
-      flush: true,
+    await ConversationStreamJournalStore.append(
+      await _streamJournalPath(),
+      jsonEncode(checkpoint),
     );
-  }
-
-  Future<bool> _needsJournalSeparator(File file) async {
-    if (!await file.exists()) return false;
-    final length = await file.length();
-    if (length == 0) return false;
-    final handle = await file.open();
-    try {
-      await handle.setPosition(length - 1);
-      return await handle.readByte() != 10;
-    } finally {
-      await handle.close();
-    }
   }
 
   Future<void> _appendJournalBarrier(Map<String, dynamic> record) async {
@@ -74,17 +103,16 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
     await write;
   }
 
-  Future<void> _clearStreamCheckpoints() async {
+  Future<bool> _clearStreamCheckpoints() async {
     try {
       if (kIsWeb) {
         await WebFileStore.deleteByPrefix(_streamJournalWebPrefix);
-        return;
+        return true;
       }
-      final file = await _streamJournalFile();
-      if (!await file.exists()) return;
-      await file.delete();
+      return ConversationStreamJournalStore.delete(await _streamJournalPath());
     } catch (e) {
       debugPrint('Failed to clear conversation stream checkpoints: $e');
+      return false;
     }
   }
 
@@ -92,6 +120,8 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
     List<Conversation> conversations, {
     bool onlyKnownConversations = false,
     bool strict = false,
+    Map<String, DateTime> pendingRestoredConversations =
+        const <String, DateTime>{},
   }) async {
     try {
       conversations = List<Conversation>.from(conversations);
@@ -105,9 +135,10 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
           if (bytes != null) records.add(utf8.decode(bytes));
         }
       } else {
-        final file = await _streamJournalFile();
-        if (!await file.exists()) return conversations;
-        records = await file.readAsLines();
+        records = await ConversationStreamJournalStore.readLines(
+              await _streamJournalPath(),
+            ) ??
+            <String>[];
       }
       final deletedConversations = <String>{};
       final deletedConversationAt = <String, DateTime>{};
@@ -183,6 +214,13 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
           // A torn last record is ignored; earlier checkpoints remain usable.
         }
       }
+      for (final entry in pendingRestoredConversations.entries) {
+        final deletedAt = deletedConversationAt[entry.key];
+        if (deletedAt == null || !deletedAt.isAfter(entry.value)) {
+          deletedConversations.remove(entry.key);
+          deletedConversationAt.remove(entry.key);
+        }
+      }
       conversations.removeWhere((conversation) {
         final deletedAt = deletedConversationAt[conversation.id];
         return deletedConversations.contains(conversation.id) &&
@@ -224,6 +262,7 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
             continue;
           }
           var conversation = byId[conversationId];
+          final needsToAddConversation = conversation == null;
           final baseConversationRaw = record['baseConversation'];
           Conversation? baseConversation;
           if (baseConversationRaw is Map) {
@@ -260,6 +299,17 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
                           kTemporaryConversationDurationVersion,
                   messages: [],
                 );
+          }
+          final checkpointMessageExists = conversation.messages.any(
+            (message) => message.id == messageId,
+          );
+          final checkpointUpdatedAt =
+              DateTime.tryParse(record['updatedAt'] as String? ?? '');
+          final checkpointIsCurrent = checkpointUpdatedAt != null &&
+              (!checkpointMessageExists ||
+                  !checkpointUpdatedAt.isBefore(conversation.updatedAt));
+          if (!checkpointIsCurrent) continue;
+          if (needsToAddConversation) {
             conversations.add(conversation);
             byId[conversationId] = conversation;
           }
@@ -296,18 +346,11 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
             for (final call in existing?.toolCalls ?? const <ToolCallData>[])
               call.id: call,
           };
-          final checkpointUpdatedAt =
-              DateTime.tryParse(record['updatedAt'] as String? ?? '');
-          final checkpointIsCurrent = existing == null ||
-              (checkpointUpdatedAt != null &&
-                  !checkpointUpdatedAt.isBefore(conversation.updatedAt));
-          if (checkpointIsCurrent &&
-              checkpointUpdatedAt != null &&
-              checkpointUpdatedAt.isAfter(conversation.updatedAt)) {
+          if (checkpointUpdatedAt!.isAfter(conversation.updatedAt)) {
             conversation.updatedAt = checkpointUpdatedAt;
           }
           var conversationMetadataChanged = false;
-          if (checkpointIsCurrent && record['isTemporary'] is bool) {
+          if (record['isTemporary'] is bool) {
             final isTemporary = record['isTemporary'] as bool;
             final expiryRaw = record['temporaryExpiresAt'];
             final expiry =
@@ -325,7 +368,7 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
               conversationMetadataChanged = true;
             }
           }
-          if (checkpointIsCurrent && callsRaw is List) {
+          if (callsRaw is List) {
             for (final rawCall in callsRaw.whereType<Map>()) {
               final call = ToolCallData.fromMap(
                 Map<String, dynamic>.from(rawCall),
@@ -341,11 +384,10 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
                         .toList(),
                   );
           final roundStartsRaw = record['toolCallRoundStarts'];
-          final roundStarts = checkpointIsCurrent &&
-                  roundStartsRaw is List &&
-                  roundStartsRaw.isNotEmpty
-              ? roundStartsRaw.whereType<int>().toList()
-              : existing?.toolCallRoundStarts;
+          final roundStarts =
+              roundStartsRaw is List && roundStartsRaw.isNotEmpty
+                  ? roundStartsRaw.whereType<int>().toList()
+                  : existing?.toolCallRoundStarts;
           final roundStartsChanged = existing == null ||
               jsonEncode(roundStarts) !=
                   jsonEncode(existing.toolCallRoundStarts);
@@ -504,6 +546,24 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
     List<Conversation>? loadedConversations;
     try {
       final prefs = await SharedPreferences.getInstance();
+      final pendingRestoresJson =
+          prefs.getString(_pendingRestoredConversationKey);
+      if (pendingRestoresJson != null) {
+        try {
+          final decoded = jsonDecode(pendingRestoresJson);
+          if (decoded is Map) {
+            _pendingRestoredConversations
+              ..clear()
+              ..addAll({
+                for (final entry in decoded.entries)
+                  if (entry.key is String && entry.value is String)
+                    entry.key as String: entry.value as String,
+              });
+          }
+        } catch (e) {
+          debugPrint('Failed to decode pending conversation restores: $e');
+        }
+      }
       final json = prefs.getString('conversations');
       if (json != null && json.isNotEmpty) {
         try {
@@ -590,6 +650,16 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
               } else {
                 loadedConversations = pinnedFirstStable(conversations);
               }
+              final activeId = prefs.getString('active_conversation_id');
+              if (activeId != null &&
+                  _ref.read(activeConversationIdProvider) == null) {
+                // Restore the saved selection before publishing the canonical
+                // list. It may refer to a conversation present only in the
+                // stream journal, which is replayed below.
+                _ref.read(activeConversationIdProvider.notifier).state =
+                    activeId;
+              }
+              state = loadedConversations;
             }
             await AppLogService.info(
               'ConversationsNotifier',
@@ -621,25 +691,77 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
       }
 
       if (mounted) {
+        final replayStartingConversations = {
+          for (final conversation in state) conversation.id: conversation,
+        };
+        final replayStartingMessageIds = {
+          for (final conversation in state)
+            conversation.id:
+                conversation.messages.map((message) => message.id).toSet(),
+        };
         final restored = await _replayStreamCheckpoints(
           loadedConversations ?? state,
+          pendingRestoredConversations: _pendingRestoredConversationsFor(
+            loadedConversations ?? state,
+          ),
         );
         if (mounted) {
-          final replayedIds = restored.map((c) => c.id).toSet();
-          final extraInMemory =
-              state.where((c) => !replayedIds.contains(c.id)).toList();
-          if (extraInMemory.isNotEmpty) hadInMemoryMerge = true;
-          final finalConversations = extraInMemory.isEmpty
-              ? restored
-              : pinnedFirstStable([...extraInMemory, ...restored]);
+          final replayedById = {
+            for (final conversation in restored) conversation.id: conversation,
+          };
+          final finalConversations = <Conversation>[];
+          // Preserve the current state order: users may reorder conversations
+          // while replay is awaiting storage I/O.
+          for (final current in state) {
+            final startingConversation =
+                replayStartingConversations[current.id];
+            final replayed = replayedById.remove(current.id);
+            if (startingConversation == null) {
+              finalConversations.add(current);
+              hadInMemoryMerge = true;
+            } else if (replayed == null) {
+              // A replay tombstone removes a canonical record unless the user
+              // replaced that conversation while replay was awaiting I/O.
+              if (!identical(current, startingConversation)) {
+                finalConversations.add(current);
+                hadInMemoryMerge = true;
+              }
+            } else if (identical(current, startingConversation)) {
+              final startingMessageIds =
+                  replayStartingMessageIds[current.id] ?? const <String>{};
+              final currentMessageIds =
+                  current.messages.map((message) => message.id).toSet();
+              final removedMessageIds =
+                  startingMessageIds.difference(currentMessageIds);
+              if (removedMessageIds.isNotEmpty) {
+                replayed.messages.removeWhere(
+                  (message) => removedMessageIds.contains(message.id),
+                );
+              }
+              finalConversations.add(replayed);
+            } else {
+              finalConversations.add(current);
+              hadInMemoryMerge = true;
+            }
+          }
+          // Journal-only conversations discovered during replay are not in
+          // the current state list; append them after preserving user order.
+          for (final conversation in replayedById.values) {
+            if (!replayStartingConversations.containsKey(conversation.id)) {
+              finalConversations.add(conversation);
+            }
+          }
+          final orderedConversations = pinnedFirstStable(finalConversations);
           final activeId = prefs.getString('active_conversation_id');
           if (activeId != null &&
-              finalConversations.any((c) => c.id == activeId)) {
-            _ref.read(activeConversationIdProvider.notifier).state = activeId;
+              orderedConversations.any((c) => c.id == activeId)) {
+            if (_ref.read(activeConversationIdProvider) == null) {
+              _ref.read(activeConversationIdProvider.notifier).state = activeId;
+            }
           } else if (_ref.read(activeConversationIdProvider) == activeId) {
             _ref.read(activeConversationIdProvider.notifier).state = null;
           }
-          state = finalConversations;
+          state = orderedConversations;
         }
       }
 
@@ -927,6 +1049,8 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
         snapshot,
         onlyKnownConversations: true,
         strict: true,
+        pendingRestoredConversations:
+            _pendingRestoredConversationsFor(snapshot),
       );
     } catch (e) {
       debugPrint(
@@ -945,7 +1069,9 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
       if (!await prefs.setString('conversations', json)) {
         throw StateError('conversation save returned false');
       }
-      await _clearStreamCheckpoints();
+      if (await _clearStreamCheckpoints()) {
+        await _clearPendingRestoredConversationMarker();
+      }
       await AppLogService.debug(
         'ConversationsNotifier',
         '对话已持久化, 共 ${snapshot.length} 个',
@@ -1000,7 +1126,9 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
       if (!await prefs.setString('conversations', json)) {
         throw StateError('stripped conversation save returned false');
       }
-      await _clearStreamCheckpoints();
+      if (await _clearStreamCheckpoints()) {
+        await _clearPendingRestoredConversationMarker();
+      }
       await AppLogService.warning(
         'ConversationsNotifier',
         '持久化对话成功 (剥离 rawRequest/rawResponse 后)',

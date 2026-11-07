@@ -6,6 +6,49 @@ part of 'conversation_provider.dart';
 // ignore_for_file: invalid_use_of_protected_member, invalid_use_of_visible_for_testing_member
 
 extension ConversationsNotifierMutationsExt on ConversationsNotifier {
+  List<Conversation> _restoreDeletedConversationOrder(
+    List<Conversation> original,
+    List<Conversation> deleted,
+  ) {
+    final restored = List<Conversation>.from(state);
+    final deletedById = {
+      for (final conversation in deleted) conversation.id: conversation,
+    };
+    for (var originalIndex = 0;
+        originalIndex < original.length;
+        originalIndex++) {
+      final conversation = deletedById[original[originalIndex].id];
+      if (conversation == null) continue;
+      var insertionIndex = -1;
+      for (var previousIndex = originalIndex - 1;
+          previousIndex >= 0;
+          previousIndex--) {
+        final currentIndex = restored.indexWhere(
+          (item) => item.id == original[previousIndex].id,
+        );
+        if (currentIndex >= 0) {
+          insertionIndex = currentIndex + 1;
+          break;
+        }
+      }
+      if (insertionIndex < 0) {
+        for (var nextIndex = originalIndex + 1;
+            nextIndex < original.length;
+            nextIndex++) {
+          insertionIndex = restored.indexWhere(
+            (item) => item.id == original[nextIndex].id,
+          );
+          if (insertionIndex >= 0) break;
+        }
+      }
+      if (insertionIndex < 0) {
+        insertionIndex = originalIndex.clamp(0, restored.length).toInt();
+      }
+      restored.insert(insertionIndex, conversation);
+    }
+    return pinnedFirstStable(restored);
+  }
+
   // --------------------------------------------------------------------------
   // Mutations
   // --------------------------------------------------------------------------
@@ -112,6 +155,7 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
   /// Deletes a conversation by [id]. If it was the active conversation, clears
   /// the active selection.
   Future<void> deleteConversation(String id) async {
+    final original = List<Conversation>.from(state);
     final deleted = state.where((c) => c.id == id).toList();
     if (deleted.isEmpty) return;
     state = state.where((c) => c.id != id).toList();
@@ -122,7 +166,7 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
         'deletedAt': DateTime.now().toIso8601String(),
       });
     } catch (error) {
-      state = pinnedFirstStable([...deleted, ...state]);
+      state = _restoreDeletedConversationOrder(original, deleted);
       _syncTemporaryTimer();
       debugPrint('Failed to record conversation deletion: $error');
       return;
@@ -140,6 +184,7 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
   /// ordinary history delete, this also removes copied attachments and writes
   /// the removal immediately before a new conversation with the same ID starts.
   Future<bool> deleteFlowConversationWithFiles(String id) async {
+    final original = List<Conversation>.from(state);
     final old = state.where((c) => c.id == id).toList();
     if (old.isEmpty) return true;
     state = state.where((c) => c.id != id).toList();
@@ -161,10 +206,7 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
       // platform store, which can still reject the write. Restore the visible
       // conversation and keep its attachment copies when disk removal fails.
       if (mounted) {
-        state = pinnedFirstStable([
-          ...old,
-          ...state.where((conversation) => conversation.id != id),
-        ]);
+        state = _restoreDeletedConversationOrder(original, old);
         _syncTemporaryTimer();
       }
       try {
@@ -174,6 +216,23 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
         });
       } catch (error) {
         debugPrint('Failed to restore conversation checkpoint marker: $error');
+        final restored = old.first;
+        _pendingRestoredConversations[id] =
+            '${restored.createdAt.toIso8601String()}|${DateTime.now().toIso8601String()}';
+        if (!await _persistPendingRestoredConversations()) {
+          debugPrint('Failed to persist restored conversation rollback marker');
+        }
+        try {
+          if (!await _persistNowChecked()) {
+            debugPrint(
+              'Failed to persist restored flow conversation after checkpoint rollback',
+            );
+          }
+        } catch (persistError) {
+          debugPrint(
+            'Failed to persist restored flow conversation after checkpoint rollback: $persistError',
+          );
+        }
       }
       return false;
     }
@@ -282,6 +341,7 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
 
   /// Deletes multiple conversations by [ids]. Also clears active if included.
   Future<void> batchDelete(List<String> ids) async {
+    final original = List<Conversation>.from(state);
     final idSet = ids.toSet();
     final deleted = state.where((c) => idSet.contains(c.id)).toList();
     if (deleted.isEmpty) return;
@@ -294,7 +354,7 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
         'deletedAt': DateTime.now().toIso8601String(),
       });
     } catch (error) {
-      state = pinnedFirstStable([...deleted, ...state]);
+      state = _restoreDeletedConversationOrder(original, deleted);
       _syncTemporaryTimer();
       debugPrint('Failed to record batch conversation deletion: $error');
       return;
@@ -352,6 +412,7 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
     if (!mounted) return;
     final current = state.where((c) => c.id == conversationId).firstOrNull;
     if (current != null) {
+      final previousMessages = List<ChatMessage>.from(current.messages);
       final nextIds = messages.map((message) => message.id).toSet();
       final removedIds = current.messages
           .where((message) => !nextIds.contains(message.id))
@@ -360,11 +421,22 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
       _replaceMessages(conversationId, messages,
           resetTemporaryCountdown: resetTemporaryCountdown);
       if (removedIds.isNotEmpty) {
-        await _appendJournalBarrier({
-          'kind': 'messageDeleted',
-          'conversationId': conversationId,
-          'messageIds': removedIds,
-        });
+        try {
+          await _appendJournalBarrier({
+            'kind': 'messageDeleted',
+            'conversationId': conversationId,
+            'messageIds': removedIds,
+          });
+        } catch (_) {
+          final latest = state.where((c) => c.id == conversationId).firstOrNull;
+          if (mounted &&
+              latest != null &&
+              identical(latest.messages, messages)) {
+            _replaceMessages(conversationId, previousMessages,
+                resetTemporaryCountdown: false);
+          }
+          rethrow;
+        }
       }
     } else {
       _replaceMessages(conversationId, messages,
