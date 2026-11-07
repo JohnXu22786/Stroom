@@ -2829,6 +2829,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get unifiedTaskTypeAudioSeparation => 'Audio separation';
 
   @override
+  String backgroundTaskGeneratedOcrTitle(Object basename) => 'OCR: $basename';
+
+  @override
+  String backgroundTaskGeneratedAudioSeparationTitle(Object basename) =>
+      'Audio separation: $basename';
+
+  @override
   String get unifiedTaskTypeChat => 'Assistant chat';
 
   @override
@@ -13104,6 +13111,13 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get unifiedTaskTypeAudioSeparation => 'Audio separation';
+
+  @override
+  String backgroundTaskGeneratedOcrTitle(Object basename) => 'OCR: $basename';
+
+  @override
+  String backgroundTaskGeneratedAudioSeparationTitle(Object basename) =>
+      'Audio separation: $basename';
 
   @override
   String get unifiedTaskTypeChat => 'Assistant chat';

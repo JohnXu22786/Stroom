@@ -999,6 +999,18 @@
   "unifiedTaskTypeOcr": "Image text recognition",
   "unifiedTaskTypeAsr": "Audio transcription",
   "unifiedTaskTypeAudioSeparation": "Audio separation",
+  "backgroundTaskGeneratedOcrTitle": "OCR: {basename}",
+  "@backgroundTaskGeneratedOcrTitle": {
+    "placeholders": {
+      "basename": {}
+    }
+  },
+  "backgroundTaskGeneratedAudioSeparationTitle": "Audio separation: {basename}",
+  "@backgroundTaskGeneratedAudioSeparationTitle": {
+    "placeholders": {
+      "basename": {}
+    }
+  },
   "unifiedTaskTypeChat": "Assistant chat",
   "unifiedTaskPlayAudio": "Play audio",
   "unifiedTaskPauseAudio": "Pause audio",

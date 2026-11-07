@@ -34,6 +34,30 @@ String _localizedBackgroundStepLabel(String label, AppLocalizations strings) =>
       _ => label,
     };
 
+String _localizedBackgroundTaskTitle(
+  BackgroundTask task,
+  AppLocalizations strings,
+  String? flowBlockTypeKey,
+) {
+  if (flowBlockTypeKey != task.type.name) return task.title;
+
+  final (prefix, localize) = switch (task.type) {
+    BackgroundTaskType.ocr => (
+        '文字识别_',
+        strings.backgroundTaskGeneratedOcrTitle,
+      ),
+    BackgroundTaskType.audioSeparation => (
+        '音频分离_',
+        strings.backgroundTaskGeneratedAudioSeparationTitle,
+      ),
+    _ => (null, null),
+  };
+  if (prefix == null || localize == null || !task.title.startsWith(prefix)) {
+    return task.title;
+  }
+  return localize(task.title.substring(prefix.length));
+}
+
 // =============================================================================
 // 后台任务卡片（OCR / ASR / 音频分离）
 // 默认折叠，只显示标题栏和类型等基本信息。
@@ -44,12 +68,14 @@ class BackgroundTaskCard extends ConsumerStatefulWidget {
   final BackgroundTask task;
   final bool isUnread;
   final bool isFlowManaged;
+  final String? flowBlockTypeKey;
 
   const BackgroundTaskCard({
     super.key,
     required this.task,
     this.isUnread = false,
     this.isFlowManaged = false,
+    this.flowBlockTypeKey,
   });
 
   @override
@@ -136,7 +162,11 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
                             const SizedBox(width: 6),
                             Expanded(
                               child: Text(
-                                widget.task.title,
+                                _localizedBackgroundTaskTitle(
+                                  widget.task,
+                                  strings,
+                                  widget.flowBlockTypeKey,
+                                ),
                                 style: const TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w500,
