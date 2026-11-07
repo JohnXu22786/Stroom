@@ -16,6 +16,21 @@ class AppLocalizationsZh extends AppLocalizations {
   String get followSystemLanguage => '跟随系统';
 
   @override
+  String get themeDisplaySettingsTitle => '主题与显示';
+
+  @override
+  String get themeDisplayThemeSection => '主题';
+
+  @override
+  String get themeModeLight => '浅色模式';
+
+  @override
+  String get themeModeDark => '深色模式';
+
+  @override
+  String get themeModeSystem => '跟随系统';
+
+  @override
   String get languageNameEnglish => '英语';
 
   @override
@@ -9216,6 +9231,21 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get followSystemLanguage => '跟随系统';
+
+  @override
+  String get themeDisplaySettingsTitle => '主题与显示';
+
+  @override
+  String get themeDisplayThemeSection => '主题';
+
+  @override
+  String get themeModeLight => '浅色模式';
+
+  @override
+  String get themeModeDark => '深色模式';
+
+  @override
+  String get themeModeSystem => '跟随系统';
 
   @override
   String get languageNameEnglish => '英语';

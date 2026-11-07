@@ -115,6 +115,8 @@ void main() {
   });
 
   testWidgets('theme mode and language options update', (tester) async {
+    tester.platformDispatcher.localeTestValue = const Locale('en', 'US');
+    addTearDown(tester.platformDispatcher.clearLocaleTestValue);
     await tester.pumpWidget(
       ProviderScope(
         overrides: [themeProvider.overrideWith((ref) => ThemeNotifier())],
@@ -147,18 +149,18 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('浅色模式'), findsOneWidget);
-    expect(find.text('深色模式'), findsOneWidget);
-    expect(find.text('Follow system'), findsOneWidget);
+    expect(find.text('Light mode'), findsOneWidget);
+    expect(find.text('Dark mode'), findsOneWidget);
+    expect(find.text('Follow system'), findsNWidgets(2));
+    expect(find.text('Theme'), findsOneWidget);
+    expect(find.text('Theme & Display'), findsOneWidget);
     expect(find.text('Language'), findsOneWidget);
     expect(find.text('English'), findsOneWidget);
     expect(find.text('Chinese (Simplified)'), findsOneWidget);
-    expect(find.text('主题'), findsOneWidget);
-    expect(find.text('主题与显示'), findsOneWidget);
     expect(find.byType(Card), findsNWidgets(2));
     expect(find.text('system'), findsOneWidget);
 
-    await tester.tap(find.text('深色模式'));
+    await tester.tap(find.text('Dark mode'));
     await tester.pumpAndSettle();
 
     expect(find.text('dark'), findsOneWidget);
@@ -173,6 +175,11 @@ void main() {
       tester.widget<MaterialApp>(find.byType(MaterialApp)).locale,
       const Locale('zh', 'CN'),
     );
+    expect(find.text('浅色模式'), findsOneWidget);
+    expect(find.text('深色模式'), findsOneWidget);
+    expect(find.text('跟随系统'), findsNWidgets(2));
+    expect(find.text('主题'), findsOneWidget);
+    expect(find.text('主题与显示'), findsOneWidget);
   });
 
   testWidgets('settings entry opens the titled theme and display page', (
