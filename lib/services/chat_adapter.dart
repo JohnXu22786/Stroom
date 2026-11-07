@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
+import 'package:flutter/widgets.dart' show Locale;
 
 import '../models/assistant.dart'
     show Assistant, AssistantSettings, CustomParameter;
@@ -77,6 +78,11 @@ class AvailableModel {
 
 /// 桥接层：将我们的供应商/模型配置系统适配到 flutter_chat_ui 的流式调用
 class ChatAdapter {
+  final Locale? Function()? _localeOverride;
+
+  ChatAdapter({Locale? Function()? localeOverride})
+      : _localeOverride = localeOverride;
+
   /// Per-conversation ChatService instances, keyed by conversation ID.
   /// Each conversation gets its own independent HTTP connection, enabling
   /// multiple conversations to stream concurrently without interference.
@@ -275,6 +281,7 @@ class ChatAdapter {
                   baseUrl: config.host,
                   apiKey: config.key,
                   endpointType: endpointType,
+                  localeOverride: _localeOverride,
                 ),
                 model,
                 config,
@@ -311,6 +318,7 @@ class ChatAdapter {
           baseUrl: config.host,
           apiKey: config.key,
           endpointType: endpointType,
+          localeOverride: _localeOverride,
         );
         return _activeServices.putIfAbsent(convId, () {
           return _buildService(
@@ -490,6 +498,7 @@ class ChatAdapter {
         baseUrl: config.host,
         apiKey: config.key,
         endpointType: endpointType,
+        localeOverride: _localeOverride,
       );
       svc = _buildTransientService(
         provider,
@@ -628,6 +637,7 @@ class ChatAdapter {
       baseUrl: config.host,
       apiKey: config.key,
       endpointType: endpointType,
+      localeOverride: _localeOverride,
     );
     _cachedProvider = provider;
     _cachedModelConfig = modelConfig;
@@ -694,6 +704,7 @@ class ChatAdapter {
       baseUrl: config.host,
       apiKey: config.key,
       endpointType: endpointType,
+      localeOverride: _localeOverride,
     );
     _cachedProvider = provider;
     _cachedModelConfig = modelConfig;

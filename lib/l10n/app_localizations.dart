@@ -16235,6 +16235,66 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Code'**
   String get mermaidEditorSplitCodeLabel;
+
+  /// No description provided for @sseConnectionFailedWithStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'SSE connection failed (HTTP {statusCode}: {statusText})'**
+  String sseConnectionFailedWithStatus(int statusCode, String statusText);
+
+  /// No description provided for @sseConnectionFailedWithoutStatusText.
+  ///
+  /// In en, this message translates to:
+  /// **'SSE connection failed (HTTP {statusCode})'**
+  String sseConnectionFailedWithoutStatusText(int statusCode);
+
+  /// No description provided for @sseConnectionUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'SSE connection failed: unable to connect to server'**
+  String get sseConnectionUnavailable;
+
+  /// No description provided for @sseHttpRequestFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'HTTP request failed (HTTP {statusCode}: {statusText})'**
+  String sseHttpRequestFailed(int statusCode, String statusText);
+
+  /// No description provided for @sseRequestFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Request failed'**
+  String get sseRequestFailed;
+
+  /// No description provided for @sseNetworkRequestFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Network request failed'**
+  String get sseNetworkRequestFailed;
+
+  /// No description provided for @sseNetworkRequestFailedWithStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Network request failed (HTTP {statusCode}: {statusText})'**
+  String sseNetworkRequestFailedWithStatus(int statusCode, String statusText);
+
+  /// No description provided for @sseNetworkRequestFailedWithoutStatusText.
+  ///
+  /// In en, this message translates to:
+  /// **'Network request failed (HTTP {statusCode})'**
+  String sseNetworkRequestFailedWithoutStatusText(int statusCode);
+
+  /// No description provided for @sseNetworkConnectionUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Network request failed: unable to connect to server'**
+  String get sseNetworkConnectionUnavailable;
+
+  /// No description provided for @sseRequestCancelled.
+  ///
+  /// In en, this message translates to:
+  /// **'Request cancelled'**
+  String get sseRequestCancelled;
 }
 
 class _AppLocalizationsDelegate

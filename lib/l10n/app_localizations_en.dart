@@ -9748,6 +9748,48 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get mermaidEditorSplitCodeLabel => 'Code';
+
+  @override
+  String sseConnectionFailedWithStatus(int statusCode, String statusText) {
+    return 'SSE connection failed (HTTP $statusCode: $statusText)';
+  }
+
+  @override
+  String sseConnectionFailedWithoutStatusText(int statusCode) {
+    return 'SSE connection failed (HTTP $statusCode)';
+  }
+
+  @override
+  String get sseConnectionUnavailable =>
+      'SSE connection failed: unable to connect to server';
+
+  @override
+  String sseHttpRequestFailed(int statusCode, String statusText) {
+    return 'HTTP request failed (HTTP $statusCode: $statusText)';
+  }
+
+  @override
+  String get sseRequestFailed => 'Request failed';
+
+  @override
+  String get sseNetworkRequestFailed => 'Network request failed';
+
+  @override
+  String sseNetworkRequestFailedWithStatus(int statusCode, String statusText) {
+    return 'Network request failed (HTTP $statusCode: $statusText)';
+  }
+
+  @override
+  String sseNetworkRequestFailedWithoutStatusText(int statusCode) {
+    return 'Network request failed (HTTP $statusCode)';
+  }
+
+  @override
+  String get sseNetworkConnectionUnavailable =>
+      'Network request failed: unable to connect to server';
+
+  @override
+  String get sseRequestCancelled => 'Request cancelled';
 }
 
 /// The translations for English, as used in the United States (`en_US`).
@@ -19493,4 +19535,46 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get mermaidEditorSplitCodeLabel => 'Code';
+
+  @override
+  String sseConnectionFailedWithStatus(int statusCode, String statusText) {
+    return 'SSE connection failed (HTTP $statusCode: $statusText)';
+  }
+
+  @override
+  String sseConnectionFailedWithoutStatusText(int statusCode) {
+    return 'SSE connection failed (HTTP $statusCode)';
+  }
+
+  @override
+  String get sseConnectionUnavailable =>
+      'SSE connection failed: unable to connect to server';
+
+  @override
+  String sseHttpRequestFailed(int statusCode, String statusText) {
+    return 'HTTP request failed (HTTP $statusCode: $statusText)';
+  }
+
+  @override
+  String get sseRequestFailed => 'Request failed';
+
+  @override
+  String get sseNetworkRequestFailed => 'Network request failed';
+
+  @override
+  String sseNetworkRequestFailedWithStatus(int statusCode, String statusText) {
+    return 'Network request failed (HTTP $statusCode: $statusText)';
+  }
+
+  @override
+  String sseNetworkRequestFailedWithoutStatusText(int statusCode) {
+    return 'Network request failed (HTTP $statusCode)';
+  }
+
+  @override
+  String get sseNetworkConnectionUnavailable =>
+      'Network request failed: unable to connect to server';
+
+  @override
+  String get sseRequestCancelled => 'Request cancelled';
 }

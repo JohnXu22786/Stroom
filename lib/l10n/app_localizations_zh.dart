@@ -9245,6 +9245,46 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get mermaidEditorSplitCodeLabel => '代码';
+
+  @override
+  String sseConnectionFailedWithStatus(int statusCode, String statusText) {
+    return 'SSE 连接失败（HTTP $statusCode：$statusText）';
+  }
+
+  @override
+  String sseConnectionFailedWithoutStatusText(int statusCode) {
+    return 'SSE 连接失败（HTTP $statusCode）';
+  }
+
+  @override
+  String get sseConnectionUnavailable => 'SSE 连接失败：无法连接到服务器';
+
+  @override
+  String sseHttpRequestFailed(int statusCode, String statusText) {
+    return 'HTTP 请求失败（HTTP $statusCode：$statusText）';
+  }
+
+  @override
+  String get sseRequestFailed => '请求失败';
+
+  @override
+  String get sseNetworkRequestFailed => '网络请求失败';
+
+  @override
+  String sseNetworkRequestFailedWithStatus(int statusCode, String statusText) {
+    return '网络请求失败（HTTP $statusCode：$statusText）';
+  }
+
+  @override
+  String sseNetworkRequestFailedWithoutStatusText(int statusCode) {
+    return '网络请求失败（HTTP $statusCode）';
+  }
+
+  @override
+  String get sseNetworkConnectionUnavailable => '网络请求失败：无法连接到服务器';
+
+  @override
+  String get sseRequestCancelled => '请求已取消';
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).
@@ -18487,4 +18527,44 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get mermaidEditorSplitCodeLabel => '代码';
+
+  @override
+  String sseConnectionFailedWithStatus(int statusCode, String statusText) {
+    return 'SSE 连接失败（HTTP $statusCode：$statusText）';
+  }
+
+  @override
+  String sseConnectionFailedWithoutStatusText(int statusCode) {
+    return 'SSE 连接失败（HTTP $statusCode）';
+  }
+
+  @override
+  String get sseConnectionUnavailable => 'SSE 连接失败：无法连接到服务器';
+
+  @override
+  String sseHttpRequestFailed(int statusCode, String statusText) {
+    return 'HTTP 请求失败（HTTP $statusCode：$statusText）';
+  }
+
+  @override
+  String get sseRequestFailed => '请求失败';
+
+  @override
+  String get sseNetworkRequestFailed => '网络请求失败';
+
+  @override
+  String sseNetworkRequestFailedWithStatus(int statusCode, String statusText) {
+    return '网络请求失败（HTTP $statusCode：$statusText）';
+  }
+
+  @override
+  String sseNetworkRequestFailedWithoutStatusText(int statusCode) {
+    return '网络请求失败（HTTP $statusCode）';
+  }
+
+  @override
+  String get sseNetworkConnectionUnavailable => '网络请求失败：无法连接到服务器';
+
+  @override
+  String get sseRequestCancelled => '请求已取消';
 }
