@@ -483,29 +483,6 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
           (message) => deletedForConversation.contains(message.id),
         );
       }
-      await for (final line in _readStreamCheckpointRecords(
-        webKeys: webKeys,
-        nativePath: nativeJournalPath,
-        nativeEnd: nativeJournalEnd,
-      )) {
-        try {
-          final decoded = jsonDecode(line);
-          if (decoded is! Map || decoded['kind'] != null) continue;
-          final conversationId = decoded['conversationId'];
-          final messageId = decoded['messageId'];
-          if (conversationId is! String ||
-              messageId is! String ||
-              messageId.isEmpty ||
-              deletedConversations.contains(conversationId) ||
-              (deletedMessages[conversationId]?.contains(messageId) ?? false)) {
-            continue;
-          }
-          _streamCheckpointKeys
-              .add(_streamCheckpointKey(conversationId, messageId));
-        } catch (_) {
-          // Invalid records do not represent replayable stream checkpoints.
-        }
-      }
       final byId = {
         for (final conversation in conversations) conversation.id: conversation,
       };
@@ -530,6 +507,8 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
               (deletedMessages[conversationId]?.contains(messageId) ?? false)) {
             continue;
           }
+          _streamCheckpointKeys
+              .add(_streamCheckpointKey(conversationId, messageId));
           final recreatedAt = recreatedConversations[conversationId];
           final checkpointCreatedAt =
               DateTime.tryParse(record['createdAt'] as String? ?? '');
