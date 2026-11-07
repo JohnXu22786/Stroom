@@ -9512,6 +9512,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get bgTaskErrorDetailsHidden => 'Error details were hidden';
 
   @override
+  String get notificationBannerTaskCompletedHeading => 'Task completed';
+
+  @override
+  String get notificationBannerTaskFailedHeading => 'Task failed';
+
+  @override
   String notificationTaskCompletedTitle(String typeLabel) {
     return 'Task completed: $typeLabel';
   }
@@ -19377,6 +19383,12 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get bgTaskErrorDetailsHidden => 'Error details were hidden';
+
+  @override
+  String get notificationBannerTaskCompletedHeading => 'Task completed';
+
+  @override
+  String get notificationBannerTaskFailedHeading => 'Task failed';
 
   @override
   String notificationTaskCompletedTitle(String typeLabel) {

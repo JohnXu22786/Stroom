@@ -5278,6 +5278,8 @@
   "bgTaskInterruptedOnRestart": "应用重启，已中断",
   "bgTaskOcrErrorDetailsHidden": "OCR 错误详情已隐藏",
   "bgTaskErrorDetailsHidden": "错误详情已隐藏",
+  "notificationBannerTaskCompletedHeading": "任务完成",
+  "notificationBannerTaskFailedHeading": "任务失败",
   "notificationTaskCompletedTitle": "任务完成：{typeLabel}",
   "@notificationTaskCompletedTitle": {
     "placeholders": {

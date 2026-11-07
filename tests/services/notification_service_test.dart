@@ -4,6 +4,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/services/notification_service.dart';
 
 /// 记录插件 show 调用时使用的通知 ID。
@@ -142,5 +143,43 @@ void main() {
       service.blockedGuide,
       '通知已被系统屏蔽，请前往系统设置允许 Stroom 的通知权限。',
     );
+  });
+
+  testWidgets('in-app banner localizes its heading and preserves task title',
+      (tester) async {
+    for (final locale in const [Locale('en', 'US'), Locale('zh', 'CN')]) {
+      final strings = lookupAppLocalizations(locale);
+      for (final (type, heading) in [
+        (
+          NotificationType.taskCompleted,
+          strings.notificationBannerTaskCompletedHeading,
+        ),
+        (
+          NotificationType.taskFailed,
+          strings.notificationBannerTaskFailedHeading,
+        ),
+      ]) {
+        await tester.pumpWidget(
+          Directionality(
+            textDirection: TextDirection.ltr,
+            child: InAppNotificationBanner(
+              locale: locale,
+              payload: NotificationPayload(
+                taskId: 'task-banner',
+                type: type,
+                title: 'OCR report',
+                typeLabel: 'OCR',
+              ),
+              isDark: false,
+              onDismiss: () {},
+            ),
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 400));
+
+        expect(find.text(heading), findsOneWidget);
+        expect(find.text('OCR report'), findsOneWidget);
+      }
+    }
   });
 }
