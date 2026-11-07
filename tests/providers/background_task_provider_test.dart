@@ -16261,6 +16261,110 @@ void main() {
     );
 
     test(
+      'legacy OCR instruction migration preserves inline documentation prose after a masked prefix',
+      () {
+        BackgroundTask taskFor(String id, String instruction) =>
+            BackgroundTask.fromMap({
+              'id': id,
+              'type': 'ocr',
+              'title': 'legacy OCR request',
+              'status': 'failed',
+              'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+              'rawRequest': {
+                'url': 'https://api.example.com/v1/chat/completions',
+                'headers': {'Authorization': 'Bearer documentation…'},
+                'body': {
+                  'model': 'vision-model',
+                  'messages': [
+                    {
+                      'role': 'user',
+                      'content': [
+                        {'type': 'text', 'text': instruction},
+                      ],
+                    },
+                  ],
+                },
+              },
+            });
+
+        const instruction = 'Read the documentation blueprints';
+        final task = taskFor(
+          'legacy-ocr-documentation-inline-blueprints',
+          instruction,
+        );
+        final persisted = jsonEncode(task.toMap());
+        final serializedTask = jsonDecode(persisted) as Map<String, dynamic>;
+        final serializedRetryData =
+            serializedTask['retryData'] as Map<String, dynamic>;
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          instruction,
+        );
+        expect(serializedRetryData['instructionContent'], instruction);
+        expect(persisted, contains(instruction));
+        expect(serializedTask, isNot(contains('rawRequest')));
+        expect(persisted, isNot(contains('Bearer documentation…')));
+
+        const echoedCredential = 'foobarxyz';
+        final credentialTask = taskFor(
+          'legacy-ocr-documentation-inline-blueprints-credential-echo',
+          '$instruction $echoedCredential',
+        );
+        final credentialPersisted = jsonEncode(credentialTask.toMap());
+        expect(
+          OcrRetrySnapshot.fromMap(credentialTask.retryData!)
+              .instructionContent,
+          isNot(contains(echoedCredential)),
+        );
+        expect(credentialPersisted, isNot(contains(echoedCredential)));
+      },
+    );
+
+    test(
+      'preserves line-broken documentation prose after a masked prefix',
+      () {
+        const instruction =
+            'Please review all the documentation\ncarefully.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-documentation-all-carefully-line-break',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer documentation…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+        final serializedTask = jsonDecode(persisted) as Map<String, dynamic>;
+        final serializedRetryData =
+            serializedTask['retryData'] as Map<String, dynamic>;
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          instruction,
+        );
+        expect(serializedRetryData['instructionContent'], instruction);
+        expect(persisted, contains(jsonEncode(instruction)));
+        expect(serializedTask, isNot(contains('rawRequest')));
+        expect(persisted, isNot(contains('Bearer documentation…')));
+      },
+    );
+
+    test(
       'legacy OCR instruction migration preserves recognized prose and redacts documentation echoes after a line break',
       () {
         BackgroundTask taskFor(String id, String instruction) =>
