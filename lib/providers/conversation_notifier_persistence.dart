@@ -52,8 +52,7 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
         _pendingUnindexedMessageDeletionIds.isEmpty) {
       return false;
     }
-    final hadPendingDeletions =
-        _pendingUnindexedMessageDeletionIds.isNotEmpty;
+    final hadPendingDeletions = _pendingUnindexedMessageDeletionIds.isNotEmpty;
     for (final entry in _pendingUnindexedMessageDeletionIds.entries) {
       final checkpointedIds = entry.value
           .where((id) => _hasStreamCheckpoint(entry.key, id))

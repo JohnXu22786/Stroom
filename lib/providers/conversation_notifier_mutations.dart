@@ -426,9 +426,8 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
           .where((id) => _hasStreamCheckpoint(conversationId, id))
           .toList();
       if (!_streamCheckpointKeyIndexIsCurrent) {
-        final uncertainIds = allRemovedIds
-            .where((id) => !removedIds.contains(id))
-            .toList();
+        final uncertainIds =
+            allRemovedIds.where((id) => !removedIds.contains(id)).toList();
         if (uncertainIds.isNotEmpty) {
           _pendingUnindexedMessageDeletionIds
               .putIfAbsent(conversationId, () => <String>{})
