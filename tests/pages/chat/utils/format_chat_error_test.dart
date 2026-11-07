@@ -33,6 +33,7 @@ void main() {
       );
       expect(serverError, contains('Unable to connect to the server'));
       expect(serverError, isNot(contains('无法连接到服务器')));
+      expect(serverError, contains('Exception:'));
       expect(serverError, contains(serverDetails));
 
       const providerDetails = 'provider=Demo https://api.example.test';
@@ -46,8 +47,10 @@ void main() {
         locale: const Locale('zh', 'CN'),
       );
       expect(providerError, isNot(contains('请先配置聊天供应商')));
+      expect(providerError, contains('\nException:'));
       expect(providerError, contains(providerDetails));
       expect(apiKeyError, isNot(contains('API key not configured')));
+      expect(apiKeyError, contains('\nException:'));
       expect(apiKeyError, contains(apiKeyDetails));
     });
 

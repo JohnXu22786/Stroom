@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:dio/dio.dart';
+import 'package:flutter/widgets.dart' show Locale;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -13,10 +14,16 @@ import 'package:stroom/services/chat_retry_policy.dart'
     show TransportRetryPolicy;
 import 'package:stroom/services/chat_service.dart';
 import 'package:stroom/services/chat_stream_manager.dart';
+import 'package:stroom/providers/chat_manager_provider.dart';
 part 'chat_stream_manager_test_p1.dart';
 part 'chat_stream_manager_test_p2.dart';
 part 'chat_stream_manager_test_p3.dart';
 part 'chat_stream_manager_test_p4.dart';
+
+class _EnglishLocaleController extends LocaleSelectionController {
+  @override
+  Locale? build() => const Locale('en', 'US');
+}
 
 // ============================================================================
 // Mock provider that yields controlled events for testing

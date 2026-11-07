@@ -1770,6 +1770,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chatErrorPrefix => '错误: ';
 
   @override
+  String get chatErrorCancelled => '用户中断了输出';
+
+  @override
   String get chatErrorProviderNotConfigured => '聊天 API 未配置，请先前往设置页面配置';
 
   @override
@@ -11421,6 +11424,9 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get chatErrorPrefix => '错误: ';
+
+  @override
+  String get chatErrorCancelled => '用户中断了输出';
 
   @override
   String get chatErrorProviderNotConfigured => '聊天 API 未配置，请先前往设置页面配置';

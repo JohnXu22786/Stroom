@@ -15,42 +15,46 @@ String formatChatErrorMessage(
   final errorStr = error.toString();
 
   if (errorStr.contains('请先配置聊天供应商')) {
-    final details = _detailsAfterKnownMessage(
+    final details = _detailsAroundKnownMessage(
       errorStr,
       '请先配置聊天供应商',
     );
-    return '${l10n.chatErrorPrefix}${l10n.chatErrorProviderNotConfigured}'
-        '$details';
+    return _withDetails(
+      '${l10n.chatErrorPrefix}${l10n.chatErrorProviderNotConfigured}',
+      details,
+    );
   }
 
   if (errorStr.contains('API key not configured')) {
-    final details = _detailsAfterKnownMessage(
+    final details = _detailsAroundKnownMessage(
       errorStr,
       'API key not configured',
     );
-    return '${l10n.chatErrorPrefix}${l10n.chatErrorApiKeyNotConfigured}'
-        '$details';
+    return _withDetails(
+      '${l10n.chatErrorPrefix}${l10n.chatErrorApiKeyNotConfigured}',
+      details,
+    );
   }
 
   if (errorStr.contains('无法连接到服务器') || errorStr.contains('连接错误')) {
-    final details = _detailsAfterFirstKnownMessage(errorStr, [
-          '无法连接到服务器，请检查网络连接和 API 地址',
-          '无法连接到服务器',
-          '连接错误',
-        ]) ??
-        '';
+    final details = _detailsAroundFirstKnownMessage(errorStr, [
+      '无法连接到服务器，请检查网络连接和 API 地址',
+      '无法连接到服务器',
+      '连接错误',
+    ]);
     return _withDetails(
       '${l10n.chatErrorPrefix}${l10n.chatErrorServerConnection}',
-      details,
+      details ?? errorStr,
     );
   }
 
   if (errorStr.contains('SocketException') ||
       errorStr.contains('Connection refused') ||
       errorStr.contains('连接失败')) {
-    final details = _detailsAfterFirstKnownMessage(errorStr, [
+    final details = _detailsAroundFirstKnownMessage(errorStr, [
       '网络连接失败，请检查网络连接',
       '网络连接失败',
+      '连接失败',
     ]);
     return _withDetails(
       '${l10n.chatErrorPrefix}${l10n.chatErrorNetworkConnection}',
@@ -59,7 +63,7 @@ String formatChatErrorMessage(
   }
 
   if (errorStr.contains('timeout') || errorStr.contains('超时')) {
-    final details = _detailsAfterFirstKnownMessage(errorStr, [
+    final details = _detailsAroundFirstKnownMessage(errorStr, [
       '连接超时，服务器无响应',
       '连接超时',
     ]);
@@ -76,20 +80,23 @@ String formatChatErrorMessage(
   return '${l10n.chatErrorPrefix}$errorStr';
 }
 
-String _detailsAfterKnownMessage(String error, String knownMessage) {
-  final messageEnd = error.indexOf(knownMessage) + knownMessage.length;
-  final details =
+String _detailsAroundKnownMessage(String error, String knownMessage) {
+  final messageStart = error.indexOf(knownMessage);
+  final messageEnd = messageStart + knownMessage.length;
+  final before = error.substring(0, messageStart);
+  final after =
       error.substring(messageEnd).replaceFirst(RegExp(r'^\s*[:：-]\s*'), '');
-  return details.isEmpty ? '' : '\n$details';
+  final details = '$before$after';
+  return details.trim().isEmpty ? '' : details;
 }
 
-String? _detailsAfterFirstKnownMessage(
+String? _detailsAroundFirstKnownMessage(
   String error,
   List<String> knownMessages,
 ) {
   for (final knownMessage in knownMessages) {
     if (error.contains(knownMessage)) {
-      return _detailsAfterKnownMessage(error, knownMessage);
+      return _detailsAroundKnownMessage(error, knownMessage);
     }
   }
   return null;

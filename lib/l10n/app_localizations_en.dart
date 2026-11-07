@@ -1881,6 +1881,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatErrorPrefix => 'Error: ';
 
   @override
+  String get chatErrorCancelled => 'Output was interrupted by the user';
+
+  @override
   String get chatErrorProviderNotConfigured =>
       'Chat API is not configured. Open Settings to configure a provider.';
 
@@ -12070,6 +12073,9 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get chatErrorPrefix => 'Error: ';
+
+  @override
+  String get chatErrorCancelled => 'Output was interrupted by the user';
 
   @override
   String get chatErrorProviderNotConfigured =>

@@ -68,6 +68,8 @@ void main() {
     await tester.pump();
     await tester.tap(find.byIcon(Icons.attach_file_outlined));
     await tester.pump(const Duration(milliseconds: 500));
+    await tester.ensureVisible(find.text('Take photo'));
+    await tester.pump();
     await tester.tap(find.text('Take photo'));
     await tester.pump(const Duration(milliseconds: 500));
 

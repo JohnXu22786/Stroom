@@ -581,6 +581,35 @@ void chatStreamManagerGroup1() {
       manager.dispose();
     });
 
+    test('cancel error block follows the selected locale', () async {
+      final container = ProviderContainer(overrides: [
+        localeProvider.overrideWith(_EnglishLocaleController.new),
+      ]);
+      addTearDown(container.dispose);
+      final manager = container.read(chatStreamManagerProvider);
+      addTearDown(manager.dispose);
+      final completer = Completer<void>();
+      final provider = _MockProvider(
+        [
+          [AIStreamEvent('Partial response')],
+        ],
+        waitForYield: completer,
+      );
+      manager.adapter.forceService(_makeChatService(provider));
+
+      final future = manager.startStreaming(
+        text: 'Hi',
+        convId: 'conv-cancel-localized',
+        history: [_userMsg('Hi')],
+      );
+      manager.cancel('conv-cancel-localized');
+      completer.complete();
+
+      final result = await future;
+      final errorBlock = result.blocks.whereType<ErrorBlock>().single;
+      expect(errorBlock.message, 'Output was interrupted by the user');
+    });
+
     test('cancel without convId cancels all streams', () async {
       final manager = ChatStreamManager();
       final completer = Completer<void>();

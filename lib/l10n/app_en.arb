@@ -621,6 +621,7 @@
   "chatInfoPath": "Path",
   "chatErrorBack": "Back",
   "chatErrorPrefix": "Error: ",
+  "chatErrorCancelled": "Output was interrupted by the user",
   "chatErrorProviderNotConfigured": "Chat API is not configured. Open Settings to configure a provider.",
   "chatErrorApiKeyNotConfigured": "API key is not configured. Check Settings.",
   "chatErrorServerConnection": "Unable to connect to the server. Check your network connection and API address.",

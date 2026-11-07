@@ -3206,6 +3206,12 @@ abstract class AppLocalizations {
   /// **'Error: '**
   String get chatErrorPrefix;
 
+  /// No description provided for @chatErrorCancelled.
+  ///
+  /// In en, this message translates to:
+  /// **'Output was interrupted by the user'**
+  String get chatErrorCancelled;
+
   /// No description provided for @chatErrorProviderNotConfigured.
   ///
   /// In en, this message translates to:

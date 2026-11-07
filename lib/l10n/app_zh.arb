@@ -621,6 +621,7 @@
   "chatInfoPath": "路径",
   "chatErrorBack": "返回",
   "chatErrorPrefix": "错误: ",
+  "chatErrorCancelled": "用户中断了输出",
   "chatErrorProviderNotConfigured": "聊天 API 未配置，请先前往设置页面配置",
   "chatErrorApiKeyNotConfigured": "API Key 未配置，请检查设置",
   "chatErrorServerConnection": "无法连接到服务器，请检查网络连接和 API 地址",
