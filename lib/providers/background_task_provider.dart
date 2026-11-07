@@ -3029,6 +3029,7 @@ String _legacyOcrRedactMaskedCredentialEchoes(
       '$leftBoundary($tokenLead'
       '${_legacyOcrOpenMaskPrefixPattern(prefix)}'
       '$lineBreakContinuation$suffixPattern)',
+      caseSensitive: false,
     );
     sanitized = sanitized.replaceAllMapped(extendedPrefix, (match) {
       final boundaryLength = match.group(0)!.length - match.group(1)!.length;
