@@ -66,7 +66,7 @@ class _OcrInstructionManageDialogState
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final l10n = AppLocalizations.of(context);
+    final l10n = AppLocalizations.of(context)!;
     final instructions = ref.watch(ocrInstructionsProvider);
 
     return AlertDialog(
@@ -263,7 +263,7 @@ class _InstructionEditorDialogState extends State<_InstructionEditorDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
+    final l10n = AppLocalizations.of(context)!;
     final canSave = _contentController.text.trim().isNotEmpty;
     return AlertDialog(
       title: Text(
