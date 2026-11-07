@@ -1541,10 +1541,6 @@ bool _legacyOcrHasCredentialUseContextAt(
     'use',
     'using',
   }.contains(actionVerb?.group(1)?.toLowerCase());
-  final myProjectManagementCredentialRequest = naturalWord ==
-          'myprojectmanagement' &&
-      useVerb &&
-      RegExp(r'^for (?:the )?request\b', caseSensitive: false).hasMatch(after);
   final tokenRequestEchoContext = prefix.toLowerCase() == 'token' &&
       useVerb &&
       requestTargetAfterConsumedConnector &&
@@ -1574,8 +1570,7 @@ bool _legacyOcrHasCredentialUseContextAt(
           credentialTargetAfterConsumedConnector ||
           (actionVerb != null &&
               actionTarget &&
-              (myProjectManagementCredentialRequest ||
-                  (!isNaturalContinuation &&
+              ((!isNaturalContinuation &&
                       (!isNaturalWordContinuation || maskPrefixIsEmbedded)) ||
                   explicitCredentialTarget ||
                   credentialHeaderTarget ||
@@ -2307,13 +2302,20 @@ bool _legacyOcrTextContainsMaskedCredential(
                 !naturalWordContinuation;
             final repeatedStructuredHyphenatedSuffix = allowEmbeddedPrefix &&
                 _legacyOcrHasRepeatedHyphenatedAlphaComponent(prefix, suffix);
+            final myProjectManagementCredentialRequest =
+                naturalWord == 'myprojectmanagement' &&
+                    RegExp(r'\buse$', caseSensitive: false)
+                        .hasMatch(beforePartBoundaryWord) &&
+                    RegExp(r'^for (?:the )?request\b', caseSensitive: false)
+                        .hasMatch(afterPartBoundaryWord);
             final hasExplicitCredentialUseContext =
-                _legacyOcrHasCredentialUseContext(
-              textWithoutPartMarkers,
-              match,
-              prefix,
-              suffix,
-            );
+                myProjectManagementCredentialRequest ||
+                    _legacyOcrHasCredentialUseContext(
+                      textWithoutPartMarkers,
+                      match,
+                      prefix,
+                      suffix,
+                    );
             final looksCredentialLike = hasExplicitCredentialUseContext ||
                 unicodeOpaqueContinuation ||
                 prefixHasKeyMarker ||
@@ -3119,6 +3121,13 @@ String _legacyOcrRedactMaskedCredentialEchoes(
             caseSensitive: false,
           ).hasMatch(beforeEcho.trimRight()) &&
           RegExp(r'^[.!?]*$').hasMatch(afterEcho.trim());
+      final myProjectManagementCredentialRequest =
+          prefix.toLowerCase() == 'myproject' &&
+              echoSuffix.toLowerCase() == 'management' &&
+              RegExp(r'\buse$', caseSensitive: false)
+                  .hasMatch(beforeEcho.trimRight()) &&
+              RegExp(r'^for (?:the )?request\b', caseSensitive: false)
+                  .hasMatch(afterEcho.trimLeft());
       final authenticateWithToProcessContext = RegExp(
             r'\bauthenticate with$',
             caseSensitive: false,
@@ -3131,7 +3140,8 @@ String _legacyOcrRedactMaskedCredentialEchoes(
           );
       final hasCredentialUseContext = splitEchoHasCredentialUseContext ||
           bareSecretBasedUseContext ||
-          authenticateWithToProcessContext;
+          authenticateWithToProcessContext ||
+          myProjectManagementCredentialRequest;
       final naturalReadInstructionsPrompt =
           _legacyOcrHasNaturalWordContinuation(prefix, echoSuffix) &&
               RegExp(
