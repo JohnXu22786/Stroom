@@ -25,6 +25,15 @@ class _DocumentsDirectory extends PathProviderPlatform {
   Future<String?> getApplicationDocumentsPath() async => path;
 }
 
+Future<void> _pumpUntilVisible(WidgetTester tester, Finder finder) async {
+  for (var i = 0; i < 100 && !tester.any(finder); i++) {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 50)),
+    );
+    await tester.pump(const Duration(milliseconds: 50));
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   late Directory temporaryDirectory;
@@ -151,9 +160,7 @@ void main() {
       AppStorage.resetCache();
 
       await tester.pumpWidget(const ProviderScope(child: StartupApp()));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
-      await tester.pump();
+      await _pumpUntilVisible(tester, find.text('数据安全保护'));
 
       expect(find.text('数据安全保护'), findsOneWidget);
       final l10n = AppLocalizations.of(
@@ -189,9 +196,7 @@ void main() {
       AppStorage.resetCache();
 
       await tester.pumpWidget(const ProviderScope(child: StartupApp()));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
-      await tester.pump();
+      await _pumpUntilVisible(tester, find.text('Data safety protection'));
 
       expect(find.text('Data safety protection'), findsOneWidget);
       final l10n = AppLocalizations.of(

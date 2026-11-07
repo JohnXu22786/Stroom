@@ -252,6 +252,32 @@ void main() {
         ),
         findsOneWidget,
       );
+      ScaffoldMessenger.of(navigatorKey.currentContext!).clearSnackBars();
+      await tester.pump();
+
+      pickerFailure = PlatformException(
+        code: 'error',
+        message:
+            'Exception: ${BackupLocationManager.noBackupDirectoryWriteErrorMessage}',
+      );
+      expect(
+        await tester.runAsync(
+          () => BackupService.exportBackup(
+            navigatorKey.currentContext!,
+            selection: emptySelection,
+          ),
+        ),
+        isFalse,
+      );
+      await tester.pump();
+      expect(
+        find.text(
+          l10n.backupServiceExportFailed(
+            l10n.backupServiceNoBackupFolderSelected,
+          ),
+        ),
+        findsOneWidget,
+      );
       pickerFailure = null;
 
       await tester.pumpWidget(const SizedBox());

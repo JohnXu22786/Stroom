@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart'
     show debugPrint, kIsWeb, visibleForTesting;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show PlatformException;
 import 'package:archive/archive.dart' hide ZLibDecoder;
 import 'package:crypto/crypto.dart';
 import 'package:file_picker/file_picker.dart';
@@ -4871,7 +4872,11 @@ class BackupService {
         final errorText = e.toString();
         final noBackupFolderError =
             BackupLocationManager.noBackupDirectoryWriteErrorMessage;
-        final errorDetail = errorText == 'Exception: $noBackupFolderError'
+        final isMissingBackupFolderError = (e is Exception &&
+                errorText == 'Exception: $noBackupFolderError') ||
+            (e is PlatformException &&
+                e.message == 'Exception: $noBackupFolderError');
+        final errorDetail = isMissingBackupFolderError
             ? l10n.backupServiceNoBackupFolderSelected
             : errorText;
         ScaffoldMessenger.of(context).showSnackBar(

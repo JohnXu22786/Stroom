@@ -306,7 +306,9 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
       _streamCheckpointKeys
           .add(_streamCheckpointKey(conversationId, messageId));
     }
-    _streamCheckpointKeyIndexIsCurrent = true;
+    if (!_streamCheckpointReplayInProgress) {
+      _streamCheckpointKeyIndexIsCurrent = true;
+    }
   }
 
   Future<void> _appendJournalBarrier(Map<String, dynamic> record) async {
@@ -359,31 +361,30 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
     Map<String, Set<String>> pendingRestoredMessageIds =
         const <String, Set<String>>{},
   }) async {
+    final refreshCheckpointIndex = !_streamCheckpointKeyIndexIsCurrent;
+    if (refreshCheckpointIndex) {
+      _streamCheckpointReplayInProgress = true;
+    }
     try {
       conversations = List<Conversation>.from(conversations);
-      late final List<String> records;
-      if (kIsWeb) {
-        final keys = await WebFileStore.keysWithPrefix(_streamJournalWebPrefix)
-          ..sort();
-        records = <String>[];
-        for (final key in keys) {
-          final bytes = await WebFileStore.read(key);
-          if (bytes != null) {
-            records.add(utf8.decode(bytes, allowMalformed: true));
-          }
-        }
-      } else {
-        records = _streamJournalPresent
-            ? await AppStorage.readDurableLines(await _streamJournalPath()) ??
-                <String>[]
-            : <String>[];
-      }
-      _streamCheckpointKeyIndexIsCurrent = true;
+      final webKeys = kIsWeb
+          ? await WebFileStore.keysWithPrefix(_streamJournalWebPrefix)
+          : null;
+      webKeys?.sort();
+      final nativeJournalPath =
+          !kIsWeb && _streamJournalPresent ? await _streamJournalPath() : null;
+      final nativeJournalEnd = nativeJournalPath == null
+          ? null
+          : await AppStorage.durableFileLength(nativeJournalPath);
       final deletedConversations = <String>{};
       final deletedConversationAt = <String, DateTime>{};
       final deletedMessages = <String, Set<String>>{};
       final recreatedConversations = <String, DateTime>{};
-      for (final line in records) {
+      await for (final line in _readStreamCheckpointRecords(
+        webKeys: webKeys,
+        nativePath: nativeJournalPath,
+        nativeEnd: nativeJournalEnd,
+      )) {
         try {
           final decoded = jsonDecode(line);
           if (decoded is! Map) continue;
@@ -482,29 +483,14 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
           (message) => deletedForConversation.contains(message.id),
         );
       }
-      for (final line in records) {
-        try {
-          final decoded = jsonDecode(line);
-          if (decoded is! Map || decoded['kind'] != null) continue;
-          final conversationId = decoded['conversationId'];
-          final messageId = decoded['messageId'];
-          if (conversationId is! String ||
-              messageId is! String ||
-              messageId.isEmpty ||
-              deletedConversations.contains(conversationId) ||
-              (deletedMessages[conversationId]?.contains(messageId) ?? false)) {
-            continue;
-          }
-          _streamCheckpointKeys
-              .add(_streamCheckpointKey(conversationId, messageId));
-        } catch (_) {
-          // Invalid records do not represent replayable stream checkpoints.
-        }
-      }
       final byId = {
         for (final conversation in conversations) conversation.id: conversation,
       };
-      for (final line in records) {
+      await for (final line in _readStreamCheckpointRecords(
+        webKeys: webKeys,
+        nativePath: nativeJournalPath,
+        nativeEnd: nativeJournalEnd,
+      )) {
         if (line.isEmpty) continue;
         try {
           final decoded = jsonDecode(line);
@@ -521,6 +507,8 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
               (deletedMessages[conversationId]?.contains(messageId) ?? false)) {
             continue;
           }
+          _streamCheckpointKeys
+              .add(_streamCheckpointKey(conversationId, messageId));
           final recreatedAt = recreatedConversations[conversationId];
           final checkpointCreatedAt =
               DateTime.tryParse(record['createdAt'] as String? ?? '');
@@ -698,11 +686,43 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
           debugPrint('Skipping invalid conversation stream checkpoint: $e');
         }
       }
+      if (refreshCheckpointIndex) {
+        _streamCheckpointKeyIndexIsCurrent = true;
+      }
     } catch (e) {
+      if (refreshCheckpointIndex) {
+        _streamCheckpointKeyIndexIsCurrent = false;
+      }
       debugPrint('Failed to replay conversation stream checkpoints: $e');
       if (strict) rethrow;
+    } finally {
+      if (refreshCheckpointIndex) {
+        _streamCheckpointReplayInProgress = false;
+      }
     }
     return conversations;
+  }
+
+  Stream<String> _readStreamCheckpointRecords({
+    required List<String>? webKeys,
+    required String? nativePath,
+    required int? nativeEnd,
+  }) async* {
+    if (webKeys != null) {
+      for (final key in webKeys) {
+        final bytes = await WebFileStore.read(key);
+        if (bytes != null) {
+          yield utf8.decode(bytes, allowMalformed: true);
+        }
+      }
+      return;
+    }
+    if (nativePath == null || nativeEnd == null) return;
+    final records = await AppStorage.readDurableLines(
+      nativePath,
+      end: nativeEnd,
+    );
+    if (records != null) yield* records;
   }
 
   bool _replaySectionDeltas(List<String> sections, dynamic rawDeltas) {
