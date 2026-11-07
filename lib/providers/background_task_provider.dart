@@ -5565,7 +5565,11 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       _iosSyncInterval,
       (_) => _syncIosContinuedTask(),
     );
-    unawaited(IosContinuedTaskService.instance.submit());
+    unawaited(
+      IosContinuedTaskService.instance.submit(
+        title: localizations.iosContinuedTaskTitle,
+      ),
+    );
     final totalSteps = running.fold<int>(0, (sum, t) => sum + t.steps.length);
     final doneSteps = running.fold<int>(
       0,

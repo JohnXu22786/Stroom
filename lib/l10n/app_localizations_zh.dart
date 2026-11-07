@@ -9733,6 +9733,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get appLogCopyDone => '已复制全部日志内容';
+
+  @override
+  String get iosContinuedTaskTitle => 'Stroom 后台任务';
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).
@@ -19463,4 +19466,7 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get appLogCopyDone => '已复制全部日志内容';
+
+  @override
+  String get iosContinuedTaskTitle => 'Stroom 后台任务';
 }

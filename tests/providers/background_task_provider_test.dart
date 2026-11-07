@@ -14,6 +14,8 @@ import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/models/ocr_batch_execution.dart';
 import 'package:stroom/pages/ocr/ocr_retry_snapshot.dart';
 import 'package:stroom/providers/background_task_provider.dart';
+import 'package:stroom/providers/locale_provider.dart'
+    show appLocalizationsForLocale;
 import 'package:stroom/providers/task_provider.dart';
 import 'package:stroom/services/asr_retry_storage.dart';
 import 'package:stroom/services/ios_continued_task_service.dart';
@@ -27198,6 +27200,36 @@ void main() {
     // ==================================================================
     // iOS 26+ 常驻后台任务桥接挂钩
     // ==================================================================
+
+    test('iOS continued task bridge: title follows the app locale', () async {
+      IosContinuedTaskService.debugForceSupported = true;
+      final calls = <MethodCall>[];
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('com.johntsui.stroom/ios_continued_task'),
+        (MethodCall call) async {
+          calls.add(call);
+          return null;
+        },
+      );
+
+      for (final (locale, expectedTitle) in [
+        (const Locale('en'), 'Background task'),
+        (const Locale('zh'), 'Stroom 后台任务'),
+      ]) {
+        calls.clear();
+        final notifier = BackgroundTaskNotifier(
+          localizationsResolver: () => appLocalizationsForLocale(locale),
+        );
+        notifier.addTask(type: BackgroundTaskType.ocr, title: 'user task name');
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        expect(
+          calls.where((call) => call.method == 'submit').single.arguments,
+          {'title': expectedTitle},
+        );
+        notifier.dispose();
+      }
+    });
 
     test(
         'iOS continued task bridge: submit while running, progress on steps, '

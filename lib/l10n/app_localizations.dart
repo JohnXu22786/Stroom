@@ -16990,6 +16990,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Copied all log content'**
   String get appLogCopyDone;
+
+  /// Title shown in iOS continued-task system UI.
+  ///
+  /// In en, this message translates to:
+  /// **'Background task'**
+  String get iosContinuedTaskTitle;
 }
 
 class _AppLocalizationsDelegate

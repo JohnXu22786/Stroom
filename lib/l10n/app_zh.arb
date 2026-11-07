@@ -5912,5 +5912,9 @@
       }
     }
   },
-  "appLogCopyDone": "已复制全部日志内容"
+  "appLogCopyDone": "已复制全部日志内容",
+  "iosContinuedTaskTitle": "Stroom 后台任务",
+  "@iosContinuedTaskTitle": {
+    "description": "Title shown in iOS continued-task system UI."
+  }
 }
