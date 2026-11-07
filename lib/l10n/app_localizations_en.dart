@@ -10081,8 +10081,8 @@ class AppLocalizationsEn extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '# lines',
-      one: '# line',
+      other: '$count lines',
+      one: '$count line',
     );
     return '$_temp0';
   }
@@ -20181,8 +20181,8 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '# lines',
-      one: '# line',
+      other: '$count lines',
+      one: '$count line',
     );
     return '$_temp0';
   }

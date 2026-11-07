@@ -16717,7 +16717,7 @@ abstract class AppLocalizations {
   /// Number of lines in the log file.
   ///
   /// In en, this message translates to:
-  /// **'{count, plural, =1{# line} other{# lines}}'**
+  /// **'{count, plural, =1{{count} line} other{{count} lines}}'**
   String appLogLineCount(int count);
 
   /// No description provided for @appLogCopyAll.

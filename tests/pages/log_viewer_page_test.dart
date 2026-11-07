@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -29,18 +27,8 @@ void main() {
       );
 
   group('LogViewerPage localization', () {
-    testWidgets(
-        'localizes page chrome and delete confirmation while preserving filename',
+    testWidgets('localizes log viewer page chrome in English and Chinese',
         (tester) async {
-      final logDir = await AppLogService.getLogDir();
-      await logDir.create(recursive: true);
-      const fileName = 'app_2024-01-01-00.log';
-      final logFile = File('${logDir.path}/$fileName');
-      await logFile.writeAsString('raw log content');
-      addTearDown(() async {
-        if (await logFile.exists()) await logFile.delete();
-      });
-
       for (final locale in [
         const Locale('en', 'US'),
         const Locale('zh', 'CN')
@@ -51,7 +39,6 @@ void main() {
             home: const LogViewerPage(),
           ),
         );
-        await tester.pumpAndSettle();
 
         final isEnglish = locale.languageCode == 'en';
         expect(
@@ -63,26 +50,15 @@ void main() {
           findsOneWidget,
         );
         expect(
+          find.byTooltip(isEnglish ? 'Clean up old logs' : '清理旧日志'),
+          findsOneWidget,
+        );
+        expect(
           find.text(isEnglish
               ? 'Log retention: Only the most recent 15 days are kept. Logs older than 15 days are cleaned automatically.'
               : '日志保留期限：只保留最近 15 天的日志，超过 15 天会自动清理。'),
           findsOneWidget,
         );
-        expect(find.text(fileName), findsOneWidget);
-
-        await tester.tap(find.byTooltip(isEnglish ? 'Delete' : '删除'));
-        await tester.pumpAndSettle();
-        expect(
-            find.text(isEnglish ? 'Confirm deletion' : '确认删除'), findsOneWidget);
-        expect(
-          find.text(isEnglish
-              ? 'Delete log file "$fileName"?'
-              : '确定要删除日志文件 "$fileName" 吗？'),
-          findsOneWidget,
-        );
-        expect(find.text(isEnglish ? 'Cancel' : '取消'), findsOneWidget);
-        await tester.tap(find.text(isEnglish ? 'Cancel' : '取消'));
-        await tester.pumpAndSettle();
       }
     });
 

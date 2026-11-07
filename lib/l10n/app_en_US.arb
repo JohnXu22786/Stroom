@@ -5770,7 +5770,7 @@
       }
     }
   },
-  "appLogLineCount": "{count, plural, =1{# line} other{# lines}}",
+  "appLogLineCount": "{count, plural, =1{{count} line} other{{count} lines}}",
   "@appLogLineCount": {
     "description": "Number of lines in the log file.",
     "placeholders": {
