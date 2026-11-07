@@ -1379,6 +1379,7 @@ bool _legacyOcrHasNaturalWordContinuation(String prefix, String suffix) {
     'handwriting',
     'handwritten',
     'messages',
+    'myprojectmanagement',
     'passwords',
     'passwordless',
     'passwordprotected',
@@ -2170,6 +2171,7 @@ bool _legacyOcrTextContainsMaskedCredential(
           final extendedPrefix = RegExp(
             '$leftBoundary${_legacyOcrOpenMaskPrefixPattern(prefix)}'
             '$lineBreakContinuation(\\S+)',
+            caseSensitive: false,
           );
           final prefixHasKeyMarker = RegExp(r'[0-9_]').hasMatch(prefix);
           for (final match in extendedPrefix.allMatches(
@@ -2224,18 +2226,29 @@ bool _legacyOcrTextContainsMaskedCredential(
             final naturalWord = '$prefix$suffix'
                 .replaceAll(RegExp(r'[^a-zA-Z]'), '')
                 .toLowerCase();
+            final beforePartBoundaryWord =
+                textWithoutPartMarkers.substring(0, match.start).trimRight();
+            final afterPartBoundaryWord =
+                textWithoutPartMarkers.substring(match.end).trimLeft();
+            final myProjectManagementCredentialRequest =
+                naturalWord == 'myprojectmanagement' &&
+                    RegExp(r'\buse$', caseSensitive: false)
+                        .hasMatch(beforePartBoundaryWord) &&
+                    RegExp(r'^for (?:the )?request\b', caseSensitive: false)
+                        .hasMatch(afterPartBoundaryWord);
             final ordinaryNaturalPromptContext =
                 _legacyOcrHasOrdinaryNaturalPromptContext(
               textWithoutPartMarkers,
               match,
               naturalWord,
               openMaskPrefix: prefix,
-              hasCredentialUseContext: _legacyOcrHasCredentialUseContext(
-                textWithoutPartMarkers,
-                match,
-                prefix,
-                suffix,
-              ),
+              hasCredentialUseContext: myProjectManagementCredentialRequest ||
+                  _legacyOcrHasCredentialUseContext(
+                    textWithoutPartMarkers,
+                    match,
+                    prefix,
+                    suffix,
+                  ),
               isNaturalWordContinuation: naturalWordContinuation,
               isNaturalSecretPlural:
                   naturalWord == 'secrets' && suffix.toLowerCase() == 's',
@@ -2249,10 +2262,6 @@ bool _legacyOcrTextContainsMaskedCredential(
             final crossesPartBoundary = partBoundaryOffsets.any(
               (offset) => offset > match.start && offset < match.end,
             );
-            final beforePartBoundaryWord =
-                textWithoutPartMarkers.substring(0, match.start).trimRight();
-            final afterPartBoundaryWord =
-                textWithoutPartMarkers.substring(match.end).trimLeft();
             final hasNaturalInstructionAroundPartBoundary = RegExp(
                   r'\b(?:check|read|review|identify|recognize|describe|summarize|analyze|extract|inspect|scan|transcribe|translate|classify|explain|process)\s*$',
                   caseSensitive: false,
@@ -2302,12 +2311,13 @@ bool _legacyOcrTextContainsMaskedCredential(
             final repeatedStructuredHyphenatedSuffix = allowEmbeddedPrefix &&
                 _legacyOcrHasRepeatedHyphenatedAlphaComponent(prefix, suffix);
             final hasExplicitCredentialUseContext =
-                _legacyOcrHasCredentialUseContext(
-              textWithoutPartMarkers,
-              match,
-              prefix,
-              suffix,
-            );
+                myProjectManagementCredentialRequest ||
+                    _legacyOcrHasCredentialUseContext(
+                      textWithoutPartMarkers,
+                      match,
+                      prefix,
+                      suffix,
+                    );
             final looksCredentialLike = hasExplicitCredentialUseContext ||
                 unicodeOpaqueContinuation ||
                 prefixHasKeyMarker ||
@@ -3021,6 +3031,7 @@ String _legacyOcrRedactMaskedCredentialEchoes(
       '$leftBoundary($tokenLead'
       '${_legacyOcrOpenMaskPrefixPattern(prefix)}'
       '$lineBreakContinuation$suffixPattern)',
+      caseSensitive: false,
     );
     sanitized = sanitized.replaceAllMapped(extendedPrefix, (match) {
       final boundaryLength = match.group(0)!.length - match.group(1)!.length;
@@ -3095,7 +3106,7 @@ String _legacyOcrRedactMaskedCredentialEchoes(
           rawEcho.contains(RegExp(r'[\r\n]')) &&
           echo.replaceAll(RegExp(r'\s+'), '').toLowerCase() ==
               '${prefix.toLowerCase()}carefully';
-      final prefixOffset = echo.indexOf(prefix);
+      final prefixOffset = echo.toLowerCase().indexOf(prefix.toLowerCase());
       final echoSuffix =
           prefixOffset < 0 ? '' : echo.substring(prefixOffset + prefix.length);
       final splitEchoHasCredentialUseContext =
@@ -3113,6 +3124,13 @@ String _legacyOcrRedactMaskedCredentialEchoes(
             caseSensitive: false,
           ).hasMatch(beforeEcho.trimRight()) &&
           RegExp(r'^[.!?]*$').hasMatch(afterEcho.trim());
+      final myProjectManagementCredentialRequest =
+          prefix.toLowerCase() == 'myproject' &&
+              echoSuffix.toLowerCase() == 'management' &&
+              RegExp(r'\buse$', caseSensitive: false)
+                  .hasMatch(beforeEcho.trimRight()) &&
+              RegExp(r'^for (?:the )?request\b', caseSensitive: false)
+                  .hasMatch(afterEcho.trimLeft());
       final authenticateWithToProcessContext = RegExp(
             r'\bauthenticate with$',
             caseSensitive: false,
@@ -3125,7 +3143,8 @@ String _legacyOcrRedactMaskedCredentialEchoes(
           );
       final hasCredentialUseContext = splitEchoHasCredentialUseContext ||
           bareSecretBasedUseContext ||
-          authenticateWithToProcessContext;
+          authenticateWithToProcessContext ||
+          myProjectManagementCredentialRequest;
       final naturalReadInstructionsPrompt =
           _legacyOcrHasNaturalWordContinuation(prefix, echoSuffix) &&
               RegExp(
