@@ -1379,6 +1379,7 @@ bool _legacyOcrHasNaturalWordContinuation(String prefix, String suffix) {
     'handwriting',
     'handwritten',
     'messages',
+    'myprojectmanagement',
     'passwords',
     'passwordless',
     'passwordprotected',
@@ -1540,6 +1541,11 @@ bool _legacyOcrHasCredentialUseContextAt(
     'use',
     'using',
   }.contains(actionVerb?.group(1)?.toLowerCase());
+  final myProjectManagementCredentialRequest =
+      naturalWord == 'myprojectmanagement' &&
+          useVerb &&
+          RegExp(r'^for (?:the )?request\b', caseSensitive: false)
+              .hasMatch(after);
   final tokenRequestEchoContext = prefix.toLowerCase() == 'token' &&
       useVerb &&
       requestTargetAfterConsumedConnector &&
@@ -1569,7 +1575,8 @@ bool _legacyOcrHasCredentialUseContextAt(
           credentialTargetAfterConsumedConnector ||
           (actionVerb != null &&
               actionTarget &&
-              ((!isNaturalContinuation &&
+              (myProjectManagementCredentialRequest ||
+                  (!isNaturalContinuation &&
                       (!isNaturalWordContinuation || maskPrefixIsEmbedded)) ||
                   explicitCredentialTarget ||
                   credentialHeaderTarget ||
