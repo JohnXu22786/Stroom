@@ -410,11 +410,15 @@ class _LiveMarkdownSearchPreview {
   static const int _maxFragments = 32;
   static const int _maxUpdates = 64;
   static const int _maxLength = 16 * 1024;
+  static const int _previewHalfLength = _maxLength ~/ 2;
+  static const String _omissionMarker = '\n… earlier output omitted …\n';
 
   final List<String> fragments = [];
   int length = 0;
   int updates = 0;
   int? lastSequence;
+  String? _beginning;
+  String? _tail;
 
   _LiveMarkdownSearchPreview(
     String initialText, {
@@ -426,6 +430,13 @@ class _LiveMarkdownSearchPreview {
 
   bool get exceedsBudget => length > _maxLength || updates > _maxUpdates;
 
+  Iterable<String> get displayFragments {
+    final beginning = _beginning;
+    final tail = _tail;
+    if (beginning == null || tail == null) return fragments;
+    return [beginning, _omissionMarker, tail];
+  }
+
   void append(String text, {int? sequence}) {
     _append(text, countUpdate: true);
     lastSequence = sequence ?? lastSequence;
@@ -433,9 +444,33 @@ class _LiveMarkdownSearchPreview {
 
   void _append(String text, {required bool countUpdate}) {
     if (text.isEmpty) return;
-    fragments.add(text);
+    final beginning = _beginning;
+    final tail = _tail;
+    if (beginning != null && tail != null) {
+      _appendToTail(text);
+    } else {
+      fragments.add(text);
+    }
     length += text.length;
     if (countUpdate) updates++;
+    if (_beginning == null && length > _maxLength) {
+      var remaining = _previewHalfLength;
+      final beginning = StringBuffer();
+      for (final fragment in fragments) {
+        if (remaining == 0) break;
+        final take =
+            fragment.length < remaining ? fragment.length : remaining;
+        final prefix = _prefixCharacters(fragment, take);
+        beginning.write(prefix);
+        remaining -= prefix.length;
+      }
+      _beginning = beginning.toString();
+      _tail = text.length >= _previewHalfLength
+          ? _lastCharacters(text, _previewHalfLength)
+          : _tailFromFragments(text);
+      fragments.clear();
+      return;
+    }
     while (fragments.length > _maxFragments) {
       var mergeIndex = 0;
       var shortestPairLength = fragments[0].length + fragments[1].length;
@@ -448,6 +483,58 @@ class _LiveMarkdownSearchPreview {
       }
       fragments[mergeIndex] += fragments.removeAt(mergeIndex + 1);
     }
+  }
+
+  void _appendToTail(String text) {
+    final tail = _tail!;
+    _tail = text.length >= _previewHalfLength
+        ? _lastCharacters(text, _previewHalfLength)
+        : _lastCharacters('$tail$text', _previewHalfLength);
+  }
+
+  String _tailFromFragments(String text) {
+    var remaining = _previewHalfLength - text.length;
+    final suffixes = <String>[];
+    for (var index = fragments.length - 2;
+        index >= 0 && remaining > 0;
+        index--) {
+      final fragment = fragments[index];
+      final take = fragment.length < remaining ? fragment.length : remaining;
+      final suffix = _lastCharacters(fragment, take);
+      suffixes.add(suffix);
+      remaining -= suffix.length;
+    }
+    return _lastCharacters(
+      '${suffixes.reversed.join()}$text',
+      _previewHalfLength,
+    );
+  }
+
+  static String _prefixCharacters(String text, int count) {
+    var end = count < text.length ? count : text.length;
+    if (end > 0 && end < text.length) {
+      final before = text.codeUnitAt(end - 1);
+      final after = text.codeUnitAt(end);
+      if (before >= 0xd800 && before <= 0xdbff &&
+          after >= 0xdc00 && after <= 0xdfff) {
+        end--;
+      }
+    }
+    return text.substring(0, end);
+  }
+
+  static String _lastCharacters(String text, int count) {
+    if (text.length <= count) return text;
+    var start = text.length - count;
+    if (start > 0) {
+      final before = text.codeUnitAt(start - 1);
+      final atStart = text.codeUnitAt(start);
+      if (before >= 0xd800 && before <= 0xdbff &&
+          atStart >= 0xdc00 && atStart <= 0xdfff) {
+        start++;
+      }
+    }
+    return text.substring(start);
   }
 }
 
@@ -682,7 +769,7 @@ extension _ChatPageBubblesExt on _ChatPageState {
                   child: SelectableText.rich(
                     TextSpan(
                       children: [
-                        for (final fragment in searchPreview.fragments)
+                        for (final fragment in searchPreview.displayFragments)
                           TextSpan(text: fragment),
                       ],
                     ),
@@ -848,7 +935,8 @@ extension _ChatPageBubblesExt on _ChatPageState {
                   ? SelectableText.rich(
                       TextSpan(
                         children: [
-                          for (final fragment in activeSearchPreview!.fragments)
+                          for (final fragment
+                              in activeSearchPreview!.displayFragments)
                             TextSpan(text: fragment),
                         ],
                       ),
