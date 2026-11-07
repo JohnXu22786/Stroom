@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/unified_task_list/background_task_card.dart';
 import 'package:stroom/providers/background_task_provider.dart';
+import 'package:stroom/providers/task_provider_shared.dart';
 
 BackgroundTask _task(BackgroundTaskType type, String title) => BackgroundTask(
       id: title,
