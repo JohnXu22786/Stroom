@@ -8467,6 +8467,30 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get browserScriptOriginManual => '手动添加';
+
+  @override
+  String browserScriptVersion(String version) => '@version $version';
+
+  @override
+  String get browserScriptEnabled => '已启用';
+
+  @override
+  String get browserScriptDisabled => '已停用';
+
+  @override
+  String get browserScriptRuntimeError => '此脚本运行时发生错误，请检查代码和网页兼容性。';
+
+  @override
+  String get browserScriptDelete => '删除';
+
+  @override
+  String get browserDeleteScriptTitle => '删除脚本？';
+
+  @override
+  String get browserDeleteScriptConfirmation => '此脚本将从此浏览器中移除，且无法撤销。';
+
+  @override
   String get browserEditScript => '编辑脚本';
 
   @override
@@ -18171,6 +18195,30 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
     );
     return '$_temp0';
   }
+
+  @override
+  String get browserScriptOriginManual => '手动添加';
+
+  @override
+  String browserScriptVersion(String version) => '@version $version';
+
+  @override
+  String get browserScriptEnabled => '已启用';
+
+  @override
+  String get browserScriptDisabled => '已停用';
+
+  @override
+  String get browserScriptRuntimeError => '此脚本运行时发生错误，请检查代码和网页兼容性。';
+
+  @override
+  String get browserScriptDelete => '删除';
+
+  @override
+  String get browserDeleteScriptTitle => '删除脚本？';
+
+  @override
+  String get browserDeleteScriptConfirmation => '此脚本将从此浏览器中移除，且无法撤销。';
 
   @override
   String get browserEditScript => '编辑脚本';

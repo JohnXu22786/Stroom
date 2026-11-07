@@ -14987,6 +14987,22 @@ abstract class AppLocalizations {
   /// **'{count, plural, one{{count} matching rule} other{{count} matching rules}}'**
   String browserScriptMatchCount(num count);
 
+  String get browserScriptOriginManual;
+
+  String browserScriptVersion(String version);
+
+  String get browserScriptEnabled;
+
+  String get browserScriptDisabled;
+
+  String get browserScriptRuntimeError;
+
+  String get browserScriptDelete;
+
+  String get browserDeleteScriptTitle;
+
+  String get browserDeleteScriptConfirmation;
+
   /// No description provided for @browserEditScript.
   ///
   /// In en, this message translates to:

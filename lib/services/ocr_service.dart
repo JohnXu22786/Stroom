@@ -356,6 +356,10 @@ class OcrService {
     ProgressCallback? onSendProgress,
     void Function(OcrRequestStage)? onStage,
   }) async {
+    if (imageBytes.isEmpty) {
+      throw ArgumentError('imageBytes must not be empty');
+    }
+
     await AppLogService.info(
       'OcrService',
       '开始 OCR 识别: 格式=$imageFormat, 大小=${imageBytes.length} 字节',

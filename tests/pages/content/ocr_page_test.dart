@@ -325,6 +325,18 @@ class _InstructionsLoadFailsOnRetryNotifier extends OcrInstructionsNotifier {
   }
 }
 
+class _InstructionsLoadAlwaysFailsNotifier extends OcrInstructionsNotifier {
+  _InstructionsLoadAlwaysFailsNotifier(super.ref);
+
+  var loadCount = 0;
+
+  @override
+  Future<void> load() async {
+    loadCount++;
+    throw StateError('instruction store unavailable');
+  }
+}
+
 class _DelayedRemoveInstructionsNotifier extends OcrInstructionsNotifier {
   _DelayedRemoveInstructionsNotifier(
     super.ref, {
@@ -2607,6 +2619,54 @@ void main() {
       finishFirstLoad.complete();
       await tester.pump();
     });
+
+    testWidgets(
+      'initial retry instruction restore load failure is handled and retryable',
+      (tester) async {
+        late _InstructionsLoadAlwaysFailsNotifier instructionsNotifier;
+        final backgroundTasks = _InspectableBackgroundTaskNotifier();
+        await tester.pumpWidget(
+          _buildTestApp(
+            entries: [_createOcrEntry(withModels: true)],
+            retryData: {
+              'type': 'ocr',
+              'images': [
+                {'bytes': base64Encode(_createTestPngBytes()), 'format': 'png'},
+              ],
+              'modelIndex': 0,
+              'instructionIndex': 1,
+            },
+            backgroundTasksNotifier: backgroundTasks,
+            testInstructionsNotifierBuilder: (ref) => instructionsNotifier =
+                _InstructionsLoadAlwaysFailsNotifier(ref),
+            testImagePayloadPreparer: (bytes) async => OcrImagePayload(
+                bytes: bytes, format: 'png', width: 1, height: 1),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(instructionsNotifier.loadCount, 1);
+        expect(find.text('读取识别指令失败，请重试'), findsOneWidget);
+
+        await tester.tap(find.byKey(const Key('ocr_confirm_legacy_model')));
+        await tester.pump();
+        await tester.tap(find.text('开始识别'));
+        await tester.pump();
+
+        expect(instructionsNotifier.loadCount, 2);
+        expect(find.text('读取识别指令失败，请重试'), findsOneWidget);
+        expect(backgroundTasks.tasksForTest, isEmpty);
+        final startButton = tester.widget<FilledButton>(
+          find.ancestor(
+            of: find.text('开始识别'),
+            matching: find.byType(FilledButton),
+          ),
+        );
+        expect(startButton.onPressed, isNotNull);
+        expect(tester.takeException(), isNull);
+      },
+    );
 
     testWidgets('disables image changes while cached retry images restore', (
       tester,
