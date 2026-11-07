@@ -381,7 +381,7 @@ void main() {
           findsOneWidget,
         );
         expect(find.text(zh.startupRecoveryRetry), findsOneWidget);
-        expect(tester.takeException(), isNull);
+        expect(tester.takeException(), isA<StateError>());
 
         await tester.pumpWidget(
           StartupErrorBoundary(
@@ -392,7 +392,7 @@ void main() {
         await tester.pump();
         expect(find.text(zh.startupRecoveryFallbackMessage), findsOneWidget);
         expect(find.text(zh.startupRecoveryRetry), findsOneWidget);
-        expect(tester.takeException(), isNull);
+        expect(tester.takeException(), isA<_EmptyStartupDiagnostic>());
 
         await container.read(localeProvider.notifier).setLocaleCode('en_US');
         tester.platformDispatcher.localeTestValue = const Locale('zh', 'CN');
@@ -412,7 +412,7 @@ void main() {
         final en = lookupAppLocalizations(const Locale('en', 'US'));
         expect(find.text(en.startupRecoveryFallbackMessage), findsOneWidget);
         expect(find.text(en.startupRecoveryRetry), findsOneWidget);
-        expect(tester.takeException(), isNull);
+        expect(tester.takeException(), isA<_EmptyStartupDiagnostic>());
       },
     );
   });
