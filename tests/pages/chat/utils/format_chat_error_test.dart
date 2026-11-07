@@ -26,6 +26,15 @@ void main() {
       expect(chinese, contains(details));
       expect(formatChatErrorMessage('plain'), '错误: plain');
 
+      const serverDetails = 'HTTP 502 https://api.example.test/v1';
+      final serverError = formatChatErrorMessage(
+        Exception('无法连接到服务器: $serverDetails'),
+        locale: const Locale('en', 'US'),
+      );
+      expect(serverError, contains('Unable to connect to the server'));
+      expect(serverError, isNot(contains('无法连接到服务器')));
+      expect(serverError, contains(serverDetails));
+
       const providerDetails = 'provider=Demo https://api.example.test';
       final providerError = formatChatErrorMessage(
         Exception('请先配置聊天供应商: $providerDetails'),

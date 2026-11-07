@@ -67,9 +67,9 @@ void main() {
     );
     await tester.pump();
     await tester.tap(find.byIcon(Icons.attach_file_outlined));
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 500));
     await tester.tap(find.text('Take photo'));
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 500));
 
     expect(find.textContaining('Could not take a photo:'), findsOneWidget);
     expect(find.textContaining('camera hardware detail'), findsOneWidget);

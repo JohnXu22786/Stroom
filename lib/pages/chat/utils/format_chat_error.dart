@@ -33,17 +33,40 @@ String formatChatErrorMessage(
   }
 
   if (errorStr.contains('无法连接到服务器') || errorStr.contains('连接错误')) {
-    return '${l10n.chatErrorPrefix}${l10n.chatErrorServerConnection}\n$errorStr';
+    final details = _detailsAfterFirstKnownMessage(errorStr, [
+          '无法连接到服务器，请检查网络连接和 API 地址',
+          '无法连接到服务器',
+          '连接错误',
+        ]) ??
+        '';
+    return _withDetails(
+      '${l10n.chatErrorPrefix}${l10n.chatErrorServerConnection}',
+      details,
+    );
   }
 
   if (errorStr.contains('SocketException') ||
       errorStr.contains('Connection refused') ||
       errorStr.contains('连接失败')) {
-    return '${l10n.chatErrorPrefix}${l10n.chatErrorNetworkConnection}\n$errorStr';
+    final details = _detailsAfterFirstKnownMessage(errorStr, [
+      '网络连接失败，请检查网络连接',
+      '网络连接失败',
+    ]);
+    return _withDetails(
+      '${l10n.chatErrorPrefix}${l10n.chatErrorNetworkConnection}',
+      details ?? errorStr,
+    );
   }
 
   if (errorStr.contains('timeout') || errorStr.contains('超时')) {
-    return '${l10n.chatErrorPrefix}${l10n.chatErrorTimeout}\n$errorStr';
+    final details = _detailsAfterFirstKnownMessage(errorStr, [
+      '连接超时，服务器无响应',
+      '连接超时',
+    ]);
+    return _withDetails(
+      '${l10n.chatErrorPrefix}${l10n.chatErrorTimeout}',
+      details ?? errorStr,
+    );
   }
 
   if (errorStr.contains('HTTP ')) {
@@ -59,6 +82,21 @@ String _detailsAfterKnownMessage(String error, String knownMessage) {
       error.substring(messageEnd).replaceFirst(RegExp(r'^\s*[:：-]\s*'), '');
   return details.isEmpty ? '' : '\n$details';
 }
+
+String? _detailsAfterFirstKnownMessage(
+  String error,
+  List<String> knownMessages,
+) {
+  for (final knownMessage in knownMessages) {
+    if (error.contains(knownMessage)) {
+      return _detailsAfterKnownMessage(error, knownMessage);
+    }
+  }
+  return null;
+}
+
+String _withDetails(String message, String details) =>
+    details.isEmpty ? message : '$message\n$details';
 
 /// 格式化 API 错误响应值（如响应体）用于错误气泡与详情弹窗展示。
 ///
