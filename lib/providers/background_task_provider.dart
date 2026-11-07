@@ -1059,7 +1059,7 @@ bool _legacyOcrIsNaturalReadDocumentationBlueprintPrompt(
   String suffix,
 ) =>
     RegExp(r'\bread\s+the\s*$', caseSensitive: false).hasMatch(before) &&
-    RegExp(r'^\s+blueprints\s*[.!?]?\s*$', caseSensitive: false)
+    RegExp(r'^\s*blueprints\s*[.!?]?\s*$', caseSensitive: false)
         .hasMatch(suffix);
 
 int _legacyOcrMaskedDocumentationCredentialEchoLength(
