@@ -14870,17 +14870,53 @@ abstract class AppLocalizations {
   /// **'Script code (JavaScript)'**
   String get browserScriptCode;
 
-  /// No description provided for @browserMatchUrls.
-  ///
-  /// In en, this message translates to:
-  /// **'URL patterns (one per line)'**
-  String get browserMatchUrls;
+  /// No description provided for @browserAddScriptMethod.
+  String get browserAddScriptMethod;
 
-  /// No description provided for @browserScriptMatchHint.
-  ///
-  /// In en, this message translates to:
-  /// **'*://*.example.com/*'**
-  String get browserScriptMatchHint;
+  /// No description provided for @browserImportFromUrl.
+  String get browserImportFromUrl;
+
+  /// No description provided for @browserEnterManually.
+  String get browserEnterManually;
+
+  /// No description provided for @browserScriptTrustWarningTitle.
+  String get browserScriptTrustWarningTitle;
+
+  /// No description provided for @browserScriptTrustWarning.
+  String get browserScriptTrustWarning;
+
+  /// No description provided for @browserContinue.
+  String get browserContinue;
+
+  /// No description provided for @browserManualUserscriptLabel.
+  String get browserManualUserscriptLabel;
+
+  /// No description provided for @browserScriptImportUrl.
+  String get browserScriptImportUrl;
+
+  /// No description provided for @browserScriptImportFetch.
+  String get browserScriptImportFetch;
+
+  /// No description provided for @browserScriptPreview.
+  String get browserScriptPreview;
+
+  /// No description provided for @browserScriptImportInvalidUrl.
+  String get browserScriptImportInvalidUrl;
+
+  /// No description provided for @browserScriptImportUnsupportedUrl.
+  String get browserScriptImportUnsupportedUrl;
+
+  /// No description provided for @browserScriptImportRedirectedUrl.
+  String get browserScriptImportRedirectedUrl;
+
+  /// No description provided for @browserScriptImportNotScript.
+  String get browserScriptImportNotScript;
+
+  /// No description provided for @browserScriptImportNetworkError.
+  String get browserScriptImportNetworkError;
+
+  /// No description provided for @browserScriptImportHttpError.
+  String browserScriptImportHttpError(Object status);
 
   /// No description provided for @browserCancel.
   ///
