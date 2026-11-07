@@ -5289,5 +5289,167 @@
   "providerPresetQueritDescription": "Querit AI search offers intelligent search and content discovery.",
   "providerPresetQueritApiKeyHint": "Get an API key (Bearer token) from the Querit website.",
   "providerPresetSearxngDescription": "A self-hosted metasearch engine that aggregates search sources with a focus on privacy.",
-  "providerPresetSearxngApiKeyHint": "Set your SearXNG instance URL (for example, http://your-instance:8080); an API key is optional."
+  "providerPresetSearxngApiKeyHint": "Set your SearXNG instance URL (for example, http://your-instance:8080); an API key is optional.",
+  "ttsErrorSynthesisFailed": "TTS synthesis failed: {details}",
+  "@ttsErrorSynthesisFailed": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "ttsErrorOriginalError": "\nOriginal error: {details}",
+  "@ttsErrorOriginalError": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "ttsErrorNetworkConnectionTimeout": "Network connection timed out. Check your network or API address.",
+  "ttsErrorServerResponseTimeout": "The server response timed out. Try again later.",
+  "ttsErrorConnectionFailed": "Unable to connect to the server ({details})",
+  "@ttsErrorConnectionFailed": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "ttsErrorWebConnectionGuidance": "Unable to connect to the server. Common causes in the web app: CORS restrictions or an incorrect API address. {details}",
+  "@ttsErrorWebConnectionGuidance": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "ttsErrorApiResponse": "API returned an error (HTTP {status}{body})",
+  "@ttsErrorApiResponse": {
+    "placeholders": {
+      "body": {
+        "type": "String"
+      },
+      "status": {
+        "type": "String"
+      }
+    }
+  },
+  "ttsErrorConnectTimeout": "Connection timed out. Check your network{details}",
+  "@ttsErrorConnectTimeout": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "ttsErrorReceiveTimeout": "Receive timed out; the server is responding slowly{details}",
+  "@ttsErrorReceiveTimeout": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "ttsErrorInvalidApiKey": "API key is invalid or permission denied (HTTP {status}): {body}{details}",
+  "@ttsErrorInvalidApiKey": {
+    "placeholders": {
+      "body": {
+        "type": "String"
+      },
+      "details": {
+        "type": "String"
+      },
+      "status": {
+        "type": "String"
+      }
+    }
+  },
+  "ttsErrorTooManyRequests": "Too many requests; try again later (HTTP {status}){details}",
+  "@ttsErrorTooManyRequests": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      },
+      "status": {
+        "type": "String"
+      }
+    }
+  },
+  "ttsErrorEndpointNotFound": "API endpoint not found (HTTP {status}): {body}\nCheck that the API base URL is correct{details}",
+  "@ttsErrorEndpointNotFound": {
+    "placeholders": {
+      "body": {
+        "type": "String"
+      },
+      "details": {
+        "type": "String"
+      },
+      "status": {
+        "type": "String"
+      }
+    }
+  },
+  "ttsErrorServerInternal": "Internal server error (HTTP {status}): {body}{details}",
+  "@ttsErrorServerInternal": {
+    "placeholders": {
+      "body": {
+        "type": "String"
+      },
+      "details": {
+        "type": "String"
+      },
+      "status": {
+        "type": "String"
+      }
+    }
+  },
+  "ttsErrorServerResponse": "Server returned an error (HTTP {status}): {body}{details}",
+  "@ttsErrorServerResponse": {
+    "placeholders": {
+      "body": {
+        "type": "String"
+      },
+      "details": {
+        "type": "String"
+      },
+      "status": {
+        "type": "String"
+      }
+    }
+  },
+  "ttsErrorRequestCancelled": "Request cancelled{details}",
+  "@ttsErrorRequestCancelled": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "ttsErrorWebNetworkGuidance": "Unable to connect to the server. Common causes in the web app: CORS restrictions or an incorrect API address. Check that the provider API address is correct and that the server allows cross-origin requests.{details}",
+  "@ttsErrorWebNetworkGuidance": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "ttsErrorNetwork": "Network error: {details}",
+  "@ttsErrorNetwork": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "ttsErrorUnknownNetwork": "Unknown network error",
+  "ttsErrorNoResponseBody": "No response body",
+  "ttsErrorStreamingSynthesisFailed": "Streaming synthesis failed: {details}",
+  "@ttsErrorStreamingSynthesisFailed": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  }
 }

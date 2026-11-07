@@ -9520,6 +9520,100 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get providerPresetSearxngApiKeyHint =>
       'Set your SearXNG instance URL (for example, http://your-instance:8080); an API key is optional.';
+
+  @override
+  String ttsErrorSynthesisFailed(String details) {
+    return 'TTS synthesis failed: $details';
+  }
+
+  @override
+  String ttsErrorOriginalError(String details) {
+    return '\nOriginal error: $details';
+  }
+
+  @override
+  String get ttsErrorNetworkConnectionTimeout =>
+      'Network connection timed out. Check your network or API address.';
+
+  @override
+  String get ttsErrorServerResponseTimeout =>
+      'The server response timed out. Try again later.';
+
+  @override
+  String ttsErrorConnectionFailed(String details) {
+    return 'Unable to connect to the server ($details)';
+  }
+
+  @override
+  String ttsErrorWebConnectionGuidance(String details) {
+    return 'Unable to connect to the server. Common causes in the web app: CORS restrictions or an incorrect API address. $details';
+  }
+
+  @override
+  String ttsErrorApiResponse(String body, String status) {
+    return 'API returned an error (HTTP $status$body)';
+  }
+
+  @override
+  String ttsErrorConnectTimeout(String details) {
+    return 'Connection timed out. Check your network$details';
+  }
+
+  @override
+  String ttsErrorReceiveTimeout(String details) {
+    return 'Receive timed out; the server is responding slowly$details';
+  }
+
+  @override
+  String ttsErrorInvalidApiKey(String body, String details, String status) {
+    return 'API key is invalid or permission denied (HTTP $status): $body$details';
+  }
+
+  @override
+  String ttsErrorTooManyRequests(String details, String status) {
+    return 'Too many requests; try again later (HTTP $status)$details';
+  }
+
+  @override
+  String ttsErrorEndpointNotFound(String body, String details, String status) {
+    return 'API endpoint not found (HTTP $status): $body\nCheck that the API base URL is correct$details';
+  }
+
+  @override
+  String ttsErrorServerInternal(String body, String details, String status) {
+    return 'Internal server error (HTTP $status): $body$details';
+  }
+
+  @override
+  String ttsErrorServerResponse(String body, String details, String status) {
+    return 'Server returned an error (HTTP $status): $body$details';
+  }
+
+  @override
+  String ttsErrorRequestCancelled(String details) {
+    return 'Request cancelled$details';
+  }
+
+  @override
+  String ttsErrorWebNetworkGuidance(String details) {
+    return 'Unable to connect to the server. Common causes in the web app: CORS restrictions or an incorrect API address. Check that the provider API address is correct and that the server allows cross-origin requests.$details';
+  }
+
+  @override
+  String ttsErrorNetwork(String details) {
+    return 'Network error: $details';
+  }
+
+  @override
+  String get ttsErrorUnknownNetwork => 'Unknown network error';
+
+  @override
+  String get ttsErrorNoResponseBody => 'No response body';
+
+  @override
+  String ttsErrorStreamingSynthesisFailed(String details) {
+    return 'Streaming synthesis failed: $details';
+  }
 }
 
 /// The translations for English, as used in the United States (`en_US`).
@@ -19037,4 +19131,98 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   @override
   String get providerPresetSearxngApiKeyHint =>
       'Set your SearXNG instance URL (for example, http://your-instance:8080); an API key is optional.';
+
+  @override
+  String ttsErrorSynthesisFailed(String details) {
+    return 'TTS synthesis failed: $details';
+  }
+
+  @override
+  String ttsErrorOriginalError(String details) {
+    return '\nOriginal error: $details';
+  }
+
+  @override
+  String get ttsErrorNetworkConnectionTimeout =>
+      'Network connection timed out. Check your network or API address.';
+
+  @override
+  String get ttsErrorServerResponseTimeout =>
+      'The server response timed out. Try again later.';
+
+  @override
+  String ttsErrorConnectionFailed(String details) {
+    return 'Unable to connect to the server ($details)';
+  }
+
+  @override
+  String ttsErrorWebConnectionGuidance(String details) {
+    return 'Unable to connect to the server. Common causes in the web app: CORS restrictions or an incorrect API address. $details';
+  }
+
+  @override
+  String ttsErrorApiResponse(String body, String status) {
+    return 'API returned an error (HTTP $status$body)';
+  }
+
+  @override
+  String ttsErrorConnectTimeout(String details) {
+    return 'Connection timed out. Check your network$details';
+  }
+
+  @override
+  String ttsErrorReceiveTimeout(String details) {
+    return 'Receive timed out; the server is responding slowly$details';
+  }
+
+  @override
+  String ttsErrorInvalidApiKey(String body, String details, String status) {
+    return 'API key is invalid or permission denied (HTTP $status): $body$details';
+  }
+
+  @override
+  String ttsErrorTooManyRequests(String details, String status) {
+    return 'Too many requests; try again later (HTTP $status)$details';
+  }
+
+  @override
+  String ttsErrorEndpointNotFound(String body, String details, String status) {
+    return 'API endpoint not found (HTTP $status): $body\nCheck that the API base URL is correct$details';
+  }
+
+  @override
+  String ttsErrorServerInternal(String body, String details, String status) {
+    return 'Internal server error (HTTP $status): $body$details';
+  }
+
+  @override
+  String ttsErrorServerResponse(String body, String details, String status) {
+    return 'Server returned an error (HTTP $status): $body$details';
+  }
+
+  @override
+  String ttsErrorRequestCancelled(String details) {
+    return 'Request cancelled$details';
+  }
+
+  @override
+  String ttsErrorWebNetworkGuidance(String details) {
+    return 'Unable to connect to the server. Common causes in the web app: CORS restrictions or an incorrect API address. Check that the provider API address is correct and that the server allows cross-origin requests.$details';
+  }
+
+  @override
+  String ttsErrorNetwork(String details) {
+    return 'Network error: $details';
+  }
+
+  @override
+  String get ttsErrorUnknownNetwork => 'Unknown network error';
+
+  @override
+  String get ttsErrorNoResponseBody => 'No response body';
+
+  @override
+  String ttsErrorStreamingSynthesisFailed(String details) {
+    return 'Streaming synthesis failed: $details';
+  }
 }
