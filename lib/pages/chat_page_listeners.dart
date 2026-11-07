@@ -260,6 +260,13 @@ extension _ChatPageListenersExt on _ChatPageState {
     _legacyFullReplySnapshots[key] = next;
     _legacyFullReplySequences[key] = sequence;
 
+    // A legacy writer may publish its first full reply after text sections
+    // have already marked reasoning complete. In that case the delta path
+    // below does not rebuild the live segments, so capture any tool/reasoning
+    // segments published before this initial snapshot once here.
+    if (prior.isEmpty && (_isReasoningCompletedForMsg[msgId] ?? false)) {
+      _rebuildLiveSegments(msgId);
+    }
     _convertStreamingPlaceholderToTextMessage(msgId);
     if (!isAppend) {
       // A non-prefix legacy update is a real reset/replacement. Make the
