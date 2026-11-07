@@ -63,7 +63,7 @@ import 'app_localizations_zh.dart';
 /// property.
 abstract class AppLocalizations {
   AppLocalizations(String locale)
-      : localeName = intl.Intl.canonicalizedLocale(locale.toString());
+    : localeName = intl.Intl.canonicalizedLocale(locale.toString());
 
   final String localeName;
 
@@ -86,11 +86,11 @@ abstract class AppLocalizations {
   /// of delegates is preferred or required.
   static const List<LocalizationsDelegate<dynamic>> localizationsDelegates =
       <LocalizationsDelegate<dynamic>>[
-    delegate,
-    GlobalMaterialLocalizations.delegate,
-    GlobalCupertinoLocalizations.delegate,
-    GlobalWidgetsLocalizations.delegate,
-  ];
+        delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+      ];
 
   /// A list of this localizations delegate's supported locales.
   static const List<Locale> supportedLocales = <Locale>[
@@ -16055,6 +16055,108 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Streaming synthesis failed: {details}'**
   String ttsErrorStreamingSynthesisFailed(String details);
+
+  /// No description provided for @mermaidEditorTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Mermaid Chart Editor'**
+  String get mermaidEditorTitle;
+
+  /// No description provided for @mermaidEditorModeEdit.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit'**
+  String get mermaidEditorModeEdit;
+
+  /// No description provided for @mermaidEditorModeSplit.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit + Preview'**
+  String get mermaidEditorModeSplit;
+
+  /// No description provided for @mermaidEditorModePreview.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview'**
+  String get mermaidEditorModePreview;
+
+  /// No description provided for @mermaidEditorSwitchViewMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch view mode'**
+  String get mermaidEditorSwitchViewMode;
+
+  /// No description provided for @mermaidEditorSaveToTextStorage.
+  ///
+  /// In en, this message translates to:
+  /// **'Save to Text Storage'**
+  String get mermaidEditorSaveToTextStorage;
+
+  /// No description provided for @mermaidEditorEmptyChart.
+  ///
+  /// In en, this message translates to:
+  /// **'Chart content is empty and cannot be saved'**
+  String get mermaidEditorEmptyChart;
+
+  /// No description provided for @mermaidEditorSaveChartTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Save chart'**
+  String get mermaidEditorSaveChartTitle;
+
+  /// No description provided for @mermaidEditorSaveFolderGuidance.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose or create a folder to save the .mmd chart file'**
+  String get mermaidEditorSaveFolderGuidance;
+
+  /// No description provided for @mermaidEditorFileNameHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a filename (.mmd added automatically)'**
+  String get mermaidEditorFileNameHint;
+
+  /// No description provided for @mermaidEditorEmptyFileName.
+  ///
+  /// In en, this message translates to:
+  /// **'Filename cannot be empty'**
+  String get mermaidEditorEmptyFileName;
+
+  /// No description provided for @mermaidEditorSavedToTextStorage.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved to text storage: {path}'**
+  String mermaidEditorSavedToTextStorage(String path);
+
+  /// No description provided for @mermaidEditorSaveFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Save failed: {error}'**
+  String mermaidEditorSaveFailed(String error);
+
+  /// No description provided for @mermaidEditorSwapPreviewAndEditor.
+  ///
+  /// In en, this message translates to:
+  /// **'Swap preview and editor panels'**
+  String get mermaidEditorSwapPreviewAndEditor;
+
+  /// No description provided for @mermaidEditorCodeLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Mermaid code'**
+  String get mermaidEditorCodeLabel;
+
+  /// No description provided for @mermaidEditorCodeHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter Mermaid code...'**
+  String get mermaidEditorCodeHint;
+
+  /// No description provided for @mermaidEditorSplitCodeLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Code'**
+  String get mermaidEditorSplitCodeLabel;
 }
 
 class _AppLocalizationsDelegate

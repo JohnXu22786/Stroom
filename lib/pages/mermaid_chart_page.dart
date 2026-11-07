@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/utils/mermaid_folder_name_lock.dart';
 import 'package:stroom/utils/mermaid_templates.dart';
 import 'package:stroom/utils/text_manifest.dart';
@@ -24,14 +25,14 @@ enum EditorMode {
   /// 纯预览 — only preview visible (with gesture zoom)
   preview;
 
-  String get label {
+  String label(AppLocalizations l10n) {
     switch (this) {
       case EditorMode.edit:
-        return '编辑模式';
+        return l10n.mermaidEditorModeEdit;
       case EditorMode.split:
-        return '编辑+预览';
+        return l10n.mermaidEditorModeSplit;
       case EditorMode.preview:
-        return '预览模式';
+        return l10n.mermaidEditorModePreview;
     }
   }
 
@@ -308,7 +309,7 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
             children: [
               Icon(mode.icon, size: 20),
               const SizedBox(width: 12),
-              Text(mode.label),
+              Text(mode.label(AppLocalizations.of(context)!)),
               if (mode == _editorMode) ...[
                 const Spacer(),
                 const Icon(Icons.check, size: 16, color: Colors.green),
@@ -331,9 +332,11 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
   // ---------------------------------------------------------------------------
 
   void _showEmptyChartError() {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('图表内容为空，无法保存')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(AppLocalizations.of(context)!.mermaidEditorEmptyChart),
+      ),
+    );
   }
 
   Future<void> _saveChart() async {
@@ -347,6 +350,7 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
     // Lock the entire asynchronous save flow before the first await so rapid
     // activations cannot open stacked folder pickers.
     setState(() => _isSaveFlowActive = true);
+    final l10n = AppLocalizations.of(context)!;
     try {
       // Show save dialog with filename input and folder picker.
       final folders = await TextManifest.getAllFolders();
@@ -363,10 +367,10 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
         context,
         currentFolder: existingRecord?.folder ?? '',
         availableFolders: folders,
-        title: '保存图表',
-        hintText: '选择或创建文件夹保存 .mmd 图表文件',
+        title: l10n.mermaidEditorSaveChartTitle,
+        hintText: l10n.mermaidEditorSaveFolderGuidance,
         fileNameController: fileNameController,
-        fileNameHintText: '输入文件名（自动添加 .mmd 后缀）',
+        fileNameHintText: l10n.mermaidEditorFileNameHint,
         onCreateFolder: (name) async {
           await TextManifest.addFolder(name);
           return null;
@@ -379,9 +383,9 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
       if (selectedFolder == null || !mounted) return;
 
       if (userFileName.isEmpty) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('文件名不能为空')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.mermaidEditorEmptyFileName)),
+        );
         return;
       }
 
@@ -389,9 +393,9 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
           ? userFileName.substring(0, userFileName.length - '.mmd'.length)
           : userFileName;
       if (baseName.isEmpty) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('文件名不能为空')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.mermaidEditorEmptyFileName)),
+        );
         return;
       }
 
@@ -541,7 +545,9 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              '已保存到文本储存区: ${selectedFolder.isEmpty ? "根目录" : selectedFolder}/$finalName.mmd',
+              l10n.mermaidEditorSavedToTextStorage(
+                '${selectedFolder.isEmpty ? l10n.rootFolder : selectedFolder}/$finalName.mmd',
+              ),
             ),
             duration: const Duration(seconds: 2),
           ),
@@ -551,7 +557,10 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('保存失败: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text(l10n.mermaidEditorSaveFailed(e.toString())),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } finally {
@@ -579,12 +588,12 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
 
     final scaffold = Scaffold(
       appBar: AppBar(
-        title: const Text('图表制作'),
+        title: Text(AppLocalizations.of(context)!.mermaidEditorTitle),
         actions: [
           // Three-state editor mode selector (popup menu)
           IconButton(
             icon: Icon(_editorMode.icon, size: 20),
-            tooltip: '切换视图模式',
+            tooltip: AppLocalizations.of(context)!.mermaidEditorSwitchViewMode,
             onPressed: _showEditorModeMenu,
           ),
           // Save
@@ -597,7 +606,8 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
           else
             IconButton(
               icon: const Icon(Icons.save, size: 20),
-              tooltip: '保存到文本储存区',
+              tooltip:
+                  AppLocalizations.of(context)!.mermaidEditorSaveToTextStorage,
               onPressed: _isSaveFlowActive ? null : _saveChart,
             ),
         ],
@@ -734,17 +744,19 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
         final discard = await showDialog<bool>(
           context: context,
           builder: (dialogContext) => AlertDialog(
-            title: const Text('放弃修改？'),
-            content: const Text('当前有未保存的修改，确定要放弃吗？'),
+            title: Text(AppLocalizations.of(dialogContext)!.modelDiscardTitle),
+            content: Text(AppLocalizations.of(dialogContext)!.modelDiscardBody),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(dialogContext, false),
-                child: const Text('取消'),
+                child: Text(AppLocalizations.of(dialogContext)!.cancel),
               ),
               TextButton(
                 onPressed: () => Navigator.pop(dialogContext, true),
                 style: TextButton.styleFrom(foregroundColor: Colors.red),
-                child: const Text('放弃'),
+                child: Text(
+                  AppLocalizations.of(dialogContext)!.textPreviewDiscard,
+                ),
               ),
             ],
           ),
@@ -852,7 +864,7 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
   /// code editor panels.
   Widget _buildSwapButton(ColorScheme cs) {
     return Tooltip(
-      message: '交换预览和编辑面板',
+      message: AppLocalizations.of(context)!.mermaidEditorSwapPreviewAndEditor,
       child: Material(
         color: Colors.transparent,
         child: InkWell(
@@ -873,7 +885,8 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
               Icons.swap_horiz,
               size: 18,
               color: cs.onSurfaceVariant,
-              semanticLabel: '交换预览和编辑面板',
+              semanticLabel: AppLocalizations.of(context)!
+                  .mermaidEditorSwapPreviewAndEditor,
             ),
           ),
         ),
@@ -896,7 +909,7 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
               Icon(Icons.code, size: 14, color: cs.onSurfaceVariant),
               const SizedBox(width: 4),
               Text(
-                '代码',
+                AppLocalizations.of(context)!.mermaidEditorSplitCodeLabel,
                 style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
               ),
               const Expanded(child: Divider(thickness: 0.5)),
@@ -915,7 +928,7 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 contentPadding: const EdgeInsets.all(10),
-                labelText: 'Mermaid 代码',
+                labelText: AppLocalizations.of(context)!.mermaidEditorCodeLabel,
                 isDense: true,
               ),
               maxLines: null,
@@ -946,8 +959,8 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
         decoration: InputDecoration(
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
           contentPadding: const EdgeInsets.all(12),
-          hintText: '输入 Mermaid 代码...',
-          labelText: 'Mermaid 代码',
+          hintText: AppLocalizations.of(context)!.mermaidEditorCodeHint,
+          labelText: AppLocalizations.of(context)!.mermaidEditorCodeLabel,
         ),
         maxLines: null,
         expands: true,

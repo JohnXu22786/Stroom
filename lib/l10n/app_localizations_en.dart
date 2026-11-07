@@ -9649,6 +9649,65 @@ class AppLocalizationsEn extends AppLocalizations {
   String ttsErrorStreamingSynthesisFailed(String details) {
     return 'Streaming synthesis failed: $details';
   }
+
+  @override
+  String get mermaidEditorTitle => 'Mermaid Chart Editor';
+
+  @override
+  String get mermaidEditorModeEdit => 'Edit';
+
+  @override
+  String get mermaidEditorModeSplit => 'Edit + Preview';
+
+  @override
+  String get mermaidEditorModePreview => 'Preview';
+
+  @override
+  String get mermaidEditorSwitchViewMode => 'Switch view mode';
+
+  @override
+  String get mermaidEditorSaveToTextStorage => 'Save to Text Storage';
+
+  @override
+  String get mermaidEditorEmptyChart =>
+      'Chart content is empty and cannot be saved';
+
+  @override
+  String get mermaidEditorSaveChartTitle => 'Save chart';
+
+  @override
+  String get mermaidEditorSaveFolderGuidance =>
+      'Choose or create a folder to save the .mmd chart file';
+
+  @override
+  String get mermaidEditorFileNameHint =>
+      'Enter a filename (.mmd added automatically)';
+
+  @override
+  String get mermaidEditorEmptyFileName => 'Filename cannot be empty';
+
+  @override
+  String mermaidEditorSavedToTextStorage(String path) {
+    return 'Saved to text storage: $path';
+  }
+
+  @override
+  String mermaidEditorSaveFailed(String error) {
+    return 'Save failed: $error';
+  }
+
+  @override
+  String get mermaidEditorSwapPreviewAndEditor =>
+      'Swap preview and editor panels';
+
+  @override
+  String get mermaidEditorCodeLabel => 'Mermaid code';
+
+  @override
+  String get mermaidEditorCodeHint => 'Enter Mermaid code...';
+
+  @override
+  String get mermaidEditorSplitCodeLabel => 'Code';
 }
 
 /// The translations for English, as used in the United States (`en_US`).
@@ -19295,4 +19354,63 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String ttsErrorStreamingSynthesisFailed(String details) {
     return 'Streaming synthesis failed: $details';
   }
+
+  @override
+  String get mermaidEditorTitle => 'Mermaid Chart Editor';
+
+  @override
+  String get mermaidEditorModeEdit => 'Edit';
+
+  @override
+  String get mermaidEditorModeSplit => 'Edit + Preview';
+
+  @override
+  String get mermaidEditorModePreview => 'Preview';
+
+  @override
+  String get mermaidEditorSwitchViewMode => 'Switch view mode';
+
+  @override
+  String get mermaidEditorSaveToTextStorage => 'Save to Text Storage';
+
+  @override
+  String get mermaidEditorEmptyChart =>
+      'Chart content is empty and cannot be saved';
+
+  @override
+  String get mermaidEditorSaveChartTitle => 'Save chart';
+
+  @override
+  String get mermaidEditorSaveFolderGuidance =>
+      'Choose or create a folder to save the .mmd chart file';
+
+  @override
+  String get mermaidEditorFileNameHint =>
+      'Enter a filename (.mmd added automatically)';
+
+  @override
+  String get mermaidEditorEmptyFileName => 'Filename cannot be empty';
+
+  @override
+  String mermaidEditorSavedToTextStorage(String path) {
+    return 'Saved to text storage: $path';
+  }
+
+  @override
+  String mermaidEditorSaveFailed(String error) {
+    return 'Save failed: $error';
+  }
+
+  @override
+  String get mermaidEditorSwapPreviewAndEditor =>
+      'Swap preview and editor panels';
+
+  @override
+  String get mermaidEditorCodeLabel => 'Mermaid code';
+
+  @override
+  String get mermaidEditorCodeHint => 'Enter Mermaid code...';
+
+  @override
+  String get mermaidEditorSplitCodeLabel => 'Code';
 }
