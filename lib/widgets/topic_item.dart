@@ -49,13 +49,10 @@ class TopicItem extends StatelessWidget {
             brightness: brightness,
           ).primary
         : isFailed
-            ? cs.error
-            : isUnread
-                ? ColorScheme.fromSeed(
-                    seedColor: Colors.green,
-                    brightness: Theme.of(context).brightness,
-                  ).primary
-                : null;
+        ? cs.error
+        : isUnread
+        ? Color.lerp(cs.primary, Colors.green, 0.55)
+        : null;
 
     final title = topic.title.isEmpty
         ? AppLocalizations.of(context)!.topicItemNew
@@ -118,7 +115,8 @@ class TopicItem extends StatelessWidget {
                                   ? Icons.push_pin
                                   : Icons.chat_bubble_outline_rounded,
                               size: 20,
-                              color: statusColor ??
+                              color:
+                                  statusColor ??
                                   (topic.isPinned
                                       ? cs.primary
                                       : cs.onSurfaceVariant),
@@ -155,8 +153,9 @@ class TopicItem extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               fontSize: 15,
-                              fontWeight:
-                                  isActive ? FontWeight.w600 : FontWeight.w500,
+                              fontWeight: isActive
+                                  ? FontWeight.w600
+                                  : FontWeight.w500,
                               color: cs.onSurface,
                             ),
                           ),
@@ -305,24 +304,25 @@ class _PulsingConversationIconState extends State<_PulsingConversationIcon>
     final dimColor = widget.color.withValues(alpha: 0.45);
     final pulse = TweenSequence<Color?>([
       TweenSequenceItem(
-        tween: ColorTween(begin: widget.color, end: dimColor)
-            .chain(CurveTween(curve: Curves.easeInOutCubic)),
+        tween: ColorTween(
+          begin: widget.color,
+          end: dimColor,
+        ).chain(CurveTween(curve: Curves.easeInOutCubic)),
         weight: 50,
       ),
       TweenSequenceItem(
-        tween: ColorTween(begin: dimColor, end: widget.color)
-            .chain(CurveTween(curve: Curves.easeInOutCubic)),
+        tween: ColorTween(
+          begin: dimColor,
+          end: widget.color,
+        ).chain(CurveTween(curve: Curves.easeInOutCubic)),
         weight: 50,
       ),
     ]).animate(_controller);
 
     return AnimatedBuilder(
       animation: pulse,
-      builder: (context, _) => Icon(
-        Icons.chat_bubble_outline_rounded,
-        size: 20,
-        color: pulse.value,
-      ),
+      builder: (context, _) =>
+          Icon(Icons.chat_bubble_outline_rounded, size: 20, color: pulse.value),
     );
   }
 }

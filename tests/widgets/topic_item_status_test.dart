@@ -8,9 +8,10 @@ Widget _app({
   bool isRunning = false,
   bool isUnread = false,
   bool isFailed = false,
+  Brightness brightness = Brightness.light,
 }) {
   return MaterialApp(
-    theme: ThemeData(colorSchemeSeed: Colors.blue),
+    theme: ThemeData(colorSchemeSeed: Colors.blue, brightness: brightness),
     supportedLocales: AppLocalizations.supportedLocales,
     localizationsDelegates: AppLocalizations.localizationsDelegates,
     home: Scaffold(
@@ -35,31 +36,32 @@ Widget _app({
 
 void main() {
   testWidgets(
-      'running conversation keeps its bubble and pulses blue each second',
-      (tester) async {
-    await tester.pumpWidget(_app(isRunning: true));
+    'running conversation keeps its bubble and pulses blue each second',
+    (tester) async {
+      await tester.pumpWidget(_app(isRunning: true));
 
-    final bubble = tester.widget<Icon>(
-      find.byIcon(Icons.chat_bubble_outline_rounded),
-    );
-    expect(
-      bubble.color,
-      ColorScheme.fromSeed(seedColor: Colors.blue).primary,
-    );
-    final firstColor = bubble.color;
+      final bubble = tester.widget<Icon>(
+        find.byIcon(Icons.chat_bubble_outline_rounded),
+      );
+      expect(
+        bubble.color,
+        ColorScheme.fromSeed(seedColor: Colors.blue).primary,
+      );
+      final firstColor = bubble.color;
 
-    await tester.pump(const Duration(milliseconds: 500));
-    final middleColor = tester
-        .widget<Icon>(find.byIcon(Icons.chat_bubble_outline_rounded))
-        .color;
-    expect(middleColor, isNot(firstColor));
+      await tester.pump(const Duration(milliseconds: 500));
+      final middleColor = tester
+          .widget<Icon>(find.byIcon(Icons.chat_bubble_outline_rounded))
+          .color;
+      expect(middleColor, isNot(firstColor));
 
-    await tester.pump(const Duration(milliseconds: 500));
-    final cycleColor = tester
-        .widget<Icon>(find.byIcon(Icons.chat_bubble_outline_rounded))
-        .color;
-    expect(cycleColor, firstColor);
-  });
+      await tester.pump(const Duration(milliseconds: 500));
+      final cycleColor = tester
+          .widget<Icon>(find.byIcon(Icons.chat_bubble_outline_rounded))
+          .color;
+      expect(cycleColor, firstColor);
+    },
+  );
 
   testWidgets('failed conversation is marked red', (tester) async {
     await tester.pumpWidget(_app(isFailed: true));
@@ -73,15 +75,25 @@ void main() {
     );
   });
 
-  testWidgets('completed unread conversation is marked green', (tester) async {
+  testWidgets('completed unread conversation uses a muted theme green', (
+    tester,
+  ) async {
     await tester.pumpWidget(_app(isUnread: true));
 
     final bubble = tester.widget<Icon>(
       find.byIcon(Icons.chat_bubble_outline_rounded),
     );
-    expect(
-      bubble.color,
-      ColorScheme.fromSeed(seedColor: Colors.green).primary,
+    final cs = Theme.of(tester.element(find.byType(TopicItem))).colorScheme;
+    expect(bubble.color, Color.lerp(cs.primary, Colors.green, 0.55));
+  });
+
+  testWidgets('unread green adapts to the dark theme blue', (tester) async {
+    await tester.pumpWidget(_app(isUnread: true, brightness: Brightness.dark));
+
+    final bubble = tester.widget<Icon>(
+      find.byIcon(Icons.chat_bubble_outline_rounded),
     );
+    final cs = Theme.of(tester.element(find.byType(TopicItem))).colorScheme;
+    expect(bubble.color, Color.lerp(cs.primary, Colors.green, 0.55));
   });
 }
