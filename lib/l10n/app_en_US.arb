@@ -490,6 +490,15 @@
   "mediaSegment": "Segment",
   "mediaPlaylist": "Playlist",
   "mediaFullVideo": "Full video",
+  "homeMediaDurationHoursMinutesSeconds": "{hours} hr {minutes} min {seconds} sec",
+  "@homeMediaDurationHoursMinutesSeconds": {
+    "description": "Media duration with hours, minutes, and seconds",
+    "placeholders": {
+      "hours": {"type": "int"},
+      "minutes": {"type": "int"},
+      "seconds": {"type": "int"}
+    }
+  },
   "mediaDuration": "Duration: {value}",
   "mediaResolution": "Resolution: {width}x{height}",
   "mediaPreview": "Preview",

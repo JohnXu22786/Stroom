@@ -203,7 +203,9 @@ extension _HomePageMediaDialogExt on _HomePageState {
                                               AppLocalizations.of(ctx)!
                                                   .mediaDuration(
                                                       formatDurationShort(
-                                                          media.duration!)),
+                                                media.duration!,
+                                                AppLocalizations.of(ctx)!,
+                                              )),
                                               style: TextStyle(
                                                 fontSize: 11,
                                                 color: Theme.of(ctx)

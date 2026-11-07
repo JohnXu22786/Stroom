@@ -1540,6 +1540,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get mediaFullVideo => '整片';
 
   @override
+  String homeMediaDurationHoursMinutesSeconds(
+    int hours,
+    int minutes,
+    int seconds,
+  ) {
+    return '$hours时$minutes分$seconds秒';
+  }
+
+  @override
   String mediaDuration(String value) {
     return '时长：$value';
   }
@@ -10905,6 +10914,15 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get mediaFullVideo => '整片';
+
+  @override
+  String homeMediaDurationHoursMinutesSeconds(
+    int hours,
+    int minutes,
+    int seconds,
+  ) {
+    return '$hours时$minutes分$seconds秒';
+  }
 
   @override
   String mediaDuration(String value) {

@@ -2788,6 +2788,16 @@ abstract class AppLocalizations {
   /// **'Full video'**
   String get mediaFullVideo;
 
+  /// Media duration with hours, minutes, and seconds
+  ///
+  /// In en, this message translates to:
+  /// **'{hours} hr {minutes} min {seconds} sec'**
+  String homeMediaDurationHoursMinutesSeconds(
+    int hours,
+    int minutes,
+    int seconds,
+  );
+
   /// Media duration display
   ///
   /// In en, this message translates to:
