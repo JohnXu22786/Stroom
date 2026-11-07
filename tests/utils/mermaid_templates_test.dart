@@ -29,7 +29,9 @@ void main() {
       },
     );
 
-    test('localizes starter and inserted snippet text while keeping syntax and IDs', () {
+    test(
+        'localizes starter and inserted snippet text while keeping syntax and IDs',
+        () {
       final english = AppLocalizationsEnUs();
       final chinese = AppLocalizationsZhCn();
       final englishTemplate = MermaidTemplates.getTemplate(
@@ -203,12 +205,10 @@ void main() {
     type: Service
   }''';
       final snippets = MermaidTemplates.getSnippets('requirement', code: code);
-      final relationshipSnippet = snippets
-          .singleWhere((snippet) => snippet.$1 == '添加关联')
-          .$2;
-      final verificationSnippet = snippets
-          .singleWhere((snippet) => snippet.$1 == '添加验证')
-          .$2;
+      final relationshipSnippet =
+          snippets.singleWhere((snippet) => snippet.$1 == '添加关联').$2;
+      final verificationSnippet =
+          snippets.singleWhere((snippet) => snippet.$1 == '添加验证').$2;
 
       expect(relationshipSnippet, '  web_portal - satisfies -> account_access');
       expect(verificationSnippet, '  auth_api - verifies -> account_access');
@@ -273,12 +273,10 @@ void main() {
       const code = '''gantt
   dateFormat  YYYY/MM/DD''';
       final snippets = MermaidTemplates.getSnippets('gantt', code: code);
-      final taskSnippet = snippets
-          .singleWhere((snippet) => snippet.$1 == '添加任务')
-          .$2;
-      final milestoneSnippet = snippets
-          .singleWhere((snippet) => snippet.$1 == '添加里程碑')
-          .$2;
+      final taskSnippet =
+          snippets.singleWhere((snippet) => snippet.$1 == '添加任务').$2;
+      final milestoneSnippet =
+          snippets.singleWhere((snippet) => snippet.$1 == '添加里程碑').$2;
 
       expect(taskSnippet, matches(RegExp(r'^  新任务 :\d{4}/\d{2}/\d{2}, 7d$')));
       expect(
@@ -291,12 +289,10 @@ void main() {
       const code = '''gantt
   dateFormat  Do MMM YYYY''';
       final snippets = MermaidTemplates.getSnippets('gantt', code: code);
-      final taskSnippet = snippets
-          .singleWhere((snippet) => snippet.$1 == '添加任务')
-          .$2;
-      final milestoneSnippet = snippets
-          .singleWhere((snippet) => snippet.$1 == '添加里程碑')
-          .$2;
+      final taskSnippet =
+          snippets.singleWhere((snippet) => snippet.$1 == '添加任务').$2;
+      final milestoneSnippet =
+          snippets.singleWhere((snippet) => snippet.$1 == '添加里程碑').$2;
       const ordinalDate = r'\d{1,2}(?:st|nd|rd|th) [A-Z][a-z]{2} \d{4}';
 
       expect(taskSnippet, matches(RegExp('^  新任务 :$ordinalDate, 7d\$')));

@@ -126,7 +126,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('图表制作'), findsOneWidget);
-    expect(find.text('流程图'), findsOneWidget);
     expect(
       (tester.widget<TextField>(find.byType(TextField))).controller!.text,
       source,

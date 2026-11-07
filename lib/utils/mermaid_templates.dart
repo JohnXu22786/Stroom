@@ -34,72 +34,70 @@ class MermaidTemplates {
   /// Returns the [MermaidDiagramType] list (all supported types).
   static List<MermaidDiagramType> getAllTypes([AppLocalizations? strings]) {
     if (strings == null) return _types;
-    return _types
-        .map((type) {
-          final localized = switch (type.id) {
-            'flowchart' => (
-              strings.mermaidCatalogTypeFlowchart,
-              strings.mermaidCatalogDescriptionFlowchart,
-            ),
-            'sequenceDiagram' => (
-              strings.mermaidCatalogTypeSequenceDiagram,
-              strings.mermaidCatalogDescriptionSequenceDiagram,
-            ),
-            'classDiagram' => (
-              strings.mermaidCatalogTypeClassDiagram,
-              strings.mermaidCatalogDescriptionClassDiagram,
-            ),
-            'stateDiagram' => (
-              strings.mermaidCatalogTypeStateDiagram,
-              strings.mermaidCatalogDescriptionStateDiagram,
-            ),
-            'erDiagram' => (
-              strings.mermaidCatalogTypeErDiagram,
-              strings.mermaidCatalogDescriptionErDiagram,
-            ),
-            'gantt' => (
-              strings.mermaidCatalogTypeGantt,
-              strings.mermaidCatalogDescriptionGantt,
-            ),
-            'pie' => (
-              strings.mermaidCatalogTypePie,
-              strings.mermaidCatalogDescriptionPie,
-            ),
-            'journey' => (
-              strings.mermaidCatalogTypeJourney,
-              strings.mermaidCatalogDescriptionJourney,
-            ),
-            'gitGraph' => (
-              strings.mermaidCatalogTypeGitGraph,
-              strings.mermaidCatalogDescriptionGitGraph,
-            ),
-            'mindmap' => (
-              strings.mermaidCatalogTypeMindmap,
-              strings.mermaidCatalogDescriptionMindmap,
-            ),
-            'timeline' => (
-              strings.mermaidCatalogTypeTimeline,
-              strings.mermaidCatalogDescriptionTimeline,
-            ),
-            'block' => (
-              strings.mermaidCatalogTypeBlock,
-              strings.mermaidCatalogDescriptionBlock,
-            ),
-            'requirement' => (
-              strings.mermaidCatalogTypeRequirement,
-              strings.mermaidCatalogDescriptionRequirement,
-            ),
-            _ => (type.label, type.description),
-          };
-          return MermaidDiagramType(
-            id: type.id,
-            label: localized.$1,
-            icon: type.icon,
-            description: localized.$2,
-            keyword: type.keyword,
-          );
-        })
-        .toList(growable: false);
+    return _types.map((type) {
+      final localized = switch (type.id) {
+        'flowchart' => (
+            strings.mermaidCatalogTypeFlowchart,
+            strings.mermaidCatalogDescriptionFlowchart,
+          ),
+        'sequenceDiagram' => (
+            strings.mermaidCatalogTypeSequenceDiagram,
+            strings.mermaidCatalogDescriptionSequenceDiagram,
+          ),
+        'classDiagram' => (
+            strings.mermaidCatalogTypeClassDiagram,
+            strings.mermaidCatalogDescriptionClassDiagram,
+          ),
+        'stateDiagram' => (
+            strings.mermaidCatalogTypeStateDiagram,
+            strings.mermaidCatalogDescriptionStateDiagram,
+          ),
+        'erDiagram' => (
+            strings.mermaidCatalogTypeErDiagram,
+            strings.mermaidCatalogDescriptionErDiagram,
+          ),
+        'gantt' => (
+            strings.mermaidCatalogTypeGantt,
+            strings.mermaidCatalogDescriptionGantt,
+          ),
+        'pie' => (
+            strings.mermaidCatalogTypePie,
+            strings.mermaidCatalogDescriptionPie,
+          ),
+        'journey' => (
+            strings.mermaidCatalogTypeJourney,
+            strings.mermaidCatalogDescriptionJourney,
+          ),
+        'gitGraph' => (
+            strings.mermaidCatalogTypeGitGraph,
+            strings.mermaidCatalogDescriptionGitGraph,
+          ),
+        'mindmap' => (
+            strings.mermaidCatalogTypeMindmap,
+            strings.mermaidCatalogDescriptionMindmap,
+          ),
+        'timeline' => (
+            strings.mermaidCatalogTypeTimeline,
+            strings.mermaidCatalogDescriptionTimeline,
+          ),
+        'block' => (
+            strings.mermaidCatalogTypeBlock,
+            strings.mermaidCatalogDescriptionBlock,
+          ),
+        'requirement' => (
+            strings.mermaidCatalogTypeRequirement,
+            strings.mermaidCatalogDescriptionRequirement,
+          ),
+        _ => (type.label, type.description),
+      };
+      return MermaidDiagramType(
+        id: type.id,
+        label: localized.$1,
+        icon: type.icon,
+        description: localized.$2,
+        keyword: type.keyword,
+      );
+    }).toList(growable: false);
   }
 
   /// Returns a template string for the given [typeId].
@@ -151,23 +149,22 @@ class MermaidTemplates {
   ) {
     final patterns = switch (diagramTypeId) {
       'classDiagram' => (
-        r'^([ \t]*class[ \t]+)(\S+)(?=[ \t]*\{)',
-        r'^[ \t]*class[ \t]+(?:"[^"]+"[ \t]+as[ \t]+)?(\S+)(?=[ \t]*(?:\{|$))|^[ \t]*(\S+)(?:[ \t]+"[^"]+")?[ \t]+[<|>*o().-]+[ \t]+(?:"[^"]+"[ \t]+)?(\S+)(?:[ \t]*:.*)?$|^[ \t]*(\S+?)(?:[ \t]+"[^"]+")?[ \t]*(?=[<|>*o().-]*[-.])[<|>*o().-]+[ \t]*(?:"[^"]+"[ \t]+)?(\S+?)(?:[ \t]*:.*)?$',
-      ),
+          r'^([ \t]*class[ \t]+)(\S+)(?=[ \t]*\{)',
+          r'^[ \t]*class[ \t]+(?:"[^"]+"[ \t]+as[ \t]+)?(\S+)(?=[ \t]*(?:\{|$))|^[ \t]*(\S+)(?:[ \t]+"[^"]+")?[ \t]+[<|>*o().-]+[ \t]+(?:"[^"]+"[ \t]+)?(\S+)(?:[ \t]*:.*)?$|^[ \t]*(\S+?)(?:[ \t]+"[^"]+")?[ \t]*(?=[<|>*o().-]*[-.])[<|>*o().-]+[ \t]*(?:"[^"]+"[ \t]+)?(\S+?)(?:[ \t]*:.*)?$',
+        ),
       'erDiagram' => (
-        r'^([ \t]*)(\S+)(?=[ \t]*\{)',
-        r'^[ \t]*(?:(\S+?)[ \t]*(?=[|{}oO.-]*[-.])[|{}oO.-]+[ \t]*(\S+?)[ \t]*(?::.*)?$|(\S+)[ \t]*\{|(\S+)[ \t]+[|{}oO.-]+[ \t]+(\S+)[ \t]*:.*$)',
-      ),
+          r'^([ \t]*)(\S+)(?=[ \t]*\{)',
+          r'^[ \t]*(?:(\S+?)[ \t]*(?=[|{}oO.-]*[-.])[|{}oO.-]+[ \t]*(\S+?)[ \t]*(?::.*)?$|(\S+)[ \t]*\{|(\S+)[ \t]+[|{}oO.-]+[ \t]+(\S+)[ \t]*:.*$)',
+        ),
       'block' => (
-        r'^([ \t]*)(\S+)(?=\[)',
-        r'(?:^|[ \t;<>.=~|\-]|--[ox])(\S+)(?=\[)|(?:^|[ \t;<>.=~|\-]|--[ox]|block:)(NewBlock\d*)(?=[ \t;]|$|\(|\{|:\d+|[-=<>.~|])',
-      ),
+          r'^([ \t]*)(\S+)(?=\[)',
+          r'(?:^|[ \t;<>.=~|\-]|--[ox])(\S+)(?=\[)|(?:^|[ \t;<>.=~|\-]|--[ox]|block:)(NewBlock\d*)(?=[ \t;]|$|\(|\{|:\d+|[-=<>.~|])',
+        ),
       _ => null,
     };
     if (patterns == null) return snippet;
 
-    final snippetIdPattern =
-        diagramTypeId == 'block' &&
+    final snippetIdPattern = diagramTypeId == 'block' &&
             RegExp(r'^[ \t]*block[ \t]*\r?\n').hasMatch(snippet)
         ? RegExp(r'^([ \t]*)(\S+)(?=\[)', multiLine: true)
         : RegExp(patterns.$1);
@@ -281,12 +278,10 @@ class MermaidTemplates {
         for (final match in nodeIdPattern.allMatches(statement)) {
           final before = statement.substring(0, match.start).trimRight();
           final after = statement.substring(match.end).trimLeft();
-          final startsNode =
-              before.isEmpty ||
+          final startsNode = before.isEmpty ||
               before.endsWith('&') ||
               RegExp(r'(?:[ox])?[-=.~<>]{2,}[ox]?$').hasMatch(before);
-          final endsNode =
-              after.isEmpty ||
+          final endsNode = after.isEmpty ||
               after.startsWith(RegExp(r'(?:[ox])?[-=.~<>]{2,}[ox]?')) ||
               after.startsWith(RegExp(r'^[\[({>@:]')) ||
               after.startsWith('&');
@@ -316,11 +311,15 @@ class MermaidTemplates {
       }
 
       if (char == '[' || char == '(' || char == '{') {
-        index = _skipDelimitedText(line, index, char, switch (char) {
-          '[' => ']',
-          '(' => ')',
-          _ => '}',
-        });
+        index = _skipDelimitedText(
+            line,
+            index,
+            char,
+            switch (char) {
+              '[' => ']',
+              '(' => ')',
+              _ => '}',
+            });
         buffer.write(' ');
         continue;
       }
@@ -347,7 +346,7 @@ class MermaidTemplates {
       final connectorMarkerChar = index > 0 ? line[index - 1] : '';
       final isMarkedConnector =
           (connectorMarkerChar == 'o' || connectorMarkerChar == 'x') &&
-          (index < 2 || !RegExp(r'[A-Za-z0-9_]').hasMatch(line[index - 2]));
+              (index < 2 || !RegExp(r'[A-Za-z0-9_]').hasMatch(line[index - 2]));
       final edgeLabelStart = !isMarkedConnector && (char == '-' || char == '=')
           ? edgeLabelStartPattern.matchAsPrefix(line, index)
           : null;
@@ -479,10 +478,8 @@ class MermaidTemplates {
     final snippetId = idPattern.firstMatch(snippet);
     if (snippetId == null) return snippet;
 
-    final existingIds = idPattern
-        .allMatches(code)
-        .map((match) => match[2]!)
-        .toSet();
+    final existingIds =
+        idPattern.allMatches(code).map((match) => match[2]!).toSet();
     var nextId = 1;
     while (existingIds.contains('$nextId')) {
       nextId++;
@@ -534,9 +531,8 @@ class MermaidTemplates {
       }
     }
 
-    final dependencyId = taskIds.isNotEmpty
-        ? taskIds.last
-        : _nextGanttTaskId(code);
+    final dependencyId =
+        taskIds.isNotEmpty ? taskIds.last : _nextGanttTaskId(code);
     if (taskIds.isEmpty && lastRootTaskIndex >= 0) {
       lines[lastRootTaskIndex] = _addGanttTaskId(
         lines[lastRootTaskIndex],
@@ -567,9 +563,8 @@ class MermaidTemplates {
 
   static List<String>? _ganttTaskAttributes(String line, String dateFormat) {
     final commentIndex = line.indexOf('%%');
-    final taskLine = commentIndex < 0
-        ? line
-        : line.substring(0, commentIndex).trimRight();
+    final taskLine =
+        commentIndex < 0 ? line : line.substring(0, commentIndex).trimRight();
     final trimmedLine = taskLine.trim();
     if (trimmedLine.isEmpty ||
         trimmedLine.startsWith('%%') ||
@@ -617,16 +612,15 @@ class MermaidTemplates {
   }
 
   static bool _isGanttTaskTag(String attribute) => const {
-    'active',
-    'done',
-    'crit',
-    'milestone',
-  }.contains(attribute.toLowerCase());
+        'active',
+        'done',
+        'crit',
+        'milestone',
+      }.contains(attribute.toLowerCase());
 
   static List<String> _ganttTaskIds(List<String> attributes) {
-    final values = attributes
-        .where((attribute) => !_isGanttTaskTag(attribute))
-        .toList();
+    final values =
+        attributes.where((attribute) => !_isGanttTaskTag(attribute)).toList();
     if (values.length < 3 || !_isGanttTaskId(values.first)) {
       return const [];
     }
@@ -640,28 +634,27 @@ class MermaidTemplates {
       !_isGanttDependency(attribute);
 
   static bool _isGanttDuration(String attribute) => RegExp(
-    r'^\d+(?:\.\d+)?\s*(?:ms|[smhdwy])$',
-    caseSensitive: false,
-  ).hasMatch(attribute);
+        r'^\d+(?:\.\d+)?\s*(?:ms|[smhdwy])$',
+        caseSensitive: false,
+      ).hasMatch(attribute);
 
   static bool _isGanttDependency(String attribute) => RegExp(
-    r'^(?:after|until)\s+\S+',
-    caseSensitive: false,
-  ).hasMatch(attribute);
+        r'^(?:after|until)\s+\S+',
+        caseSensitive: false,
+      ).hasMatch(attribute);
 
   static bool _isGanttDirective(String line) => RegExp(
-    r'^(?:title|dateFormat|axisFormat|tickInterval|excludes|includes|'
-    r'todayMarker|weekday|weekend|accTitle|accDescr)\b',
-    caseSensitive: false,
-  ).hasMatch(line);
+        r'^(?:title|dateFormat|axisFormat|tickInterval|excludes|includes|'
+        r'todayMarker|weekday|weekend|accTitle|accDescr)\b',
+        caseSensitive: false,
+      ).hasMatch(line);
 
   static bool _isGanttExplicitDateRange(
     List<String> attributes,
     String dateFormat,
   ) {
-    final values = attributes
-        .where((attribute) => !_isGanttTaskTag(attribute))
-        .toList();
+    final values =
+        attributes.where((attribute) => !_isGanttTaskTag(attribute)).toList();
     return values.length == 2 &&
         values.every((value) => _isGanttDate(value, dateFormat));
   }
@@ -732,9 +725,8 @@ class MermaidTemplates {
 
   static String _addGanttTaskId(String line, String taskId) {
     final commentIndex = line.indexOf('%%');
-    final taskLine = commentIndex < 0
-        ? line
-        : line.substring(0, commentIndex).trimRight();
+    final taskLine =
+        commentIndex < 0 ? line : line.substring(0, commentIndex).trimRight();
     final separatorIndex = taskLine.indexOf(':');
     var fieldStart = separatorIndex + 1;
     var insertionIndex = taskLine.length;
@@ -750,8 +742,7 @@ class MermaidTemplates {
       fieldStart = commaIndex + 1;
     }
 
-    final updatedTaskLine =
-        '${taskLine.substring(0, insertionIndex)}$taskId, '
+    final updatedTaskLine = '${taskLine.substring(0, insertionIndex)}$taskId, '
         '${taskLine.substring(insertionIndex)}';
     if (commentIndex < 0) return updatedTaskLine;
 
@@ -768,13 +759,13 @@ class MermaidTemplates {
     final timezoneOffset = now.timeZoneOffset.inMinutes;
     final timezoneSign = timezoneOffset < 0 ? '-' : '+';
     final timezoneHours = (timezoneOffset.abs() ~/ 60).toString().padLeft(
-      2,
-      '0',
-    );
+          2,
+          '0',
+        );
     final timezoneMinutes = (timezoneOffset.abs() % 60).toString().padLeft(
-      2,
-      '0',
-    );
+          2,
+          '0',
+        );
     const shortMonthNames = [
       'Jan',
       'Feb',
@@ -1433,7 +1424,10 @@ class MermaidTemplates {
       ('block', '添加列'): '  columns 3',
       ('block', '添加连接'): '  A --> B',
       ('block', '添加子块'): '  block\n    A["Block A"]\n  end',
-      ('requirement', '添加需求'): '  requirement 新需求 {\n    id: 1\n    text: Requirement description\n  }',
+      (
+        'requirement',
+        '添加需求'
+      ): '  requirement 新需求 {\n    id: 1\n    text: Requirement description\n  }',
       ('requirement', '添加元素'): '  element 新元素 {\n    type: UI\n  }',
     };
     final date = _ganttStartDate(code ?? '');
