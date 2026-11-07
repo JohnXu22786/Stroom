@@ -5464,5 +5464,35 @@
         "type": "String"
       }
     }
-  }
+  },
+  "mermaidEditorTitle": "Mermaid Chart Editor",
+  "mermaidEditorModeEdit": "Edit",
+  "mermaidEditorModeSplit": "Edit + Preview",
+  "mermaidEditorModePreview": "Preview",
+  "mermaidEditorSwitchViewMode": "Switch view mode",
+  "mermaidEditorSaveToTextStorage": "Save to Text Storage",
+  "mermaidEditorEmptyChart": "Chart content is empty and cannot be saved",
+  "mermaidEditorSaveChartTitle": "Save chart",
+  "mermaidEditorSaveFolderGuidance": "Choose or create a folder to save the .mmd chart file",
+  "mermaidEditorFileNameHint": "Enter a filename (.mmd added automatically)",
+  "mermaidEditorEmptyFileName": "Filename cannot be empty",
+  "mermaidEditorSavedToTextStorage": "Saved to text storage: {path}",
+  "@mermaidEditorSavedToTextStorage": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "mermaidEditorSaveFailed": "Save failed: {error}",
+  "@mermaidEditorSaveFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "mermaidEditorSwapPreviewAndEditor": "Swap preview and editor panels",
+  "mermaidEditorCodeLabel": "Code",
+  "mermaidEditorCodeHint": "Enter Mermaid code..."
 }

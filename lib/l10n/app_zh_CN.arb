@@ -5464,5 +5464,35 @@
         "type": "String"
       }
     }
-  }
+  },
+  "mermaidEditorTitle": "图表制作",
+  "mermaidEditorModeEdit": "编辑模式",
+  "mermaidEditorModeSplit": "编辑+预览",
+  "mermaidEditorModePreview": "预览模式",
+  "mermaidEditorSwitchViewMode": "切换视图模式",
+  "mermaidEditorSaveToTextStorage": "保存到文本储存区",
+  "mermaidEditorEmptyChart": "图表内容为空，无法保存",
+  "mermaidEditorSaveChartTitle": "保存图表",
+  "mermaidEditorSaveFolderGuidance": "选择或创建文件夹保存 .mmd 图表文件",
+  "mermaidEditorFileNameHint": "输入文件名（自动添加 .mmd 后缀）",
+  "mermaidEditorEmptyFileName": "文件名不能为空",
+  "mermaidEditorSavedToTextStorage": "已保存到文本储存区: {path}",
+  "@mermaidEditorSavedToTextStorage": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "mermaidEditorSaveFailed": "保存失败: {error}",
+  "@mermaidEditorSaveFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "mermaidEditorSwapPreviewAndEditor": "交换预览和编辑面板",
+  "mermaidEditorCodeLabel": "代码",
+  "mermaidEditorCodeHint": "输入 Mermaid 代码..."
 }

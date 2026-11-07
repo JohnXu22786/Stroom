@@ -9150,6 +9150,58 @@ class AppLocalizationsZh extends AppLocalizations {
   String ttsErrorStreamingSynthesisFailed(String details) {
     return '流式合成失败：$details';
   }
+
+  @override
+  String get mermaidEditorTitle => '图表制作';
+
+  @override
+  String get mermaidEditorModeEdit => '编辑模式';
+
+  @override
+  String get mermaidEditorModeSplit => '编辑+预览';
+
+  @override
+  String get mermaidEditorModePreview => '预览模式';
+
+  @override
+  String get mermaidEditorSwitchViewMode => '切换视图模式';
+
+  @override
+  String get mermaidEditorSaveToTextStorage => '保存到文本储存区';
+
+  @override
+  String get mermaidEditorEmptyChart => '图表内容为空，无法保存';
+
+  @override
+  String get mermaidEditorSaveChartTitle => '保存图表';
+
+  @override
+  String get mermaidEditorSaveFolderGuidance => '选择或创建文件夹保存 .mmd 图表文件';
+
+  @override
+  String get mermaidEditorFileNameHint => '输入文件名（自动添加 .mmd 后缀）';
+
+  @override
+  String get mermaidEditorEmptyFileName => '文件名不能为空';
+
+  @override
+  String mermaidEditorSavedToTextStorage(String path) {
+    return '已保存到文本储存区: $path';
+  }
+
+  @override
+  String mermaidEditorSaveFailed(String error) {
+    return '保存失败: $error';
+  }
+
+  @override
+  String get mermaidEditorSwapPreviewAndEditor => '交换预览和编辑面板';
+
+  @override
+  String get mermaidEditorCodeLabel => '代码';
+
+  @override
+  String get mermaidEditorCodeHint => '输入 Mermaid 代码...';
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).
@@ -18297,4 +18349,56 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String ttsErrorStreamingSynthesisFailed(String details) {
     return '流式合成失败：$details';
   }
+
+  @override
+  String get mermaidEditorTitle => '图表制作';
+
+  @override
+  String get mermaidEditorModeEdit => '编辑模式';
+
+  @override
+  String get mermaidEditorModeSplit => '编辑+预览';
+
+  @override
+  String get mermaidEditorModePreview => '预览模式';
+
+  @override
+  String get mermaidEditorSwitchViewMode => '切换视图模式';
+
+  @override
+  String get mermaidEditorSaveToTextStorage => '保存到文本储存区';
+
+  @override
+  String get mermaidEditorEmptyChart => '图表内容为空，无法保存';
+
+  @override
+  String get mermaidEditorSaveChartTitle => '保存图表';
+
+  @override
+  String get mermaidEditorSaveFolderGuidance => '选择或创建文件夹保存 .mmd 图表文件';
+
+  @override
+  String get mermaidEditorFileNameHint => '输入文件名（自动添加 .mmd 后缀）';
+
+  @override
+  String get mermaidEditorEmptyFileName => '文件名不能为空';
+
+  @override
+  String mermaidEditorSavedToTextStorage(String path) {
+    return '已保存到文本储存区: $path';
+  }
+
+  @override
+  String mermaidEditorSaveFailed(String error) {
+    return '保存失败: $error';
+  }
+
+  @override
+  String get mermaidEditorSwapPreviewAndEditor => '交换预览和编辑面板';
+
+  @override
+  String get mermaidEditorCodeLabel => '代码';
+
+  @override
+  String get mermaidEditorCodeHint => '输入 Mermaid 代码...';
 }
