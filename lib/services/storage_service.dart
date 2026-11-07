@@ -33,12 +33,22 @@ class AppStorage {
 
   /// Reads valid UTF-8 lines from a native storage file. Malformed bytes are
   /// replaced so a torn final record does not hide earlier complete lines.
-  static Future<List<String>?> readDurableLines(String path) async {
+  static Future<int?> durableFileLength(String path) async {
     final file = File(path);
     if (!await file.exists()) return null;
-    return utf8
-        .decode(await file.readAsBytes(), allowMalformed: true)
-        .split('\n');
+    return file.length();
+  }
+
+  static Future<Stream<String>?> readDurableLines(
+    String path, {
+    int? end,
+  }) async {
+    final file = File(path);
+    if (!await file.exists()) return null;
+    return file
+        .openRead(0, end)
+        .transform(utf8.decoder(allowMalformed: true))
+        .transform(const LineSplitter());
   }
 
   static Future<bool> deleteStorageFile(String path) async {
