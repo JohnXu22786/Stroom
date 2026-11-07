@@ -481,6 +481,31 @@ class AppLocalizationsEn extends AppLocalizations {
   String get ocrManageInstructions => 'Manage recognition instructions';
 
   @override
+  String get ocrInstructionManageGuidance =>
+      'These instructions apply to all recognition models. If none is selected, only the image is sent.';
+
+  @override
+  String get ocrInstructionManageEmpty => 'No instructions yet';
+
+  @override
+  String get ocrInstructionEditTooltip => 'Edit instruction';
+
+  @override
+  String get ocrInstructionDeleteTooltip => 'Delete instruction';
+
+  @override
+  String get ocrInstructionAdd => 'Add instruction';
+
+  @override
+  String get ocrInstructionEditorEditTitle => 'Edit instruction';
+
+  @override
+  String get ocrInstructionNameLabel => 'Instruction name (optional)';
+
+  @override
+  String get ocrInstructionContentLabel => 'Instruction content';
+
+  @override
   String get ocrBatchMode => 'Batch mode';
 
   @override
@@ -10199,6 +10224,31 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get ocrManageInstructions => 'Manage recognition instructions';
+
+  @override
+  String get ocrInstructionManageGuidance =>
+      'These instructions apply to all recognition models. If none is selected, only the image is sent.';
+
+  @override
+  String get ocrInstructionManageEmpty => 'No instructions yet';
+
+  @override
+  String get ocrInstructionEditTooltip => 'Edit instruction';
+
+  @override
+  String get ocrInstructionDeleteTooltip => 'Delete instruction';
+
+  @override
+  String get ocrInstructionAdd => 'Add instruction';
+
+  @override
+  String get ocrInstructionEditorEditTitle => 'Edit instruction';
+
+  @override
+  String get ocrInstructionNameLabel => 'Instruction name (optional)';
+
+  @override
+  String get ocrInstructionContentLabel => 'Instruction content';
 
   @override
   String get ocrBatchMode => 'Batch mode';

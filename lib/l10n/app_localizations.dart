@@ -898,6 +898,54 @@ abstract class AppLocalizations {
   /// **'Manage recognition instructions'**
   String get ocrManageInstructions;
 
+  /// No description provided for @ocrInstructionManageGuidance.
+  ///
+  /// In en, this message translates to:
+  /// **'These instructions apply to all recognition models. If none is selected, only the image is sent.'**
+  String get ocrInstructionManageGuidance;
+
+  /// No description provided for @ocrInstructionManageEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No instructions yet'**
+  String get ocrInstructionManageEmpty;
+
+  /// No description provided for @ocrInstructionEditTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit instruction'**
+  String get ocrInstructionEditTooltip;
+
+  /// No description provided for @ocrInstructionDeleteTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete instruction'**
+  String get ocrInstructionDeleteTooltip;
+
+  /// No description provided for @ocrInstructionAdd.
+  ///
+  /// In en, this message translates to:
+  /// **'Add instruction'**
+  String get ocrInstructionAdd;
+
+  /// No description provided for @ocrInstructionEditorEditTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit instruction'**
+  String get ocrInstructionEditorEditTitle;
+
+  /// No description provided for @ocrInstructionNameLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Instruction name (optional)'**
+  String get ocrInstructionNameLabel;
+
+  /// No description provided for @ocrInstructionContentLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Instruction content'**
+  String get ocrInstructionContentLabel;
+
   /// No description provided for @ocrBatchMode.
   ///
   /// In en, this message translates to:
