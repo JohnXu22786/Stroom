@@ -458,8 +458,7 @@ class _LiveMarkdownSearchPreview {
       final beginning = StringBuffer();
       for (final fragment in fragments) {
         if (remaining == 0) break;
-        final take =
-            fragment.length < remaining ? fragment.length : remaining;
+        final take = fragment.length < remaining ? fragment.length : remaining;
         final prefix = _prefixCharacters(fragment, take);
         beginning.write(prefix);
         remaining -= prefix.length;
@@ -515,8 +514,10 @@ class _LiveMarkdownSearchPreview {
     if (end > 0 && end < text.length) {
       final before = text.codeUnitAt(end - 1);
       final after = text.codeUnitAt(end);
-      if (before >= 0xd800 && before <= 0xdbff &&
-          after >= 0xdc00 && after <= 0xdfff) {
+      if (before >= 0xd800 &&
+          before <= 0xdbff &&
+          after >= 0xdc00 &&
+          after <= 0xdfff) {
         end--;
       }
     }
@@ -529,8 +530,10 @@ class _LiveMarkdownSearchPreview {
     if (start > 0) {
       final before = text.codeUnitAt(start - 1);
       final atStart = text.codeUnitAt(start);
-      if (before >= 0xd800 && before <= 0xdbff &&
-          atStart >= 0xdc00 && atStart <= 0xdfff) {
+      if (before >= 0xd800 &&
+          before <= 0xdbff &&
+          atStart >= 0xdc00 &&
+          atStart <= 0xdfff) {
         start++;
       }
     }
