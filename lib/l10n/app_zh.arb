@@ -999,6 +999,18 @@
   "unifiedTaskTypeOcr": "文字识别",
   "unifiedTaskTypeAsr": "音频转写",
   "unifiedTaskTypeAudioSeparation": "音频分离",
+  "backgroundTaskGeneratedOcrTitle": "文字识别_{basename}",
+  "@backgroundTaskGeneratedOcrTitle": {
+    "placeholders": {
+      "basename": {}
+    }
+  },
+  "backgroundTaskGeneratedAudioSeparationTitle": "音频分离_{basename}",
+  "@backgroundTaskGeneratedAudioSeparationTitle": {
+    "placeholders": {
+      "basename": {}
+    }
+  },
   "unifiedTaskTypeChat": "助手对话",
   "unifiedTaskPlayAudio": "播放音频",
   "unifiedTaskPauseAudio": "暂停音频",

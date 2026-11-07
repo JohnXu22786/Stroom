@@ -2675,6 +2675,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get unifiedTaskTypeAudioSeparation => '音频分离';
 
   @override
+  String backgroundTaskGeneratedOcrTitle(Object basename) => '文字识别_$basename';
+
+  @override
+  String backgroundTaskGeneratedAudioSeparationTitle(Object basename) =>
+      '音频分离_$basename';
+
+  @override
   String get unifiedTaskTypeChat => '助手对话';
 
   @override
@@ -12406,6 +12413,13 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get unifiedTaskTypeAudioSeparation => '音频分离';
+
+  @override
+  String backgroundTaskGeneratedOcrTitle(Object basename) => '文字识别_$basename';
+
+  @override
+  String backgroundTaskGeneratedAudioSeparationTitle(Object basename) =>
+      '音频分离_$basename';
 
   @override
   String get unifiedTaskTypeChat => '助手对话';
