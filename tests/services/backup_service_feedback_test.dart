@@ -179,13 +179,13 @@ void main() {
             : '尚未选择备份目录，请在启动流程中授权',
       );
 
-      expect(
-        await BackupService.exportBackup(
+      final exported = await tester.runAsync(
+        () => BackupService.exportBackup(
           navigatorKey.currentContext!,
           selection: emptySelection,
         ),
-        isTrue,
       );
+      expect(exported, isTrue);
       await tester.pump();
       expect(find.textContaining(savedPrefix), findsOneWidget);
       expect(find.textContaining(outputPath), findsOneWidget);
@@ -204,6 +204,20 @@ void main() {
       await tester.pump();
       expect(find.textContaining(failedPrefix), findsOneWidget);
       expect(find.textContaining('export picker detail'), findsOneWidget);
+      ScaffoldMessenger.of(navigatorKey.currentContext!).clearSnackBars();
+      await tester.pump();
+
+      const providerDetail = 'provider detail: SAF URI 未配置，无法写入备份文件';
+      pickerFailure = PlatformException(code: 'test', message: providerDetail);
+      expect(
+        await BackupService.exportBackup(
+          navigatorKey.currentContext!,
+          selection: emptySelection,
+        ),
+        isFalse,
+      );
+      await tester.pump();
+      expect(find.textContaining(providerDetail), findsOneWidget);
       ScaffoldMessenger.of(navigatorKey.currentContext!).clearSnackBars();
       await tester.pump();
 

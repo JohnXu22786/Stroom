@@ -7,6 +7,8 @@ import 'package:flutter/foundation.dart'
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart' show SystemNavigator;
 
+import '../l10n/app_localizations.dart';
+
 import 'app_restart.dart';
 import 'startup_sequence_controller.dart';
 import 'startup_page.dart';
@@ -486,6 +488,7 @@ class _DataSafetyBlockPageState extends ConsumerState<_DataSafetyBlockPage> {
 
   Future<void> _exportData() async {
     if (_exporting) return;
+    final l10n = AppLocalizations.of(context)!;
     setState(() => _exporting = true);
     try {
       // 双平台统一路径：原生走 FilePicker 保存；Web 走内存构建 +
@@ -499,7 +502,7 @@ class _DataSafetyBlockPageState extends ConsumerState<_DataSafetyBlockPage> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('导出失败: $e')),
+        SnackBar(content: Text(l10n.backupServiceExportFailed(e.toString()))),
       );
     } finally {
       if (mounted) setState(() => _exporting = false);

@@ -4873,10 +4873,7 @@ class BackupService {
             BackupLocationManager.noBackupDirectoryWriteErrorMessage;
         final errorDetail = errorText == 'Exception: $noBackupFolderError'
             ? l10n.backupServiceNoBackupFolderSelected
-            : errorText.replaceAll(
-                noBackupFolderError,
-                l10n.backupServiceNoBackupFolderSelected,
-              );
+            : errorText;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(l10n.backupServiceExportFailed(errorDetail)),

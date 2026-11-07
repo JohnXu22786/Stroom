@@ -6,6 +6,49 @@ part of 'conversation_provider.dart';
 // ignore_for_file: invalid_use_of_protected_member, invalid_use_of_visible_for_testing_member
 
 extension ConversationsNotifierMutationsExt on ConversationsNotifier {
+  List<Conversation> _restoreDeletedConversationOrder(
+    List<Conversation> original,
+    List<Conversation> deleted,
+  ) {
+    final restored = List<Conversation>.from(state);
+    final deletedById = {
+      for (final conversation in deleted) conversation.id: conversation,
+    };
+    for (var originalIndex = 0;
+        originalIndex < original.length;
+        originalIndex++) {
+      final conversation = deletedById[original[originalIndex].id];
+      if (conversation == null) continue;
+      var insertionIndex = -1;
+      for (var previousIndex = originalIndex - 1;
+          previousIndex >= 0;
+          previousIndex--) {
+        final currentIndex = restored.indexWhere(
+          (item) => item.id == original[previousIndex].id,
+        );
+        if (currentIndex >= 0) {
+          insertionIndex = currentIndex + 1;
+          break;
+        }
+      }
+      if (insertionIndex < 0) {
+        for (var nextIndex = originalIndex + 1;
+            nextIndex < original.length;
+            nextIndex++) {
+          insertionIndex = restored.indexWhere(
+            (item) => item.id == original[nextIndex].id,
+          );
+          if (insertionIndex >= 0) break;
+        }
+      }
+      if (insertionIndex < 0) {
+        insertionIndex = originalIndex.clamp(0, restored.length).toInt();
+      }
+      restored.insert(insertionIndex, conversation);
+    }
+    return pinnedFirstStable(restored);
+  }
+
   // --------------------------------------------------------------------------
   // Mutations
   // --------------------------------------------------------------------------
@@ -91,6 +134,13 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
       _markLatestAssistantMessageRead(previousActive);
     }
     state = pinnedFirstStable([conv, ...state]);
+    unawaited(_appendJournalBarrier({
+      'kind': 'conversationCreated',
+      'conversationId': conv.id,
+      'createdAt': now.toIso8601String(),
+    }).catchError((Object error) {
+      debugPrint('Failed to record conversation creation: $error');
+    }));
     if (activate) {
       _ref.read(activeConversationIdProvider.notifier).state = conv.id;
       _persistActiveId();
@@ -105,7 +155,23 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
   /// Deletes a conversation by [id]. If it was the active conversation, clears
   /// the active selection.
   Future<void> deleteConversation(String id) async {
+    final original = List<Conversation>.from(state);
+    final deleted = state.where((c) => c.id == id).toList();
+    if (deleted.isEmpty) return;
     state = state.where((c) => c.id != id).toList();
+    try {
+      await _appendJournalBarrier({
+        'kind': 'conversationDeleted',
+        'conversationId': id,
+        'deletedAt': DateTime.now().toIso8601String(),
+      });
+    } catch (error) {
+      state = _restoreDeletedConversationOrder(original, deleted);
+      _syncTemporaryTimer();
+      debugPrint('Failed to record conversation deletion: $error');
+      return;
+    }
+    if (!mounted) return;
     if (_ref.read(activeConversationIdProvider) == id) {
       _ref.read(activeConversationIdProvider.notifier).state = null;
     }
@@ -118,12 +184,18 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
   /// ordinary history delete, this also removes copied attachments and writes
   /// the removal immediately before a new conversation with the same ID starts.
   Future<bool> deleteFlowConversationWithFiles(String id) async {
+    final original = List<Conversation>.from(state);
     final old = state.where((c) => c.id == id).toList();
     if (old.isEmpty) return true;
     state = state.where((c) => c.id != id).toList();
     _syncTemporaryTimer();
     bool saved;
     try {
+      await _appendJournalBarrier({
+        'kind': 'conversationDeleted',
+        'conversationId': id,
+        'deletedAt': DateTime.now().toIso8601String(),
+      });
       saved = await _persistNowChecked();
     } catch (error) {
       debugPrint('Failed to remove flow conversation: $error');
@@ -134,11 +206,33 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
       // platform store, which can still reject the write. Restore the visible
       // conversation and keep its attachment copies when disk removal fails.
       if (mounted) {
-        state = pinnedFirstStable([
-          ...old,
-          ...state.where((conversation) => conversation.id != id),
-        ]);
+        state = _restoreDeletedConversationOrder(original, old);
         _syncTemporaryTimer();
+      }
+      try {
+        await _appendJournalBarrier({
+          'kind': 'conversationRestored',
+          'conversationId': id,
+        });
+      } catch (error) {
+        debugPrint('Failed to restore conversation checkpoint marker: $error');
+        final restored = old.first;
+        _pendingRestoredConversations[id] =
+            '${restored.createdAt.toIso8601String()}|${DateTime.now().toIso8601String()}';
+        if (!await _persistPendingRestoredConversations()) {
+          debugPrint('Failed to persist restored conversation rollback marker');
+        }
+        try {
+          if (!await _persistNowChecked()) {
+            debugPrint(
+              'Failed to persist restored flow conversation after checkpoint rollback',
+            );
+          }
+        } catch (persistError) {
+          debugPrint(
+            'Failed to persist restored flow conversation after checkpoint rollback: $persistError',
+          );
+        }
       }
       return false;
     }
@@ -222,6 +316,7 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
       } else {
         c.temporaryExpiresAt = null;
       }
+      c.updatedAt = DateTime.now();
       return c;
     }).toList();
     _syncTemporaryTimer();
@@ -247,8 +342,25 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
 
   /// Deletes multiple conversations by [ids]. Also clears active if included.
   Future<void> batchDelete(List<String> ids) async {
+    final original = List<Conversation>.from(state);
     final idSet = ids.toSet();
+    final deleted = state.where((c) => idSet.contains(c.id)).toList();
+    if (deleted.isEmpty) return;
     state = state.where((c) => !idSet.contains(c.id)).toList();
+    try {
+      await _appendJournalBarrier({
+        'kind': 'conversationsDeleted',
+        'conversationIds':
+            deleted.map((conversation) => conversation.id).toList(),
+        'deletedAt': DateTime.now().toIso8601String(),
+      });
+    } catch (error) {
+      state = _restoreDeletedConversationOrder(original, deleted);
+      _syncTemporaryTimer();
+      debugPrint('Failed to record batch conversation deletion: $error');
+      return;
+    }
+    if (!mounted) return;
     if (idSet.contains(_ref.read(activeConversationIdProvider))) {
       _ref.read(activeConversationIdProvider.notifier).state = null;
     }
@@ -298,20 +410,156 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
   /// 延长临时对话的生命周期）。
   Future<void> updateMessages(String conversationId, List<ChatMessage> messages,
       {bool resetTemporaryCountdown = false}) async {
-    _replaceMessages(conversationId, messages,
-        resetTemporaryCountdown: resetTemporaryCountdown);
+    if (!mounted) return;
+    var current = state.where((c) => c.id == conversationId).firstOrNull;
+    if (current != null) {
+      List<String> removedMessageIds() {
+        final nextIds = messages.map((message) => message.id).toSet();
+        return current!.messages
+            .where((message) => !nextIds.contains(message.id))
+            .map((message) => message.id)
+            .toList();
+      }
+
+      final allRemovedIds = removedMessageIds();
+      final removedIds = allRemovedIds
+          .where((id) => _hasStreamCheckpoint(conversationId, id))
+          .toList();
+      if (!_streamCheckpointKeyIndexIsCurrent) {
+        final uncertainIds =
+            allRemovedIds.where((id) => !removedIds.contains(id)).toList();
+        if (uncertainIds.isNotEmpty) {
+          _pendingUnindexedMessageDeletionIds
+              .putIfAbsent(conversationId, () => <String>{})
+              .addAll(uncertainIds);
+        }
+      }
+      final supersededRestorations =
+          (_pendingMessageRestorationIds[conversationId] ?? <String>{})
+              .intersection(removedIds.toSet());
+
+      final previousMessages = List<ChatMessage>.from(current.messages);
+      _replaceMessages(conversationId, messages,
+          resetTemporaryCountdown: resetTemporaryCountdown);
+      if (removedIds.isNotEmpty) {
+        _addPendingMessageDeletions(conversationId, removedIds);
+        try {
+          await _appendJournalBarrier({
+            'kind': 'messageDeleted',
+            'conversationId': conversationId,
+            'messageIds': removedIds,
+          });
+          final latestIds = state
+              .where((conversation) => conversation.id == conversationId)
+              .expand((conversation) => conversation.messages)
+              .map((message) => message.id)
+              .toSet();
+          final restoredDuringDelete =
+              removedIds.where(latestIds.contains).toList();
+          if (restoredDuringDelete.isNotEmpty) {
+            await _appendMessageRestorations(
+              conversationId,
+              restoredDuringDelete,
+            );
+          }
+          final restorationsToClear =
+              supersededRestorations.difference(restoredDuringDelete.toSet());
+          if (restorationsToClear.isNotEmpty) {
+            _removePendingMessageRestorations(
+              conversationId,
+              restorationsToClear,
+            );
+            if (!await _persistPendingRestoredMessages()) {
+              _addPendingMessageRestorations(
+                conversationId,
+                restorationsToClear,
+              );
+              throw StateError(
+                'Failed to persist message deletion after restore',
+              );
+            }
+          }
+          _removePendingMessageDeletions(conversationId, removedIds);
+        } catch (_) {
+          final latest = state.where((c) => c.id == conversationId).firstOrNull;
+          if (mounted &&
+              latest != null &&
+              identical(latest.messages, messages) &&
+              (_pendingMessageDeletionIds[conversationId]
+                      ?.containsAll(removedIds) ??
+                  false)) {
+            _replaceMessages(conversationId, previousMessages,
+                resetTemporaryCountdown: false);
+            try {
+              await _appendMessageRestorations(conversationId, removedIds);
+            } catch (restoreError) {
+              debugPrint(
+                'Failed to persist message deletion rollback: $restoreError',
+              );
+            }
+          } else if (mounted && latest != null) {
+            final latestIds =
+                latest.messages.map((message) => message.id).toSet();
+            final restoredIds = removedIds
+                .where((messageId) => latestIds.contains(messageId))
+                .toList();
+            if (restoredIds.isNotEmpty) {
+              try {
+                await _appendMessageRestorations(conversationId, restoredIds);
+              } catch (restoreError) {
+                debugPrint(
+                  'Failed to persist concurrent message restoration: '
+                  '$restoreError',
+                );
+              }
+            }
+          }
+          rethrow;
+        }
+      }
+    } else {
+      _replaceMessages(conversationId, messages,
+          resetTemporaryCountdown: resetTemporaryCountdown);
+    }
+    if (!mounted) return;
     await _persistNow();
   }
 
-  /// Replaces a conversation's messages for a supersedable periodic stream
-  /// checkpoint. Consecutive checkpoints share one queued persistence task;
-  /// explicit writes remain ordering barriers in the normal persistence path.
-  Future<void> updateMessagesPeriodically(
-      String conversationId, List<ChatMessage> messages,
-      {bool resetTemporaryCountdown = false}) async {
-    _replaceMessages(conversationId, messages,
-        resetTemporaryCountdown: resetTemporaryCountdown);
-    await _persistStreamCheckpoint();
+  /// Queues a supersedable periodic stream checkpoint journal entry.
+  /// Consecutive checkpoints share one queued persistence task; explicit
+  /// writes remain ordering barriers in the normal persistence path.
+  Future<void> updateMessagesPeriodically(String conversationId,
+      {required Map<String, dynamic> checkpoint,
+      bool resetTemporaryCountdown = false}) async {
+    if (!state.any((conversation) => conversation.id == conversationId)) {
+      return;
+    }
+    final updatedAt = DateTime.now();
+    checkpoint['updatedAt'] = updatedAt.toIso8601String();
+    state = state.map((conversation) {
+      if (conversation.id != conversationId) return conversation;
+      conversation.updatedAt = updatedAt;
+      if (resetTemporaryCountdown && conversation.isTemporary) {
+        conversation.resetTemporaryExpiry(updatedAt);
+      }
+      return conversation;
+    }).toList();
+    final conversation = state
+        .where((conversation) => conversation.id == conversationId)
+        .firstOrNull;
+    if (conversation != null) {
+      checkpoint['conversationCreatedAt'] =
+          conversation.createdAt.toIso8601String();
+      checkpoint['isTemporary'] = conversation.isTemporary;
+      checkpoint['temporaryExpiresAt'] =
+          conversation.temporaryExpiresAt?.toIso8601String();
+      checkpoint['temporaryExpiryVersion'] =
+          conversation.temporaryExpiryVersion;
+      if (checkpoint['baseSnapshotPending'] == true) {
+        checkpoint['baseConversation'] = conversation.toMap();
+      }
+    }
+    await _persistStreamCheckpoint(checkpoint);
   }
 
   /// Confirm flow messages reached disk before sending or completing a step.
