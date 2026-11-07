@@ -96,6 +96,10 @@ class _ConversationStreamState {
   // instead of copying the full reply for every update.
   final List<String> _completedTextChunks = [];
   StringBuffer _currentTextChunk = StringBuffer();
+  String _publishedTextPreview = '';
+  String? _publishedTextPreviewBeginning;
+  String? _publishedTextPreviewTail;
+  int _publishedTextPreviewLength = 0;
   int _currentTextAppendCount = 0;
   final List<StringBuffer> _checkpointTextDeltas = [StringBuffer()];
   bool _checkpointBasePending = true;
@@ -107,6 +111,7 @@ class _ConversationStreamState {
   set fullReply(String value) {
     _completedTextChunks.clear();
     _currentTextChunk = StringBuffer(value);
+    _resetPublishedTextPreview(value);
     _currentTextAppendCount = 0;
     _checkpointTextDeltas
       ..clear()
@@ -209,6 +214,171 @@ class _ConversationStreamState {
     ]);
   }
 
+  int publishedTextChunkLength(int chunkIndex) {
+    if (chunkIndex < 0) return 0;
+    if (chunkIndex < _completedTextChunks.length) {
+      return _completedTextChunks[chunkIndex].length;
+    }
+    if (chunkIndex == _completedTextChunks.length) {
+      return _currentTextChunk.length - _pendingTextDelta.length;
+    }
+    return 0;
+  }
+
+  String? publishedTextChunk(int chunkIndex) {
+    if (chunkIndex < 0) return null;
+    if (chunkIndex < _completedTextChunks.length) {
+      return _completedTextChunks[chunkIndex];
+    }
+    if (chunkIndex != _completedTextChunks.length) return null;
+    final current = _currentTextChunk.toString();
+    final publishedLength = current.length - _pendingTextDelta.length;
+    return current.substring(0, publishedLength);
+  }
+
+  List<String>? publishedTextChunkExcerpt(int chunkIndex, int maxLength) {
+    if (chunkIndex < 0) return null;
+    if (chunkIndex < _completedTextChunks.length) {
+      final text = _completedTextChunks[chunkIndex];
+      if (text.length <= maxLength) return [text];
+      final halfLength = maxLength ~/ 2;
+      return [
+        _previewPrefix(text, halfLength),
+        _previewTail(text, halfLength),
+      ];
+    }
+    if (chunkIndex != _completedTextChunks.length) return null;
+    if (_publishedTextPreviewLength <= maxLength) {
+      return [_publishedTextPreview];
+    }
+    return [
+      _publishedTextPreviewBeginning ?? '',
+      _publishedTextPreviewTail ?? '',
+    ];
+  }
+
+  void _resetPublishedTextPreview(String text) {
+    _publishedTextPreviewLength = text.length;
+    if (text.length <= 16 * 1024) {
+      _publishedTextPreview = text;
+      _publishedTextPreviewBeginning = null;
+      _publishedTextPreviewTail = null;
+      return;
+    }
+    const halfLength = 8 * 1024;
+    _publishedTextPreview = '';
+    _publishedTextPreviewBeginning = _previewPrefix(text, halfLength);
+    _publishedTextPreviewTail = _previewTail(text, halfLength);
+  }
+
+  void _appendPublishedTextPreview(String text) {
+    if (text.isEmpty) return;
+    final currentBeginning = _publishedTextPreviewBeginning;
+    final currentTail = _publishedTextPreviewTail;
+    if (currentBeginning != null && currentTail != null) {
+      _publishedTextPreviewTail = _previewTailAfterAppend(
+        currentTail,
+        text,
+        8 * 1024,
+      );
+      _publishedTextPreviewLength += text.length;
+      return;
+    }
+    final current = _publishedTextPreview;
+    final nextLength = _publishedTextPreviewLength + text.length;
+    if (nextLength <= 16 * 1024) {
+      _publishedTextPreview = '$current$text';
+      _publishedTextPreviewLength = nextLength;
+      return;
+    }
+    const halfLength = 8 * 1024;
+    _publishedTextPreviewBeginning = _previewPrefixParts(
+      current,
+      text,
+      halfLength,
+    );
+    _publishedTextPreviewTail = _previewTailAfterAppend(
+      current,
+      text,
+      halfLength,
+    );
+    _publishedTextPreview = '';
+    _publishedTextPreviewLength = nextLength;
+  }
+
+  static String _previewPrefixParts(String first, String second, int limit) {
+    final prefix = _previewPrefix(first, limit);
+    if (prefix.length >= limit) {
+      if (prefix.isNotEmpty && second.isNotEmpty) {
+        final last = prefix.codeUnitAt(prefix.length - 1);
+        final next = second.codeUnitAt(0);
+        if (last >= 0xD800 &&
+            last <= 0xDBFF &&
+            next >= 0xDC00 &&
+            next <= 0xDFFF) {
+          return '$prefix${second.substring(0, 1)}';
+        }
+      }
+      return prefix;
+    }
+    return '$prefix${_previewPrefix(second, limit - prefix.length)}';
+  }
+
+  static String _previewPrefix(String text, int maxLength) {
+    var end = text.length < maxLength ? text.length : maxLength;
+    if (end > 0 && end < text.length) {
+      final previous = text.codeUnitAt(end - 1);
+      final next = text.codeUnitAt(end);
+      if (previous >= 0xD800 &&
+          previous <= 0xDBFF &&
+          next >= 0xDC00 &&
+          next <= 0xDFFF) {
+        end++;
+      }
+    }
+    return text.substring(0, end);
+  }
+
+  static String _previewTail(String text, int maxLength) {
+    var start = text.length > maxLength ? text.length - maxLength : 0;
+    if (start > 0 && start < text.length) {
+      final previous = text.codeUnitAt(start - 1);
+      final next = text.codeUnitAt(start);
+      if (previous >= 0xD800 &&
+          previous <= 0xDBFF &&
+          next >= 0xDC00 &&
+          next <= 0xDFFF) {
+        start--;
+      }
+    }
+    return text.substring(start);
+  }
+
+  static String _previewTailAfterAppend(
+    String previousTail,
+    String text,
+    int maxLength,
+  ) {
+    if (text.length < maxLength) {
+      return _previewTail('$previousTail$text', maxLength);
+    }
+    if (text.length == maxLength &&
+        _isLowSurrogate(text.codeUnitAt(0)) &&
+        _endsWithHighSurrogate(previousTail)) {
+      return '${previousTail.substring(previousTail.length - 1)}$text';
+    }
+    return _previewTail(text, maxLength);
+  }
+
+  static bool _isLowSurrogate(int codeUnit) =>
+      codeUnit >= 0xDC00 && codeUnit <= 0xDFFF;
+
+  static bool _endsWithHighSurrogate(String text) {
+    if (text.isEmpty) return false;
+    final codeUnit = text.codeUnitAt(text.length - 1);
+    return codeUnit >= 0xD800 && codeUnit <= 0xDBFF;
+  }
+
   bool get hasTextContent =>
       _completedTextChunks.any((section) => section.isNotEmpty) ||
       _currentTextChunk.length > 0;
@@ -248,7 +418,10 @@ class _ConversationStreamState {
   String takeTextDelta() {
     final delta = _pendingTextDelta.toString();
     _pendingTextDelta.clear();
-    if (delta.isNotEmpty) _currentTextAppendCount++;
+    if (delta.isNotEmpty) {
+      _currentTextAppendCount++;
+      _appendPublishedTextPreview(delta);
+    }
     return delta;
   }
 
@@ -649,6 +822,10 @@ class _ConversationStreamState {
     final completed = _currentTextChunk.toString();
     _completedTextChunks.add(completed);
     _currentTextChunk = StringBuffer();
+    _publishedTextPreview = '';
+    _publishedTextPreviewBeginning = null;
+    _publishedTextPreviewTail = null;
+    _publishedTextPreviewLength = 0;
     _currentTextAppendCount = 0;
     _checkpointTextDeltas.add(StringBuffer());
     _pendingTextDelta.clear();

@@ -36,12 +36,16 @@ class _StreamingSearchOccurrenceCount {
   bool _fenceLineQuoteSpaceConsumed = false;
   bool _fencePreviousRawWasCr = false;
   bool _textEndsWithCr = false;
+  int? _lastSequence;
 
-  int countFor(String text, String lowerQuery) {
+  int countFor(String text, String lowerQuery, {int? sequence}) {
     if (_query != lowerQuery) _reset(lowerQuery);
     // Live text sections only append. Comparing lengths avoids rescanning the
     // growing prefix just to confirm that the new snapshot extends it.
-    if (text.length == _textLength) return _count;
+    if (text.length == _textLength) {
+      _lastSequence = sequence ?? _lastSequence;
+      return _count;
+    }
 
     if (_unfinishedFenceChar != null &&
         text.length > _textLength &&
@@ -49,11 +53,14 @@ class _StreamingSearchOccurrenceCount {
         !_hasPendingFinalSigma) {
       if (_scanUnfinishedFence(text.substring(_textLength))) {
         _textLength = text.length;
+        _lastSequence = sequence ?? _lastSequence;
         return _count;
       }
       // A closing fence changes the searchable text. Recount once at that
       // boundary; subsequent appends use the normal path.
-      return _recount(text, lowerQuery);
+      final count = _recount(text, lowerQuery);
+      _lastSequence = sequence;
+      return count;
     }
 
     if (_canAppendIncrementally &&
@@ -74,10 +81,64 @@ class _StreamingSearchOccurrenceCount {
       _appendLowerText(normalizedAppended.toLowerCase(), lowerQuery);
       _textLength = text.length;
       _textEndsWithCr = text.endsWith('\r');
+      _lastSequence = sequence ?? _lastSequence;
       return _count;
     }
 
-    return _recount(text, lowerQuery);
+    final count = _recount(text, lowerQuery);
+    _lastSequence = sequence;
+    return count;
+  }
+
+  int? countForAppend(
+    String appended,
+    int sourceLength,
+    String lowerQuery, {
+    int? sequence,
+  }) {
+    if (_query != lowerQuery) return null;
+    final lastSequence = _lastSequence;
+    if (sequence != null &&
+        lastSequence != null &&
+        sequence > lastSequence + 1) {
+      return null;
+    }
+    if (sourceLength == _textLength) {
+      _lastSequence = sequence ?? lastSequence;
+      return _count;
+    }
+    if (sourceLength < _textLength ||
+        sourceLength != _textLength + appended.length ||
+        lowerQuery.isEmpty) {
+      return null;
+    }
+
+    if (_unfinishedFenceChar != null) {
+      if (!_scanUnfinishedFence(appended)) return null;
+      _textLength = sourceLength;
+      _textEndsWithCr = appended.endsWith('\r');
+      _lastSequence = sequence ?? lastSequence;
+      return _count;
+    }
+    if (!_canAppendIncrementally ||
+        appended.contains('`') ||
+        appended.contains('~') ||
+        appended.contains(r'$') ||
+        appended.contains('\u03A3')) {
+      return null;
+    }
+
+    var normalizedAppended = appended;
+    if (_textEndsWithCr && normalizedAppended.startsWith('\n')) {
+      normalizedAppended = normalizedAppended.substring(1);
+    }
+    normalizedAppended =
+        normalizedAppended.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+    _appendLowerText(normalizedAppended.toLowerCase(), lowerQuery);
+    _textLength = sourceLength;
+    _textEndsWithCr = appended.endsWith('\r');
+    _lastSequence = sequence ?? lastSequence;
+    return _count;
   }
 
   int countLiveFragmentsFor(List<String> fragments, String lowerQuery) {
@@ -222,6 +283,7 @@ class _StreamingSearchOccurrenceCount {
     _resetFenceLineState();
     _fencePreviousRawWasCr = false;
     _textEndsWithCr = false;
+    _lastSequence = null;
   }
 
   void _setUnfinishedFenceState(String text) {
@@ -428,6 +490,26 @@ class _LiveMarkdownSearchPreview {
     _append(initialText, countUpdate: false);
   }
 
+  factory _LiveMarkdownSearchPreview.fromExcerpt(
+    String beginning,
+    String tail, {
+    required int sourceLength,
+    int initialUpdates = 0,
+    int? lastSequence,
+  }) {
+    return _LiveMarkdownSearchPreview(
+      '',
+      initialUpdates: initialUpdates,
+      lastSequence: lastSequence,
+    )..recoverWithExcerpt(
+        beginning,
+        tail,
+        sourceLength: sourceLength,
+        updateCount: initialUpdates,
+        sequence: lastSequence,
+      );
+  }
+
   bool get exceedsBudget => length > _maxLength || updates > _maxUpdates;
 
   Iterable<String> get displayFragments {
@@ -440,6 +522,21 @@ class _LiveMarkdownSearchPreview {
   void append(String text, {int? sequence}) {
     _append(text, countUpdate: true);
     lastSequence = sequence ?? lastSequence;
+  }
+
+  void recoverWithExcerpt(
+    String beginning,
+    String tail, {
+    required int sourceLength,
+    required int updateCount,
+    required int? sequence,
+  }) {
+    fragments.clear();
+    _beginning = beginning;
+    _tail = tail;
+    length = sourceLength;
+    updates = updateCount;
+    lastSequence = sequence;
   }
 
   void _append(String text, {required bool countUpdate}) {
@@ -465,7 +562,7 @@ class _LiveMarkdownSearchPreview {
       }
       _beginning = beginning.toString();
       _tail = text.length >= _previewHalfLength
-          ? _lastCharacters(text, _previewHalfLength)
+          ? _lastCharactersFromNewFragment(text, _previewHalfLength)
           : _tailFromFragments(text);
       fragments.clear();
       return;
@@ -486,9 +583,7 @@ class _LiveMarkdownSearchPreview {
 
   void _appendToTail(String text) {
     final tail = _tail!;
-    _tail = text.length >= _previewHalfLength
-        ? _lastCharacters(text, _previewHalfLength)
-        : _lastCharacters('$tail$text', _previewHalfLength);
+    _tail = _lastCharactersAfterAppend(tail, text, _previewHalfLength);
   }
 
   String _tailFromFragments(String text) {
@@ -507,6 +602,21 @@ class _LiveMarkdownSearchPreview {
       '${suffixes.reversed.join()}$text',
       _previewHalfLength,
     );
+  }
+
+  String _lastCharactersFromNewFragment(String text, int count) {
+    if (text.length == count &&
+        text.codeUnitAt(0) >= 0xdc00 &&
+        text.codeUnitAt(0) <= 0xdfff &&
+        fragments.length > 1) {
+      final previous = fragments[fragments.length - 2];
+      if (previous.isNotEmpty &&
+          previous.codeUnitAt(previous.length - 1) >= 0xd800 &&
+          previous.codeUnitAt(previous.length - 1) <= 0xdbff) {
+        return '${previous.substring(previous.length - 1)}$text';
+      }
+    }
+    return _lastCharacters(text, count);
   }
 
   static String _prefixCharacters(String text, int count) {
@@ -538,6 +648,25 @@ class _LiveMarkdownSearchPreview {
       }
     }
     return text.substring(start);
+  }
+
+  static String _lastCharactersAfterAppend(
+    String previousTail,
+    String text,
+    int count,
+  ) {
+    if (text.length < count) {
+      return _lastCharacters('$previousTail$text', count);
+    }
+    if (text.length == count &&
+        text.codeUnitAt(0) >= 0xdc00 &&
+        text.codeUnitAt(0) <= 0xdfff &&
+        previousTail.isNotEmpty &&
+        previousTail.codeUnitAt(previousTail.length - 1) >= 0xd800 &&
+        previousTail.codeUnitAt(previousTail.length - 1) <= 0xdbff) {
+      return '${previousTail.substring(previousTail.length - 1)}$text';
+    }
+    return _lastCharacters(text, count);
   }
 }
 
@@ -744,6 +873,18 @@ extension _ChatPageBubblesExt on _ChatPageState {
               return '$seed$append';
             }
 
+            final searchSourceConvId =
+                streamingConvId ?? ref.read(activeConversationIdProvider);
+            final searchSourceLength =
+                searchSourceConvId != null && s.chunkIndex != null
+                    ? ref
+                        .read(chatStreamManagerProvider)
+                        .publishedTextChunkLengthFor(
+                          searchSourceConvId,
+                          s.chunkIndex!,
+                        )
+                    : 0;
+
             if (hasSearchMatch &&
                 !(isStreaming &&
                     messageId == _streamingMsgId &&
@@ -751,20 +892,56 @@ extension _ChatPageBubblesExt on _ChatPageState {
               final cacheKey = s.chunkIndex == null
                   ? '$messageId:live-segment:$segmentIndex'
                   : '$messageId:live-chunk:${s.chunkIndex}';
-              occurrenceOffset += _streamingSearchOccurrenceCache
-                  .putIfAbsent(cacheKey, _StreamingSearchOccurrenceCount.new)
-                  .countFor(materializeMarkdownChunk(), lowerQuery);
+              final occurrenceCounter = _streamingSearchOccurrenceCache
+                  .putIfAbsent(cacheKey, _StreamingSearchOccurrenceCount.new);
+              final appendCount = occurrenceCounter.countForAppend(
+                append,
+                searchSourceLength,
+                lowerQuery,
+                sequence: s.liveMarkdownSequence,
+              );
+              occurrenceOffset += appendCount ??
+                  occurrenceCounter.countFor(
+                    materializeMarkdownChunk(),
+                    lowerQuery,
+                    sequence: s.liveMarkdownSequence,
+                  );
             }
 
             if (hasSearchMatch) {
               final previewKey = '$messageId:${s.chunkIndex}';
               final searchPreview = _liveMarkdownSearchPreviews.putIfAbsent(
                 previewKey,
-                () => _LiveMarkdownSearchPreview(
-                  materializeMarkdownChunk(),
-                  initialUpdates: _liveMarkdownAppendCounts[previewKey] ?? 0,
-                  lastSequence: s.liveMarkdownSequence,
-                ),
+                () {
+                  final initialUpdates =
+                      _liveMarkdownAppendCounts[previewKey] ?? 0;
+                  if (searchSourceLength >
+                          _LiveMarkdownSearchPreview._maxLength &&
+                      searchSourceConvId != null &&
+                      s.chunkIndex != null) {
+                    final excerpt = ref
+                        .read(chatStreamManagerProvider)
+                        .publishedTextChunkExcerptFor(
+                          searchSourceConvId,
+                          s.chunkIndex!,
+                          _LiveMarkdownSearchPreview._maxLength,
+                        );
+                    if (excerpt != null && excerpt.length == 2) {
+                      return _LiveMarkdownSearchPreview.fromExcerpt(
+                        excerpt[0],
+                        excerpt[1],
+                        sourceLength: searchSourceLength,
+                        initialUpdates: initialUpdates,
+                        lastSequence: s.liveMarkdownSequence,
+                      );
+                    }
+                  }
+                  return _LiveMarkdownSearchPreview(
+                    materializeMarkdownChunk(),
+                    initialUpdates: initialUpdates,
+                    lastSequence: s.liveMarkdownSequence,
+                  );
+                },
               );
               if (searchPreview.exceedsBudget) {
                 widgets.add(Padding(
@@ -900,22 +1077,73 @@ extension _ChatPageBubblesExt on _ChatPageState {
             }
             return s.text;
           }
-          final activeMarkdownText = isActiveStreamingMarkdown
+          // Reading the published snapshot copies the entire growing chunk.
+          // Keep that work on paths that need the complete source; the
+          // incremental Markdown widget gets it lazily through its recovery
+          // callback when it mounts or loses append events.
+          final activeSearchPreviewKey = '$messageId:${s.chunkIndex}';
+          final existingActiveSearchPreview =
+              isActiveStreamingMarkdown && hasSearchMatch
+                  ? _liveMarkdownSearchPreviews[activeSearchPreviewKey]
+                  : null;
+          final activeSearchConvId = isActiveStreamingMarkdown && hasSearchMatch
+              ? streamingConvId
+              : null;
+          final activeSearchChunkIndex =
+              isActiveStreamingMarkdown && hasSearchMatch ? s.chunkIndex : null;
+          final activeSearchChunkLength = activeSearchConvId != null &&
+                  activeSearchChunkIndex != null
+              ? ref.read(chatStreamManagerProvider).publishedTextChunkLengthFor(
+                    activeSearchConvId,
+                    activeSearchChunkIndex,
+                  )
+              : 0;
+          final activeMarkdownText = isActiveStreamingMarkdown &&
+                  hasSearchMatch &&
+                  !(existingActiveSearchPreview?.exceedsBudget ?? false) &&
+                  activeSearchChunkLength <=
+                      _LiveMarkdownSearchPreview._maxLength
               ? materializeActiveMarkdownChunk()
               : s.text;
-          final activeSearchPreview =
-              isActiveStreamingMarkdown && hasSearchMatch
-                  ? _liveMarkdownSearchPreviews.putIfAbsent(
-                      '$messageId:${s.chunkIndex}',
-                      () => _LiveMarkdownSearchPreview(
+          final activeSearchPreview = isActiveStreamingMarkdown &&
+                  hasSearchMatch
+              ? existingActiveSearchPreview ??
+                  _liveMarkdownSearchPreviews.putIfAbsent(
+                    activeSearchPreviewKey,
+                    () {
+                      final initialUpdates =
+                          _liveMarkdownAppendCounts[activeSearchPreviewKey] ??
+                              0;
+                      final sequence = s.liveMarkdownSequence;
+                      if (activeSearchChunkLength >
+                              _LiveMarkdownSearchPreview._maxLength &&
+                          activeSearchConvId != null &&
+                          activeSearchChunkIndex != null) {
+                        final excerpt = ref
+                            .read(chatStreamManagerProvider)
+                            .publishedTextChunkExcerptFor(
+                              activeSearchConvId,
+                              activeSearchChunkIndex,
+                              _LiveMarkdownSearchPreview._maxLength,
+                            );
+                        if (excerpt != null && excerpt.length == 2) {
+                          return _LiveMarkdownSearchPreview.fromExcerpt(
+                            excerpt[0],
+                            excerpt[1],
+                            sourceLength: activeSearchChunkLength,
+                            initialUpdates: initialUpdates,
+                            lastSequence: sequence,
+                          );
+                        }
+                      }
+                      return _LiveMarkdownSearchPreview(
                         activeMarkdownText,
-                        initialUpdates: _liveMarkdownAppendCounts[
-                                '$messageId:${s.chunkIndex}'] ??
-                            0,
-                        lastSequence: s.liveMarkdownSequence,
-                      ),
-                    )
-                  : null;
+                        initialUpdates: initialUpdates,
+                        lastSequence: sequence,
+                      );
+                    },
+                  )
+              : null;
           final useRawActiveSearchPreview =
               activeSearchPreview?.exceedsBudget ?? false;
           final messageMarkdownConfig = buildMessageMarkdownConfig(
@@ -964,7 +1192,7 @@ extension _ChatPageBubblesExt on _ChatPageState {
                               ? ValueKey(
                                   'streaming-markdown:$messageId:${s.chunkIndex}')
                               : null,
-                          data: activeMarkdownText,
+                          data: s.text,
                           selectable: true,
                           shrinkWrap: true,
                           physics: const NeverScrollableScrollPhysics(),

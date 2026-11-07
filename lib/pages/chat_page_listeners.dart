@@ -226,30 +226,73 @@ extension _ChatPageListenersExt on _ChatPageState {
     if (_isSearching) {
       var preview = _liveMarkdownSearchPreviews[previewKey];
       if (preview == null) {
-        final chunks =
-            ref.read(chatStreamManagerProvider).publishedTextChunksFor(convId);
-        final initialText = next.chunkIndex < chunks.length
-            ? chunks[next.chunkIndex]
-            : '$seed${next.text}';
-        preview = _LiveMarkdownSearchPreview(
-          initialText,
-          initialUpdates: appendCount,
-          lastSequence: next.sequence,
-        );
+        final manager = ref.read(chatStreamManagerProvider);
+        final publishedLength =
+            manager.publishedTextChunkLengthFor(convId, next.chunkIndex);
+        if (publishedLength > _LiveMarkdownSearchPreview._maxLength) {
+          final excerpt = manager.publishedTextChunkExcerptFor(
+            convId,
+            next.chunkIndex,
+            _LiveMarkdownSearchPreview._maxLength,
+          );
+          if (excerpt != null && excerpt.length == 2) {
+            preview = _LiveMarkdownSearchPreview.fromExcerpt(
+              excerpt[0],
+              excerpt[1],
+              sourceLength: publishedLength,
+              initialUpdates: appendCount,
+              lastSequence: next.sequence,
+            );
+          }
+        }
+        if (preview == null) {
+          final chunks = manager.publishedTextChunksFor(convId);
+          final initialText = next.chunkIndex < chunks.length
+              ? chunks[next.chunkIndex]
+              : '$seed${next.text}';
+          preview = _LiveMarkdownSearchPreview(
+            initialText,
+            initialUpdates: appendCount,
+            lastSequence: next.sequence,
+          );
+        }
         _liveMarkdownSearchPreviews[previewKey] = preview;
       } else if (preview.lastSequence != null &&
           next.sequence > preview.lastSequence! + 1) {
-        final chunks =
-            ref.read(chatStreamManagerProvider).publishedTextChunksFor(convId);
-        final publishedText = next.chunkIndex < chunks.length
-            ? chunks[next.chunkIndex]
-            : '${seed}${next.text}';
-        preview = _LiveMarkdownSearchPreview(
-          publishedText,
-          initialUpdates: appendCount,
-          lastSequence: next.sequence,
-        );
-        _liveMarkdownSearchPreviews[previewKey] = preview;
+        final manager = ref.read(chatStreamManagerProvider);
+        final publishedLength =
+            manager.publishedTextChunkLengthFor(convId, next.chunkIndex);
+        if (publishedLength > _LiveMarkdownSearchPreview._maxLength) {
+          // Recover oversized previews from a bounded source excerpt rather
+          // than copying the full published chunk during gap recovery.
+          final excerpt = manager.publishedTextChunkExcerptFor(
+            convId,
+            next.chunkIndex,
+            _LiveMarkdownSearchPreview._maxLength,
+          );
+          if (excerpt != null && excerpt.length == 2) {
+            preview.recoverWithExcerpt(
+              excerpt[0],
+              excerpt[1],
+              sourceLength: publishedLength,
+              updateCount: appendCount,
+              sequence: next.sequence,
+            );
+          } else {
+            preview.append(next.text, sequence: next.sequence);
+          }
+        } else {
+          final chunks = manager.publishedTextChunksFor(convId);
+          final publishedText = next.chunkIndex < chunks.length
+              ? chunks[next.chunkIndex]
+              : '${seed}${next.text}';
+          preview = _LiveMarkdownSearchPreview(
+            publishedText,
+            initialUpdates: appendCount,
+            lastSequence: next.sequence,
+          );
+          _liveMarkdownSearchPreviews[previewKey] = preview;
+        }
       } else {
         preview.append(next.text, sequence: next.sequence);
       }

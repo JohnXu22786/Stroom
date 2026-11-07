@@ -276,15 +276,21 @@ class ChatStreamManager {
   List<String> publishedTextChunksFor(String convId) =>
       _streams[convId]?.publishedTextChunks ?? const [];
 
+  /// Published character count for a chunk, without materializing its text.
+  int publishedTextChunkLengthFor(String convId, int chunkIndex) =>
+      _streams[convId]?.publishedTextChunkLength(chunkIndex) ?? 0;
+
+  List<String>? publishedTextChunkExcerptFor(
+    String convId,
+    int chunkIndex,
+    int maxLength,
+  ) =>
+      _streams[convId]?.publishedTextChunkExcerpt(chunkIndex, maxLength);
+
   /// Published text for a specific chunk, excluding any currently buffered
   /// delta that has not yet been sent to append-event consumers.
-  String? publishedTextChunkFor(String convId, int chunkIndex) {
-    final chunks = _streams[convId]?.publishedTextChunks;
-    if (chunks == null || chunkIndex < 0 || chunkIndex >= chunks.length) {
-      return null;
-    }
-    return chunks[chunkIndex];
-  }
+  String? publishedTextChunkFor(String convId, int chunkIndex) =>
+      _streams[convId]?.publishedTextChunk(chunkIndex);
 
   /// Number of nonempty text deltas already published for the current chunk.
   /// Used to preserve the Markdown live-preview budget when a ChatPage

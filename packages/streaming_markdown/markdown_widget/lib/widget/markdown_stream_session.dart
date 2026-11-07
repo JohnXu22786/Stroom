@@ -24,14 +24,20 @@ class MarkdownStreamSession {
   /// after streaming ends.
   static const int _maxIncrementalBlockLength = 16 * 1024;
   static const int _maxIncrementalChunkUpdates = 64;
-  static const int _maxPreviewFragments = 32;
+  static const int _maxPreviewPrefixLength = 4 * 1024;
+  static const int _maxPreviewTailLength = 12 * 1024;
+  static const String _previewTruncationMarker =
+      '\n\n[… live preview truncated …]\n\n';
 
   final MarkdownGenerator generator;
   final ValueCallback<List<Toc>>? onTocList;
   final MarkdownIncrementalConfigBuilder? activeConfigBuilder;
   final List<Widget> _sealedWidgets = [];
   List<Widget> _activeWidgets = const [];
-  final List<String> _plainPreviewFragments = [];
+  String _plainPreviewPrefix = '';
+  String _plainPreviewTail = '';
+  int? _pendingPlainPreviewHighSurrogate;
+  bool _plainPreviewTruncated = false;
   late m.Document _document;
   late _ReferenceState _baseReferenceState;
   String _activeText = '';
@@ -54,7 +60,7 @@ class MarkdownStreamSession {
   }) {
     _sealedWidgets.clear();
     _activeWidgets = const [];
-    _plainPreviewFragments.clear();
+    _clearPlainPreview();
     _usingPlainPreview = false;
     _chunkAppendCount = 0;
     _activeText = '';
@@ -119,7 +125,20 @@ class MarkdownStreamSession {
     if (_activeText.length + delta.length > _maxIncrementalBlockLength ||
         _chunkAppendCount > _maxIncrementalChunkUpdates) {
       _usingPlainPreview = true;
-      _appendPlainPreview('$_activeText$delta');
+      if (_activeText.isNotEmpty &&
+          delta.isNotEmpty &&
+          _isHighSurrogate(_activeText.codeUnitAt(_activeText.length - 1)) &&
+          _isLowSurrogate(delta.codeUnitAt(0))) {
+        _appendPlainPreview(_activeText, end: _activeText.length - 1);
+        _appendPlainPreview(String.fromCharCodes([
+          _activeText.codeUnitAt(_activeText.length - 1),
+          delta.codeUnitAt(0),
+        ]));
+        _appendPlainPreview(delta, start: 1);
+      } else {
+        _appendPlainPreview(_activeText);
+        _appendPlainPreview(delta);
+      }
       _activeText = '';
       _activeWidgets = _buildPlainPreview(config);
       return MarkdownStreamUpdate(
@@ -206,7 +225,7 @@ class MarkdownStreamSession {
   void dispose() {
     _sealedWidgets.clear();
     _activeWidgets = const [];
-    _plainPreviewFragments.clear();
+    _clearPlainPreview();
     _usingPlainPreview = false;
     _chunkAppendCount = 0;
     _activeText = '';
@@ -246,14 +265,18 @@ class MarkdownStreamSession {
 
   List<Widget> _buildPlainPreview(MarkdownConfig? config) =>
       generator.buildPlainTextPreview(
-        _plainPreviewFragments,
+        [
+          if (_plainPreviewPrefix.isNotEmpty) _plainPreviewPrefix,
+          if (_plainPreviewTruncated) _previewTruncationMarker,
+          if (_plainPreviewTail.isNotEmpty) _plainPreviewTail,
+        ],
         config: _activeConfig('', config),
       );
 
   void _enterPlainPreview(String source, {MarkdownConfig? config}) {
     _sealedWidgets.clear();
     _activeWidgets = const [];
-    _plainPreviewFragments.clear();
+    _clearPlainPreview();
     _usingPlainPreview = true;
     _chunkAppendCount = 0;
     _activeText = '';
@@ -261,24 +284,100 @@ class MarkdownStreamSession {
     _activeWidgets = _buildPlainPreview(config);
   }
 
-  void _appendPlainPreview(String text) {
-    if (text.isEmpty) return;
-    _plainPreviewFragments.add(text);
-    while (_plainPreviewFragments.length > _maxPreviewFragments) {
-      var mergeIndex = 0;
-      var shortestPairLength =
-          _plainPreviewFragments[0].length + _plainPreviewFragments[1].length;
-      for (var i = 1; i < _plainPreviewFragments.length - 1; i++) {
-        final pairLength = _plainPreviewFragments[i].length +
-            _plainPreviewFragments[i + 1].length;
-        if (pairLength < shortestPairLength) {
-          mergeIndex = i;
-          shortestPairLength = pairLength;
-        }
+  void _appendPlainPreview(String text, {int start = 0, int? end}) {
+    end ??= text.length;
+    if (start != 0 || end != text.length) {
+      if (start < end && _isHighSurrogate(text.codeUnitAt(end - 1))) {
+        _pendingPlainPreviewHighSurrogate = text.codeUnitAt(end - 1);
+        end--;
       }
-      _plainPreviewFragments[mergeIndex] +=
-          _plainPreviewFragments.removeAt(mergeIndex + 1);
+      _appendPlainPreviewRange(text, start: start, end: end);
+      return;
     }
+    if (start == end) return;
+
+    var appendStart = start;
+    final pendingHighSurrogate = _pendingPlainPreviewHighSurrogate;
+    if (pendingHighSurrogate != null) {
+      _pendingPlainPreviewHighSurrogate = null;
+      if (_isLowSurrogate(text.codeUnitAt(0))) {
+        _appendPlainPreview(
+          String.fromCharCodes([pendingHighSurrogate, text.codeUnitAt(0)]),
+        );
+        appendStart++;
+      } else {
+        _appendPlainPreviewRange(
+          String.fromCharCode(pendingHighSurrogate),
+          start: 0,
+          end: 1,
+        );
+      }
+    }
+
+    if (_isHighSurrogate(text.codeUnitAt(end - 1))) {
+      _pendingPlainPreviewHighSurrogate = text.codeUnitAt(end - 1);
+      end--;
+    }
+    _appendPlainPreviewRange(text, start: appendStart, end: end);
+  }
+
+  void _appendPlainPreviewRange(
+    String text, {
+    required int start,
+    required int end,
+  }) {
+    if (start == end) return;
+    var offset = start;
+    if (_plainPreviewPrefix.length < _maxPreviewPrefixLength) {
+      final prefixLength = _maxPreviewPrefixLength - _plainPreviewPrefix.length;
+      var prefixEnd = offset + prefixLength;
+      if (prefixEnd > end) prefixEnd = end;
+      if (_splitsSurrogatePair(text, prefixEnd)) prefixEnd--;
+      _plainPreviewPrefix += text.substring(offset, prefixEnd);
+      offset = prefixEnd;
+    }
+
+    if (offset == end) return;
+    final remainingLength = end - offset;
+    if (remainingLength >= _maxPreviewTailLength) {
+      var tailStart = end - _maxPreviewTailLength;
+      if (_splitsSurrogatePair(text, tailStart)) tailStart++;
+      final droppedPreviewText =
+          tailStart > offset || _plainPreviewTail.isNotEmpty;
+      _plainPreviewTail = text.substring(tailStart, end);
+      _plainPreviewTruncated = _plainPreviewTruncated || droppedPreviewText;
+      return;
+    }
+
+    final remaining = text.substring(offset, end);
+    final combinedLength = _plainPreviewTail.length + remaining.length;
+    if (combinedLength > _maxPreviewTailLength) {
+      var overflow = combinedLength - _maxPreviewTailLength;
+      if (_splitsSurrogatePair(_plainPreviewTail, overflow)) overflow++;
+      _plainPreviewTail = '${_plainPreviewTail.substring(overflow)}$remaining';
+      _plainPreviewTruncated = true;
+    } else {
+      _plainPreviewTail += remaining;
+    }
+  }
+
+  bool _splitsSurrogatePair(String text, int offset) =>
+      offset > 0 &&
+      offset < text.length &&
+      _isHighSurrogate(text.codeUnitAt(offset - 1)) &&
+      _isLowSurrogate(text.codeUnitAt(offset));
+
+  bool _isHighSurrogate(int codeUnit) =>
+      codeUnit >= 0xD800 && codeUnit <= 0xDBFF;
+
+  bool _isLowSurrogate(int codeUnit) =>
+      codeUnit >= 0xDC00 && codeUnit <= 0xDFFF;
+
+  void _clearPlainPreview() {
+    _plainPreviewPrefix = '';
+    _plainPreviewTail = '';
+    _pendingPlainPreviewHighSurrogate = null;
+    _plainPreviewTruncated = false;
   }
 
   MarkdownConfig? _activeConfig(String activeText, MarkdownConfig? fallback) =>
