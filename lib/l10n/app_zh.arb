@@ -5643,5 +5643,12 @@
   "catCatchWebInstallExtension": "请安装浏览器扩展「CatCatch（猫抓）」后再试。",
   "catCatchWebAuthorAttribution": "作者：笨笨猫（xifangczy），完全免费开源。",
   "catCatchWebOfficialWarning": "请认准作者，避免下载到付费版/山寨版。",
-  "catCatchWebGitHubAddress": "GitHub 地址: https://github.com/xifangczy/cat-catch"
+  "catCatchWebGitHubAddress": "GitHub 地址: https://github.com/xifangczy/cat-catch",
+  "catCatchLoginRequired": "此功能需要登录账户后使用，请使用右上角浏览器内的登录功能。",
+  "catCatchNoUsableMedia": "未能获取到可用媒体资源，请检查 URL 是否正确以及目标网站是否可访问。",
+  "catCatchRedownloadFileMissing": "重新下载失败，下载文件不存在。",
+  "catCatchRedownloadPathEmpty": "重新下载失败，下载文件路径为空。",
+  "catCatchWebBrowserRequired": "网页无法在没有浏览器环境的情况下直接获取资源，请尝试在移动端或桌面端使用该功能，或者直接粘贴视频/音频文件的直链地址。",
+  "catCatchPlaylistNoSegments": "播放列表没有可下载的分段。",
+  "catCatchDownloadedSourceMissing": "下载源文件不存在，请重新下载。"
 }

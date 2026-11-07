@@ -9434,6 +9434,28 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get catCatchWebGitHubAddress =>
       'GitHub 地址: https://github.com/xifangczy/cat-catch';
+
+  @override
+  String get catCatchLoginRequired => '此功能需要登录账户后使用，请使用右上角浏览器内的登录功能。';
+
+  @override
+  String get catCatchNoUsableMedia => '未能获取到可用媒体资源，请检查 URL 是否正确以及目标网站是否可访问。';
+
+  @override
+  String get catCatchRedownloadFileMissing => '重新下载失败，下载文件不存在。';
+
+  @override
+  String get catCatchRedownloadPathEmpty => '重新下载失败，下载文件路径为空。';
+
+  @override
+  String get catCatchWebBrowserRequired =>
+      '网页无法在没有浏览器环境的情况下直接获取资源，请尝试在移动端或桌面端使用该功能，或者直接粘贴视频/音频文件的直链地址。';
+
+  @override
+  String get catCatchPlaylistNoSegments => '播放列表没有可下载的分段。';
+
+  @override
+  String get catCatchDownloadedSourceMissing => '下载源文件不存在，请重新下载。';
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).
@@ -18865,4 +18887,26 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   @override
   String get catCatchWebGitHubAddress =>
       'GitHub 地址: https://github.com/xifangczy/cat-catch';
+
+  @override
+  String get catCatchLoginRequired => '此功能需要登录账户后使用，请使用右上角浏览器内的登录功能。';
+
+  @override
+  String get catCatchNoUsableMedia => '未能获取到可用媒体资源，请检查 URL 是否正确以及目标网站是否可访问。';
+
+  @override
+  String get catCatchRedownloadFileMissing => '重新下载失败，下载文件不存在。';
+
+  @override
+  String get catCatchRedownloadPathEmpty => '重新下载失败，下载文件路径为空。';
+
+  @override
+  String get catCatchWebBrowserRequired =>
+      '网页无法在没有浏览器环境的情况下直接获取资源，请尝试在移动端或桌面端使用该功能，或者直接粘贴视频/音频文件的直链地址。';
+
+  @override
+  String get catCatchPlaylistNoSegments => '播放列表没有可下载的分段。';
+
+  @override
+  String get catCatchDownloadedSourceMissing => '下载源文件不存在，请重新下载。';
 }

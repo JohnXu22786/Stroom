@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/widgets.dart' show Locale;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/catcatch/engine/playlist_merged_extensions.dart';
 import 'package:stroom/catcatch/engine/task_executor.dart';
@@ -151,5 +152,48 @@ fragment.m4s
       ),
       'mp4',
     );
+  });
+
+  test('preserves dynamic playlist HTTP errors for both locales', () async {
+    for (final locale in [
+      const Locale('en', 'US'),
+      const Locale('zh', 'CN'),
+    ]) {
+      const playlistUrl = 'https://example.com/unavailable.m3u8';
+      final task = CatCatchTask(
+        id: 'playlist-error',
+        url: playlistUrl,
+        expectedDurationSec: 0,
+        createdAt: DateTime(2026),
+        detectedMedia: [
+          const MediaResource(
+            url: playlistUrl,
+            name: 'unavailable',
+            ext: 'm3u8',
+            isPlaylist: true,
+          ),
+        ],
+        steps: [
+          for (final type in StepType.values)
+            type.index < StepType.values.indexOf(StepType.parsingPlaylist)
+                ? StepStatus.done(type)
+                : StepStatus.pending(type),
+        ],
+      );
+      CatCatchTask? lastUpdate;
+
+      await TaskExecutor.retryFromStep(
+        task: task,
+        fromStep: StepType.parsingPlaylist,
+        locale: locale,
+        playlistDioFactory: () =>
+            Dio()..httpClientAdapter = _PlaylistAdapter(const {}),
+        onUpdate: (updated) => lastUpdate = updated,
+      );
+
+      expect(lastUpdate?.status, TaskStatus.failed);
+      expect(lastUpdate?.error, contains('404'));
+      expect(lastUpdate?.error, contains('Playlist not found'));
+    }
   });
 }

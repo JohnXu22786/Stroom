@@ -9948,6 +9948,34 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get catCatchWebGitHubAddress =>
       'GitHub: https://github.com/xifangczy/cat-catch';
+
+  @override
+  String get catCatchLoginRequired =>
+      'This feature requires a signed-in account. Sign in using the browser in the top-right corner.';
+
+  @override
+  String get catCatchNoUsableMedia =>
+      'No usable media resource was found. Check the URL and make sure the website is reachable.';
+
+  @override
+  String get catCatchRedownloadFileMissing =>
+      'The download failed because the downloaded file is missing.';
+
+  @override
+  String get catCatchRedownloadPathEmpty =>
+      'The download failed because the downloaded file path is empty.';
+
+  @override
+  String get catCatchWebBrowserRequired =>
+      'This page cannot expose its resources without a browser environment. Try using the feature on mobile or desktop, or paste a direct video or audio file URL.';
+
+  @override
+  String get catCatchPlaylistNoSegments =>
+      'The playlist has no downloadable segments.';
+
+  @override
+  String get catCatchDownloadedSourceMissing =>
+      'The downloaded source file is missing. Please download it again.';
 }
 
 /// The translations for English, as used in the United States (`en_US`).
@@ -19893,4 +19921,32 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   @override
   String get catCatchWebGitHubAddress =>
       'GitHub: https://github.com/xifangczy/cat-catch';
+
+  @override
+  String get catCatchLoginRequired =>
+      'This feature requires a signed-in account. Sign in using the browser in the top-right corner.';
+
+  @override
+  String get catCatchNoUsableMedia =>
+      'No usable media resource was found. Check the URL and make sure the website is reachable.';
+
+  @override
+  String get catCatchRedownloadFileMissing =>
+      'The download failed because the downloaded file is missing.';
+
+  @override
+  String get catCatchRedownloadPathEmpty =>
+      'The download failed because the downloaded file path is empty.';
+
+  @override
+  String get catCatchWebBrowserRequired =>
+      'This page cannot expose its resources without a browser environment. Try using the feature on mobile or desktop, or paste a direct video or audio file URL.';
+
+  @override
+  String get catCatchPlaylistNoSegments =>
+      'The playlist has no downloadable segments.';
+
+  @override
+  String get catCatchDownloadedSourceMissing =>
+      'The downloaded source file is missing. Please download it again.';
 }
