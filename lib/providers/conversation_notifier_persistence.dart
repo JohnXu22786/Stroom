@@ -128,9 +128,12 @@ void _finalizeReplayMessageSections(
     if (conversation == null) continue;
     final messageIndexes = messageIndexesByConversationId.putIfAbsent(
       conversation.id,
-      () => {
-        for (var index = 0; index < conversation.messages.length; index++)
-          conversation.messages[index].id: index,
+      () {
+        final indexes = <String, int>{};
+        for (var index = 0; index < conversation.messages.length; index++) {
+          indexes.putIfAbsent(conversation.messages[index].id, () => index);
+        }
+        return indexes;
       },
     );
     final messageIndex = messageIndexes[sections.messageId];
