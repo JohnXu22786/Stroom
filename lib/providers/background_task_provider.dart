@@ -3103,7 +3103,7 @@ String _legacyOcrRedactMaskedCredentialEchoes(
           rawEcho.contains(RegExp(r'[\r\n]')) &&
           echo.replaceAll(RegExp(r'\s+'), '').toLowerCase() ==
               '${prefix.toLowerCase()}carefully';
-      final prefixOffset = echo.indexOf(prefix);
+      final prefixOffset = echo.toLowerCase().indexOf(prefix.toLowerCase());
       final echoSuffix =
           prefixOffset < 0 ? '' : echo.substring(prefixOffset + prefix.length);
       final splitEchoHasCredentialUseContext =
