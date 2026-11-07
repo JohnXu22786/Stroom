@@ -46,9 +46,29 @@ Widget createChatTestApp({
 }
 
 void main() {
+  test('edited-image failure localization preserves exception detail', () {
+    const details = 'disk write detail';
+    final english = lookupAppLocalizations(const Locale('en', 'US'));
+    final chinese = lookupAppLocalizations(const Locale('zh', 'CN'));
+
+    expect(
+      english.chatAttachmentEditedImageSaveFailed(details),
+      contains(details),
+    );
+    expect(
+      chinese.chatAttachmentEditedImageSaveFailed(details),
+      contains(details),
+    );
+  });
+
   testWidgets('camera error feedback is localized and keeps platform detail', (
     tester,
   ) async {
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     const imagePickerChannel = MethodChannel('plugins.flutter.io/image_picker');
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(imagePickerChannel, (call) async {

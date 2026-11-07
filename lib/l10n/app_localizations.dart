@@ -3329,6 +3329,12 @@ abstract class AppLocalizations {
   /// **'Imported {fileName}'**
   String chatAttachmentImported(String fileName);
 
+  /// Localized chat attachment feedback
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save the edited image: {error}'**
+  String chatAttachmentEditedImageSaveFailed(String error);
+
   /// No description provided for @chatDataDetails.
   ///
   /// In en, this message translates to:

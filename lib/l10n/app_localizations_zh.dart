@@ -1847,6 +1847,11 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String chatAttachmentEditedImageSaveFailed(String error) {
+    return '保存编辑后的图片失败: $error';
+  }
+
+  @override
   String get chatDataDetails => '数据详情';
 
   @override
@@ -11500,6 +11505,11 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   @override
   String chatAttachmentImported(String fileName) {
     return '已导入 $fileName';
+  }
+
+  @override
+  String chatAttachmentEditedImageSaveFailed(String error) {
+    return '保存编辑后的图片失败: $error';
   }
 
   @override

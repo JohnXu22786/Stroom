@@ -709,6 +709,15 @@
       }
     }
   },
+  "chatAttachmentEditedImageSaveFailed": "Could not save the edited image: {error}",
+  "@chatAttachmentEditedImageSaveFailed": {
+    "description": "Localized chat attachment feedback",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "chatDataDetails": "Data details",
   "chatAudioPreviewClose": "Close",
   "@chatSavedToPath": {

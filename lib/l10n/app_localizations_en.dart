@@ -1968,6 +1968,11 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String chatAttachmentEditedImageSaveFailed(String error) {
+    return 'Could not save the edited image: $error';
+  }
+
+  @override
   String get chatDataDetails => 'Data details';
 
   @override
@@ -12159,6 +12164,11 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   @override
   String chatAttachmentImported(String fileName) {
     return 'Imported $fileName';
+  }
+
+  @override
+  String chatAttachmentEditedImageSaveFailed(String error) {
+    return 'Could not save the edited image: $error';
   }
 
   @override

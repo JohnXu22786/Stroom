@@ -709,6 +709,15 @@
       }
     }
   },
+  "chatAttachmentEditedImageSaveFailed": "保存编辑后的图片失败: {error}",
+  "@chatAttachmentEditedImageSaveFailed": {
+    "description": "Localized chat attachment feedback",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "chatDataDetails": "数据详情",
   "chatAudioPreviewClose": "关闭",
   "@chatSavedToPath": {

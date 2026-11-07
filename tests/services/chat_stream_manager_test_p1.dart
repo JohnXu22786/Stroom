@@ -606,7 +606,8 @@ void chatStreamManagerGroup1() {
       completer.complete();
 
       final result = await future;
-      final errorBlock = result.blocks.whereType<ErrorBlock>().single;
+      final errorBlock =
+          result.assistantMessage!.blocks!.whereType<ErrorBlock>().single;
       expect(errorBlock.message, 'Output was interrupted by the user');
     });
 

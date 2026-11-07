@@ -553,8 +553,9 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
       debugPrint('[ChatComposer] _updatePendingAttachmentAfterEdit error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('保存编辑后的图片失败'),
+          SnackBar(
+            content: Text(AppLocalizations.of(context)!
+                .chatAttachmentEditedImageSaveFailed(e.toString())),
             duration: Duration(seconds: 2),
           ),
         );
