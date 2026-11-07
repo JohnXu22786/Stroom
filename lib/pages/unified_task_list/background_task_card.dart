@@ -37,9 +37,9 @@ String _localizedBackgroundStepLabel(String label, AppLocalizations strings) =>
 String _localizedBackgroundTaskTitle(
   BackgroundTask task,
   AppLocalizations strings,
-  bool isFlowManaged,
+  String? flowBlockTypeKey,
 ) {
-  if (!isFlowManaged) return task.title;
+  if (flowBlockTypeKey != task.type.name) return task.title;
 
   final (prefix, localize) = switch (task.type) {
     BackgroundTaskType.ocr => (
@@ -68,12 +68,14 @@ class BackgroundTaskCard extends ConsumerStatefulWidget {
   final BackgroundTask task;
   final bool isUnread;
   final bool isFlowManaged;
+  final String? flowBlockTypeKey;
 
   const BackgroundTaskCard({
     super.key,
     required this.task,
     this.isUnread = false,
     this.isFlowManaged = false,
+    this.flowBlockTypeKey,
   });
 
   @override
@@ -163,7 +165,7 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
                                 _localizedBackgroundTaskTitle(
                                   widget.task,
                                   strings,
-                                  widget.isFlowManaged,
+                                  widget.flowBlockTypeKey,
                                 ),
                                 style: const TextStyle(
                                   fontSize: 14,

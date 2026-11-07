@@ -729,6 +729,7 @@ class _ExpandedContent extends ConsumerWidget {
         task: task,
         isUnread: false,
         isFlowManaged: true,
+        flowBlockTypeKey: subTask.blockTypeKey,
       );
     }
     return _buildFallbackCard(subTask, cs, strings);

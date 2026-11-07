@@ -16,7 +16,7 @@ BackgroundTask _task(BackgroundTaskType type, String title) => BackgroundTask(
 
 Future<void> _pumpCards(
   WidgetTester tester,
-  List<(BackgroundTask, bool)> tasks,
+  List<(BackgroundTask, String?)> tasks,
   Locale locale,
 ) async {
   await tester.pumpWidget(
@@ -28,10 +28,11 @@ Future<void> _pumpCards(
         home: Scaffold(
           body: ListView(
             children: [
-              for (final (task, isFlowManaged) in tasks)
+              for (final (task, flowBlockTypeKey) in tasks)
                 BackgroundTaskCard(
                   task: task,
-                  isFlowManaged: isFlowManaged,
+                  isFlowManaged: flowBlockTypeKey != null,
+                  flowBlockTypeKey: flowBlockTypeKey,
                 ),
             ],
           ),
@@ -54,12 +55,17 @@ void main() {
       BackgroundTaskType.audioSeparation,
       '音频分离_regular_task',
     );
+    final mismatchedFlowBlock = _task(
+      BackgroundTaskType.ocr,
+      '文字识别_other_block',
+    );
     final tasks = [
-      (ocr, true),
-      (audio, true),
-      (custom, true),
-      (otherType, true),
-      (regularTask, false),
+      (ocr, 'ocr'),
+      (audio, 'audioSeparation'),
+      (custom, 'ocr'),
+      (otherType, 'chat'),
+      (regularTask, null),
+      (mismatchedFlowBlock, 'chat'),
     ];
 
     await _pumpCards(tester, tasks, const Locale('en', 'US'));
@@ -69,6 +75,7 @@ void main() {
     expect(find.text(custom.title), findsOneWidget);
     expect(find.text(otherType.title), findsOneWidget);
     expect(find.text(regularTask.title), findsOneWidget);
+    expect(find.text(mismatchedFlowBlock.title), findsOneWidget);
     expect(ocr.title, '文字识别_photo_01');
     expect(audio.title, '音频分离_clip_02');
 
@@ -79,6 +86,7 @@ void main() {
     expect(find.text(custom.title), findsOneWidget);
     expect(find.text(otherType.title), findsOneWidget);
     expect(find.text(regularTask.title), findsOneWidget);
+    expect(find.text(mismatchedFlowBlock.title), findsOneWidget);
     expect(ocr.title, '文字识别_photo_01');
     expect(audio.title, '音频分离_clip_02');
   });
