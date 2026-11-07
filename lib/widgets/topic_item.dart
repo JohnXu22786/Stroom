@@ -44,10 +44,7 @@ class TopicItem extends StatelessWidget {
     final brightness = Theme.of(context).brightness;
     final isDark = brightness == Brightness.dark;
     final statusColor = isRunning
-        ? ColorScheme.fromSeed(
-            seedColor: Colors.blue,
-            brightness: brightness,
-          ).primary
+        ? cs.primary
         : isFailed
             ? cs.error
             : isUnread
