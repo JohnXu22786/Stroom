@@ -84,6 +84,7 @@ Future<void> _runAudioSeparation({
   required List<SelectedVideo> videos,
   required BackgroundTaskNotifier bgNotifier,
   required String saveFolder,
+  required String errorPrefix,
   Future<({Uint8List audioBytes, String hash, String format})> Function(
           SelectedVideo video)?
       workerExtract,
@@ -142,7 +143,7 @@ Future<void> _runAudioSeparation({
       } catch (e) {
         if (!isTaskLive()) continue;
         throttler.updateStep(taskId, activeStepIndex, failed: true);
-        throttler.failTask(taskId, error: '音频提取失败: $e');
+        throttler.failTask(taskId, error: '$errorPrefix$e');
       }
     }
   } finally {
@@ -158,6 +159,7 @@ Future<void> runAudioSeparationForTesting({
   required List<SelectedVideo> videos,
   required BackgroundTaskNotifier bgNotifier,
   required String saveFolder,
+  required String errorPrefix,
   required Future<({Uint8List audioBytes, String hash, String format})>
           Function(SelectedVideo video)
       workerExtract,
@@ -166,6 +168,7 @@ Future<void> runAudioSeparationForTesting({
       videos: videos,
       bgNotifier: bgNotifier,
       saveFolder: saveFolder,
+      errorPrefix: errorPrefix,
       workerExtract: workerExtract,
     );
 
@@ -1069,6 +1072,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
     final videosToProcess = List<SelectedVideo>.from(_selectedVideos);
     final bgNotifier = ref.read(backgroundTasksProvider.notifier);
     final saveFolder = _saveFolder;
+    final errorPrefix = _l10n.audioSeparationTaskFailurePrefix;
     final route = ModalRoute.of(context);
 
     // Pop IMMEDIATELY — schedule the route transition now.
@@ -1090,6 +1094,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
       videos: videosToProcess,
       bgNotifier: bgNotifier,
       saveFolder: saveFolder,
+      errorPrefix: errorPrefix,
     ));
   }
 

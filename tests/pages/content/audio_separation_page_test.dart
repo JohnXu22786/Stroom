@@ -98,6 +98,7 @@ void main() {
       ],
       bgNotifier: notifier,
       saveFolder: '',
+      errorPrefix: '音频提取失败: ',
       workerExtract: (_) {
         extractionStarted.complete();
         return extractionResult.future;
@@ -133,6 +134,7 @@ void main() {
       ],
       bgNotifier: notifier,
       saveFolder: '',
+      errorPrefix: '音频提取失败: ',
       workerExtract: (_) async =>
           (audioBytes: audioBytes, hash: 'completed_audio_task', format: 'wav'),
     );

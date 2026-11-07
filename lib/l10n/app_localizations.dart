@@ -12893,6 +12893,12 @@ abstract class AppLocalizations {
   /// **'Failed to choose video: {error}'**
   String audioSeparationChooseVideoFailure(String error);
 
+  /// No description provided for @audioSeparationTaskFailurePrefix.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio extraction failed: '**
+  String get audioSeparationTaskFailurePrefix;
+
   /// No description provided for @audioSeparationEngineMissing.
   ///
   /// In en, this message translates to:
