@@ -15,7 +15,6 @@ Widget _buildTestApp({String? initialCode}) {
       supportedLocales: AppLocalizations.supportedLocales,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       home: MermaidChartPage(
-        key: ValueKey(initialCode),
         initialCode: initialCode,
         initialShowPreview: false,
       ),
@@ -72,7 +71,7 @@ void main() {
   );
 
   testWidgets(
-    'English save guidance and empty-content validation are localized',
+    'English save guidance and filename validation are localized',
     (tester) async {
       await tester.pumpWidget(_buildTestApp(initialCode: 'graph TD\n  A-->B'));
       await tester.pumpAndSettle();
@@ -101,17 +100,19 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Filename cannot be empty'), findsOneWidget);
       expect(find.byType(FolderPickerDialog), findsNothing);
-
-      await tester.pumpWidget(_buildTestApp(initialCode: ''));
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.byTooltip('Save to Text Storage'));
-      await tester.pump();
-      expect(
-        find.text('Chart content is empty and cannot be saved'),
-        findsOneWidget,
-      );
-      expect(find.byType(FolderPickerDialog), findsNothing);
     },
   );
+
+  testWidgets('English empty-content validation is localized', (tester) async {
+    await tester.pumpWidget(_buildTestApp(initialCode: ''));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Save to Text Storage'));
+    await tester.pump();
+    expect(
+      find.text('Chart content is empty and cannot be saved'),
+      findsOneWidget,
+    );
+    expect(find.byType(FolderPickerDialog), findsNothing);
+  });
 }
