@@ -18,20 +18,19 @@ extension _ChatStreamManagerEventsExt on ChatStreamManager {
             ChatStreamManager._textThrottle) {
           state.lastTextUpdate = now;
           final hasMarkdownSyntax = state.currentChunkHasMarkdownSyntax;
-          if (hasMarkdownSyntax) {
+          final textDelta = state.takeTextDelta();
+          if (textDelta.isNotEmpty) {
             _pushToProvider(
-                convId, streamingTextSectionsProvider, state.textChunks);
+              convId,
+              streamingTextAppendProvider,
+              StreamingTextAppend(
+                sequence: state.nextTextUpdateSequence,
+                chunkIndex: state.currentTextChunkIndex,
+                text: textDelta,
+                hasMarkdownSyntax: hasMarkdownSyntax,
+              ),
+            );
           }
-          _pushToProvider(
-            convId,
-            streamingTextAppendProvider,
-            StreamingTextAppend(
-              sequence: state.nextTextUpdateSequence,
-              chunkIndex: state.currentTextChunkIndex,
-              text: state.takeTextDelta(),
-              hasMarkdownSyntax: hasMarkdownSyntax,
-            ),
-          );
         }
 
       case ReasoningEvent e:
@@ -54,10 +53,6 @@ extension _ChatStreamManagerEventsExt on ChatStreamManager {
         final pendingText = state.takeTextDelta();
         if (pendingText.isNotEmpty) {
           final hasMarkdownSyntax = state.currentChunkHasMarkdownSyntax;
-          if (hasMarkdownSyntax) {
-            _pushToProvider(
-                convId, streamingTextSectionsProvider, state.textChunks);
-          }
           _pushToProvider(
             convId,
             streamingTextAppendProvider,
@@ -68,6 +63,12 @@ extension _ChatStreamManagerEventsExt on ChatStreamManager {
               hasMarkdownSyntax: hasMarkdownSyntax,
             ),
           );
+          if (hasMarkdownSyntax) {
+            // The text-section snapshot includes this drained tail. Publish
+            // the delta first so the live segment cannot append it twice.
+            _pushToProvider(
+                convId, streamingTextSectionsProvider, state.textChunks);
+          }
         }
         state.startTextChunkFromService();
         // Preserve the sub-throttle tail before publishing the boundary.

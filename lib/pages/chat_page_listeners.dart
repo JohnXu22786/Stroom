@@ -13,9 +13,13 @@ extension _ChatPageListenersExt on _ChatPageState {
   /// No _isStreamingForCurrentConv guard needed — families prevent cross-contamination.
   void _registerStreamingListeners(String convId) {
     ref.listen(streamingTextAppendProvider(convId), (prev, next) {
-      if (!mounted || next == null || next.hasMarkdownSyntax) return;
+      if (!mounted || next == null || next.text.isEmpty) return;
       final msgId = _streamingMsgId ?? ref.read(streamingMsgIdProvider(convId));
       if (msgId == null) return;
+      if (next.hasMarkdownSyntax) {
+        _updateLiveMarkdownSegment(msgId, next, convId);
+        return;
+      }
       final existingSegments = _chatSegments[msgId] ?? const [];
       final existingText = existingSegments
           .whereType<TextSegment>()
@@ -183,6 +187,79 @@ extension _ChatPageListenersExt on _ChatPageState {
       }
       // Other segment changes are refreshed by their reasoning/tool listener.
     });
+  }
+
+  void _updateLiveMarkdownSegment(
+    String msgId,
+    StreamingTextAppend next,
+    String convId,
+  ) {
+    final prior = _chatSegments[msgId] ?? const <MessageSegment>[];
+    final existingText = prior
+        .whereType<TextSegment>()
+        .where((segment) => segment.chunkIndex == next.chunkIndex)
+        .lastOrNull;
+    final seed = existingText == null ||
+            existingText.liveMarkdownAppend != null ||
+            existingText.liveTextFragments != null ||
+            existingText.text.length > _LiveMarkdownSearchPreview._maxLength
+        ? ''
+        : existingText.text;
+    final previewKey = '$msgId:${next.chunkIndex}';
+    final priorAppendCount = _liveMarkdownAppendCounts[previewKey] ?? 0;
+    final managerAppendCount =
+        ref.read(chatStreamManagerProvider).textChunkAppendCountFor(convId);
+    final nextAppendCount = priorAppendCount + 1;
+    final appendCount = managerAppendCount > nextAppendCount
+        ? managerAppendCount
+        : nextAppendCount;
+    _liveMarkdownAppendCounts[previewKey] = appendCount;
+    if (_isSearching) {
+      var preview = _liveMarkdownSearchPreviews[previewKey];
+      if (preview == null) {
+        final chunks =
+            ref.read(chatStreamManagerProvider).textChunksFor(convId);
+        final initialText = next.chunkIndex < chunks.length
+            ? chunks[next.chunkIndex]
+            : '$seed${next.text}';
+        preview = _LiveMarkdownSearchPreview(
+          initialText,
+          initialUpdates: appendCount,
+        );
+        _liveMarkdownSearchPreviews[previewKey] = preview;
+      } else {
+        preview.append(next.text);
+      }
+    } else {
+      _liveMarkdownSearchPreviews.remove(previewKey);
+    }
+    _livePlainTextFragments.remove('$msgId:${next.chunkIndex}');
+
+    if (!(_isReasoningCompletedForMsg[msgId] ?? false)) {
+      _isReasoningCompletedForMsg[msgId] = true;
+      _convertStreamingPlaceholderToTextMessage(msgId);
+      _rebuildLiveSegments(msgId);
+    }
+
+    final segments = List<MessageSegment>.of(_chatSegments[msgId] ?? prior);
+    final existingIndex = segments.lastIndexWhere(
+      (segment) =>
+          segment is TextSegment && segment.chunkIndex == next.chunkIndex,
+    );
+    final segment = TextSegment(
+      '',
+      chunkIndex: next.chunkIndex,
+      liveMarkdownAppend: next.text,
+      liveMarkdownSequence: next.sequence,
+      liveMarkdownSeed: seed,
+    );
+    if (existingIndex >= 0) {
+      segments[existingIndex] = segment;
+    } else {
+      segments.add(segment);
+    }
+    _chatSegments[msgId] = segments;
+    _refreshStreamingBubble(msgId);
   }
 
   /// Detects background stream completion: when the current conversation

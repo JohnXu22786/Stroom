@@ -748,7 +748,10 @@ extension _ChatPageUiExt on _ChatPageState {
             tooltip: AppLocalizations.of(context)!.chatSearchMessages,
             onPressed: () => setState(() {
               _isSearching = !_isSearching;
-              if (!_isSearching) _searchMode = SearchMode.current;
+              if (!_isSearching) {
+                _searchMode = SearchMode.current;
+                _liveMarkdownSearchPreviews.clear();
+              }
             }),
           ),
         ],

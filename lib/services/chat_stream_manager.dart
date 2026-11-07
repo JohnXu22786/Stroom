@@ -270,6 +270,12 @@ class ChatStreamManager {
   List<String> textChunksFor(String convId) =>
       _streams[convId]?.textChunks ?? const [];
 
+  /// Number of nonempty text deltas already published for the current chunk.
+  /// Used to preserve the Markdown live-preview budget when a ChatPage
+  /// reattaches to a stream that continued in the background.
+  int textChunkAppendCountFor(String convId) =>
+      _streams[convId]?.currentTextChunkAppendCount ?? 0;
+
   /// Tool call round starts for a specific conversation.
   List<int> toolCallRoundStartsFor(String convId) =>
       List.unmodifiable(_streams[convId]?.toolCallRoundStarts ?? []);

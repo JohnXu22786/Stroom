@@ -18,7 +18,22 @@ class TextSegment extends MessageSegment {
   /// separate avoids joining and reparsing the entire growing section.
   final List<String>? liveTextFragments;
 
-  TextSegment(this.text, {this.chunkIndex, this.liveTextFragments});
+  /// Latest Markdown append for the active renderer session. The session
+  /// retains only its active block and sealed widgets, not an accumulated
+  /// copy of the full section.
+  final String? liveMarkdownAppend;
+  final int? liveMarkdownSequence;
+
+  /// Existing full text supplied once when a stream switches from a snapshot
+  /// or plain-text view into incremental Markdown rendering.
+  final String? liveMarkdownSeed;
+
+  TextSegment(this.text,
+      {this.chunkIndex,
+      this.liveTextFragments,
+      this.liveMarkdownAppend,
+      this.liveMarkdownSequence,
+      this.liveMarkdownSeed});
 }
 
 class ErrorSegment extends MessageSegment {
@@ -77,7 +92,13 @@ List<MessageSegment> mergeConsecutiveTextSegments(
   if (segments.isEmpty) return [];
   final merged = <MessageSegment>[];
   for (final seg in segments) {
-    if (seg is TextSegment && merged.isNotEmpty && merged.last is TextSegment) {
+    if (seg is TextSegment &&
+        seg.liveMarkdownAppend == null &&
+        seg.liveTextFragments == null &&
+        merged.isNotEmpty &&
+        merged.last is TextSegment &&
+        (merged.last as TextSegment).liveMarkdownAppend == null &&
+        (merged.last as TextSegment).liveTextFragments == null) {
       final last = merged.last as TextSegment;
       merged[merged.length - 1] = TextSegment(
         last.text + seg.text,

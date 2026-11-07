@@ -202,6 +202,7 @@ extension _ChatPageSearchExt on _ChatPageState {
   }
 
   void _closeSearch() {
+    _liveMarkdownSearchPreviews.clear();
     setState(() {
       _isSearching = false;
       _searchMode = SearchMode.current;

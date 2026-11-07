@@ -96,6 +96,7 @@ class _ConversationStreamState {
   // instead of copying the full reply for every update.
   final List<String> _completedTextChunks = [];
   StringBuffer _currentTextChunk = StringBuffer();
+  int _currentTextAppendCount = 0;
   final List<StringBuffer> _checkpointTextDeltas = [StringBuffer()];
   bool _checkpointBasePending = true;
   final Set<String> _checkpointedHistoryMessageIds = {};
@@ -106,6 +107,7 @@ class _ConversationStreamState {
   set fullReply(String value) {
     _completedTextChunks.clear();
     _currentTextChunk = StringBuffer(value);
+    _currentTextAppendCount = 0;
     _checkpointTextDeltas
       ..clear()
       ..add(StringBuffer(value));
@@ -229,9 +231,12 @@ class _ConversationStreamState {
 
   int get nextTextUpdateSequence => _textUpdateSequence++;
 
+  int get currentTextChunkAppendCount => _currentTextAppendCount;
+
   String takeTextDelta() {
     final delta = _pendingTextDelta.toString();
     _pendingTextDelta.clear();
+    if (delta.isNotEmpty) _currentTextAppendCount++;
     return delta;
   }
 
@@ -632,6 +637,7 @@ class _ConversationStreamState {
     final completed = _currentTextChunk.toString();
     _completedTextChunks.add(completed);
     _currentTextChunk = StringBuffer();
+    _currentTextAppendCount = 0;
     _checkpointTextDeltas.add(StringBuffer());
     _pendingTextDelta.clear();
     _currentChunkHasMarkdownSyntax = false;
