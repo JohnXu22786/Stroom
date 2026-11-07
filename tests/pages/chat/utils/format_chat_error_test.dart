@@ -24,6 +24,7 @@ void main() {
       expect(english, contains(details));
       expect(chinese, contains('网络连接失败'));
       expect(chinese, contains(details));
+      expect(formatChatErrorMessage('plain'), '错误: plain');
 
       const providerDetails = 'provider=Demo https://api.example.test';
       final providerError = formatChatErrorMessage(

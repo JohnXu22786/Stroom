@@ -163,12 +163,13 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
         } else if (hadStreamError &&
             (textChunks.any((chunk) => chunk.isNotEmpty) ||
                 state.reasoningSections.any((section) => section.isNotEmpty))) {
-          blocks.add(ErrorBlock(
-            message: formatChatErrorMessage(
-              streamError,
-              locale: _ref?.read(localeProvider),
-            ),
-          ));
+          final errorMessage = _ref == null
+              ? formatChatErrorMessage(streamError)
+              : formatChatErrorMessage(
+                  streamError,
+                  locale: _ref?.read(localeProvider),
+                );
+          blocks.add(ErrorBlock(message: errorMessage));
         }
         final msg = ChatMessage(
           role: 'assistant',
@@ -204,132 +205,4 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
     // This guard ensures save always runs, even if the code below throws.
     // It's the single persistence path for all streaming results.
     // Identity guard：Stop→re-Send 时旧流的 finalize 可能晚于新流的
-    // 保存执行——若 _streams[convId] 已指向新 state，旧历史（不含
-    // 新用户消息）不得覆盖新流已持久化的数据。
-    try {
-      if (state.history.isNotEmpty && _streams[convId] == state) {
-        await AppLogService.info('ChatStreamManager',
-            '[STREAM-MGR] startStreaming: persisting historyLen=${state.history.length}');
-        await _saveMessages(convId: convId, history: state.history);
-        // 保存 await 期间新流可能已注册（Stop→re-Send）：此时本次
-        // 保存已把旧历史写入（updateMessages 全量替换），若新流已
-        // 持久化过数据，重新保存最新 _streams[convId] 的历史覆盖回来。
-        // （防御 TOCTOU：保存前检查 + 保存后检查双保险）
-        if (_streams[convId] != state &&
-            _streams[convId]?.history.isNotEmpty == true) {
-          await _saveMessages(
-              convId: convId,
-              history: List<ChatMessage>.from(_streams[convId]!.history));
-        }
-      }
-    } catch (e) {
-      await AppLogService.error(
-          'ChatStreamManager', '[STREAM-MGR] save failed', e);
-    }
-
-    // Build the result and complete the resultCompleter AFTER save.
-    // 注意：标题生成等 LLM 回环任务绝不能阻塞这里 —— 否则页面
-    // _startStreaming 的 await 被拖住（秒级），且此窗口内用户的再次
-    // 发送会命中 _streams 去重而丢失新消息。
-    // 结果构造必须保证不抛异常：completer 一旦不 complete，页面
-    // await 永久挂起、service 残留（下一条消息复用旧 service 拿到
-    // 过期配置/请求体快照）。计费不受影响——usage 已按请求事件
-    // 驱动即时累计，与 finalize 是否执行无关。
-    StreamResult result;
-    try {
-      result = StreamResult(
-        history: List.from(state.history),
-        assistantMessage: assistantMessage,
-        fullReply: fullReply,
-        reasoningBuffer: state.reasoningBuffer,
-        reasoningSections: List.from(state.reasoningSections),
-        textSections: List.from(textChunks),
-        toolCalls: List.from(state.accumulatedToolCalls),
-        toolCallRoundStarts: List.from(state.toolCallRoundStarts),
-        blocks: legacyToBlocks(
-          reasoningSections: state.reasoningSections,
-          textChunks: textChunks,
-          toolCalls: state.accumulatedToolCalls,
-          toolCallRoundStarts: state.toolCallRoundStarts,
-        ),
-        cancelled: wasCancelled,
-      );
-    } catch (e, s) {
-      debugPrint('[ChatStreamManager] 结果构造失败: $e\n$s');
-      result = StreamResult(
-        history: List.from(state.history),
-        fullReply: fullReply ?? state.textChunks.join(),
-        cancelled: wasCancelled,
-      );
-    }
-
-    // Complete the result completer so duplicate startStreaming calls
-    // await the same future and get the final result.
-    if (!state.resultCompleter!.isCompleted) {
-      state.resultCompleter!.complete(result);
-    }
-
-    // Clean up this conversation's stream.
-    // Identity guard: if _streams[convId] no longer references THIS state
-    // object, a new stream was already started for the same convId (via the
-    // Stop→re-Send path). In that case, skip removal and provider cleanup
-    // to avoid destroying the new stream's state.
-    if (_streams[convId] == state) {
-      _streams.remove(convId);
-    }
-    state.resultCompleter = null;
-
-    // Only clear per-conversation providers if no new stream replaced
-    // this one. If a new stream is active for the same convId, its own
-    // provider state should be left untouched.
-    final replaced = _streams.containsKey(convId) && _streams[convId] != state;
-    if (!replaced) {
-      _setProvider(isStreamingProvider(convId), false);
-      _setProvider(streamingMsgIdProvider(convId), null);
-      _setProvider(streamingHasFirstTokenProvider(convId), false);
-      _setProvider(streamingReasoningProvider(convId), '');
-      _setProvider(streamingReasoningAppendProvider(convId), null);
-    }
-
-    // Remove this conversation from the streaming set ONLY if no new
-    // stream replaced this one. If _streams still contains convId (pointing
-    // to a different state object), keep it in the streaming set.
-    if (!_streams.containsKey(convId)) {
-      final activeSet = <String>{
-        ..._ref?.read(streamingConversationsProvider) ?? const {}
-      };
-      activeSet.remove(convId);
-      _setProvider(streamingConversationsProvider, activeSet);
-      // Dispose the per-conversation ChatService so a subsequent
-      // startStreaming for the same convId creates a fresh service
-      // with the latest config (from forceService / selectModel).
-      _adapter.cancelService(convId);
-
-      // ── 自动标题（fire-and-forget，不阻塞结果返回） ──
-      // 放在 cancelService 之后：_maybeGenerateTitle 内部用
-      // createTransientService 创建一次性 service，不会与已 dispose
-      // 的旧 service 冲突。失败静默（保留截断标题）。
-      if (!wasCancelled && !hadStreamError && state.history.isNotEmpty) {
-        // ignore: discarded_futures
-        unawaited(_maybeGenerateTitle(
-          convId: convId,
-          history: List<ChatMessage>.from(state.history),
-        ));
-      }
-    }
-
-    // Keep segment providers while any page is displaying this completed
-    // message: its post-stream path builds finalized segments before clearing
-    // them, and a re-entered page reloads the saved message on completion.
-    // If the originating page was disposed and no page re-entered, release
-    // the large stream buffers now instead of retaining them indefinitely.
-    final streamingMsgId = state.streamingMsgId;
-    if (!replaced &&
-        (streamingMsgId == null ||
-            !_hasAttachedStreamPage(convId, streamingMsgId))) {
-      _clearCompletedSegmentProviders(convId);
-    }
-
-    return result;
-  }
-}
+    // 保存执行——若 _streams[convId] 已指向新 state，旧历史（不�

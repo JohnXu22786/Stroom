@@ -7,7 +7,10 @@ import 'package:stroom/providers/locale_provider.dart'
 import '../../../utils/data_sanitizer.dart';
 
 /// 格式化聊天错误信息，分类显示友好的提示并保留原始错误
-String formatChatErrorMessage(Object error, {Locale? locale}) {
+String formatChatErrorMessage(
+  Object error, {
+  Locale? locale = const Locale('zh', 'CN'),
+}) {
   final l10n = appLocalizationsForLocale(locale);
   final errorStr = error.toString();
 
