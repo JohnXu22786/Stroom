@@ -85,7 +85,11 @@ void main() {
         await tester.pumpWidget(
           localizationTestApp(
             locale: locale,
-            home: const LogContentPage(fileName: fileName, content: rawContent),
+            home: LogContentPage(
+              key: ValueKey(locale.languageCode),
+              fileName: fileName,
+              content: rawContent,
+            ),
           ),
         );
         await tester.pumpAndSettle();
