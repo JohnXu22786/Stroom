@@ -11,7 +11,10 @@ Widget _app({
   Brightness brightness = Brightness.light,
 }) {
   return MaterialApp(
-    theme: ThemeData(colorSchemeSeed: Colors.blue, brightness: brightness),
+    theme: ThemeData(
+      colorSchemeSeed: Colors.deepPurple,
+      brightness: brightness,
+    ),
     supportedLocales: AppLocalizations.supportedLocales,
     localizationsDelegates: AppLocalizations.localizationsDelegates,
     home: Scaffold(
@@ -36,17 +39,20 @@ Widget _app({
 
 void main() {
   testWidgets(
-    'running conversation keeps its bubble and pulses blue each second',
+    'running conversation pulses the theme primary each second',
     (tester) async {
       await tester.pumpWidget(_app(isRunning: true));
 
       final bubble = tester.widget<Icon>(
         find.byIcon(Icons.chat_bubble_outline_rounded),
       );
+      final primary =
+          Theme.of(tester.element(find.byType(TopicItem))).colorScheme.primary;
       expect(
-        bubble.color,
-        ColorScheme.fromSeed(seedColor: Colors.blue).primary,
+        primary,
+        isNot(ColorScheme.fromSeed(seedColor: Colors.blue).primary),
       );
+      expect(bubble.color, primary);
       final firstColor = bubble.color;
 
       await tester.pump(const Duration(milliseconds: 500));
