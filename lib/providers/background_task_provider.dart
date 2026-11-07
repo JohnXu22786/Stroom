@@ -2226,18 +2226,29 @@ bool _legacyOcrTextContainsMaskedCredential(
             final naturalWord = '$prefix$suffix'
                 .replaceAll(RegExp(r'[^a-zA-Z]'), '')
                 .toLowerCase();
+            final beforePartBoundaryWord =
+                textWithoutPartMarkers.substring(0, match.start).trimRight();
+            final afterPartBoundaryWord =
+                textWithoutPartMarkers.substring(match.end).trimLeft();
+            final myProjectManagementCredentialRequest =
+                naturalWord == 'myprojectmanagement' &&
+                    RegExp(r'\buse$', caseSensitive: false)
+                        .hasMatch(beforePartBoundaryWord) &&
+                    RegExp(r'^for (?:the )?request\b', caseSensitive: false)
+                        .hasMatch(afterPartBoundaryWord);
             final ordinaryNaturalPromptContext =
                 _legacyOcrHasOrdinaryNaturalPromptContext(
               textWithoutPartMarkers,
               match,
               naturalWord,
               openMaskPrefix: prefix,
-              hasCredentialUseContext: _legacyOcrHasCredentialUseContext(
-                textWithoutPartMarkers,
-                match,
-                prefix,
-                suffix,
-              ),
+              hasCredentialUseContext: myProjectManagementCredentialRequest ||
+                  _legacyOcrHasCredentialUseContext(
+                    textWithoutPartMarkers,
+                    match,
+                    prefix,
+                    suffix,
+                  ),
               isNaturalWordContinuation: naturalWordContinuation,
               isNaturalSecretPlural:
                   naturalWord == 'secrets' && suffix.toLowerCase() == 's',
@@ -2251,10 +2262,6 @@ bool _legacyOcrTextContainsMaskedCredential(
             final crossesPartBoundary = partBoundaryOffsets.any(
               (offset) => offset > match.start && offset < match.end,
             );
-            final beforePartBoundaryWord =
-                textWithoutPartMarkers.substring(0, match.start).trimRight();
-            final afterPartBoundaryWord =
-                textWithoutPartMarkers.substring(match.end).trimLeft();
             final hasNaturalInstructionAroundPartBoundary = RegExp(
                   r'\b(?:check|read|review|identify|recognize|describe|summarize|analyze|extract|inspect|scan|transcribe|translate|classify|explain|process)\s*$',
                   caseSensitive: false,
@@ -2303,12 +2310,6 @@ bool _legacyOcrTextContainsMaskedCredential(
                 !naturalWordContinuation;
             final repeatedStructuredHyphenatedSuffix = allowEmbeddedPrefix &&
                 _legacyOcrHasRepeatedHyphenatedAlphaComponent(prefix, suffix);
-            final myProjectManagementCredentialRequest =
-                naturalWord == 'myprojectmanagement' &&
-                    RegExp(r'\buse$', caseSensitive: false)
-                        .hasMatch(beforePartBoundaryWord) &&
-                    RegExp(r'^for (?:the )?request\b', caseSensitive: false)
-                        .hasMatch(afterPartBoundaryWord);
             final hasExplicitCredentialUseContext =
                 myProjectManagementCredentialRequest ||
                     _legacyOcrHasCredentialUseContext(
