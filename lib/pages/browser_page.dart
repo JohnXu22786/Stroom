@@ -409,12 +409,22 @@ Future<String> _fetchUserscript(String sourceUrl) async {
     throw const FormatException('notScript');
   }
   final contentType = response.contentType?.toLowerCase();
-  if ((contentType?.contains('text/html') ?? false) ||
-      (contentType != null &&
-          !contentType.contains('javascript') &&
-          !contentType.contains('ecmascript') &&
-          !contentType.contains('text/plain') &&
-          !contentType.contains('application/octet-stream')) ||
+  final mediaType = contentType?.split(';').first.trim();
+  const javaScriptMimeTypes = {
+    'application/javascript',
+    'text/javascript',
+    'application/ecmascript',
+    'text/ecmascript',
+    'application/x-ecmascript',
+    'text/x-ecmascript',
+    'application/x-javascript',
+    'text/x-javascript',
+  };
+  if (mediaType == 'text/html' ||
+      (mediaType != null &&
+          !javaScriptMimeTypes.contains(mediaType) &&
+          mediaType != 'text/plain' &&
+          mediaType != 'application/octet-stream') ||
       RegExp(r'^\s*<(?:!doctype\s+html|html\b)', caseSensitive: false)
           .hasMatch(source)) {
     throw const FormatException('notScript');
@@ -427,6 +437,7 @@ Future<String> _fetchUserscript(String sourceUrl) async {
           r'^\s*// ==/UserScript==\s*$',
           multiLine: true)
       .hasMatch(source);
+  final isJavaScriptMime = javaScriptMimeTypes.contains(mediaType);
   var isJson = false;
   try {
     jsonDecode(source);
@@ -438,14 +449,11 @@ Future<String> _fetchUserscript(String sourceUrl) async {
     r'^\s*(?:access denied|permission denied|unauthorized|forbidden|not found|error\b|failed\b|request failed|cannot get\b|could not\b|bad gateway|service unavailable|rate limit\b|too many requests|http\s+\d{3})',
     caseSensitive: false,
   ).hasMatch(source);
-  final isJavaScriptMime = contentType != null &&
-      (contentType.contains('javascript') ||
-          contentType.contains('ecmascript'));
   final isPlainTextMime = !isJavaScriptMime &&
-      (contentType == null ||
-          contentType.contains('text/plain') ||
-          contentType.contains('application/octet-stream'));
-  if (isJson ||
+      (mediaType == null ||
+          mediaType == 'text/plain' ||
+          mediaType == 'application/octet-stream');
+  if ((isJson && !isJavaScriptMime) ||
       looksLikeError ||
       (isPlainTextMime && !(hasUserscriptHeader && hasUserscriptEnd))) {
     throw const FormatException('notScript');
@@ -1609,10 +1617,10 @@ class _ScriptEditDialogState extends State<_ScriptEditDialog> {
             Navigator.pop(
               context,
               UserScript(
-                name: _nameCtrl.text.trim().isNotEmpty
-                    ? _nameCtrl.text.trim()
-                    : (_userscriptMetadataName(_codeCtrl.text) ??
-                        l10n.browserUnnamedScript),
+                name: _userscriptMetadataName(_codeCtrl.text) ??
+                    (_nameCtrl.text.trim().isNotEmpty
+                        ? _nameCtrl.text.trim()
+                        : l10n.browserUnnamedScript),
                 code: _codeCtrl.text,
               ),
             );
