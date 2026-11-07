@@ -320,12 +320,14 @@ class NotificationPayload {
 /// notification arrives.
 class InAppNotificationBanner extends StatefulWidget {
   final NotificationPayload payload;
+  final Locale? locale;
   final bool isDark;
   final VoidCallback onDismiss;
 
   const InAppNotificationBanner({
     super.key,
     required this.payload,
+    this.locale,
     required this.isDark,
     required this.onDismiss,
   });
@@ -375,6 +377,7 @@ class _InAppNotificationBannerState extends State<InAppNotificationBanner>
   @override
   Widget build(BuildContext context) {
     final isSuccess = widget.payload.success;
+    final strings = appLocalizationsForLocale(widget.locale);
     final isDark = widget.isDark;
     // 前景色：浅色主题用深色文字，深色主题用白色文字。
     final fg = isDark ? Colors.white : Colors.black87;
@@ -442,7 +445,9 @@ class _InAppNotificationBannerState extends State<InAppNotificationBanner>
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          isSuccess ? '任务完成' : '任务失败',
+                          isSuccess
+                              ? strings.notificationBannerTaskCompletedHeading
+                              : strings.notificationBannerTaskFailedHeading,
                           style: TextStyle(
                             color: fg,
                             fontWeight: FontWeight.bold,

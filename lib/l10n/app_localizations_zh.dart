@@ -9020,6 +9020,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get bgTaskErrorDetailsHidden => '错误详情已隐藏';
 
   @override
+  String get notificationBannerTaskCompletedHeading => '任务完成';
+
+  @override
+  String get notificationBannerTaskFailedHeading => '任务失败';
+
+  @override
   String notificationTaskCompletedTitle(String typeLabel) {
     return '任务完成：$typeLabel';
   }
@@ -18379,6 +18385,12 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get bgTaskErrorDetailsHidden => '错误详情已隐藏';
+
+  @override
+  String get notificationBannerTaskCompletedHeading => '任务完成';
+
+  @override
+  String get notificationBannerTaskFailedHeading => '任务失败';
 
   @override
   String notificationTaskCompletedTitle(String typeLabel) {

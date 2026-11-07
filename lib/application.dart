@@ -605,6 +605,7 @@ class _InAppBannerOverlay extends ConsumerWidget {
       child: InAppNotificationBanner(
         key: ValueKey(payload.taskId),
         payload: payload,
+        locale: ref.watch(localeProvider),
         isDark: isDark,
         onDismiss: () {
           ref.read(inAppNotificationProvider.notifier).state = null;

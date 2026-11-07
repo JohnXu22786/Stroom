@@ -15882,6 +15882,18 @@ abstract class AppLocalizations {
   /// **'Error details were hidden'**
   String get bgTaskErrorDetailsHidden;
 
+  /// No description provided for @notificationBannerTaskCompletedHeading.
+  ///
+  /// In en, this message translates to:
+  /// **'Task completed'**
+  String get notificationBannerTaskCompletedHeading;
+
+  /// No description provided for @notificationBannerTaskFailedHeading.
+  ///
+  /// In en, this message translates to:
+  /// **'Task failed'**
+  String get notificationBannerTaskFailedHeading;
+
   /// No description provided for @notificationTaskCompletedTitle.
   ///
   /// In en, this message translates to:
