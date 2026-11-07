@@ -8108,6 +8108,25 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String backupServiceExportSavedTo(String location) {
+    return 'Backup saved to: $location';
+  }
+
+  @override
+  String backupServiceExportFailed(String error) {
+    return 'Backup failed: $error';
+  }
+
+  @override
+  String backupServiceRestoreFailed(String error) {
+    return 'Restore failed: $error';
+  }
+
+  @override
+  String get backupServiceNoBackupFolderSelected =>
+      'No backup folder has been selected. Authorize one during startup.';
+
+  @override
   String get backupRestoreRestoreSuccessTitle => 'Data Restored';
 
   @override
@@ -17893,6 +17912,25 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String backupRestoreImportFailed(String error) {
     return 'Import failed: $error';
   }
+
+  @override
+  String backupServiceExportSavedTo(String location) {
+    return 'Backup saved to: $location';
+  }
+
+  @override
+  String backupServiceExportFailed(String error) {
+    return 'Backup failed: $error';
+  }
+
+  @override
+  String backupServiceRestoreFailed(String error) {
+    return 'Restore failed: $error';
+  }
+
+  @override
+  String get backupServiceNoBackupFolderSelected =>
+      'No backup folder has been selected. Authorize one during startup.';
 
   @override
   String get backupRestoreRestoreSuccessTitle => 'Data Restored';

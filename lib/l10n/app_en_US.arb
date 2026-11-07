@@ -4260,6 +4260,10 @@
   "backupRestoreExportFailed": "Export failed: {error}",
   "backupRestoreApkgRequired": "Select an .apkg file",
   "backupRestoreImportFailed": "Import failed: {error}",
+  "backupServiceExportSavedTo": "Backup saved to: {location}",
+  "backupServiceExportFailed": "Backup failed: {error}",
+  "backupServiceRestoreFailed": "Restore failed: {error}",
+  "backupServiceNoBackupFolderSelected": "No backup folder has been selected. Authorize one during startup.",
   "backupRestoreRestoreSuccessTitle": "Data Restored",
   "backupRestoreRestoredMessage": "Data was restored from the backup. Restart the app to use the restored data.",
   "backupRestoreExitApp": "Quit App",
@@ -4342,6 +4346,21 @@
       "error": {
         "type": "String"
       }
+    }
+  },
+  "@backupServiceExportSavedTo": {
+    "placeholders": {
+      "location": { "type": "String" }
+    }
+  },
+  "@backupServiceExportFailed": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "@backupServiceRestoreFailed": {
+    "placeholders": {
+      "error": { "type": "String" }
     }
   },
   "@backupRestoreSkippedCategories": {

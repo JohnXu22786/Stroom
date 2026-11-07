@@ -15,6 +15,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'backup_location_manager.dart';
 import 'backup_service_shared.dart';
+import '../l10n/app_localizations.dart';
 import 'browser_cookie_service.dart';
 import 'browser_profile_service.dart';
 import 'data_migration_service.dart';
@@ -4770,6 +4771,7 @@ class BackupService {
     void Function(double progress)? onProgress,
     BackupSelection selection = BackupSelection.all,
   }) async {
+    final l10n = AppLocalizations.of(context)!;
     await AppLogService.info('BackupService', 'exportBackup: start');
     try {
       final defaultName = await _nextBackupFileName();
@@ -4805,7 +4807,11 @@ class BackupService {
             await File(tempPath).delete();
           } catch (_) {}
         }
-        final displayPath = await BackupLocationManager.getDisplayPath();
+        var displayPath = await BackupLocationManager.getDisplayPath();
+        if (displayPath ==
+            BackupLocationManager.noBackupDirectorySelectedMessage) {
+          displayPath = l10n.backupServiceNoBackupFolderSelected;
+        }
         savedLocation =
             displayPath.isEmpty ? defaultName : '$displayPath/$defaultName';
       } else {
@@ -4851,16 +4857,31 @@ class BackupService {
 
       if (savedLocation == null) return false;
       if (context.mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('备份已保存到: $savedLocation')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(l10n.backupServiceExportSavedTo(savedLocation)),
+          ),
+        );
       }
       await AppLogService.info('BackupService', 'exportBackup: success');
       return true;
     } catch (e) {
       await AppLogService.error('BackupService', 'exportBackup: 失败', e);
       if (context.mounted) {
+        final errorText = e.toString();
+        final noBackupFolderError =
+            BackupLocationManager.noBackupDirectoryWriteErrorMessage;
+        final errorDetail = errorText == 'Exception: $noBackupFolderError'
+            ? l10n.backupServiceNoBackupFolderSelected
+            : errorText.replaceAll(
+                noBackupFolderError,
+                l10n.backupServiceNoBackupFolderSelected,
+              );
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('备份失败: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text(l10n.backupServiceExportFailed(errorDetail)),
+            backgroundColor: Colors.red,
+          ),
         );
       }
       return false;
@@ -4877,6 +4898,7 @@ class BackupService {
     BackupSelection selection = BackupSelection.all,
     void Function(List<String> skippedCategories)? onSkippedCategories,
   }) async {
+    final l10n = AppLocalizations.of(context)!;
     await AppLogService.info('BackupService', 'importBackup: start');
     try {
       final file = await FilePicker.pickFile(
@@ -4937,7 +4959,10 @@ class BackupService {
       await AppLogService.error('BackupService', 'importBackup: 失败', e);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('恢复失败: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text(l10n.backupServiceRestoreFailed(e.toString())),
+            backgroundColor: Colors.red,
+          ),
         );
       }
       // 重新抛出：让调用方区分"恢复失败"与"用户取消"

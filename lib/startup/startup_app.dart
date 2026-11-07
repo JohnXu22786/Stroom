@@ -495,9 +495,7 @@ class _DataSafetyBlockPageState extends ConsumerState<_DataSafetyBlockPage> {
         selection: BackupSelection.all,
       );
       if (!mounted || !exported) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('数据导出完成')),
-      );
+      // BackupService already shows a localized success message with the saved path.
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

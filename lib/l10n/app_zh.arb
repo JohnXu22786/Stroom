@@ -4262,6 +4262,10 @@
   "backupRestoreExportFailed": "导出失败: {error}",
   "backupRestoreApkgRequired": "请选择 .apkg 格式的文件",
   "backupRestoreImportFailed": "导入失败: {error}",
+  "backupServiceExportSavedTo": "备份已保存到: {location}",
+  "backupServiceExportFailed": "备份失败: {error}",
+  "backupServiceRestoreFailed": "恢复失败: {error}",
+  "backupServiceNoBackupFolderSelected": "尚未选择备份目录，请在启动流程中授权",
   "backupRestoreRestoreSuccessTitle": "数据恢复成功",
   "backupRestoreRestoredMessage": "数据已从备份中恢复。请重启应用以使用恢复的数据。",
   "backupRestoreExitApp": "退出应用",
@@ -4344,6 +4348,21 @@
       "error": {
         "type": "String"
       }
+    }
+  },
+  "@backupServiceExportSavedTo": {
+    "placeholders": {
+      "location": { "type": "String" }
+    }
+  },
+  "@backupServiceExportFailed": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "@backupServiceRestoreFailed": {
+    "placeholders": {
+      "error": { "type": "String" }
     }
   },
   "@backupRestoreSkippedCategories": {

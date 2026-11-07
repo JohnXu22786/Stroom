@@ -13672,6 +13672,30 @@ abstract class AppLocalizations {
   /// **'Import failed: {error}'**
   String backupRestoreImportFailed(String error);
 
+  /// No description provided for @backupServiceExportSavedTo.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup saved to: {location}'**
+  String backupServiceExportSavedTo(String location);
+
+  /// No description provided for @backupServiceExportFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup failed: {error}'**
+  String backupServiceExportFailed(String error);
+
+  /// No description provided for @backupServiceRestoreFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore failed: {error}'**
+  String backupServiceRestoreFailed(String error);
+
+  /// No description provided for @backupServiceNoBackupFolderSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'No backup folder has been selected. Authorize one during startup.'**
+  String get backupServiceNoBackupFolderSelected;
+
   /// No description provided for @backupRestoreRestoreSuccessTitle.
   ///
   /// In en, this message translates to:

@@ -7702,6 +7702,24 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String backupServiceExportSavedTo(String location) {
+    return '备份已保存到: $location';
+  }
+
+  @override
+  String backupServiceExportFailed(String error) {
+    return '备份失败: $error';
+  }
+
+  @override
+  String backupServiceRestoreFailed(String error) {
+    return '恢复失败: $error';
+  }
+
+  @override
+  String get backupServiceNoBackupFolderSelected => '尚未选择备份目录，请在启动流程中授权';
+
+  @override
   String get backupRestoreRestoreSuccessTitle => '数据恢复成功';
 
   @override
@@ -16982,6 +17000,24 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String backupRestoreImportFailed(String error) {
     return '导入失败: $error';
   }
+
+  @override
+  String backupServiceExportSavedTo(String location) {
+    return '备份已保存到: $location';
+  }
+
+  @override
+  String backupServiceExportFailed(String error) {
+    return '备份失败: $error';
+  }
+
+  @override
+  String backupServiceRestoreFailed(String error) {
+    return '恢复失败: $error';
+  }
+
+  @override
+  String get backupServiceNoBackupFolderSelected => '尚未选择备份目录，请在启动流程中授权';
 
   @override
   String get backupRestoreRestoreSuccessTitle => '数据恢复成功';
