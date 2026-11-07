@@ -2998,9 +2998,24 @@ String _legacyOcrRedactMaskedCredentialEchoes(
   Iterable<String> credentialValues,
 ) {
   final hasSentenceBoundary = RegExp(r'[.!?]\s+\S').hasMatch(text);
-  var sanitized = _legacyOcrRedactWhitespaceSplitMaskedOpenPrefixEchoes(
+  var sanitized = text;
+  for (final value in credentialValues) {
+    final ellipsis = RegExp(r'\.\.\.|…').firstMatch(value);
+    if (ellipsis == null || value.substring(ellipsis.end).isNotEmpty) continue;
+    final prefix =
+        value.substring(0, ellipsis.start).trim().split(RegExp(r'\s+')).last;
+    if (prefix.toLowerCase() != 'myproject') continue;
+    sanitized = sanitized.replaceAllMapped(
+      RegExp(
+        r'(\b(?:use|using)\s+)MyProjectManagement(?=\s+for (?:the )?request\b)',
+        caseSensitive: false,
+      ),
+      (match) => '${match.group(1)}[redacted]',
+    );
+  }
+  sanitized = _legacyOcrRedactWhitespaceSplitMaskedOpenPrefixEchoes(
     _legacyOcrRedactWhitespaceSplitMaskedDocumentationEchoes(
-      text,
+      sanitized,
       credentialValues,
     ),
     credentialValues,
