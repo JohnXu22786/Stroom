@@ -8829,6 +8829,32 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get browserScriptOriginManual => 'Added manually';
+
+  @override
+  String browserScriptVersion(String version) => '@version $version';
+
+  @override
+  String get browserScriptEnabled => 'Enabled';
+
+  @override
+  String get browserScriptDisabled => 'Disabled';
+
+  @override
+  String get browserScriptRuntimeError =>
+      'This script encountered a runtime error. Check its code and page compatibility.';
+
+  @override
+  String get browserScriptDelete => 'Delete';
+
+  @override
+  String get browserDeleteScriptTitle => 'Delete script?';
+
+  @override
+  String get browserDeleteScriptConfirmation =>
+      'This script will be removed from this browser. This action cannot be undone.';
+
+  @override
   String get browserEditScript => 'Edit script';
 
   @override
@@ -18980,6 +19006,32 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
     );
     return '$_temp0';
   }
+
+  @override
+  String get browserScriptOriginManual => 'Added manually';
+
+  @override
+  String browserScriptVersion(String version) => '@version $version';
+
+  @override
+  String get browserScriptEnabled => 'Enabled';
+
+  @override
+  String get browserScriptDisabled => 'Disabled';
+
+  @override
+  String get browserScriptRuntimeError =>
+      'This script encountered a runtime error. Check its code and page compatibility.';
+
+  @override
+  String get browserScriptDelete => 'Delete';
+
+  @override
+  String get browserDeleteScriptTitle => 'Delete script?';
+
+  @override
+  String get browserDeleteScriptConfirmation =>
+      'This script will be removed from this browser. This action cannot be undone.';
 
   @override
   String get browserEditScript => 'Edit script';
