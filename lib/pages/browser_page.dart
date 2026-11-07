@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -1786,9 +1787,9 @@ class _ScriptEditDialogState extends State<_ScriptEditDialog> {
                         ? _nameCtrl.text.trim()
                         : l10n.browserUnnamedScript),
                 code: _codeCtrl.text,
-                id: script.id,
-                enabled: script.enabled,
-                origin: script.origin,
+                id: widget.script.id,
+                enabled: widget.script.enabled,
+                origin: widget.script.origin,
               ),
             );
           },
