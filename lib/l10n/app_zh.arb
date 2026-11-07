@@ -5612,5 +5612,36 @@
         "detail": {"type": "String"}
     }
   },
-  "startupSafetyStatusUnreadableAfterChecks": "完成启动数据检查后，仍无法确认数据安全状态（状态标记无法读取或格式无效）。\n\n为避免继续改动数据，应用已停止启动。请先导出数据文件，然后退出应用并修复状态标记后重试。"
+  "startupSafetyStatusUnreadableAfterChecks": "完成启动数据检查后，仍无法确认数据安全状态（状态标记无法读取或格式无效）。\n\n为避免继续改动数据，应用已停止启动。请先导出数据文件，然后退出应用并修复状态标记后重试。",
+  "catCatchConnectionTimeout": "连接超时，请检查网络或服务器状态",
+  "catCatchSendTimeout": "发送请求超时",
+  "catCatchReceiveTimeout": "接收响应超时，服务器响应过慢",
+  "catCatchCannotConnect": "无法连接到服务器。",
+  "catCatchConnectionError": "无法连接到服务器，请检查 URL 是否正确",
+  "catCatchBadCertificate": "服务器证书验证失败",
+  "catCatchBadResponse": "服务器返回错误 (HTTP {statusCode})",
+  "@catCatchBadResponse": {
+    "placeholders": {
+      "statusCode": {"type": "int"}
+    }
+  },
+  "catCatchRequestCancelled": "请求已取消",
+  "catCatchNetworkError": "网络错误：{message}",
+  "@catCatchNetworkError": {
+    "placeholders": {
+      "message": {"type": "String"}
+    }
+  },
+  "catCatchUnknownError": "未知错误",
+  "catCatchOriginalError": "原始错误：{message}",
+  "@catCatchOriginalError": {
+    "placeholders": {
+      "message": {"type": "String"}
+    }
+  },
+  "catCatchWebDownloadHint": "Web 端不支持直接下载媒体文件。",
+  "catCatchWebInstallExtension": "请安装浏览器扩展「CatCatch（猫抓）」后再试。",
+  "catCatchWebAuthorAttribution": "作者：笨笨猫（xifangczy），完全免费开源。",
+  "catCatchWebOfficialWarning": "请认准作者，避免下载到付费版/山寨版。",
+  "catCatchWebGitHubAddress": "GitHub 地址: https://github.com/xifangczy/cat-catch"
 }

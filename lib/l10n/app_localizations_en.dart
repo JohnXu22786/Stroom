@@ -9885,6 +9885,69 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get startupSafetyStatusUnreadableAfterChecks =>
       'The data safety status could not be confirmed after startup checks (the status marker could not be read or was invalid).\n\nStartup has stopped to avoid making further data changes. Export your data file, exit the app, repair the status marker, and try again.';
+
+  @override
+  String get catCatchConnectionTimeout =>
+      'Connection timed out. Check your network or server status.';
+
+  @override
+  String get catCatchSendTimeout => 'The request timed out while sending.';
+
+  @override
+  String get catCatchReceiveTimeout =>
+      'The response timed out because the server is taking too long.';
+
+  @override
+  String get catCatchCannotConnect => 'Could not connect to the server.';
+
+  @override
+  String get catCatchConnectionError =>
+      'Could not connect to the server. Check that the URL is correct.';
+
+  @override
+  String get catCatchBadCertificate =>
+      'The server certificate could not be verified.';
+
+  @override
+  String catCatchBadResponse(int statusCode) {
+    return 'The server returned an error (HTTP $statusCode)';
+  }
+
+  @override
+  String get catCatchRequestCancelled => 'The request was cancelled.';
+
+  @override
+  String catCatchNetworkError(String message) {
+    return 'Network error: $message';
+  }
+
+  @override
+  String get catCatchUnknownError => 'Unknown error';
+
+  @override
+  String catCatchOriginalError(String message) {
+    return 'Original error: $message';
+  }
+
+  @override
+  String get catCatchWebDownloadHint =>
+      'Web browsers cannot download media files directly.';
+
+  @override
+  String get catCatchWebInstallExtension =>
+      'Install the CatCatch browser extension and try again.';
+
+  @override
+  String get catCatchWebAuthorAttribution =>
+      'Author: 笨笨猫 (xifangczy). Free and open source.';
+
+  @override
+  String get catCatchWebOfficialWarning =>
+      'Make sure it is the author’s version; avoid paid or imitation versions.';
+
+  @override
+  String get catCatchWebGitHubAddress =>
+      'GitHub: https://github.com/xifangczy/cat-catch';
 }
 
 /// The translations for English, as used in the United States (`en_US`).
@@ -19767,4 +19830,67 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   @override
   String get startupSafetyStatusUnreadableAfterChecks =>
       'The data safety status could not be confirmed after startup checks (the status marker could not be read or was invalid).\n\nStartup has stopped to avoid making further data changes. Export your data file, exit the app, repair the status marker, and try again.';
+
+  @override
+  String get catCatchConnectionTimeout =>
+      'Connection timed out. Check your network or server status.';
+
+  @override
+  String get catCatchSendTimeout => 'The request timed out while sending.';
+
+  @override
+  String get catCatchReceiveTimeout =>
+      'The response timed out because the server is taking too long.';
+
+  @override
+  String get catCatchCannotConnect => 'Could not connect to the server.';
+
+  @override
+  String get catCatchConnectionError =>
+      'Could not connect to the server. Check that the URL is correct.';
+
+  @override
+  String get catCatchBadCertificate =>
+      'The server certificate could not be verified.';
+
+  @override
+  String catCatchBadResponse(int statusCode) {
+    return 'The server returned an error (HTTP $statusCode)';
+  }
+
+  @override
+  String get catCatchRequestCancelled => 'The request was cancelled.';
+
+  @override
+  String catCatchNetworkError(String message) {
+    return 'Network error: $message';
+  }
+
+  @override
+  String get catCatchUnknownError => 'Unknown error';
+
+  @override
+  String catCatchOriginalError(String message) {
+    return 'Original error: $message';
+  }
+
+  @override
+  String get catCatchWebDownloadHint =>
+      'Web browsers cannot download media files directly.';
+
+  @override
+  String get catCatchWebInstallExtension =>
+      'Install the CatCatch browser extension and try again.';
+
+  @override
+  String get catCatchWebAuthorAttribution =>
+      'Author: 笨笨猫 (xifangczy). Free and open source.';
+
+  @override
+  String get catCatchWebOfficialWarning =>
+      'Make sure it is the author’s version; avoid paid or imitation versions.';
+
+  @override
+  String get catCatchWebGitHubAddress =>
+      'GitHub: https://github.com/xifangczy/cat-catch';
 }

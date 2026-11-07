@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:path/path.dart' as p;
 import '../../services/storage_service.dart';
+import '../../providers/locale_provider.dart';
 import '../../services/background_service.dart';
 import 'package:uuid/uuid.dart';
 import 'package:dio/dio.dart' show CancelToken;
@@ -941,6 +942,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
         task: task,
         onUpdate: onUpdate,
         cancelToken: cancelToken,
+        locale: ref.read(localeProvider),
       );
 
   @visibleForTesting
@@ -955,6 +957,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
         fromStep: fromStep,
         onUpdate: onUpdate,
         cancelToken: cancelToken,
+        locale: ref.read(localeProvider),
       );
 
   void _markTaskFailedAfterBackgroundServiceStartup(String taskId) {
