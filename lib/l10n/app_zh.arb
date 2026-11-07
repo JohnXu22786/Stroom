@@ -582,6 +582,7 @@
   "chatSaveFailed": "保存失败：{error}",
   "chatSavedToAppFiles": "已保存到应用文件：{path}",
   "chatSelectModel": "选择模型",
+  "chatModelFallback": "模型",
   "chatNoModelsAvailable": "暂无可用模型",
   "chatAvailableTools": "可用工具",
   "chatNoToolsAvailable": "暂无可用工具",

@@ -1653,6 +1653,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chatSelectModel => '选择模型';
 
   @override
+  String get chatModelFallback => '模型';
+
+  @override
   String get chatNoModelsAvailable => '暂无可用模型';
 
   @override
@@ -11224,6 +11227,9 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get chatSelectModel => '选择模型';
+
+  @override
+  String get chatModelFallback => '模型';
 
   @override
   String get chatNoModelsAvailable => '暂无可用模型';

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 
 // ═══════════════════════════════════════════════════════════════
 // Character-based truncation helpers
@@ -150,7 +151,8 @@ class ChipBadge extends StatelessWidget {
 // ═══════════════════════════════════════════════════════════════
 
 /// A chip that displays the current model name with automatic proportional
-/// truncation for long names. Falls back to "模型" when [displayName] is empty.
+/// truncation for long names. When [displayName] is empty, it shows the localized
+/// model fallback.
 ///
 /// Uses [Flexible] + [LayoutBuilder] internally so the text always fits within
 /// the available width, regardless of how the chip is constrained by its parent.
@@ -174,7 +176,9 @@ class ModelNameChip extends StatelessWidget {
     final isDisabled = !enabled;
 
     // Fallback label when no model name is available.
-    final label = displayName.isNotEmpty ? displayName : '模型';
+    final label = displayName.isNotEmpty
+        ? displayName
+        : AppLocalizations.of(context)!.chatModelFallback;
     // Pre-truncate to fixed max length per part (character-based).
     final displayText = truncateDisplayName(label);
     final style = TextStyle(
