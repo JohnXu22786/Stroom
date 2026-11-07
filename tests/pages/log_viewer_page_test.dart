@@ -65,13 +65,13 @@ void main() {
           appLocalizations.appLogAutoRefresh(1),
           isEnglish
               ? 'Refreshing automatically (attempt 1)...'
-              : '自动刷新中 (第 1 次)...',
+              : '正在自动刷新（第 1 次）...',
         );
         expect(
           appLocalizations.appLogAutoRefresh(2),
           isEnglish
               ? 'Refreshing automatically (attempts 2)...'
-              : '自动刷新中 (第 2 次)...',
+              : '正在自动刷新（第 2 次）...',
         );
       }
     });
