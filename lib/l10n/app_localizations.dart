@@ -15005,17 +15005,101 @@ abstract class AppLocalizations {
   /// **'Script code (JavaScript)'**
   String get browserScriptCode;
 
-  /// No description provided for @browserMatchUrls.
+  /// No description provided for @browserAddScriptMethod.
   ///
   /// In en, this message translates to:
-  /// **'URL patterns (one per line)'**
-  String get browserMatchUrls;
+  /// **'Choose how to add a script'**
+  String get browserAddScriptMethod;
 
-  /// No description provided for @browserScriptMatchHint.
+  /// No description provided for @browserImportFromUrl.
   ///
   /// In en, this message translates to:
-  /// **'*://*.example.com/*'**
-  String get browserScriptMatchHint;
+  /// **'Import from URL'**
+  String get browserImportFromUrl;
+
+  /// No description provided for @browserEnterManually.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter manually'**
+  String get browserEnterManually;
+
+  /// No description provided for @browserScriptTrustWarningTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Only import scripts you trust'**
+  String get browserScriptTrustWarningTitle;
+
+  /// No description provided for @browserScriptTrustWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'Only add scripts you trust, or they may leak data. Scripts can read or modify webpage content.'**
+  String get browserScriptTrustWarning;
+
+  /// No description provided for @browserContinue.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get browserContinue;
+
+  /// No description provided for @browserManualUserscriptLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Tampermonkey userscript'**
+  String get browserManualUserscriptLabel;
+
+  /// No description provided for @browserScriptImportUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Script URL'**
+  String get browserScriptImportUrl;
+
+  /// No description provided for @browserScriptImportFetch.
+  ///
+  /// In en, this message translates to:
+  /// **'Fetch preview'**
+  String get browserScriptImportFetch;
+
+  /// No description provided for @browserScriptPreview.
+  ///
+  /// In en, this message translates to:
+  /// **'Script source preview'**
+  String get browserScriptPreview;
+
+  /// No description provided for @browserScriptImportInvalidUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a valid HTTPS URL.'**
+  String get browserScriptImportInvalidUrl;
+
+  /// No description provided for @browserScriptImportUnsupportedUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Use a Greasy Fork .user.js URL or a GitHub Raw URL.'**
+  String get browserScriptImportUnsupportedUrl;
+
+  /// No description provided for @browserScriptImportRedirectedUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'The URL redirected to an unsupported or insecure address.'**
+  String get browserScriptImportRedirectedUrl;
+
+  /// No description provided for @browserScriptImportNotScript.
+  ///
+  /// In en, this message translates to:
+  /// **'The response is empty or does not appear to be a JavaScript script.'**
+  String get browserScriptImportNotScript;
+
+  /// No description provided for @browserScriptImportNetworkError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not fetch the script. Check the URL and your connection.'**
+  String get browserScriptImportNetworkError;
+
+  /// No description provided for @browserScriptImportHttpError.
+  ///
+  /// In en, this message translates to:
+  /// **'The server returned HTTP {status}.'**
+  String browserScriptImportHttpError(Object status);
 
   /// No description provided for @browserCancel.
   ///

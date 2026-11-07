@@ -237,13 +237,12 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
 
   /// Builds the reasoning effort section. If an effort param exists, shows
   /// the effort card with selectable/draggable option blocks. Otherwise,
-  /// shows the "添加推理力度" button, disabled when no toggle exists.
+  /// shows the "添加推理力度" button.
   Widget _buildReasoningEffortSection(ColorScheme cs) {
     final effort = _effortReasoningParam;
     if (effort != null) {
       return _buildReasoningEffortCard(effort, cs);
     }
-    final hasToggle = _toggleReasoningParam != null;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Center(
@@ -251,16 +250,16 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
           icon: Icon(
             Icons.add,
             size: 16,
-            color: hasToggle ? null : Colors.grey,
+            color: null,
           ),
           label: Text(
             AppLocalizations.of(context)!.reasoningAddEffort,
             style: TextStyle(
               fontSize: 13,
-              color: hasToggle ? null : Colors.grey,
+              color: null,
             ),
           ),
-          onPressed: hasToggle ? _addEffortReasoningParam : null,
+          onPressed: _addEffortReasoningParam,
         ),
       ),
     );
@@ -275,7 +274,6 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
   /// never deletable: a Switch (bound to [ReasoningParam.enabled]) takes
   /// the place of the delete button.
   Widget _buildReasoningEffortCard(ReasoningParam effort, ColorScheme cs) {
-    final toggleComplete = _isToggleComplete;
     final isDuplicate = _isReasoningParamNameDuplicate(effort);
 
     return Card(
@@ -325,13 +323,11 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
             const SizedBox(height: 8),
             TextFormField(
               initialValue: effort.paramName,
-              readOnly: !toggleComplete,
+              readOnly: false,
               decoration: InputDecoration(
                 labelText: AppLocalizations.of(context)!
                     .reasoningParameterNameSource(_paramSourceLabel(effort)),
-                hintText: toggleComplete
-                    ? AppLocalizations.of(context)!.reasoningNameExample
-                    : AppLocalizations.of(context)!.reasoningFillToggleFirst,
+                hintText: AppLocalizations.of(context)!.reasoningNameExample,
                 border: const OutlineInputBorder(),
                 isDense: true,
                 errorText: isDuplicate
@@ -362,7 +358,7 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
               TextFormField(
                 initialValue:
                     effort.options.isNotEmpty ? effort.options.first : '',
-                readOnly: !toggleComplete,
+                readOnly: false,
                 maxLines: 5,
                 decoration: InputDecoration(
                   labelText: AppLocalizations.of(context)!.reasoningJsonValue,
@@ -413,20 +409,9 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                   AppLocalizations.of(context)!.reasoningAddValue,
                   style: TextStyle(fontSize: 13),
                 ),
-                onPressed: toggleComplete ? _addEffortBlockWithDialog : null,
+                onPressed: _addEffortBlockWithDialog,
               ),
             ],
-            if (!toggleComplete)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(
-                  AppLocalizations.of(context)!.reasoningFillToggleBeforeEffort,
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: cs.onSurfaceVariant.withValues(alpha: 0.7),
-                  ),
-                ),
-              ),
           ],
         ),
       ),

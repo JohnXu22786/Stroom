@@ -13,6 +13,7 @@ class TopicItem extends StatelessWidget {
   final bool isActive;
   final bool isRunning;
   final bool isUnread;
+  final bool isFailed;
   final VoidCallback onTap;
   final VoidCallback onDelete;
   final VoidCallback onPinToggle;
@@ -28,6 +29,7 @@ class TopicItem extends StatelessWidget {
     required this.isActive,
     this.isRunning = false,
     this.isUnread = false,
+    this.isFailed = false,
     required this.onTap,
     required this.onDelete,
     required this.onPinToggle,
@@ -39,18 +41,18 @@ class TopicItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final brightness = Theme.of(context).brightness;
+    final isDark = brightness == Brightness.dark;
     final statusColor = isRunning
         ? ColorScheme.fromSeed(
-            seedColor: const Color(0xFFC58C00),
-            brightness: Theme.of(context).brightness,
+            seedColor: Colors.blue,
+            brightness: brightness,
           ).primary
-        : isUnread
-            ? ColorScheme.fromSeed(
-                seedColor: Colors.green,
-                brightness: Theme.of(context).brightness,
-              ).primary
-            : null;
+        : isFailed
+            ? cs.error
+            : isUnread
+                ? Color.lerp(cs.primary, Colors.green, 0.55)
+                : null;
 
     final title = topic.title.isEmpty
         ? AppLocalizations.of(context)!.topicItemNew
@@ -107,14 +109,7 @@ class TopicItem extends StatelessWidget {
                     ),
                     child: Center(
                       child: isRunning
-                          ? SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: statusColor,
-                              ),
-                            )
+                          ? _PulsingConversationIcon(color: statusColor!)
                           : Icon(
                               topic.isPinned
                                   ? Icons.push_pin
@@ -275,6 +270,57 @@ class TopicItem extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _PulsingConversationIcon extends StatefulWidget {
+  final Color color;
+
+  const _PulsingConversationIcon({required this.color});
+
+  @override
+  State<_PulsingConversationIcon> createState() =>
+      _PulsingConversationIconState();
+}
+
+class _PulsingConversationIconState extends State<_PulsingConversationIcon>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(seconds: 1),
+  )..repeat();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final dimColor = widget.color.withValues(alpha: 0.45);
+    final pulse = TweenSequence<Color?>([
+      TweenSequenceItem(
+        tween: ColorTween(
+          begin: widget.color,
+          end: dimColor,
+        ).chain(CurveTween(curve: Curves.easeInOutCubic)),
+        weight: 50,
+      ),
+      TweenSequenceItem(
+        tween: ColorTween(
+          begin: dimColor,
+          end: widget.color,
+        ).chain(CurveTween(curve: Curves.easeInOutCubic)),
+        weight: 50,
+      ),
+    ]).animate(_controller);
+
+    return AnimatedBuilder(
+      animation: pulse,
+      builder: (context, _) =>
+          Icon(Icons.chat_bubble_outline_rounded, size: 20, color: pulse.value),
     );
   }
 }

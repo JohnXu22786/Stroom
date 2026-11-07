@@ -87,7 +87,8 @@ String _detailsAroundKnownMessage(String error, String knownMessage) {
   final after =
       error.substring(messageEnd).replaceFirst(RegExp(r'^\s*[:：-]\s*'), '');
   final details = '$before$after';
-  return details.trim().isEmpty ? '' : details;
+  final trimmedDetails = details.trim();
+  return trimmedDetails == 'Exception:' ? '' : details;
 }
 
 String? _detailsAroundFirstKnownMessage(

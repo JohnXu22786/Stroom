@@ -468,6 +468,9 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                                 final latestMessage = topic.messages.isEmpty
                                     ? null
                                     : topic.messages.last;
+                                final isFailed = !isRunning &&
+                                    latestMessage?.role == 'assistant' &&
+                                    latestMessage?.isError == true;
                                 final itemWidget = TopicItem(
                                   key: ValueKey('topic_${topic.id}'),
                                   topic: topic,
@@ -475,7 +478,9 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                                   isSelected: _selectedIds.contains(topic.id),
                                   isActive: topic.id == activeConversationId,
                                   isRunning: isRunning,
+                                  isFailed: isFailed,
                                   isUnread: !isRunning &&
+                                      !isFailed &&
                                       topic.id != activeConversationId &&
                                       latestMessage?.role == 'assistant' &&
                                       latestMessage?.isStreaming == false &&

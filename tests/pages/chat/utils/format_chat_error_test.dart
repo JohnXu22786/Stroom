@@ -65,6 +65,7 @@ void main() {
           formatChatErrorMessageInChinese(Exception('API key not configured'));
       expect(result, contains('错误:'));
       expect(result, contains('API Key 未配置'));
+      expect(result, isNot(contains('Exception:')));
     });
 
     test('returns network error message for SocketException', () {

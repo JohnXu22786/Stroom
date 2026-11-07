@@ -136,16 +136,16 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
           icon: Icon(
             Icons.add,
             size: 16,
-            color: _toggleReasoningParam != null ? null : Colors.grey,
+            color: null,
           ),
           label: Text(
             AppLocalizations.of(context)!.llmAddReasoningParam,
             style: TextStyle(
               fontSize: 13,
-              color: _toggleReasoningParam != null ? null : Colors.grey,
+              color: null,
             ),
           ),
-          onPressed: _toggleReasoningParam != null ? _addReasoningParam : null,
+          onPressed: _addReasoningParam,
         ),
       ),
       const SizedBox(height: 24),

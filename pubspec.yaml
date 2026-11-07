@@ -120,6 +120,10 @@ dev_dependencies:
   sqflite_common_ffi: ^2.4.4
 
 dependency_overrides:
+  markdown:
+    path: packages/streaming_markdown/markdown
+  markdown_widget:
+    path: packages/streaming_markdown/markdown_widget
   # Newer releases use a Swift isolation argument unavailable in the Xcode SDK
   # on the macOS release runners. Keep this range until those runners are updated.
   video_player_avfoundation: ">=2.12.0 <2.12.2"

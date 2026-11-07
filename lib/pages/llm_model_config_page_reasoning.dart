@@ -537,18 +537,6 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
         .where((p) => !p.isReasoningToggle && !p.isEffortParam && p != effort)
         .toList();
   }
-
-  bool get _isToggleComplete {
-    final toggle = _toggleReasoningParam;
-    if (toggle == null) return false;
-    // boolean 类型开关只需参数名（开/关值由聊天面板提供）
-    if (toggle.type == 'boolean') {
-      return toggle.paramName.trim().isNotEmpty;
-    }
-    return toggle.paramName.trim().isNotEmpty &&
-        (toggle.onValue != null && toggle.onValue!.trim().isNotEmpty) &&
-        (toggle.offValue != null && toggle.offValue!.trim().isNotEmpty);
-  }
 }
 
 class _EditCustomParamOptionDialog extends StatefulWidget {

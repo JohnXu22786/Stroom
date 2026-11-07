@@ -12,6 +12,7 @@ import '../catcatch/engine/webview_sniffer.dart'
     show HeadedRecoveryAttemptSchedule, WebViewSniffer;
 import '../catcatch/widgets/draggable_floating_panel.dart';
 import '../services/browser_cookie_service.dart';
+import '../services/userscript_http.dart';
 
 const _scriptsKey = 'browser_user_scripts';
 const _ambiguousMainFrameErrorTimeout = Duration(seconds: 5);
@@ -312,6 +313,65 @@ class UserScript {
     // The path is matched case-sensitively (Chrome semantics).
     return RegExp(globToRegex(pathPat, host: false)).hasMatch(urlPathAndQuery);
   }
+}
+
+String? _userscriptMetadataName(String code) {
+  final start = code.indexOf('// ==UserScript==');
+  if (start < 0) return null;
+  final end = code.indexOf('// ==/UserScript==', start);
+  if (end < 0) return null;
+  final header = code.substring(start, end);
+  final nameLine =
+      RegExp(r'^//[ \t]*@name(?::[A-Za-z0-9-]+)?(?:[ \t]+(.*?))?[ \t]*$');
+  for (final line in header.split('\n')) {
+    final match = nameLine.firstMatch(line.trim());
+    final name = match?.group(1)?.trim();
+    if (name != null && name.isNotEmpty) return name;
+  }
+  return null;
+}
+
+Future<String> _fetchUserscript(String sourceUrl) async {
+  var uri = Uri.parse(normalizeUserscriptUrl(sourceUrl));
+  bool isTrustedUri(Uri candidate) {
+    final host = candidate.host.toLowerCase();
+    return candidate.scheme == 'https' &&
+        candidate.port == 443 &&
+        candidate.userInfo.isEmpty &&
+        (host == 'greasyfork.org' ||
+            host == 'www.greasyfork.org' ||
+            host == 'update.greasyfork.org' ||
+            host == 'raw.githubusercontent.com');
+  }
+
+  UserscriptHttpResponse? response;
+  for (var redirects = 0; redirects <= 5; redirects++) {
+    response = await fetchUserscriptHttp(uri.toString());
+    if (response.responseUrl != uri) {
+      if (!isTrustedUri(response.responseUrl)) {
+        throw const FormatException('redirectedUrl');
+      }
+      uri = response.responseUrl;
+    }
+    if (!response.isRedirect) break;
+    final location = response.location;
+    if (location == null || redirects == 5) {
+      throw const FormatException('redirectedUrl');
+    }
+    try {
+      uri = uri.resolve(location);
+    } on FormatException {
+      throw const FormatException('redirectedUrl');
+    }
+    if (!isTrustedUri(uri)) throw const FormatException('redirectedUrl');
+  }
+  if (response == null || !response.isSuccess || !isTrustedUri(uri)) {
+    throw const FormatException('redirectedUrl');
+  }
+  final source = response.body;
+  if (source == null) throw const FormatException('notScript');
+  validateUserscriptResponse(source, contentType: response.contentType);
+  return source;
 }
 
 class BrowserPage extends StatefulWidget {
@@ -1309,7 +1369,67 @@ class _ScriptManagerSheetState extends State<_ScriptManagerSheet> {
   }
 
   void _addScript() {
-    _editScript(-1);
+    final l10n = AppLocalizations.of(context)!;
+    showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l10n.browserAddScriptMethod),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(l10n.browserCancel),
+          ),
+        ],
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.link),
+              title: Text(l10n.browserImportFromUrl),
+              onTap: () => Navigator.pop(context, 'url'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.edit),
+              title: Text(l10n.browserEnterManually),
+              onTap: () => Navigator.pop(context, 'manual'),
+            ),
+          ],
+        ),
+      ),
+    ).then((method) {
+      if (!mounted) return;
+      if (method == 'manual') _editScript(-1);
+      if (method == 'url') _importScriptFromUrl();
+    });
+  }
+
+  Future<void> _importScriptFromUrl() async {
+    final l10n = AppLocalizations.of(context)!;
+    final trusted = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l10n.browserScriptTrustWarningTitle),
+        content: Text(l10n.browserScriptTrustWarning),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(l10n.browserCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(l10n.browserContinue),
+          ),
+        ],
+      ),
+    );
+    if (trusted != true || !mounted) return;
+    final imported = await showDialog<UserScript>(
+      context: context,
+      builder: (context) => const _ScriptImportDialog(),
+    );
+    if (imported == null || !mounted) return;
+    setState(() => _scripts.add(imported));
+    _notifyChanged();
   }
 
   Future<void> _editScript(int index) async {
@@ -1389,10 +1509,10 @@ class _ScriptEditDialogState extends State<_ScriptEditDialog> {
                 controller: _codeCtrl,
                 maxLines: 8,
                 decoration: InputDecoration(
-                  labelText: l10n.browserScriptCode,
+                  labelText: l10n.browserManualUserscriptLabel,
                   border: OutlineInputBorder(),
                   hintText:
-                      '// ==UserScript==\n// @name\n// @match *://*/*\n// ==/UserScript==\n\nconsole.log("hello");',
+                      '// ==UserScript==\n// @name Example\n// @match *://*.example.com/*\n// ==/UserScript==\n\nconsole.log("hello");',
                 ),
                 style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
               ),
@@ -1410,11 +1530,165 @@ class _ScriptEditDialogState extends State<_ScriptEditDialog> {
             Navigator.pop(
               context,
               UserScript(
-                name: _nameCtrl.text,
+                name: _userscriptMetadataName(_codeCtrl.text) ??
+                    (_nameCtrl.text.trim().isNotEmpty
+                        ? _nameCtrl.text.trim()
+                        : l10n.browserUnnamedScript),
                 code: _codeCtrl.text,
               ),
             );
           },
+          child: Text(l10n.browserSave),
+        ),
+      ],
+    );
+  }
+}
+
+class _ScriptImportDialog extends StatefulWidget {
+  const _ScriptImportDialog();
+
+  @override
+  State<_ScriptImportDialog> createState() => _ScriptImportDialogState();
+}
+
+class _ScriptImportDialogState extends State<_ScriptImportDialog> {
+  final _urlCtrl = TextEditingController();
+  String? _source;
+  String? _error;
+  bool _loading = false;
+
+  String _displayName(String source, AppLocalizations l10n) {
+    final metadataName = _userscriptMetadataName(source);
+    if (metadataName != null) return metadataName;
+    final path = Uri.tryParse(_urlCtrl.text.trim())?.pathSegments;
+    return path != null && path.isNotEmpty
+        ? path.last
+        : l10n.browserUnnamedScript;
+  }
+
+  @override
+  void dispose() {
+    _urlCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _fetch() async {
+    setState(() {
+      _loading = true;
+      _source = null;
+      _error = null;
+    });
+    try {
+      final source = await _fetchUserscript(_urlCtrl.text);
+      if (!mounted) return;
+      setState(() => _source = source);
+    } on FormatException catch (e) {
+      if (!mounted) return;
+      final l10n = AppLocalizations.of(context)!;
+      setState(() {
+        _error = switch (e.message) {
+          'invalidUrl' => l10n.browserScriptImportInvalidUrl,
+          'unsupportedUrl' => l10n.browserScriptImportUnsupportedUrl,
+          'redirectedUrl' => l10n.browserScriptImportRedirectedUrl,
+          _ => l10n.browserScriptImportNotScript,
+        };
+      });
+    } on UserscriptHttpException catch (e) {
+      if (!mounted) return;
+      final l10n = AppLocalizations.of(context)!;
+      setState(
+          () => _error = l10n.browserScriptImportHttpError('${e.statusCode}'));
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _error =
+          AppLocalizations.of(context)!.browserScriptImportNetworkError);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final source = _source;
+    final name = source == null ? null : _displayName(source, l10n);
+    return AlertDialog(
+      title: Text(l10n.browserImportFromUrl),
+      content: SizedBox(
+        width: 560,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: _urlCtrl,
+                keyboardType: TextInputType.url,
+                readOnly: _loading,
+                decoration: InputDecoration(
+                  labelText: l10n.browserScriptImportUrl,
+                  hintText: 'https://greasyfork.org/scripts/…/script.user.js',
+                  border: const OutlineInputBorder(),
+                ),
+                onChanged: (_) => setState(() {
+                  _source = null;
+                  _error = null;
+                }),
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 8),
+                Text(_error!,
+                    style:
+                        TextStyle(color: Theme.of(context).colorScheme.error)),
+              ],
+              if (source != null) ...[
+                const SizedBox(height: 12),
+                Text('${l10n.browserScriptName}: $name',
+                    style: const TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                InputDecorator(
+                  decoration: InputDecoration(
+                    labelText: l10n.browserScriptPreview,
+                    border: const OutlineInputBorder(),
+                  ),
+                  child: SizedBox(
+                    height: 180,
+                    child: SingleChildScrollView(
+                      child: SelectableText(source,
+                          style: const TextStyle(
+                              fontSize: 12, fontFamily: 'monospace')),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(l10n.browserCancel),
+        ),
+        TextButton.icon(
+          onPressed: _loading ? null : _fetch,
+          icon: _loading
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.download),
+          label: Text(l10n.browserScriptImportFetch),
+        ),
+        FilledButton(
+          onPressed: source == null
+              ? null
+              : () => Navigator.pop(
+                    context,
+                    UserScript(name: name!, code: source),
+                  ),
           child: Text(l10n.browserSave),
         ),
       ],
