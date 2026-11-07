@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart' show Locale;
 
 import '../models/ai_stream_event.dart';
 import '../services/sse_client.dart';
@@ -33,6 +34,7 @@ class AnthropicChatProvider extends BaseChatProvider {
   final String _baseUrl;
   final String _name;
   final Dio _dio;
+  final Locale? Function()? _localeOverride;
   Map<String, dynamic>? _lastRequestBody;
   Map<String, dynamic>? _lastResponseData;
   Map<String, String>? _lastRequestHeaders;
@@ -45,9 +47,11 @@ class AnthropicChatProvider extends BaseChatProvider {
     required String baseUrl,
     required String apiKey,
     String name = 'Anthropic',
+    Locale? Function()? localeOverride,
   })  : _baseUrl = baseUrl,
         _apiKey = apiKey,
         _name = name,
+        _localeOverride = localeOverride,
         _dio = Dio(BaseOptions(
           baseUrl: '',
           headers: {
@@ -374,6 +378,7 @@ class AnthropicChatProvider extends BaseChatProvider {
         },
         jsonEncode(body),
         cancelToken: cancelToken,
+        locale: _localeOverride?.call(),
         onResponseHeaders: (headers) {
           _lastResponseHeaders = headers;
         },

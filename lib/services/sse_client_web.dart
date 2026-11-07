@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:html' as html;
 
 import 'package:dio/dio.dart';
+import 'package:flutter/widgets.dart' show Locale;
 import 'package:stroom/services/sse_client_web_error.dart';
 
 /// SSE 事件帧：事件名 + 数据。
@@ -34,13 +35,14 @@ Map<String, List<String>> _readXhrHeaders(html.HttpRequest xhr) {
   return headers;
 }
 
-DioException _xhrFailure(html.HttpRequest xhr, String url) {
+DioException _xhrFailure(html.HttpRequest xhr, String url, Locale? locale) {
   return createSseClientWebFailure(
     url: url,
     statusCode: xhr.status,
     statusText: xhr.statusText,
     responseBody: xhr.responseText,
     responseHeaders: _readXhrHeaders(xhr),
+    locale: locale,
   );
 }
 
@@ -51,6 +53,7 @@ Stream<String> sseStream(
   Map<String, String> headers,
   String body, {
   CancelToken? cancelToken,
+  Locale? locale,
 
   /// Callback invoked with the initial HTTP response headers, if available.
   void Function(Map<String, List<String>> headers)? onResponseHeaders,
@@ -102,7 +105,7 @@ Stream<String> sseStream(
 
   final errorSub = xhr.onError.listen((event) {
     if (!controller.isClosed) {
-      controller.addError(_xhrFailure(xhr, url));
+      controller.addError(_xhrFailure(xhr, url, locale));
     }
   });
 
@@ -121,7 +124,7 @@ Stream<String> sseStream(
     final status = xhr.status;
     if (status != null && status >= 400) {
       if (!controller.isClosed) {
-        controller.addError(_xhrFailure(xhr, url));
+        controller.addError(_xhrFailure(xhr, url, locale));
       }
       controller.close();
       progressSub.cancel();
@@ -209,6 +212,7 @@ Stream<String> ssePostLines(
   Map<String, String> headers,
   String body, {
   CancelToken? cancelToken,
+  Locale? locale,
 
   /// Callback invoked with the initial HTTP response headers, if available.
   void Function(Map<String, List<String>> headers)? onResponseHeaders,
@@ -269,7 +273,7 @@ Stream<String> ssePostLines(
 
   final errorSub = xhr.onError.listen((event) {
     if (!controller.isClosed) {
-      controller.addError(_xhrFailure(xhr, url));
+      controller.addError(_xhrFailure(xhr, url, locale));
     }
   });
 
@@ -279,7 +283,7 @@ Stream<String> ssePostLines(
     final status = xhr.status;
     if (status != null && status >= 400) {
       if (!controller.isClosed) {
-        controller.addError(_xhrFailure(xhr, url));
+        controller.addError(_xhrFailure(xhr, url, locale));
       }
       controller.close();
       progressSub.cancel();
@@ -338,6 +342,7 @@ Stream<SseFrame> sseEventStream(
   Map<String, String> headers,
   String body, {
   CancelToken? cancelToken,
+  Locale? locale,
 
   /// Callback invoked with the initial HTTP response headers, if available.
   void Function(Map<String, List<String>> headers)? onResponseHeaders,
@@ -396,7 +401,7 @@ Stream<SseFrame> sseEventStream(
 
   final errorSub = xhr.onError.listen((event) {
     if (!controller.isClosed) {
-      controller.addError(_xhrFailure(xhr, url));
+      controller.addError(_xhrFailure(xhr, url, locale));
     }
   });
 
@@ -413,7 +418,7 @@ Stream<SseFrame> sseEventStream(
     final status = xhr.status;
     if (status != null && status >= 400) {
       if (!controller.isClosed) {
-        controller.addError(_xhrFailure(xhr, url));
+        controller.addError(_xhrFailure(xhr, url, locale));
       }
       controller.close();
       progressSub.cancel();
@@ -489,6 +494,7 @@ Stream<String> sseConnect(
   String url,
   Map<String, String> headers, {
   CancelToken? cancelToken,
+  Locale? locale,
 
   /// Callback invoked with the initial HTTP response headers, if available.
   void Function(Map<String, List<String>> headers)? onResponseHeaders,
@@ -517,12 +523,15 @@ Stream<String> sseConnect(
 
   final errorSub = xhr.onError.listen((event) {
     if (!controller.isClosed) {
-      final statusCode = xhr.status;
-      final statusText = xhr.statusText;
-      final errorMsg = statusCode != 0
-          ? 'SSE 连接失败 (HTTP $statusCode${(statusText ?? '').isNotEmpty ? ": $statusText" : ""})'
-          : 'SSE 连接失败: 无法连接到服务器';
-      controller.addError(Exception(errorMsg));
+      controller.addError(
+        Exception(
+          sseClientWebConnectionFailureMessage(
+            statusCode: xhr.status,
+            statusText: xhr.statusText,
+            locale: locale,
+          ),
+        ),
+      );
     }
   });
 
@@ -586,6 +595,7 @@ Future<String> ssePost(
   Map<String, String> headers,
   String body, {
   CancelToken? cancelToken,
+  Locale? locale,
 }) async {
   final controller = Completer<String>();
 
@@ -601,16 +611,27 @@ Future<String> ssePost(
       final response = xhr.responseText ?? '';
       controller.complete(response);
     } else if (xhr.status != null && xhr.status! > 0) {
-      controller
-          .completeError(Exception('HTTP ${xhr.status}: ${xhr.statusText}'));
+      controller.completeError(
+        Exception(
+          sseClientWebHttpRequestFailureMessage(
+            statusCode: xhr.status!,
+            statusText: xhr.statusText,
+            locale: locale,
+          ),
+        ),
+      );
     } else {
-      controller.completeError(Exception('请求失败'));
+      controller.completeError(
+        Exception(sseClientWebRequestFailureMessage(locale: locale)),
+      );
     }
   });
 
   xhr.onError.listen((_) {
     if (!controller.isCompleted) {
-      controller.completeError(Exception('网络请求失败'));
+      controller.completeError(
+        Exception(sseClientWebNetworkFailureMessage(locale: locale)),
+      );
     }
   });
 
@@ -619,7 +640,9 @@ Future<String> ssePost(
       xhr.abort();
       // 取消 = 失败：与 IO 端（Dio 抛 DioException）语义一致，
       // 避免调用方把取消当作成功响应（complete('') 会返回空串）。
-      controller.completeError(Exception('请求已取消'));
+      controller.completeError(
+        Exception(sseClientWebCancellationMessage(locale: locale)),
+      );
     }
   });
 

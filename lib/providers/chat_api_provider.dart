@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart' show Locale;
 import 'package:dio/dio.dart';
 import '../models/ai_stream_event.dart';
 import '../services/sse_client.dart';
@@ -23,6 +24,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
   final String _baseUrl;
   final String _name;
   final Dio _dio;
+  final Locale? Function()? _localeOverride;
   Map<String, dynamic>? _lastRequestBody;
   Map<String, dynamic>? _lastResponseData;
   Map<String, String>? _lastRequestHeaders;
@@ -35,9 +37,11 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     required String baseUrl,
     required String apiKey,
     String name = 'OpenAI Compatible',
+    Locale? Function()? localeOverride,
   })  : _baseUrl = baseUrl,
         _apiKey = apiKey,
         _name = name,
+        _localeOverride = localeOverride,
         _dio = Dio(BaseOptions(
           baseUrl: '',
           headers: {
@@ -368,6 +372,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
         },
         jsonEncode(body),
         cancelToken: cancelToken,
+        locale: _localeOverride?.call(),
         onResponseHeaders: (headers) {
           _lastResponseHeaders = headers;
         },
@@ -484,12 +489,14 @@ BaseChatProvider createChatProviderFromConfig({
   required String apiKey,
   String? model,
   String endpointType = 'openai',
+  Locale? Function()? localeOverride,
 }) {
   if (endpointType == 'anthropic') {
     return AnthropicChatProvider(
       baseUrl: baseUrl,
       apiKey: apiKey,
       name: providerName,
+      localeOverride: localeOverride,
     );
   }
   // OpenAI-compatible（默认）
@@ -497,5 +504,6 @@ BaseChatProvider createChatProviderFromConfig({
     baseUrl: baseUrl,
     apiKey: apiKey,
     name: providerName,
+    localeOverride: localeOverride,
   );
 }

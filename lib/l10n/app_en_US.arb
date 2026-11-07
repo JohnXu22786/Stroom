@@ -5508,5 +5508,43 @@
   "mermaidEditorSwapPreviewAndEditor": "Swap preview and editor panels",
   "mermaidEditorCodeLabel": "Mermaid code",
   "mermaidEditorCodeHint": "Enter Mermaid code...",
-  "mermaidEditorSplitCodeLabel": "Code"
+  "mermaidEditorSplitCodeLabel": "Code",
+  "sseConnectionFailedWithStatus": "SSE connection failed (HTTP {statusCode}: {statusText})",
+  "@sseConnectionFailedWithStatus": {
+    "placeholders": {
+      "statusCode": {"type": "int"},
+      "statusText": {"type": "String"}
+    }
+  },
+  "sseConnectionFailedWithoutStatusText": "SSE connection failed (HTTP {statusCode})",
+  "@sseConnectionFailedWithoutStatusText": {
+    "placeholders": {
+      "statusCode": {"type": "int"}
+    }
+  },
+  "sseConnectionUnavailable": "SSE connection failed: unable to connect to server",
+  "sseHttpRequestFailed": "HTTP request failed (HTTP {statusCode}: {statusText})",
+  "@sseHttpRequestFailed": {
+    "placeholders": {
+      "statusCode": {"type": "int"},
+      "statusText": {"type": "String"}
+    }
+  },
+  "sseRequestFailed": "Request failed",
+  "sseNetworkRequestFailed": "Network request failed",
+  "sseNetworkRequestFailedWithStatus": "Network request failed (HTTP {statusCode}: {statusText})",
+  "@sseNetworkRequestFailedWithStatus": {
+    "placeholders": {
+      "statusCode": {"type": "int"},
+      "statusText": {"type": "String"}
+    }
+  },
+  "sseNetworkRequestFailedWithoutStatusText": "Network request failed (HTTP {statusCode})",
+  "@sseNetworkRequestFailedWithoutStatusText": {
+    "placeholders": {
+      "statusCode": {"type": "int"}
+    }
+  },
+  "sseNetworkConnectionUnavailable": "Network request failed: unable to connect to server",
+  "sseRequestCancelled": "Request cancelled"
 }

@@ -67,7 +67,7 @@ class ChatStreamManager {
   final Ref? _ref;
   final TransportRetryPolicy _transportRetryPolicy;
   final Future<void> Function(Duration duration)? _retryDelay;
-  final ChatAdapter _adapter = ChatAdapter();
+  late final ChatAdapter _adapter;
 
   // ── Per-conversation stream states ──
   final Map<String, _ConversationStreamState> _streams = {};
@@ -115,7 +115,9 @@ class ChatStreamManager {
 
   ChatStreamManager([this._ref])
       : _transportRetryPolicy = const TransportRetryPolicy(),
-        _retryDelay = null;
+        _retryDelay = null {
+    _adapter = ChatAdapter(localeOverride: () => _ref?.read(localeProvider));
+  }
 
   @visibleForTesting
   ChatStreamManager.withRetryPolicy({
@@ -124,7 +126,9 @@ class ChatStreamManager {
     Future<void> Function(Duration duration)? retryDelay,
   })  : _ref = ref,
         _transportRetryPolicy = transportRetryPolicy,
-        _retryDelay = retryDelay;
+        _retryDelay = retryDelay {
+    _adapter = ChatAdapter(localeOverride: () => _ref?.read(localeProvider));
+  }
 
   // ── 公开 getter ──
 
