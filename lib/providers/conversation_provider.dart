@@ -543,6 +543,7 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
   /// invalidated by an explicit history edit.
   final Set<String> _streamCheckpointKeys = <String>{};
   bool _streamCheckpointKeyIndexIsCurrent = false;
+  bool _streamJournalPresent = false;
   final Map<String, Set<String>> _pendingMessageDeletionIds = {};
   final Map<String, Set<String>> _pendingMessageRestorationIds = {};
 

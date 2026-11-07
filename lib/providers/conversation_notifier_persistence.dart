@@ -20,6 +20,8 @@ const String _pendingRestoredMessageKey =
     'conversation_stream_pending_message_restores';
 const String _webStreamJournalTimestampKey =
     'conversation_stream_checkpoint_last_timestamp';
+const String _nativeStreamJournalPresentKey =
+    'conversation_stream_checkpoints_present';
 int _lastWebJournalTimestamp = 0;
 
 /// Latest snapshot and completion shared by periodic stream checkpoints that
@@ -256,6 +258,16 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
       _rememberAppendedStreamCheckpoint(checkpoint);
       return;
     }
+    if (!_streamJournalPresent) {
+      // Set the marker before touching the journal. A crash between these
+      // writes only causes an empty read at startup; the reverse ordering
+      // could leave a durable checkpoint that startup never discovers.
+      final prefs = await SharedPreferences.getInstance();
+      if (!await prefs.setBool(_nativeStreamJournalPresentKey, true)) {
+        throw StateError('Failed to mark native stream journal present');
+      }
+      _streamJournalPresent = true;
+    }
     await AppStorage.appendDurableLine(
       await _streamJournalPath(),
       jsonEncode(checkpoint),
@@ -294,9 +306,19 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
         _streamCheckpointKeyIndexIsCurrent = true;
         return true;
       }
-      final deleted =
-          await AppStorage.deleteStorageFile(await _streamJournalPath());
+      if (!_streamJournalPresent) {
+        _streamCheckpointKeys.clear();
+        _streamCheckpointKeyIndexIsCurrent = true;
+        return true;
+      }
+      final deleted = await AppStorage.deleteStorageFile(
+        await _streamJournalPath(),
+      );
       if (deleted) {
+        final prefs = await SharedPreferences.getInstance();
+        if (await prefs.remove(_nativeStreamJournalPresentKey)) {
+          _streamJournalPresent = false;
+        }
         _streamCheckpointKeys.clear();
         _streamCheckpointKeyIndexIsCurrent = true;
       }
@@ -330,9 +352,10 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
           }
         }
       } else {
-        records =
-            await AppStorage.readDurableLines(await _streamJournalPath()) ??
-                <String>[];
+        records = _streamJournalPresent
+            ? await AppStorage.readDurableLines(await _streamJournalPath()) ??
+                <String>[]
+            : <String>[];
       }
       _streamCheckpointKeyIndexIsCurrent = true;
       final deletedConversations = <String>{};
@@ -787,6 +810,8 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
     List<Conversation>? loadedConversations;
     try {
       final prefs = await SharedPreferences.getInstance();
+      _streamJournalPresent =
+          prefs.getBool(_nativeStreamJournalPresentKey) ?? false;
       final pendingRestoresJson =
           prefs.getString(_pendingRestoredConversationKey);
       if (pendingRestoresJson != null) {
@@ -954,6 +979,14 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
         final replayStartingConversations = {
           for (final conversation in state) conversation.id: conversation,
         };
+        // Conversation is mutable: message updates replace its messages list
+        // without replacing the Conversation object. Keep the original list
+        // identity too, so an update that lands during journal I/O is not
+        // mistaken for the unchanged object captured above.
+        final replayStartingMessages = {
+          for (final conversation in state)
+            conversation.id: conversation.messages,
+        };
         final replayStartingMessageIds = {
           for (final conversation in state)
             conversation.id:
@@ -987,7 +1020,11 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
                 finalConversations.add(current);
                 hadInMemoryMerge = true;
               }
-            } else if (identical(current, startingConversation)) {
+            } else if (identical(current, startingConversation) &&
+                identical(
+                  current.messages,
+                  replayStartingMessages[current.id],
+                )) {
               final startingMessageIds =
                   replayStartingMessageIds[current.id] ?? const <String>{};
               final currentMessageIds =
@@ -1001,6 +1038,10 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
               }
               finalConversations.add(replayed);
             } else {
+              // Keep an in-memory edit that landed while journal records were
+              // being read. Replaying the older canonical snapshot for the
+              // same mutable Conversation would otherwise restore messages
+              // that the user had just removed (including old tool cards).
               finalConversations.add(current);
               hadInMemoryMerge = true;
             }
