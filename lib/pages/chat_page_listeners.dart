@@ -208,6 +208,30 @@ extension _ChatPageListenersExt on _ChatPageState {
     final prior = _legacyFullReplySnapshots[key] ?? '';
     if (next.isEmpty) {
       if (prior.isEmpty) return;
+      if (!ref.read(isStreamingProvider(convId))) {
+        // Provider cleanup happens after a stream is finalized. Keep the last
+        // legacy text as canonical content and preserve the tool/reasoning
+        // segments already rendered for a stopped partial reply; rebuilding
+        // here would read the now-cleared providers and drop those segments.
+        final segments = List<MessageSegment>.of(
+          _chatSegments[msgId] ?? const [],
+        );
+        final existingIndex = segments.lastIndexWhere(
+          (segment) => segment is TextSegment && segment.chunkIndex == 0,
+        );
+        final segment = TextSegment(prior, chunkIndex: 0);
+        if (existingIndex >= 0) {
+          segments[existingIndex] = segment;
+        } else {
+          segments.add(segment);
+        }
+        _chatSegments[msgId] = segments;
+        _legacyFullReplySnapshots.remove(key);
+        _legacyFullReplySequences.remove(key);
+        _legacyFullReplyGenerations.remove(key);
+        _refreshStreamingBubble(msgId);
+        return;
+      }
       _legacyFullReplySnapshots[key] = '';
       _legacyFullReplySequences[key] =
           (_legacyFullReplySequences[key] ?? 0) + 2;
