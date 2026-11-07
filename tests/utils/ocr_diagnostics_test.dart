@@ -948,6 +948,35 @@ void main() {
     expect(jsonEncode(response), isNot(contains(credential)));
   });
 
+  test('camelCase API credential headers exclude echoed response IDs', () {
+    const safeRequestId = 'req-safe-camel-case-credentials';
+    for (final entry in {
+      'apiSecret': 'opaque-api-secret-header-value',
+      'apiToken': 'opaque-api-token-header-value',
+    }.entries) {
+      final excludedValues = OcrDiagnosticSnapshot.credentialValuesFromRequest({
+        'headers': {entry.key: entry.value},
+      });
+      final echoedResponse = OcrDiagnosticSnapshot.sanitizeResponse(
+        {'statusCode': 401, 'requestId': entry.value},
+        excludedValues: excludedValues,
+      )!;
+      final safeResponse = OcrDiagnosticSnapshot.sanitizeResponse(
+        {'statusCode': 429, 'requestId': safeRequestId},
+        excludedValues: excludedValues,
+      )!;
+
+      expect(excludedValues, contains(entry.value));
+      expect(echoedResponse, {'statusCode': 401});
+      expect(safeResponse, {
+        'statusCode': 429,
+        'requestId': safeRequestId,
+      });
+      expect(jsonEncode([echoedResponse, safeResponse]),
+          isNot(contains(entry.value)));
+    }
+  });
+
   test('request IDs exclude echoes matching a short masked auth header', () {
     const apiKey = 'abcd123456789';
     final excludedValues = OcrDiagnosticSnapshot.credentialValuesFromHeaders({
