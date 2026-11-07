@@ -413,17 +413,28 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
     if (!mounted) return;
     var current = state.where((c) => c.id == conversationId).firstOrNull;
     if (current != null) {
-      List<String> checkpointedRemovedIds() {
+      List<String> removedMessageIds() {
         final nextIds = messages.map((message) => message.id).toSet();
         return current!.messages
             .where((message) => !nextIds.contains(message.id))
-            .where(
-                (message) => _hasStreamCheckpoint(conversationId, message.id))
             .map((message) => message.id)
             .toList();
       }
 
-      var removedIds = checkpointedRemovedIds();
+      final allRemovedIds = removedMessageIds();
+      final removedIds = allRemovedIds
+          .where((id) => _hasStreamCheckpoint(conversationId, id))
+          .toList();
+      if (!_streamCheckpointKeyIndexIsCurrent) {
+        final uncertainIds = allRemovedIds
+            .where((id) => !removedIds.contains(id))
+            .toList();
+        if (uncertainIds.isNotEmpty) {
+          _pendingUnindexedMessageDeletionIds
+              .putIfAbsent(conversationId, () => <String>{})
+              .addAll(uncertainIds);
+        }
+      }
       final supersededRestorations =
           (_pendingMessageRestorationIds[conversationId] ?? <String>{})
               .intersection(removedIds.toSet());

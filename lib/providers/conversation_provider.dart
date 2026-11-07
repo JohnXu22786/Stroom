@@ -545,6 +545,7 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
   bool _streamCheckpointKeyIndexIsCurrent = false;
   bool _streamJournalPresent = false;
   final Map<String, Set<String>> _pendingMessageDeletionIds = {};
+  final Map<String, Set<String>> _pendingUnindexedMessageDeletionIds = {};
   final Map<String, Set<String>> _pendingMessageRestorationIds = {};
 
   /// Conversations whose deletion rollback marker could not be appended.

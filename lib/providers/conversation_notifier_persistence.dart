@@ -39,10 +39,32 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
       jsonEncode([conversationId, messageId]);
 
   bool _hasStreamCheckpoint(String conversationId, String messageId) {
-    if (!_streamCheckpointKeyIndexIsCurrent) return true;
     final key = _streamCheckpointKey(conversationId, messageId);
     return _streamCheckpointKeys.contains(key) ||
         (_coalescedStreamPersist?.checkpoints.containsKey(key) ?? false);
+  }
+
+  /// Resolves message removals recorded while the startup journal index was
+  /// still being read. Only removals that actually have a checkpoint need a
+  /// durable tombstone; ordinary history edits must not trigger journal I/O.
+  bool _resolveUnindexedMessageDeletions() {
+    if (!_streamCheckpointKeyIndexIsCurrent ||
+        _pendingUnindexedMessageDeletionIds.isEmpty) {
+      return false;
+    }
+    final hadPendingDeletions =
+        _pendingUnindexedMessageDeletionIds.isNotEmpty;
+    for (final entry in _pendingUnindexedMessageDeletionIds.entries) {
+      final checkpointedIds = entry.value
+          .where((id) => _hasStreamCheckpoint(entry.key, id))
+          .toList();
+      if (checkpointedIds.isEmpty) continue;
+      _pendingMessageDeletionIds
+          .putIfAbsent(entry.key, () => <String>{})
+          .addAll(checkpointedIds);
+    }
+    _pendingUnindexedMessageDeletionIds.clear();
+    return hadPendingDeletions;
   }
 
   void _addPendingMessageDeletions(
@@ -999,6 +1021,11 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
           ),
           pendingRestoredMessageIds: _pendingMessageRestorationIds,
         );
+        if (_resolveUnindexedMessageDeletions()) {
+          // The explicit save that ran during loading could not persist yet.
+          // Persist again after _loadHasRun is set in the finally block.
+          hadInMemoryMerge = true;
+        }
         if (mounted) {
           final replayedById = {
             for (final conversation in restored) conversation.id: conversation,
