@@ -248,4 +248,569 @@ class ChatStreamManager {
   String? streamingMsgIdFor(String convId) => _streams[convId]?.streamingMsgId;
 
   /// The full reply for a specific conversation.
- 
+  String fullReplyFor(String convId) => _streams[convId]?.fullReply ?? '';
+
+  /// The history for a specific conversation.
+  List<ChatMessage> historyFor(String convId) =>
+      List.unmodifiable(_streams[convId]?.history ?? []);
+
+  /// Reasoning sections for a specific conversation.
+  List<String> reasoningSectionsFor(String convId) =>
+      List.unmodifiable(_streams[convId]?.reasoningSections ?? []);
+
+  /// Tool calls for a specific conversation.
+  List<ToolCallData> toolCallsFor(String convId) =>
+      List.unmodifiable(_streams[convId]?.toolCalls ?? []);
+
+  /// Whether the first token has been received for a specific conversation.
+  bool hasFirstTokenFor(String convId) =>
+      _streams[convId]?.hasReceivedFirstToken ?? false;
+
+  /// Text chunks for a specific conversation.
+  List<String> textChunksFor(String convId) =>
+      _streams[convId]?.textChunks ?? const [];
+
+  /// Tool call round starts for a specific conversation.
+  List<int> toolCallRoundStartsFor(String convId) =>
+      List.unmodifiable(_streams[convId]?.toolCallRoundStarts ?? []);
+
+  /// The in-progress reasoning buffer for a specific conversation.
+  /// Returns the content of the currently-accumulating reasoning section,
+  /// or an empty string if no reasoning stream is active for this convId.
+  String reasoningBufferFor(String convId) =>
+      _streams[convId]?.reasoningBuffer ?? '';
+
+  // ── 公共 API ──
+
+  /// Pushes the streaming state of [convId] to its per-conversation
+  /// family provider instances. If the conversation has no active stream,
+  /// clears the provider for this conversation.
+  void activateConversation(String convId) {
+    final state = _streams[convId];
+    if (state != null) {
+      _pushStateToProviders(state);
+    } else {
+      _clearProvidersFor(convId);
+    }
+  }
+
+  /// 启动流式请求，独立于页面 Widget 在后台运行。
+  ///
+  /// [text] 用户消息文本
+  /// [convId] 当前对话 ID
+  /// [history] 当前对话的消息历史（不包含新创建的消息）
+  /// [tools] 启用的工具列表
+  /// [reasoning] 是否启用推理
+  /// [entriesStateOverride] task-flow's resolved configuration snapshot;
+  /// ordinary chat sends continue using the current provider entries.
+  ///
+  /// 返回 [StreamResult]，包含最终的对话历史和助手消息。
+  Future<StreamResult> startStreaming({
+    required String text,
+    required String convId,
+    required List<ChatMessage> history,
+    List<ChatMessage>? requestHistoryOverride,
+    List<ChatMessage>? historyOnSuccess,
+    List<ToolDefinition> tools = const [],
+    bool reasoning = false,
+    String reasoningEffort = 'medium',
+    Map<String, String> reasoningParamValues = const {},
+    Map<String, String>? customParamValues,
+    String? streamingMsgId,
+    Assistant? assistant,
+    ProviderEntriesState? entriesStateOverride,
+  }) async {
+    // If this conversation already has a stream running, return the
+    // pending future so the caller awaits the same result.
+    if (_streams.containsKey(convId)) {
+      final existing = _streams[convId]!;
+      // If the existing stream was cancelled (user tapped Stop), clean
+      // up immediately and allow a fresh stream. Without this, a
+      // Stop→re-Send sequence would return the cancelled stream's stale
+      // result, losing the new user message from history.
+      if (existing.cancelledByUser) {
+        existing.persistTimer?.cancel();
+        existing.persistTimer = null;
+        _streams.remove(convId);
+        // Fall through to start a new stream below.
+      } else {
+        debugPrint('[ChatStreamManager] 对话 $convId 已有流式请求进行中');
+        return _streams[convId]!.resultCompleter!.future;
+      }
+    }
+
+    // Each conversation gets its own ChatService via the adapter, so
+    // multiple conversations can stream concurrently. No need to
+    // abandon other conversations' streams.
+    // Create per-conversation state and its result completer.
+    // ALL synchronous setup must happen BEFORE the first await so
+    // that isStreaming / isStreamingFor are correct immediately.
+    final resultCompleter = Completer<StreamResult>();
+    final state = _ConversationStreamState(convId: convId)
+      ..resultCompleter = resultCompleter;
+    state.onContinuation = _pendingContinuationHandlers.remove(convId);
+    state.history = List.from(history);
+    state.historyOnSuccess = historyOnSuccess == null
+        ? null
+        : List<ChatMessage>.from(historyOnSuccess);
+    state.lastTextUpdate = DateTime.now();
+    state.lastReasoningUpdate = DateTime.now();
+
+    // ── 上下文管理：请求前检查工具输出累计是否达到 prune 阈值 ──
+    // 对齐 opencode（PRUNE_PROTECT=40K / PRUNE_MINIMUM=20K）：
+    // 从新到旧累计工具输出 token，超过保护窗后开始收集，
+    // 可 prune 量超 20K 才执行；执行 = 软删除标记（compactedAt，
+    // 数据保留），此后每次请求渲染占位符释放上下文。
+    // 阈值基于"工具输出累计"而非模型 context——1M 模型在 100k+
+    // 上下文时工具输出也早已超阈值，与 opencode 行为一致。
+    // 可在设置页"上下文管理"关闭（opencode compaction.prune）。
+    final ctxSettings = _ref?.read(contextManagementSettingsProvider) ??
+        const ContextManagementSettings();
+    if (ctxSettings.pruneEnabled) {
+      // 压缩边界（对齐 opencode summary break）：有摘要时扫描到
+      // 尾部起点即停止（其之前 = 已压缩内容）
+      final tailStartId = _ref
+          ?.read(conversationsProvider)
+          .where((c) => c.id == convId)
+          .firstOrNull
+          ?.compactionTailStartId;
+      final pruned = ContextManager.pruneToolResults(
+        state.history,
+        stopAtMessageId: tailStartId,
+      );
+      if (!identical(pruned, state.history)) {
+        AppLogService.info(
+            'ChatStreamManager', '[CTX-MGR] 工具结果 prune 执行完成, convId=$convId');
+      }
+      state.history = pruned;
+    }
+
+    final aiMsgId =
+        streamingMsgId ?? 'a${DateTime.now().microsecondsSinceEpoch}';
+    state.streamingMsgId = aiMsgId;
+
+    _streams[convId] = state;
+
+    // Track this conversation in the streaming set so the page can detect
+    // completion (see streamingConversationsProvider docs).
+    _setProvider(streamingConversationsProvider, <String>{
+      ..._ref?.read(streamingConversationsProvider) ?? const {},
+      convId
+    });
+
+    // Push initial state to this conversation's family providers
+    _pushStateToProviders(state);
+
+    // Start periodic persistence timer
+    state.persistTimer = Timer.periodic(_persistInterval, (_) {
+      unawaited(_doPeriodicPersist(state));
+    });
+
+    // Snapshot the ChatService instance BEFORE the first await so that
+    // Snapshot this conversation's ChatService before any await.
+    // The adapter creates a per-conversation service on demand, so
+    // capture it here for raw data (lastRequestBody etc.) in finally.
+    // The assistant (and entries) are passed so the snapshot itself
+    // resolves the assistant's model — otherwise the pre-stream snapshot
+    // would cache a global-config service and the send below would
+    // silently ignore the assistant binding (putIfAbsent first-writer
+    // wins).
+    final snappedChatService = _adapter.getOrCreateService(
+      convId,
+      assistant: assistant,
+      entriesState: entriesStateOverride ?? _ref?.read(providerEntriesProvider),
+    );
+
+    // ── 对话级计费累计（per-request 事件驱动） ──
+    // 每次请求的 usage 数据返回时（包含流中间观察到的快照）
+    // **立即**增量累加到对话，而非整次发送攒到流结束一次性提交：
+    // - 重发/重试/编辑只会在累计值上继续增加，绝不重置、不从头重算；
+    // - 每请求提交一次，service 复用/异常清理也不会重复提交（双计）。
+    // 压缩请求运行在独立的瞬时 service 上（chat_stream_manager_
+    // compaction.dart 中显式接线 _commitUsage），此回调只覆盖主请求。
+    snappedChatService?.onUsageEvent =
+        (usage, {required bool recordInput, double? costIncrement}) {
+      _commitUsage(convId, usage,
+          recordInput: recordInput, costIncrementOverride: costIncrement);
+    };
+
+    // ── 上下文管理：摘要注入 + 发送量过滤 + 超限自动压缩 ──
+    // 1. 每次请求都注入对话已有的压缩摘要（如有）
+    // 2. 发送历史 = 有摘要时从"压缩时记录的尾部起点"起（固定快照，
+    //    对齐 opencode tail_start_id），无摘要时全量——这就是
+    //    "上下文显示越来越少、存储还在"的机制
+    // 3. 压缩触发基于**发送量**（非存储总量），超限时把
+    //    [快照之后 .. 新尾部起点] 压缩为锚定摘要
+    final conv = _ref
+        ?.read(conversationsProvider)
+        .where((c) => c.id == convId)
+        .firstOrNull;
+    snappedChatService?.setContextSummary(conv?.contextSummary);
+
+    // 发送历史过滤（对齐 opencode filterCompacted）：
+    // 有摘要时从 compactionTailStartId（固定快照）起发送，
+    // 快照之前 = 已压缩内容，存储保留但不发送。
+    // 快照消息不在历史中（被删）时安全回退为全量。
+    final tailStartId = conv?.compactionTailStartId;
+    final hasSummary = conv?.contextSummary?.trim().isNotEmpty ?? false;
+    final historyForRequest = requestHistoryOverride == null
+        ? state.history
+        : requestHistoryOverride
+            .map((message) =>
+                state.history
+                    .where((stored) => stored.id == message.id)
+                    .firstOrNull ??
+                message)
+            .toList();
+    List<ChatMessage> requestHistory;
+    if (hasSummary && tailStartId != null) {
+      final idx = historyForRequest.indexWhere((m) => m.id == tailStartId);
+      requestHistory =
+          idx >= 0 ? historyForRequest.sublist(idx) : historyForRequest;
+    } else {
+      requestHistory = historyForRequest;
+    }
+    final requestContentCache = RequestContentCache();
+
+    try {
+      final compacted = await _compactIfNeeded(
+        state: state,
+        convId: convId,
+        tools: tools,
+        requestHistory: requestHistory,
+        contentCache: requestContentCache,
+      );
+      // 压缩成功：tail 快照已更新，重新计算发送历史
+      // （从新尾部起点起，头部被摘要替代）
+      if (compacted) {
+        final newConv = _ref
+            ?.read(conversationsProvider)
+            .where((c) => c.id == convId)
+            .firstOrNull;
+        final newTailStartId = newConv?.compactionTailStartId;
+        if (newTailStartId != null) {
+          final postCompactionHistory = requestHistoryOverride == null
+              ? state.history
+              : requestHistoryOverride
+                  .map((message) =>
+                      state.history
+                          .where((stored) => stored.id == message.id)
+                          .firstOrNull ??
+                      message)
+                  .toList();
+          final idx =
+              postCompactionHistory.indexWhere((m) => m.id == newTailStartId);
+          if (idx >= 0) {
+            requestHistory = postCompactionHistory.sublist(idx);
+          }
+        }
+        requestContentCache.retainOnly(requestHistory);
+      }
+      // 压缩期间用户取消：不发起主请求（空流走正常清理路径，
+      // 结果标记为 cancelled）
+      if (state.cancelledByUser) {
+        debugPrint('[ChatStreamManager] 压缩期间取消, convId=$convId');
+      }
+    } catch (e, s) {
+      debugPrint('[ChatStreamManager] 上下文管理失败: $e\n$s');
+    }
+
+    // Start the provider stream BEFORE yielding to the event loop so
+    // that the ChatService is guaranteed to be the one we just created.
+    // The stream controller will buffer any events produced before the
+    // await-for loop subscribes below.
+    //
+    // requestHistory 已在上方上下文管理块计算（有摘要时 = 尾部快照起）。
+    Stream<ChatEvent> createStream(List<ChatMessage> streamHistory) =>
+        state.cancelledByUser
+            ? const Stream<ChatEvent>.empty()
+            : _adapter.sendStreamWithTools(
+                text,
+                history: streamHistory,
+                contentCache: requestContentCache,
+                reasoning: reasoning,
+                reasoningEffort: reasoningEffort,
+                reasoningParamValues: reasoningParamValues,
+                customParamValues: customParamValues,
+                tools: tools,
+                convId: convId,
+                assistant: assistant,
+                entriesState:
+                    entriesStateOverride ?? _ref?.read(providerEntriesProvider),
+                onToolCallIntent: () => state.toolCallStarted = true,
+                onTextDelta: state.appendText,
+                onRequestBody: (body) => state.requestBodySnapshot = body,
+                takeCompletedToolCallRound: state.takeCompletedToolCallRound,
+                takeCompletedToolCallReasoning:
+                    state.takeCompletedToolCallReasoning,
+              );
+
+    // Now safe to yield to event loop — all state is established and the
+    // provider stream is already created.
+
+    Object? streamError;
+
+    try {
+      try {
+        await AppLogService.info('ChatStreamManager',
+            '[STREAM-MGR] startStreaming: begin, convId=$convId, historyLen=${history.length}');
+      } catch (_) {
+        // 日志失败不能误判为流错误（否则主请求已发出但响应
+        // 永不被消费，回复丢失）
+      }
+
+      var streamHistory = List<ChatMessage>.from(requestHistory);
+      var transportRetries = 0;
+      var replyLengthAtLastContinuation = 0;
+      while (true) {
+        try {
+          await for (final event in createStream(streamHistory)) {
+            if (state.cancelledByUser) break;
+            _handleStreamEvent(event, state, convId);
+          }
+          break;
+        } catch (e) {
+          final fullReplySnapshot = state.fullReply;
+          final hasPartialOutput = fullReplySnapshot.isNotEmpty;
+          final hasVisibleReasoning = state.reasoningBuffer.isNotEmpty ||
+              state.reasoningSections.any((section) => section.isNotEmpty);
+          final canContinuePartial = shouldAutoContinueStream(
+            error: e,
+            hasPartialOutput: hasPartialOutput,
+            hasToolHistory: state.toolCalls.isNotEmpty || state.toolCallStarted,
+          );
+          if (state.cancelledByUser ||
+              state.toolCalls.isNotEmpty ||
+              state.toolCallStarted ||
+              hasVisibleReasoning ||
+              transportRetries >= _transportRetryPolicy.maxRetries ||
+              !isRetryableTransportFailure(e) ||
+              (hasPartialOutput && !canContinuePartial)) {
+            rethrow;
+          }
+
+          transportRetries++;
+          final wait = _transportRetryPolicy.delayForRetry(transportRetries);
+          await waitForRetryOrCancellation(
+            wait,
+            delay: _retryDelay,
+            cancellation: state.cancellationSignal.future,
+          );
+          if (state.cancelledByUser) rethrow;
+
+          if (hasPartialOutput) {
+            final continuation = ChatMessage(
+              role: 'user',
+              content: appLocalizationsForLocale(_ref?.read(localeProvider))
+                  .chatAutoContinuePrompt,
+            );
+            state.history.add(continuation);
+            state.historyOnSuccess?.add(continuation);
+            state.pendingContinuations.add(continuation);
+            try {
+              final handler = state.onContinuation;
+              if (handler != null) {
+                await _deliverContinuation(state, continuation, handler);
+              }
+            } catch (callbackError) {
+              debugPrint(
+                  '[ChatStreamManager] continuation display callback failed: $callbackError');
+            }
+
+            final replyDelta = fullReplySnapshot.substring(
+              replyLengthAtLastContinuation,
+            );
+            replyLengthAtLastContinuation = fullReplySnapshot.length;
+            streamHistory = [
+              ...streamHistory,
+              ChatMessage(role: 'assistant', content: replyDelta),
+              continuation,
+            ];
+            state.markToolCallTextBoundary();
+          }
+          debugPrint(
+              '[ChatStreamManager] network stream interrupted; retrying ($transportRetries/${_transportRetryPolicy.maxRetries}), convId=$convId');
+        }
+      }
+    } catch (e, s) {
+      streamError = e;
+      if (!state.cancelledByUser) {
+        debugPrint('[ChatStreamManager] 流式请求异常: $e\n$s');
+        try {
+          await AppLogService.error('ChatStreamManager', '流式请求异常', e, s);
+        } catch (_) {
+          // Best effort: logging failure should not prevent cleanup
+        }
+        // 用友好错误格式化（分类中文提示 + 保留原始异常）：
+        // 未配置供应商/网络失败/超时等给出可操作的提示。
+        // 保留已经流出的正文或思考内容，并把错误作为独立尾部块显示。
+        final errorText = _ref == null
+            ? formatChatErrorMessage(e)
+            : formatChatErrorMessage(e, locale: _ref?.read(localeProvider));
+        final partial = state.fullReply;
+        if (partial.isEmpty) {
+          state.fullReply = errorText;
+          state.hasSyntheticErrorReply = true;
+        }
+        _pushToProvider(convId, streamingTextSectionsProvider,
+            List<String>.from(state.textChunks));
+        state.toolCalls.clear();
+        _pushToProvider(convId, streamingToolCallsProvider, <ToolCallData>[]);
+      }
+    } finally {
+      // Stop periodic persistence
+      state.persistTimer?.cancel();
+      state.persistTimer = null;
+
+      // Final throttle flush: push the last text to the UI.
+      _pushToProvider(convId, streamingTextSectionsProvider,
+          List<String>.from(state.textChunks));
+    }
+
+    return _completeStream(
+      state: state,
+      convId: convId,
+      streamError: streamError,
+      snappedChatService: snappedChatService,
+    );
+  }
+
+  /// Registers a conversation-scoped handler for displaying an automatically
+  /// sent continuation. Call immediately before [startStreaming].
+  void setContinuationHandler(
+    String convId,
+    Future<bool> Function(ChatMessage continuation) handler,
+  ) {
+    final activeState = _streams[convId];
+    if (activeState != null && !activeState.cancelledByUser) {
+      activeState.onContinuation = handler;
+      for (final pending in List<ChatMessage>.from(
+        activeState.pendingContinuations,
+      )) {
+        unawaited(_deliverContinuation(activeState, pending, handler));
+      }
+    } else {
+      _pendingContinuationHandlers[convId] = handler;
+    }
+  }
+
+  Future<void> _deliverContinuation(
+    _ConversationStreamState state,
+    ChatMessage continuation,
+    Future<bool> Function(ChatMessage continuation) handler,
+  ) async {
+    if (!state.pendingContinuations.contains(continuation) ||
+        !state.deliveringContinuations.add(continuation)) {
+      return;
+    }
+    try {
+      final displayed = await handler(continuation);
+      if (displayed) state.pendingContinuations.remove(continuation);
+    } catch (callbackError) {
+      debugPrint(
+          '[ChatStreamManager] continuation display callback failed: $callbackError');
+    } finally {
+      state.deliveringContinuations.remove(continuation);
+      final replacementHandler = state.onContinuation;
+      if (!state.cancelledByUser &&
+          state.pendingContinuations.contains(continuation) &&
+          replacementHandler != null &&
+          !identical(replacementHandler, handler)) {
+        unawaited(
+          _deliverContinuation(state, continuation, replacementHandler),
+        );
+      }
+    }
+  }
+
+  /// 取消指定对话的流式请求。如果 [convId] 为 null，取消所有。
+  void cancel([String? convId]) {
+    if (convId != null) {
+      final state = _streams[convId];
+      if (state == null) return;
+      state.cancelByUser();
+      // Cancel only this conversation's HTTP request.
+      _adapter.cancelService(convId);
+    } else {
+      if (_streams.isEmpty) return;
+      for (final s in _streams.values) {
+        s.cancelByUser();
+      }
+      // Cancel all services.
+      _adapter.cancelAllServices();
+    }
+  }
+
+  /// 释放资源。
+  void dispose() {
+    for (final s in _streams.values) {
+      s.persistTimer?.cancel();
+      s.persistTimer = null;
+    }
+    _streams.clear();
+    _setProvider(streamingConversationsProvider, <String>{});
+    _adapter.dispose();
+  }
+
+  /// 把一次请求的 usage 计量**立即**累加到对话（对话级累计）。
+  ///
+  /// 由 ChatService.onUsageEvent 回调触发：usage 快照返回时增量提交
+  /// （Conversation.totalCost += 新增的 cost），
+  /// 绝不从头重算。重发/重试/编辑只会继续累加，不会重置。
+  ///
+  /// [recordInput] 为 false 时只累计 cost（压缩/标题等内部任务请求的
+  /// 输入 ≈ 头部大小/仅一条消息，写入 lastInputTokens 会污染"当前
+  /// 上下文大小"：压缩触发判断膨胀、状态行显示虚高）。
+  ///
+  /// 取消语义：usage 事件在请求正常结束以及错误/取消路径（provider
+  /// 已收集到部分计量时也会先产出事件再上抛）都会产出，这里一律按
+  /// API 返回的原值提交——cost 是已发生的事实，必须保留累计；tokens
+  /// 若因截断而偏小，lastInputTokens 是"最近一次请求"的语义，压缩
+  /// 触发另有 max(实际, 估算) 兜底，不会因偏小值漏压缩。
+  ///
+  /// fire-and-forget（不 await）：幂等的增量累加 + 防抖持久化，
+  /// 多请求并发提交安全。
+  void _commitUsage(String convId, Map<String, dynamic> usage,
+      {required bool recordInput, double? costIncrementOverride}) {
+    final ref = _ref;
+    if (ref == null) return;
+    try {
+      final inputTokens = usage['inputTokens'] as int?;
+      final outputTokens = usage['outputTokens'] as int?;
+      // num 安全取值：cost 以 int（JSON 整数值反序列化）出现时
+      // 也能累计——单个字段的类型异常不能把整次计量（含 tokens）丢弃。
+      final cost = costIncrementOverride ??
+          (usage['cost'] is num ? (usage['cost'] as num).toDouble() : 0.0);
+      final hasMetering =
+          recordInput && (inputTokens != null || outputTokens != null);
+      if (!hasMetering && cost == 0) return;
+      unawaited(ref.read(conversationsProvider.notifier).updateUsage(
+            conversationId: convId,
+            inputTokens: recordInput ? inputTokens : null,
+            outputTokens: recordInput ? outputTokens : null,
+            costIncrement: cost,
+          ));
+    } catch (e) {
+      debugPrint('[ChatStreamManager] usage 计量更新失败: $e');
+    }
+  }
+
+  // ── 上下文压缩（compaction） ────────────────────────────────────
+
+  /// 找到尾部起始索引：从末尾数第 [tailUserTurns] 个用户消息。
+  /// 尾部 = 从该索引开始的所有消息（保留原文）；
+  /// 头部 = 该索引之前的消息（可压缩）。
+  static int _findTailStart(
+    List<ChatMessage> history, {
+    int tailUserTurns = 2,
+  }) {
+    var turns = 0;
+    for (var i = history.length - 1; i >= 0; i--) {
+      if (history[i].role == 'user') {
+        turns++;
+        if (turns >= tailUserTurns) return i;
+      }
+    }
+    return 0;
+  }
+}
