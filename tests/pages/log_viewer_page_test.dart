@@ -1,7 +1,10 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/log_viewer_page.dart';
 import 'package:stroom/services/app_log_service.dart';
 import 'package:stroom/services/manifest_database.dart';
@@ -15,6 +18,123 @@ void main() {
     ManifestDatabase.enableTestMode();
     WebFileStore.enableTestMode();
     AppLogService.enableFileLogging();
+  });
+
+  MaterialApp localizationTestApp({Locale? locale, required Widget home}) =>
+      MaterialApp(
+        locale: locale ?? const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: home,
+      );
+
+  group('LogViewerPage localization', () {
+    testWidgets(
+        'localizes page chrome and delete confirmation while preserving filename',
+        (tester) async {
+      final logDir = await AppLogService.getLogDir();
+      await logDir.create(recursive: true);
+      const fileName = 'app_2024-01-01-00.log';
+      final logFile = File('${logDir.path}/$fileName');
+      await logFile.writeAsString('raw log content');
+      addTearDown(() async {
+        if (await logFile.exists()) await logFile.delete();
+      });
+
+      for (final locale in [
+        const Locale('en', 'US'),
+        const Locale('zh', 'CN')
+      ]) {
+        await tester.pumpWidget(
+          localizationTestApp(
+            locale: locale,
+            home: const LogViewerPage(),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final isEnglish = locale.languageCode == 'en';
+        expect(
+          find.text(isEnglish ? 'Application logs' : '应用日志'),
+          findsOneWidget,
+        );
+        expect(
+          find.byTooltip(isEnglish ? 'Refresh' : '刷新'),
+          findsOneWidget,
+        );
+        expect(
+          find.text(isEnglish
+              ? 'Log retention: Only the most recent 15 days are kept. Logs older than 15 days are cleaned automatically.'
+              : '日志保留期限：只保留最近 15 天的日志，超过 15 天会自动清理。'),
+          findsOneWidget,
+        );
+        expect(find.text(fileName), findsOneWidget);
+
+        await tester.tap(find.byTooltip(isEnglish ? 'Delete' : '删除'));
+        await tester.pumpAndSettle();
+        expect(
+            find.text(isEnglish ? 'Confirm deletion' : '确认删除'), findsOneWidget);
+        expect(
+          find.text(isEnglish
+              ? 'Delete log file "$fileName"?'
+              : '确定要删除日志文件 "$fileName" 吗？'),
+          findsOneWidget,
+        );
+        expect(find.text(isEnglish ? 'Cancel' : '取消'), findsOneWidget);
+        await tester.tap(find.text(isEnglish ? 'Cancel' : '取消'));
+        await tester.pumpAndSettle();
+      }
+    });
+
+    testWidgets(
+        'localizes log content actions and status without changing filename or raw content',
+        (tester) async {
+      const fileName = 'user-provided.log';
+      const rawContent = '[ERROR] Keep this exact user log content: 原样保留';
+      final platformCalls = <MethodCall>[];
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          platformCalls.add(call);
+          return null;
+        },
+      );
+      addTearDown(() => tester.binding.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, null));
+
+      for (final locale in [
+        const Locale('en', 'US'),
+        const Locale('zh', 'CN')
+      ]) {
+        await tester.pumpWidget(
+          localizationTestApp(
+            locale: locale,
+            home: const LogContentPage(fileName: fileName, content: rawContent),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final isEnglish = locale.languageCode == 'en';
+        expect(find.text(fileName), findsOneWidget);
+        expect(find.text(isEnglish ? '1 line' : '共 1 行'), findsOneWidget);
+        expect(find.byTooltip(isEnglish ? 'Raw view' : '原始视图'), findsOneWidget);
+        await tester.tap(find.byTooltip(isEnglish ? 'Raw view' : '原始视图'));
+        await tester.pumpAndSettle();
+        expect(find.text(rawContent), findsOneWidget);
+
+        await tester.tap(find.byTooltip(isEnglish ? 'Copy all' : '复制全文'));
+        await tester.pump();
+        final copyCall = platformCalls
+            .where((call) => call.method == 'Clipboard.setData')
+            .lastOrNull;
+        expect(copyCall, isNotNull);
+        expect((copyCall!.arguments as Map)['text'], rawContent);
+        expect(
+          find.text(isEnglish ? 'Copied all log content' : '已复制全部日志内容'),
+          findsOneWidget,
+        );
+      }
+    });
   });
 
   // ==================================================================
@@ -62,7 +182,7 @@ void main() {
   group('LogContentPage — auto-scroll behavior', () {
     testWidgets('structured view scrolls to bottom on entry', (tester) async {
       await tester.pumpWidget(
-        MaterialApp(
+        localizationTestApp(
           home: LogContentPage(
             fileName: 'app_2024-01-01-00.log',
             content: buildLogContent(500),
@@ -84,7 +204,7 @@ void main() {
     testWidgets('first toggle to raw view keeps the reading position',
         (tester) async {
       await tester.pumpWidget(
-        MaterialApp(
+        localizationTestApp(
           home: LogContentPage(
             fileName: 'app_2024-01-01-00.log',
             content: buildLogContent(500),
@@ -133,7 +253,7 @@ void main() {
     testWidgets('toggling back to structured view keeps its scroll position',
         (tester) async {
       await tester.pumpWidget(
-        MaterialApp(
+        localizationTestApp(
           home: LogContentPage(
             fileName: 'app_2024-01-01-00.log',
             content: buildLogContent(500),
@@ -176,7 +296,7 @@ void main() {
     testWidgets('raw view restores its scroll position after toggling back',
         (tester) async {
       await tester.pumpWidget(
-        MaterialApp(
+        localizationTestApp(
           home: LogContentPage(
             fileName: 'app_2024-01-01-00.log',
             content: buildLogContent(500),
@@ -243,7 +363,7 @@ void main() {
       buffer.writeln();
 
       await tester.pumpWidget(
-        MaterialApp(
+        localizationTestApp(
           home: LogContentPage(
             fileName: 'app_2024-01-01-00.log',
             content: buffer.toString(),
@@ -276,7 +396,7 @@ void main() {
   group('LogContentPage — actions', () {
     testWidgets('shows line count in the AppBar', (tester) async {
       await tester.pumpWidget(
-        MaterialApp(
+        localizationTestApp(
           home: LogContentPage(
             fileName: 'app_2024-01-01-00.log',
             content: buildLogContent(500),
@@ -292,7 +412,7 @@ void main() {
         'newline', (tester) async {
       // Empty content: 0 lines.
       await tester.pumpWidget(
-        MaterialApp(
+        localizationTestApp(
           home: LogContentPage(fileName: 'f.log', content: ''),
         ),
       );
@@ -302,7 +422,7 @@ void main() {
     testWidgets('line count without trailing newline is exact', (tester) async {
       // No trailing newline: 'a\nb' is exactly 2 lines.
       await tester.pumpWidget(
-        MaterialApp(
+        localizationTestApp(
           home: LogContentPage(fileName: 'f.log', content: 'a\nb'),
         ),
       );
@@ -324,7 +444,7 @@ void main() {
           .setMockMethodCallHandler(SystemChannels.platform, null));
 
       await tester.pumpWidget(
-        MaterialApp(
+        localizationTestApp(
           home: LogContentPage(
             fileName: 'app_2024-01-01-00.log',
             content: content,

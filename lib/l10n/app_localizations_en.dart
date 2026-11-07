@@ -9976,6 +9976,133 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get catCatchDownloadedSourceMissing =>
       'The downloaded source file is missing. Please download it again.';
+
+  @override
+  String get appLogPageTitle => 'Application logs';
+
+  @override
+  String get appLogRefresh => 'Refresh';
+
+  @override
+  String get appLogCleanupOldLogs => 'Clean up old logs';
+
+  @override
+  String get appLogCleanupDone => 'Old logs were cleaned up';
+
+  @override
+  String appLogRetentionNotice(int days) {
+    return 'Log retention: Only the most recent $days days are kept. Logs older than $days days are cleaned automatically.';
+  }
+
+  @override
+  String get appLogWebUnsupported => 'Local logs are not supported on web';
+
+  @override
+  String get appLogNoFiles => 'No log files yet';
+
+  @override
+  String appLogAutoRefresh(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Refreshing automatically (attempt $count)...',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get appLogWillBeCreated =>
+      'Logs are generated while the app is running';
+
+  @override
+  String get appLogExport => 'Export';
+
+  @override
+  String get appLogDelete => 'Delete';
+
+  @override
+  String get appLogConfirmDeleteTitle => 'Confirm deletion';
+
+  @override
+  String appLogConfirmDeleteMessage(String fileName) {
+    return 'Delete log file \"$fileName\"?';
+  }
+
+  @override
+  String get appLogCancel => 'Cancel';
+
+  @override
+  String appLogLoadFilesError(Object error) {
+    return 'Failed to load log file list: $error';
+  }
+
+  @override
+  String appLogReadFileUnreadable(String fileName) {
+    return 'Log file \"$fileName\" exists but could not be read; it may be corrupted';
+  }
+
+  @override
+  String appLogReadFileMissing(String fileName) {
+    return 'Log file \"$fileName\" was not found; it may have been cleaned up';
+  }
+
+  @override
+  String appLogReadFileError(Object error) {
+    return 'Failed to read log file: $error';
+  }
+
+  @override
+  String appLogDeleteDone(String fileName) {
+    return 'Deleted: $fileName';
+  }
+
+  @override
+  String appLogDeleteError(Object error) {
+    return 'Delete failed: $error';
+  }
+
+  @override
+  String appLogExportMissing(String fileName) {
+    return 'Log file \"$fileName\" was not found';
+  }
+
+  @override
+  String appLogPathCopied(String filePath) {
+    return 'Path copied: $filePath';
+  }
+
+  @override
+  String appLogExportError(Object error) {
+    return 'Export failed: $error';
+  }
+
+  @override
+  String appLogLineCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '# lines',
+      one: '# line',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get appLogCopyAll => 'Copy all';
+
+  @override
+  String get appLogStructuredView => 'Structured view';
+
+  @override
+  String get appLogRawView => 'Raw view';
+
+  @override
+  String appLogCopyError(Object error) {
+    return 'Copy failed: $error';
+  }
+
+  @override
+  String get appLogCopyDone => 'Copied all log content';
 }
 
 /// The translations for English, as used in the United States (`en_US`).
@@ -19949,4 +20076,131 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   @override
   String get catCatchDownloadedSourceMissing =>
       'The downloaded source file is missing. Please download it again.';
+
+  @override
+  String get appLogPageTitle => 'Application logs';
+
+  @override
+  String get appLogRefresh => 'Refresh';
+
+  @override
+  String get appLogCleanupOldLogs => 'Clean up old logs';
+
+  @override
+  String get appLogCleanupDone => 'Old logs were cleaned up';
+
+  @override
+  String appLogRetentionNotice(int days) {
+    return 'Log retention: Only the most recent $days days are kept. Logs older than $days days are cleaned automatically.';
+  }
+
+  @override
+  String get appLogWebUnsupported => 'Local logs are not supported on web';
+
+  @override
+  String get appLogNoFiles => 'No log files yet';
+
+  @override
+  String appLogAutoRefresh(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Refreshing automatically (attempt $count)...',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get appLogWillBeCreated =>
+      'Logs are generated while the app is running';
+
+  @override
+  String get appLogExport => 'Export';
+
+  @override
+  String get appLogDelete => 'Delete';
+
+  @override
+  String get appLogConfirmDeleteTitle => 'Confirm deletion';
+
+  @override
+  String appLogConfirmDeleteMessage(String fileName) {
+    return 'Delete log file \"$fileName\"?';
+  }
+
+  @override
+  String get appLogCancel => 'Cancel';
+
+  @override
+  String appLogLoadFilesError(Object error) {
+    return 'Failed to load log file list: $error';
+  }
+
+  @override
+  String appLogReadFileUnreadable(String fileName) {
+    return 'Log file \"$fileName\" exists but could not be read; it may be corrupted';
+  }
+
+  @override
+  String appLogReadFileMissing(String fileName) {
+    return 'Log file \"$fileName\" was not found; it may have been cleaned up';
+  }
+
+  @override
+  String appLogReadFileError(Object error) {
+    return 'Failed to read log file: $error';
+  }
+
+  @override
+  String appLogDeleteDone(String fileName) {
+    return 'Deleted: $fileName';
+  }
+
+  @override
+  String appLogDeleteError(Object error) {
+    return 'Delete failed: $error';
+  }
+
+  @override
+  String appLogExportMissing(String fileName) {
+    return 'Log file \"$fileName\" was not found';
+  }
+
+  @override
+  String appLogPathCopied(String filePath) {
+    return 'Path copied: $filePath';
+  }
+
+  @override
+  String appLogExportError(Object error) {
+    return 'Export failed: $error';
+  }
+
+  @override
+  String appLogLineCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '# lines',
+      one: '# line',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get appLogCopyAll => 'Copy all';
+
+  @override
+  String get appLogStructuredView => 'Structured view';
+
+  @override
+  String get appLogRawView => 'Raw view';
+
+  @override
+  String appLogCopyError(Object error) {
+    return 'Copy failed: $error';
+  }
+
+  @override
+  String get appLogCopyDone => 'Copied all log content';
 }

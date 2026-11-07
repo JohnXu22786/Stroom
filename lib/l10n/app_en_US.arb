@@ -5650,5 +5650,146 @@
   "catCatchRedownloadPathEmpty": "The download failed because the downloaded file path is empty.",
   "catCatchWebBrowserRequired": "This page cannot expose its resources without a browser environment. Try using the feature on mobile or desktop, or paste a direct video or audio file URL.",
   "catCatchPlaylistNoSegments": "The playlist has no downloadable segments.",
-  "catCatchDownloadedSourceMissing": "The downloaded source file is missing. Please download it again."
+  "catCatchDownloadedSourceMissing": "The downloaded source file is missing. Please download it again.",
+  "appLogPageTitle": "Application logs",
+  "appLogRefresh": "Refresh",
+  "appLogCleanupOldLogs": "Clean up old logs",
+  "appLogCleanupDone": "Old logs were cleaned up",
+  "appLogRetentionNotice": "Log retention: Only the most recent {days} days are kept. Logs older than {days} days are cleaned automatically.",
+  "@appLogRetentionNotice": {
+    "description": "Explains the automatic log retention policy.",
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "appLogWebUnsupported": "Local logs are not supported on web",
+  "appLogNoFiles": "No log files yet",
+  "appLogAutoRefresh": "{count, plural, other{Refreshing automatically (attempt {count})...}}",
+  "@appLogAutoRefresh": {
+    "description": "Status shown while the log list retries loading.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "appLogWillBeCreated": "Logs are generated while the app is running",
+  "appLogExport": "Export",
+  "appLogDelete": "Delete",
+  "appLogConfirmDeleteTitle": "Confirm deletion",
+  "appLogConfirmDeleteMessage": "Delete log file \"{fileName}\"?",
+  "@appLogConfirmDeleteMessage": {
+    "description": "Confirmation message for deleting a log file.",
+    "placeholders": {
+      "fileName": {
+        "type": "String"
+      }
+    }
+  },
+  "appLogCancel": "Cancel",
+  "appLogLoadFilesError": "Failed to load log file list: {error}",
+  "@appLogLoadFilesError": {
+    "description": "Error shown when loading the log file list fails.",
+    "placeholders": {
+      "error": {
+        "type": "Object"
+      }
+    }
+  },
+  "appLogReadFileUnreadable": "Log file \"{fileName}\" exists but could not be read; it may be corrupted",
+  "@appLogReadFileUnreadable": {
+    "description": "Error shown when an existing log file cannot be read.",
+    "placeholders": {
+      "fileName": {
+        "type": "String"
+      }
+    }
+  },
+  "appLogReadFileMissing": "Log file \"{fileName}\" was not found; it may have been cleaned up",
+  "@appLogReadFileMissing": {
+    "description": "Error shown when a log file is missing.",
+    "placeholders": {
+      "fileName": {
+        "type": "String"
+      }
+    }
+  },
+  "appLogReadFileError": "Failed to read log file: {error}",
+  "@appLogReadFileError": {
+    "description": "Error shown when reading a log file fails.",
+    "placeholders": {
+      "error": {
+        "type": "Object"
+      }
+    }
+  },
+  "appLogDeleteDone": "Deleted: {fileName}",
+  "@appLogDeleteDone": {
+    "description": "Status shown after deleting a log file.",
+    "placeholders": {
+      "fileName": {
+        "type": "String"
+      }
+    }
+  },
+  "appLogDeleteError": "Delete failed: {error}",
+  "@appLogDeleteError": {
+    "description": "Error shown when deleting a log file fails.",
+    "placeholders": {
+      "error": {
+        "type": "Object"
+      }
+    }
+  },
+  "appLogExportMissing": "Log file \"{fileName}\" was not found",
+  "@appLogExportMissing": {
+    "description": "Error shown when the log file to export is missing.",
+    "placeholders": {
+      "fileName": {
+        "type": "String"
+      }
+    }
+  },
+  "appLogPathCopied": "Path copied: {filePath}",
+  "@appLogPathCopied": {
+    "description": "Status shown after copying a log file path.",
+    "placeholders": {
+      "filePath": {
+        "type": "String"
+      }
+    }
+  },
+  "appLogExportError": "Export failed: {error}",
+  "@appLogExportError": {
+    "description": "Error shown when exporting a log file fails.",
+    "placeholders": {
+      "error": {
+        "type": "Object"
+      }
+    }
+  },
+  "appLogLineCount": "{count, plural, =1{# line} other{# lines}}",
+  "@appLogLineCount": {
+    "description": "Number of lines in the log file.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "appLogCopyAll": "Copy all",
+  "appLogStructuredView": "Structured view",
+  "appLogRawView": "Raw view",
+  "appLogCopyError": "Copy failed: {error}",
+  "@appLogCopyError": {
+    "description": "Error shown when copying log content fails.",
+    "placeholders": {
+      "error": {
+        "type": "Object"
+      }
+    }
+  },
+  "appLogCopyDone": "Copied all log content"
 }

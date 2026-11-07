@@ -16575,6 +16575,180 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'The downloaded source file is missing. Please download it again.'**
   String get catCatchDownloadedSourceMissing;
+
+  /// No description provided for @appLogPageTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Application logs'**
+  String get appLogPageTitle;
+
+  /// No description provided for @appLogRefresh.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh'**
+  String get appLogRefresh;
+
+  /// No description provided for @appLogCleanupOldLogs.
+  ///
+  /// In en, this message translates to:
+  /// **'Clean up old logs'**
+  String get appLogCleanupOldLogs;
+
+  /// No description provided for @appLogCleanupDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Old logs were cleaned up'**
+  String get appLogCleanupDone;
+
+  /// Explains the automatic log retention policy.
+  ///
+  /// In en, this message translates to:
+  /// **'Log retention: Only the most recent {days} days are kept. Logs older than {days} days are cleaned automatically.'**
+  String appLogRetentionNotice(int days);
+
+  /// No description provided for @appLogWebUnsupported.
+  ///
+  /// In en, this message translates to:
+  /// **'Local logs are not supported on web'**
+  String get appLogWebUnsupported;
+
+  /// No description provided for @appLogNoFiles.
+  ///
+  /// In en, this message translates to:
+  /// **'No log files yet'**
+  String get appLogNoFiles;
+
+  /// Status shown while the log list retries loading.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, other{Refreshing automatically (attempt {count})...}}'**
+  String appLogAutoRefresh(int count);
+
+  /// No description provided for @appLogWillBeCreated.
+  ///
+  /// In en, this message translates to:
+  /// **'Logs are generated while the app is running'**
+  String get appLogWillBeCreated;
+
+  /// No description provided for @appLogExport.
+  ///
+  /// In en, this message translates to:
+  /// **'Export'**
+  String get appLogExport;
+
+  /// No description provided for @appLogDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get appLogDelete;
+
+  /// No description provided for @appLogConfirmDeleteTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm deletion'**
+  String get appLogConfirmDeleteTitle;
+
+  /// Confirmation message for deleting a log file.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete log file \"{fileName}\"?'**
+  String appLogConfirmDeleteMessage(String fileName);
+
+  /// No description provided for @appLogCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get appLogCancel;
+
+  /// Error shown when loading the log file list fails.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to load log file list: {error}'**
+  String appLogLoadFilesError(Object error);
+
+  /// Error shown when an existing log file cannot be read.
+  ///
+  /// In en, this message translates to:
+  /// **'Log file \"{fileName}\" exists but could not be read; it may be corrupted'**
+  String appLogReadFileUnreadable(String fileName);
+
+  /// Error shown when a log file is missing.
+  ///
+  /// In en, this message translates to:
+  /// **'Log file \"{fileName}\" was not found; it may have been cleaned up'**
+  String appLogReadFileMissing(String fileName);
+
+  /// Error shown when reading a log file fails.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to read log file: {error}'**
+  String appLogReadFileError(Object error);
+
+  /// Status shown after deleting a log file.
+  ///
+  /// In en, this message translates to:
+  /// **'Deleted: {fileName}'**
+  String appLogDeleteDone(String fileName);
+
+  /// Error shown when deleting a log file fails.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete failed: {error}'**
+  String appLogDeleteError(Object error);
+
+  /// Error shown when the log file to export is missing.
+  ///
+  /// In en, this message translates to:
+  /// **'Log file \"{fileName}\" was not found'**
+  String appLogExportMissing(String fileName);
+
+  /// Status shown after copying a log file path.
+  ///
+  /// In en, this message translates to:
+  /// **'Path copied: {filePath}'**
+  String appLogPathCopied(String filePath);
+
+  /// Error shown when exporting a log file fails.
+  ///
+  /// In en, this message translates to:
+  /// **'Export failed: {error}'**
+  String appLogExportError(Object error);
+
+  /// Number of lines in the log file.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{# line} other{# lines}}'**
+  String appLogLineCount(int count);
+
+  /// No description provided for @appLogCopyAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy all'**
+  String get appLogCopyAll;
+
+  /// No description provided for @appLogStructuredView.
+  ///
+  /// In en, this message translates to:
+  /// **'Structured view'**
+  String get appLogStructuredView;
+
+  /// No description provided for @appLogRawView.
+  ///
+  /// In en, this message translates to:
+  /// **'Raw view'**
+  String get appLogRawView;
+
+  /// Error shown when copying log content fails.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy failed: {error}'**
+  String appLogCopyError(Object error);
+
+  /// No description provided for @appLogCopyDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Copied all log content'**
+  String get appLogCopyDone;
 }
 
 class _AppLocalizationsDelegate
