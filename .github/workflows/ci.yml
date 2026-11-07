@@ -118,7 +118,8 @@ jobs:
               lib/services/data_integrity_json_parser_web.dart)
                 test_f="tests/startup/startup_check_service_web.dart"
                 ;;
-              lib/services/sse_client_web_error.dart)
+              lib/services/sse_client_web_error.dart|\
+              lib/services/sse_client_io.dart)
                 test_f="tests/services/sse_client_web_test.dart"
                 ;;
               lib/pages/gallery_page.dart|\
