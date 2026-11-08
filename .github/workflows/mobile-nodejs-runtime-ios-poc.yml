@@ -24,7 +24,8 @@ permissions:
 
 jobs:
   node-mcp-ios-simulator:
-    runs-on: macos-14
+    # Match the v0.7 iOS simulator checks, which now require the Xcode 26 image.
+    runs-on: macos-26
     timeout-minutes: 45
     steps:
       - name: Check out Stroom POC scripts
