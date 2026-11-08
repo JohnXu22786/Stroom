@@ -210,14 +210,20 @@ class KeepAliveReceiver : BroadcastReceiver() {
                 ACTION_KEEP_ALIVE,
                 ALARM_REQUEST_CODE,
                 generation,
-            )
+            ) ?: run {
+                Log.e(TAG, "Failed to create exact keep-alive PendingIntent")
+                return false
+            }
             val inexactPendingIntent = createPendingIntent(
                 context,
                 PendingIntent.FLAG_UPDATE_CURRENT,
                 ACTION_KEEP_ALIVE,
                 INEXACT_ALARM_REQUEST_CODE,
                 generation,
-            )
+            ) ?: run {
+                Log.e(TAG, "Failed to create inexact keep-alive PendingIntent")
+                return false
+            }
             updateExistingPendingIntentGeneration(
                 context,
                 ACTION_KEEP_ALIVE,
@@ -254,7 +260,7 @@ class KeepAliveReceiver : BroadcastReceiver() {
                         false
                     }
                 },
-                scheduleRevocationFallback = {
+                scheduleRevocationFallback = revocationFallback@{
                     try {
                         val backupPendingIntent = createPendingIntent(
                             context,
@@ -262,7 +268,7 @@ class KeepAliveReceiver : BroadcastReceiver() {
                             ACTION_KEEP_ALIVE_REVOCATION_BACKUP,
                             REVOCATION_BACKUP_REQUEST_CODE,
                             generation,
-                        )
+                        ) ?: return@revocationFallback false
                         val backupTriggerAt = revocationBackupTriggerAt(triggerAt)
                         val scheduled = scheduleCompatibleRevocationBackup(
                             supportsAllowWhileIdle = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M,
@@ -443,7 +449,7 @@ class KeepAliveReceiver : BroadcastReceiver() {
             action: String,
             requestCode: Int,
             generation: Long? = null,
-        ): PendingIntent {
+        ): PendingIntent? {
             val intent = Intent(context, KeepAliveReceiver::class.java).apply {
                 this.action = action
                 generation?.let { putExtra(EXTRA_KEEP_ALIVE_ALARM_GENERATION, it) }
