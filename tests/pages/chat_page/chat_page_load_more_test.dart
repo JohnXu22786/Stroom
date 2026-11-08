@@ -1046,7 +1046,9 @@ void main() {
         // later turns must be truncated from the complete persisted history.
         expect(persistedIds, contains('e10'));
         expect(
-          persistedMessages.singleWhere((message) => message.id == 'e10').content,
+          persistedMessages
+              .singleWhere((message) => message.id == 'e10')
+              .content,
           'Edited message',
         );
         expect(
