@@ -221,6 +221,7 @@ void main() {
 
       await _pumpConfigPage(tester, model: model);
       final typeDropdown = find.byType(DropdownButton<String>);
+      await _scrollTo(tester, typeDropdown);
       await tester.tap(typeDropdown);
       await tester.pumpAndSettle();
       await tester.tap(find.text('JSON').last);
