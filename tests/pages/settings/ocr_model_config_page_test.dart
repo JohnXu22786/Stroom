@@ -245,6 +245,53 @@ void main() {
       expect(saved!.customParams.single.paramName, 'scale');
     });
 
+    testWidgets('rejects stream=true when saving', (tester) async {
+      ModelConfig? saved;
+      final model = ModelConfig(
+        name: 'OCR模型',
+        modelId: 'qwen-vl-ocr',
+        customParams: [
+          CustomParam(
+            paramName: 'stream',
+            type: 'boolean',
+            defaultValue: 'true',
+          ),
+        ],
+      );
+
+      await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      expect(saved, isNull);
+      expect(
+        find.text('不能使用保留的 OCR 参数名：stream=true'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('saves stream=false when saving', (tester) async {
+      ModelConfig? saved;
+      final model = ModelConfig(
+        name: 'OCR模型',
+        modelId: 'qwen-vl-ocr',
+        customParams: [
+          CustomParam(
+            paramName: 'stream',
+            type: 'boolean',
+            defaultValue: 'false',
+          ),
+        ],
+      );
+
+      await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      expect(saved, isNotNull);
+      expect(saved!.customParams.single.defaultValue, 'false');
+    });
+
     testWidgets('rejects an invalid numeric default when saving', (
       tester,
     ) async {

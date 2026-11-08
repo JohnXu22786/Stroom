@@ -250,6 +250,31 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
           : param.defaultValue.trim();
       final hasEffectiveOption =
           param.type != 'json' && param.options.isNotEmpty && value.isNotEmpty;
+      if (name == 'stream') {
+        var isNonStreaming = false;
+        if (param.type == 'boolean') {
+          isNonStreaming = value.toLowerCase() == 'false';
+        } else if (param.type == 'json') {
+          try {
+            isNonStreaming = jsonDecode(value) == false;
+          } on FormatException {
+            // The JSON validation below reports malformed values.
+          }
+        }
+        if (!isNonStreaming) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                AppLocalizations.of(context)!.modelParamReserved(
+                  '$name=true',
+                ),
+              ),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          return;
+        }
+      }
       if (const {
         'model',
         'messages',
