@@ -626,7 +626,8 @@ class ChatStreamManager {
           break;
         } catch (e) {
           final fullReplySnapshot = state.fullReply;
-          final hasPartialOutput = fullReplySnapshot.isNotEmpty;
+          final hasPartialOutput = fullReplySnapshot.isNotEmpty ||
+              state.mediaAttachments.isNotEmpty;
           final hasVisibleReasoning = state.reasoningBuffer.isNotEmpty ||
               state.reasoningSections.any((section) => section.isNotEmpty);
           final canContinuePartial = shouldAutoContinueStream(

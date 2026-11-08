@@ -322,7 +322,8 @@ void main() {
     expect(
       pageTask.status,
       TaskStatus.completed,
-      reason: 'OCR task failed: ${pageTask.error}',
+      reason:
+          'OCR task failed: ${pageTask.error}; diagnostics=${pageTask.rawResponse}',
     );
     expect(
       adapter.requests,

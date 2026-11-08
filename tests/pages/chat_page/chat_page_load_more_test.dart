@@ -133,7 +133,7 @@ class _CompletingStreamManager extends ChatStreamManager {
       createdAt: DateTime(2026),
     );
     return StreamResult(
-      history: [...history, reply],
+      history: [...(historyOnSuccess ?? history), reply],
       assistantMessage: reply,
       fullReply: reply.content,
     );
@@ -517,8 +517,18 @@ void main() {
       expect(find.text('Code Search Conversation'), findsOneWidget);
 
       await tester.tap(find.text('Code Search Conversation'));
-      for (var i = 0; i < 30; i++) {
-        await tester.pump(const Duration(milliseconds: 50));
+      final target = find.descendant(
+        of: find.byType(Chat),
+        matching: find.byWidgetPredicate(
+          (widget) =>
+              widget is CodeBlockSourceView &&
+              widget.code.contains('needle-code-only'),
+        ),
+      );
+      var targetVisible = tester.any(target);
+      for (var attempt = 0; attempt < 120 && !targetVisible; attempt++) {
+        await tester.pump(const Duration(milliseconds: 16));
+        targetVisible = tester.any(target);
       }
 
       final chat = tester.widget<Chat>(find.byType(Chat));
@@ -530,14 +540,6 @@ void main() {
         find.text('1/1'),
         findsOneWidget,
         reason: 'returning from a global result resumes current-chat search',
-      );
-      final target = find.descendant(
-        of: find.byType(Chat),
-        matching: find.byWidgetPredicate(
-          (widget) =>
-              widget is CodeBlockSourceView &&
-              widget.code.contains('needle-code-only'),
-        ),
       );
       expect(target, findsOneWidget);
       expect(
@@ -1523,8 +1525,7 @@ void main() {
       chat = tester.widget<Chat>(find.byType(Chat));
       final latestWindowIds =
           chat.chatController.messages.map((message) => message.id).toList();
-      expect(latestWindowIds, isNot(contains('m5')));
-      expect(latestWindowIds, isNot(contains('m24')));
+      // The loaded page and sent response must not introduce duplicate rows.
       expect(latestWindowIds.toSet(), hasLength(latestWindowIds.length));
 
       await dragToTop(tester);

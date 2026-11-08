@@ -173,6 +173,50 @@ void chatStreamManagerGroup1() {
       manager.dispose();
     });
 
+    test('continues after a media-only partial transport interruption',
+        () async {
+      final networkFailure = DioException(
+        requestOptions: RequestOptions(path: '/chat'),
+        type: DioExceptionType.connectionError,
+      );
+      final attachment = Attachment(
+        id: 'generated-media-once',
+        fileName: 'generated.png',
+        mimeType: 'image/png',
+        fileType: 'image',
+        hash: 'generated-media-hash',
+        storagePath: 'attachments/generated-once.png',
+        fileSize: 3,
+        extraFields: const {'stroom.contentOrder': 0},
+      );
+      final provider = _MockProvider([
+        [
+          AIStreamEvent(
+            '',
+            mediaAttachments: [attachment],
+          ),
+        ],
+        [AIStreamEvent('finished')],
+      ])
+        ..errorsAfterCall[1] = networkFailure;
+      final manager = ChatStreamManager.withRetryPolicy(
+        retryDelay: (_) async {},
+        transportRetryPolicy: const TransportRetryPolicy(jitter: false),
+      );
+      manager.adapter.forceService(_makeChatService(provider));
+
+      final result = await manager.startStreaming(
+        text: 'Generate an image',
+        convId: 'media-only-interruption',
+        history: [_userMsg('Generate an image', 'u-media-only')],
+      );
+
+      expect(provider.callCount, 2);
+      expect(result.assistantMessage!.attachments, hasLength(1));
+      expect(result.assistantMessage!.attachments.single.id, attachment.id);
+      manager.dispose();
+    });
+
     test('uses the active locale for each continuation bubble', () async {
       SharedPreferences.setMockInitialValues({});
       final container = ProviderContainer();

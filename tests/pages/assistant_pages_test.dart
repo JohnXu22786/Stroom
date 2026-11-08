@@ -910,7 +910,7 @@ void main() {
       expect(find.text('温度 (Temperature)'), findsOneWidget);
       expect(find.text('流式输出'), findsOneWidget);
       expect(find.text('Top P'), findsOneWidget);
-      expect(find.text('最大Token数 (Max Tokens)'), findsOneWidget);
+      expect(find.text('最大 Token 数'), findsOneWidget);
       expect(find.text('频率惩罚 (Frequency Penalty)'), findsOneWidget);
       expect(find.text('存在惩罚 (Presence Penalty)'), findsOneWidget);
       expect(find.text('随机种子 (Seed)'), findsOneWidget);

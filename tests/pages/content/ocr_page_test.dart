@@ -244,6 +244,27 @@ Future<Map<String, dynamic>> _createVersionedRetryData({
   return cached;
 }
 
+Future<Map<String, dynamic>> _createLegacyModelIndexRetryData() async {
+  final cached = await OcrRetryStorage.cacheSnapshot(
+    taskId: 'ocr-page-test-${_retryFixtureId++}',
+    snapshot: OcrRetrySnapshot.capture(
+      legacyModelIndex: 0,
+      legacyInstructionIndex: 1,
+      images: [
+        OcrRetryImage(
+          bytes: _createTestPngBytes(),
+          format: 'png',
+          name: 'legacy-retry.png',
+        ),
+      ],
+    ),
+  );
+  _testRetryCacheReferences.addAll(
+    OcrRetryStorage.referencesFromSnapshot(cached),
+  );
+  return cached;
+}
+
 class _UnreadPickerFile extends XFile {
   int reads = 0;
   _UnreadPickerFile() : super('disposed.png');
@@ -933,18 +954,7 @@ void main() {
                         builder: (_) => OcrPage(
                           testImagePayloadPreparer: (bytes) async =>
                               prepareOcrImagePayloadSync(bytes),
-                          retryData: {
-                            'type': 'ocr',
-                            'images': [
-                              {
-                                'bytes': base64Encode(_createTestPngBytes()),
-                                'format': 'png',
-                                'name': 'retry.png',
-                              },
-                            ],
-                            'modelIndex': 0,
-                            'instructionIndex': 1,
-                          },
+                          retryData: await _createLegacyModelIndexRetryData(),
                         ),
                       ),
                     ),
@@ -971,7 +981,16 @@ void main() {
 
       // Exactly one task was created and the page popped exactly once
       // (host visible again).
-      expect(bgNotifier.state.length, 1);
+      final pageText = tester
+          .widgetList<Text>(find.byType(Text))
+          .map((widget) => widget.data)
+          .whereType<String>()
+          .join(' | ');
+      expect(
+        bgNotifier.state.length,
+        1,
+        reason: 'OCR page text: $pageText',
+      );
       expect(find.text('开始识别'), findsNothing);
       expect(find.text('打开OCR'), findsOneWidget);
     });
