@@ -3,44 +3,56 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/pages/assistant/assistant_schema_info_dialog.dart';
 
 void main() {
-  testWidgets('documents exact schema names, ranges, and available tools',
-      (tester) async {
-    await tester.pumpWidget(MaterialApp(
-      home: Builder(
-        builder: (context) => Scaffold(
-          body: TextButton(
-            onPressed: () => showAssistantSchemaInfoDialog(
-              context,
-              supportedToolNames: {'web_search', 'todowrite'},
+  testWidgets('documents exact schema names, ranges, and available tools', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () => showAssistantSchemaInfoDialog(
+                context,
+                supportedToolNames: {'web_search', 'todowrite'},
+              ),
+              child: const Text('show schema'),
             ),
-            child: const Text('show schema'),
           ),
         ),
       ),
-    ));
+    );
 
     await tester.tap(find.text('show schema'));
     await tester.pumpAndSettle();
 
     expect(find.text('Remote assistant schema'), findsOneWidget);
     expect(find.text('Catalog manifest fields'), findsOneWidget);
-    await tester.scrollUntilVisible(
+    final list = find.byType(ListView);
+    await _scrollUntilBuilt(
+      tester,
+      list,
       find.text('temperature / enableTemperature'),
-      260,
-      scrollable: find.byType(Scrollable).first,
     );
     expect(find.textContaining('0–2 / bool'), findsOneWidget);
-    await tester.scrollUntilVisible(
+    await _scrollUntilBuilt(
+      tester,
+      list,
       find.text('maxTokens / enableMaxTokens'),
-      260,
-      scrollable: find.byType(Scrollable).first,
     );
     expect(find.text('maxTokens / enableMaxTokens'), findsOneWidget);
-    await tester.scrollUntilVisible(
-      find.text('defaultToolNames'),
-      260,
-      scrollable: find.byType(Scrollable).first,
-    );
+    await _scrollUntilBuilt(tester, list, find.text('defaultToolNames'));
     expect(find.textContaining('todowrite, web_search'), findsOneWidget);
   });
+}
+
+Future<void> _scrollUntilBuilt(
+  WidgetTester tester,
+  Finder list,
+  Finder target,
+) async {
+  for (var i = 0; i < 24; i++) {
+    if (target.evaluate().isNotEmpty) return;
+    await tester.drag(list, const Offset(0, -260));
+    await tester.pumpAndSettle();
+  }
 }

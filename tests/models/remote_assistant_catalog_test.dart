@@ -24,8 +24,7 @@ settings:
   enableTemperature: true
 prompt: Be helpful.
 ''';
-      const markdown = '''
----
+      const markdown = '''---
 schemaVersion: 1
 id: stroom.test
 name: Test assistant
@@ -58,7 +57,8 @@ Be helpful.
     test('rejects unknown aliases and out-of-range settings', () {
       expect(
         () => RemoteAssistantDefinition.parse(
-            _assistantJson(extra: '"model": "x"')),
+          _assistantJson(extra: '"model": "x"'),
+        ),
         throwsA(isA<FormatException>()),
       );
       expect(
@@ -78,8 +78,7 @@ Be helpful.
     test('validates custom parameter names and types', () {
       final definition = RemoteAssistantDefinition.parse(
         _assistantJson(
-          settings:
-              '"customParameters": [{"name":"vendor.option","type":"json","value":{"enabled":true}}]',
+          settings: '"customParameters": [{"name":"vendor.option","type":"json","value":{"enabled":true}}]',
         ),
       );
       expect(definition.settings.customParameters.single.name, 'vendor.option');
@@ -87,8 +86,7 @@ Be helpful.
       expect(
         () => RemoteAssistantDefinition.parse(
           _assistantJson(
-            settings:
-                '"customParameters": [{"name":"vendor..option","type":"string","value":"x"}]',
+            settings: '"customParameters": [{"name":"vendor..option","type":"string","value":"x"}]',
           ),
         ),
         throwsA(isA<FormatException>()),
@@ -123,7 +121,8 @@ assistants:
     test('rejects unknown capabilities, invalid hashes, and duplicate ids', () {
       expect(
         () => RemoteAssistantCatalog.parse(
-            _catalogYaml(capability: 'future.capability')),
+          _catalogYaml(capability: 'future.capability'),
+        ),
         throwsA(isA<FormatException>()),
       );
       expect(
@@ -138,7 +137,8 @@ assistants:
   });
 }
 
-String _assistantJson({String settings = '', String extra = ''}) => '''
+String _assistantJson({String settings = '', String extra = ''}) =>
+    '''
 {
   "schemaVersion": 1,
   "id": "stroom.test",
