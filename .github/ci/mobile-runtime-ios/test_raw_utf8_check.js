@@ -17,12 +17,13 @@ function execute(buffer) {
   return output;
 }
 
-function roundTripBuffer({ failHex = false, failDecode = false } = {}) {
+function roundTripBuffer({ failFrom = false, failHex = false, failDecode = false } = {}) {
   let call = 0;
   return {
     from(input) {
       assert.equal(input, value);
       call += 1;
+      if (failFrom) throw new RangeError('Index out of range');
       return {
         toString(encoding) {
           if (encoding === 'utf8' && failDecode) throw new RangeError('Index out of range');
@@ -52,3 +53,12 @@ assert.throws(() => vm.runInNewContext(source, {
 }), /Index out of range/);
 assert.equal(output.includes('IOS_RAW_UTF8_RANGEERROR:RangeError:Index out of range'), false);
 assert.equal(output.includes('RESULT:PASS'), false);
+
+const fromOutput = [];
+assert.throws(() => vm.runInNewContext(source, {
+  Buffer: roundTripBuffer({ failFrom: true }),
+  RangeError,
+  console: { log: (message) => fromOutput.push(message) },
+}), /Index out of range/);
+assert.equal(fromOutput.includes('IOS_RAW_UTF8_RANGEERROR:RangeError:Index out of range'), false);
+assert.equal(fromOutput.includes('RESULT:PASS'), false);

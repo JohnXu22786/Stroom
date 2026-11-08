@@ -1,8 +1,9 @@
 (() => {
   const value = 'Stroom 学习 🙂';
+  const bytes = Buffer.from(value, 'utf8');
   let decoded;
   try {
-    decoded = Buffer.from(value, 'utf8').toString('utf8');
+    decoded = bytes.toString('utf8');
   } catch (error) {
     if (!(error instanceof RangeError && error.message === 'Index out of range')) {
       console.log('RESULT:FAIL');
