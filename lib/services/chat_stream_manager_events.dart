@@ -12,17 +12,33 @@ extension _ChatStreamManagerEventsExt on ChatStreamManager {
         break;
       case MediaAttachmentsEvent e:
         final order = e.contentOrder ?? state.nextContentOrder++;
-        for (final attachment in e.attachments) {
+        for (var index = 0; index < e.attachments.length; index++) {
+          final attachment = e.attachments[index];
+          final attachmentOrder = order + index;
           final owned = attachment.copyWith(conversationId: convId);
           state.mediaAttachments.add(owned);
           state.orderedContentParts.add({
             'type': 'attachment',
             'attachmentId': owned.id,
-            'contentOrder': order,
+            'contentOrder': attachmentOrder,
           });
+          if (state.nextContentOrder <= attachmentOrder) {
+            state.nextContentOrder = attachmentOrder + 1;
+          }
         }
         break;
       case TextEvent e:
+        if (e.text.isNotEmpty) {
+          final order = e.contentOrder ?? state.nextContentOrder++;
+          state.orderedContentParts.add({
+            'type': 'text',
+            'text': e.text,
+            'contentOrder': order,
+          });
+          if (state.nextContentOrder <= order) {
+            state.nextContentOrder = order + 1;
+          }
+        }
         if (!state.hasReceivedFirstToken) {
           state.hasReceivedFirstToken = true;
           _pushToProvider(convId, streamingHasFirstTokenProvider, true);

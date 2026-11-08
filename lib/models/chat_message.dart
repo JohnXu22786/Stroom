@@ -575,7 +575,10 @@ class ChatMessage {
             ((reasoningSections?.isNotEmpty ?? false) ||
                 (textSections?.isNotEmpty ?? false)));
     final errorBlocks = hasCanonicalSections
-        ? blocks?.whereType<ErrorBlock>().toList()
+        ? blocks
+            ?.where(
+                (block) => block is ErrorBlock || block is UnknownMessageBlock)
+            .toList()
         : blocks;
     final savedReasoningContent = _reasoningContent;
     return {
