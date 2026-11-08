@@ -49,7 +49,7 @@ if ! grep -Fq 'COPYASSETS:PASS' <<<"$prepare_log"; then
 fi
 
 run_node() {
-  local label=$1 nodeargs=$2 marker=$3 max_wait=${4:-120} log i
+  local label=$1 nodeargs=$2 marker=$3 max_wait=${4:-120} expected_app_result=${5:-pass} log i
   adb shell am force-stop "$package" || true
   adb logcat -c
   local expression=${nodeargs#-p }
@@ -91,6 +91,14 @@ run_node() {
     adb logcat -d -v threadtime -t 400 2>&1 || true
     echo "===== App process after $label ====="
     adb shell pidof "$package" 2>&1 || true
+    return 1
+  fi
+  if [[ "$expected_app_result" == pass ]] && grep -Fq 'RESULT:FAIL' <<<"$log"; then
+    echo "The Node Mobile test app reported an uncaught failure after $label emitted its pass marker." >&2
+    return 1
+  fi
+  if [[ "$expected_app_result" == fail ]] && ! grep -Fq 'RESULT:FAIL' <<<"$log"; then
+    echo "The Node Mobile test app did not report the expected failure for $label." >&2
     return 1
   fi
 }
@@ -144,7 +152,13 @@ run_node 'Patched package, TypeScript, and MCP API checks' "$verify_args" 'MCP_I
 runner="$files/test/mobile-runtime-poc/run-lifecycle-install.cjs"
 for lifecycle_case in javascript async-javascript async-exit async-exit-default async-failure sync-exit async-timeout inline-js core-js typescript child-process native-command; do
   lifecycle_expression="(()=>{let/**/fs=require('node:fs');eval(new/**/TextDecoder().decode(fs.readFileSync('$shim')));globalThis.__STROOM_LIFECYCLE_CASE='$lifecycle_case';return/**/require('$runner')})()"
+  expected_app_result=pass
+  case "$lifecycle_case" in
+    async-exit-default|async-failure|async-timeout|child-process|native-command)
+      expected_app_result=fail
+      ;;
+  esac
   run_node "npm lifecycle bridge: $lifecycle_case" \
     "-p $lifecycle_expression" \
-    'RESULT:PASS' 180
+    'RESULT:PASS' 180 "$expected_app_result"
 done

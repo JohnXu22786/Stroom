@@ -92,6 +92,17 @@ jobs:
           cp tools/mobile-runtime-poc/npm-lifecycle-bridge.cjs nodejs-mobile/test/mobile-runtime-poc/
           cp tools/mobile-runtime-poc/run-lifecycle-install.cjs nodejs-mobile/test/mobile-runtime-poc/
           cp -R tools/mobile-runtime-poc/lifecycle-fixtures nodejs-mobile/test/mobile-runtime-poc/
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("nodejs-mobile/tools/mobile-test/android/testnode/app/src/main/java/com/janeasystems/test/testnode/MainActivity.java")
+          source = path.read_text()
+          original = 'Log.i(TAG, "RESULT:FAIL");'
+          diagnostic = 'Log.i(TAG, "RESULT:FAIL " + e.getClass().getName() + ": " + e.getMessage());\n                Log.i(TAG, Log.getStackTraceString(e));'
+          if source.count(original) != 1:
+              raise SystemExit("Unexpected upstream MainActivity failure handler")
+          path.write_text(source.replace(original, diagnostic))
+          PY
 
       - name: Build upstream Android sample app
         working-directory: nodejs-mobile/tools/mobile-test/android/testnode
