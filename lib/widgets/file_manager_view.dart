@@ -1103,7 +1103,7 @@ class _FileManagerViewState<T extends FileRecord>
                 Expanded(
                   child: ClipRRect(
                     borderRadius: const BorderRadius.vertical(
-                      top: Radius.circular(16),
+                      top: Radius.circular(15),
                     ),
                     child: hasThumbnailBuilder
                         ? _putThumbnailCache(
@@ -1122,7 +1122,7 @@ class _FileManagerViewState<T extends FileRecord>
                   ),
                   decoration: const BoxDecoration(
                     borderRadius: BorderRadius.vertical(
-                      bottom: Radius.circular(16),
+                      bottom: Radius.circular(15),
                     ),
                   ),
                   child: Row(
