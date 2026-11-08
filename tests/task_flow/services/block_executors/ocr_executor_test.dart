@@ -286,8 +286,8 @@ void main() {
   test(
     'incomplete OCR keeps partial text marked incomplete after restore',
     () async {
-      final source = await File('${directory.path}/partial.png')
-          .writeAsBytes(_validPng());
+      final source =
+          await File('${directory.path}/partial.png').writeAsBytes(_validPng());
       final dio = Dio()..httpClientAdapter = _IncompleteOcrAdapter();
 
       try {
