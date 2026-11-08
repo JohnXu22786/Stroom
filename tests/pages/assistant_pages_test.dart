@@ -913,7 +913,7 @@ void main() {
       expect(find.text('最大 Token 数'), findsOneWidget);
       expect(find.text('频率惩罚'), findsOneWidget);
       expect(find.text('存在惩罚'), findsOneWidget);
-      expect(find.text('随机种子 (Seed)'), findsOneWidget);
+      expect(find.text('随机种子'), findsOneWidget);
       expect(find.text('联网搜索'), findsOneWidget);
       expect(find.text('自定义参数'), findsOneWidget);
     });

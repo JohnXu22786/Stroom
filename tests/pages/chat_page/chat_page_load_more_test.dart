@@ -1048,13 +1048,12 @@ void main() {
         expect(
           persistedMessages
               .singleWhere((message) => message.id == 'e10')
-              .content,
+              .content
+              .single
+              .data['text'],
           'Edited message',
         );
-        expect(
-          persistedIds,
-          isNot(contains('e44')),
-        );
+        expect(persistedIds, isNot(contains('e44')));
         await tester.pumpWidget(const SizedBox.shrink());
       },
     );
