@@ -1,0 +1,120 @@
+name: Mobile Node MCP POC
+
+on:
+  pull_request:
+    branches:
+      - v0.7
+    paths:
+      - .github/workflows/mobile-nodejs-runtime-poc.yml
+      - .github/workflows/mobile-nodejs-runtime-ios-poc.yml
+      - .github/ci/mobile-runtime-ios/**
+      - tools/mobile-runtime-poc/**
+  push:
+    branches:
+      - v0.7
+    paths:
+      - .github/workflows/mobile-nodejs-runtime-poc.yml
+      - .github/workflows/mobile-nodejs-runtime-ios-poc.yml
+      - .github/ci/mobile-runtime-ios/**
+      - tools/mobile-runtime-poc/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  node-mcp-android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out Stroom POC scripts
+        uses: actions/checkout@v4
+
+      - name: Check out nodejs-mobile v18.20.4
+        uses: actions/checkout@v4
+        with:
+          repository: nodejs-mobile/nodejs-mobile
+          ref: v18.20.4
+          path: nodejs-mobile
+
+      - name: Set up Java 17 for Android SDK tools
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+
+      - name: Install Android build packages
+        run: |
+          yes | sdkmanager --licenses >/dev/null
+          sdkmanager \
+            'platforms;android-26' \
+            'build-tools;30.0.2' \
+            'ndk;27.2.12479018' \
+            'cmake;3.10.2.4988404'
+
+      - name: Set up Java 11 for upstream Gradle 6.7.1
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '11'
+
+      - name: Prepare official Node library and POC fixtures
+        run: |
+          curl --fail --location --retry 2 \
+            https://github.com/nodejs-mobile/nodejs-mobile/releases/download/v18.20.4/nodejs-mobile-v18.20.4-android.zip \
+            --output "$RUNNER_TEMP/nodejs-mobile-android.zip"
+          printf '%s  %s\n' \
+            bd7321eaa1a7602fbe0bb87302df2d79d87835cf4363fbdd17c350dbb485c2af \
+            "$RUNNER_TEMP/nodejs-mobile-android.zip" | sha256sum --check
+          curl --fail --location --retry 2 \
+            https://registry.npmjs.org/npm/-/npm-10.8.2.tgz \
+            --output "$RUNNER_TEMP/npm-10.8.2.tgz"
+          expected_npm_integrity='sha512-x/AIjFIKRllrhcb48dqUNAAZl0ig9+qMuN91RpZo3Cb2+zuibfh+KISl6+kVVyktDz230JKc208UkQwwMqyB+w=='
+          actual_npm_integrity="sha512-$(openssl dgst -sha512 -binary "$RUNNER_TEMP/npm-10.8.2.tgz" | openssl base64 -A)"
+          test "$actual_npm_integrity" = "$expected_npm_integrity"
+          mkdir -p nodejs-mobile/test/npm/package
+          tar -xzf "$RUNNER_TEMP/npm-10.8.2.tgz" --strip-components=1 \
+            -C nodejs-mobile/test/npm/package
+          for abi in arm64-v8a armeabi-v7a x86_64; do
+            mkdir -p "nodejs-mobile/out_android/$abi"
+            unzip -p "$RUNNER_TEMP/nodejs-mobile-android.zip" "bin/$abi/libnode.so" \
+              > "nodejs-mobile/out_android/$abi/libnode.so"
+          done
+          cp tools/mobile-runtime-poc/runtime-check.cjs nodejs-mobile/test/runtime-check.cjs
+          mkdir -p nodejs-mobile/test/mobile-runtime-poc
+          cp tools/mobile-runtime-poc/compatibility-shim.cjs nodejs-mobile/test/mobile-runtime-poc/
+          cp -R tools/mobile-runtime-poc/npm-fixture nodejs-mobile/test/mobile-runtime-poc/
+          cp tools/mobile-runtime-poc/npm-lifecycle-bridge.cjs nodejs-mobile/test/mobile-runtime-poc/
+          cp tools/mobile-runtime-poc/run-lifecycle-install.cjs nodejs-mobile/test/mobile-runtime-poc/
+          cp -R tools/mobile-runtime-poc/lifecycle-fixtures nodejs-mobile/test/mobile-runtime-poc/
+
+      - name: Build upstream Android sample app
+        working-directory: nodejs-mobile/tools/mobile-test/android/testnode
+        run: ./gradlew --no-daemon assembleDebug
+
+      - name: Set up Java 17 for emulator SDK tools
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Run npm, TypeScript, and MCP runtime checks on Android
+        uses: ReactiveCircus/android-emulator-runner@v2
+        with:
+          api-level: 29
+          target: default
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot -partition-size 4096
+          script: |
+            adb install nodejs-mobile/tools/mobile-test/android/testnode/app/build/outputs/apk/debug/app-debug.apk
+            cp tools/mobile-runtime-poc/run-nodejs-mobile.sh "$RUNNER_TEMP/run-nodejs-mobile.sh"
+            cp tools/mobile-runtime-poc/compatibility-shim.cjs "$RUNNER_TEMP/compatibility-shim.cjs"
+            chmod +x "$RUNNER_TEMP/run-nodejs-mobile.sh"
+            "$RUNNER_TEMP/run-nodejs-mobile.sh"

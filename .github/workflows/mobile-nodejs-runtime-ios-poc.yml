@@ -1,0 +1,84 @@
+name: Mobile Node MCP iOS Simulator POC
+
+on:
+  pull_request:
+    branches:
+      - v0.7
+    paths:
+      - .github/workflows/mobile-nodejs-runtime-poc.yml
+      - .github/workflows/mobile-nodejs-runtime-ios-poc.yml
+      - .github/ci/mobile-runtime-ios/**
+      - tools/mobile-runtime-poc/**
+  push:
+    branches:
+      - v0.7
+    paths:
+      - .github/workflows/mobile-nodejs-runtime-poc.yml
+      - .github/workflows/mobile-nodejs-runtime-ios-poc.yml
+      - .github/ci/mobile-runtime-ios/**
+      - tools/mobile-runtime-poc/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  node-mcp-ios-simulator:
+    runs-on: macos-14
+    timeout-minutes: 45
+    steps:
+      - name: Check out Stroom POC scripts
+        uses: actions/checkout@v4
+
+      - name: Check out nodejs-mobile v18.20.4
+        uses: actions/checkout@v4
+        with:
+          repository: nodejs-mobile/nodejs-mobile
+          ref: v18.20.4
+          path: nodejs-mobile
+
+      - name: Prepare official iOS framework and locked npm fixture
+        run: |
+          curl --fail --location --retry 2 \
+            https://github.com/nodejs-mobile/nodejs-mobile/releases/download/v18.20.4/nodejs-mobile-v18.20.4-ios.zip \
+            --output "$RUNNER_TEMP/nodejs-mobile-v18.20.4-ios.zip"
+          printf '%s  %s\n' \
+            8c5ca3a0d1e38de7f182a5642593e82593b820efd375a14b3ecafc4bcfee620e \
+            "$RUNNER_TEMP/nodejs-mobile-v18.20.4-ios.zip" | shasum -a 256 --check
+          mkdir -p nodejs-mobile/out_ios
+          unzip -q "$RUNNER_TEMP/nodejs-mobile-v18.20.4-ios.zip" -d nodejs-mobile/out_ios
+
+          curl --fail --location --retry 2 \
+            https://registry.npmjs.org/npm/-/npm-10.8.2.tgz \
+            --output "$RUNNER_TEMP/npm-10.8.2.tgz"
+          expected_npm_integrity='sha512-x/AIjFIKRllrhcb48dqUNAAZl0ig9+qMuN91RpZo3Cb2+zuibfh+KISl6+kVVyktDz230JKc208UkQwwMqyB+w=='
+          actual_npm_integrity="sha512-$(openssl dgst -sha512 -binary "$RUNNER_TEMP/npm-10.8.2.tgz" | openssl base64 -A)"
+          test "$actual_npm_integrity" = "$expected_npm_integrity"
+          mkdir -p nodejs-mobile/test/npm/package nodejs-mobile/test/mobile-runtime-poc
+          tar -xzf "$RUNNER_TEMP/npm-10.8.2.tgz" --strip-components=1 \
+            -C nodejs-mobile/test/npm/package
+          cp -R tools/mobile-runtime-poc/npm-fixture nodejs-mobile/test/mobile-runtime-poc/
+          cp tools/mobile-runtime-poc/compatibility-shim.cjs \
+            nodejs-mobile/test/mobile-runtime-poc/
+          cp tools/mobile-runtime-poc/npm-lifecycle-bridge.cjs \
+            nodejs-mobile/test/mobile-runtime-poc/
+          cp tools/mobile-runtime-poc/run-lifecycle-install.cjs \
+            nodejs-mobile/test/mobile-runtime-poc/
+          cp -R tools/mobile-runtime-poc/lifecycle-fixtures \
+            nodejs-mobile/test/mobile-runtime-poc/
+
+      - name: Build upstream iOS sample app for Simulator
+        run: |
+          xcodebuild build \
+            -project nodejs-mobile/tools/mobile-test/ios/testnode/testnode.xcodeproj \
+            -target testnode \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            SYMROOT="$RUNNER_TEMP/NodeMobileIOSBuild" \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Run Node, npm, TypeScript, and MCP API checks in iOS Simulator
+        run: |
+          bash .github/ci/mobile-runtime-ios/run.sh \
+            "$RUNNER_TEMP/NodeMobileIOSBuild/Debug-iphonesimulator/testnode.app" \
+            "$RUNNER_TEMP"
