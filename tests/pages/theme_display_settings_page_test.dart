@@ -185,11 +185,18 @@ void main() {
       tester.widget<MaterialApp>(find.byType(MaterialApp)).locale,
       const Locale('zh', 'CN'),
     );
+    await tester.scrollUntilVisible(find.text('主题'), -300);
+    await tester.pumpAndSettle();
     expect(find.text('浅色模式'), findsOneWidget);
     expect(find.text('深色模式'), findsOneWidget);
     expect(find.text('跟随系统'), findsNWidgets(2));
     expect(find.text('主题'), findsOneWidget);
     expect(find.text('主题与显示'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('language-search-field')),
+      300,
+    );
+    await tester.pumpAndSettle();
     expect(find.text('语言'), findsOneWidget);
     expect(find.text('搜索语言'), findsOneWidget);
     expect(find.text('跟随系统'), findsNWidgets(2));
