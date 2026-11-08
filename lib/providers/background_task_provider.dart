@@ -6221,6 +6221,21 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
           }
         }
       }
+      final rawPageOutcomes = entry['ocrPageOutcomes'];
+      if (rawPageOutcomes != null) {
+        if (rawPageOutcomes is! List) return false;
+        for (final rawOutcome in rawPageOutcomes) {
+          if (rawOutcome is! Map) continue;
+          if (rawOutcome.keys.any((key) => key is! String)) return false;
+          final outcomeError = rawOutcome['error'];
+          if (outcomeError != null &&
+              (outcomeError is! String ||
+                  _sanitizeOcrTaskError(outcomeError, null) !=
+                      outcomeError)) {
+            return false;
+          }
+        }
+      }
       final entryType = entry['type'];
       if (entryType == BackgroundTaskType.asr.name) {
         if (!_canSafelyPreserveSkippedAsrEntry(entry)) return false;

@@ -25941,6 +25941,105 @@ void main() {
     );
 
     test(
+      'partial restore preserves safe page outcomes in skipped OCR rows',
+      () async {
+        final skippedRow = <String, dynamic>{
+          'type': 'ocr',
+          'title': 'Malformed OCR row with safe page outcome',
+          'status': 'not-a-task-status',
+          'createdAt': DateTime.utc(2026).toIso8601String(),
+          'steps': <dynamic>[],
+          'ocrPageOutcomes': [
+            {
+              'imageIndex': 0,
+              'status': 'failed',
+              'error': 'Provider quota exceeded',
+            },
+          ],
+        };
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(jsonEncode([skippedRow]));
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          expect(await notifier.restoreFromPersistence(), isFalse);
+          notifier.addTask(
+            type: BackgroundTaskType.asr,
+            title: 'Trigger safe partial snapshot',
+            startImmediately: false,
+            taskId: 'safe-partial-ocr-outcome-trigger',
+          );
+          await notifier.pendingPersistence;
+
+          final rows = jsonDecode(await file.readAsString()) as List;
+          expect(
+            rows.whereType<Map>().singleWhere(
+              (row) => row['title'] == skippedRow['title'],
+            ),
+            skippedRow,
+          );
+          expect(
+            rows.whereType<Map>().any(
+              (row) => row['id'] == 'safe-partial-ocr-outcome-trigger',
+            ),
+            isTrue,
+          );
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+        }
+      },
+    );
+
+    test(
+      'partial restore does not rewrite credential-bearing skipped OCR page errors',
+      () async {
+        const credential = 'opaque-page-provider-key-586';
+        final skippedRow = <String, dynamic>{
+          'type': 'ocr',
+          'title': 'Malformed OCR row with credential-bearing page outcome',
+          'status': 'not-a-task-status',
+          'createdAt': DateTime.utc(2026).toIso8601String(),
+          'steps': <dynamic>[],
+          'ocrPageOutcomes': [
+            {
+              'imageIndex': 0,
+              'status': 'failed',
+              'error': 'Provider rejected API key: $credential',
+            },
+          ],
+        };
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        final originalContent = jsonEncode([skippedRow]);
+        await file.writeAsString(originalContent);
+        var writeAttempts = 0;
+        BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = () async {
+          writeAttempts++;
+        };
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          expect(await notifier.restoreFromPersistence(), isFalse);
+          notifier.addTask(
+            type: BackgroundTaskType.asr,
+            title: 'Do not rewrite unsafe partial OCR snapshot',
+            startImmediately: false,
+            taskId: 'unsafe-partial-ocr-outcome-trigger',
+          );
+          await notifier.pendingPersistence;
+
+          expect(writeAttempts, 0);
+          expect(await file.readAsString(), originalContent);
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+        }
+      },
+    );
+
+    test(
       'malformed ASR rows release ownership after durable sanitization',
       () async {
         WebFileStore.enableTestMode();
