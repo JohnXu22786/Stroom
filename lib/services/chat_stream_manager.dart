@@ -577,6 +577,7 @@ class ChatStreamManager {
     // provider stream is already created.
 
     Object? streamError;
+    late final List<String> finalTextChunks;
 
     try {
       try {
@@ -680,8 +681,6 @@ class ChatStreamManager {
           state.fullReply = errorText;
           state.hasSyntheticErrorReply = true;
         }
-        _pushToProvider(convId, streamingTextSectionsProvider,
-            List<String>.from(state.textChunks));
         state.toolCalls.clear();
         _pushToProvider(convId, streamingToolCallsProvider, <ToolCallData>[]);
       }
@@ -690,9 +689,14 @@ class ChatStreamManager {
       state.persistTimer?.cancel();
       state.persistTimer = null;
 
-      // Final throttle flush: push the last text to the UI.
-      _pushToProvider(convId, streamingTextSectionsProvider,
-          List<String>.from(state.textChunks));
+      // Materialize the current text chunk once, then reuse this snapshot for
+      // both the final provider flush and result/persistence construction.
+      finalTextChunks = List<String>.from(state.textChunks);
+      _pushToProvider(
+        convId,
+        streamingTextSectionsProvider,
+        List<String>.from(finalTextChunks),
+      );
     }
 
     return _completeStream(
@@ -700,6 +704,7 @@ class ChatStreamManager {
       convId: convId,
       streamError: streamError,
       snappedChatService: snappedChatService,
+      finalTextChunks: finalTextChunks,
     );
   }
 
