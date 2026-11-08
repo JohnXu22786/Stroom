@@ -217,7 +217,8 @@ class RemoteAssistantCatalog {
       'catalog',
     );
     final version = _requiredInt(map, 'schemaVersion');
-    if (version != 1) throw FormatException('Unsupported catalog schemaVersion: $version');
+    if (version != 1)
+      throw FormatException('Unsupported catalog schemaVersion: $version');
     final rawEntries = map['assistants'];
     if (rawEntries is! List) {
       throw const FormatException('Catalog assistants must be a list.');
@@ -250,10 +251,11 @@ Map<String, dynamic> _parseAssistantSource(String source, {String? format}) {
   var frontMatter = source;
   if (effectiveFormat == kRemoteAssistantMarkdownFormat ||
       (effectiveFormat == null && source.startsWith('---\n'))) {
-    final match = RegExp(r'\A---\r?\n(.*?)\r?\n---\r?\n([\s\S]*)\z')
-        .firstMatch(source);
+    final match =
+        RegExp(r'\A---\r?\n(.*?)\r?\n---\r?\n([\s\S]*)\z').firstMatch(source);
     if (match == null) {
-      throw const FormatException('Markdown assistant needs YAML front matter delimited by --- lines.');
+      throw const FormatException(
+          'Markdown assistant needs YAML front matter delimited by --- lines.');
     }
     frontMatter = match.group(1)!;
     bodyPrompt = {'prompt': match.group(2)!.trimRight()};
@@ -263,14 +265,17 @@ Map<String, dynamic> _parseAssistantSource(String source, {String? format}) {
   final data = _decodeStructured(frontMatter);
   if (bodyPrompt.isNotEmpty) {
     if (data.containsKey('prompt')) {
-      throw const FormatException('Markdown prompt belongs after the front matter.');
+      throw const FormatException(
+          'Markdown prompt belongs after the front matter.');
     }
     data.addAll(bodyPrompt);
   }
-  if (effectiveFormat == 'stroom-json-v1' && !frontMatter.trimLeft().startsWith('{')) {
+  if (effectiveFormat == 'stroom-json-v1' &&
+      !frontMatter.trimLeft().startsWith('{')) {
     throw const FormatException('stroom-json-v1 must be JSON.');
   }
-  if (effectiveFormat == 'stroom-yaml-v1' && frontMatter.trimLeft().startsWith('{')) {
+  if (effectiveFormat == 'stroom-yaml-v1' &&
+      frontMatter.trimLeft().startsWith('{')) {
     throw const FormatException('stroom-yaml-v1 must be YAML.');
   }
   return data;
@@ -287,7 +292,8 @@ Map<String, dynamic> _decodeStructured(String source) {
       throw FormatException('Invalid Stroom JSON/YAML: $error');
     }
   }
-  if (value is! Map) throw const FormatException('Expected a JSON/YAML object.');
+  if (value is! Map)
+    throw const FormatException('Expected a JSON/YAML object.');
   return Map<String, dynamic>.from(_normalizeYaml(value) as Map);
 }
 
@@ -295,8 +301,8 @@ dynamic _normalizeYaml(dynamic value) {
   if (value is YamlMap || value is Map) {
     return Map<String, dynamic>.fromEntries(
       (value as Map).entries.map(
-        (entry) => MapEntry('${entry.key}', _normalizeYaml(entry.value)),
-      ),
+            (entry) => MapEntry('${entry.key}', _normalizeYaml(entry.value)),
+          ),
     );
   }
   if (value is YamlList || value is List) {
@@ -382,7 +388,8 @@ void _validateSettings(Map<String, dynamic> settings) {
         _ => false,
       };
       if (!validValue || !isValidRemoteParameterName(map['name'] as String)) {
-        throw const FormatException('Invalid custom parameter name or value type.');
+        throw const FormatException(
+            'Invalid custom parameter name or value type.');
       }
     }
   }

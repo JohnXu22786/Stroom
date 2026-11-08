@@ -28,7 +28,8 @@ class AssistantUpdateService {
       if (fileUrl == null || fileUrl.isEmpty) return null;
       final remote = await service.fetchDirectAssistant(fileUrl);
       if (remote.definition.id != assistant.remoteAssistantId) {
-        throw const FormatException('Remote assistant id changed unexpectedly.');
+        throw const FormatException(
+            'Remote assistant id changed unexpectedly.');
       }
       if (remote.definition.version == assistant.remoteVersion &&
           remote.sha256 == assistant.remoteSha256) {

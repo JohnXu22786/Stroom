@@ -30,7 +30,8 @@ class DownloadedRemoteAssistant {
 /// Fetches Stroom catalogs and assistant definitions. It intentionally accepts
 /// only HTTPS and keeps catalog entries on the catalog's origin.
 class AssistantCatalogService {
-  AssistantCatalogService({http.Client? client}) : _client = client ?? http.Client();
+  AssistantCatalogService({http.Client? client})
+      : _client = client ?? http.Client();
 
   final http.Client _client;
 
@@ -49,7 +50,8 @@ class AssistantCatalogService {
   }) async {
     final catalogUri = _validateHttpsUri(catalogUrl);
     final fileReference = Uri.parse(entry.file);
-    if (fileReference.hasScheme || fileReference.hasAuthority ||
+    if (fileReference.hasScheme ||
+        fileReference.hasAuthority ||
         entry.file.startsWith('/')) {
       throw const FormatException('Catalog file must be a relative path.');
     }
@@ -60,7 +62,8 @@ class AssistantCatalogService {
     final bytes = await _getBytes(fileUri, expectedOrigin: catalogUri);
     final actualHash = sha256.convert(bytes).toString();
     if (actualHash != entry.sha256) {
-      throw const FormatException('Assistant file SHA-256 does not match catalog.');
+      throw const FormatException(
+          'Assistant file SHA-256 does not match catalog.');
     }
     final source = utf8.decode(bytes, allowMalformed: false);
     final definition = RemoteAssistantDefinition.parse(
@@ -95,27 +98,37 @@ class AssistantCatalogService {
   Future<List<int>> _getBytes(Uri uri, {Uri? expectedOrigin}) async {
     final response = await _client.get(
       uri,
-      headers: const {'Accept': 'application/json, application/yaml, text/markdown, text/plain'},
+      headers: const {
+        'Accept':
+            'application/json, application/yaml, text/markdown, text/plain'
+      },
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw FormatException('Download failed with HTTP ${response.statusCode}.');
+      throw FormatException(
+          'Download failed with HTTP ${response.statusCode}.');
     }
     if (response.bodyBytes.length > _maxCatalogBytes) {
-      throw const FormatException('Remote assistant files may not exceed 1 MiB.');
+      throw const FormatException(
+          'Remote assistant files may not exceed 1 MiB.');
     }
     final finalUri = response.request?.url ?? uri;
     if (finalUri.scheme != 'https' ||
         (expectedOrigin != null && !_sameOrigin(expectedOrigin, finalUri))) {
-      throw const FormatException('HTTPS redirects must stay on the same origin.');
+      throw const FormatException(
+          'HTTPS redirects must stay on the same origin.');
     }
     return response.bodyBytes;
   }
 
   static Uri _validateHttpsUri(String value) {
     final uri = Uri.tryParse(value.trim());
-    if (uri == null || uri.scheme != 'https' || uri.host.isEmpty ||
-        uri.userInfo.isNotEmpty || _isLocalHost(uri.host)) {
-      throw const FormatException('Assistant URLs must be absolute HTTPS URLs.');
+    if (uri == null ||
+        uri.scheme != 'https' ||
+        uri.host.isEmpty ||
+        uri.userInfo.isNotEmpty ||
+        _isLocalHost(uri.host)) {
+      throw const FormatException(
+          'Assistant URLs must be absolute HTTPS URLs.');
     }
     return uri;
   }
@@ -130,7 +143,8 @@ class AssistantCatalogService {
       return true;
     }
     final parts = host.split('.');
-    if (parts.length == 4 && parts.every((part) => int.tryParse(part) != null)) {
+    if (parts.length == 4 &&
+        parts.every((part) => int.tryParse(part) != null)) {
       final octets = parts.map(int.parse).toList();
       if (octets.any((part) => part < 0 || part > 255)) return true;
       return octets[0] == 10 ||
@@ -156,28 +170,33 @@ class AssistantCatalogService {
   }
 
   static bool _sameOrigin(Uri a, Uri b) =>
-      a.scheme == b.scheme && a.host.toLowerCase() == b.host.toLowerCase() &&
+      a.scheme == b.scheme &&
+      a.host.toLowerCase() == b.host.toLowerCase() &&
       a.port == b.port;
 
   static String _formatForUri(Uri uri) {
     final path = uri.path.toLowerCase();
     if (path.endsWith('.json')) return 'stroom-json-v1';
-    if (path.endsWith('.yaml') || path.endsWith('.yml')) return 'stroom-yaml-v1';
+    if (path.endsWith('.yaml') || path.endsWith('.yml'))
+      return 'stroom-yaml-v1';
     if (path.endsWith('.md') || path.endsWith('.markdown')) {
       return kRemoteAssistantMarkdownFormat;
     }
-    throw const FormatException('URL must point to a .json, .yaml, .yml, or .md file.');
+    throw const FormatException(
+        'URL must point to a .json, .yaml, .yml, or .md file.');
   }
 
   static void _validateCatalogMatch(
     RemoteAssistantCatalogEntry entry,
     RemoteAssistantDefinition definition,
   ) {
-    if (entry.id != definition.id || entry.name != definition.name ||
+    if (entry.id != definition.id ||
+        entry.name != definition.name ||
         entry.version != definition.version ||
         entry.description != definition.description ||
         entry.emoji != definition.emoji) {
-      throw const FormatException('Catalog metadata does not match assistant file.');
+      throw const FormatException(
+          'Catalog metadata does not match assistant file.');
     }
   }
 }

@@ -138,8 +138,7 @@ class _AssistantRemoteSourceDialogState
       );
       final defaultTools = supportedAssistantToolNames(refs);
       final requestedTools = definition.defaultToolNames;
-      if (requestedTools != null &&
-          !defaultTools.containsAll(requestedTools)) {
+      if (requestedTools != null && !defaultTools.containsAll(requestedTools)) {
         final unknown = requestedTools.difference(defaultTools).join(', ');
         throw FormatException('Unsupported Stroom tool name(s): $unknown');
       }
@@ -236,7 +235,8 @@ class _AssistantRemoteSourceDialogState
                 controller: _urlController,
                 keyboardType: TextInputType.url,
                 decoration: InputDecoration(
-                  labelText: _isZh ? '目录清单或助手文件 URL' : 'Catalog or assistant file URL',
+                  labelText:
+                      _isZh ? '目录清单或助手文件 URL' : 'Catalog or assistant file URL',
                   hintText: 'https://…/catalog.json',
                   border: const OutlineInputBorder(),
                   suffixIcon: IconButton(
@@ -263,16 +263,22 @@ class _AssistantRemoteSourceDialogState
                     ? '关闭时进入该助手的对话选择页再提醒更新。'
                     : 'When off, check and notify on the assistant topic page.'),
                 value: _autoUpdate,
-                onChanged: _busy ? null : (value) => setState(() => _autoUpdate = value),
+                onChanged: _busy
+                    ? null
+                    : (value) => setState(() => _autoUpdate = value),
               ),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
-                title: Text(_isZh ? '使用内置安全审查 agent' : 'Review with the built-in safety agent'),
+                title: Text(_isZh
+                    ? '使用内置安全审查 agent'
+                    : 'Review with the built-in safety agent'),
                 subtitle: Text(_isZh
                     ? '首次接入及每次更新前审查提示词；会发送给当前配置的首个 LLM，可能产生 API 用量。'
                     : 'Reviews imports and updates using the first configured LLM; this may incur API usage.'),
                 value: _reviewSafety,
-                onChanged: _busy ? null : (value) => setState(() => _reviewSafety = value),
+                onChanged: _busy
+                    ? null
+                    : (value) => setState(() => _reviewSafety = value),
               ),
               if (_error != null) ...[
                 const SizedBox(height: 8),
@@ -287,7 +293,8 @@ class _AssistantRemoteSourceDialogState
                 for (final entry in _catalog!.assistants)
                   ListTile(
                     contentPadding: EdgeInsets.zero,
-                    leading: Text(entry.emoji, style: const TextStyle(fontSize: 24)),
+                    leading:
+                        Text(entry.emoji, style: const TextStyle(fontSize: 24)),
                     title: Text(entry.name),
                     subtitle: Text('${entry.description}\n${entry.version}'),
                     isThreeLine: true,
@@ -314,9 +321,8 @@ class _AssistantRemoteSourceDialogState
           child: Text(_isZh ? '直接导入文件' : 'Import file'),
         ),
         FilledButton.icon(
-          onPressed: _busy || _urlController.text.trim().isEmpty
-              ? null
-              : _loadCatalog,
+          onPressed:
+              _busy || _urlController.text.trim().isEmpty ? null : _loadCatalog,
           icon: _busy
               ? const SizedBox.square(
                   dimension: 16,

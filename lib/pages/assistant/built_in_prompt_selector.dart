@@ -108,9 +108,10 @@ class _BuiltInPromptSelectorDialogState
                   ),
                   IconButton(
                     icon: const Icon(Icons.add_link),
-                    tooltip: Localizations.localeOf(context).languageCode == 'zh'
-                        ? '接入远程助手'
-                        : 'Connect remote assistants',
+                    tooltip:
+                        Localizations.localeOf(context).languageCode == 'zh'
+                            ? '接入远程助手'
+                            : 'Connect remote assistants',
                     onPressed: () => showAssistantRemoteSourceDialog(
                       context,
                       ref,

@@ -34,12 +34,10 @@ class AssistantPromptSafetyReview {
     required String prompt,
     required Map<String, dynamic> settings,
   }) async {
-    final llmEntry = entriesState.entries
-        .where((entry) => entry.type == 'llm')
-        .firstOrNull;
-    final config = llmEntry?.configs
-        .where((item) => item.models.isNotEmpty)
-        .firstOrNull;
+    final llmEntry =
+        entriesState.entries.where((entry) => entry.type == 'llm').firstOrNull;
+    final config =
+        llmEntry?.configs.where((item) => item.models.isNotEmpty).firstOrNull;
     final model = config?.models.firstOrNull;
     if (config == null || model == null) {
       throw StateError('Configure an LLM model before enabling prompt review.');
@@ -79,8 +77,7 @@ class AssistantPromptSafetyReview {
         );
       }
       final decoded = jsonDecode(answer.substring(jsonStart, jsonEnd + 1));
-      if (decoded is! Map<String, dynamic> ||
-          decoded['decision'] is! String) {
+      if (decoded is! Map<String, dynamic> || decoded['decision'] is! String) {
         return const PromptSafetyReviewResult(
           false,
           'The reviewer returned an invalid result.',

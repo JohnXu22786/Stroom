@@ -9,6 +9,7 @@ import '../providers/conversation_provider.dart';
 import '../providers/chat_stream_provider.dart';
 import '../providers/chat_manager_provider.dart';
 import '../providers/provider_config.dart';
+import '../services/assistant_catalog_service.dart';
 import '../services/assistant_prompt_safety_review.dart';
 import '../services/assistant_update_service.dart';
 import '../services/assistant_tool_policy.dart';
@@ -73,7 +74,8 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
             ],
           ),
         );
-        if (apply == true && mounted) await _applyRemoteUpdate(assistant, update);
+        if (apply == true && mounted)
+          await _applyRemoteUpdate(assistant, update);
       }
     } catch (error) {
       if (mounted) {
