@@ -39,6 +39,12 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Remote assistant schema'), findsOneWidget);
     expect(find.text('Catalog manifest fields'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.textContaining(
+        'stroom-json-v1 / stroom-yaml-v1 / stroom-markdown-yaml-v1',
+      ),
+      260,
+    );
     expect(
       find.textContaining(
         'stroom-json-v1 / stroom-yaml-v1 / stroom-markdown-yaml-v1',

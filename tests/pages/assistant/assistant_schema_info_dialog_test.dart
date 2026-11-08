@@ -29,6 +29,10 @@ void main() {
       260,
     );
     expect(find.textContaining('0–2 / bool'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('maxTokens / enableMaxTokens'),
+      260,
+    );
     expect(find.text('maxTokens / enableMaxTokens'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('defaultToolNames'), 260);
     expect(find.textContaining('todowrite, web_search'), findsOneWidget);
