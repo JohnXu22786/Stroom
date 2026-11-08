@@ -2521,6 +2521,14 @@
       }
     }
   },
+  "modelParamReserved": "不能使用保留的 OCR 参数名：{name}",
+  "@modelParamReserved": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "modelParamName": "参数名",
   "modelParamDefaultValue": "默认参数值",
   "modelParamDelete": "删除参数",

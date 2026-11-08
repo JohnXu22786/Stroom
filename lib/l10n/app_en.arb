@@ -2521,6 +2521,14 @@
       }
     }
   },
+  "modelParamReserved": "Reserved OCR parameter name: {name}",
+  "@modelParamReserved": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "modelParamName": "Parameter name",
   "modelParamDefaultValue": "Default parameter value",
   "modelParamDelete": "Delete parameter",

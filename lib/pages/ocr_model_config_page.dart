@@ -250,6 +250,23 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
           : param.defaultValue.trim();
       final hasEffectiveOption =
           param.type != 'json' && param.options.isNotEmpty && value.isNotEmpty;
+      if (const {
+        'model',
+        'messages',
+        'temperature',
+        'top_p',
+        'max_tokens',
+      }.contains(name)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context)!.modelParamReserved(name),
+            ),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
       if (name.isEmpty ||
           (param.defaultValue.trim().isEmpty && !hasEffectiveOption)) {
         ScaffoldMessenger.of(context).showSnackBar(

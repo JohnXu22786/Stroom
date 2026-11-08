@@ -205,6 +205,46 @@ void main() {
   });
 
   group('OcrModelConfigPage custom parameter validation', () {
+    for (final reservedName in [
+      'model',
+      'messages',
+      'temperature',
+      'top_p',
+      'max_tokens',
+    ]) {
+      testWidgets('rejects reserved name $reservedName', (tester) async {
+        ModelConfig? saved;
+        final model = ModelConfig(
+          name: 'OCR模型',
+          modelId: 'qwen-vl-ocr',
+          customParams: [CustomParam(paramName: reservedName)],
+        );
+
+        await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
+        await tester.tap(find.text('保存'));
+        await tester.pumpAndSettle();
+
+        expect(saved, isNull, reason: 'Should reject $reservedName');
+        expect(find.text('不能使用保留的 OCR 参数名：$reservedName'), findsOneWidget);
+      });
+    }
+
+    testWidgets('saves a valid custom parameter name', (tester) async {
+      ModelConfig? saved;
+      final model = ModelConfig(
+        name: 'OCR模型',
+        modelId: 'qwen-vl-ocr',
+        customParams: [CustomParam(paramName: 'scale', defaultValue: '1')],
+      );
+
+      await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      expect(saved, isNotNull);
+      expect(saved!.customParams.single.paramName, 'scale');
+    });
+
     testWidgets('rejects an invalid numeric default when saving', (
       tester,
     ) async {
