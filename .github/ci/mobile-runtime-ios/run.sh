@@ -43,7 +43,9 @@ PY
 
 copy_log="$temp/ios-copy-test-assets.log"
 set +e
-run_capture "$copy_log" 90 xcrun simctl launch --console-pty --terminate-running-process \
+# A fresh Xcode 26 simulator can spend several minutes migrating system data
+# before the app is ready to launch. Keep requiring the asset-copy success marker.
+run_capture "$copy_log" 600 xcrun simctl launch --console-pty --terminate-running-process \
   "$device" "$bundle_id" --copy-path-for-testing
 copy_status=$?
 set -e
