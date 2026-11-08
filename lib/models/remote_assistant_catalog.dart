@@ -251,8 +251,9 @@ Map<String, dynamic> _parseAssistantSource(String source, {String? format}) {
   var frontMatter = source;
   if (effectiveFormat == kRemoteAssistantMarkdownFormat ||
       (effectiveFormat == null && source.startsWith('---\n'))) {
-    final match =
-        RegExp(r'\A---\r?\n(.*?)\r?\n---\r?\n([\s\S]*)\z').firstMatch(source);
+    final match = RegExp(
+      r'^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$',
+    ).firstMatch(source);
     if (match == null) {
       throw const FormatException(
           'Markdown assistant needs YAML front matter delimited by --- lines.');
