@@ -9,6 +9,8 @@
   "themeModeSystem": "Follow system",
   "languageNameEnglish": "English",
   "languageNameChinese": "Chinese (Simplified)",
+  "languageSearchHint": "Search languages",
+  "languageNoMatches": "No matching languages",
   "builtInPromptGeneralName": "General Assistant",
   "builtInPromptGeneralDescription": "An all-purpose AI assistant for everyday conversation and answers to a wide range of questions.",
   "builtInPromptGeneralPrompt": "You are a helpful AI assistant. Answer the user in the language they use. Be concise, clear, and logically organized. If you are unsure about something, say so honestly.",

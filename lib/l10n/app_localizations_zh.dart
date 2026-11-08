@@ -37,6 +37,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get languageNameChinese => '简体中文';
 
   @override
+  String get languageSearchHint => '搜索语言';
+
+  @override
+  String get languageNoMatches => '没有匹配的语言';
+
+  @override
   String get builtInPromptGeneralName => '通用助手';
 
   @override
@@ -6855,7 +6861,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get ttsInstruction => '语气指令（instruction）';
 
   @override
-  String get ttsInstructionHint => '例如: Speak in a cheerful and excited tone';
+  String get ttsInstructionHint => '例如：请用愉快、兴奋的语气说话';
 
   @override
   String get ttsCustomParams => '自定义参数';
@@ -10404,6 +10410,12 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get languageNameChinese => '简体中文';
 
   @override
+  String get languageSearchHint => '搜索语言';
+
+  @override
+  String get languageNoMatches => '没有匹配的语言';
+
+  @override
   String get builtInPromptGeneralName => '通用助手';
 
   @override
@@ -17222,7 +17234,7 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get ttsInstruction => '语气指令（instruction）';
 
   @override
-  String get ttsInstructionHint => '例如: Speak in a cheerful and excited tone';
+  String get ttsInstructionHint => '例如：请用愉快、兴奋的语气说话';
 
   @override
   String get ttsCustomParams => '自定义参数';

@@ -47,6 +47,10 @@ void main() {
       localeDisplayName(AppLocalizationsZhCn(), const Locale('en', 'US')),
       '英语',
     );
+    expect(localeNativeName(const Locale('en', 'US')), 'English');
+    expect(localeNativeName(const Locale('zh', 'CN')), '简体中文');
+    expect(localeIdTag(const Locale('en', 'US')), 'en-us');
+    expect(localeIdTag(const Locale('zh', 'CN')), 'zh-cn');
   });
 
   group('locale preference persistence', () {
@@ -155,8 +159,11 @@ void main() {
     expect(find.text('Theme'), findsOneWidget);
     expect(find.text('Theme & Display'), findsOneWidget);
     expect(find.text('Language'), findsOneWidget);
-    expect(find.text('English'), findsOneWidget);
-    expect(find.text('Chinese (Simplified)'), findsOneWidget);
+    expect(find.text('Search languages'), findsOneWidget);
+    expect(find.text('English（English）'), findsOneWidget);
+    expect(find.text('Chinese (Simplified)（简体中文）'), findsOneWidget);
+    expect(find.text('en-us'), findsOneWidget);
+    expect(find.text('zh-cn'), findsOneWidget);
     expect(find.byType(Card), findsNWidgets(2));
     expect(find.text('system'), findsOneWidget);
 
@@ -165,7 +172,7 @@ void main() {
 
     expect(find.text('dark'), findsOneWidget);
 
-    await tester.tap(find.text('Chinese (Simplified)'));
+    await tester.tap(find.text('Chinese (Simplified)（简体中文）'));
     await tester.pumpAndSettle();
     expect(
       (await SharedPreferences.getInstance()).getString(localePreferenceKey),
@@ -180,6 +187,25 @@ void main() {
     expect(find.text('跟随系统'), findsNWidgets(2));
     expect(find.text('主题'), findsOneWidget);
     expect(find.text('主题与显示'), findsOneWidget);
+    expect(find.text('语言'), findsOneWidget);
+    expect(find.text('搜索语言'), findsOneWidget);
+    expect(find.text('跟随系统'), findsNWidgets(2));
+    expect(find.text('英语（English）'), findsOneWidget);
+    expect(find.text('简体中文（简体中文）'), findsOneWidget);
+    expect(find.text('en-us'), findsOneWidget);
+    expect(find.text('zh-cn'), findsOneWidget);
+
+    await tester.enterText(
+        find.byKey(const Key('language-search-field')), 'zh-cn');
+    await tester.pumpAndSettle();
+    expect(find.text('简体中文（简体中文）'), findsOneWidget);
+    expect(find.text('英语（English）'), findsNothing);
+    expect(find.text('跟随系统'), findsNWidgets(2));
+
+    await tester.enterText(
+        find.byKey(const Key('language-search-field')), 'no-match');
+    await tester.pumpAndSettle();
+    expect(find.text('没有匹配的语言'), findsOneWidget);
   });
 
   testWidgets('settings entry opens the titled theme and display page', (

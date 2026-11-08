@@ -19,6 +19,13 @@ import 'package:stroom/task_flow/models/task_flow_templates.dart';
 
 void main() {
   group('built-in content localization', () {
+    test('Chinese TTS instruction hint is translated', () {
+      expect(
+        AppLocalizationsZhCn().ttsInstructionHint,
+        '例如：请用愉快、兴奋的语气说话',
+      );
+    });
+
     test('ARB resources have matching keys and valid JSON', () {
       final files = [
         'lib/l10n/app_en.arb',

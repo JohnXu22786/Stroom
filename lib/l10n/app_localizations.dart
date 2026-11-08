@@ -154,6 +154,18 @@ abstract class AppLocalizations {
   /// **'Chinese (Simplified)'**
   String get languageNameChinese;
 
+  /// Search hint in the language picker.
+  ///
+  /// In en, this message translates to:
+  /// **'Search languages'**
+  String get languageSearchHint;
+
+  /// Empty-state text in the language picker.
+  ///
+  /// In en, this message translates to:
+  /// **'No matching languages'**
+  String get languageNoMatches;
+
   /// No description provided for @builtInPromptGeneralName.
   ///
   /// In en, this message translates to:

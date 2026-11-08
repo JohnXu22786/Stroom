@@ -16,12 +16,33 @@ class ThemeDisplaySettingsPage extends ConsumerStatefulWidget {
 
 class _ThemeDisplaySettingsPageState
     extends ConsumerState<ThemeDisplaySettingsPage> {
+  final _languageSearchController = TextEditingController();
+  String _languageQuery = '';
+
+  @override
+  void dispose() {
+    _languageSearchController.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final themeMode = ref.watch(themeProvider);
     final themeNotifier = ref.read(themeProvider.notifier);
     final selectedLocale = ref.watch(localeProvider);
     final strings = AppLocalizations.of(context)!;
+    final normalizedQuery = _languageQuery.trim().toLowerCase();
+    final matchingLanguages = supportedAppLocales
+        .map(
+          (locale) => _LanguageOption(
+            locale: locale,
+            displayName: localeDisplayName(strings, locale),
+            nativeName: localeNativeName(locale),
+            id: localeIdTag(locale),
+          ),
+        )
+        .where((language) => language.searchText.contains(normalizedQuery))
+        .toList();
 
     return Scaffold(
       appBar: AppBar(
@@ -74,20 +95,43 @@ class _ThemeDisplaySettingsPageState
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Column(
                 children: [
+                  TextField(
+                    key: const Key('language-search-field'),
+                    controller: _languageSearchController,
+                    onChanged: (query) =>
+                        setState(() => _languageQuery = query),
+                    decoration: InputDecoration(
+                      hintText: strings.languageSearchHint,
+                      prefixIcon: const Icon(Icons.search),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      isDense: true,
+                    ),
+                  ),
+                  const Divider(height: 24),
                   _buildLocaleTile(
                     title: strings.followSystemLanguage,
                     selected: selectedLocale == null,
                     onTap: () =>
                         ref.read(localeProvider.notifier).followSystem(),
                   ),
-                  for (final locale in supportedAppLocales)
-                    _buildLocaleTile(
-                      title: localeDisplayName(strings, locale),
-                      selected: selectedLocale == locale,
-                      onTap: () => ref
-                          .read(localeProvider.notifier)
-                          .setLocaleCode(localeCode(locale)),
-                    ),
+                  const Divider(height: 1),
+                  if (matchingLanguages.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      child: Text(strings.languageNoMatches),
+                    )
+                  else
+                    for (final language in matchingLanguages)
+                      _buildLanguageTile(
+                        context,
+                        language,
+                        selected: selectedLocale == language.locale,
+                        onTap: () => ref
+                            .read(localeProvider.notifier)
+                            .setLocaleCode(localeCode(language.locale)),
+                      ),
                 ],
               ),
             ),
@@ -106,6 +150,45 @@ class _ThemeDisplaySettingsPageState
       leading: const Icon(Icons.language, color: Colors.teal),
       title: Text(title),
       trailing: selected ? const Icon(Icons.check) : null,
+      onTap: onTap,
+      contentPadding: EdgeInsets.zero,
+    );
+  }
+
+  Widget _buildLanguageTile(
+    BuildContext context,
+    _LanguageOption language, {
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return ListTile(
+      leading: const Icon(Icons.language, color: Colors.teal),
+      title: Text('${language.displayName}（${language.nativeName}）'),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (selected) ...[
+            const Icon(Icons.check),
+            const SizedBox(width: 8),
+          ],
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: colorScheme.secondaryContainer,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              language.id,
+              style: TextStyle(
+                color: colorScheme.onSecondaryContainer,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
       onTap: onTap,
       contentPadding: EdgeInsets.zero,
     );
@@ -147,4 +230,20 @@ class _ThemeDisplaySettingsPageState
       contentPadding: EdgeInsets.zero,
     );
   }
+}
+
+class _LanguageOption {
+  const _LanguageOption({
+    required this.locale,
+    required this.displayName,
+    required this.nativeName,
+    required this.id,
+  });
+
+  final Locale locale;
+  final String displayName;
+  final String nativeName;
+  final String id;
+
+  String get searchText => '$displayName $nativeName $id'.toLowerCase();
 }
