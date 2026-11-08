@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../catcatch/models/catcatch_task.dart' as catcatch;
+import '../../l10n/app_localizations.dart';
 import '../../catcatch/providers/catcatch_provider.dart';
 import '../../providers/background_task_provider.dart';
 import '../../providers/task_provider.dart';
@@ -25,11 +26,13 @@ import 'task_utils.dart';
 class TaskFlowCard extends ConsumerStatefulWidget {
   final TaskFlowExecution execution;
   final bool isUnread;
+  final double? taskListViewportHeight;
 
   const TaskFlowCard({
     super.key,
     required this.execution,
     this.isUnread = false,
+    this.taskListViewportHeight,
   });
 
   @override
@@ -49,13 +52,16 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
             .firstOrNull
             ?.status ??
         widget.execution.status;
-    _expanded = [FlowExecutionStatus.failed, FlowExecutionStatus.interrupted]
-        .contains(initialStatus);
+    _expanded = [
+      FlowExecutionStatus.failed,
+      FlowExecutionStatus.interrupted,
+    ].contains(initialStatus);
   }
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final strings = AppLocalizations.of(context)!;
 
     // Watch execution directly for real-time subTaskId/subTask status.
     // Use .select() so the card only rebuilds when ITS execution changes,
@@ -74,8 +80,10 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
       (prev, next) {
         final wasRunning =
             prev != null && prev.status == FlowExecutionStatus.running;
-        if ([FlowExecutionStatus.failed, FlowExecutionStatus.interrupted]
-                .contains(next?.status) &&
+        if ([
+              FlowExecutionStatus.failed,
+              FlowExecutionStatus.interrupted,
+            ].contains(next?.status) &&
             next?.status != prev?.status) {
           setState(() => _expanded = true);
         } else if (wasRunning &&
@@ -120,14 +128,16 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
                           children: [
                             Container(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 4, vertical: 1),
+                                horizontal: 4,
+                                vertical: 1,
+                              ),
                               margin: const EdgeInsets.only(right: 6),
                               decoration: BoxDecoration(
                                 color: cs.primary.withValues(alpha: 0.12),
                                 borderRadius: BorderRadius.circular(3),
                               ),
                               child: Text(
-                                '任务流',
+                                strings.taskFlowCardTag,
                                 style: TextStyle(
                                   fontSize: 10,
                                   color: cs.primary,
@@ -151,7 +161,7 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          '${_executionLabel(execution.status)} · ${_progressText(subTasks)}',
+                          '${_executionLabel(execution.status, strings)} · ${_progressText(subTasks, strings)}',
                           style: TextStyle(
                             fontSize: 11,
                             color: cs.onSurfaceVariant,
@@ -163,13 +173,15 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
                           const SizedBox(height: 2),
                           Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 1),
+                              horizontal: 6,
+                              vertical: 1,
+                            ),
                             decoration: BoxDecoration(
                               color: Colors.orange.withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text(
-                              '排队中（等待资源）',
+                              strings.taskFlowCardQueued,
                               style: TextStyle(
                                 fontSize: 10,
                                 color: Colors.orange.shade800,
@@ -197,16 +209,14 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
               subTasks: subTasks,
               executionId: execution.id,
               executionStatus: execution.status,
+              taskListViewportHeight: widget.taskListViewportHeight,
             ),
             if (execution.error != null)
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
                 child: Text(
                   execution.error!,
-                  style: TextStyle(
-                    color: cs.error,
-                    fontSize: 12,
-                  ),
+                  style: TextStyle(color: cs.error, fontSize: 12),
                 ),
               ),
           ],
@@ -224,36 +234,56 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
       FlowExecutionStatus.running => SizedBox(
           width: 20,
           height: 20,
-          child:
-              CircularProgressIndicator(strokeWidth: 2.5, color: cs.primary)),
-      FlowExecutionStatus.completed =>
-        const Icon(Icons.check_circle, size: 20, color: Colors.green),
-      FlowExecutionStatus.failed =>
-        Icon(Icons.error, size: 20, color: cs.error),
-      FlowExecutionStatus.paused =>
-        const Icon(Icons.pause_circle, size: 20, color: Colors.orange),
-      FlowExecutionStatus.cancelled =>
-        Icon(Icons.cancel_outlined, size: 20, color: cs.onSurfaceVariant),
-      FlowExecutionStatus.interrupted =>
-        const Icon(Icons.warning_amber, size: 20, color: Colors.orange),
-      FlowExecutionStatus.waiting =>
-        Icon(Icons.hourglass_empty, size: 20, color: cs.onSurfaceVariant),
+          child: CircularProgressIndicator(strokeWidth: 2.5, color: cs.primary),
+        ),
+      FlowExecutionStatus.completed => const Icon(
+          Icons.check_circle,
+          size: 20,
+          color: Colors.green,
+        ),
+      FlowExecutionStatus.failed => Icon(
+          Icons.error,
+          size: 20,
+          color: cs.error,
+        ),
+      FlowExecutionStatus.paused => const Icon(
+          Icons.pause_circle,
+          size: 20,
+          color: Colors.orange,
+        ),
+      FlowExecutionStatus.cancelled => Icon(
+          Icons.cancel_outlined,
+          size: 20,
+          color: cs.onSurfaceVariant,
+        ),
+      FlowExecutionStatus.interrupted => const Icon(
+          Icons.warning_amber,
+          size: 20,
+          color: Colors.orange,
+        ),
+      FlowExecutionStatus.waiting => Icon(
+          Icons.hourglass_empty,
+          size: 20,
+          color: cs.onSurfaceVariant,
+        ),
     };
   }
 
-  String _progressText(List<FlowSubTask> subTasks) {
+  String _progressText(List<FlowSubTask> subTasks, AppLocalizations strings) {
     final done = subTasks
         .where((step) => step.outcome == FlowStepOutcome.succeeded)
         .length;
-    final details = <String>['$done/${subTasks.length} 已完成'];
+    final details = <String>[
+      strings.taskFlowCardCompletedProgress(done, subTasks.length),
+    ];
     for (final (outcome, label) in [
-      (FlowStepOutcome.failed, '失败'),
-      (FlowStepOutcome.skipped, '跳过'),
-      (FlowStepOutcome.cancelled, '取消'),
-      (FlowStepOutcome.interrupted, '中断'),
+      (FlowStepOutcome.failed, strings.taskFlowCardFailedLabel),
+      (FlowStepOutcome.skipped, strings.taskFlowCardSkippedLabel),
+      (FlowStepOutcome.cancelled, strings.taskFlowCardCancelledLabel),
+      (FlowStepOutcome.interrupted, strings.taskFlowCardInterruptedLabel),
     ]) {
       final count = subTasks.where((step) => step.outcome == outcome).length;
-      if (count > 0) details.add('$count 个$label');
+      if (count > 0) details.add(strings.taskFlowCardCountLabel(count, label));
     }
     return details.join(' · ');
   }
@@ -267,16 +297,19 @@ class _ExpandedContent extends ConsumerWidget {
   final List<FlowSubTask> subTasks;
   final String executionId;
   final FlowExecutionStatus executionStatus;
+  final double? taskListViewportHeight;
 
   const _ExpandedContent({
     required this.subTasks,
     required this.executionId,
     required this.executionStatus,
+    required this.taskListViewportHeight,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
+    final strings = AppLocalizations.of(context)!;
     final restoreReady = ref.watch(taskFlowExecutionRestoreStatusProvider) ==
         FlowExecutionRestoreStatus.ready;
     final executions = ref.watch(taskFlowExecutionsProvider);
@@ -292,7 +325,13 @@ class _ExpandedContent extends ConsumerWidget {
       children: [
         for (int i = 0; i < subTasks.length; i++)
           _buildSubTaskCard(
-              subTasks[i], catcatchTasks, backgroundTasks, synthesisTasks, cs),
+            subTasks[i],
+            catcatchTasks,
+            backgroundTasks,
+            synthesisTasks,
+            cs,
+            strings,
+          ),
         Align(
           alignment: Alignment.centerRight,
           child: Padding(
@@ -304,49 +343,59 @@ class _ExpandedContent extends ConsumerWidget {
                     (executionStatus == FlowExecutionStatus.running ||
                         executionStatus == FlowExecutionStatus.waiting))
                   TextButton.icon(
-                      onPressed: () => _control(
-                          context,
-                          () => ref
-                              .read(taskFlowExecutionServiceProvider)
-                              .pauseExecution(executionId)),
-                      icon: const Icon(Icons.pause, size: 18),
-                      label: const Text('暂停流程')),
+                    onPressed: () => _control(
+                      context,
+                      () => ref
+                          .read(taskFlowExecutionServiceProvider)
+                          .pauseExecution(executionId),
+                    ),
+                    icon: const Icon(Icons.pause, size: 18),
+                    label: Text(strings.taskFlowCardPause),
+                  ),
                 if (restoreReady && (execution?.canResume ?? false))
                   TextButton.icon(
-                      onPressed: () => _control(
-                          context,
-                          () => ref
-                              .read(taskFlowExecutionServiceProvider)
-                              .resumeExecution(executionId)),
-                      icon: const Icon(Icons.play_arrow, size: 18),
-                      label: Text(executionStatus == FlowExecutionStatus.paused
-                          ? '继续流程'
-                          : '从中断步骤继续')),
+                    onPressed: () => _control(
+                      context,
+                      () => ref
+                          .read(taskFlowExecutionServiceProvider)
+                          .resumeExecution(executionId),
+                    ),
+                    icon: const Icon(Icons.play_arrow, size: 18),
+                    label: Text(
+                      executionStatus == FlowExecutionStatus.paused
+                          ? strings.taskFlowCardResume
+                          : strings.taskFlowCardResumeInterrupted,
+                    ),
+                  ),
                 if (restoreReady &&
                     [
                       FlowExecutionStatus.running,
                       FlowExecutionStatus.waiting,
-                      FlowExecutionStatus.paused
+                      FlowExecutionStatus.paused,
                     ].contains(executionStatus))
                   TextButton.icon(
-                      onPressed: () => _control(
-                          context,
-                          () => ref
-                              .read(taskFlowExecutionServiceProvider)
-                              .cancelExecution(executionId)),
-                      icon: const Icon(Icons.stop, size: 18),
-                      label: const Text('取消流程')),
+                    onPressed: () => _control(
+                      context,
+                      () => ref
+                          .read(taskFlowExecutionServiceProvider)
+                          .cancelExecution(executionId),
+                    ),
+                    icon: const Icon(Icons.stop, size: 18),
+                    label: Text(strings.taskFlowCardCancelFlow),
+                  ),
                 if (restoreReady &&
                     [
                       FlowExecutionStatus.failed,
                       FlowExecutionStatus.interrupted,
-                      FlowExecutionStatus.cancelled
+                      FlowExecutionStatus.cancelled,
                     ].contains(executionStatus))
                   TextButton.icon(
                     onPressed: () => _confirmRetry(context, ref),
                     icon: Icon(Icons.refresh, size: 18, color: cs.primary),
-                    label: Text('重试',
-                        style: TextStyle(fontSize: 13, color: cs.primary)),
+                    label: Text(
+                      strings.taskFlowCardRetry,
+                      style: TextStyle(fontSize: 13, color: cs.primary),
+                    ),
                     style: TextButton.styleFrom(
                       padding: const EdgeInsets.symmetric(horizontal: 8),
                       minimumSize: const Size(48, 48),
@@ -355,21 +404,27 @@ class _ExpandedContent extends ConsumerWidget {
                 if (restoreReady && hasBatchWork)
                   TextButton.icon(
                     onPressed: () => _control(
-                        context,
-                        () => ref
-                            .read(taskFlowExecutionServiceProvider)
-                            .cancelBatch(execution.batchId!)),
+                      context,
+                      () => ref
+                          .read(taskFlowExecutionServiceProvider)
+                          .cancelBatch(execution.batchId!),
+                    ),
                     icon: const Icon(Icons.stop, size: 18),
-                    label: const Text('取消整个批次'),
+                    label: Text(strings.taskFlowCardCancelBatch),
                   ),
                 TextButton.icon(
                   onPressed: restoreReady
                       ? () => _confirmDelete(context, ref, executionId)
                       : null,
-                  icon: const Icon(Icons.delete_outline,
-                      size: 18, color: Colors.red),
-                  label: const Text('删除',
-                      style: TextStyle(fontSize: 13, color: Colors.red)),
+                  icon: const Icon(
+                    Icons.delete_outline,
+                    size: 18,
+                    color: Colors.red,
+                  ),
+                  label: Text(
+                    strings.taskFlowCardDelete,
+                    style: TextStyle(fontSize: 13, color: Colors.red),
+                  ),
                   style: TextButton.styleFrom(
                     padding: const EdgeInsets.symmetric(horizontal: 8),
                     minimumSize: const Size(48, 48),
@@ -384,7 +439,9 @@ class _ExpandedContent extends ConsumerWidget {
   }
 
   Future<void> _control(
-      BuildContext context, Future<void> Function() action) async {
+    BuildContext context,
+    Future<void> Function() action,
+  ) async {
     try {
       await action();
     } catch (error) {
@@ -395,52 +452,75 @@ class _ExpandedContent extends ConsumerWidget {
   }
 
   void _confirmRetry(BuildContext context, WidgetRef ref) {
+    final strings = AppLocalizations.of(context)!;
     final execution = ref
         .read(taskFlowExecutionsProvider)
         .where((e) => e.id == executionId)
         .firstOrNull;
     if (execution == null) return;
     showDialog<void>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-              title: const Text('重试任务流'),
-              content: Text(execution.snapshot == null
-                  ? '此历史记录没有运行快照，将使用当前流程配置从头运行。'
-                  : '从头运行会重新下载并调用模型。可按启动时的原配置重试，或明确选择当前最新配置。要复用已完成步骤，请选择“从中断步骤继续”。'),
-              actions: [
-                TextButton(
-                    onPressed: () => Navigator.pop(ctx),
-                    child: const Text('取消')),
-                if (execution.snapshot != null)
-                  TextButton(
-                      onPressed: () {
-                        Navigator.pop(ctx);
-                        _retry(context, ref, execution, useLatest: true);
-                      },
-                      child: const Text('按最新配置运行')),
-                FilledButton(
-                    onPressed: () {
-                      Navigator.pop(ctx);
-                      _retry(context, ref, execution,
-                          useLatest: execution.snapshot == null);
-                    },
-                    child: Text(execution.snapshot == null ? '重试' : '按原配置重试')),
-              ],
-            ));
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(strings.taskFlowCardRetryFlow),
+        content: Text(
+          execution.snapshot == null
+              ? strings.taskFlowCardNoSnapshot
+              : strings.taskFlowCardRetryInfo,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(strings.taskFlowCardCancel),
+          ),
+          if (execution.snapshot != null)
+            TextButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                _retry(context, ref, execution, useLatest: true);
+              },
+              child: Text(strings.taskFlowCardRunLatest),
+            ),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _retry(
+                context,
+                ref,
+                execution,
+                useLatest: execution.snapshot == null,
+              );
+            },
+            child: Text(
+              execution.snapshot == null
+                  ? strings.taskFlowCardRetry
+                  : strings.taskFlowCardRetryOriginal,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _retry(
-      BuildContext context, WidgetRef ref, TaskFlowExecution execution,
-      {required bool useLatest}) async {
+    BuildContext context,
+    WidgetRef ref,
+    TaskFlowExecution execution, {
+    required bool useLatest,
+  }) async {
     final input = FlowRunInput(
-        text: execution.inputText, durationSec: execution.inputDurationSec);
+      text: execution.inputText,
+      durationSec: execution.inputDurationSec,
+    );
     try {
       final ids = await ref
           .read(taskFlowExecutionServiceProvider)
           .retryExecution(execution.id, useLatestConfiguration: useLatest);
       if (context.mounted)
-        await Navigator.of(context).push(MaterialPageRoute<void>(
-            builder: (_) => TaskFlowRunPage(executionIds: ids)));
+        await Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => TaskFlowRunPage(executionIds: ids),
+          ),
+        );
     } on TaskFlowValidationException catch (error) {
       if (!context.mounted) return;
       if (!useLatest ||
@@ -451,12 +531,16 @@ class _ExpandedContent extends ConsumerWidget {
             .showSnackBar(SnackBar(content: Text(error.toString())));
         return;
       }
-      await Navigator.of(context).push(MaterialPageRoute<void>(
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
           builder: (_) => TaskFlowBuilderPage(
-              flowId: execution.flowId,
-              startInRunMode: true,
-              initialInput: input,
-              validationError: error)));
+            flowId: execution.flowId,
+            startInRunMode: true,
+            initialInput: input,
+            validationError: error,
+          ),
+        ),
+      );
     } catch (error) {
       if (context.mounted)
         ScaffoldMessenger.of(context)
@@ -465,6 +549,7 @@ class _ExpandedContent extends ConsumerWidget {
   }
 
   void _confirmDelete(BuildContext context, WidgetRef ref, String execId) {
+    final strings = AppLocalizations.of(context)!;
     final execution = ref
         .read(taskFlowExecutionsProvider)
         .where((e) => e.id == execId)
@@ -472,27 +557,29 @@ class _ExpandedContent extends ConsumerWidget {
     final isRunning = execution != null && !execution.isTerminal;
     final cancelsBatch = execution != null &&
         hasUnfinishedFlowBatchMember(
-            execution, ref.read(taskFlowExecutionsProvider));
+          execution,
+          ref.read(taskFlowExecutionsProvider),
+        );
     // Clearing a card with unfinished batch members cancels their work;
     // deleting the selected card also removes its own child tasks.
     // Save the cancellation and child removals before removing the record.
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('删除任务流记录'),
+        title: Text(strings.taskFlowCardDeleteRecord),
         content: Text(
           cancelsBatch
-              ? '删除此运行记录将取消整个批次尚未完成的任务，并清除其子任务记录。确定删除？'
+              ? strings.taskFlowCardDeleteBatchConfirm
               : isRunning
-                  ? '任务流正在运行，删除将取消其中正在运行的任务。确定删除？'
+                  ? strings.taskFlowCardDeleteRunningConfirm
                   : execution != null && execution.subTasks.isNotEmpty
-                      ? '确定删除此任务流记录？其子任务记录也会一并删除。'
-                      : '确定删除此任务流记录？',
+                      ? strings.taskFlowCardDeleteRecordConfirm
+                      : strings.taskFlowCardDeleteConfirm,
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
+            child: Text(strings.taskFlowCardCancel),
           ),
           TextButton(
             onPressed: () async {
@@ -524,8 +611,8 @@ class _ExpandedContent extends ConsumerWidget {
                   if (!await ref
                       .read(taskFlowExecutionsProvider.notifier)
                       .persist()) {
-                    throw const TaskFlowPersistenceException(
-                      '任务流取消状态无法保存，请重试删除',
+                    throw TaskFlowPersistenceException(
+                      strings.taskFlowCardSaveCancelStateError,
                     );
                   }
                   if (!ctx.mounted) return;
@@ -538,17 +625,20 @@ class _ExpandedContent extends ConsumerWidget {
                   final latest =
                       snapshot.where((e) => e.id == execId).firstOrNull;
                   if (latest != null && !latest.isTerminal) {
-                    throw StateError('任务流取消后仍在运行');
+                    throw StateError(strings.taskFlowCardStillRunning);
                   }
-                  final executionsNotifier =
-                      ref.read(taskFlowExecutionsProvider.notifier);
+                  final executionsNotifier = ref.read(
+                    taskFlowExecutionsProvider.notifier,
+                  );
                   if (latest != null) {
                     await removeFlowChildTasksPersisted(ref, [latest]);
                   }
-                  if (!await executionsNotifier
-                      .removeExecutionsPersisted([execId])) {
-                    throw const TaskFlowPersistenceException(
-                        '任务流记录删除状态无法保存，请重试删除');
+                  if (!await executionsNotifier.removeExecutionsPersisted([
+                    execId,
+                  ])) {
+                    throw TaskFlowPersistenceException(
+                      strings.taskFlowCardSaveDeleteStateError,
+                    );
                   }
                   if (ctx.mounted) Navigator.pop(ctx);
                   return;
@@ -556,12 +646,24 @@ class _ExpandedContent extends ConsumerWidget {
               } catch (error) {
                 if (ctx.mounted) Navigator.pop(ctx);
                 if (context.mounted) {
+                  final message = switch (error.toString()) {
+                    '猫抓子任务删除状态无法保存，请重试' =>
+                      strings.taskFlowCardCatCatchDeletePersistError,
+                    '合成子任务删除状态无法保存，请重试' =>
+                      strings.taskFlowCardSynthesisDeletePersistError,
+                    '后台子任务删除状态无法保存，请重试' =>
+                      strings.taskFlowCardBackgroundDeletePersistError,
+                    _ => error.toString(),
+                  };
                   ScaffoldMessenger.of(context)
-                      .showSnackBar(SnackBar(content: Text(error.toString())));
+                      .showSnackBar(SnackBar(content: Text(message)));
                 }
               }
             },
-            child: const Text('确定', style: TextStyle(color: Colors.red)),
+            child: Text(
+              strings.taskFlowCardConfirm,
+              style: TextStyle(color: Colors.red),
+            ),
           ),
         ],
       ),
@@ -574,28 +676,33 @@ class _ExpandedContent extends ConsumerWidget {
     List<BackgroundTask> backgroundTasks,
     List<SynthesisTask> synthesisTasks,
     ColorScheme cs,
+    AppLocalizations strings,
   ) {
     if ([
       FlowStepOutcome.skipped,
       FlowStepOutcome.cancelled,
-      FlowStepOutcome.interrupted
+      FlowStepOutcome.interrupted,
     ].contains(subTask.outcome)) {
-      return _buildFallbackCard(subTask, cs);
+      return _buildFallbackCard(subTask, cs, strings);
     }
     switch (subTask.subTaskType) {
       case 'catcatch':
-        return _buildCatCatchCard(subTask, catcatchTasks, cs);
+        return _buildCatCatchCard(subTask, catcatchTasks, cs, strings);
       case 'background':
-        return _buildBackgroundCard(subTask, backgroundTasks, cs);
+        return _buildBackgroundCard(subTask, backgroundTasks, cs, strings);
       case 'synthesis':
-        return _buildSynthesisCard(subTask, synthesisTasks, cs);
+        return _buildSynthesisCard(subTask, synthesisTasks, cs, strings);
       default:
-        return _buildFallbackCard(subTask, cs);
+        return _buildFallbackCard(subTask, cs, strings);
     }
   }
 
   Widget _buildCatCatchCard(
-      FlowSubTask subTask, List<catcatch.CatCatchTask> tasks, ColorScheme cs) {
+    FlowSubTask subTask,
+    List<catcatch.CatCatchTask> tasks,
+    ColorScheme cs,
+    AppLocalizations strings,
+  ) {
     final task = tasks.where((t) => t.id == subTask.subTaskId).firstOrNull;
     if (task != null) {
       return CatCatchTaskCard(
@@ -603,13 +710,18 @@ class _ExpandedContent extends ConsumerWidget {
         task: task,
         isUnread: false,
         isFlowManaged: true,
+        taskListViewportHeight: taskListViewportHeight,
       );
     }
-    return _buildFallbackCard(subTask, cs);
+    return _buildFallbackCard(subTask, cs, strings);
   }
 
   Widget _buildBackgroundCard(
-      FlowSubTask subTask, List<BackgroundTask> tasks, ColorScheme cs) {
+    FlowSubTask subTask,
+    List<BackgroundTask> tasks,
+    ColorScheme cs,
+    AppLocalizations strings,
+  ) {
     final task = tasks.where((t) => t.id == subTask.subTaskId).firstOrNull;
     if (task != null) {
       return BackgroundTaskCard(
@@ -617,13 +729,18 @@ class _ExpandedContent extends ConsumerWidget {
         task: task,
         isUnread: false,
         isFlowManaged: true,
+        flowBlockTypeKey: subTask.blockTypeKey,
       );
     }
-    return _buildFallbackCard(subTask, cs);
+    return _buildFallbackCard(subTask, cs, strings);
   }
 
   Widget _buildSynthesisCard(
-      FlowSubTask subTask, List<SynthesisTask> tasks, ColorScheme cs) {
+    FlowSubTask subTask,
+    List<SynthesisTask> tasks,
+    ColorScheme cs,
+    AppLocalizations strings,
+  ) {
     final task = tasks.where((t) => t.id == subTask.subTaskId).firstOrNull;
     if (task != null) {
       return SynthesisTaskCard(
@@ -633,10 +750,14 @@ class _ExpandedContent extends ConsumerWidget {
         isFlowManaged: true,
       );
     }
-    return _buildFallbackCard(subTask, cs);
+    return _buildFallbackCard(subTask, cs, strings);
   }
 
-  Widget _buildFallbackCard(FlowSubTask subTask, ColorScheme cs) {
+  Widget _buildFallbackCard(
+    FlowSubTask subTask,
+    ColorScheme cs,
+    AppLocalizations strings,
+  ) {
     final isInitializing = subTask.outcome == FlowStepOutcome.pending;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
@@ -666,16 +787,18 @@ class _ExpandedContent extends ConsumerWidget {
                   ),
                   if (isInitializing)
                     Text(
-                      '等待中',
-                      style:
-                          TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
+                      strings.taskFlowCardWaiting,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: cs.onSurfaceVariant,
+                      ),
                     ),
                 ],
               ),
             ),
             if (!isInitializing)
               Text(
-                _stepLabel(subTask.outcome),
+                _stepLabel(subTask.outcome, strings),
                 style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
               ),
           ],
@@ -689,41 +812,61 @@ class _ExpandedContent extends ConsumerWidget {
         FlowStepOutcome.running => SizedBox(
             width: 16,
             height: 16,
-            child:
-                CircularProgressIndicator(strokeWidth: 2, color: cs.primary)),
-        FlowStepOutcome.succeeded =>
-          const Icon(Icons.check_circle, size: 16, color: Colors.green),
+            child: CircularProgressIndicator(strokeWidth: 2, color: cs.primary),
+          ),
+        FlowStepOutcome.succeeded => const Icon(
+            Icons.check_circle,
+            size: 16,
+            color: Colors.green,
+          ),
         FlowStepOutcome.failed => Icon(Icons.error, size: 16, color: cs.error),
-        FlowStepOutcome.paused =>
-          const Icon(Icons.pause_circle, size: 16, color: Colors.orange),
-        FlowStepOutcome.skipped =>
-          Icon(Icons.skip_next, size: 16, color: cs.onSurfaceVariant),
-        FlowStepOutcome.cancelled =>
-          Icon(Icons.cancel_outlined, size: 16, color: cs.onSurfaceVariant),
-        FlowStepOutcome.interrupted =>
-          const Icon(Icons.warning_amber, size: 16, color: Colors.orange),
-        FlowStepOutcome.pending =>
-          Icon(Icons.hourglass_empty, size: 16, color: cs.onSurfaceVariant),
+        FlowStepOutcome.paused => const Icon(
+            Icons.pause_circle,
+            size: 16,
+            color: Colors.orange,
+          ),
+        FlowStepOutcome.skipped => Icon(
+            Icons.skip_next,
+            size: 16,
+            color: cs.onSurfaceVariant,
+          ),
+        FlowStepOutcome.cancelled => Icon(
+            Icons.cancel_outlined,
+            size: 16,
+            color: cs.onSurfaceVariant,
+          ),
+        FlowStepOutcome.interrupted => const Icon(
+            Icons.warning_amber,
+            size: 16,
+            color: Colors.orange,
+          ),
+        FlowStepOutcome.pending => Icon(
+            Icons.hourglass_empty,
+            size: 16,
+            color: cs.onSurfaceVariant,
+          ),
       };
 }
 
-String _executionLabel(FlowExecutionStatus status) => switch (status) {
-      FlowExecutionStatus.waiting => '等待中',
-      FlowExecutionStatus.running => '进行中',
-      FlowExecutionStatus.paused => '已暂停',
-      FlowExecutionStatus.completed => '已完成',
-      FlowExecutionStatus.failed => '失败',
-      FlowExecutionStatus.cancelled => '已取消',
-      FlowExecutionStatus.interrupted => '已中断',
+String _executionLabel(FlowExecutionStatus status, AppLocalizations strings) =>
+    switch (status) {
+      FlowExecutionStatus.waiting => strings.taskFlowCardWaiting,
+      FlowExecutionStatus.running => strings.taskFlowCardRunning,
+      FlowExecutionStatus.paused => strings.taskFlowCardPaused,
+      FlowExecutionStatus.completed => strings.taskFlowCardCompleted,
+      FlowExecutionStatus.failed => strings.taskFlowCardFailed,
+      FlowExecutionStatus.cancelled => strings.taskFlowCardCanceled,
+      FlowExecutionStatus.interrupted => strings.taskFlowCardInterrupted,
     };
 
-String _stepLabel(FlowStepOutcome outcome) => switch (outcome) {
-      FlowStepOutcome.pending => '等待中',
-      FlowStepOutcome.running => '进行中',
-      FlowStepOutcome.paused => '已暂停',
-      FlowStepOutcome.succeeded => '已完成',
-      FlowStepOutcome.failed => '失败',
-      FlowStepOutcome.skipped => '已跳过',
-      FlowStepOutcome.cancelled => '已取消',
-      FlowStepOutcome.interrupted => '已中断',
+String _stepLabel(FlowStepOutcome outcome, AppLocalizations strings) =>
+    switch (outcome) {
+      FlowStepOutcome.pending => strings.taskFlowCardWaiting,
+      FlowStepOutcome.running => strings.taskFlowCardRunning,
+      FlowStepOutcome.paused => strings.taskFlowCardPaused,
+      FlowStepOutcome.succeeded => strings.taskFlowCardCompleted,
+      FlowStepOutcome.failed => strings.taskFlowCardFailed,
+      FlowStepOutcome.skipped => strings.taskFlowCardSucceeded,
+      FlowStepOutcome.cancelled => strings.taskFlowCardCanceled,
+      FlowStepOutcome.interrupted => strings.taskFlowCardInterrupted,
     };

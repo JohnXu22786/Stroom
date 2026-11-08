@@ -3,17 +3,39 @@ import 'dart:async';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/legacy.dart';
 
+import '../../catcatch/providers/catcatch_provider.dart';
+import '../../providers/background_task_provider.dart';
+import '../../providers/task_provider.dart';
 import '../../providers/task_provider_shared.dart';
 import '../../services/attachment_storage.dart';
 import '../models/task_flow_execution.dart';
 import '../models/flow_payload.dart';
 import '../models/io_type.dart';
+import '../models/flow_temporary_output.dart';
+import '../services/flow_temporary_artifact_storage.dart';
 import 'persistable_notifier.dart';
 
 /// Provider for tracking task flow executions (for the unified task list).
 final taskFlowExecutionsProvider =
     StateNotifierProvider<TaskFlowExecutionNotifier, List<TaskFlowExecution>>(
-  (ref) => TaskFlowExecutionNotifier(),
+  (ref) => TaskFlowExecutionNotifier(
+    clearTemporaryTaskFileReference: (step) {
+      switch (step.subTaskType) {
+        case 'catcatch':
+          return ref
+              .read(catcatchTasksProvider.notifier)
+              .clearDownloadedFilePath(step.subTaskId);
+        case 'synthesis':
+          return ref
+              .read(taskListProvider.notifier)
+              .clearDownloadedFilePath(step.subTaskId);
+        default:
+          return ref
+              .read(backgroundTasksProvider.notifier)
+              .clearDownloadedFilePath(step.subTaskId);
+      }
+    },
+  ),
 );
 
 /// Startup sets this to restoring before loading any task lists. Directly
@@ -26,7 +48,10 @@ final taskFlowExecutionRestoreStatusProvider =
 
 class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
     with PersistableNotifier<List<TaskFlowExecution>> {
-  TaskFlowExecutionNotifier() : super([]);
+  TaskFlowExecutionNotifier({this.clearTemporaryTaskFileReference}) : super([]);
+
+  final Future<bool> Function(FlowSubTask step)?
+      clearTemporaryTaskFileReference;
 
   Future<void> _registrationQueue = Future<void>.value();
   final Object _registrationWriteZone = Object();
@@ -139,6 +164,47 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
           _deletingInputPaths.remove(path);
         }
       });
+    }
+  }
+
+  Future<void> cleanupTemporaryArtifacts(Iterable<String> executionIds) async {
+    for (final id in executionIds.toSet()) {
+      try {
+        await FlowTemporaryArtifactStorage.deleteExecution(id);
+      } catch (error) {
+        debugPrint('Failed to clean up task-flow artifacts: $error');
+      }
+    }
+  }
+
+  Future<bool> _clearTemporaryTaskFileReferences(
+    Iterable<TaskFlowExecution> executions,
+  ) async {
+    final clearReference = clearTemporaryTaskFileReference;
+    if (clearReference == null) return true;
+    for (final execution in executions) {
+      for (final step in _temporaryTaskFileReferenceSteps(execution)) {
+        for (final taskId in step.temporaryFileReferenceTaskIdsToClear) {
+          if (!await clearReference(step.copyWith(subTaskId: taskId))) {
+            return false;
+          }
+        }
+      }
+    }
+    return true;
+  }
+
+  Iterable<FlowSubTask> _temporaryTaskFileReferenceSteps(
+      TaskFlowExecution execution) sync* {
+    final blocks = execution.snapshot?.flow.blocks;
+    for (var index = 0; index < execution.subTasks.length; index++) {
+      final step = execution.subTasks[index];
+      final hasTemporaryResult = step.result?.temporaryArtifact != null;
+      final blockIsTemporary = blocks != null &&
+          index < blocks.length &&
+          blocks[index].typeKey.name == step.blockTypeKey &&
+          isFlowBlockTemporary(blocks, index);
+      if (hasTemporaryResult || blockIsTemporary) yield step;
     }
   }
 
@@ -287,6 +353,43 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
                           : st)
                       .toList()));
 
+  Future<bool> updateSubTaskIdPersisted(
+    String executionId,
+    String subTaskId,
+    String newSubTaskId,
+  ) async {
+    updateSubTaskId(executionId, subTaskId, newSubTaskId);
+    if (!await persist()) return false;
+    final current = execution(executionId);
+    return current != null &&
+        (current.status == FlowExecutionStatus.running ||
+            current.status == FlowExecutionStatus.waiting) &&
+        current.subTasks.any(
+          (step) => step.id == subTaskId && step.subTaskId == newSubTaskId,
+        );
+  }
+
+  /// Atomically checks flow control and marks a persisted child as running
+  /// immediately before its task is registered. Callers must not await between
+  /// this and registering the child task, so pause/cancel cannot miss it.
+  bool startSubTaskIfActive(
+    String executionId,
+    String subTaskId,
+    String expectedSubTaskId,
+  ) {
+    final current = execution(executionId);
+    if (current == null ||
+        (current.status != FlowExecutionStatus.running &&
+            current.status != FlowExecutionStatus.waiting)) {
+      return false;
+    }
+    final step =
+        current.subTasks.where((step) => step.id == subTaskId).firstOrNull;
+    if (step == null || step.subTaskId != expectedSubTaskId) return false;
+    updateSubTaskStatus(executionId, subTaskId, TaskStatus.running);
+    return true;
+  }
+
   /// Child callbacks cannot reopen a terminal execution. The service owns the
   /// final lifecycle; a completed child is not a durable checkpoint yet.
   void updateSubTaskStatus(
@@ -355,19 +458,52 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
     return persist();
   }
 
+  Future<bool> setArtifactCleanupStatus(
+    String executionId,
+    String stepId,
+    FlowArtifactCleanupStatus status,
+  ) {
+    _update(executionId, (execution) {
+      final steps = execution.subTasks.map((step) {
+        if (step.id != stepId ||
+            step.result?.temporaryArtifact?.executionId != executionId) {
+          return step;
+        }
+        return step.copyWith(artifactCleanupStatus: status);
+      }).toList();
+      return execution.copyWith(subTasks: steps);
+    });
+    return persist();
+  }
+
   void prepareResume(String id) => _update(id, (e) {
         var prefix = true;
-        final steps = e.subTasks.map((st) {
+        final blocks = e.snapshot?.flow.blocks;
+        final steps = e.subTasks.asMap().entries.map((entry) {
+          final index = entry.key;
+          final st = entry.value;
           if (prefix &&
               st.outcome == FlowStepOutcome.succeeded &&
               st.result != null) {
             return st;
           }
           prefix = false;
+          final isTemporaryBlock = blocks != null &&
+              index < blocks.length &&
+              blocks[index].typeKey.name == st.blockTypeKey &&
+              isFlowBlockTemporary(blocks, index);
+          final previousTemporaryTaskIds = [
+            ...st.temporaryFileReferenceSubTaskIds,
+            if (isTemporaryBlock &&
+                !st.subTaskId.startsWith('pending_') &&
+                !st.temporaryFileReferenceSubTaskIds.contains(st.subTaskId))
+              st.subTaskId,
+          ];
           return st.copyWith(
               subTaskId: 'pending_${st.blockTypeKey}_${st.id}',
               status: TaskStatus.waiting,
               outcome: FlowStepOutcome.pending,
+              temporaryFileReferenceSubTaskIds: previousTemporaryTaskIds,
               clearResult: true);
         }).toList();
         return e.copyWith(
@@ -443,12 +579,26 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
 
   /// Removing waiting records itself prevents dispatch, even without a UI
   /// cleanup callback. The service observes removals to cancel active work.
-  Future<void> removeExecution(String id) {
+  Future<void> removeExecution(String id) async {
     if (!mounted) {
-      return Future<void>.value();
+      return;
     }
     final removed = execution(id);
-    if (removed == null) return Future<void>.value();
+    if (removed == null) return;
+    // Preserve the legacy synchronous state update for ordinary executions.
+    // Only temporary outputs need the provider write to finish before the
+    // execution can be removed. Stop an active producer first so it cannot
+    // restore its file path after that reference has been cleared.
+    final hasTemporaryReferences =
+        _temporaryTaskFileReferenceSteps(removed).isNotEmpty;
+    if (hasTemporaryReferences && !removed.isTerminal) {
+      cancelExecution(id);
+    }
+    if (hasTemporaryReferences &&
+        !await _clearTemporaryTaskFileReferences([removed])) {
+      debugPrint('Failed to clear temporary task file references for $id');
+      return;
+    }
     state = state.where((e) => e.id != id).map((e) {
       if (removed.batchId == null ||
           e.batchId != removed.batchId ||
@@ -497,6 +647,7 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
         return;
       }
       _pendingInputRemovals.remove(id);
+      await cleanupTemporaryArtifacts([id]);
       await cleanupInputStoragePaths([removed.inputStoragePath]);
     });
     _inputRemovalQueue = operation.catchError((Object error, StackTrace stack) {
@@ -517,6 +668,7 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
       if (removed.any((e) => !e.isTerminal)) {
         throw StateError('任务流取消后仍在运行');
       }
+      if (!await _clearTemporaryTaskFileReferences(removed)) return false;
 
       final gate = Completer<void>();
       _removalBarrier = gate;
@@ -545,7 +697,10 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
     });
     // A retry can hold a picker-file lock while awaiting registration. Release
     // the mutation queue before taking those same locks for input cleanup.
-    if (saved) await cleanupInputStoragePaths(inputPaths);
+    if (saved) {
+      await cleanupTemporaryArtifacts(removedIds);
+      await cleanupInputStoragePaths(inputPaths);
+    }
     if (!mounted && _disposedSnapshot != null) {
       // The removal can finish after dispose has queued its barrier-dependent
       // flush. Persist the resolved snapshot last so a flush queued before the

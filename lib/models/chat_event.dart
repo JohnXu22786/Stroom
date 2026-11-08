@@ -8,7 +8,8 @@ sealed class ChatEvent {
 class TextEvent extends ChatEvent {
   final String text;
   final int? contentOrder;
-  TextEvent(this.text, {this.contentOrder});
+  final bool alreadyAccumulated;
+  TextEvent(this.text, {this.contentOrder, this.alreadyAccumulated = false});
 }
 
 /// Provider transcription of the audio on the current user turn.
@@ -46,5 +47,6 @@ class ReasoningEvent extends ChatEvent {
 /// begin. Used by the UI to split multi-step reasoning chains into separate
 /// panels when tool calls create distinct reasoning rounds.
 class ReasoningSectionEndEvent extends ChatEvent {
-  const ReasoningSectionEndEvent();
+  final void Function()? onDelivered;
+  const ReasoningSectionEndEvent({this.onDelivered});
 }

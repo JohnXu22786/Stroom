@@ -1,0 +1,205 @@
+package com.johntsui.stroom
+
+internal object KeepAliveScheduleIntervals {
+    const val KEEP_ALIVE_INTERVAL_MS = 5 * 60 * 1000L
+    const val FAILURE_BACKOFF_INTERVAL_MS = 30 * 60 * 1000L
+}
+
+internal const val KEEP_ALIVE_ALARM_ACTION = "com.johntsui.stroom.KEEP_ALIVE"
+internal const val KEEP_ALIVE_REVOCATION_BACKUP_ACTION = "com.johntsui.stroom.KEEP_ALIVE_REVOCATION_BACKUP"
+internal const val KEEP_ALIVE_ALARM_REQUEST_CODE = 2001
+internal const val KEEP_ALIVE_INEXACT_ALARM_REQUEST_CODE = 2003
+internal const val KEEP_ALIVE_REVOCATION_BACKUP_REQUEST_CODE = 2002
+internal const val KEEP_ALIVE_REVOCATION_BACKUP_GRACE_MS = 60_000L
+
+internal fun revocationBackupTriggerAt(exactTriggerAt: Long): Long =
+    exactTriggerAt + KEEP_ALIVE_REVOCATION_BACKUP_GRACE_MS
+
+internal fun scheduleCompatibleRevocationBackup(
+    supportsAllowWhileIdle: Boolean,
+    scheduleAllowWhileIdle: () -> Boolean,
+    scheduleLegacy: () -> Boolean,
+): Boolean = if (supportsAllowWhileIdle) {
+    scheduleAllowWhileIdle()
+} else {
+    scheduleLegacy()
+}
+
+internal fun scheduleLegacyInexactPrimary(
+    scheduleRepeating: () -> Boolean,
+    cancelPreviousPrimary: () -> Unit,
+): Boolean {
+    if (!scheduleRepeating()) return false
+    cancelPreviousPrimary()
+    return true
+}
+
+internal fun scheduleWithExactRevocationFallback(
+    canScheduleExact: Boolean,
+    scheduleExact: () -> Boolean,
+    scheduleRevocationFallback: () -> Boolean,
+    scheduleInexactPrimary: () -> Boolean,
+    cancelPreviousPrimaryAfterInexactFallback: () -> Unit = {},
+): Boolean {
+    // Arm recovery first so process death cannot strand a new exact alarm
+    // before its revocation fallback is pending. If that fails, leave an
+    // inexact primary before retrying the backup.
+    var inexactPrimaryScheduled = false
+    var revocationBackupScheduled = scheduleRevocationFallback()
+    if (!revocationBackupScheduled) {
+        inexactPrimaryScheduled = scheduleInexactPrimary()
+        revocationBackupScheduled = scheduleRevocationFallback()
+        if (!revocationBackupScheduled) {
+            if (!inexactPrimaryScheduled) scheduleInexactPrimary()
+            return false
+        }
+    }
+
+    val exactScheduled = canScheduleExact && scheduleExact()
+    if (exactScheduled) {
+        return true
+    }
+
+    if (inexactPrimaryScheduled || scheduleInexactPrimary()) {
+        // Replacing the old primary is safe only after its recovery backup is pending.
+        cancelPreviousPrimaryAfterInexactFallback()
+        return true
+    }
+
+    // Keep any already queued backup alive if the replacement primary failed.
+    // The caller schedules its bounded retry if this last attempt also fails.
+    return scheduleRevocationFallback()
+}
+
+internal fun claimAlarmDeliveryGeneration(
+    scheduledGeneration: Long,
+    currentGeneration: Long,
+    keepAliveActive: Boolean,
+): Long? = if (keepAliveActive && scheduledGeneration == currentGeneration) {
+    currentGeneration + 1
+} else {
+    null
+}
+
+internal enum class AlarmGenerationClaimResult {
+    CLAIMED,
+    STALE,
+    PERSISTENCE_FAILED,
+}
+
+internal fun claimAlarmDeliveryGeneration(
+    scheduledGeneration: Long,
+    currentGeneration: Long,
+    keepAliveActive: Boolean,
+    persistGeneration: (Long) -> Boolean,
+): AlarmGenerationClaimResult {
+    val invalidatedGeneration = claimAlarmDeliveryGeneration(
+        scheduledGeneration = scheduledGeneration,
+        currentGeneration = currentGeneration,
+        keepAliveActive = keepAliveActive,
+    ) ?: return AlarmGenerationClaimResult.STALE
+
+    return if (persistGeneration(invalidatedGeneration)) {
+        AlarmGenerationClaimResult.CLAIMED
+    } else {
+        // SharedPreferences updates its in-memory map before commit() reports a
+        // disk-write failure. Restore the token so the paired alarm can retry.
+        persistGeneration(currentGeneration)
+        AlarmGenerationClaimResult.PERSISTENCE_FAILED
+    }
+}
+
+/**
+ * Tracks claims for this process so a paired alarm left one generation behind
+ * by process death can recover without admitting a same-process duplicate.
+ */
+internal class AlarmDeliveryGenerationClaims {
+    private var lastClaimedGeneration: Long? = null
+
+    fun claim(
+        scheduledGeneration: Long,
+        currentGeneration: Long,
+        keepAliveActive: Boolean,
+        persistGeneration: (Long) -> Boolean,
+    ): AlarmGenerationClaimResult {
+        if (!keepAliveActive) return AlarmGenerationClaimResult.STALE
+
+        if (scheduledGeneration == currentGeneration) {
+            val result = claimAlarmDeliveryGeneration(
+                scheduledGeneration = scheduledGeneration,
+                currentGeneration = currentGeneration,
+                keepAliveActive = keepAliveActive,
+                persistGeneration = persistGeneration,
+            )
+            if (result == AlarmGenerationClaimResult.CLAIMED) {
+                lastClaimedGeneration = scheduledGeneration
+            }
+            return result
+        }
+
+        val isInterruptedClaimRecovery = scheduledGeneration == currentGeneration - 1L &&
+            scheduledGeneration != lastClaimedGeneration
+        if (!isInterruptedClaimRecovery) return AlarmGenerationClaimResult.STALE
+
+        // Reuse currentGeneration: the receiver updates the pending alarm token
+        // while rearming, and a paired delivery can recover after process death.
+        lastClaimedGeneration = scheduledGeneration
+        return AlarmGenerationClaimResult.CLAIMED
+    }
+}
+
+internal fun persistNextAlarmGeneration(
+    currentGeneration: Long,
+    persistGeneration: (Long) -> Boolean,
+): Long? {
+    val nextGeneration = currentGeneration + 1L
+    return if (persistGeneration(nextGeneration)) {
+        nextGeneration
+    } else {
+        // SharedPreferences changes its in-memory map even when commit() fails.
+        persistGeneration(currentGeneration)
+        null
+    }
+}
+
+internal fun scheduleWithActiveIntent(
+    persistActiveIntent: () -> Boolean,
+    schedule: () -> Boolean,
+): Boolean {
+    if (!persistActiveIntent()) return false
+    return schedule()
+}
+
+internal fun scheduleFailedStopRecovery(
+    watchdogEnabled: Boolean,
+    persistEnabledIntent: () -> Boolean,
+    scheduleWatchdog: () -> Boolean,
+): Boolean = scheduleWithActiveIntent(
+    persistActiveIntent = persistEnabledIntent,
+    schedule = { if (watchdogEnabled) scheduleWatchdog() else true },
+)
+
+internal fun scheduleAlarmWithRetry(
+    schedule: () -> Boolean,
+    retrySchedule: () -> Boolean,
+    isStillActive: () -> Boolean,
+    retryLater: (() -> Unit) -> Unit,
+): Boolean {
+    if (schedule()) return true
+    retryLater {
+        if (isStillActive()) retrySchedule()
+    }
+    return false
+}
+
+internal fun scheduleAlarmWithRetryAtInterval(
+    intervalMs: Long,
+    scheduleAtInterval: (Long) -> Boolean,
+    isStillActive: () -> Boolean,
+    retryLater: (() -> Unit) -> Unit,
+): Boolean = scheduleAlarmWithRetry(
+    schedule = { scheduleAtInterval(intervalMs) },
+    retrySchedule = { scheduleAtInterval(intervalMs) },
+    isStillActive = isStillActive,
+    retryLater = retryLater,
+)

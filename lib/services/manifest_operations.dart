@@ -1,11 +1,14 @@
 import '../utils/atomic_file.dart';
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart'
     show debugPrint, kIsWeb, visibleForTesting;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import '../utils/file_record.dart';
+import '../utils/asr_audio_stream.dart';
 import '../utils/folder_path_utils.dart';
 import '../utils/image_thumbnail_loader.dart';
 import '../utils/manifest_operations_shared.dart';
@@ -27,6 +30,9 @@ class ManifestOperations<T extends FileRecord> {
   final bool useAppSupportDir; // false = app documents dir
   final T Function(Map<String, dynamic>) fromMap;
 
+  @visibleForTesting
+  final Future<bool> Function(File file)? fileExistsForTesting;
+
   /// Optional extra cleanup when entity files are deleted (e.g. .txt sidecar).
   final Future<void> Function(T record)? onExtraDelete;
 
@@ -44,6 +50,7 @@ class ManifestOperations<T extends FileRecord> {
     required this.storageDirName,
     this.useAppSupportDir = false,
     required this.fromMap,
+    this.fileExistsForTesting,
     this.onExtraDelete,
     required this.tableName,
     required this.toMap,
@@ -55,17 +62,35 @@ class ManifestOperations<T extends FileRecord> {
   List<T>? _cache;
   bool _dirty = false;
   Set<String> _folderCache = {};
-  int _recordRegistrationRevision = 0;
+  int _recordMutationRevision = 0;
+  final Map<String, Future<void>> _recordMutationTails = {};
 
   /// Pauses a forced refresh between reading records and reading folders.
   @visibleForTesting
   Future<void> Function()? beforeFolderLoadForTesting;
+
+  /// Pauses a record mutation before its database write.
+  @visibleForTesting
+  Future<void> Function()? beforeRecordMutationPersistForTesting;
+
+  /// Pauses audio folder deletion before deleting its record rows in tests.
+  @visibleForTesting
+  Future<void> Function()? beforeAudioFolderRecordDeleteForTesting;
+
+  /// Pauses non-audio folder deletion before deleting its record rows in tests.
+  @visibleForTesting
+  Future<void> Function()? beforeNonAudioFolderRecordDeleteForTesting;
+
+  /// Injects a failure before deleting an audio primary file in focused tests.
+  @visibleForTesting
+  Future<void> Function(String name)? beforeAudioPrimaryDeleteForTesting;
 
   // ---- 判断当前操作哪张表 ------------------------------------------------
 
   bool get _isImageTable => tableName == ManifestTables.imageRecords;
   bool get _isVideoTable => tableName == ManifestTables.videoRecords;
   bool get _isTextTable => tableName == ManifestTables.textRecords;
+  bool get _isAudioTable => tableName == ManifestTables.audioRecords;
 
   /// 缩略图文件名：图片表使用带版本号的 v2 命名（旧版 `_thumb.png`
   /// 是被强制缩放成 256×256 的变形产物，已废弃）；其余表保持原命名。
@@ -113,6 +138,51 @@ class ManifestOperations<T extends FileRecord> {
       await ManifestDatabase.updateTextRecord(id, updates);
     } else {
       await ManifestDatabase.updateAudioRecord(id, updates);
+    }
+  }
+
+  Future<void> _persistCachedRecordMutation(int index, T updated) async {
+    final cache = _cache!;
+    final previous = cache[index];
+    cache[index] = updated;
+    _recordMutationRevision++;
+    try {
+      await beforeRecordMutationPersistForTesting?.call();
+      await _dbUpdateRecord(updated.id, toMap(updated));
+      _recordMutationRevision++;
+      final currentCache = _cache;
+      if (currentCache != null) {
+        final currentIndex =
+            currentCache.indexWhere((record) => record.id == updated.id);
+        if (currentIndex != -1) currentCache[currentIndex] = updated;
+      }
+    } catch (_) {
+      if (identical(_cache, cache)) {
+        final currentIndex =
+            cache.indexWhere((record) => identical(record, updated));
+        if (currentIndex != -1) cache[currentIndex] = previous;
+      }
+      _recordMutationRevision++;
+      rethrow;
+    }
+  }
+
+  Future<void> _withRecordMutationLock(
+    String id,
+    Future<void> Function() operation,
+  ) async {
+    final previous = _recordMutationTails[id] ?? Future<void>.value();
+    final release = Completer<void>();
+    final tail = previous.then((_) => release.future);
+    _recordMutationTails[id] = tail;
+    await previous;
+    try {
+      await operation();
+    } finally {
+      release.complete();
+      if (identical(_recordMutationTails[id], tail)) {
+        _recordMutationTails.remove(id);
+      }
     }
   }
 
@@ -169,7 +239,259 @@ class ManifestOperations<T extends FileRecord> {
 
   /// Web 上用 "storageDirName/fileName" 做前缀，与 Native 目录结构保持一致。
   /// Native 上 `tts_audio/<hash>.wav`  ↔  Web 上 key = `"tts_audio/<hash>.wav"`
-  String _webKey(String fileName) => '$storageDirName/$fileName';
+  String _webKey(String fileName) =>
+      '$storageDirName/${_validatedFileName(fileName)}';
+
+  String _validatedFileName(String fileName) {
+    if (!_isAudioTable) return fileName;
+    if (fileName.isEmpty ||
+        fileName == '.' ||
+        fileName == '..' ||
+        fileName.contains('/') ||
+        fileName.contains('\\') ||
+        fileName.contains(':') ||
+        fileName.contains('\u0000')) {
+      throw ArgumentError.value(
+        fileName,
+        'fileName',
+        'Audio storage file names must be a single path component.',
+      );
+    }
+    return fileName;
+  }
+
+  String _storedFilePath(String directory, String fileName) =>
+      p.join(directory, _validatedFileName(fileName));
+
+  void _validateRecordStorageName(T record) {
+    if (_isAudioTable) _validatedFileName(storageNameOf(record));
+  }
+
+  Future<void> _deleteStoredFile(String name) async {
+    if (_useWebFileStore) {
+      await WebFileStore.delete(_webKey(name));
+    } else {
+      final dir = await _storageDir;
+      final file = File(_storedFilePath(dir, name));
+      if (await file.exists()) await file.delete();
+    }
+  }
+
+  Future<bool> _storedFileExists(String name) async {
+    if (_useWebFileStore) return WebFileStore.exists(_webKey(name));
+    final dir = await _storageDir;
+    return File(_storedFilePath(dir, name)).exists();
+  }
+
+  Future<Uint8List?> _readStoredFile(String name) async {
+    if (_useWebFileStore) return WebFileStore.read(_webKey(name));
+    final dir = await _storageDir;
+    final file = File(_storedFilePath(dir, name));
+    if (!await file.exists()) return null;
+    return file.readAsBytes();
+  }
+
+  Future<void> _writeStoredFile(String name, Uint8List bytes) async {
+    if (_useWebFileStore) {
+      await WebFileStore.write(_webKey(name), bytes);
+    } else {
+      final dir = await _storageDir;
+      await File(_storedFilePath(dir, name)).writeAsBytes(bytes, flush: true);
+    }
+  }
+
+  Future<Map<String, Uint8List>> _snapshotAudioSidecars(
+    Iterable<T> records,
+    Map<String, int> storageCount,
+  ) async {
+    final remainingCount = Map<String, int>.from(storageCount);
+    final sidecarNames = <String>{};
+    for (final record in records) {
+      final storageName = storageNameOf(record);
+      remainingCount[storageName] = (remainingCount[storageName] ?? 1) - 1;
+      if (remainingCount[storageName]! <= 0 &&
+          storageName.lastIndexOf('.') != -1) {
+        sidecarNames.add('${hashOf(record)}.txt');
+      }
+    }
+
+    final sidecars = <String, Uint8List>{};
+    for (final name in sidecarNames) {
+      final bytes = await _readStoredFile(name);
+      if (bytes != null) sidecars[name] = bytes;
+    }
+    return sidecars;
+  }
+
+  Future<Map<String, Uint8List>> _snapshotAudioPrimaryFiles(
+    Iterable<T> records,
+    Map<String, int> storageCount,
+  ) async {
+    final remainingCount = Map<String, int>.from(storageCount);
+    final primaryNames = <String>{};
+    for (final record in records) {
+      final storageName = storageNameOf(record);
+      remainingCount[storageName] = (remainingCount[storageName] ?? 1) - 1;
+      if (remainingCount[storageName]! <= 0 &&
+          storageName.lastIndexOf('.') != -1) {
+        primaryNames.add(storageName);
+      }
+    }
+
+    final files = <String, Uint8List>{};
+    for (final name in primaryNames) {
+      final bytes = await _readStoredFile(name);
+      if (bytes != null) files[name] = bytes;
+    }
+    return files;
+  }
+
+  Future<void> _restoreAudioPrimaryFiles(
+    Map<String, Uint8List> files,
+  ) async {
+    for (final entry in files.entries) {
+      try {
+        if (!await _storedFileExists(entry.key)) {
+          await _writeStoredFile(entry.key, entry.value);
+        }
+      } catch (error, stackTrace) {
+        await AppLogService.error(
+          'ManifestOperations($manifestKey)',
+          'failed to restore audio file after folder record delete failure',
+          error,
+          stackTrace,
+        );
+      }
+    }
+  }
+
+  Future<void> _restoreAudioSidecars(
+    Map<String, Uint8List> sidecars, {
+    Set<String>? hashes,
+  }) async {
+    for (final entry in sidecars.entries) {
+      if (hashes != null &&
+          !hashes.contains(entry.key.substring(0, entry.key.length - 4))) {
+        continue;
+      }
+      try {
+        final currentBytes = await _readStoredFile(entry.key);
+        if (currentBytes == null) {
+          await _writeStoredFile(entry.key, entry.value);
+        }
+      } catch (error, stackTrace) {
+        await AppLogService.error(
+          'ManifestOperations($manifestKey)',
+          'failed to restore audio sidecar after file cleanup failure',
+          error,
+          stackTrace,
+        );
+      }
+    }
+  }
+
+  Future<List<T>> _recordsWithStoredAudioFiles(
+    Iterable<T> records,
+  ) async {
+    final available = <T>[];
+    for (final record in records) {
+      try {
+        if (await _storedFileExists(storageNameOf(record))) {
+          available.add(record);
+        }
+      } catch (error, stackTrace) {
+        await AppLogService.error(
+          'ManifestOperations($manifestKey)',
+          'failed to check audio file after cleanup failure',
+          error,
+          stackTrace,
+        );
+      }
+    }
+    return available;
+  }
+
+  Future<List<T>> _restoreAudioMetadataAfterFileDeleteFailure(
+    Iterable<T> records,
+  ) async {
+    final restored = <T>[];
+    for (final record in records) {
+      try {
+        await ManifestDatabase.insertRecordWithFolders(
+          recordTable: tableName,
+          record: toMap(record),
+          folderPaths: const [],
+        );
+        restored.add(record);
+      } catch (error, stackTrace) {
+        await AppLogService.error(
+          'ManifestOperations($manifestKey)',
+          'failed to restore audio metadata after file cleanup failure',
+          error,
+          stackTrace,
+        );
+      }
+    }
+    return restored;
+  }
+
+  Future<void> _deleteAudioEntityFiles(T record) async {
+    final storageName = storageNameOf(record);
+    _validatedFileName(storageName);
+    final refCount =
+        _cache!.where((r) => storageNameOf(r) == storageName).length;
+    if (refCount <= 1 && storageName.lastIndexOf('.') == -1) return;
+
+    final hashRefCount =
+        _cache!.where((item) => hashOf(item) == hashOf(record)).length;
+
+    // Delete failure-prone sidecars and thumbnails before the primary audio
+    // bytes, so a cleanup error leaves the audio available for a retry.
+    if (refCount <= 1 && hashRefCount <= 1) {
+      await onExtraDelete?.call(record);
+    }
+    if (hashRefCount <= 1) {
+      await _deleteStoredFile(_thumbFileNameOf(record));
+    }
+    if (refCount <= 1) {
+      await beforeAudioPrimaryDeleteForTesting?.call(storageName);
+      await _deleteStoredFile(storageName);
+    }
+  }
+
+  Future<void> _deleteAudioBatchFiles(
+    List<T> records,
+    Map<String, int> storageCount,
+    Map<String, int> hashCount,
+  ) async {
+    final primaryFilesToDelete = <String>[];
+
+    // Remove sidecars and thumbnails for the whole batch before deleting any
+    // primary audio bytes. If ancillary cleanup fails, every audio file is
+    // still available while the rows are restored for a retry.
+    for (final record in records) {
+      final storageName = storageNameOf(record);
+      _validatedFileName(storageName);
+      storageCount[storageName] = (storageCount[storageName] ?? 1) - 1;
+      final hash = hashOf(record);
+      hashCount[hash] = (hashCount[hash] ?? 1) - 1;
+      final lastStorageReference = storageCount[storageName]! <= 0;
+      final lastHashReference = hashCount[hash]! <= 0;
+      if (lastStorageReference && storageName.lastIndexOf('.') != -1) {
+        if (lastHashReference) await onExtraDelete?.call(record);
+        primaryFilesToDelete.add(storageName);
+      }
+
+      if (lastHashReference) {
+        await _deleteStoredFile(_thumbFileNameOf(record));
+      }
+    }
+
+    for (final name in primaryFilesToDelete) {
+      await beforeAudioPrimaryDeleteForTesting?.call(name);
+      await _deleteStoredFile(name);
+    }
+  }
 
   // ---- Load / Persist ---------------------------------------------------
 
@@ -183,7 +505,7 @@ class ManifestOperations<T extends FileRecord> {
   }) async {
     if (_cache != null && !_dirty && !forceRefresh) return _cache!;
 
-    final revision = _recordRegistrationRevision;
+    final revision = _recordMutationRevision;
     try {
       final rows = await _dbGetAllRecords();
       final records = rows.map((m) => fromMap(m)).toList();
@@ -191,7 +513,7 @@ class ManifestOperations<T extends FileRecord> {
       final folders =
           (await ManifestDatabase.getAllFolders(recordTable: tableName))
               .toSet();
-      if (_recordRegistrationRevision == revision) {
+      if (_recordMutationRevision == revision) {
         _cache = records;
         _folderCache = folders;
         _dirty = false;
@@ -201,10 +523,10 @@ class ManifestOperations<T extends FileRecord> {
       await AppLogService.error(
           'ManifestOperations($manifestKey)', 'loadRecords failed', e);
       if (throwOnError) {
-        if (_recordRegistrationRevision == revision) _dirty = true;
+        if (_recordMutationRevision == revision) _dirty = true;
         rethrow;
       }
-      if (_recordRegistrationRevision == revision) {
+      if (_recordMutationRevision == revision) {
         _cache = [];
         _folderCache = {};
         _dirty = false;
@@ -217,6 +539,8 @@ class ManifestOperations<T extends FileRecord> {
 
   Future<void> addRecord(T record, {void Function()? beforeCommit}) async {
     try {
+      _validateRecordStorageName(record);
+      _validateRecordFolderPath(folderOf(record));
       await loadRecords();
       beforeCommit?.call();
       final folders = _folderPathAndAncestors(folderOf(record));
@@ -225,10 +549,13 @@ class ManifestOperations<T extends FileRecord> {
         record: toMap(record),
         folderPaths: folders,
         beforeCommit: beforeCommit,
+        afterCommit: () {
+          _cache!.removeWhere((existing) => existing.id == record.id);
+          _cache!.add(record);
+          _folderCache.addAll(folders);
+          _recordMutationRevision++;
+        },
       );
-      _cache!.add(record);
-      _folderCache.addAll(folders);
-      _recordRegistrationRevision++;
     } catch (e, st) {
       await AppLogService.error(
           'ManifestOperations($manifestKey)', 'addRecord failed', e, st);
@@ -236,9 +563,18 @@ class ManifestOperations<T extends FileRecord> {
     }
   }
 
-  Future<void> _deleteEntityFiles(T record) async {
+  Future<void> _deleteEntityFiles(
+    T record, {
+    int? storageRefCount,
+    int? hashRefCount,
+  }) async {
+    if (_isAudioTable) {
+      await _deleteAudioEntityFiles(record);
+      return;
+    }
+
     final storageName = storageNameOf(record);
-    final refCount =
+    final refCount = storageRefCount ??
         _cache!.where((r) => storageNameOf(r) == storageName).length;
     if (refCount <= 1) {
       final name = storageNameOf(record);
@@ -250,15 +586,15 @@ class ManifestOperations<T extends FileRecord> {
         await WebFileStore.delete(_webKey(name));
       } else {
         final dir = await _storageDir;
-        final file = File(p.join(dir, name));
+        final file = File(_storedFilePath(dir, name));
         if (await file.exists()) await file.delete();
       }
       await onExtraDelete?.call(record);
     }
     // Thumbnail deletion: keyed by hash, not storageName
-    final hashRefCount =
+    final thumbnailRefCount = hashRefCount ??
         _cache!.where((x) => hashOf(x) == hashOf(record)).length;
-    if (hashRefCount <= 1) {
+    if (thumbnailRefCount <= 1) {
       final thumbName = _thumbFileNameOf(record);
       debugPrint(
           'ManifestOperations($manifestKey) deleting thumbnail [$thumbName]');
@@ -266,7 +602,7 @@ class ManifestOperations<T extends FileRecord> {
         await WebFileStore.delete(_webKey(thumbName));
       } else {
         final dir = await _storageDir;
-        final thumbFile = File(p.join(dir, thumbName));
+        final thumbFile = File(_storedFilePath(dir, thumbName));
         if (await thumbFile.exists()) await thumbFile.delete();
       }
       await _deleteLegacyThumbIfImage(hashOf(record));
@@ -279,12 +615,62 @@ class ManifestOperations<T extends FileRecord> {
       final index = _cache!.indexWhere((r) => r.id == id);
       if (index == -1) return;
       final record = _cache![index];
+      if (_isAudioTable) {
+        final storageName = storageNameOf(record);
+        final refCount =
+            _cache!.where((item) => storageNameOf(item) == storageName).length;
+        final sidecars = preserveFiles
+            ? <String, Uint8List>{}
+            : await _snapshotAudioSidecars(
+                [record],
+                {storageName: refCount},
+              );
+        // Keep audio bytes and the cached row available if metadata persistence
+        // fails, so callers can retry the deletion.
+        await _dbDeleteRecord(id);
+        if (!preserveFiles) {
+          try {
+            await _deleteEntityFiles(record);
+          } catch (error, stackTrace) {
+            final availableRecords =
+                await _recordsWithStoredAudioFiles([record]);
+            await _restoreAudioSidecars(
+              sidecars,
+              hashes: availableRecords.map(hashOf).toSet(),
+            );
+            final restored = await _restoreAudioMetadataAfterFileDeleteFailure(
+              availableRecords,
+            );
+            if (!restored.any((item) => item.id == record.id)) {
+              _cache!.removeWhere((item) => item.id == record.id);
+            }
+            _recordMutationRevision++;
+            Error.throwWithStackTrace(error, stackTrace);
+          }
+        }
+        _cache!.removeAt(index);
+        _recordMutationRevision++;
+        return;
+      }
       // A caller undoing a just-added record cannot know whether another
       // writer has begun using the same content-addressed file. In that
       // case, remove only its metadata and retain the shared bytes.
-      if (!preserveFiles) await _deleteEntityFiles(record);
-      _cache!.removeAt(index);
+      final storageRefCount = _cache!
+          .where((item) => storageNameOf(item) == storageNameOf(record))
+          .length;
+      final hashRefCount =
+          _cache!.where((item) => hashOf(item) == hashOf(record)).length;
       await _dbDeleteRecord(id);
+      _cache!.removeWhere((item) => item.id == id);
+      _recordMutationRevision++;
+      if (preserveFiles) {
+        return;
+      }
+      await _deleteEntityFiles(
+        record,
+        storageRefCount: storageRefCount,
+        hashRefCount: hashRefCount,
+      );
     } catch (e, st) {
       await AppLogService.error(
           'ManifestOperations($manifestKey)', 'deleteRecord failed', e, st);
@@ -298,12 +684,9 @@ class ManifestOperations<T extends FileRecord> {
       await loadRecords();
       final idSet = ids.toSet();
       final toDelete = <T>[];
-      final remaining = <T>[];
       for (final r in _cache!) {
         if (idSet.contains(r.id)) {
           toDelete.add(r);
-        } else {
-          remaining.add(r);
         }
       }
       if (toDelete.isEmpty) return;
@@ -318,6 +701,46 @@ class ManifestOperations<T extends FileRecord> {
         hashCount[h] = (hashCount[h] ?? 0) + 1;
       }
 
+      final sidecars = _isAudioTable
+          ? await _snapshotAudioSidecars(toDelete, storageCount)
+          : <String, Uint8List>{};
+
+      // Commit audio metadata first so a persistence error leaves its cache and
+      // files available for retry. If later file cleanup fails, restore those
+      // rows so a restart or retry can still find the records.
+      if (_isAudioTable) {
+        await _dbDeleteRecords(ids);
+        try {
+          await _deleteAudioBatchFiles(toDelete, storageCount, hashCount);
+        } catch (error, stackTrace) {
+          final availableRecords = await _recordsWithStoredAudioFiles(toDelete);
+          await _restoreAudioSidecars(
+            sidecars,
+            hashes: availableRecords.map(hashOf).toSet(),
+          );
+          final restored = await _restoreAudioMetadataAfterFileDeleteFailure(
+            availableRecords,
+          );
+          final restoredIds = restored.map((record) => record.id).toSet();
+          _cache = _cache!
+              .where((record) =>
+                  !idSet.contains(record.id) || restoredIds.contains(record.id))
+              .toList();
+          _recordMutationRevision++;
+          Error.throwWithStackTrace(error, stackTrace);
+        }
+        // Preserve mutations to records that survived this batch while file
+        // cleanup was awaiting I/O. Audio updates can update the cache before
+        // their JSON write joins the mutation queue held by this deletion.
+        _cache!.removeWhere((record) => idSet.contains(record.id));
+        _recordMutationRevision++;
+        return;
+      }
+
+      await _dbDeleteRecords(ids);
+      _cache!.removeWhere((record) => idSet.contains(record.id));
+      _recordMutationRevision++;
+
       for (final r in toDelete) {
         final sn = storageNameOf(r);
         storageCount[sn] = (storageCount[sn] ?? 1) - 1;
@@ -330,7 +753,7 @@ class ManifestOperations<T extends FileRecord> {
             await WebFileStore.delete(_webKey(name));
           } else {
             final dir = await _storageDir;
-            final file = File(p.join(dir, name));
+            final file = File(_storedFilePath(dir, name));
             if (await file.exists()) await file.delete();
           }
           await onExtraDelete?.call(r);
@@ -344,14 +767,12 @@ class ManifestOperations<T extends FileRecord> {
             await WebFileStore.delete(_webKey(thumbName));
           } else {
             final dir = await _storageDir;
-            final thumbFile = File(p.join(dir, thumbName));
+            final thumbFile = File(_storedFilePath(dir, thumbName));
             if (await thumbFile.exists()) await thumbFile.delete();
           }
           await _deleteLegacyThumbIfImage(h);
         }
       }
-      _cache = remaining;
-      await _dbDeleteRecords(ids);
     } catch (e, st) {
       await AppLogService.error(
           'ManifestOperations($manifestKey)', 'deleteRecords failed', e, st);
@@ -359,13 +780,19 @@ class ManifestOperations<T extends FileRecord> {
     }
   }
 
-  Future<void> updateRecord(T updated) async {
+  Future<void> updateRecord(T updated) =>
+      _withRecordMutationLock(updated.id, () => _updateRecord(updated));
+
+  Future<void> _updateRecord(T updated) async {
     try {
+      _validateRecordStorageName(updated);
       await loadRecords();
       final index = _cache!.indexWhere((r) => r.id == updated.id);
       if (index != -1) {
-        _cache![index] = updated;
-        await _dbUpdateRecord(updated.id, toMap(updated));
+        if (folderOf(updated) != folderOf(_cache![index])) {
+          _validateRecordFolderPath(folderOf(updated));
+        }
+        await _persistCachedRecordMutation(index, updated);
       }
     } catch (e, st) {
       await AppLogService.error(
@@ -374,13 +801,16 @@ class ManifestOperations<T extends FileRecord> {
     }
   }
 
-  Future<void> renameRecord(String id, String newName) async {
+  Future<void> renameRecord(String id, String newName) =>
+      _withRecordMutationLock(id, () => _renameRecord(id, newName));
+
+  Future<void> _renameRecord(String id, String newName) async {
     try {
       await loadRecords();
       final index = _cache!.indexWhere((r) => r.id == id);
       if (index != -1) {
-        _cache![index] = copyName(_cache![index], newName);
-        await _dbUpdateRecord(id, toMap(_cache![index]));
+        final renamed = copyName(_cache![index], newName);
+        await _persistCachedRecordMutation(index, renamed);
       }
     } catch (e, st) {
       await AppLogService.error(
@@ -389,13 +819,17 @@ class ManifestOperations<T extends FileRecord> {
     }
   }
 
-  Future<void> moveRecord(String id, String targetFolder) async {
+  Future<void> moveRecord(String id, String targetFolder) =>
+      _withRecordMutationLock(id, () => _moveRecord(id, targetFolder));
+
+  Future<void> _moveRecord(String id, String targetFolder) async {
     try {
+      _validateRecordFolderPath(targetFolder);
       await loadRecords();
       final index = _cache!.indexWhere((r) => r.id == id);
       if (index != -1) {
-        _cache![index] = copyFolder(_cache![index], targetFolder);
-        await _dbUpdateRecord(id, toMap(_cache![index]));
+        final moved = copyFolder(_cache![index], targetFolder);
+        await _persistCachedRecordMutation(index, moved);
         await _ensureFolderPathTracked(targetFolder);
       }
     } catch (e, st) {
@@ -419,7 +853,7 @@ class ManifestOperations<T extends FileRecord> {
         return fileName;
       }
       final dir = await _storageDir;
-      final filePath = p.join(dir, fileName);
+      final filePath = _storedFilePath(dir, fileName);
       if (beforeCommit == null) {
         await File(filePath).writeAsBytes(data);
       } else {
@@ -441,7 +875,7 @@ class ManifestOperations<T extends FileRecord> {
         return WebFileStore.read(_webKey(fileName));
       }
       final dir = await _storageDir;
-      final filePath = p.join(dir, fileName);
+      final filePath = _storedFilePath(dir, fileName);
       final file = File(filePath);
       if (await file.exists()) {
         return await file.readAsBytes();
@@ -455,6 +889,46 @@ class ManifestOperations<T extends FileRecord> {
     }
   }
 
+  /// Reads a media file in a way that can stop when its ASR task is canceled.
+  /// Native files use a cancelable stream; Web IndexedDB reads abort their
+  /// transaction when the task token is canceled.
+  Future<Uint8List?> readFileCancellable(
+    String fileName, {
+    required CancelToken cancelToken,
+  }) async {
+    try {
+      throwIfAsrAudioCanceled(cancelToken);
+      if (_useWebFileStore) {
+        return await WebFileStore.readCancellable(
+          _webKey(fileName),
+          cancelToken: cancelToken,
+        );
+      }
+      final dir = await _storageDir;
+      throwIfAsrAudioCanceled(cancelToken);
+      final file = File(_storedFilePath(dir, fileName));
+      final exists = await (fileExistsForTesting?.call(file) ?? file.exists());
+      throwIfAsrAudioCanceled(cancelToken);
+      if (!exists) return null;
+      return await readAsrAudioStream(
+        file.openRead(),
+        cancelToken: cancelToken,
+      );
+    } catch (error, stackTrace) {
+      if (cancelToken.isCancelled) throw cancelToken.cancelError!;
+      debugPrint(
+        'ManifestOperations($manifestKey).readFileCancellable error: $error',
+      );
+      await AppLogService.error(
+        'ManifestOperations($manifestKey)',
+        'readFileCancellable failed',
+        error,
+        stackTrace,
+      );
+      return null;
+    }
+  }
+
   Future<bool> deleteFile(String fileName) async {
     try {
       if (_useWebFileStore) {
@@ -462,7 +936,7 @@ class ManifestOperations<T extends FileRecord> {
         return true;
       }
       final dir = await _storageDir;
-      final file = File(p.join(dir, fileName));
+      final file = File(_storedFilePath(dir, fileName));
       if (await file.exists()) {
         await file.delete();
         return true;
@@ -484,7 +958,7 @@ class ManifestOperations<T extends FileRecord> {
         return exists ? _webKey(fileName) : null;
       }
       final dir = await _storageDir;
-      final filePath = p.join(dir, fileName);
+      final filePath = _storedFilePath(dir, fileName);
       if (await File(filePath).exists()) {
         return filePath;
       }
@@ -504,8 +978,7 @@ class ManifestOperations<T extends FileRecord> {
       await loadRecords();
       final name = folderName.trim();
       if (name.isEmpty) return;
-      final baseName = FolderPathUtils.getFolderBaseName(name);
-      final err = FolderPathUtils.validateFolderName(baseName);
+      final err = FolderPathUtils.validateFolderPath(name);
       if (err != null) return;
       if (!_folderCache.contains(name)) {
         await ManifestDatabase.insertFolder(name, recordTable: tableName);
@@ -521,6 +994,7 @@ class ManifestOperations<T extends FileRecord> {
   Future<void> addFolderPath(String folderPath) async {
     try {
       await loadRecords();
+      if (FolderPathUtils.validateFolderPath(folderPath) != null) return;
       if (!_folderCache.contains(folderPath)) {
         await ManifestDatabase.insertFolder(folderPath, recordTable: tableName);
         _folderCache.add(folderPath);
@@ -545,23 +1019,26 @@ class ManifestOperations<T extends FileRecord> {
       }
       final descendants =
           FolderPathUtils.getAllDescendantFolderPaths(folderName, allPaths);
+      final foldersToRemove = <String>{...descendants, folderName};
+      Future<void> deleteFolderEntries() async {
+        for (final folder in foldersToRemove) {
+          await ManifestDatabase.deleteFolder(folder, recordTable: tableName);
+          _folderCache.remove(folder);
+        }
+      }
 
       // Collect all records to delete
       final idsToDelete = <String>[];
       final toRemoveRecords = <T>[];
 
       for (final child in descendants) {
-        _folderCache.remove(child);
         final childRecords =
             _cache!.where((r) => folderOf(r) == child).toList();
         toRemoveRecords.addAll(childRecords);
         for (final record in childRecords) {
           idsToDelete.add(record.id);
         }
-        await ManifestDatabase.deleteFolder(child, recordTable: tableName);
       }
-
-      _folderCache.remove(folderName);
 
       final folderRecords =
           _cache!.where((r) => folderOf(r) == folderName).toList();
@@ -569,7 +1046,6 @@ class ManifestOperations<T extends FileRecord> {
       for (final record in folderRecords) {
         idsToDelete.add(record.id);
       }
-      await ManifestDatabase.deleteFolder(folderName, recordTable: tableName);
 
       // Pre-count storage names and hash counts across ALL records before deletion
       final storageNameCount = <String, int>{};
@@ -581,46 +1057,92 @@ class ManifestOperations<T extends FileRecord> {
         hashCount[h] = (hashCount[h] ?? 0) + 1;
       }
 
-      // Decrement per record being deleted; only delete file when count reaches 0
-      for (final r in toRemoveRecords) {
-        final sn = storageNameOf(r);
-        storageNameCount[sn] = (storageNameCount[sn] ?? 1) - 1;
-        if (storageNameCount[sn]! <= 0) {
-          final name = storageNameOf(r);
-          // Guard against names without extension
-          final dotIndex = name.lastIndexOf('.');
-          if (dotIndex == -1) continue;
-          if (_useWebFileStore) {
-            await WebFileStore.delete(_webKey(name));
-          } else {
-            final dir = await _storageDir;
-            final file = File(p.join(dir, name));
-            if (await file.exists()) await file.delete();
-          }
-          await onExtraDelete?.call(r);
-        }
-        // Thumbnail deletion: keyed by hash, not storageName
-        final h = hashOf(r);
-        hashCount[h] = (hashCount[h] ?? 1) - 1;
-        if (hashCount[h]! <= 0) {
-          final thumbName = _thumbFileNameOf(r);
-          if (_useWebFileStore) {
-            await WebFileStore.delete(_webKey(thumbName));
-          } else {
-            final dir = await _storageDir;
-            final thumbFile = File(p.join(dir, thumbName));
-            if (await thumbFile.exists()) await thumbFile.delete();
-          }
-          await _deleteLegacyThumbIfImage(h);
-        }
-      }
+      final audioPrimaryFiles = _isAudioTable && idsToDelete.isNotEmpty
+          ? await _snapshotAudioPrimaryFiles(toRemoveRecords, storageNameCount)
+          : <String, Uint8List>{};
+      final audioSidecars = _isAudioTable && idsToDelete.isNotEmpty
+          ? await _snapshotAudioSidecars(toRemoveRecords, storageNameCount)
+          : <String, Uint8List>{};
 
-      _cache!.removeWhere((r) => idsToDelete.contains(r.id));
-
-      // Delete records from DB
-      if (idsToDelete.isNotEmpty) {
+      final deletesAudioRecords = _isAudioTable && idsToDelete.isNotEmpty;
+      if (idsToDelete.isNotEmpty && !deletesAudioRecords) {
+        // Commit metadata before removing files so a failed row write leaves
+        // the existing cache and bytes available for a retry.
+        await beforeNonAudioFolderRecordDeleteForTesting?.call();
         await _dbDeleteRecords(idsToDelete);
+        _cache!.removeWhere((r) => idsToDelete.contains(r.id));
+        _recordMutationRevision++;
       }
+
+      // Decrement per record being deleted; only delete file when count reaches 0
+      try {
+        for (final r in toRemoveRecords) {
+          final sn = storageNameOf(r);
+          final h = hashOf(r);
+          storageNameCount[sn] = (storageNameCount[sn] ?? 1) - 1;
+          if (storageNameCount[sn]! <= 0) {
+            final name = storageNameOf(r);
+            // Guard against names without extension
+            final dotIndex = name.lastIndexOf('.');
+            if (dotIndex == -1) continue;
+            if (_useWebFileStore) {
+              await WebFileStore.delete(_webKey(name));
+            } else {
+              final dir = await _storageDir;
+              final file = File(_storedFilePath(dir, name));
+              if (await file.exists()) await file.delete();
+            }
+            if (hashCount[h]! <= 1) await onExtraDelete?.call(r);
+          }
+          // Thumbnail deletion: keyed by hash, not storageName
+          hashCount[h] = (hashCount[h] ?? 1) - 1;
+          if (hashCount[h]! <= 0) {
+            final thumbName = _thumbFileNameOf(r);
+            if (_useWebFileStore) {
+              await WebFileStore.delete(_webKey(thumbName));
+            } else {
+              final dir = await _storageDir;
+              final thumbFile = File(_storedFilePath(dir, thumbName));
+              if (await thumbFile.exists()) await thumbFile.delete();
+            }
+            await _deleteLegacyThumbIfImage(h);
+          }
+        }
+      } catch (error, stackTrace) {
+        if (deletesAudioRecords) {
+          await _restoreAudioPrimaryFiles(audioPrimaryFiles);
+          await _restoreAudioSidecars(audioSidecars);
+        }
+        Error.throwWithStackTrace(error, stackTrace);
+      }
+
+      if (idsToDelete.isNotEmpty) {
+        if (deletesAudioRecords) {
+          _cache!.removeWhere((r) => idsToDelete.contains(r.id));
+          try {
+            await beforeAudioFolderRecordDeleteForTesting?.call();
+            await _dbDeleteRecords(idsToDelete);
+          } catch (error, stackTrace) {
+            await _restoreAudioPrimaryFiles(audioPrimaryFiles);
+            await _restoreAudioSidecars(audioSidecars);
+            final cachedIds = _cache!.map((record) => record.id).toSet();
+            for (final record in toRemoveRecords) {
+              if (cachedIds.add(record.id)) _cache!.add(record);
+            }
+            _recordMutationRevision++;
+            Error.throwWithStackTrace(error, stackTrace);
+          }
+          // A refresh can install its earlier database snapshot while the
+          // delete is awaiting persistence. Reapply the cache mutation, then
+          // invalidate any refresh that has not reached its revision check.
+          _cache!.removeWhere((r) => idsToDelete.contains(r.id));
+          _recordMutationRevision++;
+        }
+      }
+
+      // Keep folder metadata available unless record deletion commits. Empty
+      // descendants cannot be reconstructed from surviving record rows.
+      await deleteFolderEntries();
     } catch (e, st) {
       await AppLogService.error(
           'ManifestOperations($manifestKey)', 'removeFolder failed', e, st);
@@ -628,9 +1150,9 @@ class ManifestOperations<T extends FileRecord> {
     }
   }
 
-  Future<Set<String>> getAllFolders() async {
+  Future<Set<String>> getAllFolders({bool throwOnError = false}) async {
     try {
-      await loadRecords();
+      await loadRecords(throwOnError: throwOnError);
       final folders = <String>{};
       folders.addAll(_folderCache);
       for (final r in _cache ?? []) {
@@ -660,16 +1182,37 @@ class ManifestOperations<T extends FileRecord> {
         await ManifestDatabase.deleteFolder(f, recordTable: tableName);
       }
 
-      // Move records in the removed folder path to root
+      // Move records in the removed folder path to root.
       final folderPrefix = folderPath.isEmpty ? '' : '$folderPath/';
-      for (var i = 0; i < (_cache?.length ?? 0); i++) {
-        final r = _cache![i];
-        final f = folderOf(r);
-        if (f == folderPath ||
-            (folderPrefix.isNotEmpty && f.startsWith(folderPrefix))) {
-          _cache![i] = copyFolder(r, '');
-          await _dbUpdateRecord(r.id, {...toMap(r), 'folder': ''});
+      final processedRecordIds = <String>{};
+      while (true) {
+        T? nextRecord;
+        for (final record in _cache ?? <T>[]) {
+          final folder = folderOf(record);
+          if (!processedRecordIds.contains(record.id) &&
+              (folder == folderPath ||
+                  (folderPrefix.isNotEmpty &&
+                      folder.startsWith(folderPrefix)))) {
+            nextRecord = record;
+            break;
+          }
         }
+        if (nextRecord == null) break;
+
+        final id = nextRecord.id;
+        processedRecordIds.add(id);
+        await _withRecordMutationLock(id, () async {
+          final cache = _cache;
+          if (cache == null) return;
+          final index = cache.indexWhere((record) => record.id == id);
+          if (index == -1) return;
+          final record = cache[index];
+          final folder = folderOf(record);
+          if (folder == folderPath ||
+              (folderPrefix.isNotEmpty && folder.startsWith(folderPrefix))) {
+            await _persistCachedRecordMutation(index, copyFolder(record, ''));
+          }
+        });
       }
     } catch (e, st) {
       await AppLogService.error('ManifestOperations($manifestKey)',
@@ -683,9 +1226,16 @@ class ManifestOperations<T extends FileRecord> {
   Future<void> _ensureFolderPathTracked(String folderPath) async {
     for (final p in _folderPathAndAncestors(folderPath)) {
       if (!_folderCache.contains(p)) {
-        _folderCache.add(p);
         await ManifestDatabase.insertFolder(p, recordTable: tableName);
+        _folderCache.add(p);
       }
+    }
+  }
+
+  void _validateRecordFolderPath(String folderPath) {
+    final error = FolderPathUtils.validateFolderPath(folderPath);
+    if (error != null) {
+      throw ArgumentError.value(folderPath, 'folder', error);
     }
   }
 

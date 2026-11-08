@@ -107,6 +107,7 @@ extension _ChatPageModelsExt on _ChatPageState {
             'reasoningEffortEnabled': ref.read(reasoningEffortEnabledProvider),
             'reasoningEffort': ref.read(reasoningEffortProvider),
             'reasoningParamValues': ref.read(reasoningParamValuesProvider),
+            'customParamValues': ref.read(customParamValuesProvider),
           };
           prefs.setString('per_model_chat_settings', jsonEncode(allSettings));
         }
@@ -323,6 +324,7 @@ extension _ChatPageModelsExt on _ChatPageState {
         'reasoningEffortEnabled': ref.read(reasoningEffortEnabledProvider),
         'reasoningEffort': ref.read(reasoningEffortProvider),
         'reasoningParamValues': ref.read(reasoningParamValuesProvider),
+        'customParamValues': ref.read(customParamValuesProvider),
       };
       prefs.setString('per_model_chat_settings', jsonEncode(allSettings));
     } catch (e) {
@@ -450,6 +452,14 @@ extension _ChatPageModelsExt on _ChatPageState {
       ref.read(reasoningEffortProvider.notifier).state = 'medium';
       ref.read(reasoningParamValuesProvider.notifier).state = {};
     }
+    final savedCustomValues =
+        modelSettings is Map ? modelSettings['customParamValues'] : null;
+    ref.read(customParamValuesProvider.notifier).state =
+        savedCustomValues is Map
+            ? savedCustomValues.map(
+                (key, value) => MapEntry(key.toString(), value.toString()),
+              )
+            : null;
 
     // Heal sessions where the effort toggle is on but no effort value was
     // ever written to the map (the panel previously only saved explicitly
@@ -549,6 +559,7 @@ extension _ChatPageModelsExt on _ChatPageState {
       accountOverrideName: _nextRequestAccountName,
       onModelsReordered: _onModelsReordered,
       reasoningParams: _adapter.reasoningParams,
+      customParams: _adapter.customParams,
       editingMessageId: _editingMessageId,
       editingMessageText: _editingMessageText,
       editingMessageAttachments: _editingMessageAttachments,

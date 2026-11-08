@@ -561,6 +561,7 @@ abstract class ChatProtocol {
     String? assistantPrompt,
     String? contextSummary,
     int? toolOutputMaxChars,
+    RequestContentCache? contentCache,
   });
 
   /// 将工具定义转换为协议要求的 JSON 数组。

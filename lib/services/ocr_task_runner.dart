@@ -1,9 +1,12 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 
+import '../models/ocr_batch_execution.dart';
 import '../providers/background_task_provider.dart';
+import '../utils/ocr_diagnostics.dart';
 import '../utils/text_manifest.dart';
 import 'ocr_result_saver.dart';
 import 'ocr_service.dart';
@@ -14,7 +17,16 @@ class OcrTaskRunner {
   final String taskId;
   final BackgroundTaskNotifier notifier;
   final OcrConfig config;
-  final List<(Uint8List, String)> images;
+  final List<(Uint8List, String)> _images;
+
+  /// Returns a read-only snapshot of the image bytes owned by this runner.
+  List<(Uint8List, String)> get images => List.unmodifiable(
+        _images.map((image) => (Uint8List.fromList(image.$1), image.$2)),
+      );
+  final List<String?> imageNames;
+  final OcrBatchMode executionMode;
+  final int perImageConcurrency;
+  final List<OcrPageOutcome> initialPageOutcomes;
   final String title;
   final String folder;
   final void Function() onSaved;
@@ -32,7 +44,16 @@ class OcrTaskRunner {
     writeText: _writeText,
   );
   OcrService? _service;
+  OcrService? _diagnosticService;
+  OcrService? _failedDiagnosticService;
+  OcrService? _incompleteDiagnosticService;
+  final Set<OcrService> _activeServices = {};
+  final Map<int, int> _perImageRequestStages = {};
+  final Map<int, int> _perImageUploadPercent = {};
+  bool _hasPerImageFailureBeforeUpload = false;
   Future<void>? _running;
+  late final BackgroundTask? _taskGeneration;
+  Object? _cancellationOwner;
   int _stage = -1;
   int _uploadPercent = -1;
 
@@ -41,6 +62,10 @@ class OcrTaskRunner {
     required this.notifier,
     required OcrConfig config,
     required List<(Uint8List, String)> images,
+    List<String?> imageNames = const [],
+    this.executionMode = OcrBatchMode.joint,
+    this.perImageConcurrency = 1,
+    List<OcrPageOutcome> initialPageOutcomes = const [],
     required this.title,
     required this.folder,
     required this.onSaved,
@@ -50,26 +75,67 @@ class OcrTaskRunner {
   })  : config = config.copyWith(
           // Type config is JSON-shaped; recursively copy mutable containers.
           typeConfig: Map<String, dynamic>.from(
-              jsonDecode(jsonEncode(config.typeConfig)) as Map),
+            jsonDecode(jsonEncode(config.typeConfig)) as Map,
+          ),
           customParams:
               config.customParams.map((param) => param.copy()).toList(),
         ),
-        images = List.unmodifiable(
-            images.map((image) => (Uint8List.fromList(image.$1), image.$2))),
+        _images = List.unmodifiable(
+          images.map((image) => (Uint8List.fromList(image.$1), image.$2)),
+        ),
+        imageNames = List.unmodifiable(
+          List<String?>.generate(
+            images.length,
+            (index) => index < imageNames.length ? imageNames[index] : null,
+          ),
+        ),
+        initialPageOutcomes = List.unmodifiable(initialPageOutcomes),
         _serviceFactory =
             serviceFactory ?? ((config) => OcrService(config: config)),
-        _writeText = writeText ?? TextManifest.writeText;
+        _writeText = writeText ?? TextManifest.writeText {
+    _taskGeneration = notifier.taskById(taskId);
+    if (perImageConcurrency < 1 || perImageConcurrency > 2) {
+      throw ArgumentError.value(
+        perImageConcurrency,
+        'perImageConcurrency',
+        'OCR per-image concurrency must be 1 or 2',
+      );
+    }
+  }
 
   /// Memoization fences duplicate starts, including starts after completion.
-  Future<void> run() => _running ??= _run();
+  Future<void> run() {
+    final running = _running;
+    if (running != null) return running;
+
+    final completer = Completer<void>();
+    _running = completer.future;
+    unawaited(
+      _run().then<void>(
+        (_) => completer.complete(),
+        onError: (Object error, StackTrace stackTrace) {
+          completer.completeError(error, stackTrace);
+        },
+      ),
+    );
+    return completer.future;
+  }
+
+  bool get _ownsTaskGeneration {
+    final taskGeneration = _taskGeneration;
+    return taskGeneration != null &&
+        notifier.taskById(taskId)?.hasSameGenerationAs(taskGeneration) == true;
+  }
 
   void cancel() {
-    _cancelToken.cancel('已取消');
-    _service?.close(force: true);
+    _cancelToken.cancel(notifier.localizations.bgTaskCancelled);
+    for (final service in _activeServices.toList()) {
+      service.close(force: true);
+    }
   }
 
   void _checkActive() {
-    if (!notifier.mounted || !notifier.state.any((task) => task.id == taskId)) {
+    if (!notifier.mounted || !_ownsTaskGeneration) {
       cancel();
     }
     if (_cancelToken.isCancelled) throw _cancelToken.cancelError!;
@@ -79,10 +145,13 @@ class OcrTaskRunner {
     _checkActive();
     if (next <= _stage) return;
     for (var i = 0; i < next; i++) {
+      _checkActive();
       notifier.updateStep(taskId, i, completed: true);
     }
+    _checkActive();
     _stage = next;
     notifier.updateStep(taskId, next, running: true);
+    _checkActive();
   }
 
   void _requestStage(OcrRequestStage stage) {
@@ -96,35 +165,141 @@ class OcrTaskRunner {
     }
   }
 
-  void _uploadProgress(int sent, int total) {
+  void _perImageRequestStage(int imageIndex, OcrRequestStage stage) {
+    _setPerImageStageIndex(imageIndex, stage.index + 1);
+  }
+
+  void _setPerImageStageIndex(int imageIndex, int stageIndex) {
     _checkActive();
-    if (total <= 0 || _stage != 1) return;
+    if (_perImageRequestStages[imageIndex] == stageIndex) return;
+    _perImageRequestStages[imageIndex] = stageIndex;
+    _perImageUploadPercent.putIfAbsent(imageIndex, () => 0);
+    _syncPerImageSteps();
+    _checkActive();
+  }
+
+  void _syncPerImageSteps() {
+    if (_perImageRequestStages.isEmpty ||
+        _cancelToken.isCancelled ||
+        !notifier.mounted ||
+        !_ownsTaskGeneration) {
+      return;
+    }
+    final task = notifier.taskById(taskId);
+    if (task == null || task.steps.length < 4) return;
+
+    final activeStages = _perImageRequestStages.values.toList();
+    final hasPendingPages = task.ocrPageOutcomes.any(
+      (outcome) => outcome.status == OcrPageOutcomeStatus.pending,
+    );
+    final steps = List<BgTaskStep>.of(task.steps);
+    for (var index = 0; index <= 3; index++) {
+      final running = activeStages.contains(index);
+      final blockedByPreUploadFailure =
+          _hasPerImageFailureBeforeUpload && index >= 1 && index <= 2;
+      final completed = !hasPendingPages &&
+          !blockedByPreUploadFailure &&
+          activeStages.every((stage) => stage > index);
+      final status = running
+          ? BgStepStatus.running
+          : completed
+              ? BgStepStatus.completed
+              : BgStepStatus.pending;
+      steps[index] = steps[index].copyWith(
+        status: status,
+        clearError: true,
+      );
+    }
+
+    final uploadingPages = _perImageRequestStages.entries
+        .where((entry) => entry.value == OcrRequestStage.uploading.index + 1)
+        .toList()
+      ..sort((left, right) => left.key.compareTo(right.key));
+    if (uploadingPages.isNotEmpty) {
+      final progress = uploadingPages.map((entry) {
+        final percent = _perImageUploadPercent[entry.key] ?? 0;
+        return notifier.localizations.bgTaskOcrUploadPageProgress(
+          (entry.key + 1).toString(),
+          _images.length.toString(),
+          percent.toString(),
+        );
+      }).join(notifier.localizations.localeName.startsWith('zh') ? '，' : ', ');
+      steps[1] = steps[1].copyWith(
+        label: notifier.localizations.bgTaskOcrUploadPagesProgress(progress),
+      );
+    } else {
+      steps[1] = steps[1].copyWith(
+        label: notifier.localizations.bgStepUploadImage,
+      );
+    }
+    notifier.setSteps(taskId, steps);
+  }
+
+  void _uploadProgress(int sent, int total, {int? imageIndex}) {
+    _checkActive();
+    if (total <= 0) return;
     final percent = (sent * 100 ~/ total).clamp(0, 100);
+    if (imageIndex != null) {
+      if (_perImageRequestStages[imageIndex] !=
+              OcrRequestStage.uploading.index + 1 ||
+          _perImageUploadPercent[imageIndex] == percent) {
+        return;
+      }
+      _perImageUploadPercent[imageIndex] = percent;
+      _syncPerImageSteps();
+      return;
+    }
+    if (_stage != 1) return;
     if (percent == _uploadPercent) return;
     _uploadPercent = percent;
-    notifier.updateStep(taskId, 1, running: true, label: '上传图片 $percent%');
+    notifier.updateStep(
+      taskId,
+      1,
+      running: true,
+      label: notifier.localizations.bgTaskOcrUploadProgress(percent.toString()),
+    );
   }
 
   Future<void> _run() async {
-    notifier.registerCancellation(taskId, cancel);
+    final taskGeneration = _taskGeneration;
+    if (taskGeneration == null) {
+      cancel();
+    } else {
+      _cancellationOwner = notifier.registerCancellationForGeneration(
+        taskId,
+        taskGeneration,
+        cancel,
+      );
+    }
+    String? taskSpecificFailure;
     try {
       _checkActive();
       _advance(0);
-      final service = _service = _serviceFactory(config);
-      final result = images.length == 1
-          ? await service.recognize(
-              imageBytes: images.single.$1,
-              imageFormat: images.single.$2,
-              cancelToken: _cancelToken,
-              onSendProgress: _uploadProgress,
-              onStage: _requestStage,
-            )
-          : await service.recognizeBatch(
-              imageBytesList: images,
-              cancelToken: _cancelToken,
-              onSendProgress: _uploadProgress,
-              onStage: _requestStage,
-            );
+      late final OcrResult result;
+      String? incompleteMessage;
+      if (executionMode == OcrBatchMode.joint) {
+        final service = _service = _serviceFactory(config);
+        _activeServices.add(service);
+        result = _images.length == 1
+            ? await service.recognize(
+                imageBytes: _images.single.$1,
+                imageFormat: _images.single.$2,
+                cancelToken: _cancelToken,
+                onSendProgress: _uploadProgress,
+                onStage: _requestStage,
+              )
+            : await service.recognizeBatch(
+                imageBytesList: _images,
+                cancelToken: _cancelToken,
+                onSendProgress: _uploadProgress,
+                onStage: _requestStage,
+              );
+        _diagnosticService = service;
+      } else {
+        final (pageResult, message) = await _recognizePerImage();
+        result = pageResult;
+        incompleteMessage = message;
+      }
       _checkActive();
       notifier.setResult(
         taskId,
@@ -132,57 +307,279 @@ class OcrTaskRunner {
         isComplete: result.isComplete,
         folder: folder,
       );
+      _checkActive();
       if (!result.isComplete) {
-        notifier.updateStep(taskId, 3, completed: true);
-        throw Exception('OCR 返回了不完整结果（finish_reason=${result.finishReason}）');
+        final hasFailedPage = executionMode == OcrBatchMode.perImage &&
+            notifier.state.any(
+              (task) =>
+                  task.id == taskId &&
+                  task.ocrPageOutcomes.any(
+                    (outcome) => outcome.status == OcrPageOutcomeStatus.failed,
+                  ),
+            );
+        notifier.updateStep(
+          taskId,
+          3,
+          completed: !hasFailedPage,
+          failed: hasFailedPage,
+          error: hasFailedPage ? incompleteMessage : null,
+        );
+        taskSpecificFailure = incompleteMessage;
+        throw Exception(
+          incompleteMessage ??
+              notifier.localizations.bgTaskOcrResultIncomplete(
+                result.finishReason ?? 'unknown',
+              ),
+        );
       }
-      _advance(4);
-      await _resultSaver.saveResult(
-        result.text,
-        isComplete: result.isComplete,
+      final service = _diagnosticService ?? _service;
+      notifier.setRawDiagnostics(
+        taskId,
+        rawRequest: service?.diagnosticRequest,
+        rawResponse: service?.diagnosticResponse(),
       );
+      _advance(4);
+      await _resultSaver.saveResult(result.text, isComplete: result.isComplete);
     } catch (error) {
       // A removed/disposed task must never be recreated by late callbacks.
-      if (!_cancelToken.isCancelled && notifier.mounted) {
-        final task =
-            notifier.state.where((task) => task.id == taskId).firstOrNull;
+      if (!_cancelToken.isCancelled && _ownsTaskGeneration) {
+        final task = notifier.taskById(taskId);
         if (task != null) {
+          final safeError = taskSpecificFailure == null
+              ? error is OcrRequestTooLargeException
+                  ? error.toString()
+                  : OcrDiagnosticSnapshot.safeTaskError(
+                      error,
+                      excludedValues: [config.apiKey],
+                    )
+              : OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+                    taskSpecificFailure,
+                    excludedValues: [config.apiKey],
+                  ) ??
+                  notifier.localizations.bgTaskOcrIncompleteFallback;
           for (var i = 0; i < task.steps.length; i++) {
+            if (!_ownsTaskGeneration) break;
             if (task.steps[i].running) {
-              notifier.updateStep(taskId, i, failed: true, error: '$error');
+              notifier.updateStep(taskId, i, failed: true, error: safeError);
             } else if (task.steps[i].status == BgStepStatus.pending) {
               notifier.updateStep(taskId, i, skipped: true);
             }
           }
-          final service = _service;
+          final service = _failedDiagnosticService ??
+              _incompleteDiagnosticService ??
+              _diagnosticService ??
+              _service;
           final result = task.result;
+          final strings = notifier.localizations;
           final errorMessage = result == null
-              ? 'OCR识别失败: $error'
+              ? strings.bgTaskOcrError(safeError)
               : task.resultIsComplete
-                  ? 'OCR结果保存失败: $error'
-                  : 'OCR结果不完整: $error';
-          notifier.failTask(taskId,
-              error: errorMessage,
-              rawRequest: service == null
-                  ? null
-                  : {
-                      'url': service.lastRequestUrl,
-                      'headers': service.lastRequestHeaders,
-                      'body': service.lastRequestBody,
-                    },
-              rawResponse: service == null
-                  ? null
-                  : {
-                      'statusCode': service.lastResponseStatusCode,
-                      'headers': service.lastResponseHeaders,
-                      'data': service.lastResponseData,
-                    });
+                  ? strings.bgTaskOcrSaveError(safeError)
+                  : strings.bgTaskOcrIncompleteError(safeError);
+          if (!_ownsTaskGeneration) return;
+          notifier.failTask(
+            taskId,
+            error: errorMessage,
+            rawRequest: service?.diagnosticRequest,
+            rawResponse: service?.diagnosticResponse(error: error),
+            ocrCredentialValuesForSanitization: [config.apiKey],
+          );
         }
       }
     } finally {
-      notifier.unregisterCancellation(taskId);
-      _service?.close();
+      final cancellationOwner = _cancellationOwner;
+      if (cancellationOwner != null) {
+        notifier.unregisterCancellationForGeneration(
+          taskId,
+          cancellationOwner,
+        );
+      }
+      for (final service in _activeServices.toList()) {
+        service.close();
+      }
+      _activeServices.clear();
       _service = null;
     }
+  }
+
+  Future<(OcrResult, String?)> _recognizePerImage() async {
+    if (_images.isEmpty) {
+      throw ArgumentError(
+        'OCR per-image execution requires at least one image',
+      );
+    }
+    final outcomes = List<OcrPageOutcome>.generate(
+      _images.length,
+      (index) => OcrPageOutcome(
+        imageIndex: index,
+        status: OcrPageOutcomeStatus.pending,
+      ),
+    );
+    for (final outcome in initialPageOutcomes) {
+      if (outcome.imageIndex >= 0 &&
+          outcome.imageIndex < outcomes.length &&
+          outcome.canReuseResult) {
+        outcomes[outcome.imageIndex] = outcome;
+      }
+    }
+    _publishPageOutcomes(outcomes);
+
+    var nextImageIndex = 0;
+    var processingTimeMs = 0;
+    var cancellationOutcomesPublished = false;
+
+    void publishCancelledOutcomes() {
+      if (cancellationOutcomesPublished) return;
+      cancellationOutcomesPublished = true;
+      for (var index = 0; index < outcomes.length; index++) {
+        final outcome = outcomes[index];
+        if (outcome.status == OcrPageOutcomeStatus.pending ||
+            outcome.status == OcrPageOutcomeStatus.running) {
+          outcomes[index] = OcrPageOutcome(
+            imageIndex: index,
+            status: OcrPageOutcomeStatus.cancelled,
+            error: notifier.localizations.bgTaskCancelled,
+          );
+        }
+      }
+      if (notifier.mounted && _ownsTaskGeneration) {
+        _publishPageOutcomes(outcomes);
+      }
+    }
+
+    Future<void> runWorker() async {
+      while (true) {
+        try {
+          _checkActive();
+        } catch (_) {
+          if (_cancelToken.isCancelled) publishCancelledOutcomes();
+          rethrow;
+        }
+        final imageIndex = nextImageIndex++;
+        if (imageIndex >= _images.length) return;
+        if (outcomes[imageIndex].canReuseResult) continue;
+
+        outcomes[imageIndex] = OcrPageOutcome(
+          imageIndex: imageIndex,
+          status: OcrPageOutcomeStatus.running,
+        );
+        _publishPageOutcomes(outcomes);
+        final image = _images[imageIndex];
+        OcrService? service;
+        try {
+          service = _serviceFactory(config);
+          _activeServices.add(service);
+          _setPerImageStageIndex(imageIndex, 0);
+          final result = await service.recognize(
+            imageBytes: image.$1,
+            imageFormat: image.$2,
+            cancelToken: _cancelToken,
+            onSendProgress: (sent, total) =>
+                _uploadProgress(sent, total, imageIndex: imageIndex),
+            onStage: (stage) => _perImageRequestStage(imageIndex, stage),
+          );
+          _checkActive();
+          processingTimeMs += result.processingTimeMs;
+          if (result.isComplete) {
+            _diagnosticService = service;
+          } else {
+            _incompleteDiagnosticService ??= service;
+          }
+          outcomes[imageIndex] = OcrPageOutcome(
+            imageIndex: imageIndex,
+            status: result.isComplete
+                ? OcrPageOutcomeStatus.succeeded
+                : OcrPageOutcomeStatus.incomplete,
+            text: result.text,
+            error: result.isComplete
+                ? null
+                : notifier.localizations.bgTaskOcrResultIncomplete(
+                    result.finishReason ?? 'unknown',
+                  ),
+          );
+        } catch (error) {
+          if (_cancelToken.isCancelled) {
+            publishCancelledOutcomes();
+            rethrow;
+          }
+          _checkActive();
+          if ((_perImageRequestStages[imageIndex] ?? 0) == 0) {
+            _hasPerImageFailureBeforeUpload = true;
+          }
+          _failedDiagnosticService ??= service;
+          outcomes[imageIndex] = OcrPageOutcome(
+            imageIndex: imageIndex,
+            status: OcrPageOutcomeStatus.failed,
+            error: error is OcrRequestTooLargeException
+                ? error.toString()
+                : OcrDiagnosticSnapshot.safeTaskError(
+                    error,
+                    excludedValues: [config.apiKey],
+                  ),
+          );
+        } finally {
+          _perImageRequestStages.remove(imageIndex);
+          _perImageUploadPercent.remove(imageIndex);
+          _syncPerImageSteps();
+          if (service != null) {
+            _activeServices.remove(service);
+            service.close();
+          }
+        }
+        _publishPageOutcomes(outcomes);
+      }
+    }
+
+    await Future.wait(
+      List<Future<void>>.generate(perImageConcurrency, (_) => runWorker()),
+    );
+    _checkActive();
+
+    final complete = outcomes.every(
+      (outcome) => outcome.status == OcrPageOutcomeStatus.succeeded,
+    );
+    final combinedText = _combinedPageText(outcomes);
+    final errorMessage = complete ? null : _pageFailureMessage(outcomes);
+    return (
+      OcrResult(
+        text: combinedText,
+        processingTimeMs: processingTimeMs,
+        imageCount: _images.length,
+        isComplete: complete,
+        finishReason: complete ? 'stop' : 'partial',
+      ),
+      errorMessage,
+    );
+  }
+
+  void _publishPageOutcomes(List<OcrPageOutcome> outcomes) {
+    if (_ownsTaskGeneration) {
+      notifier.setOcrPageOutcomes(taskId, List.unmodifiable(outcomes));
+    }
+  }
+
+  String _combinedPageText(List<OcrPageOutcome> outcomes) => outcomes
+          .where((outcome) => outcome.text?.isNotEmpty == true)
+          .map((outcome) {
+        final name = imageNames[outcome.imageIndex]?.trim();
+        final strings = notifier.localizations;
+        final index = (outcome.imageIndex + 1).toString();
+        final label = name == null || name.isEmpty
+            ? strings.ocrResultPageHeading(index)
+            : strings.ocrResultPageHeadingWithName(index, name);
+        return '--- ' + label + ' ---\n' + outcome.text!;
+      }).join('\n\n');
+
+  String _pageFailureMessage(List<OcrPageOutcome> outcomes) {
+    final strings = notifier.localizations;
+    final failures = outcomes
+        .where((outcome) => outcome.status != OcrPageOutcomeStatus.succeeded)
+        .map((outcome) {
+      final index = (outcome.imageIndex + 1).toString();
+      return outcome.status == OcrPageOutcomeStatus.incomplete
+          ? strings.bgTaskOcrPageIncomplete(index)
+          : strings.bgTaskOcrPageFailed(index);
+    }).join(strings.bgTaskOcrPageFailureSeparator);
+    return strings.bgTaskOcrPagesIncomplete(failures);
   }
 }

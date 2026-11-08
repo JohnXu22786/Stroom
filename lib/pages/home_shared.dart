@@ -1,11 +1,22 @@
-String formatDurationShort(String durationStr) {
+import '../l10n/app_localizations.dart';
+
+String formatDurationShort(String durationStr, AppLocalizations l10n) {
   final parts = durationStr.split(':');
   if (parts.length != 3) return durationStr;
-  final h = int.tryParse(parts[0]) ?? 0;
-  final m = int.tryParse(parts[1]) ?? 0;
-  final secPart = parts[2].split('.')[0];
-  final s = int.tryParse(secPart) ?? 0;
-  if (h > 0) return '$h时$m分$s秒';
-  if (m > 0) return '$m分$s秒';
-  return '$s秒';
+  final secondsParts = parts[2].split('.');
+  final isDigits = RegExp(r'^\d+$').hasMatch;
+  if (!isDigits(parts[0]) ||
+      !isDigits(parts[1]) ||
+      !isDigits(secondsParts[0]) ||
+      secondsParts.length > 2 ||
+      (secondsParts.length == 2 && !isDigits(secondsParts[1]))) {
+    return durationStr;
+  }
+  final h = int.tryParse(parts[0]);
+  final m = int.tryParse(parts[1]);
+  final s = int.tryParse(secondsParts[0]);
+  if (h == null || m == null || s == null) return durationStr;
+  if (h > 0) return l10n.homeMediaDurationHoursMinutesSeconds(h, m, s);
+  if (m > 0) return l10n.unifiedDurationMinutesSeconds(m, s);
+  return l10n.unifiedDurationSeconds(s);
 }

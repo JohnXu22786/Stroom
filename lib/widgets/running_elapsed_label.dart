@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../l10n/app_localizations.dart';
+
 /// Shows "已运行 mm:ss" for an in-progress task, ticking every second so
 /// the user can see a slow-but-working task is still alive and decide
 /// whether to keep waiting. Renders nothing while [startedAt] is null.
@@ -67,6 +69,9 @@ class _RunningElapsedLabelState extends State<RunningElapsedLabel> {
     final start = widget.startedAt;
     if (start == null) return const SizedBox.shrink();
     final now = (widget.now ?? DateTime.now)();
-    return Text('已运行 ${format(start, now)}', style: widget.style);
+    return Text(
+      AppLocalizations.of(context)!.runningElapsed(format(start, now)),
+      style: widget.style,
+    );
   }
 }

@@ -86,8 +86,34 @@ extension _ChatServiceParamsExt on ChatService {
     bool reasoning = false,
     String reasoningEffort = 'medium',
     Map<String, String> reasoningParamValues = const {},
+    Map<String, String>? customParamValues,
   }) {
     final result = <String, dynamic>{};
+    final providerFlatJsonMaps = <String>{};
+    final providerJsonMaps = <String>{};
+    final providerNestedParamNames = <String>{};
+    // Discover explicit empty JSON parents across both custom-param layers
+    // before applying either layer. Provider and model params are assembled
+    // separately below, but an invalid descendant in either layer must not
+    // erase a valid `{}` parent from the other layer.
+    final emptyJsonParents = <String>{};
+    for (final customParams in [
+      _providerConfig?.customParams,
+      _modelConfig?.customParams,
+    ]) {
+      if (customParams == null) continue;
+      for (final cp in customParams) {
+        if (cp.type != 'json') continue;
+        try {
+          final value = ChatService.parseJsonValue(cp.defaultValue);
+          if (value is Map && value.isEmpty) {
+            emptyJsonParents.add(cp.paramName);
+          }
+        } on FormatException {
+          // Invalid JSON is handled and logged by the normal coercion path.
+        }
+      }
+    }
 
     // 1. Provider-level params first (defaults)
     // 配置值可能为 null（UI 保存路径的残留/损坏数据）：as num 强转
@@ -118,15 +144,21 @@ extension _ChatServiceParamsExt on ChatService {
       // Provider-level custom params
       // 点号参数名（如 `provider.only`）展开为嵌套 JSON，
       // 与推理参数的 setNestedParam 语义一致。
-      for (final cp in _providerConfig!.customParams) {
-        setNestedParam(
-          result,
-          cp.paramName,
-          ChatService._coerceCustomParam(
-              cp.paramName, cp.type, _customParamEffectiveValue(cp),
-              source: 'provider'),
-        );
-      }
+      _setCustomParams(
+        result,
+        _providerConfig!.customParams,
+        emptyJsonParents: emptyJsonParents,
+        source: 'provider',
+        flatJsonMapNames: providerFlatJsonMaps,
+        jsonMapNames: providerJsonMaps,
+        preserveNestedParamNames: providerNestedParamNames,
+        customParamValues: customParamValues,
+      );
+      providerNestedParamNames.addAll(
+        _providerConfig!.customParams
+            .map((param) => param.paramName)
+            .where((name) => name.contains('.')),
+      );
 
       // Provider-level reasoning params:
       // - The reasoning toggle (isReasoningToggle=true) is ALWAYS sent when
@@ -166,6 +198,7 @@ extension _ChatServiceParamsExt on ChatService {
           toggleValue,
           source: 'provider',
         );
+        providerNestedParamNames.add(providerToggleParam.paramName);
       }
 
       if (reasoning) {
@@ -194,6 +227,7 @@ extension _ChatServiceParamsExt on ChatService {
               selectedValue,
               source: 'provider',
             );
+            providerNestedParamNames.add(rp.paramName);
           }
         }
       }
@@ -225,15 +259,16 @@ extension _ChatServiceParamsExt on ChatService {
 
     // Model-level custom params
     // 点号参数名（如 `provider.only`）展开为嵌套 JSON。
-    for (final cp in _modelConfig!.customParams) {
-      setNestedParam(
-        result,
-        cp.paramName,
-        ChatService._coerceCustomParam(
-            cp.paramName, cp.type, _customParamEffectiveValue(cp),
-            source: 'model'),
-      );
-    }
+    _setCustomParams(
+      result,
+      _modelConfig!.customParams,
+      emptyJsonParents: emptyJsonParents,
+      source: 'model',
+      replaceFlatJsonMapNames: providerFlatJsonMaps,
+      jsonMapNames: providerJsonMaps,
+      preserveNestedParamNames: providerNestedParamNames,
+      customParamValues: customParamValues,
+    );
 
     // Model-level reasoning params:
     // - The reasoning toggle param (isReasoningToggle=true) controls the
@@ -338,4 +373,163 @@ extension _ChatServiceParamsExt on ChatService {
     if (cp.type == 'boolean') return 'true';
     return '';
   }
+
+  /// Apply a layer's custom params while ensuring JSON objects are present
+  /// before any dotted children beneath them. This lets those children merge
+  /// into the object regardless of saved order; their later assignment
+  /// through [setNestedParam] retains the documented nested-path-wins policy.
+  void _setCustomParams(
+    Map<String, dynamic> result,
+    List<CustomParam> customParams, {
+    required Set<String> emptyJsonParents,
+    required String source,
+    Set<String>? flatJsonMapNames,
+    Set<String>? replaceFlatJsonMapNames,
+    Set<String>? jsonMapNames,
+    required Set<String> preserveNestedParamNames,
+    Map<String, String>? customParamValues,
+  }) {
+    if (source == 'model') {
+      preserveNestedParamNames.addAll(
+        customParams
+            .map((param) => param.paramName)
+            .where((name) => name.contains('.')),
+      );
+    }
+
+    bool isJsonParent(CustomParam param) =>
+        param.type == 'json' &&
+        customParams.any(
+          (other) => other.paramName.startsWith('${param.paramName}.'),
+        );
+
+    final jsonParents = customParams.where(isJsonParent).toList()
+      ..sort(
+        (a, b) => a.paramName.split('.').length.compareTo(
+              b.paramName.split('.').length,
+            ),
+      );
+    final orderedParams = [
+      ...jsonParents,
+      ...customParams.where((param) => !isJsonParent(param)),
+    ];
+    for (final cp in orderedParams) {
+      // A null map preserves the historic config-default behavior. Once the
+      // user changes a custom parameter in the composer, the map becomes the
+      // complete enabled/value set and absent names are intentionally off.
+      if (customParamValues != null &&
+          !customParamValues.containsKey(cp.paramName)) {
+        // Mask a dotted path from an already-applied JSON parent (or a
+        // provider default) so an off switch really removes it from the body.
+        setNestedParam(
+          result,
+          cp.paramName,
+          const _OmittedSentinel(),
+          replaceExistingMap: cp.type == 'json' && !cp.paramName.contains('.'),
+        );
+        continue;
+      }
+      if (source == 'model' &&
+          cp.options.isEmpty &&
+          cp.optionOrder.isNotEmpty &&
+          (cp.type == 'string' || cp.type == 'number') &&
+          customParamValues == null) {
+        // An explicit saved option order distinguishes an intentional
+        // all-unchecked selection from legacy params that have no options.
+        // Replace any provider-layer value with an omission marker so the
+        // inherited default is removed from the final request as well.
+        final nestedValues = _nestedParamValues(
+          result,
+          cp.paramName,
+          preserveNestedParamNames,
+        );
+        setNestedParam(
+          result,
+          cp.paramName,
+          nestedValues.isEmpty ? const _OmittedSentinel() : nestedValues,
+          replaceExistingMap: jsonMapNames?.contains(cp.paramName) == true,
+        );
+        continue;
+      }
+      final value = ChatService._coerceCustomParam(
+        cp.paramName,
+        cp.type,
+        customParamValues?[cp.paramName] ?? _customParamEffectiveValue(cp),
+        source: source,
+      );
+      final hasEmptyJsonParent = emptyJsonParents.any(
+        (parent) => cp.paramName.startsWith('$parent.'),
+      );
+      if (value is _OmittedSentinel && hasEmptyJsonParent) {
+        // Do not let an invalid descendant turn an explicitly configured `{}`
+        // into a wrapper that _stripOmitted would mistake for an all-invalid
+        // branch and remove.
+        continue;
+      }
+      setNestedParam(
+        result,
+        cp.paramName,
+        value,
+        replaceExistingMap:
+            replaceFlatJsonMapNames?.contains(cp.paramName) == true &&
+                (cp.type == 'json' ||
+                    !customParams.any(
+                      (other) => other.paramName.startsWith('${cp.paramName}.'),
+                    )),
+      );
+      if (cp.type == 'json' && value is Map && value.isEmpty) {
+        emptyJsonParents.add(cp.paramName);
+      }
+      if (cp.type == 'json' && value is Map) {
+        jsonMapNames?.add(cp.paramName);
+      }
+      if (cp.type == 'json' &&
+          value is Map &&
+          !cp.paramName.contains('.') &&
+          !customParams.any(
+            (other) => other.paramName.startsWith('${cp.paramName}.'),
+          )) {
+        // A model JSON object may replace a provider JSON object with the same
+        // flat key. Maps assembled from dotted descendants keep nested-path
+        // precedence and are deliberately excluded.
+        flatJsonMapNames?.add(cp.paramName);
+      }
+    }
+  }
+}
+
+Map<String, dynamic> _nestedParamValues(
+  Map<String, dynamic> params,
+  String parent,
+  Set<String> nestedParamNames,
+) {
+  dynamic parentValue = params;
+  for (final part in parent.split('.')) {
+    if (parentValue is Map && parentValue.containsKey(part)) {
+      parentValue = parentValue[part];
+    } else {
+      return {};
+    }
+  }
+  if (parentValue is! Map) return {};
+
+  final retained = <String, dynamic>{};
+  for (final name in nestedParamNames) {
+    if (!name.startsWith('$parent.')) continue;
+    final relativeName = name.substring(parent.length + 1);
+    dynamic value = parentValue;
+    var found = true;
+    for (final part in relativeName.split('.')) {
+      if (value is Map && value.containsKey(part)) {
+        value = value[part];
+      } else {
+        found = false;
+        break;
+      }
+    }
+    if (found && value is! _OmittedSentinel) {
+      setNestedParam(retained, relativeName, value);
+    }
+  }
+  return retained;
 }

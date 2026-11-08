@@ -7,6 +7,7 @@ import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:window_manager/window_manager.dart';
 
+import '../l10n/app_localizations.dart';
 import '../services/background_service.dart';
 import '../services/desktop_app_service.dart';
 import '../services/ios_continued_task_service.dart';
@@ -25,12 +26,15 @@ class BackgroundOptimizationPage extends ConsumerStatefulWidget {
 class _BackgroundOptimizationPageState
     extends ConsumerState<BackgroundOptimizationPage>
     with WidgetsBindingObserver {
+  AppLocalizations get _strings => AppLocalizations.of(context)!;
+
   // ── Detection results ────────────────────────────────────────────────
   String _platformName = '';
   IconData _platformIcon = Icons.devices;
   Color _platformColor = Colors.grey;
   String _platformVersion = '';
   bool _isServiceRunning = false;
+  bool _isServiceStatusUnknown = false;
   String _optimizationStatus = '';
   bool _isCheckingService = true;
   bool _isOperating = false;
@@ -44,23 +48,41 @@ class _BackgroundOptimizationPageState
   bool _watchdogEnabled = true;
   bool _coldStartRestoreEnabled = true;
   bool _batteryReminderEnabled = true;
+  Locale? _lastLocale;
 
   // ── Desktop: minimize on close ──────────────────────────────────────
   bool _closeMinimizeEnabled = true;
+  int _closeMinimizeChangeVersion = 0;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    if (isDesktopPlatform()) {
+      DesktopAppService.instance.trayReady.addListener(_onTrayReadyChanged);
+    }
     _detectPlatform();
-    _checkBackgroundService();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _checkBackgroundService();
+    });
     _checkBatteryOptimization();
     _checkExactAlarmStatus();
     _loadStrategyToggles();
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final locale = Localizations.localeOf(context);
+    if (_lastLocale != null && _lastLocale != locale) {
+      _checkBackgroundService();
+    }
+    _lastLocale = locale;
+  }
+
+  @override
   void dispose() {
+    DesktopAppService.instance.trayReady.removeListener(_onTrayReadyChanged);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -78,6 +100,7 @@ class _BackgroundOptimizationPageState
   }
 
   Future<void> _loadStrategyToggles() async {
+    final closeMinimizeChangeVersion = _closeMinimizeChangeVersion;
     final w = await isWatchdogEnabled();
     final c = await isColdStartRestoreEnabled();
     final b = await isBatteryReminderEnabled();
@@ -93,7 +116,9 @@ class _BackgroundOptimizationPageState
         _watchdogEnabled = w;
         _coldStartRestoreEnabled = c;
         _batteryReminderEnabled = b;
-        _closeMinimizeEnabled = closeMinimize;
+        if (closeMinimizeChangeVersion == _closeMinimizeChangeVersion) {
+          _closeMinimizeEnabled = closeMinimize;
+        }
       });
     }
   }
@@ -105,7 +130,7 @@ class _BackgroundOptimizationPageState
       _platformName = 'Web';
       _platformIcon = Icons.web;
       _platformColor = Colors.blue;
-      _platformVersion = '浏览器环境';
+      _platformVersion = '';
       return;
     }
 
@@ -166,21 +191,33 @@ class _BackgroundOptimizationPageState
       // 桌面/Web 没有前台服务：直接给出平台对应的真实状态，
       // 不要调用仅 Android/iOS 可用的插件（会抛异常显示误导性文案）。
       _isServiceRunning = false;
+      _isServiceStatusUnknown = false;
       if (isDesktopPlatform()) {
-        _optimizationStatus = DesktopAppService.instance.isTrayReady
-            ? '桌面端使用托盘驻留保活'
-            : '桌面端托盘暂不可用，关闭窗口将直接退出';
+        final closeMinimizeChangeVersion = _closeMinimizeChangeVersion;
+        final closeMinimize = await isDesktopCloseMinimizeEnabled();
+        if (!mounted) return;
+        if (closeMinimizeChangeVersion == _closeMinimizeChangeVersion) {
+          _closeMinimizeEnabled = closeMinimize;
+        }
+        _optimizationStatus = _getDesktopOptimizationStatus();
       } else {
-        _optimizationStatus = '当前平台不支持后台服务';
+        _optimizationStatus = _strings.backgroundOptimizationUnsupportedStatus;
       }
     } else {
       try {
         final service = FlutterBackgroundService();
-        _isServiceRunning = await service.isRunning();
-        _optimizationStatus = _isServiceRunning ? '后台服务运行中' : '后台服务未启动';
+        final isServiceRunning = await service.isRunning();
+        if (!mounted) return;
+        _isServiceRunning = isServiceRunning;
+        _isServiceStatusUnknown = false;
+        _optimizationStatus = _isServiceRunning
+            ? _strings.backgroundOptimizationServiceRunning
+            : _strings.backgroundOptimizationServiceStopped;
       } catch (_) {
+        if (!mounted) return;
         _isServiceRunning = false;
-        _optimizationStatus = '无法检测后台服务状态';
+        _isServiceStatusUnknown = true;
+        _optimizationStatus = _strings.backgroundOptimizationServiceCheckFailed;
       }
     }
 
@@ -189,6 +226,23 @@ class _BackgroundOptimizationPageState
         _isCheckingService = false;
       });
     }
+  }
+
+  void _onTrayReadyChanged() {
+    if (!mounted || !isDesktopPlatform()) return;
+    setState(() {
+      _optimizationStatus = _getDesktopOptimizationStatus();
+    });
+  }
+
+  String _getDesktopOptimizationStatus() {
+    if (!DesktopAppService.instance.isTrayReady) {
+      return _strings.backgroundOptimizationDesktopTrayUnavailable;
+    }
+    if (!_closeMinimizeEnabled) {
+      return _strings.backgroundOptimizationDesktopCloseExits;
+    }
+    return _strings.backgroundOptimizationDesktopTrayKeepsAlive;
   }
 
   // ── Battery Optimization Check ───────────────────────────────────────
@@ -265,7 +319,7 @@ class _BackgroundOptimizationPageState
     if (!ok) {
       if (mounted) {
         setState(() {
-          _optimizationStatus = '启动服务失败';
+          _optimizationStatus = _strings.backgroundOptimizationStartFailed;
           _isOperating = false;
         });
       }
@@ -289,7 +343,7 @@ class _BackgroundOptimizationPageState
     if (!ok) {
       if (mounted) {
         setState(() {
-          _optimizationStatus = '停止服务失败';
+          _optimizationStatus = _strings.backgroundOptimizationStopFailed;
           _isOperating = false;
         });
       }
@@ -313,7 +367,7 @@ class _BackgroundOptimizationPageState
     if (!ok) {
       if (mounted) {
         setState(() {
-          _optimizationStatus = '重启服务失败';
+          _optimizationStatus = _strings.backgroundOptimizationRestartFailed;
           _isOperating = false;
         });
       }
@@ -335,17 +389,22 @@ class _BackgroundOptimizationPageState
     final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('后台运行优化'),
+        title: Text(_strings.backgroundOptimizationTitle),
         centerTitle: true,
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          _buildSectionHeader('系统环境检测', theme),
+          _buildSectionHeader(
+            _strings.backgroundOptimizationEnvironment,
+            theme,
+          ),
           const SizedBox(height: 8),
           _buildPlatformDetectionCard(theme),
+          const SizedBox(height: 8),
+          _buildPlatformTutorialEntry(theme),
           const SizedBox(height: 24),
-          _buildSectionHeader('后台优化检测', theme),
+          _buildSectionHeader(_strings.backgroundOptimizationChecks, theme),
           const SizedBox(height: 8),
           _buildOptimizationStatusCard(theme),
           const SizedBox(height: 24),
@@ -355,23 +414,16 @@ class _BackgroundOptimizationPageState
           // Web 没有任何保活策略（移动端策略与桌面端策略都不适用），
           // 此时不显示空的「保活策略」标题。
           if (_hasKeepAliveStrategies) ...[
-            _buildSectionHeader('保活策略', theme),
+            _buildSectionHeader(
+              _strings.backgroundOptimizationKeepAliveStrategies,
+              theme,
+            ),
             const SizedBox(height: 8),
             _buildStrategyTogglesCard(theme),
             _buildIosBackgroundNoteCard(theme),
             _buildDesktopKeepAliveCard(theme),
             const SizedBox(height: 24),
           ],
-          _buildSectionHeader('平台教程', theme),
-          const SizedBox(height: 8),
-          _buildDescription(
-            '选择您的操作系统查看详细的后台运行优化教程。'
-            '不同系统的设置方式有所不同，请根据您的设备选择对应教程。',
-            theme,
-          ),
-          const SizedBox(height: 12),
-          ..._buildPlatformTutorialCards(),
-          const SizedBox(height: 24),
         ],
       ),
     );
@@ -393,11 +445,7 @@ class _BackgroundOptimizationPageState
                 borderRadius: BorderRadius.circular(28),
               ),
               alignment: Alignment.center,
-              child: Icon(
-                _platformIcon,
-                size: 32,
-                color: _platformColor,
-              ),
+              child: Icon(_platformIcon, size: 32, color: _platformColor),
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -412,7 +460,9 @@ class _BackgroundOptimizationPageState
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    _platformVersion,
+                    kIsWeb
+                        ? _strings.backgroundOptimizationBrowserEnvironment
+                        : _platformVersion,
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
@@ -420,11 +470,7 @@ class _BackgroundOptimizationPageState
                 ],
               ),
             ),
-            Icon(
-              Icons.check_circle,
-              color: _platformColor,
-              size: 28,
-            ),
+            Icon(Icons.check_circle, color: _platformColor, size: 28),
           ],
         ),
       ),
@@ -457,7 +503,9 @@ class _BackgroundOptimizationPageState
                       ),
                 const SizedBox(width: 12),
                 Text(
-                  _isCheckingService ? '正在检测...' : _optimizationStatus,
+                  _isCheckingService
+                      ? _strings.backgroundOptimizationDetecting
+                      : _optimizationStatus,
                   style: theme.textTheme.titleSmall?.copyWith(
                     fontWeight: FontWeight.w600,
                     color: _isServiceRunning ? Colors.green : Colors.orange,
@@ -487,11 +535,12 @@ class _BackgroundOptimizationPageState
                             ? const SizedBox(
                                 width: 18,
                                 height: 18,
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               )
                             : const Icon(Icons.stop, size: 18),
-                        label: const Text('停止服务'),
+                        label: Text(_strings.backgroundOptimizationStopService),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -502,11 +551,14 @@ class _BackgroundOptimizationPageState
                             ? const SizedBox(
                                 width: 18,
                                 height: 18,
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               )
                             : const Icon(Icons.restart_alt, size: 18),
-                        label: const Text('重新启动服务'),
+                        label: Text(
+                          _strings.backgroundOptimizationRestartService,
+                        ),
                       ),
                     ),
                   ],
@@ -523,7 +575,7 @@ class _BackgroundOptimizationPageState
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Icon(Icons.play_arrow, size: 18),
-                    label: const Text('启动服务'),
+                    label: Text(_strings.backgroundOptimizationStartService),
                   ),
                 ),
               // Re-detect button
@@ -533,7 +585,7 @@ class _BackgroundOptimizationPageState
                 child: OutlinedButton.icon(
                   onPressed: _isOperating ? null : _checkBackgroundService,
                   icon: const Icon(Icons.refresh, size: 18),
-                  label: const Text('重新检测'),
+                  label: Text(_strings.backgroundOptimizationRedetect),
                 ),
               ),
             ],
@@ -542,12 +594,15 @@ class _BackgroundOptimizationPageState
               const SizedBox(height: 16),
               Row(
                 children: [
-                  Icon(Icons.info_outline,
-                      size: 18, color: theme.colorScheme.onSurfaceVariant),
+                  Icon(
+                    Icons.info_outline,
+                    size: 18,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      '当前平台不支持后台服务控制。',
+                      _strings.backgroundOptimizationUnsupportedControl,
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
@@ -602,10 +657,10 @@ class _BackgroundOptimizationPageState
                 Expanded(
                   child: Text(
                     _isCheckingBattery
-                        ? '正在检测电池优化状态...'
+                        ? _strings.backgroundOptimizationCheckingBattery
                         : _isIgnoringBattery
-                            ? '已忽略电池优化'
-                            : '未忽略电池优化 — 后台可能被杀',
+                            ? _strings.backgroundOptimizationBatteryIgnored
+                            : _strings.backgroundOptimizationBatteryMayKill,
                     style: theme.textTheme.bodySmall?.copyWith(
                       fontWeight: FontWeight.w500,
                     ),
@@ -620,7 +675,7 @@ class _BackgroundOptimizationPageState
                 child: OutlinedButton.icon(
                   onPressed: _requestBatteryExemption,
                   icon: const Icon(Icons.battery_charging_full, size: 18),
-                  label: const Text('忽略电池优化'),
+                  label: Text(_strings.backgroundOptimizationIgnoreBattery),
                 ),
               ),
             ],
@@ -632,7 +687,7 @@ class _BackgroundOptimizationPageState
                 child: OutlinedButton.icon(
                   onPressed: _requestExactAlarm,
                   icon: const Icon(Icons.alarm_add, size: 18),
-                  label: const Text('允许精确闹钟（保活更可靠）'),
+                  label: Text(_strings.backgroundOptimizationExactAlarm),
                 ),
               ),
             ],
@@ -671,20 +726,36 @@ class _BackgroundOptimizationPageState
       tiles.addAll([
         _buildToggleTile(
           theme: theme,
-          title: 'AlarmManager 看门狗',
-          detail: '启用后，Android 系统会每 5 分钟用原生闹钟检查后台服务是否还活着。'
-              '如果进程被系统杀掉，闹钟会触发自动重启。'
-              '\n\n闹钟在设备休眠（Doze）模式下依然生效，'
-              '重启后也会自动重新调度。'
-              '\n\n适用场景：对后台任务要求极高的用户。'
-              '\n耗电影响：极低（每次仅短暂唤醒检查一次）。',
+          title: _strings.backgroundOptimizationWatchdogTitle,
+          detail: _strings.backgroundOptimizationWatchdogDetail,
           value: _watchdogEnabled,
-          onChanged: (v) {
-            setState(() => _watchdogEnabled = v);
-            setWatchdogEnabled(v);
-            if (v && _isServiceRunning) {
-              startBackgroundService();
-            } else if (!v) {
+          onChanged: (v) async {
+            final saved = await setWatchdogEnabled(v);
+            if (!saved) {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      _strings.backgroundOptimizationSaveWatchdogFailed,
+                    ),
+                  ),
+                );
+              }
+              return;
+            }
+            if (mounted) setState(() => _watchdogEnabled = v);
+            if (v) {
+              final activated = await rearmBackgroundServiceWatchdog();
+              if (!activated && mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      _strings.backgroundOptimizationWatchdogActivationFailed,
+                    ),
+                  ),
+                );
+              }
+            } else {
               disableKeepAlive();
             }
           },
@@ -696,16 +767,24 @@ class _BackgroundOptimizationPageState
     tiles.addAll([
       _buildToggleTile(
         theme: theme,
-        title: '冷启动自动恢复',
-        detail: '启用后，每次重新打开 App 时，会自动检测并恢复之前正在运行的后台服务。'
-            '\n\n如果 App 进程被系统或用户手动杀掉，'
-            '下次打开 App 时后台服务会自动重启，无需手动操作。'
-            '\n\n适用场景：所有用户都建议开启。'
-            '\n耗电影响：无（仅在 App 启动时检查一次）。',
+        title: _strings.backgroundOptimizationColdStartTitle,
+        detail: _strings.backgroundOptimizationColdStartDetail,
         value: _coldStartRestoreEnabled,
-        onChanged: (v) {
-          setState(() => _coldStartRestoreEnabled = v);
-          setColdStartRestoreEnabled(v);
+        onChanged: (v) async {
+          final saved = await setColdStartRestoreEnabled(v);
+          if (!saved) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    _strings.backgroundOptimizationSaveColdStartFailed,
+                  ),
+                ),
+              );
+            }
+            return;
+          }
+          if (mounted) setState(() => _coldStartRestoreEnabled = v);
         },
       ),
     ]);
@@ -715,15 +794,8 @@ class _BackgroundOptimizationPageState
         const Divider(height: 1, indent: 16, endIndent: 16),
         _buildToggleTile(
           theme: theme,
-          title: '电池优化提醒',
-          detail: '启用后，本页面会显示电池优化状态卡片。'
-              '如果检测到 App 未被添加到省电白名单，'
-              '会提供一键跳转至系统设置进行豁免。'
-              '\n\n电池优化是安卓系统省电机制（Doze），'
-              '会限制后台应用的运行。添加到白名单后，'
-              '系统不会因省电而杀掉本 App。'
-              '\n\n适用场景：关闭本开关仅隐藏提醒卡片，'
-              '不影响实际的电池优化豁免状态。',
+          title: _strings.backgroundOptimizationBatteryReminderTitle,
+          detail: _strings.backgroundOptimizationBatteryReminderDetail,
           value: _batteryReminderEnabled,
           onChanged: (v) {
             setState(() => _batteryReminderEnabled = v);
@@ -742,10 +814,13 @@ class _BackgroundOptimizationPageState
             // Section description
             Padding(
               padding: const EdgeInsets.only(
-                  left: 16, right: 16, top: 12, bottom: 4),
+                left: 16,
+                right: 16,
+                top: 12,
+                bottom: 4,
+              ),
               child: Text(
-                '以下策略可独立开关。默认全部启用以获得最强保活效果。'
-                '关闭某项仅影响该策略，不会影响后台服务本身的运行。',
+                _strings.backgroundOptimizationStrategyIntro,
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -789,7 +864,7 @@ class _BackgroundOptimizationPageState
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'iOS 后台任务提示',
+                    _strings.backgroundOptimizationIosNoteTitle,
                     style: theme.textTheme.titleSmall,
                   ),
                 ),
@@ -798,22 +873,15 @@ class _BackgroundOptimizationPageState
             const SizedBox(height: 8),
             Text(
               supported
-                  ? '当前系统（iOS 26 及以上）支持任务常驻后台：'
-                      '任务运行期间切换 App 或锁屏，任务通常会继续执行'
-                      '（系统资源紧张时可能终止），'
-                      '并可在锁屏界面查看进度。'
-                  : '当前系统（低于 iOS 26）不支持任务常驻后台。'
-                      '任务运行时请每隔几分钟返回一次 App'
-                      '（建议 5–10 分钟，具体由系统决定），'
-                      '刷新后台执行时间，防止任务被系统挂起。',
+                  ? _strings.backgroundOptimizationIosSupported
+                  : _strings.backgroundOptimizationIosUnsupported,
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
             const SizedBox(height: 8),
             Text(
-              '注意：所有 iOS 版本都请勿在 App 切换器中划掉 Stroom——'
-              '划掉会立即终止所有运行中的任务。',
+              _strings.backgroundOptimizationIosWarning,
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.error,
               ),
@@ -839,10 +907,13 @@ class _BackgroundOptimizationPageState
           children: [
             Padding(
               padding: const EdgeInsets.only(
-                  left: 16, right: 16, top: 12, bottom: 4),
+                left: 16,
+                right: 16,
+                top: 12,
+                bottom: 4,
+              ),
               child: Text(
-                '桌面端没有移动系统的进程保活机制，'
-                '但可以让应用在关闭窗口后继续运行。',
+                _strings.backgroundOptimizationDesktopIntro,
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -851,19 +922,19 @@ class _BackgroundOptimizationPageState
             const Divider(height: 1, indent: 16, endIndent: 16),
             _buildToggleTile(
               theme: theme,
-              title: '关闭窗口时最小化',
-              detail: '启用后，点击窗口关闭按钮不会退出应用，'
-                  '而是隐藏到系统托盘继续运行，后台任务不受影响。'
-                  '\n\n可从托盘图标（或右键菜单「显示主窗口」）恢复窗口；'
-                  '需要真正退出时，点击下方「完全退出应用」按钮。'
-                  '\n\n适用场景：所有桌面用户都建议开启。',
+              title: _strings.backgroundOptimizationCloseMinimizeTitle,
+              detail: _strings.backgroundOptimizationCloseMinimizeDetail,
               value: _closeMinimizeEnabled,
               onChanged: (v) async {
                 // 拦截保持开启（关闭行为由 Application 层决策）。
                 _ensureWindowCloseIntercepted();
                 final saved = await setDesktopCloseMinimizeEnabled(v);
                 if (!saved || !mounted) return;
-                setState(() => _closeMinimizeEnabled = v);
+                setState(() {
+                  _closeMinimizeChangeVersion++;
+                  _closeMinimizeEnabled = v;
+                  _optimizationStatus = _getDesktopOptimizationStatus();
+                });
               },
             ),
             const Divider(height: 1, indent: 16, endIndent: 16),
@@ -874,7 +945,7 @@ class _BackgroundOptimizationPageState
                 child: OutlinedButton.icon(
                   onPressed: _quitDesktopApp,
                   icon: const Icon(Icons.power_settings_new, size: 18),
-                  label: const Text('完全退出应用'),
+                  label: Text(_strings.backgroundOptimizationQuitApp),
                 ),
               ),
             ),
@@ -926,8 +997,10 @@ class _BackgroundOptimizationPageState
       title: Row(
         children: [
           Expanded(
-            child: Text(title,
-                style: const TextStyle(fontWeight: FontWeight.w500)),
+            child: Text(
+              title,
+              style: const TextStyle(fontWeight: FontWeight.w500),
+            ),
           ),
           InkWell(
             borderRadius: BorderRadius.circular(12),
@@ -963,7 +1036,7 @@ class _BackgroundOptimizationPageState
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('知道了'),
+            child: Text(_strings.backgroundOptimizationGotIt),
           ),
         ],
       ),
@@ -992,7 +1065,7 @@ class _BackgroundOptimizationPageState
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Web 后台任务提示',
+                    _strings.backgroundOptimizationWebNoteTitle,
                     style: theme.textTheme.titleSmall,
                   ),
                 ),
@@ -1000,9 +1073,7 @@ class _BackgroundOptimizationPageState
             ),
             const SizedBox(height: 8),
             Text(
-              '浏览器没有应用常驻后台的机制。关闭标签页、刷新页面，'
-              '或浏览器冻结长时间不活跃的后台标签页，都会立即中断'
-              '运行中的任务。任务运行时请保持 Stroom 标签页打开并处于前台。',
+              _strings.backgroundOptimizationWebNote,
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -1013,91 +1084,44 @@ class _BackgroundOptimizationPageState
     );
   }
 
-  // ── Platform Tutorial Cards ──────────────────────────────────────────
-
-  List<Widget> _buildPlatformTutorialCards() {
-    final platforms = [
-      PlatformTutorialConfig(
-        platformName: 'Android',
-        icon: Icons.android,
-        color: Colors.green,
-      ),
-      PlatformTutorialConfig(
-        platformName: 'iOS',
-        icon: Icons.phone_iphone,
-        color: Colors.grey,
-      ),
-      PlatformTutorialConfig(
-        platformName: 'Windows',
-        icon: Icons.desktop_windows,
-        color: Colors.blue,
-      ),
-      PlatformTutorialConfig(
-        platformName: 'macOS',
-        icon: Icons.desktop_mac,
-        color: Colors.blueGrey,
-      ),
-      PlatformTutorialConfig(
-        platformName: 'Linux',
-        icon: Icons.terminal,
-        color: Colors.orange,
-      ),
-      PlatformTutorialConfig(
-        platformName: 'Web',
-        icon: Icons.language,
-        color: Colors.purple,
-      ),
-    ];
-
-    return platforms.map((config) {
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: Card(
-          child: ListTile(
-            leading: Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: config.color.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              alignment: Alignment.center,
-              child: Icon(config.icon, color: config.color, size: 24),
-            ),
-            title: Text(
-              config.platformName,
-              style: const TextStyle(fontWeight: FontWeight.w500),
-            ),
-            subtitle: Text('${config.platformName} 后台运行优化教程'),
-            trailing: const Icon(Icons.chevron_right),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 4,
-            ),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => PlatformTutorialPage(config: config),
-                ),
-              );
-            },
-          ),
+  Widget _buildPlatformTutorialEntry(ThemeData theme) {
+    return Card(
+      child: ListTile(
+        leading: Icon(
+          Icons.menu_book_outlined,
+          color: theme.colorScheme.primary,
         ),
-      );
-    }).toList();
+        title: Text(_strings.backgroundOptimizationTutorial),
+        subtitle: Text(_strings.backgroundOptimizationTutorialDescription),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const PlatformTutorialSelectionPage(),
+            ),
+          );
+        },
+      ),
+    );
   }
 
   // ── Status Description ──────────────────────────────────────────────
 
   String _getStatusDescription() {
-    if (_isCheckingService) return '正在检测后台服务状态...';
+    if (_isCheckingService)
+      return _strings.backgroundOptimizationServiceCheckingDescription;
 
-    if (_isServiceRunning) return '后台服务正在运行，任务将在后台正常执行。';
+    if (_isServiceStatusUnknown) {
+      return _strings.backgroundOptimizationServiceUnknown;
+    }
+
+    if (_isServiceRunning)
+      return _strings.backgroundOptimizationServiceRunningDescription;
 
     // Platform-specific messaging when service is not running
     if (kIsWeb) {
-      return 'Web 浏览器环境不支持后台服务运行。请保持页面打开以继续任务。';
+      return _strings.backgroundOptimizationWebServiceUnsupported;
     }
     if (defaultTargetPlatform == TargetPlatform.linux ||
         defaultTargetPlatform == TargetPlatform.macOS ||
@@ -1106,24 +1130,21 @@ class _BackgroundOptimizationPageState
       // （窗口隐藏后将无法找回）。
       if (!DesktopAppService.instance.isTrayReady) {
         if (defaultTargetPlatform == TargetPlatform.linux) {
-          return '桌面平台托盘暂不可用（Linux 构建需安装 '
-              'libayatana-appindicator3-dev），关闭窗口将直接退出应用。';
+          return _strings.backgroundOptimizationLinuxTrayUnavailable;
         }
-        return '桌面平台托盘暂不可用，关闭窗口将直接退出应用。';
+        return _strings.backgroundOptimizationDesktopTrayUnavailableDescription;
+      }
+      if (!_closeMinimizeEnabled) {
+        return _strings.backgroundOptimizationDesktopExitDescription;
       }
       if (defaultTargetPlatform == TargetPlatform.linux) {
         // Linux appindicator 左键点击弹出的是菜单而非恢复窗口事件，
         // 恢复窗口只能通过托盘菜单项完成。
-        return '桌面平台已启用托盘驻留：关闭窗口后应用会隐藏到系统托盘继续运行，'
-            '从托盘菜单选择「显示主窗口」即可恢复窗口。'
-            '如需彻底退出，请从托盘菜单选择「退出 Stroom」。';
+        return _strings.backgroundOptimizationLinuxTrayDescription;
       }
-      return '桌面平台已启用托盘驻留：关闭窗口后应用会最小化到系统托盘继续运行，'
-          '点击托盘图标（或托盘菜单「显示主窗口」）即可恢复窗口。'
-          '如需彻底退出，请从托盘菜单选择「退出 Stroom」。';
+      return _strings.backgroundOptimizationDesktopTrayDescription;
     }
-    return '后台服务未启动。请点击下方「启动服务」按钮启动后台服务，'
-        '或查看平台教程了解如何优化后台运行设置。';
+    return _strings.backgroundOptimizationServiceNotRunningDescription;
   }
 
   // ── Helpers ──────────────────────────────────────────────────────────

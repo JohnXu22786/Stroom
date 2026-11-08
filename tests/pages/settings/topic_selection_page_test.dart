@@ -3,12 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/models/assistant.dart';
 import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/pages/topic_selection_page.dart';
 import 'package:stroom/providers/assistant_provider.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/widgets/temporary_countdown_capsule.dart';
+import 'package:stroom/widgets/search_panel.dart';
 
 /// Creates a test app simulating the topic selection page.
 Widget createTestApp({
@@ -16,41 +18,7 @@ Widget createTestApp({
   String? selectedAssistantId,
   List<Conversation>? conversations,
   String? activeConversationId,
-}) {
-  SharedPreferences.setMockInitialValues({});
-  return ProviderScope(
-    overrides: [
-      if (assistants != null)
-        assistantProvider.overrideWith((ref) {
-          final notifier = AssistantsNotifier();
-          notifier.state = assistants;
-          return notifier;
-        }),
-      if (selectedAssistantId != null)
-        selectedAssistantIdProvider.overrideWith((ref) => selectedAssistantId),
-      conversationsProvider.overrideWith((ref) {
-        final notifier = ConversationsNotifier(ref);
-        if (conversations != null) {
-          notifier.state = conversations;
-        }
-        return notifier;
-      }),
-      if (activeConversationId != null)
-        activeConversationIdProvider.overrideWith(
-          (ref) => activeConversationId,
-        ),
-    ],
-    child: const MaterialApp(home: TopicSelectionPage()),
-  );
-}
-
-/// Creates a test app simulating the chat tab's nested Navigator structure,
-/// starting at the (merged) TopicSelectionPage with pre-selected assistant.
-Widget createMergedTopicTestApp({
-  List<Assistant>? assistants,
-  String? selectedAssistantId,
-  List<Conversation>? conversations,
-  String? activeConversationId,
+  Locale locale = const Locale('zh', 'CN'),
 }) {
   SharedPreferences.setMockInitialValues({});
   return ProviderScope(
@@ -76,6 +44,50 @@ Widget createMergedTopicTestApp({
         ),
     ],
     child: MaterialApp(
+      locale: locale,
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      home: TopicSelectionPage(),
+    ),
+  );
+}
+
+/// Creates a test app simulating the chat tab's nested Navigator structure,
+/// starting at the (merged) TopicSelectionPage with pre-selected assistant.
+Widget createMergedTopicTestApp({
+  List<Assistant>? assistants,
+  String? selectedAssistantId,
+  List<Conversation>? conversations,
+  String? activeConversationId,
+  Locale locale = const Locale('zh', 'CN'),
+}) {
+  SharedPreferences.setMockInitialValues({});
+  return ProviderScope(
+    overrides: [
+      if (assistants != null)
+        assistantProvider.overrideWith((ref) {
+          final notifier = AssistantsNotifier();
+          notifier.state = assistants;
+          return notifier;
+        }),
+      if (selectedAssistantId != null)
+        selectedAssistantIdProvider.overrideWith((ref) => selectedAssistantId),
+      conversationsProvider.overrideWith((ref) {
+        final notifier = ConversationsNotifier(ref);
+        if (conversations != null) {
+          notifier.state = conversations;
+        }
+        return notifier;
+      }),
+      if (activeConversationId != null)
+        activeConversationIdProvider.overrideWith(
+          (ref) => activeConversationId,
+        ),
+    ],
+    child: MaterialApp(
+      locale: locale,
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
       home: Navigator(
         initialRoute: '/topic-selection',
         onGenerateRoute: (settings) {
@@ -105,6 +117,60 @@ Widget createMergedTopicTestApp({
 }
 
 void main() {
+  group('Topic selection localization', () {
+    for (final locale in [const Locale('en', 'US'), const Locale('zh', 'CN')]) {
+      testWidgets('localizes selection controls and empty state for $locale', (
+        tester,
+      ) async {
+        await tester.pumpWidget(createTestApp(
+          locale: locale,
+          assistants: [
+            Assistant(
+              id: 'localized-assistant',
+              name: 'Assistant',
+              prompt: 'Keep this prompt unchanged',
+              emoji: '🤖',
+            ),
+          ],
+          selectedAssistantId: 'localized-assistant',
+        ));
+        await tester.pump();
+
+        final l10n = AppLocalizations.of(
+          tester.element(find.byType(TopicSelectionPage)),
+        )!;
+        expect(find.text(l10n.conversationSelectTitle), findsOneWidget);
+        expect(find.byTooltip(l10n.conversationSearch), findsOneWidget);
+        expect(find.text(l10n.topicSelectionEmptyTitle), findsOneWidget);
+        expect(find.text(l10n.topicSelectionEmptyMessage), findsOneWidget);
+        expect(
+          find.widgetWithText(FilledButton, l10n.topicSelectionNewTopic),
+          findsOneWidget,
+        );
+
+        await tester.tap(find.byTooltip(l10n.conversationSearch));
+        await tester.pumpAndSettle();
+        expect(find.text(l10n.searchPanelHint), findsOneWidget);
+      });
+    }
+  });
+
+  testWidgets('search panel uses localized labels', (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      locale: const Locale('en', 'US'),
+      home: Scaffold(
+        body: SearchPanel(
+          conversations: const [],
+          onConversationSelected: (_) {},
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('Search conversations'), findsOneWidget);
+    expect(find.text('Enter a keyword...'), findsOneWidget);
+  });
   testWidgets('temporary conversation shows countdown before its title',
       (tester) async {
     final temporaryTopic = Conversation(

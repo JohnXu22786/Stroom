@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:stroom/pages/chat/composer/chat_setting_panels.dart';
 import 'package:stroom/providers/provider_config.dart';
 
@@ -26,6 +28,14 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Scaffold(
             body: Builder(
               builder: (context) {
@@ -79,6 +89,14 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Scaffold(
             body: Builder(
               builder: (context) {
@@ -128,6 +146,14 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Scaffold(
             body: Builder(
               builder: (context) {
@@ -180,6 +206,14 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Scaffold(
             body: Builder(
               builder: (context) {
@@ -229,6 +263,14 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Scaffold(
             body: Builder(
               builder: (context) {
@@ -280,6 +322,14 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Scaffold(
             body: Builder(
               builder: (context) {
@@ -322,6 +372,14 @@ void main() {
         (tester) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Scaffold(
             body: Builder(
               builder: (context) {
@@ -371,6 +429,14 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Scaffold(
             body: Builder(
               builder: (context) {
@@ -418,6 +484,14 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Scaffold(
             body: Builder(
               builder: (context) {

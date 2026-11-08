@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:stroom/pages/chat/dialogs/error_detail_dialog.dart';
 
 void main() {
@@ -8,6 +10,14 @@ void main() {
         (tester) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () => showDataDetailDialog(
@@ -28,10 +38,389 @@ void main() {
       expect(find.text('No detail data available'), findsOneWidget);
     });
 
+    testWidgets('OCR diagnostics show safe summary fields only',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showDataDetailDialog(
+                context: context,
+                rawRequest: {
+                  'host': 'api.example.com',
+                  'method': 'POST',
+                  'requestId': 'req-123',
+                  'durationMs': 37,
+                  'imageCount': 2,
+                  'imageBytes': 8192,
+                  'body': {
+                    'Authorization': 'Bearer secret-token',
+                    'image': 'data:image/png;base64,private-image-data',
+                  },
+                },
+                rawResponse: {
+                  'statusCode': 502,
+                  'finishReason': 'length',
+                  'errorType': 'DioException',
+                  'data': {'secret': 'private-response-body'},
+                },
+                isOcrDiagnostics: true,
+              ),
+              child: const Text('Show'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Show'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('OCR Diagnostics'), findsOneWidget);
+      expect(find.text('Request Body'), findsNothing);
+      await tester.tap(find.text('OCR Diagnostics'));
+      await tester.pumpAndSettle();
+
+      final displayed =
+          tester.widget<SelectableText>(find.byType(SelectableText));
+      expect(displayed.data, contains('api.example.com'));
+      expect(displayed.data, contains('req-123'));
+      expect(displayed.data, contains('502'));
+      expect(displayed.data, contains('length'));
+      expect(displayed.data, contains('37'));
+      expect(displayed.data, isNot(contains('secret-token')));
+      expect(displayed.data, isNot(contains('private-image-data')));
+      expect(displayed.data, isNot(contains('private-response-body')));
+    });
+
+    testWidgets('OCR diagnostics exclude credentials embedded in host and ID',
+        (tester) async {
+      const credential = 'opaque-user-secret-173';
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showDataDetailDialog(
+                context: context,
+                rawRequest: {
+                  'host': 'https://$credential.api.test.com/v1',
+                  'headers': {'X-Auth-Token': credential},
+                },
+                rawResponse: {
+                  'statusCode': 401,
+                  'requestId': credential,
+                },
+                isOcrDiagnostics: true,
+              ),
+              child: const Text('Show'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Show'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('OCR Diagnostics'));
+      await tester.pumpAndSettle();
+
+      final displayed =
+          tester.widget<SelectableText>(find.byType(SelectableText));
+      expect(displayed.data, isNot(contains(credential)));
+      expect(displayed.data, isNot(contains('.api.test.com')));
+      expect(displayed.data, contains('401'));
+    });
+
+    testWidgets('OCR diagnostics exclude credentials embedded in request URL',
+        (tester) async {
+      const credential = 'opaque-secret-key-191';
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showDataDetailDialog(
+                context: context,
+                rawRequest: {
+                  'url': 'https://ocr.test/v1?secretKey=$credential',
+                },
+                rawResponse: {
+                  'statusCode': 401,
+                  'requestId': credential,
+                },
+                isOcrDiagnostics: true,
+              ),
+              child: const Text('Show'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Show'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('OCR Diagnostics'));
+      await tester.pumpAndSettle();
+
+      final displayed =
+          tester.widget<SelectableText>(find.byType(SelectableText));
+      expect(displayed.data, isNot(contains(credential)));
+      expect(displayed.data, contains('401'));
+    });
+
+    testWidgets(
+        'OCR diagnostics exclude URL credentials with a malformed query component',
+        (tester) async {
+      const credential = 'opaque-secret';
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showDataDetailDialog(
+                context: context,
+                rawRequest: {
+                  'url': 'https://ocr.test/v1?api_key=$credential&other=%FF',
+                },
+                rawResponse: {
+                  'statusCode': 502,
+                  'requestId': credential,
+                },
+                isOcrDiagnostics: true,
+              ),
+              child: const Text('Show'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Show'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('OCR Diagnostics'));
+      await tester.pumpAndSettle();
+
+      final displayed =
+          tester.widget<SelectableText>(find.byType(SelectableText));
+      expect(displayed.data, contains('502'));
+      expect(displayed.data, isNot(contains(credential)));
+    });
+
+    testWidgets('OCR diagnostics redact legacy masked Authorization keys',
+        (tester) async {
+      const credential = 'opaque-user-secret-174';
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showDataDetailDialog(
+                context: context,
+                rawRequest: {
+                  'host': 'https://$credential.api.test.com/v1',
+                  'headers': {'Authorization': 'Bearer opaque-u...t-174'},
+                },
+                rawResponse: {
+                  'statusCode': 401,
+                  'requestId': credential,
+                },
+                isOcrDiagnostics: true,
+              ),
+              child: const Text('Show'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Show'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('OCR Diagnostics'));
+      await tester.pumpAndSettle();
+
+      final displayed =
+          tester.widget<SelectableText>(find.byType(SelectableText));
+      expect(displayed.data, isNot(contains(credential)));
+      expect(displayed.data, isNot(contains('.api.test.com')));
+      expect(displayed.data, contains('401'));
+    });
+
+    testWidgets('OCR diagnostics redact short legacy masked Authorization keys',
+        (tester) async {
+      const credential = 'abcd123456789';
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showDataDetailDialog(
+                context: context,
+                rawRequest: {
+                  'headers': {'Authorization': 'Bearer abcd****'},
+                },
+                rawResponse: {
+                  'statusCode': 401,
+                  'requestId': credential,
+                },
+                isOcrDiagnostics: true,
+              ),
+              child: const Text('Show'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Show'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('OCR Diagnostics'));
+      await tester.pumpAndSettle();
+
+      final displayed =
+          tester.widget<SelectableText>(find.byType(SelectableText));
+      expect(displayed.data, isNot(contains(credential)));
+      expect(displayed.data, contains('401'));
+    });
+
+    testWidgets('OCR diagnostics redact tiny legacy masked Authorization keys',
+        (tester) async {
+      const credential = 'abcd';
+      const safeRequestId = 'req-safe-after-tiny-mask';
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showDataDetailDialog(
+                context: context,
+                rawRequest: {
+                  'headers': {'Authorization': 'Bearer a***'},
+                },
+                rawResponse: {
+                  'statusCode': 401,
+                  'requestId': credential,
+                  'data': {'requestId': safeRequestId},
+                },
+                isOcrDiagnostics: true,
+              ),
+              child: const Text('Show'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Show'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('OCR Diagnostics'));
+      await tester.pumpAndSettle();
+
+      final displayed =
+          tester.widget<SelectableText>(find.byType(SelectableText));
+      expect(displayed.data, isNot(contains(credential)));
+      expect(displayed.data, contains(safeRequestId));
+      expect(displayed.data, contains('401'));
+    });
+
+    testWidgets('OCR diagnostics redact echoed secret-key header values',
+        (tester) async {
+      const credential = 'opaque-user-secret-192';
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showDataDetailDialog(
+                context: context,
+                rawRequest: {
+                  'headers': {'X-Secret-Key': credential},
+                },
+                rawResponse: {
+                  'statusCode': 401,
+                  'data': {'id': credential},
+                },
+                isOcrDiagnostics: true,
+              ),
+              child: const Text('Show'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Show'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('OCR Diagnostics'));
+      await tester.pumpAndSettle();
+
+      final displayed =
+          tester.widget<SelectableText>(find.byType(SelectableText));
+      expect(displayed.data, isNot(contains(credential)));
+      expect(displayed.data, contains('401'));
+    });
+
     testWidgets('shows all 6 sections when full data is provided',
         (tester) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () => showDataDetailDialog(
@@ -75,6 +464,14 @@ void main() {
     ) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () => showDataDetailDialog(
@@ -114,6 +511,14 @@ void main() {
     ) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () => showDataDetailDialog(
@@ -148,6 +553,14 @@ void main() {
     testWidgets('tapping Response Body shows data as JSON', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () => showDataDetailDialog(
@@ -187,6 +600,14 @@ void main() {
     ) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () => showDataDetailDialog(
@@ -219,6 +640,14 @@ void main() {
     testWidgets('Response Body shows when data is a Map', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () => showDataDetailDialog(
@@ -256,6 +685,14 @@ void main() {
     ) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () => showDataDetailDialog(
@@ -291,6 +728,14 @@ void main() {
         (tester) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () => showDataDetailDialog(
@@ -330,6 +775,14 @@ void main() {
       final longValue = '错' * 500;
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () => showDataDetailDialog(
@@ -365,6 +818,14 @@ void main() {
     testWidgets('Response Body hidden when data key is absent', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () => showDataDetailDialog(
@@ -396,6 +857,14 @@ void main() {
     ) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () => showDataDetailDialog(
@@ -426,6 +895,14 @@ void main() {
     ) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () => showDataDetailDialog(
@@ -456,6 +933,14 @@ void main() {
       (tester) async {
         await tester.pumpWidget(
           MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
             home: Builder(
               builder: (context) => ElevatedButton(
                 onPressed: () => showDataDetailDialog(
@@ -484,6 +969,14 @@ void main() {
     testWidgets('Status Code detail shows the numeric code', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () => showDataDetailDialog(
@@ -509,6 +1002,14 @@ void main() {
     testWidgets('Request Body detail shows formatted JSON', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () => showDataDetailDialog(
@@ -538,6 +1039,14 @@ void main() {
     testWidgets('multiple back/forth navigation works', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () => showDataDetailDialog(
@@ -584,6 +1093,14 @@ void main() {
     ) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () => showDataDetailDialog(
@@ -609,6 +1126,14 @@ void main() {
     ) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () => showDataDetailDialog(
@@ -635,6 +1160,14 @@ void main() {
     testWidgets('no 消息内容 section anywhere', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () => showDataDetailDialog(
@@ -659,6 +1192,14 @@ void main() {
     ) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () => showDataDetailDialog(
@@ -690,6 +1231,14 @@ void main() {
       (tester) async {
         await tester.pumpWidget(
           MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
             home: Builder(
               builder: (context) => ElevatedButton(
                 onPressed: () => showDataDetailDialog(
@@ -723,6 +1272,14 @@ void main() {
     Future<void> openDialog(WidgetTester tester) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () => showDataDetailDialog(

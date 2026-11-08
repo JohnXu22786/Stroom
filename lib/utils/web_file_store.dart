@@ -1,9 +1,16 @@
 import 'dart:async';
 import 'dart:typed_data';
-import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
 import 'package:idb_shim/idb_shim.dart'
     show Database, idbModeReadOnly, idbModeReadWrite;
 import 'package:idb_shim/idb_browser.dart' show idbFactoryBrowser;
+
+class WebFileStoreReadLimitExceededException implements Exception {
+  const WebFileStoreReadLimitExceededException(this.maxBytes);
+
+  final int maxBytes;
+}
 
 /// Web 端使用 IndexedDB 存储二进制文件
 /// 突破 SharedPreferences 约 2MB 的存储上限
@@ -35,6 +42,24 @@ class WebFileStore {
 
   /// Whether test mode is currently active.
   static bool get isTestMode => _testMode;
+
+  @visibleForTesting
+  static Future<Object?> waitForRequestAndTransactionCompletionForTesting(
+    Future<Object?> request,
+    Future<void> completed,
+  ) =>
+      _waitForRequestAndTransactionCompletion(request, completed);
+
+  static Future<Object?> _waitForRequestAndTransactionCompletion(
+    Future<Object?> request,
+    Future<void> completed,
+  ) async {
+    final results = await Future.wait<Object?>([
+      request,
+      completed.then<Object?>((_) => null),
+    ], eagerError: false);
+    return results.first;
+  }
 
   // ---- IndexedDB database ------------------------------------------------
 
@@ -230,10 +255,24 @@ class WebFileStore {
     return null;
   }
 
+  static void _checkReadLimit(dynamic value, int? maxBytes) {
+    if (maxBytes == null) return;
+    final byteLength = switch (value) {
+      ByteBuffer buffer => buffer.lengthInBytes,
+      TypedData data => data.lengthInBytes,
+      List<int> bytes => bytes.length,
+      _ => null,
+    };
+    if (byteLength != null && byteLength > maxBytes) {
+      throw WebFileStoreReadLimitExceededException(maxBytes);
+    }
+  }
+
   /// 读取文件
-  static Future<Uint8List?> read(String key) async {
+  static Future<Uint8List?> read(String key, {int? maxBytes}) async {
     if (_testMode) {
       final val = _inMemoryStore[key];
+      _checkReadLimit(val, maxBytes);
       return val != null ? Uint8List.fromList(val) : null;
     }
     final db = await _database;
@@ -246,13 +285,50 @@ class WebFileStore {
       return null;
     }
 
+    _checkReadLimit(result, maxBytes);
     final converted = _toUint8List(result, key);
+    _checkReadLimit(converted, maxBytes);
     if (converted == null) {
       debugPrint(
         'WebFileStore 读取 $key → 原始类型: ${result.runtimeType} (值: $result)',
       );
     }
     return converted;
+  }
+
+  /// Reads an ASR source while allowing cancellation to abort an IndexedDB
+  /// transaction before the stored value is materialized in Dart memory.
+  static Future<Uint8List?> readCancellable(
+    String key, {
+    required CancelToken cancelToken,
+  }) async {
+    if (cancelToken.isCancelled) throw cancelToken.cancelError!;
+    if (_testMode) return read(key);
+    final db = await _database;
+    if (cancelToken.isCancelled) throw cancelToken.cancelError!;
+    final transaction = db.transaction('files', idbModeReadOnly);
+    final completed = transaction.completed;
+    final request = transaction.objectStore('files').getObject(key);
+    unawaited(
+      cancelToken.whenCancel.then<void>((_) {
+        try {
+          transaction.abort();
+        } catch (_) {
+          // The transaction may have completed just before cancellation.
+        }
+      }),
+    );
+    try {
+      final value = await _waitForRequestAndTransactionCompletion(
+        request,
+        completed,
+      );
+      if (cancelToken.isCancelled) throw cancelToken.cancelError!;
+      return _toUint8List(value, key);
+    } catch (_) {
+      if (cancelToken.isCancelled) throw cancelToken.cancelError!;
+      rethrow;
+    }
   }
 
   /// 删除文件

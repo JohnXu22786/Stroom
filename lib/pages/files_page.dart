@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
+import '../l10n/app_localizations.dart';
 import 'files_page_shared.dart';
 import 'gallery_page.dart';
 import 'text_storage_page.dart';
@@ -51,7 +52,15 @@ class _FilesPageState extends ConsumerState<FilesPage>
     setState(() {});
   }
 
-  static const _tabLabels = ['文本', '音频', '图片', '视频'];
+  List<String> get _tabLabels {
+    final localizations = AppLocalizations.of(context)!;
+    return [
+      localizations.filesTabText,
+      localizations.filesTabAudio,
+      localizations.filesTabImages,
+      localizations.filesTabVideos,
+    ];
+  }
 
   void _onTabTapped(int physicalIndex) {
     // Map physical position → logical tab index via the current order.
@@ -144,12 +153,13 @@ class _FilesPageState extends ConsumerState<FilesPage>
     showDialog(
       context: context,
       builder: (ctx) {
+        final localizations = AppLocalizations.of(ctx)!;
         final order = List<int>.from(currentOrder);
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
               key: const Key('files_reorder_dialog'),
-              title: const Text('排序标签'),
+              title: Text(localizations.filesReorderTabs),
               // 内容可滚动：短屏（如横屏手机）上不会溢出
               scrollable: true,
               content: Column(
@@ -187,7 +197,7 @@ class _FilesPageState extends ConsumerState<FilesPage>
                 TextButton(
                   key: const Key('files_reorder_cancel_btn'),
                   onPressed: () => Navigator.pop(ctx),
-                  child: const Text('取消'),
+                  child: Text(localizations.filesReorderCancel),
                 ),
                 TextButton(
                   key: const Key('files_reorder_confirm_btn'),
@@ -204,7 +214,7 @@ class _FilesPageState extends ConsumerState<FilesPage>
                     _lastTappedLogicalTabIndex = -1;
                     Navigator.pop(ctx);
                   },
-                  child: const Text('确定'),
+                  child: Text(localizations.filesReorderDone),
                 ),
               ],
             );

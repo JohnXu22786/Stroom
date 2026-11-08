@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
+import '../l10n/app_localizations.dart';
 import '../services/app_log_service.dart';
 
 // ====================================================================
@@ -95,13 +96,17 @@ class _LogViewerPageState extends State<LogViewerPage>
         setState(() => _isLoading = false);
         _scheduleRetry(); // Retry on error too
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('加载日志文件列表失败: $e')),
+          SnackBar(
+            content:
+                Text(AppLocalizations.of(context)!.appLogLoadFilesError(e)),
+          ),
         );
       }
     }
   }
 
   Future<void> _viewLogFile(String fileName) async {
+    final l10n = AppLocalizations.of(context)!;
     try {
       final content = await AppLogService.readLogFile(fileName);
       if (!mounted) return;
@@ -115,10 +120,10 @@ class _LogViewerPageState extends State<LogViewerPage>
 
         String errorMsg;
         if (fileExists) {
-          errorMsg = '日志文件 "$fileName" 存在但无法读取，可能文件已损坏';
+          errorMsg = l10n.appLogReadFileUnreadable(fileName);
           debugPrint('[LogViewer] 文件存在但无法读取: $filePath');
         } else {
-          errorMsg = '日志文件 "$fileName" 不存在，可能已被清理';
+          errorMsg = l10n.appLogReadFileMissing(fileName);
           debugPrint('[LogViewer] 文件不存在: $filePath');
         }
 
@@ -128,7 +133,7 @@ class _LogViewerPageState extends State<LogViewerPage>
               content: Text(errorMsg),
               duration: const Duration(seconds: 3),
               action: SnackBarAction(
-                label: '刷新',
+                label: l10n.appLogRefresh,
                 onPressed: () {
                   _retryCount = 0;
                   _loadLogFiles();
@@ -150,7 +155,9 @@ class _LogViewerPageState extends State<LogViewerPage>
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('读取日志文件失败: $e')),
+          SnackBar(
+            content: Text(AppLocalizations.of(context)!.appLogReadFileError(e)),
+          ),
         );
       }
     }
@@ -165,14 +172,19 @@ class _LogViewerPageState extends State<LogViewerPage>
         await _loadLogFiles();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('已删除: $fileName')),
+            SnackBar(
+              content: Text(
+                  AppLocalizations.of(context)!.appLogDeleteDone(fileName)),
+            ),
           );
         }
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('删除失败: $e')),
+          SnackBar(
+            content: Text(AppLocalizations.of(context)!.appLogDeleteError(e)),
+          ),
         );
       }
     }
@@ -189,7 +201,11 @@ class _LogViewerPageState extends State<LogViewerPage>
       if (!await file.exists()) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('日志文件 "$fileName" 不存在')),
+            SnackBar(
+              content: Text(
+                AppLocalizations.of(context)!.appLogExportMissing(fileName),
+              ),
+            ),
           );
         }
         return;
@@ -198,13 +214,18 @@ class _LogViewerPageState extends State<LogViewerPage>
       await Clipboard.setData(ClipboardData(text: filePath));
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('已复制路径: $filePath')),
+          SnackBar(
+            content:
+                Text(AppLocalizations.of(context)!.appLogPathCopied(filePath)),
+          ),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('导出失败: $e')),
+          SnackBar(
+            content: Text(AppLocalizations.of(context)!.appLogExportError(e)),
+          ),
         );
       }
     }
@@ -213,15 +234,16 @@ class _LogViewerPageState extends State<LogViewerPage>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final l10n = AppLocalizations.of(context)!;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('应用日志'),
+        title: Text(l10n.appLogPageTitle),
         centerTitle: true,
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: '刷新',
+            tooltip: l10n.appLogRefresh,
             onPressed: () {
               _retryCount = 0; // Reset retry count on manual refresh
               _loadLogFiles();
@@ -229,13 +251,13 @@ class _LogViewerPageState extends State<LogViewerPage>
           ),
           IconButton(
             icon: const Icon(Icons.delete_sweep),
-            tooltip: '清理旧日志',
+            tooltip: l10n.appLogCleanupOldLogs,
             onPressed: () async {
               await AppLogService.cleanupOldLogs();
               await _loadLogFiles();
               if (!context.mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('旧日志已清理')),
+                SnackBar(content: Text(l10n.appLogCleanupDone)),
               );
             },
           ),
@@ -248,7 +270,7 @@ class _LogViewerPageState extends State<LogViewerPage>
             child: Align(
               alignment: Alignment.centerLeft,
               child: Text(
-                '日志保留期限：只保留最近 ${AppLogService.retentionDays} 天的日志，超过 ${AppLogService.retentionDays} 天会自动清理。',
+                l10n.appLogRetentionNotice(AppLogService.retentionDays),
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -274,6 +296,7 @@ class _LogViewerPageState extends State<LogViewerPage>
   }
 
   Widget _buildEmptyState(ThemeData theme) {
+    final l10n = AppLocalizations.of(context)!;
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -281,14 +304,16 @@ class _LogViewerPageState extends State<LogViewerPage>
           Icon(Icons.article_outlined, size: 64, color: theme.disabledColor),
           const SizedBox(height: 16),
           Text(
-            kIsWeb ? 'Web 平台不支持本地日志' : '暂无日志文件',
+            kIsWeb ? l10n.appLogWebUnsupported : l10n.appLogNoFiles,
             style: theme.textTheme.bodyLarge?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
           ),
           const SizedBox(height: 8),
           Text(
-            _retryCount > 0 ? '自动刷新中 (第 $_retryCount 次)...' : '应用运行后将自动生成日志',
+            _retryCount > 0
+                ? l10n.appLogAutoRefresh(_retryCount)
+                : l10n.appLogWillBeCreated,
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
@@ -311,6 +336,7 @@ class _LogViewerPageState extends State<LogViewerPage>
   }
 
   Widget _buildLogFileList(ThemeData theme) {
+    final l10n = AppLocalizations.of(context)!;
     return ListView.separated(
       padding: const EdgeInsets.all(16),
       itemCount: _logFiles.length,
@@ -336,13 +362,13 @@ class _LogViewerPageState extends State<LogViewerPage>
               IconButton(
                 icon: Icon(Icons.ios_share,
                     color: theme.colorScheme.primary, size: 20),
-                tooltip: '导出',
+                tooltip: l10n.appLogExport,
                 onPressed: () => _exportLogFile(fileName),
               ),
               IconButton(
                 icon: Icon(Icons.delete_outline,
                     color: theme.colorScheme.error, size: 20),
-                tooltip: '删除',
+                tooltip: l10n.appLogDelete,
                 onPressed: () => _confirmDelete(fileName),
               ),
               const Icon(Icons.chevron_right),
@@ -373,15 +399,16 @@ class _LogViewerPageState extends State<LogViewerPage>
   }
 
   void _confirmDelete(String fileName) {
+    final l10n = AppLocalizations.of(context)!;
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('确认删除'),
-        content: Text('确定要删除日志文件 "$fileName" 吗？'),
+        title: Text(l10n.appLogConfirmDeleteTitle),
+        content: Text(l10n.appLogConfirmDeleteMessage(fileName)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
+            child: Text(l10n.appLogCancel),
           ),
           FilledButton(
             onPressed: () {
@@ -391,7 +418,7 @@ class _LogViewerPageState extends State<LogViewerPage>
             style: FilledButton.styleFrom(
               backgroundColor: Theme.of(ctx).colorScheme.error,
             ),
-            child: const Text('删除'),
+            child: Text(l10n.appLogDelete),
           ),
         ],
       ),
@@ -527,15 +554,17 @@ class _LogContentPageState extends State<LogContentPage> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('复制失败: $e')),
+        SnackBar(
+            content: Text(AppLocalizations.of(context)!.appLogCopyError(e))),
       );
       return;
     }
     if (!mounted) return;
+    final l10n = AppLocalizations.of(context)!;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('已复制全部日志内容'),
-        duration: Duration(seconds: 2),
+      SnackBar(
+        content: Text(l10n.appLogCopyDone),
+        duration: const Duration(seconds: 2),
       ),
     );
   }
@@ -576,6 +605,7 @@ class _LogContentPageState extends State<LogContentPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final l10n = AppLocalizations.of(context)!;
 
     return Scaffold(
       appBar: AppBar(
@@ -588,7 +618,7 @@ class _LogContentPageState extends State<LogContentPage> {
               Text(widget.fileName,
                   maxLines: 1, overflow: TextOverflow.ellipsis),
               Text(
-                '共 $_lineCount 行',
+                l10n.appLogLineCount(_lineCount),
                 style: theme.textTheme.labelSmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -600,12 +630,12 @@ class _LogContentPageState extends State<LogContentPage> {
         actions: [
           IconButton(
             icon: const Icon(Icons.copy_all),
-            tooltip: '复制全文',
+            tooltip: l10n.appLogCopyAll,
             onPressed: _copyAllContent,
           ),
           IconButton(
             icon: Icon(_showRaw ? Icons.format_list_bulleted : Icons.code),
-            tooltip: _showRaw ? '结构化视图' : '原始视图',
+            tooltip: _showRaw ? l10n.appLogStructuredView : l10n.appLogRawView,
             onPressed: _toggleView,
           ),
         ],

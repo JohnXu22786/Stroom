@@ -15,6 +15,7 @@ extension _ChatPageSearchExt on _ChatPageState {
       _searchQuery = query;
       _searchError = null;
       _searchMatches.clear();
+      _searchMatchFirstIndexByMessageId.clear();
       _currentMatchIndex = 0;
     });
     if (query.isEmpty) return;
@@ -97,6 +98,7 @@ extension _ChatPageSearchExt on _ChatPageState {
         _currentMatchIndex = 0;
         if (targetMatch >= 0) _currentMatchIndex = targetMatch;
         _pendingSearchMessageId = null;
+        _rebuildSearchMatchFirstIndex();
       });
       if (requestedMessageId != null && targetMatch < 0) {
         // Global search can find text inside code or math that local search
@@ -123,6 +125,16 @@ extension _ChatPageSearchExt on _ChatPageState {
         return;
       }
       setState(() => _searchError = '搜索失败');
+    }
+  }
+
+  void _rebuildSearchMatchFirstIndex() {
+    _searchMatchFirstIndexByMessageId.clear();
+    for (var i = 0; i < _searchMatches.length; i++) {
+      _searchMatchFirstIndexByMessageId.putIfAbsent(
+        _searchMatches[i].messageId,
+        () => i,
+      );
     }
   }
 
@@ -667,7 +679,7 @@ extension _ChatPageSearchExt on _ChatPageState {
                 if (_searchMode == SearchMode.current) ...[
                   IconButton(
                     icon: const Icon(Icons.keyboard_arrow_up, size: 20),
-                    tooltip: '上一个',
+                    tooltip: AppLocalizations.of(context)!.searchPrevious,
                     onPressed: _previousMatch,
                     visualDensity: VisualDensity.compact,
                     padding: EdgeInsets.zero,
@@ -678,7 +690,7 @@ extension _ChatPageSearchExt on _ChatPageState {
                   ),
                   IconButton(
                     icon: const Icon(Icons.keyboard_arrow_down, size: 20),
-                    tooltip: '下一个',
+                    tooltip: AppLocalizations.of(context)!.searchNext,
                     onPressed: _nextMatch,
                     visualDensity: VisualDensity.compact,
                     padding: EdgeInsets.zero,
@@ -690,7 +702,7 @@ extension _ChatPageSearchExt on _ChatPageState {
                 ],
                 IconButton(
                   icon: const Icon(Icons.close, size: 18),
-                  tooltip: '关闭搜索',
+                  tooltip: AppLocalizations.of(context)!.searchClose,
                   onPressed: _closeSearch,
                   visualDensity: VisualDensity.compact,
                   padding: EdgeInsets.zero,

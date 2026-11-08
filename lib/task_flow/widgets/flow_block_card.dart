@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../models/block_type_definition.dart';
 import '../models/task_flow_definition.dart';
+import '../models/flow_temporary_output.dart';
 import '../utils/block_param_display.dart';
+import '../utils/task_flow_localization.dart';
 import 'io_type_indicator.dart';
+import '../../l10n/app_localizations.dart';
 
 /// A card representing a single block in the task flow builder.
 ///
@@ -31,6 +35,7 @@ class FlowBlockCard extends ConsumerWidget {
   final VoidCallback? onInsertAfter;
   final String? validationMessage;
   final bool selected;
+  final ValueChanged<bool>? onTemporaryOutputChanged;
 
   const FlowBlockCard({
     super.key,
@@ -50,22 +55,33 @@ class FlowBlockCard extends ConsumerWidget {
     this.onInsertAfter,
     this.validationMessage,
     this.selected = false,
+    this.onTemporaryOutputChanged,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
+    final strings = AppLocalizations.of(context)!;
     final def = block.getDefinition();
+    final temporaryOutput =
+        !isLast && hasFileOutput(block) && isFlowTemporaryOutputEnabled(block);
 
     if (def == null) {
-      return _buildUnknownBlock(cs);
+      return _buildUnknownBlock(context, cs);
     }
+    final localizedBlockLabel = localizedBlockTypeLabel(def, strings);
+    final localizedOutputLabel = block.followsDownstreamOutput
+        ? strings.taskFlowOutputVideoAudioDownstream
+        : localizedIoTypeDisplayLabel(block.outputTypeLabel, strings);
 
     // Compute non-default parameters for summary display
     final nonDefaultParams = block.params.entries.where((e) {
       final paramDef = def.params.where((p) => p.key == e.key).firstOrNull;
       if (paramDef == null) return false;
       if (e.value == null) return false;
+      if (temporaryOutput && paramDef.type == BlockParamType.filePath) {
+        return false;
+      }
       // Folder params (saveFolder / videoFolder / audioFolder) ALWAYS
       // show — including the root folder (''), which is a meaningful
       // "save to root" config, not an unset value.
@@ -128,7 +144,7 @@ class FlowBlockCard extends ConsumerWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              '$index. ${def.label}',
+                              '$index. $localizedBlockLabel',
                               style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w600,
@@ -145,6 +161,35 @@ class FlowBlockCard extends ConsumerWidget {
                           ],
                         ),
                       ),
+                      if (!readOnly &&
+                          !isLast &&
+                          hasFileOutput(block) &&
+                          onTemporaryOutputChanged != null)
+                        Tooltip(
+                          message: AppLocalizations.of(context)!
+                              .taskFlowUiTemporaryFileHint,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Checkbox(
+                                value: temporaryOutput,
+                                onChanged: (value) {
+                                  if (value != null) {
+                                    onTemporaryOutputChanged!(value);
+                                  }
+                                },
+                                visualDensity: VisualDensity.compact,
+                                materialTapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap,
+                              ),
+                              Text(
+                                AppLocalizations.of(context)!
+                                    .taskFlowUiTemporary,
+                                style: TextStyle(fontSize: 10),
+                              ),
+                            ],
+                          ),
+                        ),
                       // Settings button (hidden in readOnly)
                       if (!readOnly)
                         IconButton(
@@ -159,7 +204,8 @@ class FlowBlockCard extends ConsumerWidget {
                             minWidth: 28,
                             minHeight: 28,
                           ),
-                          tooltip: '设置参数',
+                          tooltip: AppLocalizations.of(context)!
+                              .taskFlowUiSetParameters,
                         ),
                       // Replace button (hidden in readOnly)
                       if (!readOnly)
@@ -175,9 +221,10 @@ class FlowBlockCard extends ConsumerWidget {
                             minWidth: 28,
                             minHeight: 28,
                           ),
-                          tooltip: '替换功能块',
+                          tooltip: AppLocalizations.of(context)!
+                              .taskFlowUiReplaceBlock,
                         ),
-                      if (!readOnly) _buildMenu(),
+                      if (!readOnly) _buildMenu(context),
                     ],
                   ),
                   const SizedBox(height: 8),
@@ -201,7 +248,9 @@ class FlowBlockCard extends ConsumerWidget {
                       Flexible(
                         child: IOTypeIndicator(
                           type: def.outputType,
+                          possibleTypes: def.possibleOutputTypes,
                           isInput: false,
+                          labelOverride: localizedOutputLabel,
                         ),
                       ),
                     ],
@@ -224,7 +273,13 @@ class FlowBlockCard extends ConsumerWidget {
                           final paramDef = def.params
                               .where((p) => p.key == e.key)
                               .firstOrNull;
-                          final label = paramDef?.label ?? e.key;
+                          final label = paramDef == null
+                              ? e.key
+                              : localizedBlockParamLabel(
+                                  def,
+                                  paramDef,
+                                  strings,
+                                );
                           return Text(
                             '$label: ${friendlyParamValue(paramDef, e.value, ref, params: block.params)}',
                             style: TextStyle(
@@ -239,8 +294,10 @@ class FlowBlockCard extends ConsumerWidget {
 
                   if (validationMessage != null) ...[
                     const SizedBox(height: 8),
-                    Text(validationMessage!,
-                        style: TextStyle(fontSize: 12, color: cs.error)),
+                    Text(
+                      validationMessage!,
+                      style: TextStyle(fontSize: 12, color: cs.error),
+                    ),
                   ],
 
                   // Tap hint
@@ -248,7 +305,11 @@ class FlowBlockCard extends ConsumerWidget {
                   Align(
                     alignment: Alignment.centerRight,
                     child: Text(
-                      readOnly ? '点击查看参数' : '点击设置参数',
+                      readOnly
+                          ? AppLocalizations.of(context)!
+                              .taskFlowUiViewParameters
+                          : AppLocalizations.of(context)!
+                              .taskFlowUiTapSetParameters,
                       style: TextStyle(
                         fontSize: 9,
                         color: cs.primary.withValues(alpha: 0.6),
@@ -264,7 +325,7 @@ class FlowBlockCard extends ConsumerWidget {
     );
   }
 
-  Widget _buildUnknownBlock(ColorScheme cs) {
+  Widget _buildUnknownBlock(BuildContext context, ColorScheme cs) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -289,7 +350,8 @@ class FlowBlockCard extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '未知功能块: ${block.typeKey.name}',
+                        AppLocalizations.of(context)!
+                            .taskFlowUiUnknownBlockType(block.typeKey.name),
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
@@ -297,7 +359,9 @@ class FlowBlockCard extends ConsumerWidget {
                         ),
                       ),
                       Text(
-                        validationMessage ?? '该功能块类型未注册',
+                        validationMessage ??
+                            AppLocalizations.of(context)!
+                                .taskFlowUiBlockUnregistered,
                         style: TextStyle(
                           fontSize: 12,
                           color: cs.onSurfaceVariant,
@@ -306,7 +370,7 @@ class FlowBlockCard extends ConsumerWidget {
                     ],
                   ),
                 ),
-                if (!readOnly) _buildMenu(),
+                if (!readOnly) _buildMenu(context),
               ],
             ),
           ),
@@ -315,7 +379,7 @@ class FlowBlockCard extends ConsumerWidget {
     );
   }
 
-  Widget _buildMenu() {
+  Widget _buildMenu(BuildContext context) {
     final callbacks = <int, VoidCallback?>{
       0: onSettings ?? onTap,
       1: onInsertBefore,
@@ -327,24 +391,67 @@ class FlowBlockCard extends ConsumerWidget {
       7: onDelete,
     };
     return PopupMenuButton<int>(
-      tooltip: '步骤 $index 操作',
+      tooltip: AppLocalizations.of(context)!.taskFlowUiStepActions(index),
       icon: const Icon(Icons.more_vert),
       onSelected: (action) => callbacks[action]?.call(),
       itemBuilder: (_) => [
-        _menuItem(0, '设置参数', callbacks[0]),
-        _menuItem(1, '在前面插入', callbacks[1]),
-        _menuItem(2, '在后面插入', callbacks[2]),
-        _menuItem(3, '复制功能块', callbacks[3]),
-        _menuItem(4, isFirst ? '上移（已在最前）' : '上移', callbacks[4]),
-        _menuItem(5, isLast ? '下移（已在最后）' : '下移', callbacks[5]),
-        _menuItem(6, '替换功能块', callbacks[6]),
-        _menuItem(7, '删除功能块', callbacks[7]),
+        _menuItem(
+          0,
+          AppLocalizations.of(context)!.taskFlowUiSetParameters,
+          callbacks[0],
+        ),
+        _menuItem(
+          1,
+          AppLocalizations.of(context)!.taskFlowUiInsertBefore,
+          callbacks[1],
+        ),
+        _menuItem(
+          2,
+          AppLocalizations.of(context)!.taskFlowUiInsertAfter,
+          callbacks[2],
+        ),
+        _menuItem(
+          3,
+          AppLocalizations.of(context)!.taskFlowUiCopyBlock,
+          callbacks[3],
+        ),
+        _menuItem(
+          4,
+          isFirst
+              ? AppLocalizations.of(context)!.taskFlowUiMoveUpDisabled
+              : AppLocalizations.of(context)!.taskFlowUiMoveUp,
+          callbacks[4],
+        ),
+        _menuItem(
+          5,
+          isLast
+              ? AppLocalizations.of(context)!.taskFlowUiMoveDownDisabled
+              : AppLocalizations.of(context)!.taskFlowUiMoveDown,
+          callbacks[5],
+        ),
+        _menuItem(
+          6,
+          AppLocalizations.of(context)!.taskFlowUiReplaceBlock,
+          callbacks[6],
+        ),
+        if (callbacks[7] != null) const PopupMenuDivider(),
+        _menuItem(
+          7,
+          AppLocalizations.of(context)!.taskFlowUiDeleteBlock,
+          callbacks[7],
+        ),
       ],
     );
   }
 
   PopupMenuItem<int> _menuItem(
-          int action, String label, VoidCallback? callback) =>
+    int action,
+    String label,
+    VoidCallback? callback,
+  ) =>
       PopupMenuItem(
-          value: action, enabled: callback != null, child: Text(label));
+        value: action,
+        enabled: callback != null,
+        child: Text(label),
+      );
 }

@@ -260,6 +260,97 @@ void main() {
       expect(extra!.containsKey('provider'), isFalse);
       expect(extra['style'], equals('cheerful'));
     });
+
+    test('invalid dotted child does not erase an explicit empty JSON parent',
+        () async {
+      final modelConfig = ModelConfig(
+        modelId: 'test-model',
+        name: 'Test',
+        typeConfig: {'context': 4096},
+        customParams: [
+          CustomParam(
+            paramName: 'options',
+            defaultValue: '{}',
+            type: 'json',
+          ),
+          CustomParam(
+            paramName: 'options.bad',
+            defaultValue: '{invalid json}',
+            type: 'json',
+          ),
+          CustomParam(
+            paramName: 'standalone.bad',
+            defaultValue: '{invalid json}',
+            type: 'json',
+          ),
+        ],
+      );
+
+      final provider = _NestedCaptureProvider();
+      final service = ChatService(provider: provider, modelConfig: modelConfig);
+
+      service.sendStream('Hi', history: []).listen((_) {});
+      await Future.delayed(Duration.zero);
+
+      final extra = provider.capturedExtraParams;
+      expect(extra, isNotNull);
+      expect(extra!['options'], isEmpty,
+          reason: 'An explicitly configured empty JSON parent is valid.');
+      expect(extra.containsKey('standalone'), isFalse,
+          reason: 'An invalid dotted param without a parent remains omitted.');
+    });
+
+    test('empty JSON parents survive invalid children across config layers',
+        () async {
+      final emptyParent = CustomParam(
+        paramName: 'options',
+        defaultValue: '{}',
+        type: 'json',
+      );
+      final invalidChild = CustomParam(
+        paramName: 'options.bad',
+        defaultValue: '{invalid json}',
+        type: 'json',
+      );
+
+      Future<void> expectEmptyParent({
+        required List<CustomParam> providerParams,
+        required List<CustomParam> modelParams,
+      }) async {
+        final providerConfig = ProviderConfigItem(
+          providerName: 'p',
+          host: 'http://localhost',
+          key: 'k',
+          customParams: providerParams,
+        );
+        final modelConfig = ModelConfig(
+          modelId: 'test-model',
+          name: 'Test',
+          typeConfig: {'context': 4096},
+          customParams: modelParams,
+        );
+        final provider = _NestedCaptureProvider();
+        final service = ChatService(
+          provider: provider,
+          modelConfig: modelConfig,
+          providerConfig: providerConfig,
+        );
+
+        await for (final _ in service.sendStream('Hi', history: [])) {}
+
+        expect(provider.capturedExtraParams, isNotNull);
+        expect(provider.capturedExtraParams!['options'], isEmpty);
+      }
+
+      await expectEmptyParent(
+        providerParams: [emptyParent],
+        modelParams: [invalidChild],
+      );
+      await expectEmptyParent(
+        providerParams: [invalidChild],
+        modelParams: [emptyParent],
+      );
+    });
   });
 
   group('_stripOmitted recursive sentinel stripping', () {

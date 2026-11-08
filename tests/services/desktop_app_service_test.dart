@@ -3,23 +3,75 @@ import 'dart:io' show exit;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart' show Locale;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 import 'package:stroom/services/background_service.dart' as background_service;
 import 'package:stroom/services/desktop_app_service.dart';
-import 'package:tray_manager/tray_manager.dart' show trayManager;
+import 'package:tray_manager/legacy.dart' show Menu, TrayListener;
 import 'package:window_manager/window_manager.dart' show windowManager;
 
 /// Records method calls made on a mocked platform channel.
 class RecordingChannelMock {
   final List<MethodCall> calls = [];
   Object? throwError;
+  String? throwOnMethod;
+  bool hasListeners = false;
 
   Future<Object?> handler(MethodCall call) async {
     calls.add(call);
-    if (throwError != null) throw throwError!;
+    if (throwError != null &&
+        (throwOnMethod == null || throwOnMethod == call.method)) {
+      throw throwError!;
+    }
     return true;
+  }
+}
+
+class _RecordingTrayAdapter implements DesktopTrayAdapter {
+  _RecordingTrayAdapter(this.mock);
+
+  final RecordingChannelMock mock;
+
+  void _record(String method, [Object? arguments]) {
+    mock.calls.add(MethodCall(method, arguments));
+    if (mock.throwError != null &&
+        (mock.throwOnMethod == null || mock.throwOnMethod == method)) {
+      throw mock.throwError!;
+    }
+  }
+
+  @override
+  Future<void> setIcon(String iconPath) async =>
+      _record('setIcon', {'iconPath': iconPath});
+
+  @override
+  Future<void> setToolTip(String toolTip) async =>
+      _record('setToolTip', {'toolTip': toolTip});
+
+  @override
+  Future<void> setContextMenu(Menu menu) async =>
+      _record('setContextMenu', {'menu': menu.toJson()});
+
+  @override
+  Future<void> popUpContextMenu() async => _record('popUpContextMenu');
+
+  @override
+  Future<void> destroy() async => _record('destroy');
+
+  @override
+  void addListener(TrayListener listener) {
+    mock.hasListeners = true;
+    _record('addListener');
+  }
+
+  @override
+  void removeListener(TrayListener listener) {
+    mock.hasListeners = false;
+    // Listener cleanup must not replay a tray failure deliberately injected
+    // into operational calls by an error-path test.
+    mock.calls.add(const MethodCall('removeListener'));
   }
 }
 
@@ -56,9 +108,8 @@ Map<String, RecordingChannelMock> registerChannelMocks() {
     const MethodChannel('window_manager'),
     mocks['window_manager']!.handler,
   );
-  messenger.setMockMethodCallHandler(
-    const MethodChannel('tray_manager'),
-    mocks['tray_manager']!.handler,
+  DesktopAppService.instance.setTrayAdapterForTesting(
+    _RecordingTrayAdapter(mocks['tray_manager']!),
   );
   return mocks;
 }
@@ -210,8 +261,54 @@ void main() {
   });
 
   group('DesktopAppService - tray setup', () {
+    test('tray tooltip and menu labels follow the selected locale', () async {
+      final service = DesktopAppService.instance;
+      final mocks = registerChannelMocks();
+      await withDesktopPlatform(TargetPlatform.windows, () async {
+        service.updateLocaleOverride(const Locale('en', 'US'));
+        await service.setupTrayAndCloseBehavior();
+      });
+
+      var tooltipCall = mocks['tray_manager']!
+          .calls
+          .firstWhere((call) => call.method == 'setToolTip');
+      expect(
+        (tooltipCall.arguments as Map)['toolTip'],
+        'Stroom is running in the background',
+      );
+      var menuCall = mocks['tray_manager']!
+          .calls
+          .firstWhere((call) => call.method == 'setContextMenu');
+      var menuItems =
+          ((menuCall.arguments as Map)['menu'] as Map)['items'] as List;
+      expect(menuItems.map((item) => (item as Map)['label']), [
+        'Show Main Window',
+        '',
+        'Quit Stroom',
+      ]);
+
+      service.updateLocaleOverride(const Locale('zh', 'CN'));
+      await Future<void>.delayed(Duration.zero);
+      tooltipCall = mocks['tray_manager']!
+          .calls
+          .where((call) => call.method == 'setToolTip')
+          .last;
+      expect((tooltipCall.arguments as Map)['toolTip'], 'Stroom 正在后台运行');
+      menuCall = mocks['tray_manager']!
+          .calls
+          .where((call) => call.method == 'setContextMenu')
+          .last;
+      menuItems = ((menuCall.arguments as Map)['menu'] as Map)['items'] as List;
+      expect(menuItems.map((item) => (item as Map)['label']), [
+        '显示主窗口',
+        '',
+        '退出 Stroom',
+      ]);
+    });
+
     test('setupTrayAndCloseBehavior prevents close and registers tray',
         () async {
+      DesktopAppService.instance.updateLocaleOverride(const Locale('zh', 'CN'));
       final mocks = registerChannelMocks();
       await withDesktopPlatform(TargetPlatform.windows, () async {
         await DesktopAppService.instance.setupTrayAndCloseBehavior();
@@ -244,6 +341,51 @@ void main() {
           .toList();
       expect(labels, contains('显示主窗口'));
       expect(labels, contains('退出 Stroom'));
+    });
+
+    test('macOS keeps close interception when tray setup succeeds', () async {
+      SharedPreferences.setMockInitialValues({'desktop_close_minimize': true});
+      final mocks = registerChannelMocks();
+      final exitCodes = <int>[];
+      DesktopAppService.exitApp = exitCodes.add;
+      await withDesktopPlatform(TargetPlatform.macOS, () async {
+        await DesktopAppService.instance.setupTrayAndCloseBehavior();
+        DesktopAppService.instance.onWindowClose();
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      });
+
+      expect(DesktopAppService.instance.isTrayReady, isTrue);
+      expect(
+        mocks['window_manager']!.calls.any((call) =>
+            call.method == 'setPreventClose' &&
+            (call.arguments as Map)['isPreventClose'] == true),
+        isTrue,
+        reason:
+            'closing the window must still be intercepted while the tray is ready',
+      );
+      expect(
+          windowManager.listeners.contains(DesktopAppService.instance), isTrue);
+      expect(_calledWith(mocks['window_manager']!.calls, 'hide'), isTrue);
+      expect(exitCodes, isEmpty);
+    });
+
+    test('macOS tray failure allows closing the last window to exit', () async {
+      final mocks = registerChannelMocks();
+      mocks['tray_manager']!.throwError = 'tray unavailable';
+      await withDesktopPlatform(TargetPlatform.macOS, () async {
+        await DesktopAppService.instance.setupTrayAndCloseBehavior();
+      });
+
+      expect(
+        mocks['window_manager']!.calls.any((call) =>
+            call.method == 'setPreventClose' &&
+            (call.arguments as Map)['isPreventClose'] == false),
+        isTrue,
+        reason:
+            'without a tray, macOS must be allowed to close the last window',
+      );
+      expect(windowManager.listeners.contains(DesktopAppService.instance),
+          isFalse);
     });
 
     test('setupTrayAndCloseBehavior is idempotent', () async {
@@ -301,7 +443,136 @@ void main() {
       );
       expect(windowManager.listeners.contains(DesktopAppService.instance),
           isFalse);
-      expect(trayManager.hasListeners, isFalse);
+      expect(mocks['tray_manager']!.hasListeners, isFalse);
+    });
+
+    test('pending close is replayed when tray setup fails', () async {
+      final mocks = registerChannelMocks();
+      await withDesktopPlatform(TargetPlatform.windows, () async {
+        // Initialization intercepts close requests before the first-frame
+        // tray setup. The first click must still be honored if setup fails.
+        await DesktopAppService.instance.initialize();
+        await _emitWindowClose();
+
+        mocks['tray_manager']!.throwError = 'tray unavailable';
+        await DesktopAppService.instance.setupTrayAndCloseBehavior();
+      });
+
+      final windowCalls = mocks['window_manager']!.calls;
+      final guardDisabledIndex = windowCalls.indexWhere(
+        (call) =>
+            call.method == 'setPreventClose' &&
+            (call.arguments as Map)['isPreventClose'] == false,
+      );
+      final closeIndex = windowCalls.indexWhere(
+        (call) => call.method == 'close',
+      );
+
+      expect(guardDisabledIndex, greaterThanOrEqualTo(0));
+      expect(
+        closeIndex,
+        greaterThan(guardDisabledIndex),
+        reason: 'the saved close must be replayed after native interception is '
+            'disabled',
+      );
+      expect(
+        windowCalls.where((call) => call.method == 'hide'),
+        isEmpty,
+        reason: 'tray failure must use native close instead of hiding without '
+            'a tray',
+      );
+      expect(
+        windowManager.listeners.contains(DesktopAppService.instance),
+        isFalse,
+      );
+    });
+
+    test('close remains handled when tray rollback cannot clear interception',
+        () async {
+      final mocks = registerChannelMocks();
+      final exitCodes = <int>[];
+      var confirmationCalls = 0;
+      DesktopAppService.exitApp = exitCodes.add;
+      DesktopAppService.instance.onQuitConfirmation = () async {
+        confirmationCalls++;
+        return true;
+      };
+
+      await withDesktopPlatform(TargetPlatform.windows, () async {
+        await DesktopAppService.instance.initialize();
+        mocks['tray_manager']!.throwError = 'tray unavailable';
+        mocks['window_manager']!
+          ..throwOnMethod = 'setPreventClose'
+          ..throwError = 'close interception could not be cleared';
+
+        await DesktopAppService.instance.setupTrayAndCloseBehavior();
+
+        expect(
+          windowManager.listeners.contains(DesktopAppService.instance),
+          isTrue,
+          reason: 'the listener must stay registered while native close '
+              'interception may still be active',
+        );
+
+        await _emitWindowClose();
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      });
+
+      final windowCalls = mocks['window_manager']!.calls;
+      expect(
+        windowCalls.any((call) =>
+            call.method == 'setPreventClose' &&
+            (call.arguments as Map)['isPreventClose'] == false),
+        isTrue,
+      );
+      expect(confirmationCalls, 1,
+          reason: 'a later close must use the configured confirmation');
+      expect(exitCodes, [0]);
+      expect(_calledWith(windowCalls, 'hide'), isFalse,
+          reason: 'a missing tray cannot be used as a minimize destination');
+      expect(_calledWith(windowCalls, 'close'), isFalse,
+          reason: 'native close must not be replayed while interception may '
+              'still be active');
+      expect(_calledWith(windowCalls, 'destroy'), isTrue);
+    });
+
+    test(
+        'pending close is honored when tray rollback cannot clear interception',
+        () async {
+      final mocks = registerChannelMocks();
+      final exitCodes = <int>[];
+      var confirmationCalls = 0;
+      DesktopAppService.exitApp = exitCodes.add;
+      DesktopAppService.instance.onQuitConfirmation = () async {
+        confirmationCalls++;
+        return false;
+      };
+
+      await withDesktopPlatform(TargetPlatform.windows, () async {
+        await DesktopAppService.instance.initialize();
+        await _emitWindowClose();
+
+        mocks['tray_manager']!.throwError = 'tray unavailable';
+        mocks['window_manager']!
+          ..throwOnMethod = 'setPreventClose'
+          ..throwError = 'close interception could not be cleared';
+        await DesktopAppService.instance.setupTrayAndCloseBehavior();
+      });
+
+      final windowCalls = mocks['window_manager']!.calls;
+      expect(confirmationCalls, 1,
+          reason: 'the captured close must use the configured confirmation');
+      expect(exitCodes, isEmpty,
+          reason: 'cancelling the captured close must keep the app alive');
+      expect(_calledWith(windowCalls, 'close'), isFalse,
+          reason: 'native close must not be replayed while interception may '
+              'still be active');
+      expect(_calledWith(windowCalls, 'hide'), isFalse);
+      expect(
+        windowManager.listeners.contains(DesktopAppService.instance),
+        isTrue,
+        reason: 'failed native reset must not remove the only close listener',
+      );
     });
 
     test('setupTrayAndCloseBehavior is a no-op on non-desktop platforms',

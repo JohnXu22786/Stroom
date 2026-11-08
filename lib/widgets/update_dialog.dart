@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../l10n/app_localizations.dart';
 import '../providers/update_provider.dart';
 
 /// A shared update dialog used by both the settings page and the
@@ -37,6 +38,7 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
   Widget build(BuildContext context) {
     final state = ref.watch(updateProvider);
     final cs = Theme.of(context).colorScheme;
+    final strings = AppLocalizations.of(context)!;
 
     // Prevent dialog dismissal during download or install.
     // The user must not accidentally dismiss the dialog while
@@ -47,7 +49,9 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
     // only one version available, "已选择" when user picked an older version.
     final _isNewestSelected = state.selectedVersionIndex == 0 ||
         (state.availableVersions?.length ?? 0) <= 1;
-    final _versionLabel = _isNewestSelected ? '最新版本' : '已选择';
+    final versionLabel = _isNewestSelected
+        ? strings.updateLatestVersionLabel
+        : strings.updateSelectedVersionLabel;
 
     return PopScope(
       canPop: canPop,
@@ -56,7 +60,7 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
           children: [
             Icon(Icons.system_update, color: cs.primary),
             SizedBox(width: 8),
-            Expanded(child: Text('发现新版本')),
+            Expanded(child: Text(strings.updateDialogTitle)),
           ],
         ),
         content: SingleChildScrollView(
@@ -72,12 +76,12 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
               ],
               // Show selected version info
               // Label changes to "已选择" when user picks a non-newest version
-              Text('$_versionLabel: ${state.latestVersion ?? ''}'),
+              Text('$versionLabel: ${state.latestVersion ?? ''}'),
               if (state.releaseNotes != null &&
                   state.releaseNotes!.isNotEmpty) ...[
                 const SizedBox(height: 12),
-                const Text('更新内容:',
-                    style: TextStyle(fontWeight: FontWeight.bold)),
+                Text(strings.updateReleaseNotesLabel,
+                    style: const TextStyle(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 4),
                 Text(state.releaseNotes!),
               ],
@@ -109,7 +113,7 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
                       ),
                       const SizedBox(width: 10),
                       Text(
-                        '正在安装...',
+                        strings.updateInstalling,
                         style: TextStyle(
                           fontWeight: FontWeight.w600,
                           color: cs.onTertiaryContainer,
@@ -129,7 +133,10 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
                     const SizedBox(width: 4),
                     Expanded(
                       child: Text(
-                        state.downloadError!,
+                        _localizedDownloadError(
+                          state.downloadError!,
+                          AppLocalizations.of(context)!,
+                        ),
                         style: TextStyle(color: cs.error),
                       ),
                     ),
@@ -144,7 +151,7 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
                     Icon(Icons.check_circle, color: cs.primary, size: 18),
                     const SizedBox(width: 4),
                     Text(
-                      '下载完成',
+                      AppLocalizations.of(context)!.updateDownloadComplete,
                       style: TextStyle(color: cs.primary),
                     ),
                   ],
@@ -159,6 +166,7 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
   }
 
   List<Widget> _buildActions(UpdateState state) {
+    final strings = AppLocalizations.of(context)!;
     final notifier = ref.read(updateProvider.notifier);
 
     // During download, show progress bar in the button area
@@ -186,7 +194,7 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
         return [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('关闭'),
+            child: Text(strings.updateClose),
           ),
           FilledButton(
             onPressed: () {
@@ -194,7 +202,7 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
               // with visual feedback (isInstalling state).
               notifier.retryInstall();
             },
-            child: const Text('手动安装'),
+            child: Text(strings.updateManualInstall),
           ),
         ];
       }
@@ -204,30 +212,30 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
       return [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('关闭'),
+          child: Text(strings.updateClose),
         ),
         FilledButton(
           onPressed: () {
             // Re-open the installer (same as manual install fallback)
             notifier.retryInstall();
           },
-          child: const Text('打开安装包'),
+          child: Text(strings.updateOpenInstaller),
         ),
       ];
     }
 
     // After download error that is non-recoverable (html fallback), show close only
     if (state.downloadError != null) {
-      final isNonRecoverable = state.downloadError!.contains('暂无直接下载链接');
+      final isNonRecoverable = _isHtmlUrlFallback;
       return [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('关闭'),
+          child: Text(strings.updateClose),
         ),
         if (!isNonRecoverable)
           FilledButton(
             onPressed: () => notifier.downloadUpdate(),
-            child: const Text('重试下载'),
+            child: Text(strings.updateRetryDownload),
           ),
       ];
     }
@@ -242,15 +250,15 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
             }
             Navigator.of(context).pop();
           },
-          child: const Text('跳过此版本'),
+          child: Text(strings.updateSkipVersion),
         ),
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('稍后提醒'),
+          child: Text(strings.updateRemindLater),
         ),
         FilledButton(
           onPressed: () => _openInBrowser(state.downloadUrl!),
-          child: const Text('前往浏览器下载'),
+          child: Text(strings.updateOpenBrowser),
         ),
       ];
     }
@@ -264,15 +272,15 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
           }
           Navigator.of(context).pop();
         },
-        child: const Text('跳过此版本'),
+        child: Text(strings.updateSkipVersion),
       ),
       TextButton(
         onPressed: () => Navigator.of(context).pop(),
-        child: const Text('稍后提醒'),
+        child: Text(strings.updateRemindLater),
       ),
       FilledButton(
         onPressed: () => notifier.downloadUpdate(),
-        child: const Text('立即更新'),
+        child: Text(strings.updateNow),
       ),
     ];
   }
@@ -288,6 +296,7 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
     final versions = state.availableVersions!;
     final selectedIndex = state.selectedVersionIndex;
     final showAll = state.acceptPreRelease;
+    final strings = AppLocalizations.of(context)!;
 
     // Count visible items first for proper border calculations.
     final visibleCount =
@@ -355,7 +364,7 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text(
-                              '预览版',
+                              strings.updatePreviewBadge,
                               style: TextStyle(
                                 fontSize: 10,
                                 color: Colors.orange.shade700,
@@ -366,7 +375,7 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
                         if (realIdx == 0) ...[
                           const SizedBox(width: 6),
                           Text(
-                            '最新',
+                            strings.updateLatestBadge,
                             style: TextStyle(
                               fontSize: 10,
                               color: cs.primary,
@@ -398,7 +407,7 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
             child: Text(
-              '选择版本',
+              strings.updateSelectVersion,
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
@@ -415,6 +424,7 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
   /// Builds the download progress card shown in the actions area.
   Widget _buildDownloadProgress(UpdateState state) {
     final cs = Theme.of(context).colorScheme;
+    final strings = AppLocalizations.of(context)!;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(14),
@@ -434,7 +444,7 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
             children: [
               Icon(Icons.download, size: 18, color: cs.primary),
               const SizedBox(width: 6),
-              Text('正在下载更新...',
+              Text(strings.updateDownloading,
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     color: cs.onSurface,
@@ -466,6 +476,48 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
         ],
       ),
     );
+  }
+
+  String _localizedDownloadError(String error, AppLocalizations strings) {
+    if (error == '下载地址不可用') return strings.updateDownloadUrlUnavailable;
+    if (error.startsWith('当前平台暂无直接下载链接')) {
+      return strings.updateNoDirectDownloadLink;
+    }
+
+    final httpStatus = RegExp(r'^下载失败: HTTP (\d+)$').firstMatch(error);
+    if (httpStatus != null) {
+      return strings.updateDownloadHttpFailed(httpStatus.group(1)!);
+    }
+    if (error.startsWith('自动安装失败: ')) {
+      return strings.updateAutomaticInstallFailed(
+        error.substring('自动安装失败: '.length),
+      );
+    }
+    if (error.startsWith('下载失败: ')) {
+      return strings.updateDownloadFailed(
+        error.substring('下载失败: '.length),
+      );
+    }
+    if (error.startsWith('无法打开文件，请手动安装: ')) {
+      return strings.updateManualInstallFileError(
+        error.substring('无法打开文件，请手动安装: '.length),
+      );
+    }
+    if (error == '安装失败，请手动打开 APK 安装') {
+      return strings.updateApkInstallFailedNoDetails;
+    }
+    if (error.startsWith('安装失败，请手动打开 APK 安装: ')) {
+      return strings.updateApkInstallFailed(
+        error.substring('安装失败，请手动打开 APK 安装: '.length),
+      );
+    }
+    if (error.startsWith('安装失败: ')) {
+      return strings.updateInstallFailed(error.substring('安装失败: '.length));
+    }
+    if (error.startsWith('更新失败: ')) {
+      return strings.updateFailed(error.substring('更新失败: '.length));
+    }
+    return error;
   }
 
   Future<void> _openInBrowser(String url) async {

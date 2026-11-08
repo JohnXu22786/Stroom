@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/widgets/mermaid_render_widget.dart';
 
 void main() {
@@ -48,6 +49,9 @@ void main() {
       const creationError = '图表渲染引擎初始化失败，请重试';
       await tester.pumpWidget(
         const MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
           ),

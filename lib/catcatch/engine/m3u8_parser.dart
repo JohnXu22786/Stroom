@@ -2,6 +2,12 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart' show debugPrint;
 
+typedef M3U8PlaylistResource = ({
+  String url,
+  int? rangeStart,
+  int? rangeLength,
+});
+
 /// M3U8 / HLS 播放列表解析器
 ///
 /// 支持：
@@ -16,7 +22,7 @@ class M3U8Parser {
   // 公共 API
   // ===========================================================================
 
-  /// 解析 m3u8 内容，返回所有 TS 分段 URL 列表
+  /// 解析 m3u8 内容，返回初始化资源和媒体分段 URL 列表
   ///
   /// [content] M3U8 文本内容
   /// [baseUrl] 用于将相对路径拼装为绝对 URL
@@ -26,37 +32,137 @@ class M3U8Parser {
     String content,
     String baseUrl,
   ) async {
+    final parsed = await parsePlaylistWithDetails(content, baseUrl);
+    return parsed.resources;
+  }
+
+  /// Parses playlist resources and reports the media-fragment count separately
+  /// from initialization resources such as `#EXT-X-MAP`.
+  static Future<
+      ({
+        List<String> resources,
+        List<M3U8PlaylistResource> playlistResources,
+        int mediaSegmentCount,
+        bool hasInitializationMap,
+      })> parsePlaylistWithDetails(
+    String content,
+    String baseUrl,
+  ) async {
     final lines = _normalizeLines(content);
-    final segments = <String>[];
+    final segments = <M3U8PlaylistResource>[];
+    var mediaSegmentCount = 0;
+    var hasInitializationMap = false;
+    var pendingExtInf = false;
+    ({int length, int? offset})? pendingByteRange;
+    String? previousRangeUri;
+    int? previousRangeEnd;
+    String? previousMapRangeUri;
+    int? previousMapRangeEnd;
 
     if (_hasStreamInf(lines)) {
       debugPrint('[M3U8Parser] Detected multi-bitrate playlist');
       final variants = _parseStreamInf(lines);
-      if (variants.isEmpty) return [];
+      if (variants.isEmpty) {
+        return (
+          resources: <String>[],
+          playlistResources: <M3U8PlaylistResource>[],
+          mediaSegmentCount: 0,
+          hasInitializationMap: false,
+        );
+      }
       // 按带宽降序排序，选最高码率
       variants.sort((a, b) => (b.bandwidth ?? 0).compareTo(a.bandwidth ?? 0));
       final selectedUrl = _resolveUrl(variants.first.url, baseUrl);
       debugPrint(
           '[M3U8Parser] Selected variant: bandwidth=${variants.first.bandwidth}');
       final subContent = await _fetchUrl(selectedUrl);
-      return parsePlaylist(subContent, selectedUrl);
+      return parsePlaylistWithDetails(subContent, selectedUrl);
     }
 
     for (int i = 0; i < lines.length; i++) {
       final line = lines[i].trim();
-      if (line.startsWith('#EXTINF:')) {
-        if (i + 1 < lines.length) {
-          final urlLine = lines[i + 1].trim();
-          if (!urlLine.startsWith('#')) {
-            segments.add(_resolveUrl(urlLine, baseUrl));
+      if (line.startsWith('#EXT-X-MAP:')) {
+        hasInitializationMap = true;
+        final attributes = _parseTagParams(
+          line.substring('#EXT-X-MAP:'.length),
+        );
+        final initializationUrl = attributes['URI'];
+        if (initializationUrl != null) {
+          final range = _parseByteRange(attributes['BYTERANGE']);
+          final resolvedUrl = _resolveUrl(initializationUrl, baseUrl);
+          int? rangeStart;
+          if (range != null) {
+            rangeStart = range.offset ??
+                (previousMapRangeUri == resolvedUrl
+                    ? previousMapRangeEnd
+                    : null);
+            if (rangeStart == null) {
+              throw FormatException(
+                'Implicit EXT-X-MAP byte-range offset has no preceding range for $resolvedUrl',
+              );
+            }
+            previousMapRangeUri = resolvedUrl;
+            previousMapRangeEnd = rangeStart + range.length;
+          } else {
+            previousMapRangeUri = null;
+            previousMapRangeEnd = null;
           }
+          segments.add((
+            url: resolvedUrl,
+            rangeStart: rangeStart,
+            rangeLength: range?.length,
+          ));
         }
+      } else if (line.startsWith('#EXT-X-BYTERANGE:')) {
+        pendingByteRange = _parseByteRange(
+          line.substring('#EXT-X-BYTERANGE:'.length),
+        );
+      } else if (line.startsWith('#EXTINF:')) {
+        pendingExtInf = true;
+      } else if (!line.startsWith('#') && pendingExtInf) {
+        final resolvedUrl = _resolveUrl(line, baseUrl);
+        int? rangeStart;
+        int? rangeLength;
+        final byteRange = pendingByteRange;
+        if (byteRange != null) {
+          rangeLength = byteRange.length;
+          rangeStart = byteRange.offset ??
+              (previousRangeUri == resolvedUrl ? previousRangeEnd : null);
+          if (rangeStart == null) {
+            throw FormatException(
+              'Implicit EXT-X-BYTERANGE offset has no preceding range for $resolvedUrl',
+            );
+          }
+          previousRangeUri = resolvedUrl;
+          previousRangeEnd = rangeStart + rangeLength;
+        } else {
+          previousRangeUri = null;
+          previousRangeEnd = null;
+        }
+        final segment = (
+          url: resolvedUrl,
+          rangeStart: rangeStart,
+          rangeLength: rangeLength,
+        );
+        segments.add(segment);
+        mediaSegmentCount++;
+        pendingByteRange = null;
+        pendingExtInf = false;
       }
     }
 
-    debugPrint('[M3U8Parser] Parsed ${segments.length} segments');
-    return segments;
+    debugPrint('[M3U8Parser] Parsed ${segments.length} media resources');
+    return (
+      resources: segments.map((resource) => resource.url).toList(),
+      playlistResources: segments,
+      mediaSegmentCount: mediaSegmentCount,
+      hasInitializationMap: hasInitializationMap,
+    );
   }
+
+  /// Selects a container extension matching the concatenated HLS resources.
+  static String mergedFileExtension({required bool hasInitializationMap}) =>
+      hasInitializationMap ? 'mp4' : 'ts';
 
   /// 获取所有分段的时长信息（秒），用于 ±2s 时长筛选
   ///
@@ -189,6 +295,22 @@ class M3U8Parser {
           m.group(2) ?? m.group(4) ?? '';
     }
     return map;
+  }
+
+  static ({int length, int? offset})? _parseByteRange(String? value) {
+    if (value == null) return null;
+    final match = RegExp(r'^(\d+)(?:@(\d+))?$').firstMatch(value.trim());
+    if (match == null) {
+      throw FormatException('Invalid EXT-X-BYTERANGE value: $value');
+    }
+    final length = int.parse(match.group(1)!);
+    if (length == 0) {
+      throw FormatException('Invalid EXT-X-BYTERANGE value: $value');
+    }
+    return (
+      length: length,
+      offset: match.group(2) == null ? null : int.parse(match.group(2)!),
+    );
   }
 
   /// 相对路径 → 绝对 URL

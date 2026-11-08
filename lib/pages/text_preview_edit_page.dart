@@ -6,6 +6,7 @@ import 'package:markdown_widget/markdown_widget.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/pages/mermaid_chart_page.dart';
 import 'package:stroom/utils/text_manifest.dart';
+import '../l10n/app_localizations.dart';
 import '../widgets/markdown_extensions.dart';
 
 /// 文本预览/编辑页面 - 查看和编辑文本内容
@@ -163,17 +164,18 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
     final shouldDiscard = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('放弃编辑？'),
-        content: const Text('你有未保存的更改，确定要放弃吗？'),
+        title: Text(AppLocalizations.of(context)!.textPreviewDiscardEditsTitle),
+        content: Text(
+            AppLocalizations.of(context)!.textPreviewUnsavedChangesConfirm),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('取消'),
+            child: Text(AppLocalizations.of(context)!.textPreviewCancel),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('放弃'),
+            child: Text(AppLocalizations.of(context)!.textPreviewDiscard),
           ),
         ],
       ),
@@ -218,7 +220,7 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          title: const Text('字号调整'),
+          title: Text(AppLocalizations.of(context)!.textPreviewFontSize),
           content: SizedBox(
             width: 260,
             height: 100,
@@ -260,11 +262,12 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
                 setState(() => _fontSize = temp);
                 _persistFontSize();
               },
-              child: const Text('恢复默认'),
+              child:
+                  Text(AppLocalizations.of(context)!.textPreviewRestoreDefault),
             ),
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('关闭'),
+              child: Text(AppLocalizations.of(context)!.textPreviewClose),
             ),
           ],
         ),
@@ -301,25 +304,18 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
       );
       final newStorageFileName = updatedRecord.storageFileName;
 
-      // 写入新内容到新的存储文件（基于新 hash 的文件名）
-      await TextManifest.writeText(newStorageFileName, newContent);
-
-      // 删除旧的存储文件
-      if (oldStorageFileName != newStorageFileName) {
-        final records = await TextManifest.loadRecords();
-        final oldPathIsShared = records.any(
-          (record) =>
-              record.id != _currentFile.id &&
-              record.storageFileName == oldStorageFileName,
-        );
-        if (!oldPathIsShared) {
-          await TextManifest.deleteFile(oldStorageFileName);
-        }
-      }
-
       // 更新 manifest 记录为新 hash；内容未变化时保留原修改时间，
       // 内容变化时把修改时间更新为当前时间（按修改时间排序的依据）
-      await TextManifest.updateRecord(updatedRecord);
+      await TextManifest.updateTextRecord(updatedRecord, newContent);
+
+      // Recheck all persisted references under the old hash lock. The same
+      // record ID may have been repointed to the old content by a stale save.
+      if (oldStorageFileName != newStorageFileName) {
+        await TextManifest.deleteFileIfUnreferenced(
+          _currentFile.hash,
+          oldStorageFileName,
+        );
+      }
 
       if (mounted) {
         setState(() => _isSaving = false);
@@ -330,7 +326,8 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
         setState(() => _isSaving = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('保存失败: $e'),
+            content: Text(AppLocalizations.of(context)!
+                .textPreviewSaveFailed(e.toString())),
             backgroundColor: Colors.red,
             duration: const Duration(seconds: 3),
           ),
@@ -349,19 +346,19 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
         if (!isMarkdown)
           IconButton(
             icon: const Icon(Icons.format_size, size: 20),
-            tooltip: '字号调整',
+            tooltip: AppLocalizations.of(context)!.textPreviewFontSize,
             onPressed: _showFontSizePopup,
           ),
         // 撤销按钮
         IconButton(
           icon: const Icon(Icons.undo, size: 20),
-          tooltip: '撤销',
+          tooltip: AppLocalizations.of(context)!.textPreviewUndo,
           onPressed: (_undoStack.length > 1) && !_isSaving ? _undo : null,
         ),
         // 重做按钮
         IconButton(
           icon: const Icon(Icons.redo, size: 20),
-          tooltip: '重做',
+          tooltip: AppLocalizations.of(context)!.textPreviewRedo,
           onPressed: _redoStack.isNotEmpty && !_isSaving ? _redo : null,
         ),
         // 保存按钮（仅图标）
@@ -374,13 +371,13 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
         else
           IconButton(
             icon: const Icon(Icons.save, size: 20),
-            tooltip: '保存',
+            tooltip: AppLocalizations.of(context)!.textPreviewSave,
             onPressed: _save,
           ),
         // 放弃按钮（仅图标）
         IconButton(
           icon: const Icon(Icons.close, size: 20),
-          tooltip: '放弃',
+          tooltip: AppLocalizations.of(context)!.textPreviewDiscard,
           onPressed: !_isSaving ? _handleClose : null,
         ),
       ];
@@ -391,13 +388,13 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
       if (!isMarkdown)
         IconButton(
           icon: const Icon(Icons.format_size, size: 20),
-          tooltip: '字号调整',
+          tooltip: AppLocalizations.of(context)!.textPreviewFontSize,
           onPressed: _showFontSizePopup,
         ),
       if (_currentFile.format == 'mmd')
         IconButton(
           icon: const Icon(Icons.account_tree, size: 20),
-          tooltip: '图表编辑',
+          tooltip: AppLocalizations.of(context)!.textPreviewChartEdit,
           onPressed: () async {
             final result = await Navigator.push<String>(
               context,
@@ -433,7 +430,7 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
         ),
       IconButton(
         icon: const Icon(Icons.edit, size: 20),
-        tooltip: '编辑',
+        tooltip: AppLocalizations.of(context)!.textPreviewEdit,
         onPressed: _enterEditMode,
       ),
     ];
@@ -452,17 +449,19 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
         final shouldDiscard = await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
-            title: const Text('放弃编辑？'),
-            content: const Text('你有未保存的更改，确定要放弃吗？'),
+            title: Text(
+                AppLocalizations.of(context)!.textPreviewDiscardEditsTitle),
+            content: Text(
+                AppLocalizations.of(context)!.textPreviewUnsavedChangesConfirm),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('取消'),
+                child: Text(AppLocalizations.of(context)!.textPreviewCancel),
               ),
               TextButton(
                 onPressed: () => Navigator.pop(ctx, true),
                 style: TextButton.styleFrom(foregroundColor: Colors.red),
-                child: const Text('放弃'),
+                child: Text(AppLocalizations.of(context)!.textPreviewDiscard),
               ),
             ],
           ),

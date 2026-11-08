@@ -5,13 +5,14 @@
 // No naming conflicts between sources for this file.
 
 import 'dart:async';
-
+import 'package:flutter/widgets.dart' show Locale;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/models/assistant.dart';
 import 'package:stroom/models/llm_account.dart';
 import 'package:stroom/models/mcp.dart';
 import 'package:stroom/models/tool_call.dart';
 import 'package:stroom/providers/llm_routed_chat_provider.dart';
+import 'package:stroom/providers/locale_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/services/chat_adapter.dart';
 import 'package:stroom/services/chat_service.dart';
@@ -46,6 +47,20 @@ class _FakeAccountManagement implements AiGatewayAccountManagement {
 }
 
 void main() {
+  test('missing provider stream error follows the selected locale', () async {
+    var locale = const Locale('en', 'US');
+    await expectLater(
+      ChatAdapter(localeOverride: () => locale).sendStream('', history: []),
+      emitsError('Please configure a chat provider first'),
+    );
+
+    locale = const Locale('zh', 'CN');
+    await expectLater(
+      ChatAdapter(localeOverride: () => locale).sendStream('', history: []),
+      emitsError('请先配置聊天供应商'),
+    );
+  });
+
   // ====================================================================
   // From chat_adapter_model_selection_test.dart
   // ====================================================================

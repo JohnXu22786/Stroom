@@ -1,6 +1,45 @@
+import 'dart:typed_data';
+
+import 'package:dio/dio.dart';
+import 'package:flutter/widgets.dart' show Locale;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/models/ai_stream_event.dart';
 import 'package:stroom/providers/anthropic_chat_provider.dart';
+import 'package:stroom/providers/locale_provider.dart';
+
+class _ResponseAdapter implements HttpClientAdapter {
+  final String body;
+  final int statusCode;
+
+  _ResponseAdapter(this.body, this.statusCode);
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<dynamic>? cancelFuture,
+  ) async {
+    return ResponseBody.fromString(
+      body,
+      statusCode,
+      headers: {
+        Headers.contentTypeHeader: [Headers.jsonContentType]
+      },
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+Dio _dioReturning(String body, {int statusCode = 200}) =>
+    Dio()..httpClientAdapter = _ResponseAdapter(body, statusCode);
+
+Matcher _throwsContaining(String expected) => throwsA(isA<Exception>().having(
+      (error) => error.toString(),
+      'message',
+      contains(expected),
+    ));
 
 // ============================================================================
 // AnthropicChatProvider 测试（官方 Messages API 格式）
@@ -15,6 +54,116 @@ import 'package:stroom/providers/anthropic_chat_provider.dart';
 // 4. thinking 签名事件、请求头
 
 void main() {
+  test('chat setup, malformed response, and HTTP errors follow the locale',
+      () async {
+    var locale = const Locale('en', 'US');
+
+    await expectLater(
+      AnthropicChatProvider(
+        baseUrl: 'https://api.anthropic.com/v1/messages',
+        apiKey: '',
+        localeOverride: () => locale,
+      ).chat([]),
+      _throwsContaining('API key is not configured'),
+    );
+
+    await expectLater(
+      AnthropicChatProvider(
+        baseUrl: 'https://api.anthropic.com/v1/messages',
+        apiKey: 'test',
+        dio: _dioReturning('{"content":[]}'),
+        localeOverride: () => locale,
+      ).chat([]),
+      _throwsContaining(
+          'Request failed: Exception: API response has no content blocks'),
+    );
+
+    final provider = AnthropicChatProvider(
+      baseUrl: 'https://api.anthropic.com/v1/messages',
+      apiKey: 'test',
+      dio: _dioReturning(
+        '{"error":{"message":"raw provider detail"}}',
+        statusCode: 400,
+      ),
+      localeOverride: () => locale,
+    );
+    await expectLater(
+      provider.chat([]),
+      _throwsContaining('API request failed (HTTP 400): raw provider detail'),
+    );
+    expect(provider.lastResponseStatusCode, 400);
+    expect(provider.lastResponseData, {
+      'error': {'message': 'raw provider detail'}
+    });
+
+    locale = const Locale('zh', 'CN');
+    await expectLater(
+      AnthropicChatProvider(
+        baseUrl: 'https://api.anthropic.com/v1/messages',
+        apiKey: '',
+        localeOverride: () => locale,
+      ).chat([]),
+      _throwsContaining('API 密钥未配置'),
+    );
+    await expectLater(
+      AnthropicChatProvider(
+        baseUrl: 'https://api.anthropic.com/v1/messages',
+        apiKey: 'test',
+        dio: _dioReturning('{"content":[]}'),
+        localeOverride: () => locale,
+      ).chat([]),
+      _throwsContaining('请求失败：Exception: API 返回的 content 列表为空'),
+    );
+  });
+
+  test('Anthropic stream errors localize framing and preserve server detail',
+      () {
+    final data = {
+      'type': 'error',
+      'error': {'message': 'raw server message'},
+    };
+    var locale = const Locale('en', 'US');
+
+    expect(
+      () => processAnthropicStreamData(
+        data,
+        AnthropicStreamAccumulator(),
+        localizations: () => appLocalizationsForLocale(locale),
+      ),
+      throwsA(isA<Exception>().having(
+        (error) => error.toString(),
+        'message',
+        contains('Anthropic API error: raw server message'),
+      )),
+    );
+    expect(
+      () => processAnthropicStreamData(
+        {'type': 'error'},
+        AnthropicStreamAccumulator(),
+        localizations: () => appLocalizationsForLocale(locale),
+      ),
+      throwsA(isA<Exception>().having(
+        (error) => error.toString(),
+        'message',
+        contains('Anthropic API error: Unknown error'),
+      )),
+    );
+
+    locale = const Locale('zh', 'CN');
+    expect(
+      () => processAnthropicStreamData(
+        data,
+        AnthropicStreamAccumulator(),
+        localizations: () => appLocalizationsForLocale(locale),
+      ),
+      throwsA(isA<Exception>().having(
+        (error) => error.toString(),
+        'message',
+        contains('Anthropic API 错误：raw server message'),
+      )),
+    );
+  });
+
   group('buildBody', () {
     final provider = AnthropicChatProvider(
       baseUrl: 'https://api.anthropic.com/v1/messages',

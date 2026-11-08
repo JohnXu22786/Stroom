@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/task_flow/models/block_type_definition.dart';
 import 'package:stroom/task_flow/models/task_flow_definition.dart';
 import 'package:stroom/task_flow/widgets/flow_block_card.dart';
@@ -12,6 +13,9 @@ void main() {
     var moves = 0;
     await tester.pumpWidget(ProviderScope(
       child: MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
         home: Scaffold(
           body: FlowBlockCard(
             block: TaskFlowBlock(typeKey: BlockType.chat),
@@ -46,6 +50,9 @@ void main() {
     var removed = false;
     await tester.pumpWidget(ProviderScope(
       child: MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
         home: Scaffold(
           body: FlowBlockCard(
             block: TaskFlowBlock(typeKey: BlockType.custom),

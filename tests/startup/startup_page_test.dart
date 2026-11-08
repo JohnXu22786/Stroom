@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/startup/startup_page.dart';
 import 'package:stroom/startup/startup_visual_style.dart';
 
@@ -11,6 +12,8 @@ Widget wrapStartupPage({
   String? progressDetail,
 }) {
   return MaterialApp(
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    supportedLocales: AppLocalizations.supportedLocales,
     home: StartupPage(
       isWorking: isWorking,
       statusMessage: statusMessage,
@@ -23,9 +26,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUp(() {
-    SharedPreferences.setMockInitialValues({
-      'data_format_version': 1,
-    });
+    SharedPreferences.setMockInitialValues({'data_format_version': 1});
   });
 
   group('StartupPage - splash UI', () {
@@ -44,19 +45,16 @@ void main() {
     });
 
     testWidgets('shows status message when provided', (tester) async {
-      await tester.pumpWidget(wrapStartupPage(
-        statusMessage: '正在检查数据格式...',
-      ));
+      await tester.pumpWidget(wrapStartupPage(statusMessage: '正在检查数据格式...'));
       await tester.pump();
 
       expect(find.text('正在检查数据格式...'), findsOneWidget);
     });
 
     testWidgets('shows progress detail when provided', (tester) async {
-      await tester.pumpWidget(wrapStartupPage(
-        statusMessage: '正在检查',
-        progressDetail: '1/3',
-      ));
+      await tester.pumpWidget(
+        wrapStartupPage(statusMessage: '正在检查', progressDetail: '1/3'),
+      );
       await tester.pump();
 
       expect(find.text('1/3'), findsOneWidget);
@@ -73,8 +71,31 @@ void main() {
       );
     });
 
-    testWidgets('long status message does not overflow the layout',
-        (tester) async {
+    testWidgets('shows tagline in the selected locale and keeps product name', (
+      tester,
+    ) async {
+      for (final locale in [
+        (const Locale('en', 'US'), 'Your learning assistant'),
+        (const Locale('zh', 'CN'), '你的学习助手'),
+      ]) {
+        await tester.pumpWidget(
+          MaterialApp(
+            locale: locale.$1,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const StartupPage(),
+          ),
+        );
+        await tester.pump();
+
+        expect(find.text('Stroom'), findsOneWidget);
+        expect(find.text(locale.$2), findsOneWidget);
+      }
+    });
+
+    testWidgets('long status message does not overflow the layout', (
+      tester,
+    ) async {
       // 启动检查发现多个问题时状态文案会非常长（所有问题拼接），
       // 必须在受限高度内滚动而不是触发 RenderFlex overflow。
       final longMessage = '启动完成（注意: 发现 3 个数据问题:\n'
@@ -95,10 +116,9 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
 
-      await tester.pumpWidget(wrapStartupPage(
-        statusMessage: '正在准备你的学习空间',
-        progressDetail: '1/3',
-      ));
+      await tester.pumpWidget(
+        wrapStartupPage(statusMessage: '正在准备你的学习空间', progressDetail: '1/3'),
+      );
       await tester.pump();
 
       expect(

@@ -1,10 +1,16 @@
 import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:stroom/l10n/app_localizations.dart';
+import 'package:stroom/widgets/stroom_menu_style.dart';
+
+import '../models/ocr_batch_execution.dart';
 import '../providers/provider_config.dart';
 import '../services/asr_service.dart';
 import '../widgets/code_editor_field.dart';
 import '../widgets/drag_sort_area.dart';
 import 'llm_model_config_shared.dart';
+import 'model_config_shared.dart';
 
 part 'provider_settings_panel_custom_params.dart';
 part 'provider_settings_panel_reasoning.dart';
@@ -87,6 +93,7 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
   AudioUploadMethod _uploadMethod = AudioUploadMethod.multipart;
   double _maxFileSizeMb = 25.0;
   late final TextEditingController _maxFileSizeController;
+  late final TextEditingController _ocrRequestSizeBudgetController;
 
   // ASR preprocessing & chunking
   String _preprocessing = 'none'; // 'none' | 'resampleMono'
@@ -97,6 +104,7 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
 
   bool get _isLlmType => widget.providerType == 'llm';
   bool get _isAsrType => widget.providerType == 'asr';
+  bool get _isOcrType => widget.providerType == 'ocr';
 
   @override
   void initState() {
@@ -146,6 +154,15 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
       }
     }
     _reasoningParams = c.reasoningParams.map((p) => p.copy()).toList();
+    final ocrRequestBudget = c.typeConfig['requestSizeBudgetBytes'];
+    _ocrRequestSizeBudgetController = TextEditingController(
+      text: _isOcrType && ocrRequestBudget is num
+          ? (ocrRequestBudget / (1024 * 1024)).toString().replaceFirst(
+                RegExp(r'\.0$'),
+                '',
+              )
+          : '',
+    );
     // Initialize JSON validation for existing params
     for (int i = 0; i < _customParams.length; i++) {
       _validateJsonField(i, _customParams[i]);
@@ -188,6 +205,7 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
     _maxTokensController.dispose();
     _seedController.dispose();
     _maxFileSizeController.dispose();
+    _ocrRequestSizeBudgetController.dispose();
     super.dispose();
   }
 
@@ -196,7 +214,7 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
     final cs = Theme.of(context).colorScheme;
     final title = widget.config.providerName.isNotEmpty
         ? widget.config.providerName
-        : '供应商配置';
+        : AppLocalizations.of(context)!.providerSettingsTitle;
 
     return Dialog(
       insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
@@ -229,9 +247,12 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
               ),
               TabBar(
                 labelPadding: const EdgeInsets.symmetric(horizontal: 24),
-                tabs: const [
-                  Tab(text: '基本信息'),
-                  Tab(text: '参数设置'),
+                tabs: [
+                  Tab(text: AppLocalizations.of(context)!.providerBasicInfoTab),
+                  Tab(
+                    text: AppLocalizations.of(context)!
+                        .providerParameterSettingsTab,
+                  ),
                 ],
               ),
               Expanded(
@@ -249,7 +270,7 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
                   children: [
                     TextButton(
                       onPressed: () => Navigator.pop(context),
-                      child: const Text('取消'),
+                      child: Text(AppLocalizations.of(context)!.batchDlgCancel),
                     ),
                     const SizedBox(width: 12),
                     FilledButton(
@@ -258,7 +279,9 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
                           Navigator.pop(context, _buildConfig());
                         }
                       },
-                      child: const Text('保存'),
+                      child: Text(
+                        AppLocalizations.of(context)!.mermaidSaveButton,
+                      ),
                     ),
                   ],
                 ),

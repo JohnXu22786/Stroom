@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:stroom/pages/chat/chat_types.dart';
 import 'package:stroom/pages/chat/widgets/reasoning_section.dart';
@@ -19,6 +21,14 @@ void main() {
             ),
           ],
           child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
             home: Scaffold(
               body: ReasoningSection(
                 sections: ReasoningSectionData(
@@ -50,6 +60,14 @@ void main() {
             ),
           ],
           child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
             home: Scaffold(
               body: ReasoningSection(
                 sections: ReasoningSectionData(
@@ -81,6 +99,14 @@ void main() {
             ),
           ],
           child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
             home: Scaffold(
               body: ReasoningSection(
                 sections: ReasoningSectionData(
@@ -108,6 +134,14 @@ void main() {
       // and then flipped to streaming never started the timer.
       Widget build({required bool streaming}) => ProviderScope(
             child: MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              supportedLocales: AppLocalizations.supportedLocales,
+              localizationsDelegates: const [
+                AppLocalizations.delegate,
+                GlobalMaterialLocalizations.delegate,
+                GlobalWidgetsLocalizations.delegate,
+                GlobalCupertinoLocalizations.delegate,
+              ],
               home: Scaffold(
                 body: ReasoningSection(
                   sections: ReasoningSectionData(
@@ -156,6 +190,14 @@ void main() {
             ),
           ],
           child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
             home: Scaffold(
               body: ReasoningSection(
                 sections: ReasoningSectionData(
@@ -188,6 +230,14 @@ void main() {
             ),
           ],
           child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
             home: Scaffold(
               body: ReasoningSection(
                 sections: ReasoningSectionData(
@@ -217,6 +267,14 @@ void main() {
             ),
           ],
           child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
             home: Scaffold(
               body: ReasoningSection(
                 sections: ReasoningSectionData(
@@ -262,6 +320,14 @@ void main() {
             ),
           ],
           child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
             home: Scaffold(
               body: ReasoningSection(
                 sections: ReasoningSectionData(
@@ -303,6 +369,14 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
             home: Scaffold(
               body: ReasoningSection(
                 sections: ReasoningSectionData(
@@ -334,6 +408,14 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
             home: Scaffold(
               body: ReasoningSection(
                 sections: ReasoningSectionData(
@@ -369,6 +451,14 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
             home: Scaffold(
               body: ReasoningSection(
                 sections: ReasoningSectionData(
@@ -397,6 +487,14 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
             home: Scaffold(
               body: ReasoningSection(
                 sections: ReasoningSectionData(
@@ -444,6 +542,14 @@ void main() {
                 .overrideWith((ref) => hasFirstToken),
           ],
           child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
             home: Scaffold(
               body: ReasoningSection(
                 sections: ReasoningSectionData(

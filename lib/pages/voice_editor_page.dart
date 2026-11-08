@@ -1,5 +1,8 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
+
+import '../l10n/app_localizations.dart';
 import '../providers/provider_config.dart';
 import 'voice_batch_add_page.dart';
 import 'voice_editor_shared.dart';
@@ -228,9 +231,10 @@ class _VoiceEditorPageState extends State<VoiceEditorPage> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('音色编辑'),
+        title: Text(l10n.voiceEditorTitle),
         actions: [
           TextButton(
             onPressed: () {
@@ -240,7 +244,7 @@ class _VoiceEditorPageState extends State<VoiceEditorPage> {
                 _save();
               }
             },
-            child: const Text('保存'),
+            child: Text(l10n.save),
           ),
         ],
       ),
@@ -254,13 +258,13 @@ class _VoiceEditorPageState extends State<VoiceEditorPage> {
                 OutlinedButton.icon(
                   onPressed: _addRow,
                   icon: const Icon(Icons.add, size: 18),
-                  label: const Text('添加一行'),
+                  label: Text(l10n.voiceAddRow),
                 ),
                 const SizedBox(width: 8),
                 OutlinedButton.icon(
                   onPressed: _batchAdd,
                   icon: const Text('📋', style: TextStyle(fontSize: 16)),
-                  label: const Text('批量添加'),
+                  label: Text(l10n.voiceBatchAdd),
                 ),
               ],
             ),
@@ -286,10 +290,10 @@ class _VoiceEditorPageState extends State<VoiceEditorPage> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  const Expanded(
+                  Expanded(
                     child: Text(
-                      '音色名称',
-                      style: TextStyle(
+                      l10n.voiceName,
+                      style: const TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                         color: Colors.grey,
@@ -297,10 +301,10 @@ class _VoiceEditorPageState extends State<VoiceEditorPage> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  const Expanded(
+                  Expanded(
                     child: Text(
-                      '音色ID',
-                      style: TextStyle(
+                      l10n.voiceId,
+                      style: const TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                         color: Colors.grey,
@@ -313,9 +317,9 @@ class _VoiceEditorPageState extends State<VoiceEditorPage> {
             ),
           Expanded(
             child: _voices.isEmpty
-                ? const Center(
+                ? Center(
                     child: Text(
-                      '暂无音色，请添加',
+                      l10n.voiceNoneAdd,
                       style: TextStyle(color: Colors.grey),
                     ),
                   )
@@ -334,6 +338,7 @@ class _VoiceEditorPageState extends State<VoiceEditorPage> {
   }
 
   Widget _buildRow(int index) {
+    final l10n = AppLocalizations.of(context)!;
     final isDuplicate = _findDuplicateIndices(index).isNotEmpty;
 
     return Card(
@@ -365,8 +370,8 @@ class _VoiceEditorPageState extends State<VoiceEditorPage> {
             Expanded(
               child: TextField(
                 controller: _nameCtrls[index],
-                decoration: const InputDecoration(
-                  hintText: '音色名称',
+                decoration: InputDecoration(
+                  hintText: l10n.voiceName,
                   border: InputBorder.none,
                   isDense: true,
                   contentPadding: EdgeInsets.symmetric(vertical: 8),
@@ -380,15 +385,18 @@ class _VoiceEditorPageState extends State<VoiceEditorPage> {
                 controller: _idCtrls[index],
                 focusNode: _idFocusNodes[index],
                 decoration: InputDecoration(
-                  hintText: '音色ID',
+                  hintText: l10n.voiceId,
                   border: InputBorder.none,
                   isDense: true,
                   contentPadding: const EdgeInsets.symmetric(vertical: 8),
                   suffixIcon: isDuplicate
                       ? const Padding(
                           padding: EdgeInsets.only(right: 4),
-                          child: Icon(Icons.warning_amber,
-                              size: 16, color: Colors.orange),
+                          child: Icon(
+                            Icons.warning_amber,
+                            size: 16,
+                            color: Colors.orange,
+                          ),
                         )
                       : null,
                 ),
@@ -400,7 +408,7 @@ class _VoiceEditorPageState extends State<VoiceEditorPage> {
               onPressed: () => _deleteRow(index),
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-              tooltip: '删除',
+              tooltip: l10n.delete,
             ),
           ],
         ),

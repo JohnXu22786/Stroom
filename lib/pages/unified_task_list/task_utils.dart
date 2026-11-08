@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -8,20 +9,21 @@ import '../../providers/chat_manager_provider.dart';
 import '../../providers/task_provider.dart';
 import '../../providers/background_task_provider.dart';
 import '../../task_flow/models/task_flow_execution.dart';
+import '../../l10n/app_localizations.dart';
 import '../../task_flow/services/task_flow_execution_service.dart';
 
 // =============================================================================
 // 工具函数
 // =============================================================================
 
-String formatSize(int? bytes) {
-  if (bytes == null) return '未知大小';
-  if (bytes < 1024) return '$bytes B';
-  if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+String formatSize(int? bytes, AppLocalizations strings) {
+  if (bytes == null) return strings.unifiedTaskUnknownSize;
+  if (bytes < 1024) return bytes.toString() + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toStringAsFixed(1) + ' KB';
   if (bytes < 1024 * 1024 * 1024) {
-    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    return (bytes / (1024 * 1024)).toStringAsFixed(1) + ' MB';
   }
-  return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
+  return (bytes / (1024 * 1024 * 1024)).toStringAsFixed(1) + ' GB';
 }
 
 String truncateUrl(String url, {int maxLen = 40}) {
@@ -29,12 +31,14 @@ String truncateUrl(String url, {int maxLen = 40}) {
   return '${url.substring(0, maxLen ~/ 2)}...${url.substring(url.length - maxLen ~/ 2)}';
 }
 
-String formatDurationSimple(String duration) {
+String formatDurationSimple(String duration, AppLocalizations strings) {
   final sec = parseDurationToSeconds(duration);
   if (sec == null) return duration;
-  if (sec < 60) return '${sec.round()}秒';
-  if (sec < 3600) return '${(sec ~/ 60)}分${(sec % 60).round()}秒';
-  return '${(sec ~/ 3600)}时${((sec % 3600) ~/ 60)}分';
+  if (sec < 60) return strings.unifiedDurationSeconds(sec.round());
+  if (sec < 3600) {
+    return strings.unifiedDurationMinutesSeconds(sec ~/ 60, (sec % 60).round());
+  }
+  return strings.unifiedDurationHoursMinutes(sec ~/ 3600, (sec % 3600) ~/ 60);
 }
 
 double? parseDurationToSeconds(String duration) {
@@ -53,28 +57,29 @@ double? parseDurationToSeconds(String duration) {
   return double.tryParse(duration);
 }
 
-String formatRelativeTime(DateTime dt) {
+String formatRelativeTime(DateTime dt, AppLocalizations strings) {
   final now = DateTime.now();
   final diff = now.difference(dt);
-  if (diff.inMinutes < 1) return '刚刚';
-  if (diff.inMinutes < 60) return '${diff.inMinutes}分钟前';
-  if (diff.inHours < 24) return '${diff.inHours}小时前';
-  return '${dt.month}/${dt.day} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+  if (diff.inMinutes < 1) return strings.commonJustNow;
+  if (diff.inMinutes < 60) return strings.commonMinutesAgo(diff.inMinutes);
+  if (diff.inHours < 24) return strings.commonHoursAgo(diff.inHours);
+  return dt.month.toString() +
+      '/' +
+      dt.day.toString() +
+      ' ' +
+      dt.hour.toString().padLeft(2, '0') +
+      ':' +
+      dt.minute.toString().padLeft(2, '0');
 }
 
-String getStatusLabel(TaskStatus status) {
-  switch (status) {
-    case TaskStatus.running:
-      return '进行中';
-    case TaskStatus.completed:
-      return '已完成';
-    case TaskStatus.failed:
-      return '失败';
-    case TaskStatus.paused:
-      return '已暂停';
-    case TaskStatus.waiting:
-      return '等待中';
-  }
+String getStatusLabel(TaskStatus status, AppLocalizations strings) {
+  return switch (status) {
+    TaskStatus.running => strings.taskFlowCardRunning,
+    TaskStatus.completed => strings.taskFlowCardCompleted,
+    TaskStatus.failed => strings.taskFlowCardFailed,
+    TaskStatus.paused => strings.taskFlowCardPaused,
+    TaskStatus.waiting => strings.taskFlowCardWaiting,
+  };
 }
 
 Widget buildInfoRow(ColorScheme cs, IconData icon, String label, String value) {
@@ -92,16 +97,13 @@ Widget buildInfoRow(ColorScheme cs, IconData icon, String label, String value) {
         ),
       ),
       Expanded(
-        child: Text(
-          value,
-          style: TextStyle(fontSize: 12, color: cs.onSurface),
-        ),
+        child: Text(value, style: TextStyle(fontSize: 12, color: cs.onSurface)),
       ),
     ],
   );
 }
 
-Widget buildStatusChip(TaskStatus status) {
+Widget buildStatusChip(TaskStatus status, AppLocalizations strings) {
   switch (status) {
     case TaskStatus.running:
       return Container(
@@ -110,8 +112,8 @@ Widget buildStatusChip(TaskStatus status) {
           color: Colors.blue.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(10),
         ),
-        child: const Text(
-          '进行中',
+        child: Text(
+          strings.taskFlowCardRunning,
           style: TextStyle(fontSize: 11, color: Colors.blue),
         ),
       );
@@ -122,8 +124,8 @@ Widget buildStatusChip(TaskStatus status) {
           color: Colors.green.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(10),
         ),
-        child: const Text(
-          '已完成',
+        child: Text(
+          strings.taskFlowCardCompleted,
           style: TextStyle(fontSize: 11, color: Colors.green),
         ),
       );
@@ -134,8 +136,8 @@ Widget buildStatusChip(TaskStatus status) {
           color: Colors.red.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(10),
         ),
-        child: const Text(
-          '失败',
+        child: Text(
+          strings.taskFlowCardFailed,
           style: TextStyle(fontSize: 11, color: Colors.red),
         ),
       );
@@ -146,8 +148,8 @@ Widget buildStatusChip(TaskStatus status) {
           color: Colors.orange.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(10),
         ),
-        child: const Text(
-          '已暂停',
+        child: Text(
+          strings.taskFlowCardPaused,
           style: TextStyle(fontSize: 11, color: Colors.orange),
         ),
       );
@@ -158,8 +160,8 @@ Widget buildStatusChip(TaskStatus status) {
           color: Colors.purple.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(10),
         ),
-        child: const Text(
-          '等待中',
+        child: Text(
+          strings.taskFlowCardWaiting,
           style: TextStyle(fontSize: 11, color: Colors.purple),
         ),
       );
@@ -210,7 +212,8 @@ bool hasUnfinishedFlowBatchMember(
 ) =>
     execution.batchId != null &&
     records.any(
-        (member) => member.batchId == execution.batchId && !member.isTerminal);
+      (member) => member.batchId == execution.batchId && !member.isTerminal,
+    );
 
 /// Remove the real tasks behind a flow execution's sub-tasks from their
 /// providers, so they don't resurface as orphaned standalone cards when
@@ -221,12 +224,14 @@ bool hasUnfinishedFlowBatchMember(
 /// cancelled by conversation id; the in-flight ASR/OCR request of the
 /// currently executing block is cancelled via the execution service.
 void removeFlowSubTaskTasks(WidgetRef ref, TaskFlowExecution execution) {
-  unawaited(ref
-      .read(taskFlowExecutionServiceProvider)
-      .cancelExecution(execution.id)
-      .catchError((Object error) {
-    debugPrint('无法保存任务流取消状态: $error');
-  }));
+  unawaited(
+    ref
+        .read(taskFlowExecutionServiceProvider)
+        .cancelExecution(execution.id)
+        .catchError((Object error) {
+      debugPrint('无法保存任务流取消状态: $error');
+    }),
+  );
   removeFlowSubTaskTasksCore(
     execution,
     removeCatCatch: (id) =>

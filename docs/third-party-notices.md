@@ -6,19 +6,253 @@ Stroom's application license is AGPL-3.0; see the root [`LICENSE`](../LICENSE).
 
 About > Open Source Licenses uses Flutter's `showLicensePage` and
 `LicenseRegistry` to show licenses from the package graph resolved for the
-build. This repository does not track `pubspec.lock`, so the exact direct and
-transitive package versions cannot be reconstructed from `pubspec.yaml` alone.
-This note does not duplicate or claim to enumerate that graph.
+build. The repository does not track `pubspec.lock`, so Pub resolves direct and
+transitive Dart package versions from the constraints in `pubspec.yaml` for each
+build. The Flutter SDK itself also supplies packages, so the graph can vary
+with the Flutter version used for a build. This note does not duplicate or
+claim to enumerate that graph. CI and release workflows use Flutter 3.47.8.
 
-`fvp` 0.37.3's package archive includes a BSD-3-Clause license. The package is
-based on libmdk, whose upstream terms allow Flutter/fvp users to use a bundled
-key without charge, including in commercial software; the runtime is not under
-a standard OSI-approved open-source license. This describes only the upstream
-MDK component terms; they do not change Stroom's AGPL-3.0 obligations and must
-not be read as permission to distribute Stroom as closed-source commercial
-software. This is conditionally unsuitable if Stroom's distribution policy
-requires every runtime component to use an OSI-approved license. The package
-license and runtime terms are separate.
+`function_tree` is retained because the current math evaluator exposes syntax
+that the proposed Dendrocas rewrite does not support directly; a replacement
+needs a separate compatibility review. `cupertino_icons` is constrained by
+Chewie's dependency range, and the test-only `cross_file` dependency is
+constrained by `file_picker_platform_interface`.
+
+`fvp: ^0.39.1` is declared by Stroom. The [`fvp` 0.39.1 package archive](https://pub.dev/packages/fvp/versions/0.39.1)
+is BSD-3-Clause licensed, and Flutter's generated package registry shows that
+package license on the in-app page. That package license is separate from the
+native runtime downloaded by FVP.
+
+FVP 0.39.1's [CMake setup](https://pub.dev/packages/fvp/versions/0.39.1)
+downloads MDK SDK archives from SourceForge's mutable
+[`nightly` directory](https://sourceforge.net/projects/mdk-sdk/files/nightly/)
+unless `FVP_DEPS_URL` is set; for Windows x64 it selects
+`mdk-sdk-windows-x64.7z`. Stroom's release workflow does not set that override.
+The notices below
+describe runtime packages inspected on 2026-10-11; they do not identify every
+future release artifact or make the downloaded runtime reproducible.
+
+| Native component | Observed runtime scope | License and retained text |
+| --- | --- | --- |
+| FFmpeg shared libraries | Linux, Windows, Android, and Apple (macOS plus iOS/Catalyst slices); build identity `git-2026-10-08-ec420ba-avbuild` | [LGPL-2.1-or-later](https://github.com/FFmpeg/FFmpeg/blob/ec420ba16172960f0009b8bdcc393688797bf8a6/COPYING.LGPLv2.1), copied to `assets/vendor/native/ffmpeg-COPYING.LGPLv2.1` |
+| libass | Windows, Android, and macOS | [ISC](https://github.com/libass/libass/blob/f61db567e6593df3470e91594bcd4ad2d0473aff/COPYING), copied to `assets/vendor/native/libass-COPYING` |
+| dav1d | macOS framework slice only | [BSD-2-Clause](https://github.com/videolan/dav1d/blob/99f3354ed0b9b4bf3c7c9347318dbcc522c94af5/COPYING), copied to `assets/vendor/native/dav1d-COPYING` |
+| mdk-braw plugin | Linux, Windows, and macOS | [MIT](https://github.com/wang-bin/mdk-braw/blob/c05dedfd7407b54d831dd5484612627800e14fad/LICENSE), copied to `assets/vendor/native/mdk-braw-LICENSE` |
+| mdk-r3d plugin | Linux, Windows, and macOS | [MIT](https://github.com/wang-bin/mdk-r3d/blob/17350174fbb64373ecbc9410faab39687eee7e07/LICENSE), copied to `assets/vendor/native/mdk-r3d-LICENSE` |
+| LLVM libc++ | Linux `libc++.so.1` and Android `libc++_shared.so` | [Apache-2.0 WITH LLVM-exception](https://github.com/llvm/llvm-project/blob/611eee02d8a717ce6eb0cbe9d75268699321d352/libcxx/LICENSE.TXT), copied to `assets/vendor/native/llvm-libcxx-LICENSE.TXT` |
+
+The Android SDK archive also contained `libdav1d.so`, but FVP's Android target
+does not link it and no Stroom Android output confirmed that it is packaged.
+It is therefore not listed as an Android runtime component. The separate
+[`mdk-dav1d` wrapper](https://github.com/wang-bin/mdk-dav1d/blob/8f71de3a0c199fdc7c36316ae9bf043e5b3d4633/LICENSE)
+has an MIT license, but no separate wrapper artifact was identified in the
+inspected outputs; only the macOS `libdav1d.dylib` is confirmed here.
+
+### Windows x64 MDK package and NVJPEG2000 plugin snapshot
+
+The vendor MDK `0.39.0.2635` Windows x64 `.nupkg` artifact downloaded from
+SourceForge's mutable `nightly` directory has SHA-256
+`24ee1dd517ad3950ca952a27875c3a87f6ea4b9bee27c8e549b5c1fd86af6618`. Its
+`mdk.nuspec` declares `<license type="expression">MIT</license>` and links to
+the MIT text. Its README attributes the package to `Copyright (c) 2016-2025
+WangBin`. The package version was not listed in the public nuget.org version
+index on the review date, so this is recorded as the vendor `.nupkg` artifact,
+not as a nuget.org release. The package-level MIT text and attribution are
+registered separately on the in-app license page at
+`assets/vendor/native/mdk-0.39.0.2635-Windows-x64-MIT.txt`.
+
+This `.nupkg` contains `mdk.dll` (SHA-256
+`94b518ce425518170d6f088dd136dfe083f17347cbc5b1d730160060c66f2fa4`) and
+`mdk-nvjp2k.dll` (SHA-256
+`d8101a8340fc09527566c8450d2bab17e772770316790355f093bb9dfc3ba0fc`). The
+inspected FVP Windows x64 SDK archive (SHA-256
+`e5ade9203fe5fd0e7526ec23bd89926318d073f0d36ef474865b4e6bc3447bd0`)
+contains byte-identical copies of both DLLs. The plugin PDB names MDK's
+`plugins/nvjp2k` build path. The public `mdk-nvjp2k` Actions include successful
+run `38029681028` at source commit
+[`7ab9b30954957cc76763aa8b9ce356015435c4d6`](https://github.com/wang-bin/mdk-nvjp2k/tree/7ab9b30954957cc76763aa8b9ce356015435c4d6).
+These are source/build provenance, not a reproducible attestation tying every
+mutable-nightly byte to that commit: the run's live artifact
+`mdk-nvjp2k-windows-2025-vs2026` (`11661711442`) could not be downloaded here
+because the HTTPS tunnel returned 403.
+
+The FVP/MDK runtime distributions reviewed here also contain separately
+licensed components listed in the table above, including FFmpeg, libass,
+`mdk-braw`, and `mdk-r3d`. The Windows package-level MIT declaration does not
+replace those component-specific notices.
+
+The source at that commit has no standalone repository `LICENSE` file or
+GitHub license metadata. Its `nvJp2kDecoder.cpp` header says “Free for
+opensource softwares or non-commercial use.”, requires retaining the copyright
+and permission notice, and identifies NVIDIA-provided source. Stroom keeps
+that exact source-file header at
+`assets/vendor/native/mdk-nvjp2k-source-file-notice.txt` as a separate notice;
+it is not relabeled as the `.nupkg`'s MIT license.
+
+Static PE inspection of `mdk-nvjp2k.dll` shows imports of `nvjpeg2k_0.dll`,
+`cudart64_12.dll`, and `mdk.dll`. Neither NVIDIA DLL is present in the
+inspected `.nupkg` or FVP SDK archive. The nvJPEG2000 supplement §4.1 limits
+nvJPEG2K use to systems with NVIDIA GPUs; its “Distribution” paragraph lists
+`nvjpeg2k_0.dll` among runtime files distributable under the base Agreement;
+see the
+[nvJPEG2000 license supplement](https://docs.nvidia.com/cuda/nvjpeg2000/license.html).
+The notice “This software contains source code provided by NVIDIA
+Corporation.” appears in the
+[base NVIDIA SDK Agreement §1.2(iii)](https://docs.nvidia.com/cuda/nvjpeg2000/license.html#software-license-agreement),
+which requires it in distributed
+modifications and derivative works of sample source code. It is not a general
+notice condition for runtime DLLs. The upstream source-file header contains
+that notice, and Stroom retains it separately.
+
+The CUDA runtime import has a separate license source: the
+[CUDA Toolkit EULA, Attachment A](https://docs.nvidia.com/cuda/eula/index.html#attachment-a)
+lists Windows `cudart.dll` and allows version- or architecture-specific
+filename variants, using `cudart64_90.dll` as an example, subject to the
+EULA's distribution requirements. The import name `cudart64_12.dll` does not
+identify the precise CUDA Toolkit build. Neither runtime DLL is included in
+the inspected packages; if a deployment supplies them, `nvjpeg2k_0.dll` is
+scoped by the nvJPEG2000 supplement and `cudart64_12.dll` by the separate CUDA
+Toolkit EULA. Neither is covered by the MDK `.nupkg` package-level MIT entry.
+
+The inspected Windows `.nupkg` declaration is evidence for this dated package
+snapshot only, not a complete or reproducible all-platform MDK runtime bill of
+materials.
+
+### MDK runtime terms and commercial use
+
+The inspected MDK SDK packages contain a binary-only core, and the public MDK
+SDK repository has no `LICENSE` file or GitHub license metadata. MDK's
+[README](https://github.com/wang-bin/mdk-sdk/blob/f038eb2c67141e6d71ef067f11a9a3c68dd5ab95/README.md)
+says Flutter users may use the bundled key without charge and ship commercial
+software; it also says open-source projects may be commercial. This expressly
+permits commercial Flutter applications such as Stroom. It does not provide
+the binary core's source or make the Windows `.nupkg` package-level MIT
+declaration apply to other platform artifacts or future nightly contents.
+
+The official [`mdk` 0.36.0 CocoaPods specification](https://cdn.jsdelivr.net/cocoa/Specs/5/1/3/mdk/0.36.0/mdk.podspec.json)
+labels its license type `Commercial`, while the embedded license text grants
+permission to use, modify, distribute, sublicense, and sell with the copyright
+and permission notice retained. That exact text is shown on the in-app page
+and stored at `assets/vendor/native/mdk-cocoapods-0.36.0-license-text.txt`.
+This is evidence about the Apple CocoaPods 0.36.0 metadata, not proof that all
+platform SDK archives have the same terms. Apple and Linux nightly SDK README
+files also repeat MDK's commercial Flutter/open-source permission language,
+and the extracted README text SHA-256 values are:
+
+- Apple: `db2f6936bbbc92e91a957b0e1ffc1b87ffa6c954be1b20151f095051b3c9a3d0`
+- Linux: `60855cad5f59067e1d1062308ce997e566f88eb280764d10c8ca76912cbdfb3a`
+
+These README statements are evidence of use permission, but they are not the
+Windows `.nupkg` and do not supply its MIT package metadata. The Windows
+package declaration is therefore not generalized to those platform runtimes.
+The inspected MDK core remains binary-only; the cited sources do not establish
+that its binaries are source-available. These scoped findings do not establish
+an AGPL conflict or a prohibition on commercial use.
+
+### Anki protocol schemas
+
+The sync protocol schemas under `lib/anki/sync/proto/anki/` are based on
+[`ankitects/anki`](https://github.com/ankitects/anki/tree/d64812b680426c6dd55f9de7004070e560361d4b/proto/anki).
+Against that upstream revision, 14 of the 15 local schema files match
+byte-for-byte; `stats.proto` differs. The source headers retain the following
+Ankitects attribution and license notice:
+
+```text
+// Copyright: Ankitects Pty Ltd and contributors
+// License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
+```
+
+The in-app page repeats those lines and includes the AGPLv3 license text in
+`assets/vendor/native/anki-sync-proto-AGPL-3.0-or-later.txt`.
+
+AGPLv3 permits commercial use. It is copyleft: when distributing covered
+object code, the distributor must provide corresponding source through one of
+the methods allowed by §6; when users interact over a network with a modified
+version, §13 requires a prominent offer to obtain its corresponding source.
+AGPLv3 §13 also permits combining an AGPLv3-covered work with GPLv3-covered
+code; the AGPL terms continue to apply to the AGPL-covered portion, while the
+GPLv3 terms remain applicable to the GPLv3-covered portion.
+
+## Android runtime dependencies observed in release APK v0.5.0-rc.1
+
+The [Android release APK](https://github.com/JohnXu22786/Stroom/releases/tag/v0.5.0-rc.1)
+(SHA-256 `0b3e3d179a49ffdc79be7b91cbdc1477d8e3f57acdb03bf7659adb508f837f12`)
+contains `j$.util.DesugarTimeZone`. Neither the APK's standalone notices nor
+Flutter's `NOTICES.Z` lists `desugar_jdk_libs`. Android Gradle configures
+`coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")`, and the
+[Google Maven POM](https://dl.google.com/dl/android/maven2/com/android/tools/desugar_jdk_libs/2.1.4/desugar_jdk_libs-2.1.4.pom)
+identifies GNU GPL version 2 with the Classpath Exception. The exact upstream
+[`LICENSE`](https://github.com/google/desugar_jdk_libs/blob/50d9c1fb3e85fa4c00161525a45484f712c1f003/LICENSE)
+and [`ADDITIONAL_LICENSE_INFO`](https://github.com/google/desugar_jdk_libs/blob/50d9c1fb3e85fa4c00161525a45484f712c1f003/ADDITIONAL_LICENSE_INFO)
+from that 2.1.4 preparation commit are retained at
+`assets/vendor/native/desugar-2.1.4-LICENSE.txt` and
+`assets/vendor/native/desugar-2.1.4-ADDITIONAL_LICENSE_INFO.txt`, and
+both are shown on Flutter's Open Source Licenses page.
+
+The Classpath Exception permits linking independent modules with the library
+in one executable under each module's own license terms. It does not extend to
+code copied into or derived from the GPL-covered library. We found no AGPLv3
+incompatibility for the independent-module linking path described by the
+exception. The upstream additional licensing note warns that the broader
+repository may include separate Apache-2.0 or FreeType programs. The inspected
+`jdk11/src/java.base` subset at the preparation commit had no such headers;
+that scoped check does not establish the license of every upstream source file.
+
+The separate [`desugar_jdk_libs_configuration:2.1.4` POM](https://dl.google.com/dl/android/maven2/com/android/tools/desugar_jdk_libs_configuration/2.1.4/desugar_jdk_libs_configuration-2.1.4.pom)
+identifies BSD-3-Clause. It is build-time configuration; its 29 class
+descriptors were not found in this release APK, so it is not listed as bundled
+runtime software.
+
+The APK also contains AndroidX, Material Components, and Kotlinx Coroutines
+Maven runtime artifacts. Inspection found 63 `META-INF/*.version` markers;
+the POMs for 62 identified coordinates report Apache-2.0. The
+`androidx.arch.core:core-runtime` marker contains malformed Gradle task text,
+so its exact version cannot be recovered from this APK. Google's [Maven
+metadata](https://dl.google.com/dl/android/maven2/androidx/arch/core/core-runtime/maven-metadata.xml)
+currently lists 15 versions; the POMs for all 15 versions identify Apache-2.0.
+The coordinate is included in the Apache-2.0 group despite its unknown exact
+version. The APK embeds the Apache license from
+`androidx.annotation`; the standard [Apache License 2.0
+text](https://www.apache.org/licenses/LICENSE-2.0.txt) is retained at
+`assets/vendor/native/android-maven-runtime-APACHE-2.0.txt` and registered for
+the 62 identified artifacts and `androidx.arch.core:core-runtime`. Flutter's
+`NOTICES.Z` does not enumerate these Maven dependencies.
+
+This notice group describes only the dependencies observed in APK
+`v0.5.0-rc.1`; the repository does not track a Gradle or Pub lockfile and does
+not claim to cover future APK contents. On newer `main`, `wechat_assets_picker`
+10.1.3 has a root Apache-2.0 license already
+collected by Flutter. Its `photo_manager` dependency declares no Android Maven
+runtime dependency and is not part of this observed APK group.
+
+## iOS CocoaPods frameworks observed in release IPA v0.5.0-rc.1
+
+The unsigned iOS release IPA (SHA-256
+`8b2b7bff76d89b6fdcf68b13babf2405650020ee726352bf3249d2f55dd0e3ae`) contains
+the following CocoaPods frameworks. Their embedded `Info.plist` versions and
+the version-specific CocoaPods specs identify these licenses:
+
+| Framework | IPA version | CocoaPods license |
+| --- | --- | --- |
+| [DKImagePickerController](https://cocoapods.org/pods/DKImagePickerController#4.3.9) | 4.3.9 | MIT |
+| [DKPhotoGallery](https://cocoapods.org/pods/DKPhotoGallery#0.0.19) | 0.0.19 | MIT |
+| [OrderedSet](https://cocoapods.org/pods/OrderedSet#6.0.3) | 6.0.3 | MIT |
+| [SwiftyGif](https://cocoapods.org/pods/SwiftyGif#5.4.5) | 5.4.5 | MIT |
+| [SDWebImage](https://cocoapods.org/pods/SDWebImage#5.21.7) | 5.21.7 | MIT |
+| [libwebp](https://cocoapods.org/pods/libwebp#1.6.0) | 1.6.0 | BSD-3-Clause |
+
+The five MIT license texts are retained together at
+`assets/vendor/native/ios-cocoapods-MIT-licenses.txt`; the complete BSD-3-Clause
+text for libwebp is at
+`assets/vendor/native/libwebp-1.6.0-BSD-3-Clause.txt`. Flutter's generated
+`NOTICES.Z` does not identify these native CocoaPods framework/version pairs.
+It contains generic libwebp BSD notices, but does not attribute them to the
+native `libwebp` 1.6.0 framework; the explicit entry supplies that link.
+
+This is evidence from the named IPA only. That release contains FVP 0.36.1 and
+MDK 0.39.0, separate from the FVP 0.39.1 dependency currently declared by
+Stroom and the MDK CocoaPods 0.36.0 evidence above. It does not identify current
+or future iOS build graphs.
 
 ## CatCatch behavior reference
 
@@ -38,6 +272,15 @@ had no visible `LICENSE` file or GitHub license metadata. Stroom's local
 implementation XORs the first 100 bytes by `0xFF` and remuxes the decoded FLV
 to MP4; the reference script writes an FLV. The citation does not establish a
 license grant, and this note does not determine whether any code was copied.
+
+## OpenCode CLI design reference
+
+The retry and stream-continuation behavior was informed by the CLI portions of
+[`anomalyco/opencode`](https://github.com/anomalyco/opencode), reviewed at
+commit [`84262f9277f14fc3a493d46c31789942ea5cb55e`](https://github.com/anomalyco/opencode/tree/84262f9277f14fc3a493d46c31789942ea5cb55e).
+OpenCode is distributed under the [MIT License](https://github.com/anomalyco/opencode/blob/84262f9277f14fc3a493d46c31789942ea5cb55e/LICENSE).
+This is a design reference only; no OpenCode code was copied into Stroom.
+Stroom remains licensed under AGPL-3.0.
 
 ## Bundled vendor assets
 
@@ -60,9 +303,19 @@ license grant, and this note does not determine whether any code was copied.
   entry on Flutter's license page.
 - **Mermaid 11.16.1** is MIT-licensed. The license from its
   [`mermaid@11.16.1` release](https://github.com/mermaid-js/mermaid/blob/mermaid%4011.16.1/LICENSE)
-  is retained at `assets/vendor/mermaid/LICENSE.txt`. The license page also
-  displays the embedded dependency notices from `assets/vendor/mermaid.min.js`.
-  Those notices identify DOMPurify 3.4.0 (Apache-2.0 or MPL-2.0), js-yaml 4.1.1
-  (MIT), lodash-es 4.18.1 (MIT), and several Cytoscape components (MIT). The
-  embedded notices do not state the Cytoscape package version; no version is
-  inferred here.
+  is retained at `assets/vendor/mermaid/LICENSE.txt`. The SHA-256 of the
+  checked-in `assets/vendor/mermaid.min.js` matches the exact
+  [`mermaid@11.16.1` npm tarball](https://registry.npmjs.org/mermaid/-/mermaid-11.16.1.tgz).
+  Its source map identifies 59 bundled package/version entries. Their complete
+  upstream license files are retained in
+  `assets/vendor/mermaid/THIRD-PARTY-LICENSES.txt` and shown on the in-app
+  license page: 22 MIT, 31 ISC, five BSD-3-Clause, and DOMPurify 3.4.0 under
+  `(MPL-2.0 OR Apache-2.0)`. Both full license alternatives for DOMPurify are
+  included. `khroma` 2.1.0 omits license metadata from its package JSON, but its
+  npm tarball contains an MIT license, which is retained and identified in the
+  corpus. These entries describe the checked-in Mermaid bundle and do not
+  claim license coverage for future bundle versions. The in-app page also keeps
+  Mermaid's embedded bundled-license comment block as a separate attribution
+  entry; it includes additional MIT attributions for code embedded within
+  Cytoscape (Promises/A+, jQuery event handling, Bezier curves, and Runge-Kutta
+  spring physics).

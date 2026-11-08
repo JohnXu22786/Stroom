@@ -1,0 +1,108 @@
+/// Fallback request-size budget when neither the OCR model nor provider sets one.
+const defaultOcrRequestSizeBudgetBytes = 20 * 1024 * 1024;
+
+/// Request-size configuration is optional at both levels. A model override
+/// takes precedence; otherwise use the provider value and finally the safe
+/// application fallback.
+int effectiveOcrRequestSizeBudgetBytes({
+  dynamic modelValue,
+  dynamic providerValue,
+}) {
+  if (modelValue is num && modelValue.isFinite && modelValue > 0) {
+    final bytes = modelValue.toInt();
+    if (bytes > 0) return bytes;
+  }
+  if (providerValue is num && providerValue.isFinite && providerValue > 0) {
+    final bytes = providerValue.toInt();
+    if (bytes > 0) return bytes;
+  }
+  return defaultOcrRequestSizeBudgetBytes;
+}
+
+int? ocrRequestSizeBudgetBytesFromMib(String value) {
+  final mebibytes = double.tryParse(value.trim());
+  if (mebibytes == null || !mebibytes.isFinite || mebibytes <= 0) return null;
+  final byteValue = mebibytes * 1024 * 1024;
+  if (!byteValue.isFinite || byteValue > 9007199254740991) return null;
+  final bytes = byteValue.round();
+  return bytes > 0 ? bytes : null;
+}
+
+String ocrRequestSizeBudgetMib(int bytes, {int decimalPlaces = 2}) {
+  final mebibytes = bytes / (1024 * 1024);
+  return mebibytes < 0.005
+      ? mebibytes.toStringAsFixed(8)
+      : mebibytes.toStringAsFixed(decimalPlaces);
+}
+
+String ocrRequestSizeBudgetOverageMib(int requestBytes, int budgetBytes) {
+  var decimalPlaces = 2;
+  var requestSize = ocrRequestSizeBudgetMib(requestBytes);
+  while (requestSize ==
+          ocrRequestSizeBudgetMib(budgetBytes, decimalPlaces: decimalPlaces) &&
+      decimalPlaces < 20) {
+    requestSize = ocrRequestSizeBudgetMib(
+      requestBytes,
+      decimalPlaces: ++decimalPlaces,
+    );
+  }
+  return requestSize;
+}
+
+/// How a selected set of images is submitted to the OCR model.
+enum OcrBatchMode { joint, perImage }
+
+/// Persisted result for one source image in a per-image OCR run.
+enum OcrPageOutcomeStatus {
+  pending,
+  running,
+  succeeded,
+  incomplete,
+  failed,
+  cancelled,
+}
+
+class OcrPageOutcome {
+  final int imageIndex;
+  final OcrPageOutcomeStatus status;
+  final String? text;
+  final String? error;
+
+  const OcrPageOutcome({
+    required this.imageIndex,
+    required this.status,
+    this.text,
+    this.error,
+  });
+
+  bool get canReuseResult =>
+      status == OcrPageOutcomeStatus.succeeded && text != null;
+
+  Map<String, dynamic> toMap() => {
+        'imageIndex': imageIndex,
+        'status': status.name,
+        if (text != null) 'text': text,
+        if (error != null) 'error': error,
+      };
+
+  static OcrPageOutcome? fromMap(dynamic value) {
+    if (value is! Map) return null;
+    final imageIndex = value['imageIndex'];
+    final status = value['status'];
+    if (imageIndex is! int || imageIndex < 0 || status is! String) return null;
+    OcrPageOutcomeStatus? parsedStatus;
+    for (final candidate in OcrPageOutcomeStatus.values) {
+      if (candidate.name == status) {
+        parsedStatus = candidate;
+        break;
+      }
+    }
+    if (parsedStatus == null) return null;
+    return OcrPageOutcome(
+      imageIndex: imageIndex,
+      status: parsedStatus,
+      text: value['text'] is String ? value['text'] as String : null,
+      error: value['error'] is String ? value['error'] as String : null,
+    );
+  }
+}

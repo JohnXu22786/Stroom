@@ -105,7 +105,8 @@ extension _ChatPageAttachmentsExt on _ChatPageState {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('无法加载文件')));
+        ).showSnackBar(SnackBar(
+            content: Text(AppLocalizations.of(context)!.chatCannotLoadFile)));
       }
       return;
     }

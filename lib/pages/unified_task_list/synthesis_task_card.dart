@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../providers/task_provider.dart';
+import '../../l10n/app_localizations.dart';
 import '../tts_create_page.dart';
 import 'task_utils.dart';
 import 'file_opener.dart';
@@ -16,11 +17,12 @@ class SynthesisTaskCard extends ConsumerStatefulWidget {
   final bool isUnread;
   final bool isFlowManaged;
 
-  const SynthesisTaskCard(
-      {super.key,
-      required this.task,
-      this.isUnread = false,
-      this.isFlowManaged = false});
+  const SynthesisTaskCard({
+    super.key,
+    required this.task,
+    this.isUnread = false,
+    this.isFlowManaged = false,
+  });
 
   @override
   ConsumerState<SynthesisTaskCard> createState() => _SynthesisTaskCardState();
@@ -91,7 +93,8 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                         Text(
                           widget.task.title.isNotEmpty
                               ? widget.task.title
-                              : '未命名录音',
+                              : AppLocalizations.of(context)!
+                                  .unifiedTaskUnnamedRecording,
                           style: const TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w500,
@@ -102,10 +105,16 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                         const SizedBox(height: 4),
                         Row(
                           children: [
-                            buildStatusChip(widget.task.status),
+                            buildStatusChip(
+                              widget.task.status,
+                              AppLocalizations.of(context)!,
+                            ),
                             const SizedBox(width: 8),
                             Text(
-                              formatRelativeTime(widget.task.createdAt),
+                              formatRelativeTime(
+                                widget.task.createdAt,
+                                AppLocalizations.of(context)!,
+                              ),
                               style: TextStyle(
                                 fontSize: 12,
                                 color: Colors.grey[500],
@@ -130,7 +139,7 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                   ),
                   const SizedBox(width: 8),
                   // ── Action buttons for running/paused/failed/completed ──
-                  _buildHeaderActions(),
+                  _buildHeaderActions(context),
                   const SizedBox(width: 4),
                   AnimatedRotation(
                     turns: _expanded ? 0.5 : 0,
@@ -148,7 +157,7 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
           // Expanded detail section
           AnimatedCrossFade(
             firstChild: const SizedBox.shrink(),
-            secondChild: _buildExpandedDetail(),
+            secondChild: _buildExpandedDetail(context),
             crossFadeState: _expanded
                 ? CrossFadeState.showSecond
                 : CrossFadeState.showFirst,
@@ -166,10 +175,7 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
         return SizedBox(
           width: 24,
           height: 24,
-          child: CircularProgressIndicator(
-            strokeWidth: 2.5,
-            color: cs.primary,
-          ),
+          child: CircularProgressIndicator(strokeWidth: 2.5, color: cs.primary),
         );
       case TaskStatus.completed:
         return Icon(Icons.check_circle, color: cs.primary, size: 24);
@@ -186,15 +192,16 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
   // Header action buttons (extracted from old inline code)
   // ===========================================================================
 
-  Widget _buildHeaderActions() {
+  Widget _buildHeaderActions(BuildContext context) {
     if (widget.isFlowManaged) {
       return widget.task.status == TaskStatus.completed &&
               widget.task.downloadedFilePath != null
           ? IconButton(
-              tooltip: '打开文件',
+              tooltip: AppLocalizations.of(context)!.unifiedTaskOpenFile,
               icon: const Icon(Icons.folder_open),
               onPressed: () =>
-                  openFile(widget.task.downloadedFilePath!, context))
+                  openFile(widget.task.downloadedFilePath!, context),
+            )
           : const SizedBox.shrink();
     }
     switch (widget.task.status) {
@@ -209,21 +216,28 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
             }
           },
           itemBuilder: (_) => [
-            const PopupMenuItem(
+            PopupMenuItem(
               value: 'pause',
               child: ListTile(
                 leading: Icon(Icons.pause, size: 20),
-                title: Text('暂停'),
+                title: Text(AppLocalizations.of(context)!.unifiedTaskPause),
                 dense: true,
                 contentPadding: EdgeInsets.zero,
               ),
             ),
-            const PopupMenuItem(
+            const PopupMenuDivider(),
+            PopupMenuItem(
               value: 'remove',
               child: ListTile(
-                leading:
-                    Icon(Icons.delete_outline, size: 20, color: Colors.red),
-                title: Text('清除任务', style: TextStyle(color: Colors.red)),
+                leading: Icon(
+                  Icons.delete_outline,
+                  size: 20,
+                  color: Colors.red,
+                ),
+                title: Text(
+                  AppLocalizations.of(context)!.unifiedTaskClearTask,
+                  style: TextStyle(color: Colors.red),
+                ),
                 dense: true,
                 contentPadding: EdgeInsets.zero,
               ),
@@ -243,7 +257,10 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                       .resumeTask(widget.task.id);
                 },
                 icon: const Icon(Icons.play_arrow, size: 16),
-                label: const Text('继续', style: TextStyle(fontSize: 13)),
+                label: Text(
+                  AppLocalizations.of(context)!.unifiedTaskContinue,
+                  style: TextStyle(fontSize: 13),
+                ),
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(horizontal: 10),
                 ),
@@ -259,12 +276,18 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                 }
               },
               itemBuilder: (_) => [
-                const PopupMenuItem(
+                PopupMenuItem(
                   value: 'remove',
                   child: ListTile(
-                    leading:
-                        Icon(Icons.delete_outline, size: 20, color: Colors.red),
-                    title: Text('清除任务', style: TextStyle(color: Colors.red)),
+                    leading: Icon(
+                      Icons.delete_outline,
+                      size: 20,
+                      color: Colors.red,
+                    ),
+                    title: Text(
+                      AppLocalizations.of(context)!.unifiedTaskClearTask,
+                      style: TextStyle(color: Colors.red),
+                    ),
                     dense: true,
                     contentPadding: EdgeInsets.zero,
                   ),
@@ -289,7 +312,10 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                   );
                 },
                 icon: const Icon(Icons.refresh, size: 16),
-                label: const Text('重试', style: TextStyle(fontSize: 13)),
+                label: Text(
+                  AppLocalizations.of(context)!.unifiedTaskRetry,
+                  style: TextStyle(fontSize: 13),
+                ),
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(horizontal: 10),
                 ),
@@ -305,12 +331,18 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                 }
               },
               itemBuilder: (_) => [
-                const PopupMenuItem(
+                PopupMenuItem(
                   value: 'remove',
                   child: ListTile(
-                    leading:
-                        Icon(Icons.delete_outline, size: 20, color: Colors.red),
-                    title: Text('清除任务', style: TextStyle(color: Colors.red)),
+                    leading: Icon(
+                      Icons.delete_outline,
+                      size: 20,
+                      color: Colors.red,
+                    ),
+                    title: Text(
+                      AppLocalizations.of(context)!.unifiedTaskClearTask,
+                      style: TextStyle(color: Colors.red),
+                    ),
                     dense: true,
                     contentPadding: EdgeInsets.zero,
                   ),
@@ -330,7 +362,10 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                   onPressed: () =>
                       openFile(widget.task.downloadedFilePath!, context),
                   icon: const Icon(Icons.folder_open, size: 16),
-                  label: const Text('打开文件', style: TextStyle(fontSize: 13)),
+                  label: Text(
+                    AppLocalizations.of(context)!.unifiedTaskOpenFile,
+                    style: TextStyle(fontSize: 13),
+                  ),
                   style: TextButton.styleFrom(
                     foregroundColor: Colors.green,
                     padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -347,12 +382,17 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                 }
               },
               itemBuilder: (_) => [
-                const PopupMenuItem(
+                PopupMenuItem(
                   value: 'remove',
                   child: ListTile(
-                    leading: Icon(Icons.delete_outline,
-                        size: 20, color: Colors.grey),
-                    title: Text('从列表移除'),
+                    leading: Icon(
+                      Icons.delete_outline,
+                      size: 20,
+                      color: Colors.grey,
+                    ),
+                    title: Text(
+                      AppLocalizations.of(context)!.unifiedTaskRemoveFromList,
+                    ),
                     dense: true,
                     contentPadding: EdgeInsets.zero,
                   ),
@@ -370,7 +410,7 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
   // Expanded detail section
   // ===========================================================================
 
-  Widget _buildExpandedDetail() {
+  Widget _buildExpandedDetail(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     return Column(
       children: [
@@ -383,7 +423,7 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
               // Text content being synthesized
               if (widget.task.text.isNotEmpty) ...[
                 Text(
-                  '合成文本',
+                  AppLocalizations.of(context)!.unifiedTaskSynthesisText,
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
@@ -412,15 +452,36 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                 const SizedBox(height: 8),
               ],
               // Status info
-              buildInfoRow(cs, Icons.info_outline, '状态',
-                  getStatusLabel(widget.task.status)),
+              buildInfoRow(
+                cs,
+                Icons.info_outline,
+                AppLocalizations.of(context)!.unifiedTaskStatus,
+                getStatusLabel(
+                  widget.task.status,
+                  AppLocalizations.of(context)!,
+                ),
+              ),
               const SizedBox(height: 4),
-              buildInfoRow(cs, Icons.access_time, '创建时间',
-                  formatRelativeTime(widget.task.createdAt)),
+              buildInfoRow(
+                cs,
+                Icons.access_time,
+                AppLocalizations.of(context)!.unifiedTaskCreatedAt,
+                formatRelativeTime(
+                  widget.task.createdAt,
+                  AppLocalizations.of(context)!,
+                ),
+              ),
               if (widget.task.completedAt != null) ...[
                 const SizedBox(height: 4),
-                buildInfoRow(cs, Icons.check_circle_outline, '完成时间',
-                    formatRelativeTime(widget.task.completedAt!)),
+                buildInfoRow(
+                  cs,
+                  Icons.check_circle_outline,
+                  AppLocalizations.of(context)!.unifiedTaskCompletedAt,
+                  formatRelativeTime(
+                    widget.task.completedAt!,
+                    AppLocalizations.of(context)!,
+                  ),
+                ),
               ],
               // Error message for failed tasks
               if (widget.task.status == TaskStatus.failed &&
@@ -428,24 +489,32 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                 const SizedBox(height: 10),
                 Container(
                   width: double.infinity,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.red.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(6),
-                    border:
-                        Border.all(color: Colors.red.withValues(alpha: 0.25)),
+                    border: Border.all(
+                      color: Colors.red.withValues(alpha: 0.25),
+                    ),
                   ),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(Icons.error_outline,
-                          size: 14, color: Colors.red),
+                      const Icon(
+                        Icons.error_outline,
+                        size: 14,
+                        color: Colors.red,
+                      ),
                       const SizedBox(width: 6),
                       Expanded(
                         child: GestureDetector(
                           onTap: () => _showErrorDetailDialog(
-                              context, widget.task.error!),
+                            context,
+                            widget.task.error!,
+                          ),
                           child: Text(
                             widget.task.error!,
                             style: const TextStyle(
@@ -462,8 +531,8 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                         GestureDetector(
                           onTap: () =>
                               _showOriginalDetailDialog(context, widget.task),
-                          child: const Text(
-                            '详情',
+                          child: Text(
+                            AppLocalizations.of(context)!.unifiedTaskDetails,
                             style: TextStyle(
                               fontSize: 12,
                               color: Colors.red,
@@ -487,11 +556,11 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Row(
+        title: Row(
           children: [
             Icon(Icons.error_outline, color: Colors.red, size: 20),
             SizedBox(width: 8),
-            Text('合成错误详情'),
+            Text(AppLocalizations.of(context)!.unifiedTaskSynthesisError),
           ],
         ),
         content: SingleChildScrollView(
@@ -503,7 +572,7 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('关闭'),
+            child: Text(AppLocalizations.of(context)!.unifiedTaskClose),
           ),
         ],
       ),
@@ -514,11 +583,11 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Row(
+        title: Row(
           children: [
             Icon(Icons.code, color: Colors.orange, size: 20),
             SizedBox(width: 8),
-            Text('原始请求与响应'),
+            Text(AppLocalizations.of(context)!.unifiedTaskRawRequestResponse),
           ],
         ),
         content: SizedBox(
@@ -529,8 +598,8 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (task.originalRequest != null) ...[
-                  const Text(
-                    '原始请求体:',
+                  Text(
+                    AppLocalizations.of(context)!.unifiedTaskRawRequestBody,
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
@@ -557,8 +626,8 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                   const SizedBox(height: 16),
                 ],
                 if (task.originalResponse != null) ...[
-                  const Text(
-                    '原始响应体:',
+                  Text(
+                    AppLocalizations.of(context)!.unifiedTaskRawResponseBody,
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
@@ -590,7 +659,7 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('关闭'),
+            child: Text(AppLocalizations.of(context)!.unifiedTaskClose),
           ),
         ],
       ),

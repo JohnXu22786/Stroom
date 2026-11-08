@@ -45,14 +45,15 @@ void showAssistantFullEditDialog(
         ? null
         : Set<String>.from(assistant.defaultToolNames!),
   );
-  final seedController =
-      TextEditingController(text: vars.seed?.toString() ?? '');
+  final seedController = TextEditingController(
+    text: vars.seed?.toString() ?? '',
+  );
 
   showDialog(
     context: context,
     builder: (ctx) => StatefulBuilder(
       builder: (ctx, setDlgState) => AlertDialog(
-        title: const Text('编辑助手'),
+        title: Text(AppLocalizations.of(context)!.assistantEditTitle),
         content: SizedBox(
           width: double.maxFinite,
           child: DefaultTabController(
@@ -68,10 +69,15 @@ void showAssistantFullEditDialog(
                   tabAlignment: TabAlignment.center,
                   labelPadding: const EdgeInsets.symmetric(horizontal: 24),
                   indicatorSize: TabBarIndicatorSize.label,
-                  tabs: const [
-                    Tab(text: '基本设置'),
-                    Tab(text: '参数设置'),
-                    Tab(text: '默认设置'),
+                  tabs: [
+                    Tab(text: AppLocalizations.of(context)!.assistantBasicTab),
+                    Tab(
+                      text:
+                          AppLocalizations.of(context)!.assistantParametersTab,
+                    ),
+                    Tab(
+                      text: AppLocalizations.of(context)!.assistantDefaultsTab,
+                    ),
                   ],
                 ),
                 // Tab content area - expands to fill remaining space
@@ -125,7 +131,8 @@ void showAssistantFullEditDialog(
                           vars.defaultsToolsEngaged = true;
                         }),
                         onEnableMaxToolOutputCharsChanged: (v) => setDlgState(
-                            () => vars.enableMaxToolOutputChars = v),
+                          () => vars.enableMaxToolOutputChars = v,
+                        ),
                         onMaxToolOutputCharsChanged: (v) =>
                             setDlgState(() => vars.maxToolOutputChars = v),
                       ),
@@ -139,7 +146,7 @@ void showAssistantFullEditDialog(
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
+            child: Text(AppLocalizations.of(context)!.batchDlgCancel),
           ),
           FilledButton(
             onPressed: () {
@@ -190,8 +197,9 @@ void showAssistantFullEditDialog(
               // 与 tab 的"暂不设置"退化显示保持一致，避免同名模型
               // 重新添加后旧的默认值悄悄复活。
               final adapter = ref.read(chatStreamManagerProvider).adapter;
-              final availableModels =
-                  adapter.availableModels(ref.read(providerEntriesProvider));
+              final availableModels = adapter.availableModels(
+                ref.read(providerEntriesProvider),
+              );
               final defaultRef = resolveModelRef(
                 models: availableModels,
                 modelId: assistant.defaultModelId,
@@ -229,7 +237,7 @@ void showAssistantFullEditDialog(
 
               Navigator.pop(ctx);
             },
-            child: const Text('保存'),
+            child: Text(AppLocalizations.of(context)!.mermaidSaveButton),
           ),
         ],
       ),

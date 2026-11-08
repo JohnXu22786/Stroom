@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:stroom/pages/chat/widgets/action_button.dart';
 import 'package:stroom/pages/chat/widgets/message_action_row.dart';
 
@@ -36,6 +38,14 @@ Widget buildApp({
   VoidCallback? onSave,
 }) {
   return MaterialApp(
+    locale: const Locale('zh', 'CN'),
+    supportedLocales: AppLocalizations.supportedLocales,
+    localizationsDelegates: const [
+      AppLocalizations.delegate,
+      GlobalMaterialLocalizations.delegate,
+      GlobalWidgetsLocalizations.delegate,
+      GlobalCupertinoLocalizations.delegate,
+    ],
     home: Scaffold(
       body: MessageActionRow(
         messageText: messageText,

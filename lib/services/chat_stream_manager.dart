@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
 import 'package:flutter_riverpod/flutter_riverpod.dart' show Ref;
 import 'package:flutter_riverpod/legacy.dart'
@@ -15,14 +16,20 @@ import '../providers/chat_stream_provider.dart';
 import '../providers/context_management_provider.dart';
 import '../providers/conversation_provider.dart';
 import '../providers/system_assistant_provider.dart';
+import '../providers/locale_provider.dart'
+    show appLocalizationsForLocale, localeProvider;
 import '../providers/provider_config.dart';
 import 'app_log_service.dart';
 import 'chat_adapter.dart';
 import 'chat_protocol.dart' show rebuildToolResultText;
 import 'chat_service.dart' show ChatService;
 import 'context_manager.dart';
-import 'conversation_media_storage.dart';
-import '../ai_gateway/ai_gateway.dart';
+import 'chat_retry_policy.dart'
+    show
+        TransportRetryPolicy,
+        isRetryableTransportFailure,
+        shouldAutoContinueStream,
+        waitForRetryOrCancellation;
 
 // ============================================================================
 // ChatStreamManager — 对话流式请求管理器
@@ -59,10 +66,18 @@ part 'chat_stream_manager_finalize.dart';
 
 class ChatStreamManager {
   final Ref? _ref;
-  final ChatAdapter _adapter;
+  final TransportRetryPolicy _transportRetryPolicy;
+  final Future<void> Function(Duration duration)? _retryDelay;
+  late final ChatAdapter _adapter;
 
   // ── Per-conversation stream states ──
   final Map<String, _ConversationStreamState> _streams = {};
+  final Map<String, Future<bool> Function(ChatMessage)>
+      _pendingContinuationHandlers = {};
+
+  /// Pages currently displaying a specific stream. A completed stream only
+  /// needs its provider buffers retained while at least one page is attached.
+  final Map<String, Map<Object, String>> _streamPageOwners = {};
 
   // ── Throttle constants ──
   static const Duration _textThrottle = Duration(milliseconds: 200); // 5次/秒
@@ -88,38 +103,33 @@ class ChatStreamManager {
   /// never disagree.
   @visibleForTesting
   static bool partialPersistHasContent({
-    required String fullReply,
+    List<String>? textSections,
+    String? fullReply,
     required List<String> reasoningSections,
     required bool hasAccumulatedToolCalls,
-    bool hasMediaAttachments = false,
   }) {
-    return fullReply.isNotEmpty ||
+    return (textSections?.any((section) => section.isNotEmpty) ??
+            (fullReply?.isNotEmpty ?? false)) ||
         reasoningSections.any((s) => s.isNotEmpty) ||
-        hasAccumulatedToolCalls ||
-        hasMediaAttachments;
+        hasAccumulatedToolCalls;
   }
 
-  /// Replaces the existing streaming assistant snapshot when refreshing a
-  /// periodic partial save, preserving its position in conversation history.
+  ChatStreamManager([this._ref])
+      : _transportRetryPolicy = const TransportRetryPolicy(),
+        _retryDelay = null {
+    _adapter = ChatAdapter(localeOverride: () => _ref?.read(localeProvider));
+  }
+
   @visibleForTesting
-  static void upsertPartialAssistantMessage(
-    List<ChatMessage> history,
-    ChatMessage partialMessage,
-  ) {
-    final index =
-        history.indexWhere((message) => message.id == partialMessage.id);
-    if (index < 0) {
-      history.add(partialMessage);
-    } else {
-      history[index] = partialMessage;
-    }
+  ChatStreamManager.withRetryPolicy({
+    Ref? ref,
+    TransportRetryPolicy transportRetryPolicy = const TransportRetryPolicy(),
+    Future<void> Function(Duration duration)? retryDelay,
+  })  : _ref = ref,
+        _transportRetryPolicy = transportRetryPolicy,
+        _retryDelay = retryDelay {
+    _adapter = ChatAdapter(localeOverride: () => _ref?.read(localeProvider));
   }
-
-  ChatStreamManager([Ref? ref])
-      : _ref = ref,
-        _adapter = ChatAdapter(
-          routingRuntime: ref == null ? null : AiGateway.sharedPlatform(),
-        );
 
   // ── 公开 getter ──
 
@@ -164,6 +174,10 @@ class ChatStreamManager {
         : const [];
   }
 
+  /// Number of active-section characters waiting for the next throttled delta.
+  int pendingReasoningDeltaLengthFor(String convId) =>
+      _streams[convId]?._pendingReasoningDelta.length ?? 0;
+
   /// Tool calls for the first active conversation.
   List<ToolCallData> get toolCalls {
     final first = activeStreamingConvId;
@@ -190,6 +204,46 @@ class ChatStreamManager {
   /// Whether [convId] is currently streaming.
   bool isStreamingFor(String convId) => _streams.containsKey(convId);
 
+  /// Records that a chat page is displaying [streamingMsgId] for [convId].
+  void attachStreamPage(String convId, String streamingMsgId, Object owner) {
+    (_streamPageOwners[convId] ??= {})[owner] = streamingMsgId;
+  }
+
+  /// Removes a page's stream attachment. A disposed page can arrive just
+  /// after finalization, so clear its completed buffers here when no page
+  /// remains attached to that message.
+  void detachStreamPage(
+    String convId,
+    String streamingMsgId,
+    Object owner, {
+    bool clearIfCompleted = false,
+  }) {
+    final owners = _streamPageOwners[convId];
+    owners?.remove(owner);
+    if (owners?.isEmpty == true) _streamPageOwners.remove(convId);
+    if (clearIfCompleted &&
+        !_streams.containsKey(convId) &&
+        !_hasAttachedStreamPage(convId, streamingMsgId)) {
+      _clearCompletedSegmentProviders(convId);
+    }
+  }
+
+  bool _hasAttachedStreamPage(String convId, String streamingMsgId) =>
+      _streamPageOwners[convId]?.containsValue(streamingMsgId) ?? false;
+
+  void _clearCompletedSegmentProviders(String convId) {
+    final ref = _ref;
+    if (ref == null) return;
+    ref.read(streamingFullReplyProvider(convId).notifier).state = '';
+    ref.read(streamingReasoningProvider(convId).notifier).state = '';
+    ref.read(streamingReasoningAppendProvider(convId).notifier).state = null;
+    ref.read(streamingReasoningSectionsProvider(convId).notifier).state = [];
+    ref.read(streamingTextSectionsProvider(convId).notifier).state = [''];
+    ref.read(streamingTextAppendProvider(convId).notifier).state = null;
+    ref.read(streamingToolCallsProvider(convId).notifier).state = [];
+    ref.read(streamingToolCallRoundStartsProvider(convId).notifier).state = [];
+  }
+
   /// The streaming message ID for a specific conversation.
   String? streamingMsgIdFor(String convId) => _streams[convId]?.streamingMsgId;
 
@@ -214,7 +268,35 @@ class ChatStreamManager {
 
   /// Text chunks for a specific conversation.
   List<String> textChunksFor(String convId) =>
-      List.unmodifiable(_streams[convId]?.textChunks ?? []);
+      _streams[convId]?.textChunks ?? const [];
+
+  /// Text chunks whose append events have already been drained to consumers.
+  /// Reattached page snapshots use this view so pending throttled bytes are
+  /// added exactly once when their append event is published.
+  List<String> publishedTextChunksFor(String convId) =>
+      _streams[convId]?.publishedTextChunks ?? const [];
+
+  /// Published character count for a chunk, without materializing its text.
+  int publishedTextChunkLengthFor(String convId, int chunkIndex) =>
+      _streams[convId]?.publishedTextChunkLength(chunkIndex) ?? 0;
+
+  List<String>? publishedTextChunkExcerptFor(
+    String convId,
+    int chunkIndex,
+    int maxLength,
+  ) =>
+      _streams[convId]?.publishedTextChunkExcerpt(chunkIndex, maxLength);
+
+  /// Published text for a specific chunk, excluding any currently buffered
+  /// delta that has not yet been sent to append-event consumers.
+  String? publishedTextChunkFor(String convId, int chunkIndex) =>
+      _streams[convId]?.publishedTextChunk(chunkIndex);
+
+  /// Number of nonempty text deltas already published for the current chunk.
+  /// Used to preserve the Markdown live-preview budget when a ChatPage
+  /// reattaches to a stream that continued in the background.
+  int textChunkAppendCountFor(String convId) =>
+      _streams[convId]?.currentTextChunkAppendCount ?? 0;
 
   /// Tool call round starts for a specific conversation.
   List<int> toolCallRoundStartsFor(String convId) =>
@@ -255,14 +337,16 @@ class ChatStreamManager {
     required String text,
     required String convId,
     required List<ChatMessage> history,
+    List<ChatMessage>? requestHistoryOverride,
+    List<ChatMessage>? historyOnSuccess,
     List<ToolDefinition> tools = const [],
     bool reasoning = false,
     String reasoningEffort = 'medium',
     Map<String, String> reasoningParamValues = const {},
+    Map<String, String>? customParamValues,
     String? streamingMsgId,
     Assistant? assistant,
     ProviderEntriesState? entriesStateOverride,
-    String? selectedAccountId,
   }) async {
     // If this conversation already has a stream running, return the
     // pending future so the caller awaits the same result.
@@ -292,7 +376,11 @@ class ChatStreamManager {
     final resultCompleter = Completer<StreamResult>();
     final state = _ConversationStreamState(convId: convId)
       ..resultCompleter = resultCompleter;
+    state.onContinuation = _pendingContinuationHandlers.remove(convId);
     state.history = List.from(history);
+    state.historyOnSuccess = historyOnSuccess == null
+        ? null
+        : List<ChatMessage>.from(historyOnSuccess);
     state.lastTextUpdate = DateTime.now();
     state.lastReasoningUpdate = DateTime.now();
 
@@ -320,9 +408,7 @@ class ChatStreamManager {
       );
       if (!identical(pruned, state.history)) {
         AppLogService.info(
-          'ChatStreamManager',
-          '[CTX-MGR] 工具结果 prune 执行完成, convId=$convId',
-        );
+            'ChatStreamManager', '[CTX-MGR] 工具结果 prune 执行完成, convId=$convId');
       }
       state.history = pruned;
     }
@@ -337,7 +423,7 @@ class ChatStreamManager {
     // completion (see streamingConversationsProvider docs).
     _setProvider(streamingConversationsProvider, <String>{
       ..._ref?.read(streamingConversationsProvider) ?? const {},
-      convId,
+      convId
     });
 
     // Push initial state to this conversation's family providers
@@ -345,7 +431,7 @@ class ChatStreamManager {
 
     // Start periodic persistence timer
     state.persistTimer = Timer.periodic(_persistInterval, (_) {
-      _doPeriodicPersist(state);
+      unawaited(_doPeriodicPersist(state));
     });
 
     // Snapshot the ChatService instance BEFORE the first await so that
@@ -361,18 +447,19 @@ class ChatStreamManager {
       convId,
       assistant: assistant,
       entriesState: entriesStateOverride ?? _ref?.read(providerEntriesProvider),
-      selectedAccountId: selectedAccountId,
     );
 
     // ── 对话级计费累计（per-request 事件驱动） ──
-    // 每次请求的完整 usage 数据返回时（流末尾/错误轮的 usage 事件）
+    // 每次请求的 usage 数据返回时（包含流中间观察到的快照）
     // **立即**增量累加到对话，而非整次发送攒到流结束一次性提交：
     // - 重发/重试/编辑只会在累计值上继续增加，绝不重置、不从头重算；
     // - 每请求提交一次，service 复用/异常清理也不会重复提交（双计）。
     // 压缩请求运行在独立的瞬时 service 上（chat_stream_manager_
     // compaction.dart 中显式接线 _commitUsage），此回调只覆盖主请求。
-    snappedChatService?.onUsageEvent = (usage, {required bool recordInput}) {
-      _commitUsage(convId, usage, recordInput: recordInput);
+    snappedChatService?.onUsageEvent =
+        (usage, {required bool recordInput, double? costIncrement}) {
+      _commitUsage(convId, usage,
+          recordInput: recordInput, costIncrementOverride: costIncrement);
     };
 
     // ── 上下文管理：摘要注入 + 发送量过滤 + 超限自动压缩 ──
@@ -394,13 +481,24 @@ class ChatStreamManager {
     // 快照消息不在历史中（被删）时安全回退为全量。
     final tailStartId = conv?.compactionTailStartId;
     final hasSummary = conv?.contextSummary?.trim().isNotEmpty ?? false;
+    final historyForRequest = requestHistoryOverride == null
+        ? state.history
+        : requestHistoryOverride
+            .map((message) =>
+                state.history
+                    .where((stored) => stored.id == message.id)
+                    .firstOrNull ??
+                message)
+            .toList();
     List<ChatMessage> requestHistory;
     if (hasSummary && tailStartId != null) {
-      final idx = state.history.indexWhere((m) => m.id == tailStartId);
-      requestHistory = idx >= 0 ? state.history.sublist(idx) : state.history;
+      final idx = historyForRequest.indexWhere((m) => m.id == tailStartId);
+      requestHistory =
+          idx >= 0 ? historyForRequest.sublist(idx) : historyForRequest;
     } else {
-      requestHistory = state.history;
+      requestHistory = historyForRequest;
     }
+    final requestContentCache = RequestContentCache();
 
     try {
       final compacted = await _compactIfNeeded(
@@ -408,6 +506,7 @@ class ChatStreamManager {
         convId: convId,
         tools: tools,
         requestHistory: requestHistory,
+        contentCache: requestContentCache,
       );
       // 压缩成功：tail 快照已更新，重新计算发送历史
       // （从新尾部起点起，头部被摘要替代）
@@ -418,11 +517,22 @@ class ChatStreamManager {
             .firstOrNull;
         final newTailStartId = newConv?.compactionTailStartId;
         if (newTailStartId != null) {
-          final idx = state.history.indexWhere((m) => m.id == newTailStartId);
+          final postCompactionHistory = requestHistoryOverride == null
+              ? state.history
+              : requestHistoryOverride
+                  .map((message) =>
+                      state.history
+                          .where((stored) => stored.id == message.id)
+                          .firstOrNull ??
+                      message)
+                  .toList();
+          final idx =
+              postCompactionHistory.indexWhere((m) => m.id == newTailStartId);
           if (idx >= 0) {
-            requestHistory = state.history.sublist(idx);
+            requestHistory = postCompactionHistory.sublist(idx);
           }
         }
+        requestContentCache.retainOnly(requestHistory);
       }
       // 压缩期间用户取消：不发起主请求（空流走正常清理路径，
       // 结果标记为 cancelled）
@@ -439,41 +549,117 @@ class ChatStreamManager {
     // await-for loop subscribes below.
     //
     // requestHistory 已在上方上下文管理块计算（有摘要时 = 尾部快照起）。
-    final stream = state.cancelledByUser
-        ? const Stream<ChatEvent>.empty()
-        : _adapter.sendStreamWithTools(
-            text,
-            history: requestHistory,
-            reasoning: reasoning,
-            reasoningEffort: reasoningEffort,
-            reasoningParamValues: reasoningParamValues,
-            tools: tools,
-            convId: convId,
-            assistant: assistant,
-            entriesState:
-                entriesStateOverride ?? _ref?.read(providerEntriesProvider),
-          );
+    Stream<ChatEvent> createStream(List<ChatMessage> streamHistory) =>
+        state.cancelledByUser
+            ? const Stream<ChatEvent>.empty()
+            : _adapter.sendStreamWithTools(
+                text,
+                history: streamHistory,
+                contentCache: requestContentCache,
+                reasoning: reasoning,
+                reasoningEffort: reasoningEffort,
+                reasoningParamValues: reasoningParamValues,
+                customParamValues: customParamValues,
+                tools: tools,
+                convId: convId,
+                assistant: assistant,
+                entriesState:
+                    entriesStateOverride ?? _ref?.read(providerEntriesProvider),
+                onToolCallIntent: () => state.toolCallStarted = true,
+                onTextDelta: state.appendText,
+                onRequestBody: (body) => state.requestBodySnapshot = body,
+                takeCompletedToolCallRound: state.takeCompletedToolCallRound,
+                takeCompletedToolCallReasoning:
+                    state.takeCompletedToolCallReasoning,
+              );
 
     // Now safe to yield to event loop — all state is established and the
     // provider stream is already created.
 
     Object? streamError;
+    late final List<String> finalTextChunks;
 
     try {
       try {
-        await AppLogService.info(
-          'ChatStreamManager',
-          '[STREAM-MGR] startStreaming: begin, convId=$convId, historyLen=${history.length}',
-        );
+        await AppLogService.info('ChatStreamManager',
+            '[STREAM-MGR] startStreaming: begin, convId=$convId, historyLen=${history.length}');
       } catch (_) {
         // 日志失败不能误判为流错误（否则主请求已发出但响应
         // 永不被消费，回复丢失）
       }
 
-      await for (final event in stream) {
-        if (state.cancelledByUser) break;
+      var streamHistory = List<ChatMessage>.from(requestHistory);
+      var transportRetries = 0;
+      var replyLengthAtLastContinuation = 0;
+      while (true) {
+        try {
+          await for (final event in createStream(streamHistory)) {
+            if (state.cancelledByUser) break;
+            _handleStreamEvent(event, state, convId);
+          }
+          break;
+        } catch (e) {
+          final fullReplySnapshot = state.fullReply;
+          final hasPartialOutput = fullReplySnapshot.isNotEmpty;
+          final hasVisibleReasoning = state.reasoningBuffer.isNotEmpty ||
+              state.reasoningSections.any((section) => section.isNotEmpty);
+          final canContinuePartial = shouldAutoContinueStream(
+            error: e,
+            hasPartialOutput: hasPartialOutput,
+            hasToolHistory: state.toolCalls.isNotEmpty || state.toolCallStarted,
+          );
+          if (state.cancelledByUser ||
+              state.toolCalls.isNotEmpty ||
+              state.toolCallStarted ||
+              hasVisibleReasoning ||
+              transportRetries >= _transportRetryPolicy.maxRetries ||
+              !isRetryableTransportFailure(e) ||
+              (hasPartialOutput && !canContinuePartial)) {
+            rethrow;
+          }
 
-        _handleStreamEvent(event, state, convId);
+          transportRetries++;
+          final wait = _transportRetryPolicy.delayForRetry(transportRetries);
+          await waitForRetryOrCancellation(
+            wait,
+            delay: _retryDelay,
+            cancellation: state.cancellationSignal.future,
+          );
+          if (state.cancelledByUser) rethrow;
+
+          if (hasPartialOutput) {
+            final continuation = ChatMessage(
+              role: 'user',
+              content: appLocalizationsForLocale(_ref?.read(localeProvider))
+                  .chatAutoContinuePrompt,
+            );
+            state.history.add(continuation);
+            state.historyOnSuccess?.add(continuation);
+            state.pendingContinuations.add(continuation);
+            try {
+              final handler = state.onContinuation;
+              if (handler != null) {
+                await _deliverContinuation(state, continuation, handler);
+              }
+            } catch (callbackError) {
+              debugPrint(
+                  '[ChatStreamManager] continuation display callback failed: $callbackError');
+            }
+
+            final replyDelta = fullReplySnapshot.substring(
+              replyLengthAtLastContinuation,
+            );
+            replyLengthAtLastContinuation = fullReplySnapshot.length;
+            streamHistory = [
+              ...streamHistory,
+              ChatMessage(role: 'assistant', content: replyDelta),
+              continuation,
+            ];
+            state.markToolCallTextBoundary();
+          }
+          debugPrint(
+              '[ChatStreamManager] network stream interrupted; retrying ($transportRetries/${_transportRetryPolicy.maxRetries}), convId=$convId');
+        }
       }
     } catch (e, s) {
       streamError = e;
@@ -486,18 +672,14 @@ class ChatStreamManager {
         }
         // 用友好错误格式化（分类中文提示 + 保留原始异常）：
         // 未配置供应商/网络失败/超时等给出可操作的提示。
-        // 已流出的部分回复不能丢：拼接在错误文本之后，
-        // 用户仍可看到流中断前的回答内容。
-        final errorText = formatChatErrorMessage(e);
-        final partial = state.fullReply;
-        state.fullReply =
-            partial.isEmpty ? errorText : '$errorText\n\n---\n$partial';
-        _pushToProvider(
-          convId,
-          streamingTextSectionsProvider,
-          List<String>.from(state.textChunks),
-        );
-        _pushToProvider(convId, streamingFullReplyProvider, state.fullReply);
+        // 保留已经流出的正文或思考内容，并把错误作为独立尾部块显示。
+        final errorText = _ref == null
+            ? formatChatErrorMessage(e)
+            : formatChatErrorMessage(e, locale: _ref?.read(localeProvider));
+        if (!state.hasTextContent) {
+          state.fullReply = errorText;
+          state.hasSyntheticErrorReply = true;
+        }
         state.toolCalls.clear();
         _pushToProvider(convId, streamingToolCallsProvider, <ToolCallData>[]);
       }
@@ -506,16 +688,14 @@ class ChatStreamManager {
       state.persistTimer?.cancel();
       state.persistTimer = null;
 
-      // Final throttle flush: push the last text to the UI.
-      // Set textSections first (no listener) so that when
-      // fullReply fires its listener and reads streamingTextSectionsProvider
-      // inside _rebuildLiveSegments, it sees the already-updated value.
+      // Materialize the current text chunk once, then reuse this snapshot for
+      // both the final provider flush and result/persistence construction.
+      finalTextChunks = List<String>.from(state.textChunks);
       _pushToProvider(
         convId,
         streamingTextSectionsProvider,
-        List<String>.from(state.textChunks),
+        List<String>.from(finalTextChunks),
       );
-      _pushToProvider(convId, streamingFullReplyProvider, state.fullReply);
     }
 
     return _completeStream(
@@ -523,7 +703,56 @@ class ChatStreamManager {
       convId: convId,
       streamError: streamError,
       snappedChatService: snappedChatService,
+      finalTextChunks: finalTextChunks,
     );
+  }
+
+  /// Registers a conversation-scoped handler for displaying an automatically
+  /// sent continuation. Call immediately before [startStreaming].
+  void setContinuationHandler(
+    String convId,
+    Future<bool> Function(ChatMessage continuation) handler,
+  ) {
+    final activeState = _streams[convId];
+    if (activeState != null && !activeState.cancelledByUser) {
+      activeState.onContinuation = handler;
+      for (final pending in List<ChatMessage>.from(
+        activeState.pendingContinuations,
+      )) {
+        unawaited(_deliverContinuation(activeState, pending, handler));
+      }
+    } else {
+      _pendingContinuationHandlers[convId] = handler;
+    }
+  }
+
+  Future<void> _deliverContinuation(
+    _ConversationStreamState state,
+    ChatMessage continuation,
+    Future<bool> Function(ChatMessage continuation) handler,
+  ) async {
+    if (!state.pendingContinuations.contains(continuation) ||
+        !state.deliveringContinuations.add(continuation)) {
+      return;
+    }
+    try {
+      final displayed = await handler(continuation);
+      if (displayed) state.pendingContinuations.remove(continuation);
+    } catch (callbackError) {
+      debugPrint(
+          '[ChatStreamManager] continuation display callback failed: $callbackError');
+    } finally {
+      state.deliveringContinuations.remove(continuation);
+      final replacementHandler = state.onContinuation;
+      if (!state.cancelledByUser &&
+          state.pendingContinuations.contains(continuation) &&
+          replacementHandler != null &&
+          !identical(replacementHandler, handler)) {
+        unawaited(
+          _deliverContinuation(state, continuation, replacementHandler),
+        );
+      }
+    }
   }
 
   /// 取消指定对话的流式请求。如果 [convId] 为 null，取消所有。
@@ -531,13 +760,13 @@ class ChatStreamManager {
     if (convId != null) {
       final state = _streams[convId];
       if (state == null) return;
-      state.cancelledByUser = true;
+      state.cancelByUser();
       // Cancel only this conversation's HTTP request.
       _adapter.cancelService(convId);
     } else {
       if (_streams.isEmpty) return;
       for (final s in _streams.values) {
-        s.cancelledByUser = true;
+        s.cancelByUser();
       }
       // Cancel all services.
       _adapter.cancelAllServices();
@@ -557,8 +786,8 @@ class ChatStreamManager {
 
   /// 把一次请求的 usage 计量**立即**累加到对话（对话级累计）。
   ///
-  /// 由 ChatService.onUsageEvent 回调触发：每次请求的完整 usage 数据
-  /// 返回时增量提交（Conversation.totalCost += costIncrement），
+  /// 由 ChatService.onUsageEvent 回调触发：usage 快照返回时增量提交
+  /// （Conversation.totalCost += 新增的 cost），
   /// 绝不从头重算。重发/重试/编辑只会继续累加，不会重置。
   ///
   /// [recordInput] 为 false 时只累计 cost（压缩/标题等内部任务请求的
@@ -573,11 +802,8 @@ class ChatStreamManager {
   ///
   /// fire-and-forget（不 await）：幂等的增量累加 + 防抖持久化，
   /// 多请求并发提交安全。
-  void _commitUsage(
-    String convId,
-    Map<String, dynamic> usage, {
-    required bool recordInput,
-  }) {
+  void _commitUsage(String convId, Map<String, dynamic> usage,
+      {required bool recordInput, double? costIncrementOverride}) {
     final ref = _ref;
     if (ref == null) return;
     try {
@@ -585,19 +811,17 @@ class ChatStreamManager {
       final outputTokens = usage['outputTokens'] as int?;
       // num 安全取值：cost 以 int（JSON 整数值反序列化）出现时
       // 也能累计——单个字段的类型异常不能把整次计量（含 tokens）丢弃。
-      final cost =
-          usage['cost'] is num ? (usage['cost'] as num).toDouble() : 0.0;
+      final cost = costIncrementOverride ??
+          (usage['cost'] is num ? (usage['cost'] as num).toDouble() : 0.0);
       final hasMetering =
           recordInput && (inputTokens != null || outputTokens != null);
-      if (!hasMetering && cost <= 0) return;
-      unawaited(
-        ref.read(conversationsProvider.notifier).updateUsage(
-              conversationId: convId,
-              inputTokens: recordInput ? inputTokens : null,
-              outputTokens: recordInput ? outputTokens : null,
-              costIncrement: cost,
-            ),
-      );
+      if (!hasMetering && cost == 0) return;
+      unawaited(ref.read(conversationsProvider.notifier).updateUsage(
+            conversationId: convId,
+            inputTokens: recordInput ? inputTokens : null,
+            outputTokens: recordInput ? outputTokens : null,
+            costIncrement: cost,
+          ));
     } catch (e) {
       debugPrint('[ChatStreamManager] usage 计量更新失败: $e');
     }

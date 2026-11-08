@@ -1,4 +1,5 @@
 import 'package:sqflite/sqflite.dart';
+
 import '../models/revlog.dart';
 
 class RevlogDao {
@@ -6,12 +7,20 @@ class RevlogDao {
   RevlogDao(this._db);
 
   Future<void> insert(RevlogEntry entry) async {
+    entry.usn = -1;
     await _db.insert('revlog', entry.toMap());
+    await _db.rawUpdate('UPDATE col SET mod = ? WHERE id = 1', [
+      DateTime.now().millisecondsSinceEpoch ~/ 1000,
+    ]);
   }
 
   Future<List<RevlogEntry>> listByCard(int cid) async {
-    final rows = await _db.query('revlog',
-        where: 'cid = ?', whereArgs: [cid], orderBy: 'id');
+    final rows = await _db.query(
+      'revlog',
+      where: 'cid = ?',
+      whereArgs: [cid],
+      orderBy: 'id',
+    );
     return rows.map(RevlogEntry.fromMap).toList();
   }
 

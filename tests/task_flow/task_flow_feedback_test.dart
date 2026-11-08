@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:stroom/services/storage_service.dart';
 import 'package:stroom/pages/unified_task_list/task_flow_card.dart';
@@ -157,9 +158,15 @@ void main() {
         await tester.runAsync(() async {
           expect(await executions.addExecutions([terminal, sibling]), isTrue);
         });
-        await tester.pumpWidget(ProviderScope(overrides: [
-          taskFlowExecutionsProvider.overrideWith((ref) => executions),
-        ], child: const MaterialApp(home: UnifiedTaskListPage())));
+        await tester.pumpWidget(ProviderScope(
+            overrides: [
+              taskFlowExecutionsProvider.overrideWith((ref) => executions),
+            ],
+            child: const MaterialApp(
+                locale: Locale('zh', 'CN'),
+                supportedLocales: AppLocalizations.supportedLocales,
+                localizationsDelegates: AppLocalizations.localizationsDelegates,
+                home: UnifiedTaskListPage())));
         if (terminalStatus == FlowExecutionStatus.completed) {
           await _clearCompleted(tester);
         } else {
@@ -221,6 +228,9 @@ void main() {
           taskFlowExecutionServiceProvider.overrideWithValue(control),
         ],
         child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
             home: Scaffold(body: TaskFlowCard(execution: completed)))));
     await tester.tap(find.text('Completed'));
     await tester.pump();
@@ -258,8 +268,11 @@ void main() {
       addTearDown(container.dispose);
       await tester.pumpWidget(UncontrolledProviderScope(
           container: container,
-          child:
-              const MaterialApp(home: TaskFlowRunPage(executionIds: ['run']))));
+          child: const MaterialApp(
+              locale: Locale('zh', 'CN'),
+              supportedLocales: AppLocalizations.supportedLocales,
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              home: TaskFlowRunPage(executionIds: ['run']))));
       expect(find.byType(TaskFlowCard), findsNothing);
       expect(find.text('取消整个批次'), findsNothing);
       expect(
@@ -301,6 +314,9 @@ void main() {
         await tester.pumpWidget(UncontrolledProviderScope(
             container: container,
             child: MaterialApp(
+                locale: const Locale('zh', 'CN'),
+                supportedLocales: AppLocalizations.supportedLocales,
+                localizationsDelegates: AppLocalizations.localizationsDelegates,
                 home: Scaffold(body: TaskFlowCard(execution: execution)))));
         if (status == FlowExecutionStatus.running ||
             status == FlowExecutionStatus.paused) {
@@ -359,6 +375,9 @@ void main() {
             taskFlowExecutionsProvider.overrideWith((ref) => executions),
           ],
           child: MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              supportedLocales: AppLocalizations.supportedLocales,
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
               home: Scaffold(
                   body: TaskFlowCard(
                       execution: status == FlowExecutionStatus.interrupted
@@ -393,6 +412,9 @@ void main() {
           taskFlowExecutionsProvider.overrideWith((ref) => executions),
         ],
         child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
             home: Scaffold(
                 body: TaskFlowCard(execution: executions.executions.single)))));
     await tester.tap(find.text('Run'));
@@ -414,9 +436,15 @@ void main() {
     executions.completeExecution(id);
     final other = executions.addExecution(flowId: 'f', flowName: 'Other');
     executions.completeExecution(other);
-    await tester.pumpWidget(ProviderScope(overrides: [
-      taskFlowExecutionsProvider.overrideWith((ref) => executions),
-    ], child: MaterialApp(home: TaskFlowRunPage(executionIds: [id]))));
+    await tester.pumpWidget(ProviderScope(
+        overrides: [
+          taskFlowExecutionsProvider.overrideWith((ref) => executions),
+        ],
+        child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            home: TaskFlowRunPage(executionIds: [id]))));
     await tester.pump();
     expect(find.text('Submitted'), findsOneWidget);
     expect(find.text('Other'), findsNothing);
@@ -450,6 +478,9 @@ void main() {
           taskFlowExecutionServiceProvider.overrideWithValue(control),
         ],
         child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
             home: Scaffold(body: TaskFlowCard(execution: active)))));
     await tester.tap(find.text('Active'));
     await tester.pump();
@@ -476,11 +507,17 @@ void main() {
           status: FlowExecutionStatus.waiting)
     ]);
     final control = _Control(executions)..cancellationFails = true;
-    await tester.pumpWidget(ProviderScope(overrides: [
-      taskFlowExecutionsProvider.overrideWith((ref) => executions),
-      taskFlowExecutionServiceProvider.overrideWithValue(control),
-      taskListLastReadProvider.overrideWith((ref) => DateTime.now()),
-    ], child: const MaterialApp(home: UnifiedTaskListPage())));
+    await tester.pumpWidget(ProviderScope(
+        overrides: [
+          taskFlowExecutionsProvider.overrideWith((ref) => executions),
+          taskFlowExecutionServiceProvider.overrideWithValue(control),
+          taskListLastReadProvider.overrideWith((ref) => DateTime.now()),
+        ],
+        child: const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            home: UnifiedTaskListPage())));
     await tester.pump();
     await tester.tap(find.byType(PopupMenuButton<String>));
     await tester.pumpAndSettle();
@@ -528,7 +565,11 @@ void main() {
           taskFlowExecutionsProvider.overrideWith((ref) => executions),
           taskFlowExecutionServiceProvider.overrideWithValue(control),
         ],
-        child: const MaterialApp(home: UnifiedTaskListPage()),
+        child: const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            home: UnifiedTaskListPage()),
       ),
     );
     await _clearAll(tester);
@@ -559,7 +600,11 @@ void main() {
           taskFlowExecutionsProvider.overrideWith((ref) => executions),
           taskFlowExecutionServiceProvider.overrideWithValue(control),
         ],
-        child: const MaterialApp(home: UnifiedTaskListPage()),
+        child: const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            home: UnifiedTaskListPage()),
       ),
     );
     await _clearAll(tester);
@@ -608,7 +653,11 @@ void main() {
           taskFlowExecutionServiceProvider.overrideWithValue(control),
           backgroundTasksProvider.overrideWith((ref) => backgrounds),
         ],
-        child: const MaterialApp(home: UnifiedTaskListPage()),
+        child: const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            home: UnifiedTaskListPage()),
       ),
     );
     await _clearAll(tester);
@@ -680,7 +729,11 @@ void main() {
           taskFlowExecutionsProvider.overrideWith((ref) => executions),
           backgroundTasksProvider.overrideWith((ref) => backgrounds),
         ],
-        child: const MaterialApp(home: UnifiedTaskListPage()),
+        child: const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            home: UnifiedTaskListPage()),
       ),
     );
     await _clearAll(tester);
@@ -689,7 +742,7 @@ void main() {
     expect(executions.durable.single.id, 'finished');
     expect(backgrounds.tasks, isEmpty);
     expect(backgrounds.durable, isEmpty);
-    expect(find.textContaining('记录删除状态无法保存'), findsOneWidget);
+    expect(find.textContaining('无法保存任务流记录的删除状态'), findsOneWidget);
 
     executions.removalPersistenceFails = false;
     await _clearAll(tester);
@@ -736,7 +789,11 @@ void main() {
           taskFlowExecutionsProvider.overrideWith((ref) => executions),
           backgroundTasksProvider.overrideWith((ref) => backgrounds),
         ],
-        child: const MaterialApp(home: UnifiedTaskListPage()),
+        child: const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            home: UnifiedTaskListPage()),
       ),
     );
     await _clearAll(tester);
@@ -816,7 +873,11 @@ void main() {
           taskFlowExecutionsProvider.overrideWith((ref) => executions),
           backgroundTasksProvider.overrideWith((ref) => backgrounds),
         ],
-        child: const MaterialApp(home: UnifiedTaskListPage()),
+        child: const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            home: UnifiedTaskListPage()),
       ),
     );
     await _clearCompleted(tester);
@@ -840,7 +901,11 @@ void main() {
           taskFlowExecutionsProvider.overrideWith((ref) => restoredExecutions),
           backgroundTasksProvider.overrideWith((ref) => restoredBackgrounds),
         ],
-        child: const MaterialApp(home: UnifiedTaskListPage()),
+        child: const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            home: UnifiedTaskListPage()),
       ),
     );
     await _clearCompleted(tester);
@@ -901,7 +966,11 @@ void main() {
           taskFlowExecutionsProvider.overrideWith((ref) => executions),
           backgroundTasksProvider.overrideWith((ref) => backgrounds),
         ],
-        child: const MaterialApp(home: UnifiedTaskListPage()),
+        child: const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            home: UnifiedTaskListPage()),
       ),
     );
     await _openClearFailed(tester);
@@ -922,7 +991,7 @@ void main() {
     expect(executions.durable.map((e) => e.id),
         containsAll(['failed', 'completed', 'later']));
     expect(backgrounds.durable, isEmpty);
-    expect(find.textContaining('记录删除状态无法保存'), findsOneWidget);
+    expect(find.textContaining('无法保存任务流记录的删除状态'), findsOneWidget);
 
     final restoredExecutions = _Executions()
       ..load(List.of(executions.durable))
@@ -936,7 +1005,11 @@ void main() {
           taskFlowExecutionsProvider.overrideWith((ref) => restoredExecutions),
           backgroundTasksProvider.overrideWith((ref) => restoredBackgrounds),
         ],
-        child: const MaterialApp(home: UnifiedTaskListPage()),
+        child: const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            home: UnifiedTaskListPage()),
       ),
     );
     await _clearFailed(tester);
@@ -974,6 +1047,9 @@ void main() {
           taskFlowExecutionServiceProvider.overrideWithValue(control),
         ],
         child: MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(body: TaskFlowCard(execution: active)),
         ),
       ),
@@ -1009,6 +1085,9 @@ void main() {
           taskFlowExecutionServiceProvider.overrideWithValue(control),
         ],
         child: MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(body: TaskFlowCard(execution: active)),
         ),
       ),
@@ -1071,6 +1150,9 @@ void main() {
           backgroundTasksProvider.overrideWith((ref) => backgrounds),
         ],
         child: MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(body: TaskFlowCard(execution: active)),
         ),
       ),
@@ -1131,6 +1213,9 @@ void main() {
           backgroundTasksProvider.overrideWith((ref) => backgrounds),
         ],
         child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
             home: Scaffold(body: TaskFlowCard(execution: finished))),
       ),
     );
@@ -1151,6 +1236,73 @@ void main() {
     expect(backgrounds.durable, isEmpty);
     expect(executions.executions, isEmpty);
     expect(executions.durable, isEmpty);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('clear all localizes fixed child removal errors in English', (
+    tester,
+  ) async {
+    final executions = _Executions();
+    executions.load([
+      TaskFlowExecution(
+        id: 'finished',
+        flowId: 'f',
+        flowName: 'Finished',
+        status: FlowExecutionStatus.completed,
+        subTasks: [
+          FlowSubTask(
+            blockTypeKey: 'chat',
+            blockLabel: 'Child',
+            subTaskId: 'child',
+            subTaskType: 'background',
+            status: TaskStatus.completed,
+          ),
+        ],
+      ),
+    ]);
+    final backgrounds = _Backgrounds()
+      ..load([
+        BackgroundTask(
+          id: 'child',
+          type: BackgroundTaskType.chat,
+          title: 'Child',
+          status: TaskStatus.completed,
+        ),
+      ])
+      ..removalPersistenceFails = true;
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          taskFlowExecutionsProvider.overrideWith((ref) => executions),
+          backgroundTasksProvider.overrideWith((ref) => backgrounds),
+        ],
+        child: MaterialApp(
+          locale: const Locale('en', 'US'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          home: const UnifiedTaskListPage(),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(find.byType(PopupMenuButton<String>));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.tap(find.text('Clear all tasks'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.tap(find.widgetWithText(TextButton, 'Confirm'));
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(
+      find.textContaining(
+          'Could not save background child task deletion state.'),
+      findsOneWidget,
+    );
+    expect(executions.executions.single.id, 'finished');
+    expect(backgrounds.tasks.single.id, 'child');
+    expect(backgrounds.durable.single.id, 'child');
     await tester.pumpWidget(const SizedBox.shrink());
   });
 }

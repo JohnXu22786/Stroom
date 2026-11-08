@@ -76,6 +76,8 @@ class _InspectingManager extends ChatStreamManager {
     required String text,
     required String convId,
     required List<ChatMessage> history,
+    List<ChatMessage>? requestHistoryOverride,
+    List<ChatMessage>? historyOnSuccess,
     List<ToolDefinition> tools = const [],
     bool reasoning = false,
     String reasoningEffort = 'medium',
@@ -83,6 +85,7 @@ class _InspectingManager extends ChatStreamManager {
     String? selectedAccountId,
     String? streamingMsgId,
     Assistant? assistant,
+    Map<String, String>? customParamValues,
     ProviderEntriesState? entriesStateOverride,
   }) {
     if (failStreamSetup) throw StateError('stream setup failed');
@@ -97,6 +100,7 @@ class _InspectingManager extends ChatStreamManager {
       selectedAccountId: selectedAccountId,
       streamingMsgId: streamingMsgId,
       assistant: assistant,
+      customParamValues: customParamValues,
       entriesStateOverride: entriesStateOverride,
     );
     services.add(adapter.currentChatService);

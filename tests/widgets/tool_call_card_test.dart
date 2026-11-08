@@ -5,6 +5,7 @@
 //   - error: tool name rendered in red
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/models/tool_call.dart' show ToolCallData, ToolCallStatus;
 import 'package:stroom/services/context_manager.dart'
     show kCompactedToolResultPlaceholder;
@@ -26,6 +27,9 @@ ToolCallData _tc({
     );
 
 Widget _wrap(ToolCallData data) => MaterialApp(
+      locale: const Locale('zh', 'CN'),
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
       home: Scaffold(
         body: ToolCallCard(data: data),
       ),
@@ -187,6 +191,9 @@ void main() {
     testWidgets('compactedAt 非空时收起态显示"已压缩"徽标，展开显示占位符', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: ToolCallCard(
               data: ToolCallData(
@@ -305,6 +312,9 @@ void main() {
       // Align 提供松约束，width: double.infinity 才能让卡片撑满。
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: Align(
               alignment: Alignment.topLeft,
@@ -334,6 +344,9 @@ void main() {
       const longName = 'mcp__notion__search_pages_tool';
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: Align(
               alignment: Alignment.topLeft,

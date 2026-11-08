@@ -1,4 +1,5 @@
 part of 'llm_model_config_page.dart';
+
 // Extension methods on the State class cannot use @protected members
 // (setState / state) without analyzer warnings, but the receiver IS the
 // State/StateNotifier, so runtime behavior is identical to the original
@@ -98,8 +99,9 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
       additional.insert(newIndex, param);
       // 重建工作副本：开关/力度保持原顺序，附加参数按新顺序
       final rebuilt = <ReasoningParam>[
-        ..._reasoningParams
-            .where((p) => p.isReasoningToggle || p.isEffortParam),
+        ..._reasoningParams.where(
+          (p) => p.isReasoningToggle || p.isEffortParam,
+        ),
         ...additional,
       ];
       _reasoningParams
@@ -129,12 +131,12 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
     final value = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('添加选项值'),
+        title: Text(AppLocalizations.of(context)!.reasoningAddOptionValue),
         content: TextField(
           controller: controller,
           autofocus: true,
-          decoration: const InputDecoration(
-            hintText: '如 low、medium、high',
+          decoration: InputDecoration(
+            hintText: AppLocalizations.of(context)!.reasoningOptionExample,
             border: OutlineInputBorder(),
             isDense: true,
           ),
@@ -142,12 +144,12 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('取消'),
+            child: Text(AppLocalizations.of(context)!.batchDlgCancel),
           ),
           TextButton(
             onPressed: () =>
                 Navigator.pop(dialogContext, controller.text.trim()),
-            child: const Text('确定'),
+            child: Text(AppLocalizations.of(context)!.batchDlgConfirm),
           ),
         ],
       ),
@@ -257,12 +259,12 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
     final value = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('添加选项值'),
+        title: Text(AppLocalizations.of(context)!.reasoningAddOptionValue),
         content: TextField(
           controller: controller,
           autofocus: true,
-          decoration: const InputDecoration(
-            hintText: '如 low、medium、high',
+          decoration: InputDecoration(
+            hintText: AppLocalizations.of(context)!.reasoningOptionExample,
             border: OutlineInputBorder(),
             isDense: true,
           ),
@@ -270,12 +272,12 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('取消'),
+            child: Text(AppLocalizations.of(context)!.batchDlgCancel),
           ),
           TextButton(
             onPressed: () =>
                 Navigator.pop(dialogContext, controller.text.trim()),
-            child: const Text('确定'),
+            child: Text(AppLocalizations.of(context)!.batchDlgConfirm),
           ),
         ],
       ),
@@ -289,6 +291,28 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
         // 新选项默认勾选（照搬力度块：添加即选中）
         _customParamSelectedValues[param]?.add(value);
       }
+    });
+  }
+
+  /// 编辑模型自建的自定义参数选项值；替换列表原位并迁移勾选状态。
+  Future<void> _editCustomParamOptionWithDialog(
+    CustomParam param,
+    String oldValue,
+  ) async {
+    final value = await showDialog<String>(
+      context: context,
+      builder: (_) => _EditCustomParamOptionDialog(initialValue: oldValue),
+    );
+    if (value == null || value.isEmpty || !mounted) return;
+    final blocks = _customParamBlockValues[param];
+    if (blocks == null || blocks.contains(value)) return;
+    final index = blocks.indexOf(oldValue);
+    if (index < 0) return;
+    setState(() {
+      final selected = _customParamSelectedValues[param];
+      final wasSelected = selected?.remove(oldValue) ?? false;
+      blocks[index] = value;
+      if (wasSelected) selected?.add(value);
     });
   }
 
@@ -308,8 +332,7 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          '点击块选中/取消（选中的值将参与发送），长按块拖拽排序。'
-          '供应商的值不可删除，取消勾选即可隐藏。',
+          AppLocalizations.of(context)!.reasoningOptionSelectionHelp,
           style: TextStyle(
             fontSize: 12,
             color: cs.onSurfaceVariant.withValues(alpha: 0.7),
@@ -324,13 +347,19 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
           deletable: (v) =>
               !(_providerCustomParamValues[param]?.contains(v) ?? false),
           onTap: (v) => _toggleCustomParamOption(param, v),
+          editable: (v) =>
+              !(_providerCustomParamValues[param]?.contains(v) ?? false),
+          onEdit: (v) => _editCustomParamOptionWithDialog(param, v),
           onDelete: (v) => _removeCustomParamOption(param, v),
           onReorder: (from, to) => _moveCustomParamOptionTo(param, from, to),
         ),
         const SizedBox(height: 4),
         TextButton.icon(
           icon: const Icon(Icons.add, size: 16),
-          label: const Text('添加选项', style: TextStyle(fontSize: 13)),
+          label: Text(
+            AppLocalizations.of(context)!.reasoningAddOption,
+            style: TextStyle(fontSize: 13),
+          ),
           onPressed: () => _addCustomParamOptionWithDialog(param),
         ),
       ],
@@ -468,7 +497,9 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
   /// 参数来源状态（参数名标签后的括号显示）：
   /// 「当前：供应商」= 参数继承自供应商；其它情况 → 「当前：模型自定义」。
   String _paramSourceLabel(ReasoningParam param) =>
-      _isReasoningParamInherited(param) ? '当前：供应商' : '当前：模型自定义';
+      _isReasoningParamInherited(param)
+          ? AppLocalizations.of(context)!.reasoningCurrentProvider
+          : AppLocalizations.of(context)!.reasoningCurrentModel;
 
   /// 自定义参数是否「继承自供应商」：供应商存在同名且同类型的参数，
   /// 且该参数是打开页面时工作副本里的成员（本会话添加的参数即使改名
@@ -506,16 +537,53 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
         .where((p) => !p.isReasoningToggle && !p.isEffortParam && p != effort)
         .toList();
   }
+}
 
-  bool get _isToggleComplete {
-    final toggle = _toggleReasoningParam;
-    if (toggle == null) return false;
-    // boolean 类型开关只需参数名（开/关值由聊天面板提供）
-    if (toggle.type == 'boolean') {
-      return toggle.paramName.trim().isNotEmpty;
-    }
-    return toggle.paramName.trim().isNotEmpty &&
-        (toggle.onValue != null && toggle.onValue!.trim().isNotEmpty) &&
-        (toggle.offValue != null && toggle.offValue!.trim().isNotEmpty);
+class _EditCustomParamOptionDialog extends StatefulWidget {
+  final String initialValue;
+
+  const _EditCustomParamOptionDialog({required this.initialValue});
+
+  @override
+  State<_EditCustomParamOptionDialog> createState() =>
+      _EditCustomParamOptionDialogState();
+}
+
+class _EditCustomParamOptionDialogState
+    extends State<_EditCustomParamOptionDialog> {
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.initialValue,
+  );
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(AppLocalizations.of(context)!.reasoningEditOptionValue),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        decoration: InputDecoration(
+          hintText: AppLocalizations.of(context)!.reasoningOptionExample,
+          border: OutlineInputBorder(),
+          isDense: true,
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(AppLocalizations.of(context)!.batchDlgCancel),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(context, _controller.text.trim()),
+          child: Text(AppLocalizations.of(context)!.mermaidSaveButton),
+        ),
+      ],
+    );
   }
 }

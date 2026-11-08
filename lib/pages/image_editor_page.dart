@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:pro_image_editor/pro_image_editor.dart';
 
 // ====================================================================
@@ -16,10 +17,7 @@ class ImageEditorResult {
   final Uint8List editedBytes;
   final bool isSaveAs;
 
-  const ImageEditorResult({
-    required this.editedBytes,
-    required this.isSaveAs,
-  });
+  const ImageEditorResult({required this.editedBytes, required this.isSaveAs});
 }
 
 /// Actions for save/discard dialogs.
@@ -46,32 +44,32 @@ Future<SaveAction?> showImageSaveDialog(BuildContext context) {
     barrierDismissible: false,
     builder: (ctx) => AlertDialog(
       backgroundColor: Colors.grey[900],
-      title: const Text(
-        '保存图片',
+      title: Text(
+        AppLocalizations.of(context)!.imageEditorSaveImageTitle,
         style: TextStyle(color: Colors.white),
       ),
-      content: const Text(
-        '请选择保存方式：',
+      content: Text(
+        AppLocalizations.of(context)!.imageEditorSaveImagePrompt,
         style: TextStyle(color: Colors.white70),
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(ctx, SaveAction.cancel),
-          child: const Text(
-            '取消',
+          child: Text(
+            AppLocalizations.of(context)!.actionCancel,
             style: TextStyle(color: Colors.white54),
           ),
         ),
         TextButton(
           onPressed: () => Navigator.pop(ctx, SaveAction.overwrite),
-          child: const Text(
-            '覆盖',
+          child: Text(
+            AppLocalizations.of(context)!.imageEditorOverwrite,
             style: TextStyle(color: Colors.blue),
           ),
         ),
         FilledButton(
           onPressed: () => Navigator.pop(ctx, SaveAction.saveAs),
-          child: const Text('另存为'),
+          child: Text(AppLocalizations.of(context)!.imageEditorSaveAs),
         ),
       ],
     ),
@@ -92,32 +90,32 @@ Future<SaveAction?> showDiscardOrSaveDialog(BuildContext context) {
     barrierDismissible: false,
     builder: (ctx) => AlertDialog(
       backgroundColor: Colors.grey[900],
-      title: const Text(
-        '保存照片',
+      title: Text(
+        AppLocalizations.of(context)!.imageEditorSavePhotoTitle,
         style: TextStyle(color: Colors.white),
       ),
-      content: const Text(
-        '是否保存当前照片？',
+      content: Text(
+        AppLocalizations.of(context)!.imageEditorSavePhotoPrompt,
         style: TextStyle(color: Colors.white70),
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(ctx, SaveAction.cancel),
-          child: const Text(
-            '取消',
+          child: Text(
+            AppLocalizations.of(context)!.actionCancel,
             style: TextStyle(color: Colors.white54),
           ),
         ),
         TextButton(
           onPressed: () => Navigator.pop(ctx, SaveAction.discard),
-          child: const Text(
-            '不保存',
+          child: Text(
+            AppLocalizations.of(context)!.imageEditorDiscard,
             style: TextStyle(color: Colors.redAccent),
           ),
         ),
         FilledButton(
           onPressed: () => Navigator.pop(ctx, SaveAction.save),
-          child: const Text('保存'),
+          child: Text(AppLocalizations.of(context)!.actionSave),
         ),
       ],
     ),
@@ -138,17 +136,15 @@ Future<SaveAction?> showDiscardOrSaveDialog(BuildContext context) {
 ///   ([Icons.done] by default) — a checkmark means "apply this edit",
 ///   the save icon means "save the image".
 /// - The built-in loading dialog (shown while the final image is being
-///   generated) uses a Chinese message so the user gets clear feedback
+///   generated) uses a localized message so the user gets clear feedback
 ///   during the processing.
-ProImageEditorConfigs buildImageEditorConfigs() {
-  return const ProImageEditorConfigs(
+ProImageEditorConfigs buildImageEditorConfigs(AppLocalizations strings) {
+  return ProImageEditorConfigs(
     designMode: ImageEditorDesignMode.material,
-    mainEditor: MainEditorConfigs(
-      icons: MainEditorIcons(doneIcon: Icons.save),
-    ),
+    mainEditor: MainEditorConfigs(icons: MainEditorIcons(doneIcon: Icons.save)),
     i18n: I18n(
-      done: '保存',
-      doneLoadingMsg: '正在生成图片，请稍候…',
+      done: strings.actionSave,
+      doneLoadingMsg: strings.imageEditorDoneLoading,
     ),
   );
 }
@@ -277,10 +273,7 @@ class _ImageEditorPageState extends State<ImageEditorPage> {
       // Save the original (unedited) photo.
       Navigator.pop(
         context,
-        ImageEditorResult(
-          editedBytes: widget.imageBytes,
-          isSaveAs: false,
-        ),
+        ImageEditorResult(editedBytes: widget.imageBytes, isSaveAs: false),
       );
     } else {
       // Discard — pop with null.
@@ -296,7 +289,7 @@ class _ImageEditorPageState extends State<ImageEditorPage> {
         onImageEditingComplete: _onImageEditingComplete,
         onCloseEditor: _onCloseEditor,
       ),
-      configs: buildImageEditorConfigs(),
+      configs: buildImageEditorConfigs(AppLocalizations.of(context)!),
     );
   }
 }

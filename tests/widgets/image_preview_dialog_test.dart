@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/widgets/image_preview_dialog.dart';
 
 /// Create a small valid PNG (1x1 white pixel) for use in widget tests.
@@ -40,6 +41,9 @@ void main() {
       String fileName = 'test.jpg',
     }) {
       return MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
         home: Scaffold(
           body: ImagePreviewDialog(
             imageData: imageData,
@@ -83,6 +87,9 @@ void main() {
     testWidgets('close button pops dialog with null', (tester) async {
       bool? result;
       await tester.pumpWidget(MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
         home: Builder(
           builder: (context) => ElevatedButton(
             onPressed: () async {
@@ -112,6 +119,9 @@ void main() {
     testWidgets('crop button pops dialog with true', (tester) async {
       bool? result;
       await tester.pumpWidget(MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
         home: Builder(
           builder: (context) => ElevatedButton(
             onPressed: () async {
@@ -141,6 +151,9 @@ void main() {
     testWidgets('edit button pops dialog with true', (tester) async {
       bool? result;
       await tester.pumpWidget(MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
         home: Builder(
           builder: (context) => ElevatedButton(
             onPressed: () async {
@@ -172,6 +185,9 @@ void main() {
       bool? dialogClosed;
 
       await tester.pumpWidget(MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
         home: Builder(
           builder: (context) => ElevatedButton(
             onPressed: () async {
@@ -230,6 +246,9 @@ void main() {
     testWidgets('rapid open/close does not crash', (tester) async {
       for (int i = 0; i < 3; i++) {
         await tester.pumpWidget(MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () async {

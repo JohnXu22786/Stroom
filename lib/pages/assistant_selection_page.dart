@@ -1,6 +1,8 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:stroom/l10n/app_localizations.dart';
+import 'package:stroom/widgets/stroom_menu_style.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/assistant.dart';
@@ -20,6 +22,29 @@ part 'assistant_selection_page_edit_params_tab.dart';
 part 'assistant_selection_page_add_custom_param.dart';
 part 'assistant_selection_page_edit_custom_param.dart';
 
+/// Carries whether the retained chat tab is currently visible to its routes.
+/// Offstage routes stay mounted, so loading animations must pause in the
+/// background to let the surrounding UI settle.
+class ChatTabVisibility extends InheritedWidget {
+  const ChatTabVisibility({
+    required this.isVisible,
+    required super.child,
+    super.key,
+  });
+
+  final bool isVisible;
+
+  static bool of(BuildContext context) =>
+      context
+          .dependOnInheritedWidgetOfExactType<ChatTabVisibility>()
+          ?.isVisible ??
+      true;
+
+  @override
+  bool updateShouldNotify(ChatTabVisibility oldWidget) =>
+      isVisible != oldWidget.isVisible;
+}
+
 /// First page in the chat flow: select an assistant.
 /// Displays assistants in a grid of cards, similar to Cherry Studio's design.
 class AssistantSelectionPage extends ConsumerWidget {
@@ -28,6 +53,7 @@ class AssistantSelectionPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final assistants = ref.watch(assistantProvider);
+    final isLoading = ref.watch(assistantInitialLoadProvider).isLoading;
     final cs = Theme.of(context).colorScheme;
     final pressHighlightColor = cs.primary.withValues(alpha: 0.02);
     final dragHighlightColor = cs.primary.withValues(alpha: 0.06);
@@ -35,7 +61,7 @@ class AssistantSelectionPage extends ConsumerWidget {
     return Scaffold(
       backgroundColor: cs.surface,
       appBar: AppBar(
-        title: const Text('选择助手'),
+        title: Text(AppLocalizations.of(context)!.taskFlowUiChooseAssistant),
         centerTitle: true,
         elevation: 0,
         backgroundColor: cs.surface,
@@ -44,94 +70,99 @@ class AssistantSelectionPage extends ConsumerWidget {
             // A storefront icon conveys that this entry opens the
             // built-in assistant "market".
             icon: const Icon(Icons.storefront),
-            tooltip: '助手市场',
+            tooltip: AppLocalizations.of(context)!.builtInPromptMarketTitle,
             onPressed: () => showBuiltInPromptSelector(context, ref),
           ),
           IconButton(
             icon: const Icon(Icons.add),
-            tooltip: '新建助手',
+            tooltip: AppLocalizations.of(context)!.assistantCreateNew,
             onPressed: () => _showCreateAssistantDialog(context, ref),
           ),
         ],
       ),
-      body: assistants.isEmpty
-          ? Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.smart_toy_outlined,
-                    size: 64,
-                    color: cs.onSurfaceVariant.withValues(alpha: 0.4),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    '暂无助手，请先创建',
-                    style: TextStyle(color: cs.onSurfaceVariant),
-                  ),
-                  const SizedBox(height: 16),
-                  FilledButton.icon(
-                    icon: const Icon(Icons.add),
-                    label: const Text('创建助手'),
-                    onPressed: () => _showCreateAssistantDialog(context, ref),
-                  ),
-                ],
-              ),
+      body: isLoading
+          ? TickerMode(
+              enabled: TickerMode.of(context) && ChatTabVisibility.of(context),
+              child: const Center(child: CircularProgressIndicator()),
             )
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // 与话题页一致的提示文案：新加入的长按拖拽手势需要被发现
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Center(
-                      child: Text(
-                        '长按拖拽即可调整助手顺序',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: cs.onSurfaceVariant.withValues(alpha: 0.5),
+          : assistants.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.smart_toy_outlined,
+                        size: 64,
+                        color: cs.onSurfaceVariant.withValues(alpha: 0.4),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        AppLocalizations.of(context)!.assistantEmptyState,
+                        style: TextStyle(color: cs.onSurfaceVariant),
+                      ),
+                      const SizedBox(height: 16),
+                      FilledButton.icon(
+                        icon: const Icon(Icons.add),
+                        label:
+                            Text(AppLocalizations.of(context)!.assistantCreate),
+                        onPressed: () =>
+                            _showCreateAssistantDialog(context, ref),
+                      ),
+                    ],
+                  ),
+                )
+              : SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // 与话题页一致的提示文案：新加入的长按拖拽手势需要被发现
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Center(
+                          child: Text(
+                            AppLocalizations.of(context)!.assistantReorderHint,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: cs.onSurfaceVariant.withValues(alpha: 0.5),
+                            ),
+                          ),
                         ),
                       ),
-                    ),
+                      DragSortArea(
+                        // 与旧 GridView 相同的几何：
+                        // SliverGridDelegateWithMaxCrossAxisExtent(
+                        //   maxCrossAxisExtent: 220, spacing: 12, aspectRatio: 0.85)
+                        wrap: false,
+                        grid: true,
+                        gridMaxCrossAxisExtent: 220,
+                        gridCrossAxisSpacing: 12,
+                        gridMainAxisSpacing: 12,
+                        gridChildAspectRatio: 0.85,
+                        dragDelay: const Duration(milliseconds: 600),
+                        dragHighlightColor: dragHighlightColor,
+                        draggedItemOpacity: 0.88,
+                        values: [for (final a in assistants) a.id],
+                        onReorder: (from, to) => ref
+                            .read(assistantProvider.notifier)
+                            .reorderAssistant(from, to),
+                        itemBuilder: (context, index, id) {
+                          final assistant = assistants[index];
+                          return AssistantCard(
+                            assistant: assistant,
+                            pressHighlightColor: pressHighlightColor,
+                            onTap: () =>
+                                _onAssistantSelected(context, ref, assistant),
+                            // 长按已让给拖拽排序，编辑/删除入口移到卡片右上角 ⋮
+                            onMenu: () =>
+                                _showAssistantMenu(context, ref, assistant),
+                          );
+                        },
+                      ),
+                    ],
                   ),
-                  DragSortArea(
-                    // 与旧 GridView 相同的几何：
-                    // SliverGridDelegateWithMaxCrossAxisExtent(
-                    //   maxCrossAxisExtent: 220, spacing: 12, aspectRatio: 0.85)
-                    wrap: false,
-                    grid: true,
-                    gridMaxCrossAxisExtent: 220,
-                    gridCrossAxisSpacing: 12,
-                    gridMainAxisSpacing: 12,
-                    gridChildAspectRatio: 0.85,
-                    dragDelay: const Duration(milliseconds: 800),
-                    dragHighlightColor: dragHighlightColor,
-                    draggedItemOpacity: 0.88,
-                    values: [for (final a in assistants) a.id],
-                    onReorder: (from, to) =>
-                        ref.read(assistantProvider.notifier).reorderAssistant(
-                              from,
-                              to,
-                            ),
-                    itemBuilder: (context, index, id) {
-                      final assistant = assistants[index];
-                      return AssistantCard(
-                        assistant: assistant,
-                        pressHighlightColor: pressHighlightColor,
-                        onTap: () =>
-                            _onAssistantSelected(context, ref, assistant),
-                        // 长按已让给拖拽排序，编辑/删除入口移到卡片右上角 ⋮
-                        onMenu: () =>
-                            _showAssistantMenu(context, ref, assistant),
-                      );
-                    },
-                  ),
-                ],
-              ),
-            ),
+                ),
     );
   }
 
@@ -149,7 +180,7 @@ class AssistantSelectionPage extends ConsumerWidget {
   void _showCreateAssistantDialog(BuildContext context, WidgetRef ref) {
     final nameController = TextEditingController();
     final promptController = TextEditingController(
-      text: '你是一个有帮助的AI助手。请用中文回答用户的问题。',
+      text: AppLocalizations.of(context)!.assistantDefaultPrompt,
     );
     String selectedEmoji = '🤖';
     final descriptionController = TextEditingController();
@@ -164,7 +195,7 @@ class AssistantSelectionPage extends ConsumerWidget {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDlgState) => AlertDialog(
-          title: const Text('新建助手'),
+          title: Text(AppLocalizations.of(context)!.assistantCreateNew),
           content: Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
             child: AssistantEditorFields(
@@ -174,8 +205,9 @@ class AssistantSelectionPage extends ConsumerWidget {
               selectedEmoji: selectedEmoji,
               onEmojiSelected: (e) => setDlgState(() => selectedEmoji = e),
               autofocusName: true,
-              nameHint: '输入助手名称',
-              descriptionHint: '简短描述此助手的功能',
+              nameHint: AppLocalizations.of(context)!.assistantNewNameHint,
+              descriptionHint:
+                  AppLocalizations.of(context)!.assistantNewDescriptionHint,
             ),
           ),
           actions: [
@@ -184,7 +216,7 @@ class AssistantSelectionPage extends ConsumerWidget {
                 disposeControllers();
                 Navigator.pop(ctx);
               },
-              child: const Text('取消'),
+              child: Text(AppLocalizations.of(context)!.batchDlgCancel),
             ),
             FilledButton(
               onPressed: () {
@@ -199,7 +231,7 @@ class AssistantSelectionPage extends ConsumerWidget {
                 disposeControllers();
                 Navigator.pop(ctx);
               },
-              child: const Text('创建'),
+              child: Text(AppLocalizations.of(context)!.fileManagerCreate),
             ),
           ],
         ),
@@ -223,7 +255,7 @@ class AssistantSelectionPage extends ConsumerWidget {
           children: [
             ListTile(
               leading: const Icon(Icons.edit_outlined),
-              title: const Text('编辑'),
+              title: Text(AppLocalizations.of(context)!.imagePreviewEdit),
               onTap: () {
                 Navigator.pop(ctx);
                 showAssistantFullEditDialog(context, ref, assistant);
@@ -232,7 +264,7 @@ class AssistantSelectionPage extends ConsumerWidget {
             ListTile(
               leading: const Icon(Icons.delete_outline),
               title: Text(
-                '删除',
+                AppLocalizations.of(context)!.fileManagerDelete,
                 style: TextStyle(color: Theme.of(context).colorScheme.error),
               ),
               onTap: () {
@@ -254,12 +286,15 @@ class AssistantSelectionPage extends ConsumerWidget {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('删除助手'),
-        content: Text('确定要删除助手「${assistant.name}」吗？此操作无法撤销。'),
+        title: Text(AppLocalizations.of(context)!.assistantDeleteTitle),
+        content: Text(
+          AppLocalizations.of(context)!
+              .assistantDeleteConfirmation(assistant.name),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
+            child: Text(AppLocalizations.of(context)!.batchDlgCancel),
           ),
           TextButton(
             onPressed: () {
@@ -271,7 +306,7 @@ class AssistantSelectionPage extends ConsumerWidget {
             style: TextButton.styleFrom(
               foregroundColor: Theme.of(context).colorScheme.error,
             ),
-            child: const Text('删除'),
+            child: Text(AppLocalizations.of(context)!.fileManagerDelete),
           ),
         ],
       ),

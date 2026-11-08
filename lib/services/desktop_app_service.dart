@@ -2,12 +2,57 @@ import 'dart:async';
 import 'dart:io' show exit;
 
 import 'package:flutter/foundation.dart'
-    show TargetPlatform, debugPrint, defaultTargetPlatform, visibleForTesting;
-import 'package:tray_manager/tray_manager.dart';
+    show
+        TargetPlatform,
+        ValueListenable,
+        ValueNotifier,
+        debugPrint,
+        defaultTargetPlatform,
+        visibleForTesting;
+import 'package:flutter/widgets.dart' show Locale;
+import 'package:tray_manager/legacy.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'app_log_service.dart';
 import 'background_service.dart' as background_service;
+import '../providers/locale_provider.dart';
+
+/// Operations the desktop window service needs from the native tray plugin.
+/// Keeping this boundary injectable lets tests cover tray behavior without
+/// constructing GTK or other platform-native objects.
+abstract interface class DesktopTrayAdapter {
+  Future<void> setIcon(String iconPath);
+  Future<void> setToolTip(String toolTip);
+  Future<void> setContextMenu(Menu menu);
+  Future<void> popUpContextMenu();
+  Future<void> destroy();
+  void addListener(TrayListener listener);
+  void removeListener(TrayListener listener);
+}
+
+class _LegacyDesktopTrayAdapter implements DesktopTrayAdapter {
+  @override
+  Future<void> setIcon(String iconPath) => trayManager.setIcon(iconPath);
+
+  @override
+  Future<void> setToolTip(String toolTip) => trayManager.setToolTip(toolTip);
+
+  @override
+  Future<void> setContextMenu(Menu menu) => trayManager.setContextMenu(menu);
+
+  @override
+  Future<void> popUpContextMenu() => trayManager.popUpContextMenu();
+
+  @override
+  Future<void> destroy() => trayManager.destroy();
+
+  @override
+  void addListener(TrayListener listener) => trayManager.addListener(listener);
+
+  @override
+  void removeListener(TrayListener listener) =>
+      trayManager.removeListener(listener);
+}
 
 // ====================================================================
 // DesktopAppService — 桌面端窗口与系统托盘驻留服务
@@ -57,9 +102,27 @@ class DesktopAppService extends WindowListener with TrayListener {
   bool _initialized = false;
   bool _windowCloseListenerRegistered = false;
   bool _pendingCloseBeforeTrayReady = false;
-  bool _trayReady = false;
+  bool _trayRollbackCloseInterceptionFailed = false;
+  final _trayReady = ValueNotifier<bool>(false);
   bool _quitRequested = false;
   Menu? _menu;
+  DesktopTrayAdapter _trayAdapter = _LegacyDesktopTrayAdapter();
+  Locale? _localeOverride;
+  String? _effectiveLocaleName;
+  int _localeGeneration = 0;
+
+  /// Keeps tray labels in sync with the app's selected locale.
+  void updateLocaleOverride(Locale? locale) {
+    final effectiveLocaleName = appLocalizationsForLocale(locale).localeName;
+    if (_localeOverride == locale &&
+        _effectiveLocaleName == effectiveLocaleName) {
+      return;
+    }
+    _localeOverride = locale;
+    _effectiveLocaleName = effectiveLocaleName;
+    _localeGeneration++;
+    if (_trayReady.value) unawaited(_refreshLocalizedTrayStrings());
+  }
 
   /// 当前是否运行在桌面平台（Windows / macOS / Linux）。
   ///
@@ -71,8 +134,18 @@ class DesktopAppService extends WindowListener with TrayListener {
   @visibleForTesting
   Menu? get trayMenuForTesting => _menu;
 
+  /// Replaces native tray calls in tests to avoid loading platform FFI code.
+  @visibleForTesting
+  void setTrayAdapterForTesting(DesktopTrayAdapter adapter) {
+    _trayAdapter.removeListener(this);
+    _trayAdapter = adapter;
+  }
+
   /// 托盘是否已成功注册（用于 UI 展示真实状态）。
-  bool get isTrayReady => _trayReady;
+  bool get isTrayReady => _trayReady.value;
+
+  /// Notifies UI when asynchronous tray registration becomes ready.
+  ValueListenable<bool> get trayReady => _trayReady;
 
   /// 「关闭即退出」模式下的退出确认回调。
   ///
@@ -85,14 +158,18 @@ class DesktopAppService extends WindowListener with TrayListener {
   @visibleForTesting
   void resetForTesting() {
     windowManager.removeListener(this);
-    trayManager.removeListener(this);
+    _trayAdapter.removeListener(this);
+    _trayAdapter = _LegacyDesktopTrayAdapter();
     _initialized = false;
     _windowCloseListenerRegistered = false;
     _pendingCloseBeforeTrayReady = false;
-    _trayReady = false;
+    _trayRollbackCloseInterceptionFailed = false;
+    _trayReady.value = false;
     _quitRequested = false;
     _confirmInProgress = false;
     _menu = null;
+    _localeOverride = null;
+    _effectiveLocaleName = null;
     onQuitConfirmation = null;
   }
 
@@ -124,7 +201,8 @@ class DesktopAppService extends WindowListener with TrayListener {
   /// 3. 窗口监听在托盘就绪前暂缓处理关闭事件。若托盘失败则撤销拦截并移除
   ///    监听，避免出现「窗口已隐藏但无托盘可恢复」的幽灵进程。
   Future<void> setupTrayAndCloseBehavior() async {
-    if (!isDesktopPlatform || _quitRequested || _trayReady) return;
+    if (!isDesktopPlatform || _quitRequested || _trayReady.value) return;
+    final localeGeneration = _localeGeneration;
     // 托盘注册超时：插件挂起（如 Linux 缺少 appindicator 服务）时
     // 走回滚路径，而不是让窗口永远无法关闭。
 
@@ -139,7 +217,7 @@ class DesktopAppService extends WindowListener with TrayListener {
       // 2. 注册托盘图标与菜单。失败则回退为「关闭即退出」，
       //    避免窗口隐藏后应用无法找回。
       try {
-        await trayManager
+        await _trayAdapter
             .setIcon(
               defaultTargetPlatform == TargetPlatform.windows
                   ? _trayIconIco
@@ -150,13 +228,21 @@ class DesktopAppService extends WindowListener with TrayListener {
         // 单独捕获，避免拖垮整个托盘注册流程；同样受超时保护
         // （DBus/appindicator 挂起时不能无限期停留在无监听的拦截状态）。
         try {
-          await trayManager.setToolTip('Stroom 正在后台运行').timeout(_trayTimeout);
+          await _trayAdapter
+              .setToolTip(
+                appLocalizationsForLocale(_localeOverride).desktopTrayTooltip,
+              )
+              .timeout(_trayTimeout);
         } catch (e) {
           debugPrint('[DesktopAppService] setToolTip unsupported: $e');
         }
         _menu = _buildMenu();
-        await trayManager.setContextMenu(_menu!).timeout(_trayTimeout);
-        _trayReady = true;
+        await _trayAdapter.setContextMenu(_menu!).timeout(_trayTimeout);
+        _trayReady.value = true;
+        if (localeGeneration != _localeGeneration) {
+          unawaited(_refreshLocalizedTrayStrings());
+        }
+        _trayRollbackCloseInterceptionFailed = false;
         debugPrint('[DesktopAppService] Tray icon registered');
       } catch (e) {
         debugPrint('[DesktopAppService] Tray registration failed: $e');
@@ -166,22 +252,42 @@ class DesktopAppService extends WindowListener with TrayListener {
         // 同样受超时保护：回滚路径绝不能再次被插件挂起阻塞
         // （否则 setPreventClose(false) 永远执行不到，窗口无法关闭）。
         try {
-          await trayManager.destroy().timeout(_trayTimeout);
+          await _trayAdapter.destroy().timeout(_trayTimeout);
         } catch (_) {}
         // 托盘不可用：撤销拦截，恢复「关闭即退出」。
         // 此时尚未注册监听，也不会有幽灵窗口。
         // 同样受超时保护：回滚路径绝不能再次被插件挂起阻塞。
+        var closeInterceptionCleared = false;
         try {
           await windowManager.setPreventClose(false).timeout(_trayTimeout);
+          closeInterceptionCleared = true;
         } catch (_) {}
-        windowManager.removeListener(this);
-        _windowCloseListenerRegistered = false;
+        if (closeInterceptionCleared) {
+          windowManager.removeListener(this);
+          _windowCloseListenerRegistered = false;
+        } else {
+          // Keep the only close listener active and use the no-tray exit
+          // fallback if native interception remains enabled.
+          _trayRollbackCloseInterceptionFailed = true;
+        }
+        final replayPendingClose = _pendingCloseBeforeTrayReady;
         _pendingCloseBeforeTrayReady = false;
+        if (replayPendingClose) {
+          if (closeInterceptionCleared) {
+            // The original native close was intercepted and consumed. Replay
+            // it now that interception is disabled so the first click is honored.
+            await windowManager.close().timeout(_trayTimeout);
+          } else {
+            // Native close may still be intercepted, so honor the pending
+            // request through the close-to-quit confirmation path.
+            await quitWithConfirmation();
+          }
+        }
         return;
       }
 
       // 3. 窗口关闭监听已在启动时注册；托盘就绪后注册托盘事件监听。
-      trayManager.addListener(this);
+      _trayAdapter.addListener(this);
       if (_pendingCloseBeforeTrayReady) {
         _pendingCloseBeforeTrayReady = false;
         unawaited(_handleWindowClose());
@@ -196,13 +302,37 @@ class DesktopAppService extends WindowListener with TrayListener {
     // 注意：托盘菜单项的点击回调统一走 [onTrayMenuItemClick] 按键路由，
     // 不要在 MenuItem.onClick 中重复绑定，否则每次点击会执行两次
     // （tray_manager 会同时触发 item.onClick 和 listener.onTrayMenuItemClick）。
+    final strings = appLocalizationsForLocale(_localeOverride);
     return Menu(
       items: [
-        MenuItem(key: _menuShowKey, label: '显示主窗口'),
+        MenuItem(key: _menuShowKey, label: strings.desktopTrayShowMainWindow),
         MenuItem.separator(),
-        MenuItem(key: _menuQuitKey, label: '退出 Stroom'),
+        MenuItem(key: _menuQuitKey, label: strings.desktopTrayQuitStroom),
       ],
     );
+  }
+
+  Future<void> _refreshLocalizedTrayStrings() async {
+    while (_trayReady.value) {
+      final localeGeneration = _localeGeneration;
+      final strings = appLocalizationsForLocale(_localeOverride);
+      try {
+        await _trayAdapter.setToolTip(strings.desktopTrayTooltip).timeout(
+              _trayTimeout,
+            );
+      } catch (e) {
+        debugPrint('[DesktopAppService] setToolTip unsupported: $e');
+      }
+      if (localeGeneration != _localeGeneration) continue;
+      try {
+        final menu = _buildMenu();
+        await _trayAdapter.setContextMenu(menu).timeout(_trayTimeout);
+        if (localeGeneration == _localeGeneration) _menu = menu;
+      } catch (e) {
+        debugPrint('[DesktopAppService] Failed to refresh localized tray: $e');
+      }
+      if (localeGeneration == _localeGeneration) return;
+    }
   }
 
   // ── 窗口事件 ──────────────────────────────────────────────────────
@@ -221,9 +351,13 @@ class DesktopAppService extends WindowListener with TrayListener {
   @override
   void onWindowClose() {
     debugPrint('[DesktopAppService] Window close intercepted');
+    if (_trayRollbackCloseInterceptionFailed) {
+      unawaited(quitWithConfirmation());
+      return;
+    }
     // 在托盘注册完成前只阻止原生默认关闭，保持启动窗口可见；隐藏
     // 前必须确保用户已有可用的托盘入口，避免产生无法恢复的幽灵进程。
-    if (!_trayReady) {
+    if (!_trayReady.value) {
       _pendingCloseBeforeTrayReady = true;
       return;
     }
@@ -304,9 +438,10 @@ class DesktopAppService extends WindowListener with TrayListener {
     // Linux 插件未实现 popUpContextMenu（菜单随左键自动弹出），
     // 异常通过 Future 异步抛出，必须用 catchError 兜住。
     unawaited(
-      trayManager.popUpContextMenu().catchError((Object e) => debugPrint(
-            '[DesktopAppService] popUpContextMenu unsupported: $e',
-          )),
+      _trayAdapter.popUpContextMenu().catchError(
+            (Object e) => debugPrint(
+                '[DesktopAppService] popUpContextMenu unsupported: $e'),
+          ),
     );
   }
 
@@ -358,7 +493,7 @@ class DesktopAppService extends WindowListener with TrayListener {
     // 时绝不能让 exitApp 永远执行不到 —— 最坏情况是残留一个原生托盘
     // 条目，进程退出时由系统清理。
     try {
-      await trayManager.destroy().timeout(_trayTimeout);
+      await _trayAdapter.destroy().timeout(_trayTimeout);
     } catch (e) {
       debugPrint('[DesktopAppService] Failed to destroy tray: $e');
     }

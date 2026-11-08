@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/catcatch/models/catcatch_task.dart' as catcatch;
 import 'package:stroom/catcatch/providers/catcatch_provider.dart';
 import 'package:stroom/pages/unified_task_list_page.dart';
@@ -74,8 +75,8 @@ catcatch.CatCatchTask _createPausedTask({required String id}) {
 // Page pump helpers
 // =============================================================================
 /// Pump the UnifiedTaskListPage with given catcatch tasks and no synthesis tasks.
-Future<void> pumpPage(
-    WidgetTester tester, List<catcatch.CatCatchTask> tasks) async {
+Future<void> pumpPage(WidgetTester tester, List<catcatch.CatCatchTask> tasks,
+    {Locale locale = const Locale('zh', 'CN')}) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
@@ -91,7 +92,10 @@ Future<void> pumpPage(
         }),
         taskListLastReadProvider.overrideWith((ref) => DateTime.now()),
       ],
-      child: const MaterialApp(
+      child: MaterialApp(
+        locale: locale,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: UnifiedTaskListPage(),
       ),
     ),
@@ -132,7 +136,10 @@ Future<void> pumpPageWithBackground(
         backgroundTasksProvider.overrideWith((ref) => bgNotifier),
         taskListLastReadProvider.overrideWith((ref) => DateTime.now()),
       ],
-      child: const MaterialApp(
+      child: MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: UnifiedTaskListPage(),
       ),
     ),
@@ -166,7 +173,10 @@ Future<void> pumpPageWithSynthesis(
         }),
         taskListLastReadProvider.overrideWith((ref) => DateTime.now()),
       ],
-      child: const MaterialApp(
+      child: MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: UnifiedTaskListPage(),
       ),
     ),
@@ -333,6 +343,35 @@ void main() {
 
       expect(find.text('暂无任务'), findsOneWidget,
           reason: 'Empty task list should show "暂无任务"');
+    });
+
+    testWidgets('task list shell renders English labels and confirmations',
+        (tester) async {
+      await pumpPage(tester, [], locale: const Locale('en', 'US'));
+
+      expect(find.text('Task list'), findsOneWidget);
+      expect(find.text('All'), findsOneWidget);
+      expect(find.text('In progress'), findsOneWidget);
+      expect(find.text('Completed'), findsOneWidget);
+      expect(find.text('Failed'), findsOneWidget);
+      expect(find.text('Stopped'), findsOneWidget);
+      expect(find.text('No tasks'), findsOneWidget);
+
+      await tester.tap(find.byType(PopupMenuButton<String>));
+      await tester.pumpAndSettle();
+      expect(find.text('Clear all tasks'), findsOneWidget);
+      await tester.tap(find.text('Clear all tasks'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Confirm clear'), findsOneWidget);
+      expect(
+        find.text(
+          'Are you sure you want to clear all tasks? This action cannot be undone.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Cancel'), findsOneWidget);
+      expect(find.text('Confirm'), findsOneWidget);
     });
   });
 
@@ -528,7 +567,10 @@ void main() {
             backgroundTasksProvider.overrideWith((ref) => bgNotifier),
             taskListLastReadProvider.overrideWith((ref) => DateTime.now()),
           ],
-          child: const MaterialApp(
+          child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
             home: UnifiedTaskListPage(),
           ),
         ),
@@ -637,7 +679,10 @@ void main() {
             backgroundTasksProvider.overrideWith((ref) => bgNotifier),
             taskListLastReadProvider.overrideWith((ref) => DateTime.now()),
           ],
-          child: const MaterialApp(
+          child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
             home: UnifiedTaskListPage(),
           ),
         ),
@@ -715,7 +760,10 @@ void main() {
             backgroundTasksProvider.overrideWith((ref) => bgNotifier),
             taskListLastReadProvider.overrideWith((ref) => DateTime.now()),
           ],
-          child: const MaterialApp(
+          child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
             home: UnifiedTaskListPage(),
           ),
         ),
@@ -759,7 +807,10 @@ void main() {
             backgroundTasksProvider.overrideWith((ref) => bgNotifier),
             taskListLastReadProvider.overrideWith((ref) => DateTime.now()),
           ],
-          child: const MaterialApp(
+          child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
             home: UnifiedTaskListPage(),
           ),
         ),
@@ -880,8 +931,11 @@ void main() {
           status: TaskStatus.failed,
           error: 'OCR识别失败',
           createdAt: DateTime(2025, 6, 1),
-          rawRequest: {'url': 'https://api.test.com'},
-          rawResponse: {'statusCode': 400, 'data': 'bad request'},
+          rawRequest: {
+            'host': 'api.test.com',
+            'requestId': 'ocr-request-1',
+          },
+          rawResponse: {'statusCode': 400, 'finishReason': 'stop'},
         ),
       ]);
 
@@ -891,6 +945,11 @@ void main() {
 
       expect(find.text('查看错误详情'), findsOneWidget,
           reason: '有诊断数据的失败任务应显示"查看错误详情"按钮');
+
+      await tester.tap(find.text('查看错误详情'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('OCR Diagnostics'), findsOneWidget);
     });
   });
 
@@ -1342,7 +1401,10 @@ void main() {
             backgroundTasksProvider.overrideWith((ref) => bgNotifier),
             taskListLastReadProvider.overrideWith((ref) => DateTime.now()),
           ],
-          child: const MaterialApp(
+          child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
             home: UnifiedTaskListPage(),
           ),
         ),

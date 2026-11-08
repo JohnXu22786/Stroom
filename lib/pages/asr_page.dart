@@ -2,7 +2,12 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+
+import '../l10n/app_localizations.dart';
+
+import 'package:stroom/widgets/stroom_menu_style.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 
@@ -12,7 +17,11 @@ import '../providers/tts_state_provider.dart';
 import '../providers/background_task_provider.dart';
 import '../providers/text_provider.dart';
 import '../services/asr_service.dart';
+import '../services/asr_retry_storage.dart';
 import '../services/asr_task_scheduler.dart';
+import '../utils/audio_chunker.dart';
+import '../utils/asr_audio_stream.dart';
+import '../utils/asr_legacy_audio.dart';
 import '../utils/audio_utils.dart';
 import '../utils/data_sanitizer.dart';
 import '../utils/file_manifest.dart';
@@ -30,12 +39,16 @@ import 'provider_config_page.dart';
 /// Pair of model config with its source provider info for display and
 /// request building.
 class _ModelOption {
+  final String configId;
+  final String modelId;
   final ModelConfig model;
   final String providerName;
   final String host;
   final String apiKey;
   final Map<String, dynamic> providerTypeConfig;
   const _ModelOption(
+    this.configId,
+    this.modelId,
     this.model,
     this.providerName,
     this.host,
@@ -52,6 +65,8 @@ List<_ModelOption> _getAsrModelOptions(WidgetRef ref) {
   return [
     for (final e in flattenProviderModels(state, 'asr'))
       _ModelOption(
+        e.config.id,
+        e.model.id,
         e.model,
         e.config.providerName,
         e.config.host,
@@ -78,11 +93,125 @@ String? _getFirstAsrEntryId(WidgetRef ref) {
 
 /// Represents a single selected audio file for ASR transcription.
 class SelectedAudio {
-  final Uint8List bytes;
+  Uint8List bytes;
+  Future<Uint8List> Function()? _loadBytes;
+  Future<Uint8List> Function(CancelToken? cancelToken)?
+      _loadBytesWithCancellation;
+  Uint8List? _cachedLoadedBytes;
+  Future<Uint8List>? _loadingBytes;
+  final bool hasCustomLoader;
+  int byteLength;
+  String Function(Uint8List bytes)? resolveFormat;
+  void Function()? _onSourceReleased;
   final String name;
-  final String format;
+  String format;
+  final AsrAudioReference? audioReference;
+  final List<AsrChunkResult> priorChunks;
+  final bool resetChunkCheckpoint;
 
-  SelectedAudio({required this.bytes, required this.name, this.format = 'wav'});
+  SelectedAudio({
+    Uint8List? bytes,
+    Future<Uint8List> Function()? loadBytes,
+    Future<Uint8List> Function(CancelToken? cancelToken)?
+        loadBytesWithCancellation,
+    int? byteLength,
+    this.resolveFormat,
+    void Function()? onSourceReleased,
+    required this.name,
+    this.format = 'wav',
+    this.audioReference,
+    List<AsrChunkResult> priorChunks = const [],
+    this.resetChunkCheckpoint = false,
+  })  : bytes = Uint8List.fromList(bytes ?? Uint8List(0)),
+        _loadBytes = loadBytes,
+        _loadBytesWithCancellation = loadBytesWithCancellation,
+        hasCustomLoader =
+            loadBytes != null || loadBytesWithCancellation != null,
+        _onSourceReleased = onSourceReleased,
+        byteLength = byteLength ?? bytes?.length ?? 0,
+        priorChunks = List.unmodifiable(priorChunks);
+
+  Future<Uint8List> loadBytes() => loadBytesWithCancellation(null);
+
+  /// Validate the selected source format while keeping custom-loaded audio
+  /// transient. Picker validation is sequential, so a batch does not retain
+  /// every file just to preserve the existing immediate error feedback.
+  Future<void> validateFormatAndReleaseLoadedBytes({
+    Future<Uint8List> Function()? loadForValidation,
+  }) async {
+    try {
+      final loadedBytes = await (loadForValidation?.call() ?? loadBytes());
+      if (loadedBytes.isEmpty) {
+        throw const FormatException('音频数据为空');
+      }
+      resolveFormat?.call(loadedBytes);
+    } finally {
+      if (hasCustomLoader) {
+        _cachedLoadedBytes = null;
+        _loadingBytes = null;
+      }
+    }
+  }
+
+  SelectedAudio copyForChunkCheckpointReset() => SelectedAudio(
+        bytes: bytes,
+        loadBytes: hasCustomLoader ? loadBytes : null,
+        loadBytesWithCancellation:
+            hasCustomLoader ? loadBytesWithCancellation : null,
+        byteLength: byteLength,
+        resolveFormat: resolveFormat,
+        onSourceReleased: releaseSource,
+        name: name,
+        format: format,
+        audioReference: audioReference,
+        resetChunkCheckpoint: true,
+      );
+
+  Future<Uint8List> loadBytesWithCancellation(CancelToken? cancelToken) async {
+    throwIfAsrAudioCanceled(cancelToken);
+    final cachedBytes = _cachedLoadedBytes;
+    if (cachedBytes != null) return cachedBytes;
+
+    final loader = _loadBytes;
+    final cancellableLoader = _loadBytesWithCancellation;
+    if (loader != null || cancellableLoader != null) {
+      if (cancelToken != null && cancellableLoader == null) {
+        throw StateError(
+          'A cancellable ASR task requires a cancellation-aware audio loader',
+        );
+      }
+      final pendingLoad = _loadingBytes ??= Future<Uint8List>.sync(
+        () => cancellableLoader?.call(cancelToken) ?? loader!(),
+      );
+      try {
+        final loadedBytes = await pendingLoad;
+        throwIfAsrAudioCanceled(cancelToken);
+        if (identical(_loadingBytes, pendingLoad)) {
+          _cachedLoadedBytes = loadedBytes;
+          _loadingBytes = null;
+        }
+        return loadedBytes;
+      } catch (_) {
+        if (identical(_loadingBytes, pendingLoad)) _loadingBytes = null;
+        rethrow;
+      }
+    }
+    return Uint8List.fromList(bytes);
+  }
+
+  /// Release page-owned source buffers when the task scheduler has durably
+  /// staged this input for retry.
+  void releaseSource() {
+    bytes = Uint8List(0);
+    _loadBytes = null;
+    _loadBytesWithCancellation = null;
+    _cachedLoadedBytes = null;
+    _loadingBytes = null;
+    resolveFormat = null;
+    final onSourceReleased = _onSourceReleased;
+    _onSourceReleased = null;
+    onSourceReleased?.call();
+  }
 
   /// True when this entry is a public URL (URL upload mode). In that case
   /// [name] holds the URL and [bytes] is empty.
@@ -102,6 +231,8 @@ class AsrPage extends ConsumerStatefulWidget {
     this.retryData,
     this.asrServiceFactory,
     this.onNavigateBack,
+    this.retryAudioStore,
+    this.retryTaskId,
   });
 
   /// Retry data to pre-populate the form (audio files, model, etc.).
@@ -110,17 +241,28 @@ class AsrPage extends ConsumerStatefulWidget {
 
   /// Optional navigation hook for hosts that manage this page lifecycle.
   final VoidCallback? onNavigateBack;
+  final AsrRetryAudioStore? retryAudioStore;
+  final String? retryTaskId;
 
   @override
   ConsumerState<AsrPage> createState() => _AsrPageState();
 }
 
 class _AsrPageState extends ConsumerState<AsrPage> {
+  final CancelToken _retryLoadCancelToken = CancelToken();
   final List<SelectedAudio> _selectedAudios = [];
   bool _isProcessing = false;
+  bool _retryLoading = false;
+  bool _retrySourcesIncomplete = false;
+  String? _retryTaskId;
+  bool _retryDataLoadStarted = false;
   String? _errorMessage;
   String? _transcriptionResult;
-  int _selectedModelIndex = 0;
+  Map<String, String>? _selectedModelReference;
+  bool _modelSelectionRequired = false;
+  AsrRetryConfigSnapshot? _retryConfigSnapshot;
+  late final AsrRetryAudioStore _retryAudioStore =
+      widget.retryAudioStore ?? AsrRetryAudioStore();
 
   /// Save-to folder selection
   String _saveFolder = '';
@@ -134,68 +276,271 @@ class _AsrPageState extends ConsumerState<AsrPage> {
   @override
   void initState() {
     super.initState();
-    _applyRetryData();
+    _retryTaskId = widget.retryTaskId;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_retryDataLoadStarted) return;
+    _retryDataLoadStarted = true;
+    unawaited(_loadRetryData());
+  }
+
+  @override
+  void dispose() {
+    _retryLoadCancelToken.cancel('ASR page disposed');
+    super.dispose();
   }
 
   /// Pre-populate form from retry data if available.
-  void _applyRetryData() {
+  Future<void> _loadRetryData() async {
     final data = widget.retryData;
     if (data == null) return;
-
-    final audiosData = data['audios'] as List<dynamic>?;
-    if (audiosData != null) {
-      for (final audioData in audiosData) {
-        if (audioData is! Map) continue;
-        // URL-mode entry: restore the link (no bytes).
-        final url = audioData['url'];
-        if (url is String && url.isNotEmpty) {
-          _selectedAudios.add(
-            SelectedAudio(bytes: Uint8List(0), name: url, format: 'url'),
-          );
-          continue;
-        }
-        final bytesStr = audioData['bytes'] as String?;
-        if (bytesStr != null) {
+    _retryLoading = true;
+    try {
+      final saveFolder = data['saveFolder'];
+      _saveFolder = saveFolder is String ? saveFolder : '';
+      String? configuredApiKey;
+      final reference = data['modelReference'];
+      if (reference is Map &&
+          reference['configId'] is String &&
+          reference['modelId'] is String) {
+        _selectedModelReference = {
+          'configId': reference['configId'] as String,
+          'modelId': reference['modelId'] as String,
+        };
+        final snapshot = data['configSnapshot'];
+        if (snapshot is Map) {
           try {
-            final bytes = base64Decode(bytesStr);
-            _selectedAudios.add(
-              SelectedAudio(
-                bytes: bytes,
-                name: audioData['name'] as String? ?? 'audio',
-                format: audioData['format'] as String? ?? 'wav',
+            _retryConfigSnapshot = AsrRetryConfigSnapshot.fromMap(
+              Map<String, dynamic>.from(snapshot),
+            );
+            final providerEntries = ref.read(providerEntriesProvider);
+            if (!providerEntries.isLoaded) {
+              await ref.read(providerEntriesProvider.notifier).ready;
+              if (!mounted) return;
+            }
+            final selected = resolveProviderModel(
+              ref.read(providerEntriesProvider),
+              'asr',
+              _selectedModelReference,
+            );
+            if (selected == null) {
+              _modelSelectionRequired = true;
+            } else {
+              configuredApiKey = selected.config.key;
+              _retryConfigSnapshot!.toConfig(
+                apiKey: selected.config.key,
+                liveHost: selected.config.host,
+                liveModel: selected.model.modelId,
+              );
+            }
+          } catch (error) {
+            _modelSelectionRequired = true;
+            _errorMessage = '$error';
+          }
+        } else {
+          _modelSelectionRequired = true;
+        }
+      } else {
+        // Legacy modelIndex cannot prove model identity after provider edits.
+        _modelSelectionRequired = true;
+      }
+
+      final audioReferenceData = data['audioReference'];
+      if (audioReferenceData is Map) {
+        try {
+          _selectedAudios.add(
+            await _loadReferencedAudio(
+              Map<String, dynamic>.from(audioReferenceData),
+              data['chunks'],
+              configuredApiKey: configuredApiKey,
+            ),
+          );
+        } on AsrRetryAudioUnavailableException catch (error) {
+          _retrySourcesIncomplete = true;
+          _errorMessage = error.toString();
+        } catch (error) {
+          if (!mounted) return;
+          _retrySourcesIncomplete = true;
+          _errorMessage = AppLocalizations.of(context)!
+              .asrRetryAudioUnreadable(error.toString());
+        }
+      } else if (data['audioReferences'] is List) {
+        try {
+          final restored = <SelectedAudio>[];
+          for (final value in data['audioReferences'] as List) {
+            if (value is! Map || value['audioReference'] is! Map) {
+              throw const FormatException('无效的 ASR 音频引用列表');
+            }
+            restored.add(
+              await _loadReferencedAudio(
+                Map<String, dynamic>.from(value['audioReference'] as Map),
+                value['chunks'],
+                configuredApiKey: configuredApiKey,
               ),
             );
-          } catch (e) {
-            debugPrint('Failed to decode retry audio: $e');
           }
+          _selectedAudios.addAll(restored);
+        } on AsrRetryAudioUnavailableException catch (error) {
+          _retrySourcesIncomplete = true;
+          _errorMessage = error.toString();
+        } catch (error) {
+          if (!mounted) return;
+          _retrySourcesIncomplete = true;
+          _errorMessage = AppLocalizations.of(context)!
+              .asrRetryAudioUnreadable(error.toString());
+        }
+      } else {
+        final audiosData = data['audios'] as List<dynamic>?;
+        for (final audioData in audiosData ?? const []) {
+          if (!mounted) return;
+          if (audioData is! Map) {
+            _retrySourcesIncomplete = true;
+            _errorMessage =
+                AppLocalizations.of(context)!.asrLegacyRetryUnavailable;
+            continue;
+          }
+          final url = audioData['url'];
+          if (url is String && url.isNotEmpty) {
+            _selectedAudios.add(
+              SelectedAudio(bytes: Uint8List(0), name: url, format: 'url'),
+            );
+            continue;
+          }
+          final bytesStr = audioData['bytes'];
+          if (bytesStr is! String) {
+            _retrySourcesIncomplete = true;
+            _errorMessage =
+                AppLocalizations.of(context)!.asrLegacyRetryUnavailable;
+            continue;
+          }
+          final byteLength = await validateAsrLegacyBase64AudioByteLength(
+            bytesStr,
+            checkCanceled: () => throwIfAsrAudioCanceled(_retryLoadCancelToken),
+          );
+          if (!mounted) return;
+          throwIfAsrAudioCanceled(_retryLoadCancelToken);
+          if (byteLength == null) {
+            _retrySourcesIncomplete = true;
+            _errorMessage =
+                AppLocalizations.of(context)!.asrLegacyRetryUnavailable;
+            continue;
+          }
+          _selectedAudios.add(
+            SelectedAudio(
+              bytes: Uint8List(0),
+              byteLength: byteLength,
+              loadBytesWithCancellation: (cancelToken) async {
+                throwIfAsrAudioCanceled(cancelToken);
+                final bytes = await decodeAsrLegacyBase64Audio(
+                  bytesStr,
+                  checkCanceled: () => throwIfAsrAudioCanceled(cancelToken),
+                );
+                throwIfAsrAudioCanceled(cancelToken);
+                if (bytes.isEmpty) throw const FormatException('音频数据为空');
+                return bytes;
+              },
+              name: audioData['name'] as String? ?? 'audio',
+              format: audioData['format'] as String? ?? 'wav',
+            ),
+          );
         }
       }
+      if (_selectedAudios.isEmpty) {
+        if (!mounted) return;
+        _retrySourcesIncomplete = true;
+        _errorMessage ??= AppLocalizations.of(context)!.asrRetryUnavailable;
+      }
+    } catch (_) {
+      if (!mounted) return;
+      _selectedAudios.clear();
+      _retrySourcesIncomplete = true;
+      _errorMessage = AppLocalizations.of(context)!.asrRetryDataUnreadable;
+    } finally {
+      _retryLoading = false;
+      if (mounted) setState(() {});
     }
+  }
 
-    if (data['modelIndex'] is int) {
-      _selectedModelIndex = data['modelIndex'] as int;
+  List<AsrChunkResult> _readPriorChunks(dynamic rawChunks) {
+    if (rawChunks == null) return const [];
+    if (rawChunks is! List) {
+      throw const AsrRetryChunkCheckpointUnavailableException();
     }
+    final chunks = <AsrChunkResult>[];
+    for (final value in rawChunks) {
+      if (value is! Map ||
+          !AsrChunkStatus.values.any(
+            (status) => status.name == value['status'],
+          )) {
+        throw const AsrRetryChunkCheckpointUnavailableException();
+      }
+      chunks.add(AsrChunkResult.fromMap(Map<String, dynamic>.from(value)));
+    }
+    return chunks;
+  }
 
-    // Restore save folder from retry data
-    if (data['saveFolder'] is String) {
-      _saveFolder = data['saveFolder'] as String;
+  Future<SelectedAudio> _loadReferencedAudio(
+    Map<String, dynamic> data,
+    dynamic rawChunks, {
+    String? configuredApiKey,
+  }) async {
+    final reference = AsrAudioReference.fromMap(
+      data,
+      configuredApiKey: configuredApiKey,
+    );
+    if (reference.requiresSourceReselection) {
+      throw const AsrRetrySourceReselectionException();
     }
+    if (reference.isUrl) {
+      final url = reference.url;
+      if (url == null || url.isEmpty) throw const FormatException();
+      return SelectedAudio(
+        bytes: Uint8List(0),
+        name: url,
+        format: 'url',
+        priorChunks: _readPriorChunks(rawChunks),
+        audioReference: reference,
+      );
+    }
+    await _retryAudioStore.verifyPresent(
+      reference,
+      configuredApiKey: configuredApiKey,
+    );
+    return SelectedAudio(
+      bytes: Uint8List(0),
+      loadBytesWithCancellation: (cancelToken) => _retryAudioStore.load(
+        reference,
+        configuredApiKey: configuredApiKey,
+        cancelToken: cancelToken,
+      ),
+      byteLength: reference.byteLength,
+      name: reference.name,
+      format: reference.format,
+      audioReference: reference,
+      priorChunks: _readPriorChunks(rawChunks),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    ref.watch(providerEntriesProvider);
     final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('音频转写'),
+        title: Text(l10n.asrPageTitle),
         centerTitle: true,
         actions: [
-          if (_selectedAudios.isNotEmpty && !_isProcessing)
+          if ((_selectedAudios.isNotEmpty || _retrySourcesIncomplete) &&
+              !_isProcessing)
             TextButton.icon(
               onPressed: _clearAll,
               icon: const Icon(Icons.clear_all, size: 18),
-              label: const Text('清空'),
+              label: Text(l10n.clear),
             ),
         ],
       ),
@@ -215,7 +560,8 @@ class _AsrPageState extends ConsumerState<AsrPage> {
           ),
 
           // Error message
-          if (_errorMessage != null) _buildErrorBanner(cs),
+          if (_retrySourcesIncomplete || _errorMessage != null)
+            _buildErrorBanner(cs),
 
           // Transcription result
           if (_transcriptionResult != null) _buildResultBanner(cs),
@@ -252,7 +598,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  '识别模型',
+                  AppLocalizations.of(context)!.asrModel,
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
@@ -284,7 +630,10 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   foregroundColor: cs.error,
                 ),
-                child: const Text('去配置', style: TextStyle(fontSize: 12)),
+                child: Text(
+                  AppLocalizations.of(context)!.configure,
+                  style: const TextStyle(fontSize: 12),
+                ),
               ),
             ],
           ),
@@ -292,12 +641,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
       );
     }
 
-    final clampedIndex = _selectedModelIndex.clamp(0, modelOptions.length - 1);
-    if (clampedIndex != _selectedModelIndex) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) setState(() => _selectedModelIndex = clampedIndex);
-      });
-    }
+    final selectedIndex = _selectedModelOptionIndex(modelOptions);
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
@@ -326,7 +670,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
             ),
             const SizedBox(width: 10),
             Text(
-              '识别模型',
+              AppLocalizations.of(context)!.asrModel,
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
@@ -347,7 +691,15 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                 padding: const EdgeInsets.symmetric(horizontal: 10),
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<int>(
-                    value: clampedIndex,
+                    dropdownColor: StroomMenuStyle.surface(context),
+                    borderRadius: StroomMenuStyle.borderRadius,
+                    value: selectedIndex,
+                    hint: Text(
+                      _modelSelectionRequired || _selectedModelReference != null
+                          ? AppLocalizations.of(context)!.reselectModel
+                          : AppLocalizations.of(context)!.selectAsrModel,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     isDense: true,
                     isExpanded: true,
                     icon: Icon(
@@ -360,10 +712,32 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                       fontWeight: FontWeight.w600,
                       color: cs.onSurface,
                     ),
-                    onChanged: (idx) {
-                      if (idx == null || idx >= modelOptions.length) return;
-                      setState(() => _selectedModelIndex = idx);
-                    },
+                    onChanged: _isProcessing || _retryLoading
+                        ? null
+                        : (idx) {
+                            if (idx == null || idx >= modelOptions.length) {
+                              return;
+                            }
+                            final option = modelOptions[idx];
+                            final newReference = {
+                              'configId': option.configId,
+                              'modelId': option.modelId,
+                            };
+                            final resetRetryState = _modelSelectionRequired ||
+                                !_sameModelReference(
+                                  _selectedModelReference,
+                                  newReference,
+                                );
+                            setState(() {
+                              _selectedModelReference = newReference;
+                              _modelSelectionRequired = false;
+                              _errorMessage = null;
+                              if (resetRetryState) {
+                                _retryConfigSnapshot = null;
+                                _clearCompletedChunkCheckpoints();
+                              }
+                            });
+                          },
                     items: List.generate(modelOptions.length, (i) {
                       final opt = modelOptions[i];
                       final modelName = opt.model.name.isNotEmpty
@@ -391,6 +765,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
   }
 
   Widget _buildAudioSourceBar(ColorScheme cs) {
+    final sourceControlsDisabled = _isProcessing || _retryLoading;
     // URL upload mode: the provider downloads from a public link, so the
     // local file pickers don't apply — offer a link input instead.
     if (_getCurrentUploadMethod() == AudioUploadMethod.url) {
@@ -400,15 +775,15 @@ class _AsrPageState extends ConsumerState<AsrPage> {
           height: 48,
           width: double.infinity,
           child: ElevatedButton.icon(
-            onPressed: _isProcessing ? null : _showUrlInputDialog,
+            onPressed: sourceControlsDisabled ? null : _showUrlInputDialog,
             style: ElevatedButton.styleFrom(
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
             ),
             icon: const Icon(Icons.link, size: 20),
-            label: const Text(
-              '输入公网音频链接',
+            label: Text(
+              AppLocalizations.of(context)!.enterPublicAudioUrl,
               style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
             ),
           ),
@@ -424,15 +799,16 @@ class _AsrPageState extends ConsumerState<AsrPage> {
             child: SizedBox(
               height: 48,
               child: ElevatedButton.icon(
-                onPressed: _isProcessing ? null : _showAudioSourceSheet,
+                onPressed:
+                    sourceControlsDisabled ? null : _showAudioSourceSheet,
                 style: ElevatedButton.styleFrom(
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
                 icon: const Icon(Icons.mic, size: 20),
-                label: const Text(
-                  '录音选择',
+                label: Text(
+                  AppLocalizations.of(context)!.recordingSelection,
                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
                 ),
               ),
@@ -443,15 +819,16 @@ class _AsrPageState extends ConsumerState<AsrPage> {
             child: SizedBox(
               height: 48,
               child: ElevatedButton.icon(
-                onPressed: _isProcessing ? null : _showAudioSourceSheet,
+                onPressed:
+                    sourceControlsDisabled ? null : _showAudioSourceSheet,
                 style: ElevatedButton.styleFrom(
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
                 icon: const Icon(Icons.audio_file_outlined, size: 20),
-                label: const Text(
-                  '音频文件',
+                label: Text(
+                  AppLocalizations.of(context)!.audioFiles,
                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
                 ),
               ),
@@ -474,7 +851,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
           ),
           const SizedBox(height: 16),
           Text(
-            '暂未选择音频文件',
+            AppLocalizations.of(context)!.noAudioSelected,
             style: TextStyle(
               fontSize: 16,
               color: cs.onSurfaceVariant.withValues(alpha: 0.6),
@@ -482,7 +859,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
           ),
           const SizedBox(height: 8),
           Text(
-            '支持 wav、mp3、m4a、ogg 等常见音频格式',
+            AppLocalizations.of(context)!.supportedAudioFormats,
             style: TextStyle(
               fontSize: 13,
               color: cs.onSurfaceVariant.withValues(alpha: 0.4),
@@ -512,7 +889,8 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                   Icon(Icons.audiotrack, size: 48, color: cs.primary),
                   const SizedBox(height: 12),
                   Text(
-                    '已选择 ${_selectedAudios.length} 个音频文件',
+                    AppLocalizations.of(context)!
+                        .asrSelectedAudioCount(_selectedAudios.length),
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
@@ -524,13 +902,13 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                   SizedBox(
                     width: double.infinity,
                     child: OutlinedButton.icon(
-                      onPressed: _isProcessing
+                      onPressed: _isProcessing || _retryLoading
                           ? null
                           : _getCurrentUploadMethod() == AudioUploadMethod.url
                               ? _showUrlInputDialog
                               : _showAudioSourceSheet,
                       icon: const Icon(Icons.refresh, size: 18),
-                      label: const Text('重新选择'),
+                      label: Text(AppLocalizations.of(context)!.asrReselect),
                     ),
                   ),
                 ],
@@ -586,8 +964,8 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                           const SizedBox(height: 2),
                           Text(
                             audio.isUrl
-                                ? 'URL  |  公网链接'
-                                : '${formatDisplayName(audio.format)}  |  ${_formatFileSize(audio.bytes.length)}',
+                                ? AppLocalizations.of(context)!.asrUrlLabel
+                                : '${formatDisplayName(audio.format)}  |  ${_formatFileSize(audio.byteLength)}',
                             style: TextStyle(
                               fontSize: 11,
                               color: cs.onSurfaceVariant,
@@ -598,8 +976,9 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                     ),
                     IconButton(
                       icon: Icon(Icons.close, size: 16, color: cs.error),
-                      onPressed:
-                          _isProcessing ? null : () => _removeAudio(index),
+                      onPressed: _isProcessing || _retryLoading
+                          ? null
+                          : () => _removeAudio(index),
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
                     ),
@@ -617,7 +996,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
     if (index < 0 || index >= _selectedAudios.length) return;
     setState(() {
       _selectedAudios.removeAt(index);
-      _errorMessage = null;
+      if (!_retrySourcesIncomplete) _errorMessage = null;
       _transcriptionResult = null;
     });
   }
@@ -645,7 +1024,10 @@ class _AsrPageState extends ConsumerState<AsrPage> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  _errorMessage!,
+                  _retrySourcesIncomplete
+                      ? (_errorMessage ??
+                          AppLocalizations.of(context)!.asrRetryIncomplete)
+                      : _errorMessage!,
                   style: TextStyle(color: cs.onErrorContainer, fontSize: 13),
                 ),
                 if (_lastRawRequest != null || _lastRawResponse != null)
@@ -653,8 +1035,8 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                     padding: const EdgeInsets.only(top: 4),
                     child: TextButton.icon(
                       icon: const Icon(Icons.preview, size: 14),
-                      label: const Text(
-                        '查看详细错误',
+                      label: Text(
+                        AppLocalizations.of(context)!.asrErrorDetails,
                         style: TextStyle(fontSize: 12),
                       ),
                       onPressed: () => _showErrorDetailDialog(context),
@@ -700,7 +1082,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  '识别结果已保存',
+                  AppLocalizations.of(context)!.asrResultSaved,
                   style: TextStyle(
                     color: cs.onPrimaryContainer,
                     fontSize: 13,
@@ -750,7 +1132,8 @@ class _AsrPageState extends ConsumerState<AsrPage> {
               Padding(
                 padding: const EdgeInsets.only(bottom: 4),
                 child: Text(
-                  '已选 ${_selectedAudios.length} 个音频',
+                  AppLocalizations.of(context)!
+                      .asrSelectedAudioCountShort(_selectedAudios.length),
                   style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
                 ),
               ),
@@ -758,7 +1141,10 @@ class _AsrPageState extends ConsumerState<AsrPage> {
               width: double.infinity,
               height: 48,
               child: FilledButton.icon(
-                onPressed: _selectedAudios.isEmpty || _isProcessing
+                onPressed: _selectedAudios.isEmpty ||
+                        _isProcessing ||
+                        _retryLoading ||
+                        _retrySourcesIncomplete
                     ? null
                     : _startTranscription,
                 icon: _isProcessing
@@ -772,7 +1158,9 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                       )
                     : const Icon(Icons.transcribe, size: 20),
                 label: Text(
-                  _isProcessing ? '识别中...' : '开始识别',
+                  _isProcessing
+                      ? AppLocalizations.of(context)!.asrWorking
+                      : AppLocalizations.of(context)!.asrStart,
                   style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
@@ -807,12 +1195,14 @@ class _AsrPageState extends ConsumerState<AsrPage> {
               Icon(Icons.folder_outlined, size: 16, color: cs.primary),
               const SizedBox(width: 8),
               Text(
-                '保存至',
+                AppLocalizations.of(context)!.saveTo,
                 style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
               ),
               const SizedBox(width: 4),
               Text(
-                _saveFolder.isEmpty ? '根目录' : _saveFolder,
+                _saveFolder.isEmpty
+                    ? AppLocalizations.of(context)!.rootFolder
+                    : _saveFolder,
                 style: TextStyle(
                   fontSize: 12,
                   color: cs.primary,
@@ -835,7 +1225,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
       context,
       currentFolder: _saveFolder,
       availableFolders: folders,
-      title: '选择保存文件夹',
+      title: AppLocalizations.of(context)!.chooseSaveFolder,
       onCreateFolder: (name) async {
         await TextManifest.addFolder(name);
         return null;
@@ -854,11 +1244,66 @@ class _AsrPageState extends ConsumerState<AsrPage> {
   /// The upload method of the currently selected ASR provider.
   AudioUploadMethod _getCurrentUploadMethod() {
     final modelOptions = _getAsrModelOptions(ref);
-    if (modelOptions.isEmpty) return AudioUploadMethod.multipart;
-    final idx = _selectedModelIndex.clamp(0, modelOptions.length - 1);
-    return asrUploadMethodFromProviderTypeConfig(
-      modelOptions[idx].providerTypeConfig,
+    final idx = _selectedModelOptionIndex(modelOptions);
+    if (idx == null) {
+      if (_retryLoading) return AudioUploadMethod.multipart;
+      return _retryConfigSnapshot?.uploadMethod == AudioUploadMethod.url.name ||
+              _selectedAudios.any((audio) => audio.format == 'url')
+          ? AudioUploadMethod.url
+          : AudioUploadMethod.multipart;
+    }
+    try {
+      return _configForModelOption(modelOptions[idx]).uploadMethod;
+    } on StateError {
+      return AudioUploadMethod.multipart;
+    }
+  }
+
+  AsrConfig _configForModelOption(_ModelOption option) =>
+      _retryConfigSnapshot?.toConfig(
+        apiKey: option.apiKey,
+        liveHost: option.host,
+        liveModel: option.model.modelId,
+      ) ??
+      createAsrConfigFromProviderModel(
+        host: option.host,
+        apiKey: option.apiKey,
+        model: option.model,
+        providerTypeConfig: option.providerTypeConfig,
+      );
+
+  int? _selectedModelOptionIndex(List<_ModelOption> options) {
+    if (options.isEmpty || _modelSelectionRequired) return null;
+    final reference = _selectedModelReference;
+    if (reference == null) return 0;
+    if (resolveProviderModel(
+          ref.read(providerEntriesProvider),
+          'asr',
+          reference,
+        ) ==
+        null) {
+      return null;
+    }
+    final index = options.indexWhere(
+      (option) =>
+          option.configId == reference['configId'] &&
+          option.modelId == reference['modelId'],
     );
+    return index < 0 ? null : index;
+  }
+
+  bool _sameModelReference(
+    Map<String, String>? left,
+    Map<String, String> right,
+  ) =>
+      left?['configId'] == right['configId'] &&
+      left?['modelId'] == right['modelId'];
+
+  void _clearCompletedChunkCheckpoints() {
+    for (var index = 0; index < _selectedAudios.length; index++) {
+      final audio = _selectedAudios[index];
+      _selectedAudios[index] = audio.copyForChunkCheckpointReset();
+    }
   }
 
   /// Ask the user for a public audio URL (URL upload mode) and add it as
@@ -874,9 +1319,11 @@ class _AsrPageState extends ConsumerState<AsrPage> {
     // duplicate text records).
     if (_selectedAudios.any((a) => a.isUrl && a.name == url)) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('该链接已在列表中')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(AppLocalizations.of(context)!.linkAlreadyAdded),
+          ),
+        );
       }
       return;
     }
@@ -915,18 +1362,20 @@ class _AsrPageState extends ConsumerState<AsrPage> {
               ),
               const SizedBox(height: 24),
               Text(
-                '选择音频来源',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                AppLocalizations.of(context)!.chooseAudioSource,
+                style: Theme.of(context)
+                    .textTheme
+                    .titleLarge
+                    ?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 24),
               Column(
                 children: [
                   ChoiceCard(
                     icon: Icons.library_music_outlined,
-                    title: '应用内录音',
-                    subtitle: '从已生成的录音中选择',
+                    title: AppLocalizations.of(context)!.inAppRecordings,
+                    subtitle:
+                        AppLocalizations.of(context)!.chooseGeneratedRecordings,
                     color: Colors.green,
                     onTap: () {
                       Navigator.pop(ctx);
@@ -936,8 +1385,9 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                   const SizedBox(height: 8),
                   ChoiceCard(
                     icon: Icons.audio_file_outlined,
-                    title: '系统音频文件',
-                    subtitle: '从设备文件中选择',
+                    title: AppLocalizations.of(context)!.systemAudioFiles,
+                    subtitle:
+                        AppLocalizations.of(context)!.chooseDeviceAudioFiles,
                     color: Colors.blue,
                     onTap: () {
                       Navigator.pop(ctx);
@@ -954,34 +1404,58 @@ class _AsrPageState extends ConsumerState<AsrPage> {
   }
 
   /// Pick audio files from the device storage (supports multi-select).
+  String _resolveSelectedAudioFormat(
+    Uint8List bytes, {
+    required String fallbackFormat,
+  }) {
+    if (detectAudioFormat(bytes) == 'wav') {
+      validateWavContainer(bytes);
+    }
+    return resolveAudioFormat(bytes, fallbackFormat: fallbackFormat);
+  }
+
   Future<void> _pickAudioFile() async {
     try {
-      final result = await FilePicker.pickFiles(
+      final files = await FilePicker.pickFiles(
         type: FileType.audio,
-        allowMultiple: true,
-        withData: true,
         initialDirectory: SystemPickDirectories.music(),
       );
-      if (result == null || result.files.isEmpty) return;
+      if (files.isEmpty) return;
 
       final newAudios = <SelectedAudio>[];
-      for (final file in result.files) {
-        final bytes = file.bytes;
-        if (bytes == null || bytes.isEmpty) continue;
-        newAudios.add(
-          SelectedAudio(
-            bytes: bytes,
-            name: file.name,
-            format: _detectFormat(file.name),
+      for (final file in files) {
+        final audio = SelectedAudio(
+          bytes: Uint8List(0),
+          byteLength: file.lengthSync() ?? 0,
+          loadBytesWithCancellation: (cancelToken) async {
+            final bytes = await readAsrAudioStream(
+              file.readAsByteStream(),
+              cancelToken: cancelToken,
+            );
+            throwIfAsrAudioCanceled(cancelToken);
+            if (bytes.isEmpty) throw const FormatException('音频数据为空');
+            return bytes;
+          },
+          name: file.name,
+          format: _detectFormat(file.name),
+          resolveFormat: (bytes) => _resolveSelectedAudioFormat(
+            bytes,
+            fallbackFormat: _detectFormat(file.name),
           ),
         );
+        await audio.validateFormatAndReleaseLoadedBytes(
+          loadForValidation: file.readAsBytes,
+        );
+        newAudios.add(audio);
       }
 
       if (newAudios.isEmpty) {
         if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('无法读取音频文件')));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(AppLocalizations.of(context)!.cannotReadAudioFile),
+            ),
+          );
         }
         return;
       }
@@ -993,9 +1467,13 @@ class _AsrPageState extends ConsumerState<AsrPage> {
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('选择音频文件失败: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context)!.chooseAudioFileFailed(e.toString()),
+            ),
+          ),
+        );
       }
     }
   }
@@ -1003,12 +1481,13 @@ class _AsrPageState extends ConsumerState<AsrPage> {
   /// Show a dialog to pick from in-app audio recordings using the unified
   /// media picker (matching the OCR image picker pattern).
   Future<void> _showInAppAudioPicker() async {
+    List<AudioRecord> selectedRecords = const [];
     final result = await showMediaPickerDialog<AudioRecord>(
       context,
       MediaPickerConfig<AudioRecord>(
-        title: '选择应用内录音',
+        title: AppLocalizations.of(context)!.chooseInAppRecording,
         emptyIcon: Icons.multitrack_audio_outlined,
-        emptyText: '暂无录音',
+        emptyText: AppLocalizations.of(context)!.noRecordings,
         fileIcon: Icons.audiotrack,
         fileIconColor: Colors.green,
         multiSelect: true,
@@ -1017,7 +1496,9 @@ class _AsrPageState extends ConsumerState<AsrPage> {
           return ref.read(audioRecordsProvider);
         },
         loadFolders: () => FileManifest.getAllFolders(),
-        readFile: (record) => FileManifest.readFile(record.storagePath),
+        onRecordsPicked: (records) async {
+          selectedRecords = List<AudioRecord>.of(records);
+        },
         displayName: (record) => record.name,
         subtitleBuilder: (record) => Row(
           children: [
@@ -1051,7 +1532,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
               ),
               const SizedBox(width: 6),
               Text(
-                '${record.duration}秒',
+                AppLocalizations.of(context)!.durationSeconds(record.duration),
                 style: const TextStyle(fontSize: 12, color: Colors.grey),
               ),
             ],
@@ -1062,22 +1543,47 @@ class _AsrPageState extends ConsumerState<AsrPage> {
 
     if (result == null || result.isEmpty || !mounted) return;
 
-    // Look up records to get correct formats
-    final records = ref.read(audioRecordsProvider);
     final newAudios = <SelectedAudio>[];
-    for (final entry in result) {
-      String format = 'wav';
-      for (final r in records) {
-        if (r.name == entry.key) {
-          format = r.format;
-          break;
-        }
+    try {
+      for (final record in selectedRecords) {
+        final audio = SelectedAudio(
+          bytes: Uint8List(0),
+          byteLength: record.size,
+          loadBytesWithCancellation: (cancelToken) async {
+            throwIfAsrAudioCanceled(cancelToken);
+            final bytes = await FileManifest.readFileCancellable(
+              record.storagePath,
+              cancelToken: cancelToken,
+            );
+            throwIfAsrAudioCanceled(cancelToken);
+            if (bytes == null || bytes.isEmpty) {
+              throw const FormatException('无法读取音频文件');
+            }
+            return bytes;
+          },
+          name: record.name,
+          format: record.format,
+          resolveFormat: (bytes) =>
+              _resolveSelectedAudioFormat(bytes, fallbackFormat: record.format),
+        );
+        await audio.validateFormatAndReleaseLoadedBytes();
+        newAudios.add(audio);
       }
-      newAudios.add(
-        SelectedAudio(bytes: entry.value, name: entry.key, format: format),
-      );
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context)!
+                  .chooseAudioFileFailed(error.toString()),
+            ),
+          ),
+        );
+      }
+      return;
     }
 
+    if (!mounted) return;
     setState(() {
       _selectedAudios.addAll(newAudios);
       _errorMessage = null;
@@ -1088,8 +1594,12 @@ class _AsrPageState extends ConsumerState<AsrPage> {
   void _clearAll() {
     setState(() {
       _selectedAudios.clear();
+      _retrySourcesIncomplete = false;
       _errorMessage = null;
       _transcriptionResult = null;
+      // Clearing a retry's source set abandons that retry. A later selection
+      // must create a new task so incomplete saved sources remain recoverable.
+      _retryTaskId = null;
     });
   }
 
@@ -1098,39 +1608,55 @@ class _AsrPageState extends ConsumerState<AsrPage> {
   // ==================================================================
 
   void _startTranscription() {
-    if (_isProcessing || _selectedAudios.isEmpty) return;
+    if (_isProcessing ||
+        _retryLoading ||
+        _selectedAudios.isEmpty ||
+        _retrySourcesIncomplete) {
+      return;
+    }
 
     final modelOptions = _getAsrModelOptions(ref);
-    if (modelOptions.isEmpty || _selectedModelIndex >= modelOptions.length) {
+    if (modelOptions.isEmpty) {
       setState(() {
-        _errorMessage = '请先在设置中配置音频转写供应商和模型';
+        _errorMessage = AppLocalizations.of(context)!.asrNeedsProvider;
+      });
+      return;
+    }
+    final modelIndex = _selectedModelOptionIndex(modelOptions);
+    if (modelIndex == null) {
+      setState(() {
+        _modelSelectionRequired = true;
+        _errorMessage = AppLocalizations.of(context)!.asrModelUnavailable;
       });
       return;
     }
 
-    final selectedOption = modelOptions[_selectedModelIndex];
-    final providerTypeConfig = selectedOption.providerTypeConfig;
-    final uploadMethod = asrUploadMethodFromProviderTypeConfig(
-      providerTypeConfig,
-    );
-    final config = createAsrConfigFromProviderModel(
-      host: selectedOption.host,
-      apiKey: selectedOption.apiKey,
-      model: selectedOption.model,
-      providerTypeConfig: providerTypeConfig,
-    );
+    final selectedOption = modelOptions[modelIndex];
+    final AsrConfig config;
+    try {
+      config = _configForModelOption(selectedOption);
+    } on StateError catch (error) {
+      setState(() {
+        _selectedModelReference = null;
+        _modelSelectionRequired = true;
+        _retryConfigSnapshot = null;
+        _errorMessage = '$error';
+      });
+      return;
+    }
+    final uploadMethod = config.uploadMethod;
 
     final hasFileEntries = _selectedAudios.any((audio) => !audio.isUrl);
     final hasUrlEntries = _selectedAudios.any((audio) => audio.isUrl);
     if (uploadMethod == AudioUploadMethod.url && hasFileEntries) {
       setState(() {
-        _errorMessage = '当前供应商使用 URL 上传方式，请移除本地音频文件后重试';
+        _errorMessage = AppLocalizations.of(context)!.asrUrlProviderRemoveFiles;
       });
       return;
     }
     if (uploadMethod != AudioUploadMethod.url && hasUrlEntries) {
       setState(() {
-        _errorMessage = '当前供应商使用文件上传方式，不支持链接转写，请移除链接后重试';
+        _errorMessage = AppLocalizations.of(context)!.asrFileProviderRemoveUrls;
       });
       return;
     }
@@ -1139,12 +1665,36 @@ class _AsrPageState extends ConsumerState<AsrPage> {
       _selectedAudios.map(
         (audio) => AsrTaskAudio(
           bytes: audio.bytes,
+          loadBytesWithCancellation:
+              audio.hasCustomLoader ? audio.loadBytesWithCancellation : null,
+          byteLength: audio.byteLength,
+          resolveFormat: audio.resolveFormat == null
+              ? null
+              : (bytes) {
+                  final format = audio.resolveFormat!(bytes);
+                  if (audio.format != format ||
+                      audio.byteLength != bytes.length) {
+                    audio.format = format;
+                    audio.byteLength = bytes.length;
+                    if (mounted && _selectedAudios.contains(audio)) {
+                      setState(() {});
+                    }
+                  }
+                  return format;
+                },
+          onSourceReleased: audio.releaseSource,
           name: audio.name,
           format: audio.format,
+          audioReference: audio.audioReference,
+          priorChunks: audio.priorChunks,
+          resetChunkCheckpoint: audio.resetChunkCheckpoint,
         ),
       ),
     );
-    final modelIndex = _selectedModelIndex;
+    final modelReference = {
+      'configId': selectedOption.configId,
+      'modelId': selectedOption.modelId,
+    };
     final saveFolder = _saveFolder;
     final bgNotifier = ref.read(backgroundTasksProvider.notifier);
     final textNotifier = ref.read(textRecordsProvider.notifier);
@@ -1153,7 +1703,9 @@ class _AsrPageState extends ConsumerState<AsrPage> {
       config: config,
       audios: audios,
       saveFolder: saveFolder,
-      modelIndex: modelIndex,
+      modelReference: modelReference,
+      sourceTaskId: _retryTaskId,
+      retryStore: _retryAudioStore,
       serviceFactory: widget.asrServiceFactory,
       onSaved: () => unawaited(textNotifier.loadRecords()),
     );
@@ -1168,7 +1720,8 @@ class _AsrPageState extends ConsumerState<AsrPage> {
       if (mounted) {
         setState(() {
           _isProcessing = false;
-          _errorMessage = '任务启动失败: $error';
+          _errorMessage = AppLocalizations.of(context)!
+              .asrTaskStartFailed(error.toString());
         });
       }
       return;
@@ -1222,7 +1775,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                     Icon(Icons.error_outline, size: 18, color: Colors.red[700]),
                     const SizedBox(width: 8),
                     Text(
-                      '错误详情',
+                      AppLocalizations.of(ctx)!.asrErrorDetails,
                       style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
@@ -1246,7 +1799,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                         children: [
                           if (_lastRawRequest != null) ...[
                             _buildJsonBlock(
-                              '请求 (Request)',
+                              AppLocalizations.of(ctx)!.chatRequest,
                               _lastRawRequest,
                               isDark,
                             ),
@@ -1254,17 +1807,17 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                           ],
                           if (_lastRawResponse != null)
                             _buildJsonBlock(
-                              '响应 (Response)',
+                              AppLocalizations.of(ctx)!.chatResponse,
                               _lastRawResponse,
                               isDark,
                             ),
                         ],
                       )
-                    : const Padding(
+                    : Padding(
                         padding: EdgeInsets.all(24),
                         child: Center(
                           child: Text(
-                            '无详细数据',
+                            AppLocalizations.of(ctx)!.chatNoErrorDetails,
                             style: TextStyle(
                               color: Colors.grey,
                               fontStyle: FontStyle.italic,
@@ -1367,7 +1920,7 @@ class _UrlInputDialogState extends State<_UrlInputDialog> {
   void _submit() {
     final value = _controller.text.trim();
     if (!value.startsWith('http://') && !value.startsWith('https://')) {
-      setState(() => _errorText = '无效链接，必须以 http:// 或 https:// 开头');
+      setState(() => _errorText = AppLocalizations.of(context)!.asrInvalidUrl);
       return;
     }
     Navigator.pop(context, value);
@@ -1376,12 +1929,12 @@ class _UrlInputDialogState extends State<_UrlInputDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('输入音频链接'),
+      title: Text(AppLocalizations.of(context)!.asrEnterAudioUrl),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text(
-            '当前供应商使用 URL 上传方式，请输入公网音频链接（http/https）。',
+          Text(
+            AppLocalizations.of(context)!.asrUrlProviderHelp,
             style: TextStyle(fontSize: 12),
           ),
           const SizedBox(height: 12),
@@ -1402,9 +1955,12 @@ class _UrlInputDialogState extends State<_UrlInputDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
+          child: Text(AppLocalizations.of(context)!.cancel),
         ),
-        FilledButton(onPressed: _submit, child: const Text('添加')),
+        FilledButton(
+          onPressed: _submit,
+          child: Text(AppLocalizations.of(context)!.add),
+        ),
       ],
     );
   }

@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import '../../l10n/app_localizations.dart';
 import '../../models/tool_call.dart';
 import '../../services/context_manager.dart'
     show kCompactedToolResultPlaceholder;
@@ -124,8 +126,8 @@ class _ToolCallCardState extends State<ToolCallCard> {
                         color: Colors.blueGrey.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(4),
                       ),
-                      child: const Text(
-                        '已压缩',
+                      child: Text(
+                        AppLocalizations.of(context)!.toolCallCompacted,
                         style: TextStyle(fontSize: 10, color: Colors.blueGrey),
                       ),
                     ),
@@ -169,8 +171,9 @@ class _ToolCallCardState extends State<ToolCallCard> {
                     decoration: BoxDecoration(
                       color: isDark ? Colors.grey[900] : Colors.white,
                       borderRadius: BorderRadius.circular(4),
-                      border:
-                          Border.all(color: borderColor.withValues(alpha: 0.5)),
+                      border: Border.all(
+                        color: borderColor.withValues(alpha: 0.5),
+                      ),
                     ),
                     child: Text(
                       // 软删除语义：compacted 后渲染占位符（数据仍保留，

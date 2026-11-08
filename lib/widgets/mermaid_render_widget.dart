@@ -3,19 +3,26 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
+
+import '../l10n/app_localizations.dart';
+
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, kIsWeb, TargetPlatform, visibleForTesting;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:pointer_interceptor/pointer_interceptor.dart';
 import 'package:stroom/pages/chat/dialogs/mermaid_preview_dialog.dart';
+import 'package:stroom/utils/mermaid_folder_name_lock.dart';
+import 'package:stroom/utils/mermaid_web_url.dart';
 import 'package:stroom/utils/text_manifest.dart';
 import 'package:stroom/widgets/folder_picker_dialog.dart';
+
 import 'code_block_source_widget.dart';
 
-/// A [OneSequenceGestureRecognizer] that immediately accepts any drag gesture
-/// on the very first [PointerMoveEvent], before the parent [ScrollView]'s
-/// [VerticalDragGestureRecognizer] can accept (which typically requires ~1px
-/// of vertical movement for mouse devices).
+/// A [OneSequenceGestureRecognizer] that accepts a drag after the pointer moves
+/// beyond the pointer's gesture slop, before the parent [ScrollView]'s
+/// [VerticalDragGestureRecognizer] can take the gesture.
 ///
 /// This recognizer is used in a [GestureArenaTeam] alongside the
 /// [ScaleGestureRecognizer] so that when the [ImmediateMermaidGestureRecognizer]
@@ -24,38 +31,43 @@ import 'code_block_source_widget.dart';
 /// are captured for pan/zoom instead of scrolling the parent chat page.
 ///
 /// When paired with a [ScaleGestureRecognizer] in a [GestureArenaTeam]:
-/// - **Taps / clicks** produce no [PointerMoveEvent], so this recognizer never
-///   resolves, allowing toolbar buttons and other tap handlers to work normally.
-/// - **Drags of any direction** produce a [PointerMoveEvent] immediately on
-///   the first movement, at which point this recognizer resolves with
-///   [GestureDisposition.accepted], winning the arena before the parent
-///   [ScrollView] can detect the drag direction.
-/// - **Pinch zoom** also triggers a [PointerMoveEvent] from one of the two
-///   pointers, causing the same early acceptance and team win.
+/// - **Taps / clicks** remain eligible while movement stays within the
+///   pointer's hit slop, allowing the separate tap recognizer to forward the
+///   click.
+/// - **Drags of any direction** resolve with [GestureDisposition.accepted]
+///   after movement exceeds the pointer's gesture slop, winning the arena
+///   before the parent [ScrollView] can take an actual drag.
+/// - **Pinch zoom** is captured when either pointer moves beyond the same slop.
 class ImmediateMermaidGestureRecognizer extends OneSequenceGestureRecognizer {
+  final Map<int, Offset> _initialPositions = <int, Offset>{};
+
   @override
   void addAllowedPointer(PointerDownEvent event) {
     // OneSequenceGestureRecognizer.addAllowedPointer already calls
     // startTrackingPointer, which registers with the pointer router and
     // adds this recognizer to the gesture arena.
     super.addAllowedPointer(event);
+    _initialPositions[event.pointer] = event.position;
   }
 
   @override
   void handleEvent(PointerEvent event) {
     if (event is PointerMoveEvent) {
-      // Accept on the very first movement (any direction, any distance),
-      // winning the gesture arena before the parent ScrollView's
-      // VerticalDragGestureRecognizer can accept (which needs ~1px for mouse).
-      resolve(GestureDisposition.accepted);
+      final initialPosition = _initialPositions[event.pointer];
+      final gestureSlop = computeHitSlop(event.kind, gestureSettings);
+      if (initialPosition != null &&
+          (event.position - initialPosition).distance > gestureSlop) {
+        resolve(GestureDisposition.accepted);
+      }
     } else if (event is PointerUpEvent || event is PointerCancelEvent) {
+      _initialPositions.remove(event.pointer);
       stopTrackingPointer(event.pointer);
     }
   }
 
   @override
   void didStopTrackingLastPointer(int pointer) {
-    // No cleanup needed.
+    _initialPositions.clear();
   }
 
   @override
@@ -65,6 +77,7 @@ class ImmediateMermaidGestureRecognizer extends OneSequenceGestureRecognizer {
 
   @override
   void rejectGesture(int pointer) {
+    _initialPositions.remove(pointer);
     stopTrackingPointer(pointer);
   }
 
@@ -148,6 +161,15 @@ class MermaidRenderWidget extends StatefulWidget {
   /// Test-only: overrides the initial folder lookup used by Save as MMD.
   final Future<Set<String>> Function()? testOnlyGetAllFolders;
 
+  /// Test-only: runs immediately before a Save as MMD name lock is acquired.
+  final VoidCallback? testOnlyBeforeMmdFolderNameLock;
+
+  /// Test-only: runs after a Save as MMD name is selected, before it is saved.
+  final Future<void> Function(String name)? testOnlyAfterMmdNameAllocation;
+
+  /// Test-only: runs after a Save as MMD record has been persisted.
+  final VoidCallback? testOnlyOnMmdSaveComplete;
+
   const MermaidRenderWidget({
     super.key,
     required this.mermaidCode,
@@ -157,6 +179,9 @@ class MermaidRenderWidget extends StatefulWidget {
     this.showZoomControls = false,
     this.testOnlyShowSourceCode,
     this.testOnlyGetAllFolders,
+    this.testOnlyBeforeMmdFolderNameLock,
+    this.testOnlyAfterMmdNameAllocation,
+    this.testOnlyOnMmdSaveComplete,
   });
 
   /// Builds a complete HTML document with mermaid.js that renders the
@@ -177,16 +202,82 @@ class MermaidRenderWidget extends StatefulWidget {
   /// exactly once per library instance ([_buildMermaidLoader] caches it),
   /// and the multi-megabyte skeleton (template + gestures + loader) is
   /// built once and reused ([_buildMermaidSkeleton] caches it). Each
-  /// render only pays a single pass over the skeleton to splice in the
-  /// (small) diagram code.
+  /// render only pays a small number of passes over the skeleton to splice
+  /// in the diagram code and optional error-document generation.
+  /// [transformDocumentGeneration], when supplied, is included with transform
+  /// bridge notifications so callers can reject callbacks from old documents.
   ///
   /// This is the single source of truth for the Mermaid HTML/JS template.
   /// Both [MermaidRenderWidget] and [MermaidChartPage] use this method.
-  static String buildMermaidHtml(String mermaidCode,
-      {bool withJsGestures = true, String? inlineMermaidJs}) {
+  static String buildMermaidHtml(
+    String mermaidCode, {
+    bool withJsGestures = true,
+    String? inlineMermaidJs,
+    int? errorDocumentGeneration,
+    int? transformDocumentGeneration,
+    String loadingMessage = 'Loading diagram…',
+    String cdnLoadTimeoutMessage = 'Mermaid loading timed out.',
+    String cdnLoadFailedMessage =
+        'Could not load Mermaid from cdn.jsdelivr.net.',
+    String renderErrorPrefix = 'Mermaid render error: ',
+    String initializeErrorPrefix = 'Mermaid initialization error: ',
+    String resourceErrorMessage = 'A Mermaid resource failed to load.',
+  }) {
     final escaped = _escapeMermaidCode(mermaidCode);
-    final loader = _buildMermaidLoader(inlineMermaidJs);
-    final skeleton = _buildMermaidSkeleton(withJsGestures, loader);
+    final loader = _localizedMermaidLoader(
+      inlineMermaidJs,
+      cdnLoadTimeoutMessage,
+      cdnLoadFailedMessage,
+      renderErrorPrefix,
+      initializeErrorPrefix,
+    );
+    var skeleton = _buildMermaidSkeleton(
+      withJsGestures,
+      loader,
+      loadingMessage,
+      resourceErrorMessage,
+    );
+    if (errorDocumentGeneration != null) {
+      skeleton = skeleton.replaceFirst(
+        "callHandler('onMermaidError', msg);",
+        "callHandler('onMermaidError', msg, $errorDocumentGeneration);",
+      );
+      skeleton = skeleton.replaceFirst(
+        '/*MERMAID_GENERATION_SCOPED_RESOURCE_ERROR_LISTENER*/',
+        '''window.addEventListener('error', function(event) {
+      var target = event.target;
+      var container = document.getElementById('diagram-container');
+      if (!target || !container || !container.contains(target)) return;
+      var href = target.href;
+      var hrefValue = href && href.baseVal !== undefined ? href.baseVal : href;
+      var resourceUrl = target.currentSrc || target.src ||
+        hrefValue ||
+        (target.getAttribute &&
+          (target.getAttribute('src') || target.getAttribute('href')));
+      if (!resourceUrl) return;
+      var sameOrigin = true;
+      try {
+        sameOrigin = new URL(resourceUrl, document.baseURI).origin ===
+          window.location.origin;
+      } catch(_) {
+        // An unresolvable resource in the diagram still belongs to this page.
+      }
+      if (sameOrigin) return;
+      reportError('Mermaid resource failed to load');
+    }, true);''',
+      );
+      skeleton = skeleton.replaceFirst(
+        "'Mermaid resource failed to load'",
+        jsonEncode(resourceErrorMessage),
+      );
+    }
+    if (transformDocumentGeneration != null) {
+      skeleton = skeleton.replaceFirst(
+        "callHandler('onTransformChanged', zoomLevel, panX, panY, fitComplete);",
+        "callHandler('onTransformChanged', zoomLevel, panX, panY, fitComplete, "
+            "$transformDocumentGeneration);",
+      );
+    }
     return skeleton.replaceFirst('MERMAID_CODE_PLACEHOLDER', escaped);
   }
 
@@ -203,6 +294,60 @@ class MermaidRenderWidget extends StatefulWidget {
   /// UI thread for every render and every rebuild of every diagram).
   static String? _cachedLoaderLibraryJs;
   static String? _cachedLoaderScriptJs;
+  static String? _cachedLocalizedLoaderSource;
+  static String? _cachedLocalizedLoader;
+  static String? _cachedLocalizedLoaderTimeout;
+  static String? _cachedLocalizedLoaderFailure;
+  static String? _cachedLocalizedRenderErrorPrefix;
+  static String? _cachedLocalizedInitializeErrorPrefix;
+
+  static String _localizedMermaidLoader(
+    String? inlineMermaidJs,
+    String cdnLoadTimeoutMessage,
+    String cdnLoadFailedMessage,
+    String renderErrorPrefix,
+    String initializeErrorPrefix,
+  ) {
+    final source = _buildMermaidLoader(inlineMermaidJs);
+    final sameSource = identical(source, _cachedLocalizedLoaderSource) ||
+        source == _cachedLocalizedLoaderSource;
+    if (sameSource &&
+        cdnLoadTimeoutMessage == _cachedLocalizedLoaderTimeout &&
+        cdnLoadFailedMessage == _cachedLocalizedLoaderFailure &&
+        renderErrorPrefix == _cachedLocalizedRenderErrorPrefix &&
+        initializeErrorPrefix == _cachedLocalizedInitializeErrorPrefix) {
+      return _cachedLocalizedLoader!;
+    }
+
+    var loader = source;
+    if (loader.contains('CDN_TIMEOUT_MESSAGE_PLACEHOLDER')) {
+      loader = loader
+          .replaceFirst(
+            'CDN_TIMEOUT_MESSAGE_PLACEHOLDER',
+            jsonEncode(cdnLoadTimeoutMessage),
+          )
+          .replaceFirst(
+            'CDN_LOAD_FAILED_MESSAGE_PLACEHOLDER',
+            jsonEncode(cdnLoadFailedMessage),
+          );
+    }
+    loader = loader
+        .replaceAll(
+          'RENDER_ERROR_PREFIX_PLACEHOLDER',
+          jsonEncode(renderErrorPrefix),
+        )
+        .replaceAll(
+          'INITIALIZE_ERROR_PREFIX_PLACEHOLDER',
+          jsonEncode(initializeErrorPrefix),
+        );
+    _cachedLocalizedLoaderSource = source;
+    _cachedLocalizedLoader = loader;
+    _cachedLocalizedLoaderTimeout = cdnLoadTimeoutMessage;
+    _cachedLocalizedLoaderFailure = cdnLoadFailedMessage;
+    _cachedLocalizedRenderErrorPrefix = renderErrorPrefix;
+    _cachedLocalizedInitializeErrorPrefix = initializeErrorPrefix;
+    return loader;
+  }
 
   /// Builds the JavaScript that loads mermaid.js and initializes the
   /// diagram.
@@ -212,7 +357,9 @@ class MermaidRenderWidget extends StatefulWidget {
   /// mermaid.js is loaded dynamically from the CDN — dynamic injection
   /// (not a static `<script>` in `<head>`) keeps the document load event
   /// from being blocked by a slow/unreachable CDN, and a failure or
-  /// timeout shows a visible error instead of an endless spinner.
+  /// timeout shows a visible error instead of an endless spinner. Both
+  /// loaders use Mermaid's antiscript mode to keep sanitized HTML labels
+  /// while enabling URL sanitization and disabling click directives.
   static String _buildMermaidLoader(String? inlineMermaidJs) {
     if (inlineMermaidJs != null && inlineMermaidJs.isNotEmpty) {
       if (identical(inlineMermaidJs, _cachedLoaderLibraryJs) &&
@@ -233,7 +380,7 @@ class MermaidRenderWidget extends StatefulWidget {
       try {
         mermaid.initialize({
           theme: 'default',
-          securityLevel: 'loose',
+          securityLevel: 'antiscript',
           fontFamily: 'sans-serif',
         });
         mermaid.run({
@@ -243,11 +390,11 @@ class MermaidRenderWidget extends StatefulWidget {
           window.fitToViewport();
         }).catch(function(err) {
           if (hint) hint.style.display = 'none';
-          reportError('Mermaid render error: ' + err.message);
+          reportError(RENDER_ERROR_PREFIX_PLACEHOLDER + err.message);
         });
       } catch(e) {
         if (hint) hint.style.display = 'none';
-        reportError('Mermaid initialize error: ' + e.message);
+        reportError(INITIALIZE_ERROR_PREFIX_PLACEHOLDER + e.message);
       }
     })();
 ''';
@@ -267,27 +414,48 @@ class MermaidRenderWidget extends StatefulWidget {
   /// combination, not once per render.
   static String? _cachedSkeletonLoaderJs;
   static bool? _cachedSkeletonWithGestures;
+  static String? _cachedSkeletonLoadingMessage;
+  static String? _cachedSkeletonResourceErrorMessage;
   static String? _cachedSkeletonHtml;
 
   /// Builds the HTML template with the gesture script and the mermaid
   /// loader already spliced in (cached), leaving only the small
   /// [MERMAID_CODE_PLACEHOLDER] to be replaced per render.
-  static String _buildMermaidSkeleton(bool withJsGestures, String loader) {
+  static String _buildMermaidSkeleton(
+    bool withJsGestures,
+    String loader,
+    String loadingMessage,
+    String resourceErrorMessage,
+  ) {
     final cached = _cachedSkeletonHtml;
     if (cached != null &&
         identical(loader, _cachedSkeletonLoaderJs) &&
-        withJsGestures == _cachedSkeletonWithGestures) {
+        withJsGestures == _cachedSkeletonWithGestures &&
+        loadingMessage == _cachedSkeletonLoadingMessage &&
+        resourceErrorMessage == _cachedSkeletonResourceErrorMessage) {
       return cached;
     }
     final skeleton = _mermaidHtmlTemplate
-        .replaceFirst('GESTURE_SCRIPT_PLACEHOLDER',
-            withJsGestures ? _mermaidGestureJs : '')
-        .replaceFirst('MERMAID_LOADER_PLACEHOLDER', loader);
+        .replaceFirst(
+          'GESTURE_SCRIPT_PLACEHOLDER',
+          withJsGestures ? _mermaidGestureJs : '',
+        )
+        .replaceFirst('MERMAID_LOADER_PLACEHOLDER', loader)
+        .replaceFirst('LOADING_HINT_PLACEHOLDER', _escapeHtml(loadingMessage));
     _cachedSkeletonLoaderJs = loader;
     _cachedSkeletonWithGestures = withJsGestures;
+    _cachedSkeletonLoadingMessage = loadingMessage;
+    _cachedSkeletonResourceErrorMessage = resourceErrorMessage;
     _cachedSkeletonHtml = skeleton;
     return skeleton;
   }
+
+  static String _escapeHtml(String text) => text
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#39;');
 
   /// CDN loader script (constant): the same string instance every time, so
   /// [_buildMermaidSkeleton] can cache the CDN skeleton keyed by identity.
@@ -296,7 +464,7 @@ class MermaidRenderWidget extends StatefulWidget {
       var hint = document.getElementById('loading-hint');
       var mermaidTimer = setTimeout(function() {
         if (hint) hint.style.display = 'none';
-        reportError('Mermaid 加载超时：请检查网络连接后重试');
+        reportError(CDN_TIMEOUT_MESSAGE_PLACEHOLDER);
       }, 20000);
       var script = document.createElement('script');
       script.src = 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js';
@@ -305,7 +473,7 @@ class MermaidRenderWidget extends StatefulWidget {
         try {
           mermaid.initialize({
             theme: 'default',
-            securityLevel: 'loose',
+            securityLevel: 'antiscript',
             fontFamily: 'sans-serif',
           });
           mermaid.run({
@@ -315,17 +483,17 @@ class MermaidRenderWidget extends StatefulWidget {
             window.fitToViewport();
           }).catch(function(err) {
             if (hint) hint.style.display = 'none';
-            reportError('Mermaid render error: ' + err.message);
+            reportError(RENDER_ERROR_PREFIX_PLACEHOLDER + err.message);
           });
         } catch(e) {
           if (hint) hint.style.display = 'none';
-          reportError('Mermaid initialize error: ' + e.message);
+          reportError(INITIALIZE_ERROR_PREFIX_PLACEHOLDER + e.message);
         }
       };
       script.onerror = function() {
         clearTimeout(mermaidTimer);
         if (hint) hint.style.display = 'none';
-        reportError('Mermaid 加载失败：无法访问 cdn.jsdelivr.net');
+        reportError(CDN_LOAD_FAILED_MESSAGE_PLACEHOLDER);
       };
       document.head.appendChild(script);
     })();
@@ -345,30 +513,62 @@ class MermaidRenderWidget extends StatefulWidget {
   /// failures, which do not happen in normal builds).
   static const bundledMermaidJsAsset = 'assets/vendor/mermaid.min.js';
 
-  /// Web-only: absolute URL of the bundled asset template loaded via
-  /// [InAppWebViewController.loadUrl]. Flutter web serves assets under
-  /// `/assets/<pubspec path>`, and the template loads mermaid.min.js from
+  /// Web-only: URL of the bundled asset template loaded via
+  /// [InAppWebViewController.loadUrl]. Keeping it relative lets the browser
+  /// resolve it against Flutter web's configured `<base href>`, including
+  /// deployments under a path prefix. The template loads mermaid.min.js from
   /// the same directory (same origin, no CDN request).
-  static const webAssetTemplateUrl =
-      '/assets/assets/vendor/mermaid_render.html';
+  static const webAssetTemplateUrl = 'assets/assets/vendor/mermaid_render.html';
 
   /// Web-only: builds the full template URL for [code]. The ?v= query
   /// forces a fresh template fetch (a stale browser/iframe cache of the
-  /// old template would otherwise keep failing after an app update), and
-  /// the code travels as its own &code= parameter — both must share one
-  /// query string, or URLSearchParams cannot find the code and the
-  /// template renders the empty-code placeholder.
+  /// old template would otherwise keep failing after an app update).
+  /// Small sources travel in the query string; large sources use same-origin
+  /// session storage so chart data does not grow the navigation URL.
   ///
   /// Bump ?v= whenever assets/vendor/mermaid_render.html changes (and keep
   /// the template's TEMPLATE_VERSION in sync: it keys the decompressed
   /// library's CacheStorage entry, so a stale version would serve the
   /// previous library forever).
-  static String buildWebAssetUrl(String code) {
-    final base = '$webAssetTemplateUrl?v=5';
+  static const _webCodeQueryEncodedLimit = 1500;
+  static int _webSourceStorageGeneration = 0;
+
+  static String buildWebAssetUrl(String code, {String? sourceKey}) {
+    final base = '$webAssetTemplateUrl?v=18';
     final trimmed = code.trim();
-    return trimmed.isEmpty
-        ? base
-        : '$base&code=${Uri.encodeQueryComponent(trimmed)}';
+    if (trimmed.isEmpty) return base;
+
+    final encodedCode = Uri.encodeQueryComponent(trimmed);
+    if (encodedCode.length > _webCodeQueryEncodedLimit) {
+      if (sourceKey != null && sourceKey.isNotEmpty) {
+        return '$base&sourceKey=${Uri.encodeQueryComponent(sourceKey)}';
+      }
+      throw ArgumentError.value(
+        code,
+        'code',
+        'Large Mermaid sources must be prepared for web storage first.',
+      );
+    }
+    return '$base&code=$encodedCode';
+  }
+
+  /// Stores long source outside the navigation URL, then returns a template
+  /// URL that reads it from session storage. [storeSource] runs in the
+  /// web view's same-origin browsing context.
+  static Future<String> prepareWebAssetUrl(
+    String code,
+    Future<void> Function(String key, String source) storeSource,
+  ) async {
+    final trimmed = code.trim();
+    if (trimmed.isEmpty ||
+        Uri.encodeQueryComponent(trimmed).length <= _webCodeQueryEncodedLimit) {
+      return buildWebAssetUrl(trimmed);
+    }
+
+    final storageKey =
+        'mermaid-${DateTime.now().microsecondsSinceEpoch}-${++_webSourceStorageGeneration}';
+    await storeSource(storageKey, trimmed);
+    return buildWebAssetUrl(trimmed, sourceKey: storageKey);
   }
 
   /// Load-once cache of the bundled mermaid.js source, shared by every
@@ -379,12 +579,25 @@ class MermaidRenderWidget extends StatefulWidget {
   /// Returns null if the asset cannot be loaded — the caller then lets the
   /// template fall back to its CDN loader.
   static Future<String?> loadBundledMermaidJs() {
-    return _bundledMermaidJsLoad ??= _loadBundledMermaidJs();
+    final cachedLoad = _bundledMermaidJsLoad;
+    if (cachedLoad != null) {
+      return cachedLoad;
+    }
+
+    late final Future<String?> load;
+    load = _loadBundledMermaidJs().then((source) {
+      if (source == null && identical(_bundledMermaidJsLoad, load)) {
+        _bundledMermaidJsLoad = null;
+      }
+      return source;
+    });
+    _bundledMermaidJsLoad = load;
+    return load;
   }
 
   static Future<String?> _loadBundledMermaidJs() async {
     try {
-      return await rootBundle.loadString(bundledMermaidJsAsset);
+      return await rootBundle.loadString(bundledMermaidJsAsset, cache: false);
     } catch (e) {
       debugPrint(
         '[MermaidRenderWidget] Failed to load bundled mermaid.js '
@@ -457,7 +670,7 @@ class MermaidRenderWidget extends StatefulWidget {
 </head>
 <body>
   <div id="viewport">
-    <div id="loading-hint">图表加载中...</div>
+    <div id="loading-hint">LOADING_HINT_PLACEHOLDER</div>
     <div id="diagram-container">
       <pre class="mermaid" id="mermaid-code">
 MERMAID_CODE_PLACEHOLDER
@@ -469,7 +682,100 @@ MERMAID_CODE_PLACEHOLDER
     var panX = 0;
     var panY = 0;
     var fitComplete = false;
-    var pendingZoomDeltas = [];
+    var pendingZoomOperations = [];
+    var activeNativeGestureId = null;
+    var nativeGestureZoomLevel = 1;
+    window.zoomInputQueueReady = false;
+
+    function zoomInputTimestamp() {
+      var performance = window.performance;
+      if (performance && typeof performance.timeOrigin === 'number' &&
+          typeof performance.now === 'function') {
+        return performance.timeOrigin + performance.now();
+      }
+      return Date.now();
+    }
+
+    function queuePendingZoomOperation(operation) {
+      if (typeof operation.inputTimestamp !== 'number') {
+        operation.inputTimestamp = zoomInputTimestamp();
+      }
+      if (typeof operation.inputSequence !== 'number') {
+        try {
+          var parentWindow = window.parent;
+          if (parentWindow && parentWindow !== window) {
+            var sequence = Number(
+              parentWindow.__stroomMermaidZoomInputSequence
+            ) || 0;
+            operation.inputSequence = sequence + 1;
+            parentWindow.__stroomMermaidZoomInputSequence =
+              operation.inputSequence;
+          }
+        } catch (error) {
+          // Cross-origin parents cannot share the Dart/iframe sequence.
+        }
+      }
+      pendingZoomOperations.push(operation);
+    }
+
+    function replayPendingZoomOperations() {
+      if (!fitComplete || window.zoomInputQueueReady === false ||
+          pendingZoomOperations.length === 0) return;
+      var zoomOperations = pendingZoomOperations;
+      pendingZoomOperations = [];
+      zoomOperations.sort(function(a, b) {
+        if (typeof a.inputSequence === 'number' &&
+            typeof b.inputSequence === 'number') {
+          return a.inputSequence - b.inputSequence;
+        }
+        return a.inputTimestamp - b.inputTimestamp;
+      });
+      var viewport = document.getElementById('viewport');
+      for (var zoomIndex = 0; zoomIndex < zoomOperations.length; zoomIndex++) {
+        var zoomOperation = zoomOperations[zoomIndex];
+        if (zoomOperation.kind === 'gesture') {
+          window.applyGestureTransformAfterFit(
+            zoomOperation.gestureId,
+            zoomOperation.scale,
+            zoomOperation.panDeltaX,
+            zoomOperation.panDeltaY,
+            zoomOperation.centerX,
+            zoomOperation.centerY
+          );
+        } else if (zoomOperation.kind === 'touch-pan') {
+          panX += zoomOperation.panDeltaX;
+          panY += zoomOperation.panDeltaY;
+          updateTransform();
+          notifyTransform();
+        } else if (zoomOperation.kind === 'touch-pinch') {
+          window.setZoom(
+            zoomLevel * zoomOperation.scale,
+            zoomOperation.centerX,
+            zoomOperation.centerY,
+            true
+          );
+        } else if (zoomOperation.anchored) {
+          window.setZoom(
+            zoomLevel + zoomOperation.delta,
+            zoomOperation.centerX,
+            zoomOperation.centerY
+          );
+        } else {
+          window.setZoom(
+            zoomLevel + zoomOperation.delta,
+            viewport.clientWidth / 2,
+            viewport.clientHeight / 2
+          );
+        }
+      }
+      if (typeof touchLastX !== 'undefined' && touchLastX !== undefined &&
+          touchLastY !== undefined) {
+        touchStartX = touchLastX;
+        touchStartY = touchLastY;
+        touchPanStartX = panX;
+        touchPanStartY = panY;
+      }
+    }
 
     function updateTransform() {
       var container = document.getElementById('diagram-container');
@@ -491,12 +797,14 @@ MERMAID_CODE_PLACEHOLDER
       } catch(_) {}
     }
 
+    /*MERMAID_GENERATION_SCOPED_RESOURCE_ERROR_LISTENER*/
+
     // Reports the current zoom + pan to Flutter so the Flutter side always
     // mirrors the JS state (used for button anchors and gesture bases).
     function notifyTransform() {
       try {
         if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
-          window.flutter_inappwebview.callHandler('onTransformChanged', zoomLevel, panX, panY);
+          window.flutter_inappwebview.callHandler('onTransformChanged', zoomLevel, panX, panY, fitComplete);
         }
       } catch(_) {}
     }
@@ -504,31 +812,81 @@ MERMAID_CODE_PLACEHOLDER
     // Called from Flutter or local handlers to set zoom level.
     // When centerX / centerY are provided, the zoom is anchored at that
     // point (in viewport coordinates) instead of the top-left corner.
-    window.setZoom = function(level, centerX, centerY) {
+    window.setZoom = function(level, centerX, centerY, preserveSubFloorPinch) {
       var oldZoom = zoomLevel;
-      zoomLevel = Math.max(0.1, Math.min(10, level));
+      var minZoom = oldZoom < 0.1 && (level <= oldZoom || preserveSubFloorPinch)
+        ? oldZoom : 0.1;
+      zoomLevel = Math.max(minZoom, Math.min(10, level));
       if (centerX !== undefined && centerY !== undefined) {
         panX = centerX - (centerX - panX) * (zoomLevel / oldZoom);
         panY = centerY - (centerY - panY) * (zoomLevel / oldZoom);
+      }
+      activeNativeGestureId = null;
+      nativeGestureZoomLevel = zoomLevel;
+      updateTransform();
+      notifyTransform();
+    };
+
+    // Sets absolute pan offset and zoom level in a single call for callers
+    // that track the complete transform outside this page.
+    window.setPanZoom = function(x, y, level) {
+      var oldZoom = zoomLevel;
+      panX = x;
+      panY = y;
+      var minZoom = oldZoom < 0.1 && level <= oldZoom ? oldZoom : 0.1;
+      zoomLevel = Math.max(minZoom, Math.min(10, level));
+      activeNativeGestureId = null;
+      nativeGestureZoomLevel = zoomLevel;
+      updateTransform();
+    };
+
+    // Applies a pan/pinch transform from the native Flutter gesture layer.
+    // Before the first fit, retain it as a relative transform so the fit can
+    // establish its base zoom and center before replaying the gesture.
+    window.applyGestureTransformAfterFit = function(gestureId, scale, panDeltaX, panDeltaY, centerX, centerY) {
+      if (!fitComplete || window.zoomInputQueueReady === false) {
+        queuePendingZoomOperation({
+          kind: 'gesture',
+          gestureId: gestureId,
+          scale: scale,
+          panDeltaX: panDeltaX,
+          panDeltaY: panDeltaY,
+          centerX: centerX,
+          centerY: centerY
+        });
+        return;
+      }
+      if (activeNativeGestureId !== gestureId) {
+        activeNativeGestureId = gestureId;
+        nativeGestureZoomLevel = zoomLevel;
+      }
+      panX += panDeltaX;
+      panY += panDeltaY;
+      var oldZoom = zoomLevel;
+      var requestedZoom = nativeGestureZoomLevel * scale;
+      // Keep a sub-floor fit as the lower bound until native zoom crosses it.
+      var minZoom = nativeGestureZoomLevel < 0.1 ? nativeGestureZoomLevel : 0.1;
+      nativeGestureZoomLevel = Math.max(minZoom, Math.min(10, requestedZoom));
+      zoomLevel = nativeGestureZoomLevel;
+      var appliedScale = oldZoom > 0 ? zoomLevel / oldZoom : 1;
+      if (centerX !== null && centerY !== null) {
+        panX = centerX - (centerX - panX) * appliedScale;
+        panY = centerY - (centerY - panY) * appliedScale;
       }
       updateTransform();
       notifyTransform();
     };
 
-    // Sets absolute pan offset and zoom level in a single call. Used by the
-    // inline widget, which tracks pan/zoom on the Flutter side and computes
-    // the zoom anchor (finger position / preview center) itself.
-    window.setPanZoom = function(x, y, level) {
-      panX = x;
-      panY = y;
-      zoomLevel = Math.max(0.1, Math.min(10, level));
-      updateTransform();
-    };
-
-    window.applyZoomDeltasAfterFit = function(deltas) {
+    window.applyZoomDeltasAfterFit = function(deltas, inputTimestamp) {
       if (!Array.isArray(deltas)) return;
-      if (!fitComplete) {
-        pendingZoomDeltas = pendingZoomDeltas.concat(deltas);
+      if (!fitComplete || window.zoomInputQueueReady === false) {
+        for (var i = 0; i < deltas.length; i++) {
+          queuePendingZoomOperation({
+            delta: deltas[i],
+            anchored: false,
+            inputTimestamp: inputTimestamp
+          });
+        }
         return;
       }
       var viewport = document.getElementById('viewport');
@@ -538,6 +896,49 @@ MERMAID_CODE_PLACEHOLDER
           viewport.clientWidth / 2,
           viewport.clientHeight / 2
         );
+      }
+    };
+
+    window.applyWheelZoomAfterFit = function(delta, centerX, centerY, inputTimestamp) {
+      if (!fitComplete || window.zoomInputQueueReady === false) {
+        queuePendingZoomOperation({
+          delta: delta,
+          anchored: true,
+          centerX: centerX,
+          centerY: centerY,
+          inputTimestamp: inputTimestamp
+        });
+        return;
+      }
+      window.setZoom(zoomLevel + delta, centerX, centerY);
+    };
+
+    window.applyZoomOperationsAfterFit = function(operations) {
+      if (!Array.isArray(operations)) return;
+      for (var i = 0; i < operations.length; i++) {
+        var operation = operations[i];
+        if (!operation || typeof operation.delta !== 'number') continue;
+        if (operation.kind === 'wheel') {
+          queuePendingZoomOperation({
+            delta: operation.delta,
+            anchored: true,
+            centerX: operation.centerX,
+            centerY: operation.centerY,
+            inputTimestamp: operation.inputTimestamp,
+            inputSequence: operation.inputSequence
+          });
+        } else if (operation.kind === 'toolbar') {
+          queuePendingZoomOperation({
+            delta: operation.delta,
+            anchored: false,
+            inputTimestamp: operation.inputTimestamp,
+            inputSequence: operation.inputSequence
+          });
+        }
+      }
+      window.zoomInputQueueReady = true;
+      if (typeof replayPendingZoomOperations === 'function') {
+        replayPendingZoomOperations();
       }
     };
 
@@ -587,16 +988,25 @@ MERMAID_CODE_PLACEHOLDER
       // double-scale the diagram (shrunk and misplaced).
       svg.setAttribute('width', sw);
       svg.setAttribute('height', sh);
-      zoomLevel = Math.max(0.1, Math.min(10, Math.min(vw / sw, vh / sh)));
+      zoomLevel = Math.min(10, Math.min(vw / sw, vh / sh));
       panX = (vw - sw * zoomLevel) / 2;
       panY = (vh - sh * zoomLevel) / 2;
+      activeNativeGestureId = null;
+      nativeGestureZoomLevel = zoomLevel;
       updateTransform();
-      notifyTransform();
       fitComplete = true;
-      var deltas = pendingZoomDeltas;
-      pendingZoomDeltas = [];
-      window.applyZoomDeltasAfterFit(deltas);
+      notifyTransform();
+      if (typeof replayPendingZoomOperations === 'function') {
+        replayPendingZoomOperations();
+      }
     };
+
+    window.addEventListener('resize', function() {
+      if (!fitComplete) return;
+      var viewport = document.getElementById('viewport');
+      if (!viewport || viewport.clientWidth <= 0 || viewport.clientHeight <= 0) return;
+      window.fitToViewport();
+    });
 
 GESTURE_SCRIPT_PLACEHOLDER
 
@@ -615,54 +1025,113 @@ MERMAID_LOADER_PLACEHOLDER
     var dragStartY = 0;
     var panStartX = 0;
     var panStartY = 0;
+    var hasDragged = false;
+    var dragSlop = 4;
+    var suppressClickAfterPan = false;
+    var suppressClickTimer = null;
+    var dragParentWindow = null;
+
+    function finishMouseDrag() {
+      if (isDragging && hasDragged) {
+        suppressClickAfterPan = true;
+        suppressClickTimer = setTimeout(function() {
+          suppressClickAfterPan = false;
+          suppressClickTimer = null;
+        }, 0);
+      }
+      isDragging = false;
+      hasDragged = false;
+      if (dragParentWindow !== null) {
+        try {
+          dragParentWindow.removeEventListener('mouseup', finishMouseDrag);
+        } catch(_) {}
+        dragParentWindow = null;
+      }
+    }
+
+    document.addEventListener('mouseup', finishMouseDrag);
+    window.addEventListener('blur', finishMouseDrag);
+    window.addEventListener('unload', finishMouseDrag);
 
     // Drag-to-pan with mouse
     document.addEventListener('mousedown', function(e) {
+      if (suppressClickTimer !== null) {
+        clearTimeout(suppressClickTimer);
+        suppressClickTimer = null;
+        suppressClickAfterPan = false;
+      }
       if (e.target.closest('#diagram-container')) {
         isDragging = true;
+        hasDragged = false;
         dragStartX = e.clientX;
         dragStartY = e.clientY;
         panStartX = panX;
         panStartY = panY;
+        try {
+          var parentWindow = window.parent;
+          if (parentWindow && parentWindow !== window) {
+            parentWindow.addEventListener('mouseup', finishMouseDrag);
+            dragParentWindow = parentWindow;
+          }
+        } catch(_) {
+          dragParentWindow = null;
+        }
         e.preventDefault();
       }
     });
 
     document.addEventListener('mousemove', function(e) {
       if (isDragging) {
-        panX = panStartX + (e.clientX - dragStartX);
-        panY = panStartY + (e.clientY - dragStartY);
-        updateTransform();
-        notifyTransform();
+        var deltaX = e.clientX - dragStartX;
+        var deltaY = e.clientY - dragStartY;
+        if (deltaX * deltaX + deltaY * deltaY > dragSlop * dragSlop) {
+          hasDragged = true;
+        }
+        if (hasDragged) {
+          panX = panStartX + deltaX;
+          panY = panStartY + deltaY;
+          updateTransform();
+          notifyTransform();
+        }
         e.preventDefault();
       }
     });
 
-    document.addEventListener('mouseup', function() {
-      isDragging = false;
-    });
+    document.addEventListener('click', function(e) {
+      if (!suppressClickAfterPan || e.detail === 0) return;
+      suppressClickAfterPan = false;
+      if (suppressClickTimer !== null) {
+        clearTimeout(suppressClickTimer);
+        suppressClickTimer = null;
+      }
+      e.preventDefault();
+      e.stopPropagation();
+    }, true);
 
     // Zoom with Ctrl/Meta + MouseWheel
     document.addEventListener('wheel', function(e) {
-      if (e.ctrlKey || e.metaKey) {
+      if ((e.ctrlKey || e.metaKey) && e.deltaY !== 0) {
         e.preventDefault();
         var rect = document.getElementById('viewport').getBoundingClientRect();
         var centerX = e.clientX - rect.left;
         var centerY = e.clientY - rect.top;
         var delta = e.deltaY > 0 ? -0.1 : 0.1;
-        window.setZoom(zoomLevel + delta, centerX, centerY);
+        window.applyWheelZoomAfterFit(delta, centerX, centerY);
       }
     }, { passive: false });
 
     // Touch events for mobile pan
     var touchStartX, touchStartY;
     var touchPanStartX, touchPanStartY;
+    var touchLastX, touchLastY;
     var lastTouchDist = 0;
 
     document.addEventListener('touchstart', function(e) {
       if (e.touches.length === 1) {
         touchStartX = e.touches[0].clientX;
         touchStartY = e.touches[0].clientY;
+        touchLastX = touchStartX;
+        touchLastY = touchStartY;
         touchPanStartX = panX;
         touchPanStartY = panY;
       } else if (e.touches.length === 2) {
@@ -675,8 +1144,21 @@ MERMAID_LOADER_PLACEHOLDER
 
     document.addEventListener('touchmove', function(e) {
       if (e.touches.length === 1) {
-        panX = touchPanStartX + (e.touches[0].clientX - touchStartX);
-        panY = touchPanStartY + (e.touches[0].clientY - touchStartY);
+        var touchX = e.touches[0].clientX;
+        var touchY = e.touches[0].clientY;
+        var panDeltaX = touchX - touchLastX;
+        var panDeltaY = touchY - touchLastY;
+        touchLastX = touchX;
+        touchLastY = touchY;
+        if (!fitComplete) {
+          queuePendingZoomOperation({
+            kind: 'touch-pan',
+            panDeltaX: panDeltaX,
+            panDeltaY: panDeltaY
+          });
+        }
+        panX = touchPanStartX + (touchX - touchStartX);
+        panY = touchPanStartY + (touchY - touchStartY);
         updateTransform();
         notifyTransform();
         e.preventDefault();
@@ -692,16 +1174,33 @@ MERMAID_LOADER_PLACEHOLDER
         var rect = document.getElementById('viewport').getBoundingClientRect();
         var centerX = midX - rect.left;
         var centerY = midY - rect.top;
-        window.setZoom(zoomLevel * scale, centerX, centerY);
+        if (!fitComplete) {
+          queuePendingZoomOperation({
+            kind: 'touch-pinch',
+            scale: scale,
+            centerX: centerX,
+            centerY: centerY
+          });
+        }
+        window.setZoom(zoomLevel * scale, centerX, centerY, true);
         e.preventDefault();
       }
     }, { passive: false });
 
     document.addEventListener('touchend', function(e) {
-      lastTouchDist = 0;
+      if (e.touches.length === 2) {
+        lastTouchDist = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY
+        );
+      } else {
+        lastTouchDist = 0;
+      }
       if (e.touches.length === 1) {
         touchStartX = e.touches[0].clientX;
         touchStartY = e.touches[0].clientY;
+        touchLastX = touchStartX;
+        touchLastY = touchStartY;
         touchPanStartX = panX;
         touchPanStartY = panY;
       }
@@ -716,9 +1215,36 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   InAppWebViewController? _webViewController;
   bool _isReady = false;
   bool _hasLoadedPage = false;
+  bool _canApplyZoomCommands = false;
   bool _shouldCreateWebView = false;
   Key _webViewKey = const Key('mermaid_render_webview');
+  String? _localizedHtmlLocaleName;
   String? _errorMessage;
+  bool _hasWebViewCreationTimeoutError = false;
+  bool _hasWebRetryTimeoutError = false;
+  // Tracks ordinary navigations too, so their late main-frame errors are stale.
+  String? _webLoadUrl;
+  String? _webRetryUrl;
+  int _webRetryGeneration = 0;
+  int _webSourceUpdateGeneration = 0;
+  int _nativeLoadGeneration = 0;
+  // Embedded in each page so delayed Mermaid bridge errors keep their source.
+  int _mermaidDocumentGeneration = 0;
+  WebUri? _nativeLoadBaseUrl;
+
+  String _resolveWebUrl(String url) => resolveMermaidWebUrl(url);
+
+  WebUri _newNativeLoadBaseUrl() {
+    final generation = ++_nativeLoadGeneration;
+    return WebUri('https://mermaid-$generation.invalid/load/');
+  }
+
+  WebUri? _initialNativeLoadBaseUrl() {
+    // Windows replaces its view on source changes because WebView2 ignores
+    // loadData base URLs; that view's controller identity scopes callbacks.
+    if (defaultTargetPlatform == TargetPlatform.windows) return null;
+    return _nativeLoadBaseUrl ??= _newNativeLoadBaseUrl();
+  }
 
   /// Whether the source code view is shown instead of the rendered diagram.
   bool _showSourceCode = false;
@@ -753,8 +1279,18 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   /// Current zoom level tracked on the Flutter side.
   double _zoomLevel = 1.0;
 
-  /// Toolbar zoom taps made before the WebView is ready to accept commands.
-  final List<double> _pendingZoomDeltas = [];
+  /// Whether this native document has reported a JavaScript transform.
+  bool _hasReceivedNativeTransform = false;
+
+  /// Zoom inputs made before the WebView is ready to accept commands.
+  final List<
+      ({
+        double delta,
+        double? centerX,
+        double? centerY,
+        double inputTimestamp,
+        int? inputSequence,
+      })> _pendingZoomOperations = [];
 
   /// Pan offset tracked on the Flutter side for mouse/trackpad gesture
   /// handling (desktop). Updated by [_onScaleUpdate] and sent to JS via
@@ -762,9 +1298,11 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   double _panX = 0;
   double _panY = 0;
 
-  /// Values captured at the start of a scale gesture, used to compute
-  /// cumulative zoom and relative pan deltas.
-  double _gestureStartZoom = 1.0;
+  /// Cumulative scale reported by Flutter at the previous update. Keeping
+  /// this separate from zoom lets an active pinch continue across a JS fit
+  /// notification that changes [_zoomLevel].
+  double _lastGestureScale = 1.0;
+  int _nativeGestureId = 0;
 
   @override
   void initState() {
@@ -797,6 +1335,41 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     }
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final localeName = AppLocalizations.of(context)!.localeName;
+    final previousLocaleName = _localizedHtmlLocaleName;
+    _localizedHtmlLocaleName = localeName;
+    if (previousLocaleName == null || previousLocaleName == localeName) return;
+
+    // initialData is consumed only when the platform view is created. Re-key
+    // the view and discard its localized HTML when the app locale changes.
+    _initialHtml = null;
+    _webViewKey = UniqueKey();
+    _nativeInitialSourceKey = null;
+    _nativeInitialSourceCode = null;
+    _webViewController = null;
+    _isReady = false;
+    _hasLoadedPage = false;
+    _errorMessage = null;
+    _hasWebViewCreationTimeoutError = false;
+    _hasWebRetryTimeoutError = false;
+    _webLoadUrl = null;
+    _webRetryUrl = null;
+    _webRetryGeneration++;
+    _webSourceUpdateGeneration++;
+    _nativeLoadGeneration++;
+    _mermaidDocumentGeneration++;
+    _readyFallbackTimer?.cancel();
+    _webViewCreationFallbackTimer?.cancel();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _showSourceCode) return;
+      _armReadyFallback(showNavigationTimeoutError: true);
+      _armWebViewCreationFallback();
+    });
+  }
+
   Future<void> _loadMermaidAsset() async {
     final js = await MermaidRenderWidget.loadBundledMermaidJs();
     if (!mounted) return;
@@ -811,35 +1384,85 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   void didUpdateWidget(MermaidRenderWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.mermaidCode != widget.mermaidCode) {
+      final wasShowingWebSource = kIsWeb && _showSourceCode;
+      final hasNonEmptyCode = widget.mermaidCode.trim().isNotEmpty;
+      final wasEmptyCode = oldWidget.mermaidCode.trim().isEmpty;
+      final shouldRetryWebViewCreation = kIsWeb &&
+          hasNonEmptyCode &&
+          _hasWebViewCreationTimeoutError &&
+          _webViewController == null;
+      final isPendingWebRetry = kIsWeb &&
+          !_isReady &&
+          _webViewController != null &&
+          (_readyFallbackTimer?.isActive ?? false);
+      final isTimedOutWebRetry = kIsWeb &&
+          _hasWebRetryTimeoutError &&
+          _webRetryUrl != null &&
+          _webViewController != null;
+      final shouldRearmWebRetry =
+          hasNonEmptyCode && (isPendingWebRetry || isTimedOutWebRetry);
+      if (!hasNonEmptyCode) {
+        _webViewCreationFallbackTimer?.cancel();
+        _readyFallbackTimer?.cancel();
+        _webRetryUrl = null;
+      }
       // Invalidate the memoized initial HTML: if the WebView is recreated
       // (e.g. the widget was unmounted and mounted again) it reads
       // initialData anew and must see the NEW code. While the WebView
-      // stays alive the code change goes through loadData below. (The
-      // source-code toggle keeps the WebView mounted — see [build].)
+      // stays alive the code change goes through loadData below. On native,
+      // the source-code toggle keeps the WebView mounted; web remount handling
+      // lives in [_toggleSourceCode].
       _initialHtml = null;
-      // On web the loading state is managed INSIDE the iframe (the asset
-      // template shows a hint until the diagram is rendered), so _isReady
-      // stays true and the Flutter overlay never appears there. On native
+      _nativeLoadBaseUrl = null;
+      // Ordinary web source updates use the iframe's own loading hint. A
+      // retained-view retry instead keeps Flutter's overlay until its
+      // navigation completes or the retry fallback resolves it. On native
       // platforms the overlay tracks onLoadStop.
-      if (!kIsWeb) {
+      if (!kIsWeb ||
+          shouldRearmWebRetry ||
+          shouldRetryWebViewCreation ||
+          !hasNonEmptyCode) {
         _isReady = false;
       }
       _hasLoadedPage = false;
       _errorMessage = null;
+      _hasWebViewCreationTimeoutError = false;
+      _hasWebRetryTimeoutError = false;
+      if (wasShowingWebSource) _prepareWebPreviewRemount();
       _showSourceCode = false;
       _zoomLevel = 1.0;
-      _pendingZoomDeltas.clear();
+      _pendingZoomOperations.clear();
       _panX = 0;
       _panY = 0;
-      if (oldWidget.mermaidCode.trim().isEmpty &&
-          widget.mermaidCode.trim().isNotEmpty) {
+      if (wasEmptyCode && hasNonEmptyCode) {
         // The empty-code placeholder unmounts the WebView. Drop its stale
-        // controller and give the remounted platform view a fresh creation
-        // deadline, so a failed remount still reaches the error state.
+        // controller and give the remounted platform view a fresh key and
+        // creation deadline, so stale callbacks and failed mounts are handled.
         _webViewController = null;
+        _webViewKey = UniqueKey();
+        _webRetryUrl = null;
+        _isReady = false;
+      }
+      if (shouldRetryWebViewCreation) {
+        // The creation fallback reported a failed mount while no controller
+        // existed. A source update starts a fresh WebView creation attempt.
+        _webViewKey = UniqueKey();
+      }
+      if (!kIsWeb &&
+          defaultTargetPlatform != TargetPlatform.windows &&
+          hasNonEmptyCode &&
+          _webViewController == null) {
         _armWebViewCreationFallback();
       }
+      if (shouldRearmWebRetry && !wasShowingWebSource) {
+        _armReadyFallback(showNavigationTimeoutError: true);
+      }
       _loadMermaidCode();
+      if (hasNonEmptyCode &&
+          (wasShowingWebSource ||
+              (kIsWeb && (wasEmptyCode || shouldRetryWebViewCreation)))) {
+        _armWebViewCreationFallback();
+      }
     }
   }
 
@@ -859,59 +1482,103 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   /// still does not exist after 12s (the platform view failed to mount —
   /// onWebViewCreated never fired), show an error instead of loading forever.
   void _armWebViewCreationFallback() {
-    if (!_shouldCreateWebView || (!kIsWeb && _mermaidJsLoading)) return;
+    if (!_shouldCreateWebView ||
+        (!kIsWeb && _mermaidJsLoading) ||
+        widget.mermaidCode.trim().isEmpty) {
+      return;
+    }
     _webViewCreationFallbackTimer?.cancel();
     _webViewCreationFallbackTimer = Timer(const Duration(seconds: 12), () {
-      if (mounted && _webViewController == null && _errorMessage == null) {
-        debugPrint('[MermaidRenderWidget] WebView was not created within '
-            '12s, showing an error');
-        setState(() => _errorMessage = '图表渲染引擎初始化失败，请重试');
+      if (mounted &&
+          widget.mermaidCode.trim().isNotEmpty &&
+          _webViewController == null &&
+          _errorMessage == null) {
+        debugPrint(
+          '[MermaidRenderWidget] WebView was not created within '
+          '12s, showing an error',
+        );
+        setState(() {
+          _errorMessage = AppLocalizations.of(context)!.mermaidEngineInitFailed;
+          _hasWebViewCreationTimeoutError = true;
+        });
       }
     });
   }
 
   /// Arms a fallback timer that force-ends the loading state after 3s if
-  /// [onLoadStop] has not fired yet (native platforms only). The loading
-  /// overlay must never spin forever: whatever the WebView does (rendered,
-  /// blank, or errored), the overlay is removed so the user sees the
-  /// actual iframe content (which shows its own loading hint or error
-  /// message from the HTML template).
-  void _armReadyFallback() {
+  /// [onLoadStop] has not fired yet. Web retries show an error because a
+  /// failed navigation leaves no iframe loading UI to recover the preview.
+  void _armReadyFallback({bool showNavigationTimeoutError = false}) {
     _readyFallbackTimer?.cancel();
     _readyFallbackTimer = Timer(const Duration(seconds: 3), () {
       if (mounted && !_isReady && _errorMessage == null) {
-        debugPrint('[MermaidRenderWidget] onLoadStop did not fire within 3s, '
-            'force-ending the loading state');
-        setState(() => _isReady = true);
+        debugPrint(
+          '[MermaidRenderWidget] onLoadStop did not fire within 3s, '
+          'ending the loading state',
+        );
+        setState(() {
+          _isReady = true;
+          if (showNavigationTimeoutError) {
+            _errorMessage = AppLocalizations.of(context)!.mermaidPageTimeout;
+            _hasWebRetryTimeoutError = true;
+          } else {
+            _canApplyZoomCommands = true;
+            _hasWebRetryTimeoutError = false;
+          }
+        });
+        if (!showNavigationTimeoutError) {
+          unawaited(_applyPendingZoomOperations());
+        }
       }
     });
   }
 
   void _loadMermaidCode() {
+    final generation = ++_mermaidDocumentGeneration;
     _hasLoadedPage = false;
+    _canApplyZoomCommands = false;
+    _hasReceivedNativeTransform = false;
+    final code = widget.mermaidCode.trim();
+
+    if (!kIsWeb &&
+        defaultTargetPlatform == TargetPlatform.windows &&
+        code.isNotEmpty) {
+      // Windows WebView2 ignores loadData's baseUrl, so replacing the view
+      // gives each source update a distinct controller for callback checks.
+      _readyFallbackTimer?.cancel();
+      _webViewController = null;
+      _webViewKey = UniqueKey();
+      _armWebViewCreationFallback();
+      return;
+    }
+
     final ctrl = _webViewController;
     if (ctrl == null) return;
 
-    final code = widget.mermaidCode.trim();
-
     if (kIsWeb) {
-      // Web: load the bundled asset template (same origin, no CDN request)
-      // with the code as a query parameter. A data: URL cannot be used
+      // Web: load the bundled asset template (same origin, no CDN request).
+      // Large sources use session storage to keep the navigation URL small.
+      // A data: URL cannot be used
       // here — Chromium truncates data: URLs at ~1MB, and the bundled
       // mermaid.min.js cannot be reached from a data: page (opaque origin).
-      // No ready-fallback is armed: the iframe manages its own loading
-      // state (the template hides its hint the moment the diagram renders).
-      ctrl.loadUrl(
-          urlRequest: URLRequest(
-              url: WebUri(MermaidRenderWidget.buildWebAssetUrl(code))));
+      // The iframe manages its own initial loading state; retained-view
+      // retries arm a Flutter fallback separately in [_retry].
+      unawaited(_loadWebMermaidCode(ctrl, code, generation));
       return;
     }
+
+    // Native loadData completions carry their document's base URL. Give each
+    // HTML document a distinct URL so a late completion from an older load can
+    // be ignored.
+    final nativeLoadBaseUrl = _newNativeLoadBaseUrl();
+    _nativeLoadBaseUrl = nativeLoadBaseUrl;
 
     if (code.isEmpty) {
       ctrl.loadData(
         data: _emptyPlaceholderHtml,
         mimeType: 'text/html',
         encoding: 'utf8',
+        baseUrl: nativeLoadBaseUrl,
       );
       return;
     }
@@ -922,20 +1589,104 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     // the JS mouse handlers act as a fallback (e.g. mobile platforms where
     // the platform view receives events directly). Sharing one template
     // keeps zoom anchoring and auto-fit behavior identical everywhere.
-    final html = MermaidRenderWidget.buildMermaidHtml(code,
-        inlineMermaidJs: _inlineMermaidJs);
+    final html = MermaidRenderWidget.buildMermaidHtml(
+      code,
+      inlineMermaidJs: _inlineMermaidJs,
+      errorDocumentGeneration: _mermaidDocumentGeneration,
+      transformDocumentGeneration: _mermaidDocumentGeneration,
+      loadingMessage: AppLocalizations.of(context)!.mermaidLoadingDiagram,
+      cdnLoadTimeoutMessage: AppLocalizations.of(context)!.mermaidLoadTimeout,
+      cdnLoadFailedMessage: AppLocalizations.of(context)!.mermaidCdnLoadFailed,
+      renderErrorPrefix:
+          AppLocalizations.of(context)!.mermaidRenderErrorPrefix(''),
+      initializeErrorPrefix:
+          AppLocalizations.of(context)!.mermaidInitializeErrorPrefix(''),
+      resourceErrorMessage: AppLocalizations.of(context)!.mermaidResourceError,
+    );
     _armReadyFallback();
     ctrl.loadData(
       data: html,
       mimeType: 'text/html',
       encoding: 'utf8',
+      baseUrl: nativeLoadBaseUrl,
     );
+  }
+
+  Future<void> _loadWebMermaidCode(
+    InAppWebViewController ctrl,
+    String code,
+    int generation,
+  ) async {
+    String? preparedSourceKey;
+    try {
+      final baseUrl = await MermaidRenderWidget.prepareWebAssetUrl(code, (
+        key,
+        source,
+      ) async {
+        await ctrl.evaluateJavascript(
+          source:
+              'window.sessionStorage.setItem(${jsonEncode(key)}, ${jsonEncode(source)});',
+        );
+      });
+      preparedSourceKey = Uri.parse(baseUrl).queryParameters['sourceKey'];
+      if (!mounted || generation != _mermaidDocumentGeneration) {
+        if (preparedSourceKey != null) {
+          await _removeStoredWebSource(ctrl, preparedSourceKey);
+          preparedSourceKey = null;
+        }
+        return;
+      }
+
+      final isTrackedRetry =
+          _readyFallbackTimer?.isActive == true || _webRetryUrl != null;
+      final url = isTrackedRetry
+          ? '$baseUrl&attempt=${++_webRetryGeneration}'
+          : _webLoadUrl != null
+              ? '$baseUrl&sourceUpdate=${++_webSourceUpdateGeneration}'
+              : baseUrl;
+      _webLoadUrl = _resolveWebUrl(url);
+      if (isTrackedRetry) {
+        _webRetryUrl = _webLoadUrl;
+      }
+      await ctrl.loadUrl(urlRequest: URLRequest(url: WebUri(url)));
+    } catch (error) {
+      if (preparedSourceKey != null) {
+        await _removeStoredWebSource(ctrl, preparedSourceKey);
+      }
+      if (!mounted || generation != _mermaidDocumentGeneration) return;
+      debugPrint('[MermaidRenderWidget] Failed to prepare web source: $error');
+      setState(
+        () =>
+            _errorMessage = AppLocalizations.of(context)!.mermaidCodeLoadFailed,
+      );
+    }
+  }
+
+  Future<void> _removeStoredWebSource(
+    InAppWebViewController ctrl,
+    String sourceKey,
+  ) async {
+    try {
+      await ctrl.evaluateJavascript(
+        source: 'window.sessionStorage.removeItem(${jsonEncode(sourceKey)});',
+      );
+    } catch (error) {
+      debugPrint(
+        '[MermaidRenderWidget] Failed to remove stored web source: $error',
+      );
+    }
   }
 
   void _retry() {
     final webViewWasNeverCreated = _webViewController == null;
     setState(() {
+      // A retry advances the document generation, so any remounted page
+      // must rebuild its HTML and native base URL for that generation.
+      _initialHtml = null;
+      _nativeLoadBaseUrl = null;
       _errorMessage = null;
+      _hasWebViewCreationTimeoutError = false;
+      _hasWebRetryTimeoutError = false;
       _isReady = false;
       if (webViewWasNeverCreated) {
         _webViewKey = UniqueKey();
@@ -946,6 +1697,10 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       // the retry attempt and remount its platform view so creation is
       // attempted again. Re-arming also reports another failed mount.
       _armWebViewCreationFallback();
+    } else if (kIsWeb) {
+      // A web retry reuses the existing view, so it will not receive another
+      // onWebViewCreated callback to restore readiness if navigation stalls.
+      _armReadyFallback(showNavigationTimeoutError: true);
     }
     _loadMermaidCode();
   }
@@ -954,9 +1709,10 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   // Gesture handling (mouse/trackpad pan and zoom at the Flutter level)
   // ---------------------------------------------------------------------------
 
-  /// Captures the current zoom level at the start of a scale gesture.
+  /// Resets the cumulative scale baseline at the start of each gesture.
   void _onScaleStart(ScaleStartDetails details) {
-    _gestureStartZoom = _zoomLevel;
+    _nativeGestureId++;
+    _lastGestureScale = 1.0;
   }
 
   /// Handles mouse drag (pan) and touchpad pinch (zoom). The scale gesture
@@ -975,18 +1731,28 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     _panX += details.focalPointDelta.dx;
     _panY += details.focalPointDelta.dy;
 
-    // Zoom: compute new zoom level from cumulative scale factor
-    // (details.scale is 1.0 for single-pointer drag, changes for pinch)
-    final hasZoom = details.scale != 1.0;
+    // Flutter reports scale cumulatively from the start of the gesture. Use
+    // only the change since the prior update so a fit notification can safely
+    // replace the current zoom while the gesture remains active.
+    final gestureScale = details.scale / _lastGestureScale;
+    _lastGestureScale = details.scale;
+    final hasZoom = gestureScale != 1.0;
+    double? centerX;
+    double? centerY;
     if (hasZoom) {
-      final newZoom = (_gestureStartZoom * details.scale).clamp(0.1, 10.0);
+      final newZoom = _clampManualZoom(
+        _zoomLevel * gestureScale,
+        currentZoom: _zoomLevel,
+      );
       final renderBox = context.findRenderObject() as RenderBox?;
       if (renderBox != null && renderBox.hasSize) {
         final localPos = renderBox.globalToLocal(details.focalPoint);
+        centerX = localPos.dx.clamp(0.0, renderBox.size.width);
+        centerY = localPos.dy.clamp(0.0, renderBox.size.height);
         _applyZoomAnchored(
           newZoom: newZoom,
-          centerX: localPos.dx.clamp(0.0, renderBox.size.width),
-          centerY: localPos.dy.clamp(0.0, renderBox.size.height),
+          centerX: centerX,
+          centerY: centerY,
         );
       } else {
         _zoomLevel = newZoom;
@@ -996,7 +1762,14 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     // Batch pan and zoom in a single evaluateJavascript call to avoid
     // multiple expensive platform channel round-trips per gesture frame
     // and prevent race conditions between separate pan/zoom calls.
-    _syncPanZoomToWebView();
+    _sendGestureTransformToWebView(
+      gestureId: _nativeGestureId,
+      scale: gestureScale,
+      panDeltaX: details.focalPointDelta.dx,
+      panDeltaY: details.focalPointDelta.dy,
+      centerX: centerX,
+      centerY: centerY,
+    );
   }
 
   /// Handles mouse wheel zoom with Ctrl/Meta modifier.
@@ -1022,7 +1795,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     );
   }
 
-  /// Forwards an unmoved tap from the Flutter overlay to the DOM element at
+  /// Forwards a tap from the Flutter overlay to the DOM element at
   /// the same WebView viewport position. Mermaid's own SVG click handlers
   /// then process callbacks and links as usual.
   void _onDiagramTap(TapUpDetails details) {
@@ -1061,19 +1834,29 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     final renderBox = context.findRenderObject() as RenderBox?;
     if (renderBox == null || !renderBox.hasSize) return;
     final localPos = renderBox.globalToLocal(event.position);
-    final centerX = localPos.dx.clamp(0.0, renderBox.size.width);
-    final centerY = localPos.dy.clamp(0.0, renderBox.size.height);
+    final centerX = localPos.dx.clamp(0.0, renderBox.size.width).toDouble();
+    final centerY = localPos.dy.clamp(0.0, renderBox.size.height).toDouble();
 
     final delta = verticalDelta > 0 ? -0.1 : 0.1;
-    final newZoom = (_zoomLevel + delta).clamp(0.1, 10.0);
-    if (newZoom != _zoomLevel) {
-      _zoomLevel = newZoom;
-      // Anchor in JS at the cursor position: the JS side owns the pan
-      // state here, so no absolute pan is pushed (avoids snap-back).
-      _webViewController?.evaluateJavascript(
-        source: 'window.setZoom($newZoom, $centerX, $centerY)',
-      );
+    final ctrl = _webViewController;
+    // Keep every wheel step: before fit completes, Flutter cannot know the
+    // final fitted zoom at which JavaScript will apply this delta.
+    _zoomLevel = _clampManualZoom(_zoomLevel + delta, currentZoom: _zoomLevel);
+    if (ctrl == null || !_canApplyZoomCommands) {
+      _pendingZoomOperations.add((
+        delta: delta,
+        centerX: centerX,
+        centerY: centerY,
+        inputTimestamp: mermaidZoomInputTimestamp,
+        inputSequence: mermaidZoomInputSequence,
+      ));
+      return;
     }
+    // Anchor in JS at the cursor position: JavaScript owns the pan state and
+    // queues the relative step if its initial fit has not completed yet.
+    ctrl.evaluateJavascript(
+      source: 'window.applyWheelZoomAfterFit($delta, $centerX, $centerY);',
+    );
   }
 
   /// Applies a new zoom level while keeping the viewport point
@@ -1091,11 +1874,24 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     _panY = centerY - (centerY - _panY) * (newZoom / oldZoom);
   }
 
-  /// Pushes the Flutter-tracked pan/zoom state to the WebView in a single
-  /// evaluateJavascript call.
-  void _syncPanZoomToWebView() {
+  double _clampManualZoom(double requestedZoom, {required double currentZoom}) {
+    // Let native pinch-in scale from a sub-floor fit without a jump to 0.1.
+    final minZoom = currentZoom < 0.1 ? currentZoom : 0.1;
+    return requestedZoom.clamp(minZoom, 10.0).toDouble();
+  }
+
+  /// Sends a relative native pan/pinch update to the WebView in one call.
+  void _sendGestureTransformToWebView({
+    required int gestureId,
+    required double scale,
+    required double panDeltaX,
+    required double panDeltaY,
+    required double? centerX,
+    required double? centerY,
+  }) {
     _webViewController?.evaluateJavascript(
-      source: 'window.setPanZoom($_panX, $_panY, $_zoomLevel);',
+      source: 'window.applyGestureTransformAfterFit($gestureId, $scale, '
+          '$panDeltaX, $panDeltaY, $centerX, $centerY);',
     );
   }
 
@@ -1121,11 +1917,9 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   /// The overlay uses [RawGestureDetector] with a [GestureArenaTeam]
   /// containing two recognizers, plus a separate [TapGestureRecognizer]:
   ///
-  /// 1. [ImmediateMermaidGestureRecognizer] — wins the arena on the very
-  ///    first [PointerMoveEvent] in ANY direction, before the parent
-  ///    [ScrollView]'s [VerticalDragGestureRecognizer] can determine the
-  ///    drag direction (which typically needs ~1px of vertical movement
-  ///    for mouse devices, or ~18px for touch devices).
+  /// 1. [ImmediateMermaidGestureRecognizer] — wins the arena after movement
+  ///    exceeds gesture slop in ANY direction, while allowing smaller
+  ///    movements to remain taps.
   /// 2. [ScaleGestureRecognizer] — handles pan (single-finger drag) and
   ///    pinch zoom (two-finger pinch), communicating with the WebView via
   ///    [evaluateJavascript].
@@ -1139,7 +1933,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   /// Mermaid diagram area, preventing the parent chat scroll view from
   /// scrolling while the user pans or zooms the diagram.
   ///
-  /// Taps without movement are recognized separately and forwarded to the
+  /// Taps within gesture slop are recognized separately and forwarded to the
   /// WebView as a click on the DOM element at the tap position. The tap
   /// recognizer stays outside the pan/zoom team so a tap does not start a
   /// scale gesture. Moving beyond tap slop rejects it, leaving the immediate
@@ -1152,7 +1946,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   /// All gestures are communicated to the WebView via [evaluateJavascript]
   /// calls (see [_onDiagramTap], [_onScaleUpdate], [_onPointerSignal] and
   /// [_zoomAroundCenter]), so the inline widget owns pan/zoom state and
-  /// sends it to the page via `window.setPanZoom`.
+  /// sends native gesture transforms to the page after its first fit.
   ///
   /// Note: the inline HTML template is the SAME template used by the
   /// full-screen dialog ([MermaidRenderWidget.buildMermaidHtml], with full
@@ -1168,8 +1962,8 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     // without any Flutter-level gesture interception.
     if (kIsWeb) return child;
 
-    // Shared gesture arena team: when the immediate recognizer wins the arena
-    // on first pointer move, the ScaleGestureRecognizer also accepts.
+    // Shared gesture arena team: when the recognizer wins after pointer
+    // movement exceeds gesture slop, the ScaleGestureRecognizer also accepts.
     final team = GestureArenaTeam();
 
     return ClipRect(
@@ -1218,7 +2012,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                     },
                   ),
                   // ImmediateMermaidGestureRecognizer: wins the gesture arena
-                  // on the very first PointerMoveEvent (any direction).
+                  // after movement exceeds gesture slop (any direction).
                   // Defined after ScaleGestureRecognizer so it enters the
                   // arena second, ensuring ScaleGestureRecognizer is in
                   // 'possible' state before the team resolves.
@@ -1257,18 +2051,27 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   /// its own (possibly stale) pan here.
   Future<void> _zoomAroundCenter(double delta) async {
     final ctrl = _webViewController;
-    if (ctrl == null || !_hasLoadedPage) {
-      _pendingZoomDeltas.add(delta);
+    if (ctrl == null || !_canApplyZoomCommands) {
+      _pendingZoomOperations.add((
+        delta: delta,
+        centerX: null,
+        centerY: null,
+        inputTimestamp: mermaidZoomInputTimestamp,
+        inputSequence: mermaidZoomInputSequence,
+      ));
       return;
     }
 
-    // Keep native-side state current for Flutter gesture handling, but let
-    // JavaScript apply the toolbar delta to its live zoom. The web platform
-    // has no JS handler bridge, so Flutter's cached level may not reflect
-    // auto-fit or JS gesture changes.
+    // JavaScript applies the toolbar delta to its live zoom. Keep the native
+    // cache current for gesture handling, but don't discard input based on a
+    // stale limit before this document reports its initial transform: fit can
+    // reset JS zoom before the queued toolbar deltas are replayed.
     if (!kIsWeb) {
-      final target = (_zoomLevel + delta).clamp(0.1, 10.0);
-      if (target == _zoomLevel) return;
+      final target = _clampManualZoom(
+        _zoomLevel + delta,
+        currentZoom: _zoomLevel,
+      );
+      if (_hasReceivedNativeTransform && target == _zoomLevel) return;
       _zoomLevel = target;
     }
 
@@ -1277,26 +2080,75 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     );
   }
 
-  Future<void> _applyPendingZoomDeltas() async {
+  Future<void> _applyPendingZoomOperations() async {
     final ctrl = _webViewController;
-    if (ctrl == null || _pendingZoomDeltas.isEmpty) return;
+    if (ctrl == null) return;
 
-    final pendingDeltas = List<double>.of(_pendingZoomDeltas);
-    _pendingZoomDeltas.clear();
+    final pendingOperations = List.of(_pendingZoomOperations);
+    _pendingZoomOperations.clear();
+
+    final operations = pendingOperations.map<Map<String, Object?>>((operation) {
+      final centerX = operation.centerX;
+      final centerY = operation.centerY;
+      if (centerX == null || centerY == null) {
+        return {
+          'kind': 'toolbar',
+          'delta': operation.delta,
+          'inputTimestamp': operation.inputTimestamp,
+          'inputSequence': operation.inputSequence,
+        };
+      }
+      return {
+        'kind': 'wheel',
+        'delta': operation.delta,
+        'centerX': centerX,
+        'centerY': centerY,
+        'inputTimestamp': operation.inputTimestamp,
+        'inputSequence': operation.inputSequence,
+      };
+    }).toList();
+    // Even an empty flush marks the page as ready to apply queued DOM zooms.
     await ctrl.evaluateJavascript(
-      source: 'window.applyZoomDeltasAfterFit(${jsonEncode(pendingDeltas)})',
+      source: 'window.applyZoomOperationsAfterFit(${jsonEncode(operations)})',
     );
   }
 
   void _toggleSourceCode() {
+    final enteringWebSourceMode = kIsWeb && !_showSourceCode;
+    final returningToWebPreview = kIsWeb && _showSourceCode;
+    if (enteringWebSourceMode) {
+      // Web unmounts its iframe while the source view is shown. Invalidate
+      // callbacks from that iframe and stop its creation/readiness timers.
+      _webViewKey = UniqueKey();
+      _webViewCreationFallbackTimer?.cancel();
+      _readyFallbackTimer?.cancel();
+    } else if (returningToWebPreview) {
+      _prepareWebPreviewRemount();
+    }
     setState(() => _showSourceCode = !_showSourceCode);
+    if (returningToWebPreview) _armWebViewCreationFallback();
+  }
+
+  void _prepareWebPreviewRemount() {
+    // The iframe will be recreated, so the old controller/readiness cannot
+    // represent the new render attempt. Give the new platform view its own
+    // identity and clear the old navigation state and fallbacks.
+    _webViewKey = UniqueKey();
+    _webViewController = null;
+    _isReady = false;
+    _hasLoadedPage = false;
+    _canApplyZoomCommands = false;
+    _errorMessage = null;
+    _hasWebViewCreationTimeoutError = false;
+    _hasWebRetryTimeoutError = false;
+    _webLoadUrl = null;
+    _webRetryUrl = null;
+    _readyFallbackTimer?.cancel();
+    _webViewCreationFallbackTimer?.cancel();
   }
 
   void _openFullScreen() {
-    showMermaidPreviewDialog(
-      context: context,
-      mermaidCode: widget.mermaidCode,
-    );
+    showMermaidPreviewDialog(context: context, mermaidCode: widget.mermaidCode);
   }
 
   // ---------------------------------------------------------------------------
@@ -1313,7 +2165,9 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     if (content.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Mermaid 代码为空，无法保存')),
+          SnackBar(
+            content: Text(AppLocalizations.of(context)!.mermaidSaveEmpty),
+          ),
         );
       }
       _isSaving = false;
@@ -1323,13 +2177,16 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     late final Set<String> folders;
     try {
       folders = await (widget.testOnlyGetAllFolders?.call() ??
-          TextManifest.getAllFolders());
+          TextManifest.getAllFolders(throwOnError: true));
     } catch (e) {
       _isSaving = false;
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('获取文件夹失败: $e'),
+            content: Text(
+              AppLocalizations.of(context)!
+                  .mermaidFolderLoadFailed(e.toString()),
+            ),
             backgroundColor: Colors.red,
           ),
         );
@@ -1353,10 +2210,10 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     final selectedFolder = await FolderPickerDialog.show(
       context,
       availableFolders: folders,
-      title: '保存 Mermaid 图表',
-      hintText: '选择或创建文件夹保存 .mmd 文件',
+      title: AppLocalizations.of(context)!.mermaidSaveTitle,
+      hintText: AppLocalizations.of(context)!.mermaidSaveHint,
       fileNameController: fileNameController,
-      fileNameHintText: '输入文件名（自动添加 .mmd 后缀）',
+      fileNameHintText: AppLocalizations.of(context)!.mermaidSaveFilenameHint,
       onCreateFolder: (name) async {
         await TextManifest.addFolder(name);
         return null;
@@ -1364,7 +2221,14 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       onRefreshFolders: () async => TextManifest.getAllFolders(),
     );
 
-    final userFileName = fileNameController.text.trim();
+    final enteredFileName = fileNameController.text.trim();
+    const mmdExtension = '.mmd';
+    final userFileName = enteredFileName.toLowerCase().endsWith(mmdExtension)
+        ? enteredFileName.substring(
+            0,
+            enteredFileName.length - mmdExtension.length,
+          )
+        : enteredFileName;
 
     if (selectedFolder == null || !mounted) {
       _isSaving = false;
@@ -1374,7 +2238,9 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     if (userFileName.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('文件名不能为空')),
+          SnackBar(
+            content: Text(AppLocalizations.of(context)!.mermaidFilenameEmpty),
+          ),
         );
       }
       _isSaving = false;
@@ -1384,34 +2250,51 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     try {
       final bytes = Uint8List.fromList(utf8.encode(content));
       final hash = computeTextHash(bytes);
-      final storageFileName = '$hash.txt';
 
-      // Ensure unique filename in the selected folder
-      final records = await TextManifest.loadRecords();
-      String finalName = userFileName;
-      int counter = 2;
-      while (records
-          .any((r) => r.name == finalName && r.folder == selectedFolder)) {
-        finalName = '$userFileName ($counter)';
-        counter++;
-      }
+      widget.testOnlyBeforeMmdFolderNameLock?.call();
+      final finalName = await MermaidFolderNameLock.withLock(
+        selectedFolder,
+        () async {
+          // Name selection and record insertion must be one serialized
+          // operation so concurrent saves cannot choose the same visible name.
+          final records = await TextManifest.loadRecordsUncached();
+          var finalName = userFileName;
+          var counter = 2;
+          while (records.any(
+            (r) => r.name == finalName && r.folder == selectedFolder,
+          )) {
+            finalName = '$userFileName ($counter)';
+            counter++;
+          }
 
-      await TextManifest.writeText(storageFileName, content);
-      await TextManifest.addRecord(TextRecord(
-        name: finalName,
-        hash: hash,
-        format: 'mmd',
-        createdAt: DateTime.now(),
-        size: bytes.length,
-        folder: selectedFolder,
-        textLength: content.length,
-      ));
+          await widget.testOnlyAfterMmdNameAllocation?.call(finalName);
+          await TextManifest.saveTextRecord(
+            TextRecord(
+              name: finalName,
+              hash: hash,
+              format: 'mmd',
+              createdAt: DateTime.now(),
+              size: bytes.length,
+              folder: selectedFolder,
+              textLength: content.length,
+            ),
+            content,
+          );
+          return finalName;
+        },
+      );
 
+      widget.testOnlyOnMmdSaveComplete?.call();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              '已保存到文本储存区: ${selectedFolder.isEmpty ? "根目录" : selectedFolder}/$finalName.mmd',
+              AppLocalizations.of(context)!.mermaidSaveSuccess(
+                selectedFolder.isEmpty
+                    ? AppLocalizations.of(context)!.folderPickerRoot
+                    : selectedFolder,
+                finalName,
+              ),
             ),
             duration: const Duration(seconds: 2),
           ),
@@ -1422,7 +2305,9 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('保存失败: $e'),
+            content: Text(
+              AppLocalizations.of(context)!.mermaidSaveFailed(e.toString()),
+            ),
             backgroundColor: Colors.red,
           ),
         );
@@ -1431,10 +2316,10 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     }
   }
 
-  static const _emptyPlaceholderHtml = '''
+  String get _emptyPlaceholderHtml => '''
 <html>
 <body style="background:transparent;display:flex;justify-content:center;align-items:center;height:100%;font-family:sans-serif;color:#999;font-size:14px;padding:16px;text-align:center;">
-<div>No Mermaid code to render</div>
+<div>${AppLocalizations.of(context)!.mermaidEmptyPlaceholder}</div>
 </body>
 </html>''';
 
@@ -1445,6 +2330,17 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   /// waste (it used to run inside [build] on every setState).
   String? _initialHtml;
 
+  Key? _nativeInitialSourceKey;
+  String? _nativeInitialSourceCode;
+
+  String _getNativeInitialSourceCode() {
+    if (_nativeInitialSourceKey != _webViewKey) {
+      _nativeInitialSourceKey = _webViewKey;
+      _nativeInitialSourceCode = widget.mermaidCode.trim();
+    }
+    return _nativeInitialSourceCode!;
+  }
+
   String _getInitialHtml() {
     final code = widget.mermaidCode.trim();
     if (code.isEmpty) {
@@ -1452,8 +2348,20 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     }
     // Same shared template as the fullscreen dialog, with the bundled
     // mermaid.js inlined (offline rendering, no CDN request).
-    return _initialHtml ??= MermaidRenderWidget.buildMermaidHtml(code,
-        inlineMermaidJs: _inlineMermaidJs);
+    return _initialHtml ??= MermaidRenderWidget.buildMermaidHtml(
+      code,
+      inlineMermaidJs: _inlineMermaidJs,
+      errorDocumentGeneration: _mermaidDocumentGeneration,
+      transformDocumentGeneration: _mermaidDocumentGeneration,
+      loadingMessage: AppLocalizations.of(context)!.mermaidLoadingDiagram,
+      cdnLoadTimeoutMessage: AppLocalizations.of(context)!.mermaidLoadTimeout,
+      cdnLoadFailedMessage: AppLocalizations.of(context)!.mermaidCdnLoadFailed,
+      renderErrorPrefix:
+          AppLocalizations.of(context)!.mermaidRenderErrorPrefix(''),
+      initializeErrorPrefix:
+          AppLocalizations.of(context)!.mermaidInitializeErrorPrefix(''),
+      resourceErrorMessage: AppLocalizations.of(context)!.mermaidResourceError,
+    );
   }
 
   @override
@@ -1475,30 +2383,39 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     // ---- Source code mode on web ----
     // On web the WebView is an iframe (HtmlElementView) that the engine
     // composites ABOVE the Flutter canvas, so a Flutter overlay cannot
-    // reliably cover it. Unmount the iframe as before — re-creation is
-    // cheap on web (no platform-view teardown), and the source view
-    // renders unconditionally.
+    // reliably cover it. Unmount the iframe while showing source; returning
+    // to preview starts a new render attempt with a fresh creation fallback.
     if (_showSourceCode && kIsWeb) {
-      return _buildSourceCodeView(cs, isDark, effectiveHeight);
+      final sourceView = _buildSourceCodeView(cs, isDark, effectiveHeight);
+      if (!widget.expand) return sourceView;
+
+      // A Row gives its children loose height constraints. Keep expanded
+      // previews full-height in that layout while retaining adaptive source
+      // height when no bounded preview height is available.
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          if (!constraints.hasBoundedHeight) return sourceView;
+          return SizedBox(height: constraints.maxHeight, child: sourceView);
+        },
+      );
     }
 
     // ---- Render layer + source-code overlay (stable root) ----
-    // The render layer is ALWAYS the Stack's base child, so its element —
-    // and with it the InAppWebView platform view on native — keeps the
-    // same tree slot across source↔preview toggles. The source code view
-    // is drawn ON TOP of the live render layer only while the source is
-    // shown; toggling back just removes the overlay and the
-    // already-rendered diagram is visible instantly — no blank flash, no
-    // loading animation, no platform-view re-creation. This mirrors
-    // MermaidChartPage's split mode, which keeps the preview mounted while
-    // the code editor is visible.
+    // On native platforms the render layer stays mounted as the Stack's base
+    // child, so its InAppWebView keeps the same tree slot across source↔preview
+    // toggles. The source view is drawn over the live render layer. Web uses
+    // the iframe-unmounting path above because an iframe cannot be covered
+    // reliably by Flutter overlays.
     //
     // CodeBlockSourceView provides its own border, background, line
     // numbers, and wrap toggle, so the source view needs no extra border
     // container — it sits directly on top of the render layer.
     return Stack(
       children: [
-        _buildRenderLayer(cs, effectiveHeight),
+        ExcludeSemantics(
+          excluding: _showSourceCode,
+          child: _buildRenderLayer(cs, effectiveHeight),
+        ),
         if (_showSourceCode)
           Positioned.fill(
             child: _buildSourceCodeView(cs, isDark, effectiveHeight),
@@ -1507,10 +2424,13 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     );
   }
 
+  Widget _buildWebOverlay(Widget child) =>
+      kIsWeb ? PointerInterceptor(child: child) : child;
+
   /// Builds the render layer: the deferred-creation loading placeholder
   /// (before the WebView exists), or the WebView with its overlays and
-  /// button row. Kept mounted underneath the source code view when
-  /// [_showSourceCode] is true (see [build]).
+  /// button row. Kept mounted underneath source mode on native platforms
+  /// (see [build]).
   Widget _buildRenderLayer(ColorScheme cs, double? effectiveHeight) {
     // ---- Loading placeholder (deferred WebView creation) ----
     // On native platforms the WebView is created only after the bundled
@@ -1524,7 +2444,12 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
         child: Stack(
           children: [
             Positioned.fill(
-              child: _buildLoadingIndicator(cs, '正在准备渲染引擎...'),
+              child: _buildWebOverlay(
+                _buildLoadingIndicator(
+                  cs,
+                  AppLocalizations.of(context)!.mermaidPrepareEngine,
+                ),
+              ),
             ),
             // Zoom controls overlay — visible even during loading when
             // showZoomControls is true.
@@ -1532,7 +2457,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
               Positioned(
                 top: 4,
                 right: 4,
-                child: _buildZoomControls(cs),
+                child: _buildWebOverlay(_buildZoomControls(cs)),
               ),
           ],
         ),
@@ -1542,6 +2467,11 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     // ---- Render mode: WebView + overlays + button row ----
     final showLoading = !_isReady && _errorMessage == null;
     final showErrorOverlay = _errorMessage != null;
+    final currentWebViewKey = _webViewKey;
+    final initialNativeSourceCode =
+        !kIsWeb && defaultTargetPlatform != TargetPlatform.windows
+            ? _getNativeInitialSourceCode()
+            : null;
 
     return _buildBorderedContainer(
       height: effectiveHeight,
@@ -1552,7 +2482,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
           // pan/zoom, kept alive once created.
           _buildGestureWrapper(
             InAppWebView(
-              key: _webViewKey,
+              key: currentWebViewKey,
               initialSettings: InAppWebViewSettings(
                 javaScriptEnabled: true,
                 transparentBackground: true,
@@ -1567,9 +2497,17 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                       data: _getInitialHtml(),
                       mimeType: 'text/html',
                       encoding: 'utf8',
+                      baseUrl: _initialNativeLoadBaseUrl(),
                     ),
               onWebViewCreated: (ctrl) {
+                if (currentWebViewKey != _webViewKey) return;
                 _webViewController = ctrl;
+                if (mounted && _hasWebViewCreationTimeoutError) {
+                  setState(() {
+                    _errorMessage = null;
+                    _hasWebViewCreationTimeoutError = false;
+                  });
+                }
                 // On web the iframe manages its own loading state (the
                 // asset template shows a hint until the diagram renders),
                 // so the widget is immediately ready and no fallback timer
@@ -1580,9 +2518,17 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                   }
                   _loadMermaidCode();
                 } else {
-                  // The initial page (initialData) loads outside
-                  // [_loadMermaidCode], so arm the ready fallback here too.
-                  _armReadyFallback();
+                  if (initialNativeSourceCode != null &&
+                      initialNativeSourceCode != widget.mermaidCode.trim()) {
+                    // Native initialData is a snapshot. If its source changed
+                    // while the platform view was mounting, apply the latest
+                    // source after the controller becomes available.
+                    _loadMermaidCode();
+                  } else {
+                    // The initial page (initialData) loads outside
+                    // [_loadMermaidCode], so arm the ready fallback here too.
+                    _armReadyFallback();
+                  }
                 }
                 // Register the JS→Flutter message bridge (error reporting
                 // and transform sync). flutter_inappwebview's WEB platform
@@ -1595,11 +2541,18 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                   ctrl.addJavaScriptHandler(
                     handlerName: 'onMermaidError',
                     callback: (args) {
-                      if (mounted) {
-                        final msg =
-                            args.isNotEmpty ? args[0].toString() : '未知错误';
-                        setState(() => _errorMessage = msg);
+                      if (!mounted ||
+                          (kIsWeb && currentWebViewKey != _webViewKey) ||
+                          args.length < 2) {
+                        return;
                       }
+                      final generation = int.tryParse(args[1].toString());
+                      if (generation != _mermaidDocumentGeneration) return;
+                      final msg = args[0].toString();
+                      setState(() {
+                        _errorMessage = msg;
+                        _hasWebRetryTimeoutError = false;
+                      });
                     },
                   );
                   ctrl.addJavaScriptHandler(
@@ -1613,7 +2566,19 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                       //
                       // No setState: these values are not read in build();
                       // the WebView itself reflects the transform visually.
-                      if (!mounted || args.length < 3) return;
+                      if (!mounted ||
+                          (kIsWeb && currentWebViewKey != _webViewKey) ||
+                          (!kIsWeb && ctrl != _webViewController) ||
+                          args.length < 3) {
+                        return;
+                      }
+                      if (!kIsWeb) {
+                        final generation = args.length < 5
+                            ? null
+                            : int.tryParse(args[4].toString());
+                        if (generation != _mermaidDocumentGeneration) return;
+                        if (args[3] == true) _hasReceivedNativeTransform = true;
+                      }
                       final zoom = double.tryParse(args[0].toString());
                       final px = double.tryParse(args[1].toString());
                       final py = double.tryParse(args[2].toString());
@@ -1625,30 +2590,91 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                   );
                 } catch (e) {
                   debugPrint(
-                      '[MermaidRenderWidget] JS handler bridge unavailable: $e');
+                    '[MermaidRenderWidget] JS handler bridge unavailable: $e',
+                  );
                 }
               },
               onLoadStop: (ctrl, url) {
+                if (kIsWeb && currentWebViewKey != _webViewKey) return;
+                if (!kIsWeb &&
+                    (ctrl != _webViewController ||
+                        (_nativeLoadBaseUrl != null &&
+                            url?.toString() !=
+                                _nativeLoadBaseUrl.toString()))) {
+                  return;
+                }
+                if (kIsWeb &&
+                    ((_webRetryUrl != null && url == null) ||
+                        (_webLoadUrl != null &&
+                            (url == null ||
+                                _resolveWebUrl(url.toString()) !=
+                                    _webLoadUrl)))) {
+                  return;
+                }
                 _hasLoadedPage = true;
-                if (mounted && !_isReady) {
-                  setState(() => _isReady = true);
+                _canApplyZoomCommands = true;
+                if (mounted && (!_isReady || _hasWebRetryTimeoutError)) {
+                  setState(() {
+                    _isReady = true;
+                    if (_hasWebRetryTimeoutError) {
+                      _errorMessage = null;
+                      _hasWebRetryTimeoutError = false;
+                    }
+                  });
                 }
                 _readyFallbackTimer?.cancel();
-                unawaited(_applyPendingZoomDeltas());
+                unawaited(_applyPendingZoomOperations());
               },
               onReceivedError: (controller, request, error) {
-                _readyFallbackTimer?.cancel();
+                if (controller != _webViewController) return;
+                if (request.isForMainFrame == true &&
+                    !kIsWeb &&
+                    _nativeLoadBaseUrl != null &&
+                    request.url.toString() != _nativeLoadBaseUrl.toString()) {
+                  return;
+                }
+                final requestUrl = request.url.toString();
+                final documentGenerationMatch = RegExp(
+                  r'^https://mermaid-(\d+)\.invalid/',
+                ).firstMatch(requestUrl);
+                if (!kIsWeb &&
+                    request.isForMainFrame != true &&
+                    _nativeLoadBaseUrl != null &&
+                    (documentGenerationMatch == null ||
+                        documentGenerationMatch.group(1) !=
+                            '$_nativeLoadGeneration')) {
+                  // Only same-origin resources carry the synthetic document
+                  // identity in their URL. Cross-origin failures are reported
+                  // from the page through the generation-tagged JS bridge.
+                  return;
+                }
+                if (kIsWeb && request.isForMainFrame == true) {
+                  final requestUrl = _resolveWebUrl(request.url.toString());
+                  final sourceKey =
+                      Uri.tryParse(requestUrl)?.queryParameters['sourceKey'];
+                  if (sourceKey != null) {
+                    unawaited(_removeStoredWebSource(controller, sourceKey));
+                  }
+                  if ((_webLoadUrl != null && requestUrl != _webLoadUrl) ||
+                      (_webRetryUrl != null && requestUrl != _webRetryUrl)) {
+                    return;
+                  }
+                }
                 // WebView creation ends the Flutter loading overlay before
                 // the asset URL finishes navigating. Surface main-frame
                 // failures even after that, but leave web subresource errors
                 // to the iframe's own loading/error UI. Native behavior still
-                // only reports load errors while its initial page is pending.
+                // only reports load errors while its initial page is pending;
+                // the readiness fallback only hides the loading overlay.
                 final shouldShowError =
-                    kIsWeb ? request.isForMainFrame == true : !_isReady;
+                    kIsWeb ? request.isForMainFrame == true : !_hasLoadedPage;
                 if (mounted && shouldShowError) {
+                  _readyFallbackTimer?.cancel();
                   setState(() {
                     _isReady = true;
-                    _errorMessage = '页面加载失败: ${error.description}';
+                    _errorMessage = AppLocalizations.of(context)!
+                        .mermaidPageLoadFailed(error.description);
+                    _hasWebRetryTimeoutError = false;
                   });
                 }
               },
@@ -1658,40 +2684,50 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
           // Loading overlay
           if (showLoading)
             Positioned.fill(
-              child: Container(
-                color: cs.surface,
-                child: _buildLoadingIndicator(cs, '加载渲染引擎...'),
+              child: _buildWebOverlay(
+                Container(
+                  color: cs.surface,
+                  child: _buildLoadingIndicator(
+                    cs,
+                    AppLocalizations.of(context)!.mermaidLoadingEngine,
+                  ),
+                ),
               ),
             ),
 
           // Error overlay
           if (showErrorOverlay)
             Positioned.fill(
-              child: Container(
-                color: cs.surface,
-                child: _buildErrorWidget(cs, _errorMessage!),
+              child: _buildWebOverlay(
+                Container(
+                  color: cs.surface,
+                  child: _buildErrorWidget(cs, _errorMessage!),
+                ),
               ),
             ),
 
-          // Button row (top right) — only show when widget.showToolbar is true
-          // and the WebView is ready with no error.
-          if (widget.showToolbar && !showLoading && !showErrorOverlay)
+          // Button row (top right) — keep the toolbar available after a
+          // render error so users can still inspect or save the source.
+          // The error overlay already intercepts WebView taps, so avoid a
+          // second PointerInterceptor around the toolbar in that state.
+          if (widget.showToolbar && !showLoading)
             Positioned(
               top: 4,
               right: 4,
-              child: _buildButtonRow(cs),
+              child: showErrorOverlay
+                  ? _buildButtonRow(cs)
+                  : _buildWebOverlay(_buildButtonRow(cs)),
             ),
 
           // Zoom controls overlay — shown independently of showToolbar.
           // When showToolbar is also true and the widget is ready, the
           // toolbar already includes zoom controls (in render mode), so
           // we skip to avoid duplication.
-          if (widget.showZoomControls &&
-              (!widget.showToolbar || showLoading || showErrorOverlay))
+          if (widget.showZoomControls && (!widget.showToolbar || showLoading))
             Positioned(
               top: 4,
               right: 4,
-              child: _buildZoomControls(cs),
+              child: _buildWebOverlay(_buildZoomControls(cs)),
             ),
         ],
       ),
@@ -1713,14 +2749,15 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   /// only the block-specific "查看图表" toggle is passed as an action
   /// button (it sits right of the common buttons).
   Widget _buildSourceCodeView(
-      ColorScheme cs, bool isDark, double? effectiveHeight) {
+    ColorScheme cs,
+    bool isDark,
+    double? effectiveHeight,
+  ) {
     return CodeBlockSourceView(
       code: widget.mermaidCode,
       language: 'mermaid',
       height: effectiveHeight,
-      actionButtons: [
-        _buildSrcCodeActionButton(),
-      ],
+      actionButtons: [_buildSrcCodeActionButton()],
     );
   }
 
@@ -1731,9 +2768,13 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       child: InkWell(
         customBorder: const CircleBorder(),
         onTap: _toggleSourceCode,
-        child: const Padding(
+        child: Padding(
           padding: EdgeInsets.all(8),
-          child: Icon(Icons.image, size: 20, semanticLabel: '查看图表'),
+          child: Icon(
+            Icons.image,
+            size: 20,
+            semanticLabel: AppLocalizations.of(context)!.mermaidDiagramSemantic,
+          ),
         ),
       ),
     );
@@ -1768,29 +2809,29 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
           // ---- Zoom controls (block-specific, left side) ----
           _buildActionButton(
             icon: Icons.zoom_out,
-            label: '缩小',
+            label: AppLocalizations.of(context)!.mermaidZoomOut,
             onTap: _zoomOut,
           ),
           _buildActionButton(
             icon: Icons.zoom_in,
-            label: '放大',
+            label: AppLocalizations.of(context)!.mermaidZoomIn,
             onTap: _zoomIn,
           ),
 
           // ---- Common buttons (right-aligned, fixed order) ----
           _buildActionButton(
             icon: Icons.fullscreen,
-            label: '全屏',
+            label: AppLocalizations.of(context)!.mermaidFullscreen,
             onTap: _openFullScreen,
           ),
           _buildActionButton(
             icon: Icons.save,
-            label: '保存',
+            label: AppLocalizations.of(context)!.mermaidSaveButton,
             onTap: _saveAsMmd,
           ),
           _buildActionButton(
             icon: Icons.code,
-            label: '查看源码',
+            label: AppLocalizations.of(context)!.mermaidSourceButton,
             onTap: _toggleSourceCode,
           ),
         ],
@@ -1831,12 +2872,12 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
         children: [
           _buildActionButton(
             icon: Icons.zoom_out,
-            label: '缩小',
+            label: AppLocalizations.of(context)!.mermaidZoomOut,
             onTap: _zoomOut,
           ),
           _buildActionButton(
             icon: Icons.zoom_in,
-            label: '放大',
+            label: AppLocalizations.of(context)!.mermaidZoomIn,
             onTap: _zoomIn,
           ),
         ],
@@ -1871,17 +2912,11 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          CircularProgressIndicator(
-            strokeWidth: 2,
-            color: cs.primary,
-          ),
+          CircularProgressIndicator(strokeWidth: 2, color: cs.primary),
           const SizedBox(height: 8),
           Text(
             text,
-            style: TextStyle(
-              fontSize: 12,
-              color: cs.onSurfaceVariant,
-            ),
+            style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
           ),
         ],
       ),
@@ -1891,11 +2926,8 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   Widget _buildEmptyPlaceholder(ColorScheme cs) {
     return Center(
       child: Text(
-        'No Mermaid code to render',
-        style: TextStyle(
-          fontSize: 13,
-          color: cs.onSurfaceVariant,
-        ),
+        AppLocalizations.of(context)!.mermaidEmptyPlaceholder,
+        style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
       ),
     );
   }
@@ -1910,7 +2942,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
             Icon(Icons.error_outline, size: 32, color: cs.error),
             const SizedBox(height: 8),
             Text(
-              '渲染图表时出错',
+              AppLocalizations.of(context)!.mermaidRenderErrorTitle,
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
@@ -1921,10 +2953,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
             Text(
               message,
               textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 11,
-                color: cs.onSurfaceVariant,
-              ),
+              style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
               maxLines: 4,
               overflow: TextOverflow.ellipsis,
             ),
@@ -1932,7 +2961,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
             OutlinedButton.icon(
               onPressed: _retry,
               icon: const Icon(Icons.refresh, size: 16),
-              label: const Text('重试'),
+              label: Text(AppLocalizations.of(context)!.mermaidRetry),
             ),
           ],
         ),

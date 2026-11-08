@@ -1,76 +1,148 @@
 name: Release Build
 
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag whose source should be built
+        required: true
+        type: string
+      platforms:
+        description: Comma-separated platforms to rebuild (or all)
+        required: true
+        default: all
+        type: string
+      include_release_notes:
+        description: Embed release notes; disable for legacy tags without compressed-note support
+        required: true
+        default: true
+        type: boolean
 
 permissions:
   contents: write
 
 env:
-  TAG: ${{ github.event.release.tag_name || github.ref_name }}
+  TAG: ${{ github.event.inputs.tag || github.event.release.tag_name || github.ref_name }}
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
+  create-release-draft:
+    if: ${{ github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create release draft with generated notes
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          draft: true
+          generate_release_notes: true
+
   prepare-version:
+    needs: create-release-draft
+    if: ${{ always() && (needs.create-release-draft.result == 'success' || needs.create-release-draft.result == 'skipped') }}
     runs-on: ubuntu-latest
     outputs:
       app_version: ${{ steps.extract-version.outputs.app_version }}
       release_time: ${{ steps.build-info.outputs.release_time }}
-      release_notes_b64: ${{ steps.build-info.outputs.release_notes_b64 }}
     steps:
+      - name: Validate dispatch inputs
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        env:
+          PLATFORMS: ${{ inputs.platforms }}
+          INCLUDE_RELEASE_NOTES: ${{ inputs.include_release_notes }}
+        run: |
+          python3 - <<'PY'
+          import os
+
+          allowed = {"android", "ios", "linux", "macos-arm64", "macos-x64", "web", "windows"}
+          selected = os.environ["PLATFORMS"].split(",")
+          if os.environ["INCLUDE_RELEASE_NOTES"] not in {"true", "false"}:
+              raise SystemExit("Invalid include_release_notes input")
+          if selected == ["all"]:
+              raise SystemExit(0)
+          if not selected or any(item not in allowed for item in selected) or len(set(selected)) != len(selected):
+              raise SystemExit("Invalid platforms input; use all or a unique comma-separated platform list")
+          PY
       - id: extract-version
         run: |
           TAG="${{ env.TAG }}"
           echo "app_version=$TAG" >> "$GITHUB_OUTPUT"
 
       # 构建信息：发布时间 + 更新内容，写入应用「版本信息」面板。
-      # - release 事件：取自 GitHub Release 的发布时间与 Release 说明。
-      # - workflow_dispatch：优先取该 tag 对应 release 的真实发布时间
-      #   与说明 —— 重建旧 tag 时，用户安装的仍是该 release 的发布时间点，
-      #   晚于它的发布才算新版本；tag 不存在（如按分支手动构建）时回退到
-      #   当前 UTC 时间、无更新内容。
-      # 更新内容经 Base64 编码后通过 --dart-define 注入，
-      # 避免换行/特殊字符破坏命令行。
+      # - tag push：从预先创建的 release draft 读取创建时间和自动生成的说明。
+      # - workflow_dispatch：优先取该 tag 对应 release 的发布时间与说明；
+      #   重建旧 tag 时保留原发布时间，tag 无关联 release 时回退到当前 UTC 时间。
+      # 更新内容压缩后再 Base64 写入 JSON，避免大型发布说明超过
+      # Flutter/Gradle 的进程参数长度限制。
       - id: build-info
         run: |
-          if [ "${{ github.event_name }}" = "release" ]; then
-            RELEASE_TIME="$(jq -r '.release.published_at // empty' "$GITHUB_EVENT_PATH")"
-            RELEASE_NOTES="$(jq -r '.release.body // ""' "$GITHUB_EVENT_PATH")"
+          RELEASE_NOTES_FILE="$RUNNER_TEMP/release-notes.txt"
+          RELEASE_JSON="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" 2>/dev/null || true)"
+          RELEASE_TIME="$(printf '%s' "$RELEASE_JSON" | jq -r '.published_at // .created_at // empty' 2>/dev/null || true)"
+          if [ -z "$RELEASE_TIME" ]; then
+            RELEASE_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            : > "$RELEASE_NOTES_FILE"
           else
-            RELEASE_TIME="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" -q '.published_at // empty' 2>/dev/null || true)"
-            if [ -z "$RELEASE_TIME" ]; then
-              RELEASE_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-              RELEASE_NOTES=""
-            else
-              RELEASE_NOTES="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" -q '.body // ""' 2>/dev/null || true)"
-            fi
+            printf '%s' "$RELEASE_JSON" | jq -j '.body // ""' > "$RELEASE_NOTES_FILE" || true
           fi
-          # 限制更新内容长度：base64 后每 3 字节膨胀为 4 字符，超长的
-          # release 说明会撑爆 Windows 命令行上限（flutter.bat 经 cmd.exe
-          # 执行，上限 ~8191 字符；base64 ≈ 4000 字节 → ~5336 字符）。
-          # 按 UTF-8 字节截断：decode(errors='ignore') 丢弃末尾不完整
-          # 的多字节字符，保证输出始终是合法 UTF-8。
-          RELEASE_NOTES="$(printf '%s' "$RELEASE_NOTES" | python3 -c 'import sys; sys.stdout.buffer.write(sys.stdin.buffer.read(4000).decode("utf-8", "ignore").encode("utf-8"))')"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.include_release_notes }}" != "true" ]; then
+            : > "$RELEASE_NOTES_FILE"
+          fi
           echo "release_time=$RELEASE_TIME" >> "$GITHUB_OUTPUT"
-          echo "release_notes_b64=$(printf '%s' "$RELEASE_NOTES" | base64 -w 0)" >> "$GITHUB_OUTPUT"
+          python3 - "$GITHUB_WORKSPACE/build-info.json" "$TAG" "$RELEASE_TIME" "$RELEASE_NOTES_FILE" <<'PY'
+          import base64
+          import json
+          import pathlib
+          import sys
+          import zlib
+
+          output, version, release_time, notes_path = sys.argv[1:]
+          build_info = {
+              "APP_VERSION": version,
+              "APP_RELEASE_TIME": release_time,
+              # Keep the legacy define empty so this workflow can rebuild tags
+              # whose source predates compressed-note decoding.
+              "APP_RELEASE_NOTES_B64": "",
+              # Compress potentially large notes before Flutter expands
+              # dart-defines into platform command-line args.
+              "APP_RELEASE_NOTES_ZLIB_B64": base64.b64encode(
+                  zlib.compress(pathlib.Path(notes_path).read_bytes())
+              ).decode("ascii"),
+          }
+          pathlib.Path(output).write_text(json.dumps(build_info), encoding="utf-8")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-build-info
+          path: build-info.json
+          retention-days: 1
+          if-no-files-found: error
 
   windows:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.platforms == 'all' || contains(format(',{0},', inputs.platforms), ',windows,') }}
     needs: prepare-version
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-build-info
       - uses: subosito/flutter-action@v2
         with:
-          channel: stable
-          # 固定 3.44.9：Flutter 3.47.0 在 windows 上 flutter_assemble 失败
-          # （MSB8066, flutter_windows.dll），3.44.9 已验证可成功构建。
-          flutter-version: 3.44.9
+          # Keep release builds on the Flutter SDK version validated for this app.
+          flutter-version: 3.47.8
           cache: true
           pub-cache: true
       - run: flutter pub get
-      - run: flutter build windows --release --dart-define=APP_VERSION=${{ needs.prepare-version.outputs.app_version }} --dart-define=APP_RELEASE_TIME=${{ needs.prepare-version.outputs.release_time }} --dart-define=APP_RELEASE_NOTES_B64=${{ needs.prepare-version.outputs.release_notes_b64 }}
+      - uses: NuGet/setup-nuget@v2
+      - name: Verify NuGet CLI
+        run: nuget help
+      - run: flutter build windows --release --dart-define-from-file=build-info.json
       - name: Create Windows installer
         shell: pwsh
         run: |
@@ -82,19 +154,26 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.TAG }}
+          draft: ${{ github.event_name == 'push' }}
           files: artifacts/stroom-windows-x64-installer-*.exe
 
 
 
   # Builds native arm64 binary on Apple Silicon (ARM64) runner.
   macos-arm64:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.platforms == 'all' || contains(format(',{0},', inputs.platforms), ',macos-arm64,') }}
     needs: prepare-version
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-build-info
       - uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          flutter-version: 3.47.8
           cache: true
           pub-cache: true
       - run: flutter create --platforms=macos .
@@ -110,7 +189,7 @@ jobs:
         run: |
           pod repo add trunk https://github.com/CocoaPods/Specs.git 2>/dev/null || true
       - name: Build macOS arm64
-        run: flutter build macos --release --dart-define=APP_VERSION=${{ needs.prepare-version.outputs.app_version }} --dart-define=APP_RELEASE_TIME=${{ needs.prepare-version.outputs.release_time }} --dart-define=APP_RELEASE_NOTES_B64=${{ needs.prepare-version.outputs.release_notes_b64 }}
+        run: flutter build macos --release --dart-define-from-file=build-info.json
         env:
           FLUTTER_XCODE_ARCHS: arm64
       - name: Create macOS arm64 archive
@@ -149,18 +228,25 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.TAG }}
+          draft: ${{ github.event_name == 'push' }}
           files: stroom-macos-arm64-release-*.zip
 
   # x86_64 is cross-compiled on ARM64 via Xcode cross-compilation.
   # GitHub no longer provides Intel macOS runners (macos-13 removed).
   macos-x64:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.platforms == 'all' || contains(format(',{0},', inputs.platforms), ',macos-x64,') }}
     needs: prepare-version
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-build-info
       - uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          flutter-version: 3.47.8
           cache: true
           pub-cache: true
       - run: flutter create --platforms=macos .
@@ -176,7 +262,7 @@ jobs:
         run: |
           pod repo add trunk https://github.com/CocoaPods/Specs.git 2>/dev/null || true
       - name: Build macOS x64
-        run: flutter build macos --release --dart-define=APP_VERSION=${{ needs.prepare-version.outputs.app_version }} --dart-define=APP_RELEASE_TIME=${{ needs.prepare-version.outputs.release_time }} --dart-define=APP_RELEASE_NOTES_B64=${{ needs.prepare-version.outputs.release_notes_b64 }}
+        run: flutter build macos --release --dart-define-from-file=build-info.json
         env:
           FLUTTER_XCODE_ARCHS: x86_64
       - name: Create macOS x64 archive
@@ -215,24 +301,31 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.TAG }}
+          draft: ${{ github.event_name == 'push' }}
           files: stroom-macos-x64-release-*.zip
 
   linux:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.platforms == 'all' || contains(format(',{0},', inputs.platforms), ',linux,') }}
     needs: prepare-version
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-build-info
       - uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          flutter-version: 3.47.8
           cache: true
           pub-cache: true
       - run: |
           sudo apt-get update -y
-          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libmpv-dev libayatana-appindicator3-dev
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libmpv-dev libayatana-appindicator3-dev libsecret-1-dev
       - run: flutter create --platforms=linux .
       - run: flutter pub get
-      - run: flutter build linux --release --dart-define=APP_VERSION=${{ needs.prepare-version.outputs.app_version }} --dart-define=APP_RELEASE_TIME=${{ needs.prepare-version.outputs.release_time }} --dart-define=APP_RELEASE_NOTES_B64=${{ needs.prepare-version.outputs.release_notes_b64 }}
+      - run: flutter build linux --release --dart-define-from-file=build-info.json
       - name: Create Linux archive
         run: |
           cd build/linux/x64/release/bundle
@@ -240,20 +333,27 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.TAG }}
+          draft: ${{ github.event_name == 'push' }}
           files: stroom-linux-x64-release-*.zip
 
   web:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.platforms == 'all' || contains(format(',{0},', inputs.platforms), ',web,') }}
     needs: prepare-version
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-build-info
       - uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          flutter-version: 3.47.8
           cache: true
           pub-cache: true
       - run: flutter pub get
-      - run: flutter build web --release --dart-define=APP_VERSION=${{ needs.prepare-version.outputs.app_version }} --dart-define=APP_RELEASE_TIME=${{ needs.prepare-version.outputs.release_time }} --dart-define=APP_RELEASE_NOTES_B64=${{ needs.prepare-version.outputs.release_notes_b64 }}
+      - run: flutter build web --release --dart-define-from-file=build-info.json
       - name: Create Web archive
         run: |
           cd build/web
@@ -261,16 +361,23 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.TAG }}
+          draft: ${{ github.event_name == 'push' }}
           files: stroom-web-release-*.zip
 
   ios:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.platforms == 'all' || contains(format(',{0},', inputs.platforms), ',ios,') }}
     needs: prepare-version
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-build-info
       - uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          flutter-version: 3.47.8
           cache: true
           pub-cache: true
       - run: flutter create --platforms=ios .
@@ -286,7 +393,7 @@ jobs:
         run: |
           pod repo add trunk https://github.com/CocoaPods/Specs.git 2>/dev/null || true
       - name: Build unsigned iOS app
-        run: flutter build ios --release --no-codesign --dart-define=APP_VERSION=${{ needs.prepare-version.outputs.app_version }} --dart-define=APP_RELEASE_TIME=${{ needs.prepare-version.outputs.release_time }} --dart-define=APP_RELEASE_NOTES_B64=${{ needs.prepare-version.outputs.release_notes_b64 }}
+        run: flutter build ios --release --no-codesign --dart-define-from-file=build-info.json
       - name: Create unsigned IPA (Payload/Runner.app → zip)
         run: |
           TAG="${{ env.TAG }}"
@@ -297,20 +404,27 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.TAG }}
+          draft: ${{ github.event_name == 'push' }}
           files: stroom-ios-unsigned-*.ipa
 
   android:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.platforms == 'all' || contains(format(',{0},', inputs.platforms), ',android,') }}
     needs: prepare-version
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-build-info
       - uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
       - uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          flutter-version: 3.47.8
           cache: true
           pub-cache: true
       - uses: actions/cache@v4
@@ -329,10 +443,23 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: flutter build apk --release --dart-define=APP_VERSION=${{ needs.prepare-version.outputs.app_version }} --dart-define=APP_RELEASE_TIME=${{ needs.prepare-version.outputs.release_time }} --dart-define=APP_RELEASE_NOTES_B64=${{ needs.prepare-version.outputs.release_notes_b64 }}
+        run: flutter build apk --release --dart-define-from-file=build-info.json
       - name: Rename APK
         run: mv build/app/outputs/flutter-apk/app-release.apk "stroom-android-release-$TAG.apk"
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.TAG }}
+          draft: ${{ github.event_name == 'push' }}
           files: stroom-android-release-*.apk
+
+
+  publish-release:
+    if: ${{ github.event_name == 'push' }}
+    needs: [windows, macos-arm64, macos-x64, linux, web, ios, android]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish release after all platform builds succeed
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          draft: false

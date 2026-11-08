@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:math';
 import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/utils/audio_codecs.dart';
 import 'package:stroom/utils/audio_chunker.dart';
 
 /// Build a synthetic PCM WAV file with configurable silence gaps.
@@ -35,7 +37,14 @@ Uint8List _buildTestWav({
           : ((sin(2 * pi * 440 * sampleIdx / sampleRate) * seg.$2 * 32767)
               .round()
               .clamp(-32768, 32767));
-      pcmData.setInt16(sampleIdx * bytesPerSample, value, Endian.little);
+      for (int channel = 0; channel < numChannels; channel++) {
+        final interleavedIndex = sampleIdx * numChannels + channel;
+        pcmData.setInt16(
+          interleavedIndex * bytesPerSample,
+          value,
+          Endian.little,
+        );
+      }
       sampleIdx++;
     }
   }
@@ -81,6 +90,203 @@ Uint8List _buildTestWav({
   result.setRange(0, 44, header.buffer.asUint8List());
   result.setRange(44, 44 + dataSize, pcmData.buffer.asUint8List());
   return result;
+}
+
+Uint8List _buildWavFromFrames(
+  List<List<int>> frames, {
+  int sampleRate = 1000,
+}) {
+  final numChannels = frames.isEmpty ? 1 : frames.first.length;
+  final blockAlign = numChannels * 2;
+  final dataSize = frames.length * blockAlign;
+  final output = ByteData(44 + dataSize);
+  var offset = 0;
+
+  void writeFourCc(String value) {
+    for (var i = 0; i < 4; i++) {
+      output.setUint8(offset++, value.codeUnitAt(i));
+    }
+  }
+
+  void writeUint16(int value) {
+    output.setUint16(offset, value, Endian.little);
+    offset += 2;
+  }
+
+  void writeUint32(int value) {
+    output.setUint32(offset, value, Endian.little);
+    offset += 4;
+  }
+
+  writeFourCc('RIFF');
+  writeUint32(output.lengthInBytes - 8);
+  writeFourCc('WAVE');
+  writeFourCc('fmt ');
+  writeUint32(16);
+  writeUint16(1);
+  writeUint16(numChannels);
+  writeUint32(sampleRate);
+  writeUint32(sampleRate * blockAlign);
+  writeUint16(blockAlign);
+  writeUint16(16);
+  writeFourCc('data');
+  writeUint32(dataSize);
+  for (final frame in frames) {
+    for (final sample in frame) {
+      writeUint16(sample & 0xffff);
+    }
+  }
+
+  return Uint8List.view(output.buffer);
+}
+
+Uint8List _buildExtensiblePcmWav(
+  Uint8List pcmWav, {
+  int? channelMask,
+}) {
+  final result = Uint8List(pcmWav.length + 24);
+  result.setRange(0, 20, pcmWav);
+  result.setRange(20, 36, pcmWav, 20);
+  result.setRange(60, result.length, pcmWav, 36);
+
+  final data = ByteData.sublistView(result);
+  data.setUint32(4, result.length - 8, Endian.little);
+  data.setUint32(16, 40, Endian.little);
+  data.setUint16(20, 0xfffe, Endian.little); // WAVE_FORMAT_EXTENSIBLE
+  data.setUint16(36, 22, Endian.little); // cbSize
+  data.setUint16(38, 16, Endian.little); // valid bits per sample
+  final channels = ByteData.sublistView(pcmWav).getUint16(22, Endian.little);
+  final mask = channelMask ??
+      switch (channels) {
+        1 => 1,
+        2 => 3,
+        _ => 0,
+      };
+  data.setUint32(40, mask, Endian.little);
+  result.setRange(44, 60, [
+    0x01, 0x00, 0x00, 0x00, // PCM subtype GUID, Data1
+    0x00, 0x00, // Data2
+    0x10, 0x00, // Data3
+    0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71, // Data4
+  ]);
+  return result;
+}
+
+List<int> _readPcmValues(Uint8List wav) {
+  final info = parseWavHeader(wav);
+  final bytes = ByteData.sublistView(
+    wav,
+    info.dataOffset,
+    info.dataOffset + info.dataSize,
+  );
+  return List<int>.generate(
+    info.dataSize ~/ 2,
+    (index) => bytes.getInt16(index * 2, Endian.little),
+  );
+}
+
+void _writeUint16(Uint8List bytes, int offset, int value) {
+  bytes.buffer
+      .asByteData(bytes.offsetInBytes + offset, 2)
+      .setUint16(0, value, Endian.little);
+}
+
+void _writeUint32(Uint8List bytes, int offset, int value) {
+  bytes.buffer
+      .asByteData(bytes.offsetInBytes + offset, 4)
+      .setUint32(0, value, Endian.little);
+}
+
+Uint8List _appendWavChunk(Uint8List wav, String tag, List<int> payload) {
+  final paddedPayloadSize = payload.length + (payload.length.isOdd ? 1 : 0);
+  final result = Uint8List(wav.length + 8 + paddedPayloadSize);
+  result.setRange(0, wav.length, wav);
+  for (var index = 0; index < 4; index++) {
+    result[wav.length + index] = tag.codeUnitAt(index);
+  }
+  _writeUint32(result, wav.length + 4, payload.length);
+  result.setRange(wav.length + 8, wav.length + 8 + payload.length, payload);
+  _writeUint32(result, 4, result.length - 8);
+  return result;
+}
+
+Uint8List _removeImaAdpcmFormatExtension(Uint8List wav) {
+  final withoutExtension = Uint8List(wav.length - 4);
+  withoutExtension.setRange(0, 36, wav);
+  withoutExtension.setRange(36, withoutExtension.length, wav, 40);
+  final data = ByteData.sublistView(withoutExtension);
+  data.setUint32(4, withoutExtension.length - 8, Endian.little);
+  data.setUint32(16, 16, Endian.little);
+  return withoutExtension;
+}
+
+Uint8List _buildWaveWithFormatTag({
+  required int formatTag,
+  int channels = 1,
+  int sampleRate = 16000,
+  required int byteRate,
+  required int blockAlign,
+  required int bitsPerSample,
+  List<int>? formatExtension,
+  int? factSampleCount,
+  required Uint8List data,
+}) {
+  final fmtSize =
+      16 + (formatExtension == null ? 0 : 2 + formatExtension.length);
+  final fmtPadding = fmtSize.isOdd ? 1 : 0;
+  final dataPadding = data.length.isOdd ? 1 : 0;
+  final factSize = factSampleCount == null ? 0 : 12;
+  final fileSize =
+      12 + 8 + fmtSize + fmtPadding + factSize + 8 + data.length + dataPadding;
+  final output = ByteData(fileSize);
+  var offset = 0;
+
+  void writeFourCc(String value) {
+    for (var index = 0; index < 4; index++) {
+      output.setUint8(offset++, value.codeUnitAt(index));
+    }
+  }
+
+  void writeUint16(int value) {
+    output.setUint16(offset, value, Endian.little);
+    offset += 2;
+  }
+
+  void writeUint32(int value) {
+    output.setUint32(offset, value, Endian.little);
+    offset += 4;
+  }
+
+  writeFourCc('RIFF');
+  writeUint32(fileSize - 8);
+  writeFourCc('WAVE');
+  writeFourCc('fmt ');
+  writeUint32(fmtSize);
+  writeUint16(formatTag);
+  writeUint16(channels);
+  writeUint32(sampleRate);
+  writeUint32(byteRate);
+  writeUint16(blockAlign);
+  writeUint16(bitsPerSample);
+  if (formatExtension != null) {
+    writeUint16(formatExtension.length);
+    for (final byte in formatExtension) {
+      output.setUint8(offset++, byte);
+    }
+  }
+  if (fmtPadding != 0) output.setUint8(offset++, 0);
+  if (factSampleCount != null) {
+    writeFourCc('fact');
+    writeUint32(4);
+    writeUint32(factSampleCount);
+  }
+  writeFourCc('data');
+  writeUint32(data.length);
+  for (final byte in data) {
+    output.setUint8(offset++, byte);
+  }
+  if (dataPadding != 0) output.setUint8(offset, 0);
+  return Uint8List.view(output.buffer);
 }
 
 void main() {
@@ -171,6 +377,385 @@ void main() {
       expect(info.bitsPerSample, 16);
       expect(info.dataSize, dataSize);
     });
+
+    test('skips a bounded non-audio chunk before PCM data', () {
+      final original = _buildTestWav(segments: [(0.1, 0.5)]);
+      final withJunk = Uint8List(original.length + 10);
+      withJunk.setRange(0, 36, original);
+      withJunk.setRange(36, 46, [
+        0x4a, 0x55, 0x4e, 0x4b, // JUNK
+        2, 0, 0, 0, // two payload bytes
+        0xaa, 0xbb,
+      ]);
+      withJunk.setRange(46, withJunk.length, original, 36);
+      _writeUint32(withJunk, 4, withJunk.length - 8);
+
+      final info = parseWavHeader(withJunk);
+
+      expect(info.dataOffset, 54);
+      expect(info.sampleRate, 16000);
+    });
+
+    test('validates chunks after the first PCM data chunk', () {
+      final original = _buildTestWav(segments: [(0.1, 0.5)]);
+      final trailingHeaderByte = Uint8List(original.length + 1)
+        ..setRange(0, original.length, original);
+      trailingHeaderByte[original.length] = 0x4a;
+      _writeUint32(trailingHeaderByte, 4, trailingHeaderByte.length - 8);
+
+      final trailingChunkOutOfBounds = Uint8List(original.length + 8)
+        ..setRange(0, original.length, original);
+      trailingChunkOutOfBounds.setRange(original.length, original.length + 4, [
+        0x4a, 0x55, 0x4e, 0x4b, // JUNK
+      ]);
+      _writeUint32(trailingChunkOutOfBounds, original.length + 4, 2);
+      _writeUint32(
+        trailingChunkOutOfBounds,
+        4,
+        trailingChunkOutOfBounds.length - 8,
+      );
+
+      expect(
+        () => parseWavHeader(trailingHeaderByte),
+        throwsA(isA<FormatException>()),
+        reason: 'incomplete trailing chunk header',
+      );
+      expect(
+        () => parseWavHeader(trailingChunkOutOfBounds),
+        throwsA(isA<FormatException>()),
+        reason: 'trailing chunk payload exceeds the RIFF container',
+      );
+
+      final validTrailingChunk = _appendWavChunk(original, 'JUNK', [0xaa]);
+      final info = parseWavHeader(validTrailingChunk);
+      expect(info.dataOffset, 44);
+      expect(info.dataSize, parseWavHeader(original).dataSize);
+    });
+
+    test('rejects duplicate data chunks instead of dropping later frames', () {
+      final original = _buildTestWav(segments: [(0.1, 0.5)]);
+      final duplicateData = _appendWavChunk(
+        original,
+        'data',
+        original.sublist(44),
+      );
+
+      expect(
+        () => parseWavHeader(duplicateData),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => validateWavContainer(duplicateData),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('parses and chunks WAVE_FORMAT_EXTENSIBLE PCM', () {
+      final standardWav = _buildTestWav(
+        sampleRate: 1000,
+        numChannels: 2,
+        segments: [(2.0, 0.5)],
+      );
+      final extensibleWav = _buildExtensiblePcmWav(standardWav);
+
+      final info = parseWavHeader(extensibleWav);
+      expect(info.numChannels, 2);
+      expect(info.dataOffset, 68);
+      expect(info.dataSize, standardWav.length - 44);
+
+      final chunks = AudioChunker(
+        config: AudioChunkConfig(fixedDurationSeconds: 0.5),
+      ).splitByDuration(extensibleWav);
+      expect(chunks.length, greaterThan(1));
+      for (final chunk in chunks) {
+        final chunkInfo = parseWavHeader(chunk);
+        expect(chunkInfo.numChannels, 2);
+        expect(chunkInfo.dataSize % chunkInfo.blockAlign, 0);
+      }
+
+      final unsupportedSubtype = Uint8List.fromList(extensibleWav);
+      unsupportedSubtype[44] = 3; // IEEE_FLOAT subtype, unsupported by chunker
+      expect(
+        () => parseWavHeader(unsupportedSubtype),
+        throwsA(isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          contains('subtype'),
+        )),
+      );
+    });
+
+    test('validates WAVE_FORMAT_EXTENSIBLE channel masks', () {
+      final stereoPcm = _buildTestWav(
+        sampleRate: 1000,
+        numChannels: 2,
+        segments: [(0.1, 0.5)],
+      );
+      final matchingMask = _buildExtensiblePcmWav(stereoPcm);
+      final unspecifiedMask = _buildExtensiblePcmWav(
+        stereoPcm,
+        channelMask: 0,
+      );
+      final mismatchedMask = _buildExtensiblePcmWav(
+        stereoPcm,
+        channelMask: 1,
+      );
+
+      expect(() => validateWavContainer(matchingMask), returnsNormally);
+      expect(() => validateWavContainer(unspecifiedMask), returnsNormally);
+      expect(
+        () => validateWavContainer(mismatchedMask),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => parseWavHeader(mismatchedMask),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('requires the WAVE_FORMAT_EXTENSIBLE fmt extension', () {
+      final malformedExtensible = _buildTestWav(
+        segments: [(0.1, 0.5)],
+      );
+      _writeUint16(malformedExtensible, 20, 0xfffe);
+
+      expect(
+        () => validateWavContainer(malformedExtensible),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('rejects unknown non-PCM format tags in container validation', () {
+      final unsupportedTag = _buildTestWav(segments: [(0.1, 0.5)]);
+      _writeUint16(unsupportedTag, 20, 0x7777);
+
+      expect(
+        () => validateWavContainer(unsupportedTag),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('rejects unknown extensible subtypes in container validation', () {
+      final unsupportedSubtype = _buildExtensiblePcmWav(
+        _buildTestWav(segments: [(0.1, 0.5)]),
+      );
+      unsupportedSubtype.setRange(44, 48, [0x77, 0x77, 0x00, 0x00]);
+
+      expect(
+        () => validateWavContainer(unsupportedSubtype),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('validates IMA ADPCM fmt metadata while accepting valid ADPCM', () {
+      final validImaAdpcm = adpcmToWav(
+        Uint8List.fromList([0, 0, 0, 0]),
+        sampleRate: 16000,
+      );
+      expect(() => validateWavContainer(validImaAdpcm), returnsNormally);
+
+      final missingExtension = _removeImaAdpcmFormatExtension(validImaAdpcm);
+      expect(
+        () => validateWavContainer(missingExtension),
+        throwsA(isA<FormatException>()),
+      );
+
+      final invalidCbSize = Uint8List.fromList(validImaAdpcm);
+      ByteData.sublistView(invalidCbSize).setUint16(36, 0, Endian.little);
+      expect(
+        () => validateWavContainer(invalidCbSize),
+        throwsA(isA<FormatException>()),
+      );
+
+      final invalidSamplesPerBlock = Uint8List.fromList(validImaAdpcm);
+      ByteData.sublistView(invalidSamplesPerBlock).setUint16(
+        38,
+        0,
+        Endian.little,
+      );
+      expect(
+        () => validateWavContainer(invalidSamplesPerBlock),
+        throwsA(isA<FormatException>()),
+      );
+
+      final invalidBitDepth = Uint8List.fromList(validImaAdpcm);
+      ByteData.sublistView(invalidBitDepth).setUint16(34, 16, Endian.little);
+      expect(
+        () => validateWavContainer(invalidBitDepth),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('validates tag-specific metadata for every upload format', () {
+      final validFloat = _buildWaveWithFormatTag(
+        formatTag: 3,
+        byteRate: 64000,
+        blockAlign: 4,
+        bitsPerSample: 32,
+        data: Uint8List(4),
+      );
+      final validAlaw = _buildWaveWithFormatTag(
+        formatTag: 6,
+        sampleRate: 8000,
+        byteRate: 8000,
+        blockAlign: 1,
+        bitsPerSample: 8,
+        data: Uint8List(1),
+      );
+      final validMulaw = _buildWaveWithFormatTag(
+        formatTag: 7,
+        sampleRate: 8000,
+        byteRate: 8000,
+        blockAlign: 1,
+        bitsPerSample: 8,
+        data: Uint8List(1),
+      );
+      final validMsAdpcm = _buildWaveWithFormatTag(
+        formatTag: 2,
+        sampleRate: 16000,
+        byteRate: 8192,
+        blockAlign: 256,
+        bitsPerSample: 4,
+        formatExtension: [
+          0xf4, 0x01, // 500 samples per block.
+          7, 0, // Seven coefficient pairs.
+          ...List<int>.filled(28, 0),
+        ],
+        data: Uint8List(256),
+      );
+
+      for (final valid in [validFloat, validAlaw, validMulaw, validMsAdpcm]) {
+        expect(() => validateWavContainer(valid), returnsNormally);
+      }
+
+      final invalidFloat = _buildWaveWithFormatTag(
+        formatTag: 3,
+        byteRate: 1,
+        blockAlign: 1,
+        bitsPerSample: 0,
+        data: Uint8List(1),
+      );
+      final invalidAlaw = _buildWaveWithFormatTag(
+        formatTag: 6,
+        sampleRate: 8000,
+        byteRate: 16000,
+        blockAlign: 2,
+        bitsPerSample: 16,
+        data: Uint8List(2),
+      );
+      final missingMsAdpcmExtension = _buildWaveWithFormatTag(
+        formatTag: 2,
+        sampleRate: 16000,
+        byteRate: 8192,
+        blockAlign: 256,
+        bitsPerSample: 4,
+        data: Uint8List(256),
+      );
+      final tooFewMsAdpcmSamplesPerBlock = _buildWaveWithFormatTag(
+        formatTag: 2,
+        sampleRate: 16000,
+        byteRate: 112000,
+        blockAlign: 7,
+        bitsPerSample: 4,
+        formatExtension: [
+          1, 0, // One sample per block is invalid: the header has two seeds.
+          1, 0, // One coefficient pair.
+          ...List<int>.filled(4, 0),
+        ],
+        data: Uint8List(7),
+      );
+
+      for (final invalid in [
+        invalidFloat,
+        invalidAlaw,
+        missingMsAdpcmExtension,
+        tooFewMsAdpcmSamplesPerBlock,
+      ]) {
+        expect(
+          () => validateWavContainer(invalid),
+          throwsA(isA<FormatException>()),
+        );
+      }
+    });
+
+    test('rejects zero, inconsistent, or truncated PCM WAV metadata', () {
+      final original = _buildTestWav(segments: [(0.1, 0.5)]);
+
+      Uint8List changed({
+        int? riffSize,
+        int? formatSize,
+        int? format,
+        int? channels,
+        int? sampleRate,
+        int? byteRate,
+        int? blockAlign,
+        int? bitsPerSample,
+        int? dataSize,
+      }) {
+        final bytes = Uint8List.fromList(original);
+        if (riffSize != null) _writeUint32(bytes, 4, riffSize);
+        if (formatSize != null) _writeUint32(bytes, 16, formatSize);
+        if (format != null) _writeUint16(bytes, 20, format);
+        if (channels != null) _writeUint16(bytes, 22, channels);
+        if (sampleRate != null) _writeUint32(bytes, 24, sampleRate);
+        if (byteRate != null) _writeUint32(bytes, 28, byteRate);
+        if (blockAlign != null) _writeUint16(bytes, 32, blockAlign);
+        if (bitsPerSample != null) _writeUint16(bytes, 34, bitsPerSample);
+        if (dataSize != null) _writeUint32(bytes, 40, dataSize);
+        return bytes;
+      }
+
+      final truncatedData = Uint8List.fromList(
+        original.sublist(0, original.length - 1),
+      );
+      _writeUint32(truncatedData, 4, truncatedData.length - 8);
+      final truncatedChunkHeader = original.sublist(0, 37);
+      _writeUint32(truncatedChunkHeader, 4, truncatedChunkHeader.length - 8);
+
+      final malformed = <String, Uint8List>{
+        'truncated file header': original.sublist(0, 11),
+        'truncated chunk header': truncatedChunkHeader,
+        'zero channels': changed(channels: 0),
+        'zero sample rate': changed(sampleRate: 0),
+        'zero data size': changed(dataSize: 0),
+        'zero format code': changed(format: 0),
+        'zero byte rate': changed(byteRate: 0),
+        'zero block alignment': changed(blockAlign: 0),
+        'zero bit depth': changed(bitsPerSample: 0),
+        'unsupported bit depth': changed(bitsPerSample: 8),
+        'inconsistent block alignment': changed(blockAlign: 1),
+        'inconsistent byte rate': changed(byteRate: 1),
+        'data size not frame aligned': changed(dataSize: 3),
+        'fmt chunk exceeds container': changed(formatSize: 4096),
+        'container exceeds available bytes':
+            changed(riffSize: original.length - 8 + 1),
+        'data exceeds truncated container': truncatedData,
+      };
+
+      for (final entry in malformed.entries) {
+        expect(
+          () => parseWavHeader(entry.value),
+          throwsA(isA<FormatException>()),
+          reason: entry.key,
+        );
+      }
+    });
+
+    test('explicitly rejects RIFX before little-endian PCM decoding', () {
+      final rifx = Uint8List.fromList(
+        _buildTestWav(segments: [(0.1, 0.5)]),
+      );
+      rifx.setRange(0, 4, [0x52, 0x49, 0x46, 0x58]);
+
+      expect(
+        () => parseWavHeader(rifx),
+        throwsA(isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          contains('RIFX'),
+        )),
+      );
+    });
   });
 
   group('Silence Detection', () {
@@ -222,6 +807,15 @@ void main() {
       final gaps = detector.detect(samples, info.sampleRate);
 
       expect(gaps, isEmpty);
+    });
+
+    test('detects gaps from precomputed dB values', () {
+      const config = AudioChunkConfig(frameSize: 1024, minSilenceDuration: 0.2);
+      final gaps = SilenceDetector(
+        config,
+      ).detectGapsFromDb(Float64List.fromList([-80, -80, 0]), 8000);
+
+      expect(gaps, hasLength(1));
     });
   });
 
@@ -366,6 +960,288 @@ void main() {
     });
   });
 
+  group('AudioChunker frame boundaries', () {
+    test('first-frame WAV materialization avoids the discarded tail', () {
+      final wav = _buildWavFromFrames([
+        [120, -240],
+        [360, -480],
+        [600, -720],
+      ]);
+      final materializedRanges = <(int, int)>[];
+
+      final firstFrame = materializeFirstWavFrame(
+        wav,
+        onFrameRangeMaterializedForTesting: (start, end) {
+          materializedRanges.add((start, end));
+        },
+      );
+
+      expect(firstFrame, splitWavAtFrame(wav, 1).first);
+      expect(parseWavHeader(firstFrame).totalSamples, 1);
+      expect(materializedRanges, [(0, 4)]);
+    });
+
+    test('adaptive PCM split preserves every source frame without overlap', () {
+      final frames = List<List<int>>.generate(
+        17,
+        (index) => [index * 101 - 700, 900 - index * 37],
+      );
+      final wav = _buildWavFromFrames(frames);
+      final originalValues = frames.expand((frame) => frame).toList();
+
+      final pieces = splitWavAtFrame(wav, 7);
+      expect(pieces, hasLength(2));
+      final reconstructed = <int>[];
+      for (final piece in pieces) {
+        final info = parseWavHeader(piece);
+        expect(info.dataSize % info.blockAlign, 0);
+        reconstructed.addAll(_readPcmValues(piece));
+      }
+
+      expect(reconstructed, originalValues);
+    });
+
+    test('mono and stereo recordings cut at equivalent times', () {
+      const sampleRate = 1000;
+      final segments = <(double, double)>[
+        (0.5, 0.6),
+        (0.8, 0),
+        (0.5, 0.6),
+      ];
+      final mono = _buildTestWav(
+        sampleRate: sampleRate,
+        segments: segments,
+      );
+      final stereo = _buildTestWav(
+        sampleRate: sampleRate,
+        numChannels: 2,
+        segments: segments,
+      );
+      final config = AudioChunkConfig(
+        maxChunkBytes: 100000,
+        frameSize: 32,
+        minSilenceDuration: 0.15,
+        minChunkDuration: 0.1,
+        targetChunkDuration: 0.6,
+        maxChunkDuration: 0.8,
+      );
+
+      final monoDurations =
+          AudioChunker(config: config).split(mono).map((chunk) {
+        final info = parseWavHeader(chunk);
+        return info.totalSamples / info.sampleRate;
+      }).toList();
+      final stereoDurations =
+          AudioChunker(config: config).split(stereo).map((chunk) {
+        final info = parseWavHeader(chunk);
+        return info.totalSamples / info.sampleRate;
+      }).toList();
+
+      expect(stereoDurations, monoDurations);
+    });
+
+    test('silent stereo channel does not shift silence cut times', () {
+      final monoFrames = <List<int>>[];
+      final stereoFrames = <List<int>>[];
+      for (var frame = 0; frame < 2300; frame++) {
+        final sample = switch (frame) {
+          < 500 => frame.isEven ? 12000 : -12000,
+          < 1000 => frame.isEven ? 1250 : -1250,
+          < 1800 => 0,
+          _ => frame.isEven ? 12000 : -12000,
+        };
+        monoFrames.add([sample]);
+        stereoFrames.add([sample, 0]);
+      }
+
+      final mono = _buildWavFromFrames(monoFrames);
+      final stereo = _buildWavFromFrames(stereoFrames);
+      final config = AudioChunkConfig(
+        silenceDbThreshold: -24,
+        frameSize: 16,
+        minSilenceDuration: 0.15,
+        minChunkDuration: 0.1,
+        targetChunkDuration: 1.5,
+        maxChunkDuration: 2.5,
+      );
+      List<double> chunkDurations(Uint8List wav) => AudioChunker(
+            config: config,
+          ).split(wav).map((chunk) {
+            final info = parseWavHeader(chunk);
+            return info.totalSamples / info.sampleRate;
+          }).toList();
+
+      expect(chunkDurations(stereo), chunkDurations(mono));
+    });
+
+    test(
+        'all splitting methods emit parseable, aligned chunks that reconstruct frames',
+        () {
+      final frames = List<List<int>>.generate(1200, (index) {
+        if (index >= 400 && index < 700) return [0, 0];
+        return [
+          ((index * 37) % 60001) - 30000,
+          ((index * 97) % 50001) - 25000,
+        ];
+      });
+      final wav = _buildWavFromFrames(frames);
+      final originalValues = frames.expand((frame) => frame).toList();
+      const methods = [
+        AudioChunkMethod.silence,
+        AudioChunkMethod.fixedDuration,
+        AudioChunkMethod.fixedSize,
+      ];
+
+      for (final method in methods) {
+        final chunks = AudioChunker(
+          config: AudioChunkConfig(
+            maxChunkBytes: 80,
+            frameSize: 20,
+            minSilenceDuration: 0.1,
+            minChunkDuration: 0.1,
+            targetChunkDuration: 0.3,
+            maxChunkDuration: 0.5,
+            fixedDurationSeconds: 0.3,
+          ),
+        ).chunk(wav, method);
+        final reconstructed = <int>[];
+
+        expect(chunks.length, greaterThan(1), reason: method.name);
+        for (final chunk in chunks) {
+          final info = parseWavHeader(chunk);
+          expect(info.numChannels, 2, reason: method.name);
+          expect(info.dataSize % info.blockAlign, 0, reason: method.name);
+          expect(info.dataSize, greaterThan(0), reason: method.name);
+          reconstructed.addAll(_readPcmValues(chunk));
+        }
+
+        expect(reconstructed, originalValues, reason: method.name);
+      }
+    });
+
+    test('silence and duration chunks respect byte caps at whole-frame sizes',
+        () {
+      final frames = [
+        [101, 202, 303],
+        [404, 505, 606],
+        [707, 808, 909],
+      ];
+      final wav = _buildWavFromFrames(frames, sampleRate: 1000);
+      const maxChunkBytes = 10;
+      final config = AudioChunkConfig(
+        maxChunkBytes: maxChunkBytes,
+        minChunkDuration: 0.001,
+        targetChunkDuration: 0.002,
+        maxChunkDuration: 0.004,
+        fixedDurationSeconds: 0.003,
+      );
+      final originalValues = frames.expand((frame) => frame).toList();
+
+      for (final method in [
+        AudioChunkMethod.silence,
+        AudioChunkMethod.fixedDuration,
+      ]) {
+        final chunks = AudioChunker(config: config).chunk(wav, method);
+        final reconstructed = <int>[];
+
+        for (final chunk in chunks) {
+          final info = parseWavHeader(chunk);
+          expect(
+            info.dataSize,
+            lessThanOrEqualTo(maxChunkBytes),
+            reason: method.name,
+          );
+          expect(info.dataSize % info.blockAlign, 0, reason: method.name);
+          reconstructed.addAll(_readPcmValues(chunk));
+        }
+
+        expect(reconstructed, originalValues, reason: method.name);
+      }
+    });
+
+    test('rejects incoherent chunk parameters before splitting', () {
+      final wav = _buildTestWav(segments: [(0.1, 0.5)]);
+      final invalidConfigs = [
+        AudioChunkConfig(maxChunkBytes: 0),
+        AudioChunkConfig(maxChunkBytes: -1),
+        AudioChunkConfig(silenceDbThreshold: 0),
+        AudioChunkConfig(silenceDbThreshold: double.nan),
+        AudioChunkConfig(minSilenceDuration: 0),
+        AudioChunkConfig(minSilenceDuration: -0.1),
+        AudioChunkConfig(frameSize: 0),
+        AudioChunkConfig(frameSize: -1),
+        AudioChunkConfig(overlapSeconds: -0.1),
+        AudioChunkConfig(overlapSeconds: double.nan),
+        AudioChunkConfig(fixedDurationSeconds: 0),
+        AudioChunkConfig(fixedDurationSeconds: -1),
+        AudioChunkConfig(fixedDurationSeconds: double.infinity),
+        AudioChunkConfig(minChunkDuration: 0),
+        AudioChunkConfig(minChunkDuration: double.infinity),
+        AudioChunkConfig(targetChunkDuration: double.nan),
+        AudioChunkConfig(targetChunkDuration: 61),
+        AudioChunkConfig(maxChunkDuration: 0),
+        AudioChunkConfig(maxChunkDuration: 30),
+        AudioChunkConfig(analysisWindowSeconds: 0),
+        AudioChunkConfig(analysisWindowSeconds: double.nan),
+      ];
+
+      for (final config in invalidConfigs) {
+        expect(
+          () => AudioChunker(config: config).chunk(
+            wav,
+            AudioChunkMethod.fixedDuration,
+          ),
+          throwsA(isA<ArgumentError>()),
+        );
+      }
+
+      expect(
+        () => AudioChunker(
+          config: AudioChunkConfig(maxChunkBytes: 1),
+        ).splitBySize(wav),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
+
+    test(
+        'validates sample and frame counts within JavaScript safe integer range',
+        () {
+      AudioChunkConfig config({
+        double minSilenceDuration = 1,
+        double analysisWindowSeconds = 1,
+      }) =>
+          AudioChunkConfig(
+            fixedDurationSeconds: 1,
+            minChunkDuration: 1,
+            targetChunkDuration: 1,
+            maxChunkDuration: 1,
+            frameSize: 1,
+            minSilenceDuration: minSilenceDuration,
+            analysisWindowSeconds: analysisWindowSeconds,
+          );
+
+      // 2^53 - 1 is the largest integer that JavaScript numbers represent
+      // exactly. Counts just beyond it must be rejected on every platform.
+      config().validateForSampleRate(9007199254740991);
+      expect(
+        () => config().validateForSampleRate(9007199254740992),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(
+        () => config(analysisWindowSeconds: 2).validateForSampleRate(
+          4503599627370496,
+        ),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(
+        () => config(minSilenceDuration: 2).validateForSampleRate(
+          4503599627370496,
+        ),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
+  });
+
   group('AudioChunker - fixed duration', () {
     test('splits audio into fixed-duration chunks', () {
       final wav = _buildTestWav(
@@ -409,6 +1285,88 @@ void main() {
       final wav = _buildTestWav(segments: [(2.0, 0.5)]);
       final chunks = AudioChunker().chunk(wav, AudioChunkMethod.none);
       expect(chunks.length, 1);
+    });
+
+    test('plan reports the full source duration', () {
+      final wav = _buildTestWav(segments: [(2.5, 0.5)]);
+      final chunk = AudioChunker().plan(wav, AudioChunkMethod.none).single;
+
+      expect(chunk.startSecond, 0);
+      expect(chunk.endSecond, 2.5);
+      expect(chunk.durationSeconds, 2.5);
+      expect(chunk.startByte, 0);
+      expect(chunk.endByte, wav.length);
+    });
+
+    test('passes through supported non-PCM WAV files unchanged', () {
+      final files = [
+        _buildWaveWithFormatTag(
+          formatTag: 3,
+          sampleRate: 8000,
+          byteRate: 32000,
+          blockAlign: 4,
+          bitsPerSample: 32,
+          data: Uint8List(3200),
+        ),
+        _buildWaveWithFormatTag(
+          formatTag: 7,
+          sampleRate: 8000,
+          byteRate: 8000,
+          blockAlign: 1,
+          bitsPerSample: 8,
+          data: Uint8List(800),
+        ),
+      ];
+
+      for (final wav in files) {
+        final chunk = AudioChunker().plan(wav, AudioChunkMethod.none).single;
+
+        expect(chunk.startByte, 0);
+        expect(chunk.endByte, wav.length);
+        expect(chunk.durationSeconds, closeTo(0.1, 0.000001));
+        expect(
+          AudioChunker().chunk(wav, AudioChunkMethod.none).single,
+          orderedEquals(wav),
+        );
+      }
+    });
+
+    test('pass-through ADPCM duration uses decoded block coverage', () {
+      final msAdpcm = _buildWaveWithFormatTag(
+        formatTag: 2,
+        sampleRate: 8000,
+        byteRate: 21333,
+        blockAlign: 8,
+        bitsPerSample: 4,
+        formatExtension: [
+          3, 0, // Three samples per block.
+          7, 0, // Seven coefficient pairs.
+          ...List<int>.filled(28, 0),
+        ],
+        data: Uint8List(8 * 1000),
+      );
+      final chunk = AudioChunker().plan(msAdpcm, AudioChunkMethod.none).single;
+
+      expect(chunk.durationSeconds, closeTo(3000 / 8000, 1e-10));
+      expect(chunk.endByte, msAdpcm.length);
+    });
+
+    test('pass-through ADPCM duration uses the fact sample count', () {
+      final imaAdpcm = _buildWaveWithFormatTag(
+        formatTag: 0x0011,
+        sampleRate: 8000,
+        byteRate: 7111,
+        blockAlign: 8,
+        bitsPerSample: 4,
+        formatExtension: [9, 0], // Nine samples per block.
+        factSampleCount: 8999,
+        data: Uint8List(8 * 1000),
+      );
+      final imaChunk =
+          AudioChunker().plan(imaAdpcm, AudioChunkMethod.none).single;
+
+      expect(imaChunk.durationSeconds, closeTo(8999 / 8000, 1e-10));
+      expect(imaChunk.endByte, imaAdpcm.length);
     });
   });
 
@@ -468,6 +1426,155 @@ void main() {
       ).process(wav);
       expect(processed.length, wav.length);
     });
+
+    test(
+      'async no-op preprocessing observes precompleted cancellation',
+      () async {
+        final wav = _buildTestWav(segments: [(1.0, 0.5)]);
+        final cancellation = Completer<Object?>();
+        cancellation.complete(StateError('cancelled'));
+
+        await expectLater(
+          WavPreprocessor(
+            config: AudioPreprocessConfig.none,
+          ).processAsync(wav, cancellationSignal: cancellation.future),
+          throwsA(isA<StateError>()),
+        );
+      },
+    );
+
+    test(
+      'async no-op preprocessing rechecks callback after yielding',
+      () async {
+        final wav = _buildTestWav(segments: [(1.0, 0.5)]);
+        final cancellation = Completer<Object?>();
+        var cancellationRequested = false;
+        var checkCount = 0;
+
+        await expectLater(
+          WavPreprocessor(config: AudioPreprocessConfig.none).processAsync(
+            wav,
+            checkCancelled: () {
+              checkCount++;
+              if (checkCount == 1) {
+                scheduleMicrotask(() => cancellationRequested = true);
+              } else if (cancellationRequested) {
+                throw StateError('cancelled');
+              }
+            },
+            cancellationSignal: cancellation.future,
+          ),
+          throwsA(isA<StateError>()),
+        );
+      },
+    );
+
+    test(
+      'Web no-op preprocessing observes precompleted cancellation',
+      () async {
+        final wav = _buildTestWav(segments: [(1.0, 0.5)]);
+        final cancellation = Completer<Object?>();
+        cancellation.complete(StateError('cancelled'));
+
+        await expectLater(
+          WavPreprocessor(
+            config: AudioPreprocessConfig.none,
+          ).processWithEventLoopYield(
+            wav,
+            cancellationSignal: cancellation.future,
+          ),
+          throwsA(isA<StateError>()),
+        );
+      },
+    );
+
+    test('async preprocessing matches synchronous output', () async {
+      final wav = _buildTestWav(
+        sampleRate: 44100,
+        numChannels: 2,
+        segments: [(2.0, 0.5)],
+      );
+      final preprocessor = WavPreprocessor();
+
+      final processed = await preprocessor.processAsync(wav);
+
+      expect(processed, orderedEquals(preprocessor.process(wav)));
+    });
+
+    test(
+      'Web-compatible preprocessing yields between sample batches',
+      () async {
+        final wav = _buildTestWav(sampleRate: 48000, segments: [(2.0, 0.5)]);
+        final preprocessor = WavPreprocessor();
+        var yieldCount = 0;
+
+        final yielded = await preprocessor.processWithEventLoopYield(
+          wav,
+          onYield: () => yieldCount++,
+        );
+
+        expect(yieldCount, greaterThan(0));
+        expect(yielded, orderedEquals(preprocessor.process(wav)));
+      },
+    );
+
+    test('Web preprocessing checks cancellation between batches', () async {
+      final wav = _buildTestWav(sampleRate: 48000, segments: [(20.0, 0.5)]);
+      var yieldCount = 0;
+
+      await expectLater(
+        WavPreprocessor().processWithEventLoopYield(
+          wav,
+          onYield: () => yieldCount++,
+          checkCancelled: () {
+            if (yieldCount > 0) throw StateError('cancelled');
+          },
+        ),
+        throwsA(isA<StateError>()),
+      );
+
+      expect(yieldCount, 1);
+    });
+
+    test(
+      'native preprocessing checks cancellation after its worker returns',
+      () async {
+        final wav = _buildTestWav(segments: [(1.0, 0.5)]);
+        var checkCount = 0;
+
+        await expectLater(
+          WavPreprocessor().processAsync(
+            wav,
+            checkCancelled: () {
+              checkCount++;
+              if (checkCount > 1) throw StateError('cancelled');
+            },
+          ),
+          throwsA(isA<StateError>()),
+        );
+
+        expect(checkCount, 2);
+      },
+    );
+
+    test(
+      'native preprocessing aborts when its cancellation signal completes',
+      () async {
+        final wav = _buildTestWav(
+          sampleRate: 44100,
+          numChannels: 2,
+          segments: [(1.0, 0.5)],
+        );
+        final cancellation = Completer<Object?>();
+        final processing = WavPreprocessor().processAsync(
+          wav,
+          cancellationSignal: cancellation.future,
+        );
+        cancellation.complete(StateError('cancelled'));
+
+        await expectLater(processing, throwsA(isA<StateError>()));
+      },
+    );
   });
 
   // ===========================================================================
@@ -475,6 +1582,26 @@ void main() {
   // ===========================================================================
 
   group('Environment Analyzer', () {
+    test(
+      'Web-compatible environment analysis yields with identical result',
+      () async {
+        final analyzer = EnvironmentAnalyzer();
+        final frameDb = Float64List.fromList([
+          for (var index = 0; index < 4096; index++)
+            index % 7 == 0 ? -90.0 : -18.0 - (index % 31),
+        ]);
+        var yieldCount = 0;
+
+        final yielded = await analyzer.analyzeFromDbWithEventLoopYield(
+          frameDb,
+          onYield: () => yieldCount++,
+        );
+
+        expect(yieldCount, greaterThan(10));
+        expect(yielded, analyzer.analyzeFromDb(frameDb));
+      },
+    );
+
     test('provides environment-adjusted minSilenceDuration', () {
       final analyzer = EnvironmentAnalyzer();
       const baseMs = 500.0;
@@ -586,7 +1713,7 @@ void main() {
           maxChunkBytes: 10 * 1024 * 1024,
           minSilenceDuration: 0.5,
           minChunkDuration: 10.0,
-          targetChunkDuration: 30.0,
+          targetChunkDuration: 15.0,
           maxChunkDuration: 20.0, // force split every 20s
         ),
       );
@@ -761,8 +1888,600 @@ void main() {
       final originalInfo = parseWavHeader(wav);
       // With 0 overlap, total chunk data ≈ original data
       // (Allow small variance due to rounding at frame boundaries)
-      expect(totalChunkData,
-          closeTo(originalInfo.dataSize, originalInfo.dataSize * 0.1));
+      expect(
+        totalChunkData,
+        closeTo(originalInfo.dataSize, originalInfo.dataSize * 0.1),
+      );
+    });
+  });
+
+  group('AudioChunker lazy frame plans', () {
+    test(
+      'native non-silence plans avoid full-audio isolate transfer',
+      () async {
+        final wav = _buildTestWav(sampleRate: 1000, segments: [(4.0, 0.5)]);
+        final chunker = AudioChunker(
+          config: const AudioChunkConfig(
+            maxChunkBytes: 1024,
+            fixedDurationSeconds: 1.5,
+          ),
+        );
+        var isolateStarts = 0;
+
+        for (final method in [
+          AudioChunkMethod.none,
+          AudioChunkMethod.fixedDuration,
+          AudioChunkMethod.fixedSize,
+        ]) {
+          final asyncPlan = await chunker.planAsync(
+            wav,
+            method,
+            maxChunks: 100,
+            onNativeIsolateStarted: () => isolateStarts++,
+          );
+          final syncPlan = chunker.plan(wav, method, maxChunks: 100);
+
+          expect(
+            asyncPlan.map(
+              (chunk) => (
+                chunk.startByte,
+                chunk.endByte,
+                chunk.startSecond,
+                chunk.endSecond,
+              ),
+            ),
+            syncPlan.map(
+              (chunk) => (
+                chunk.startByte,
+                chunk.endByte,
+                chunk.startSecond,
+                chunk.endSecond,
+              ),
+            ),
+          );
+        }
+
+        expect(isolateStarts, 0);
+      },
+    );
+
+    test(
+      'materialized ranges preserve exact PCM bytes and time offsets',
+      () async {
+        final wav = _buildTestWav(
+          sampleRate: 1000,
+          segments: [(2.25, 0.5), (0.75, 0), (2.5, 0.3)],
+        );
+        final chunker = AudioChunker(
+          config: const AudioChunkConfig(
+            maxChunkBytes: 1024 * 1024,
+            fixedDurationSeconds: 1.5,
+          ),
+        );
+
+        final plan = await chunker.planAsync(
+          wav,
+          AudioChunkMethod.fixedDuration,
+        );
+
+        expect(plan.map((chunk) => [chunk.startSecond, chunk.endSecond]), [
+          [0.0, 1.5],
+          [1.5, 3.0],
+          [3.0, 4.5],
+          [4.5, 5.5],
+        ]);
+        final materialized = [
+          for (final chunk in plan) chunker.materializeChunk(wav, chunk),
+        ];
+        final input = parseWavHeader(wav);
+        final expectedPcm = wav.sublist(input.dataOffset);
+        final actualPcm = Uint8List(
+          materialized.fold<int>(
+            0,
+            (length, chunk) => length + parseWavHeader(chunk).dataSize,
+          ),
+        );
+        var offset = 0;
+        for (final chunk in materialized) {
+          final info = parseWavHeader(chunk);
+          actualPcm.setRange(
+            offset,
+            offset + info.dataSize,
+            chunk,
+            info.dataOffset,
+          );
+          offset += info.dataSize;
+        }
+
+        expect(actualPcm, orderedEquals(expectedPcm));
+        expect(offset, input.dataSize);
+      },
+    );
+
+    test('Web-compatible planning yields between analysis batches', () async {
+      final wav = _buildTestWav(
+        sampleRate: 1000,
+        segments: [(6.0, 0.5), (0.75, 0), (6.0, 0.4)],
+      );
+      final chunker = AudioChunker(
+        config: const AudioChunkConfig(
+          frameSize: 32,
+          maxChunkBytes: 1024 * 1024,
+          minSilenceDuration: 0.1,
+          minChunkDuration: 1.0,
+          targetChunkDuration: 2.0,
+          maxChunkDuration: 3.0,
+          analysisWindowSeconds: 0.1,
+        ),
+      );
+      var yieldCount = 0;
+
+      final plan = await chunker.planWithEventLoopYield(
+        wav,
+        AudioChunkMethod.silence,
+        onYield: () => yieldCount++,
+      );
+
+      expect(yieldCount, greaterThan(0));
+      expect(
+        plan.map((range) => (range.startByte, range.endByte)),
+        chunker
+            .plan(wav, AudioChunkMethod.silence)
+            .map((range) => (range.startByte, range.endByte)),
+      );
+      var coveredFrames = 0;
+      var coveredPcmBytes = 0;
+      for (final range in plan) {
+        final chunk = chunker.materializeChunk(wav, range);
+        final info = parseWavHeader(chunk);
+        coveredFrames += info.totalSamples;
+        coveredPcmBytes += info.dataSize;
+      }
+      final source = parseWavHeader(wav);
+      expect(coveredFrames, source.totalSamples);
+      expect(coveredPcmBytes, source.dataSize);
+    });
+
+    test('Web silence analysis yields within a large analysis frame', () async {
+      const sampleCount = 1000000;
+      final wav = _buildTestWav(
+        sampleRate: 1000,
+        segments: [(sampleCount / 1000, 0)],
+      );
+      final chunker = AudioChunker(
+        config: const AudioChunkConfig(
+          frameSize: sampleCount,
+          maxChunkBytes: 4 * 1024 * 1024,
+          minSilenceDuration: 0.1,
+          minChunkDuration: 1001,
+          targetChunkDuration: 1001,
+          maxChunkDuration: 1001,
+          analysisWindowSeconds: 0.1,
+        ),
+      );
+      var yieldCount = 0;
+
+      final plan = await chunker.planWithEventLoopYield(
+        wav,
+        AudioChunkMethod.silence,
+        onYield: () => yieldCount++,
+      );
+
+      expect(plan, hasLength(1));
+      expect(yieldCount, greaterThan(0));
+    });
+
+    test('Web no-chunk planning observes precompleted cancellation', () async {
+      final wav = _buildTestWav(segments: [(1.0, 0.5)]);
+      final cancellation = Completer<Object?>();
+      cancellation.complete(StateError('cancelled'));
+
+      await expectLater(
+        AudioChunker().planWithEventLoopYield(
+          wav,
+          AudioChunkMethod.none,
+          cancellationSignal: cancellation.future,
+        ),
+        throwsA(isA<StateError>()),
+      );
+    });
+
+    test(
+      'Web planAsync delivers cancellation before a no-chunk return',
+      () async {
+        final wav = _buildTestWav(segments: [(1.0, 0.5)]);
+        final cancellation = Completer<Object?>();
+        Timer.run(
+          () => cancellation.complete(StateError('cancelled in Web path')),
+        );
+
+        await expectLater(
+          AudioChunker().planAsync(
+            wav,
+            AudioChunkMethod.none,
+            cancellationSignal: cancellation.future,
+            forceWebPathForTesting: true,
+          ),
+          throwsA(
+            predicate<Object>(
+              (error) => error.toString().contains('cancelled in Web path'),
+            ),
+          ),
+        );
+      },
+    );
+
+    test('Web silence candidate scoring yields within large frames', () async {
+      const sampleRate = 1000;
+      const frameSize = 100000;
+      final wav = _buildTestWav(
+        sampleRate: sampleRate,
+        segments: [(200, 0.5), (100, 0), (200, 0.5)],
+      );
+      final chunker = AudioChunker(
+        config: const AudioChunkConfig(
+          frameSize: frameSize,
+          maxChunkBytes: 4 * 1024 * 1024,
+          minSilenceDuration: 0.5,
+          minChunkDuration: 60,
+          targetChunkDuration: 300,
+          maxChunkDuration: 300,
+          analysisWindowSeconds: 0.1,
+        ),
+      );
+      var yieldCount = 0;
+
+      final plan = await chunker.planWithEventLoopYield(
+        wav,
+        AudioChunkMethod.silence,
+        onYield: () => yieldCount++,
+      );
+
+      expect(plan, hasLength(2));
+      expect(yieldCount, greaterThan(50));
+      expect(
+        plan.map((range) => (range.startByte, range.endByte)),
+        chunker
+            .plan(wav, AudioChunkMethod.silence)
+            .map((range) => (range.startByte, range.endByte)),
+      );
+    });
+
+    test(
+      'Web planning stops at the next yielding boundary after cancellation',
+      () async {
+        final wav = _buildTestWav(sampleRate: 1000, segments: [(20.0, 0.5)]);
+        final chunker = AudioChunker(
+          config: const AudioChunkConfig(
+            frameSize: 32,
+            maxChunkBytes: 1024 * 1024,
+            minSilenceDuration: 0.1,
+            minChunkDuration: 1.0,
+            targetChunkDuration: 2.0,
+            maxChunkDuration: 3.0,
+            analysisWindowSeconds: 0.1,
+          ),
+        );
+        var cancelled = false;
+        var yieldCount = 0;
+
+        await expectLater(
+          chunker.planWithEventLoopYield(
+            wav,
+            AudioChunkMethod.silence,
+            onYield: () {
+              yieldCount++;
+              cancelled = true;
+            },
+            checkCancelled: () {
+              if (cancelled) throw StateError('cancelled');
+            },
+          ),
+          throwsA(isA<StateError>()),
+        );
+
+        expect(yieldCount, 1);
+      },
+    );
+
+    test(
+      'Web analysis observes cancellation after its event-loop yield',
+      () async {
+        final dbValues = Float64List(200);
+        var cancelled = false;
+        var yieldCount = 0;
+
+        await expectLater(
+          EnvironmentAnalyzer(frameSize: 1).analyzeFromDbWithEventLoopYield(
+            dbValues,
+            onYield: () {
+              yieldCount++;
+              cancelled = true;
+            },
+            checkCancelled: () {
+              if (cancelled) {
+                throw StateError('cancelled during Web analysis yield');
+              }
+            },
+          ),
+          throwsA(
+            predicate<Object>(
+              (error) => error.toString().contains(
+                    'cancelled during Web analysis yield',
+                  ),
+            ),
+          ),
+        );
+
+        expect(yieldCount, 1);
+      },
+    );
+
+    test('native plan aborts when its cancellation signal completes', () async {
+      final wav = _buildTestWav(sampleRate: 1000, segments: [(1.0, 0.5)]);
+      final cancellation = Completer<Object?>();
+      final planning = AudioChunker().planAsync(
+        wav,
+        AudioChunkMethod.fixedDuration,
+        cancellationSignal: cancellation.future,
+      );
+      cancellation.complete(StateError('cancelled'));
+
+      await expectLater(planning, throwsA(isA<StateError>()));
+    });
+
+    test(
+      'native silence plan skips isolate transfer after precompleted cancellation',
+      () async {
+        final wav = _buildTestWav(sampleRate: 1000, segments: [(1.0, 0.5)]);
+        final cancellation = Completer<Object?>()
+          ..complete(StateError('cancelled before transfer'));
+        var isolateStarts = 0;
+
+        await expectLater(
+          AudioChunker().planAsync(
+            wav,
+            AudioChunkMethod.silence,
+            cancellationSignal: cancellation.future,
+            onNativeIsolateStarted: () => isolateStarts++,
+          ),
+          throwsA(
+            predicate<Object>(
+              (error) => error.toString().contains('cancelled before transfer'),
+            ),
+          ),
+        );
+
+        expect(isolateStarts, 0);
+      },
+    );
+
+    test('native fixed plans yield while building many ranges', () async {
+      final wav = _buildTestWav(sampleRate: 1000, segments: [(2.0, 0.5)]);
+      final chunker = AudioChunker(
+        config: const AudioChunkConfig(
+          maxChunkBytes: 2,
+          fixedDurationSeconds: 0.001,
+        ),
+      );
+
+      for (final method in [
+        AudioChunkMethod.fixedDuration,
+        AudioChunkMethod.fixedSize,
+      ]) {
+        final cancellation = Completer<Object?>();
+        Timer.run(
+          () => cancellation.complete(
+            StateError('cancelled during range planning'),
+          ),
+        );
+
+        await expectLater(
+          chunker.planAsync(
+            wav,
+            method,
+            maxChunks: 300,
+            cancellationSignal: cancellation.future,
+          ),
+          throwsA(
+            predicate<Object>(
+              (error) =>
+                  error.toString().contains('cancelled during range planning'),
+            ),
+          ),
+        );
+      }
+    });
+
+    test('range planning checks cancellation after each yield wait', () async {
+      final wav = _buildTestWav(sampleRate: 1000, segments: [(2.0, 0.5)]);
+      final cancellation = Completer<Object?>();
+      var yieldCount = 0;
+      final chunker = AudioChunker(
+        config: const AudioChunkConfig(
+          maxChunkBytes: 2,
+          fixedDurationSeconds: 0.001,
+        ),
+      );
+
+      final planning = chunker.planWithEventLoopYield(
+        wav,
+        AudioChunkMethod.fixedDuration,
+        maxChunks: 300,
+        cancellationSignal: cancellation.future,
+        onYield: () {
+          yieldCount++;
+          if (yieldCount == 2) {
+            cancellation.complete(
+              StateError('cancelled during second range yield'),
+            );
+          }
+        },
+      );
+
+      await expectLater(
+        planning,
+        throwsA(
+          predicate<Object>(
+            (error) => error.toString().contains(
+                  'cancelled during second range yield',
+                ),
+          ),
+        ),
+      );
+      expect(yieldCount, 2);
+    });
+
+    test('Web silence cut scans yield across dense candidate lists', () async {
+      final segments = <(double, double)>[];
+      for (var index = 0; index < 1000; index++) {
+        segments.add((0.2, 0.5));
+        segments.add((0.2, 0));
+      }
+      final wav = _buildTestWav(sampleRate: 1000, segments: segments);
+      final chunker = AudioChunker(
+        config: const AudioChunkConfig(
+          frameSize: 32,
+          maxChunkBytes: 1024 * 1024,
+          minSilenceDuration: 0.1,
+          minChunkDuration: 1.0,
+          targetChunkDuration: 2.0,
+          maxChunkDuration: 3.0,
+          analysisWindowSeconds: 0.1,
+        ),
+      );
+      var yieldCount = 0;
+
+      final plan = await chunker.planWithEventLoopYield(
+        wav,
+        AudioChunkMethod.silence,
+        onYield: () => yieldCount++,
+      );
+      final expected = chunker.plan(wav, AudioChunkMethod.silence);
+      final frameCount = parseWavHeader(wav).totalSamples ~/ 32;
+
+      expect(yieldCount, greaterThan((frameCount ~/ 128) * 2));
+      expect(
+        plan.map((range) => (range.startByte, range.endByte)),
+        expected.map((range) => (range.startByte, range.endByte)),
+      );
+    });
+
+    test(
+      'Web silence range planning yields between one-range selected cuts',
+      () async {
+        const sampleCount = 300;
+        final wav = _buildTestWav(
+          sampleRate: 1000,
+          segments: [(sampleCount / 1000, 0.5)],
+        );
+        final chunker = AudioChunker(
+          config: const AudioChunkConfig(
+            frameSize: 1,
+            silenceDbThreshold: -200,
+            maxChunkBytes: 1024 * 1024,
+            minSilenceDuration: 0.001,
+            minChunkDuration: 0.001,
+            targetChunkDuration: 0.002,
+            maxChunkDuration: 0.002,
+            analysisWindowSeconds: 0.001,
+          ),
+        );
+        var yieldCount = 0;
+
+        final plan = await chunker.planWithEventLoopYield(
+          wav,
+          AudioChunkMethod.silence,
+          onYield: () => yieldCount++,
+        );
+        final expected = chunker.plan(wav, AudioChunkMethod.silence);
+        final frameCount = parseWavHeader(wav).totalSamples;
+
+        expect(plan, hasLength(150));
+        expect(yieldCount, greaterThan((frameCount - 1) ~/ 128 * 3));
+        expect(
+          plan.map((range) => (range.startByte, range.endByte)),
+          expected.map((range) => (range.startByte, range.endByte)),
+        );
+      },
+    );
+
+    test(
+      'Web silence selector yields and checks cancellation across forced cuts',
+      () async {
+        const sampleCount = 3000;
+        final wav = _buildTestWav(
+          sampleRate: 1000,
+          segments: [(sampleCount / 1000, 0.5)],
+        );
+        final chunker = AudioChunker(
+          config: const AudioChunkConfig(
+            frameSize: sampleCount,
+            silenceDbThreshold: -200,
+            maxChunkBytes: 1024 * 1024,
+            minSilenceDuration: 0.001,
+            minChunkDuration: 0.001,
+            targetChunkDuration: 0.001,
+            maxChunkDuration: 0.001,
+            analysisWindowSeconds: 0.001,
+          ),
+        );
+        var cancelled = false;
+        var yieldCount = 0;
+
+        await expectLater(
+          chunker.planWithEventLoopYield(
+            wav,
+            AudioChunkMethod.silence,
+            // Stop range planning before it can mask selector yields.
+            maxChunks: 1,
+            onYield: () {
+              yieldCount++;
+              cancelled = true;
+            },
+            checkCancelled: () {
+              if (cancelled) throw StateError('cancelled');
+            },
+          ),
+          throwsA(isA<StateError>()),
+        );
+
+        expect(yieldCount, 1);
+      },
+    );
+
+    test('Web silence gap scan yields across long frame lists', () async {
+      const durationSeconds = 524.3;
+      final wav = _buildTestWav(
+        sampleRate: 1000,
+        segments: [(durationSeconds, 0.5)],
+      );
+      final chunker = AudioChunker(
+        config: const AudioChunkConfig(
+          frameSize: 32,
+          maxChunkBytes: 2 * 1024 * 1024,
+          minSilenceDuration: 0.1,
+          minChunkDuration: 1.0,
+          targetChunkDuration: 2.0,
+          maxChunkDuration: 600.0,
+          analysisWindowSeconds: 0.1,
+        ),
+      );
+      var yieldCount = 0;
+
+      final plan = await chunker.planWithEventLoopYield(
+        wav,
+        AudioChunkMethod.silence,
+        onYield: () => yieldCount++,
+      );
+      final expected = chunker.plan(wav, AudioChunkMethod.silence);
+      final frameCount = parseWavHeader(wav).totalSamples ~/ 32;
+
+      expect(yieldCount, greaterThan((frameCount ~/ 128) * 3));
+      expect(
+        plan.map((range) => (range.startByte, range.endByte)),
+        expected.map((range) => (range.startByte, range.endByte)),
+      );
     });
   });
 }

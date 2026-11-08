@@ -12,6 +12,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_chat_core/flutter_chat_core.dart';
 import 'package:flutter_chat_ui/flutter_chat_ui.dart' hide ChatMessage;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -43,6 +45,8 @@ class _HangingStreamManager extends ChatStreamManager {
     required String text,
     required String convId,
     required List<ChatMessage> history,
+    List<ChatMessage>? requestHistoryOverride,
+    List<ChatMessage>? historyOnSuccess,
     List<ToolDefinition> tools = const [],
     bool reasoning = false,
     String reasoningEffort = 'medium',
@@ -50,6 +54,7 @@ class _HangingStreamManager extends ChatStreamManager {
     String? selectedAccountId,
     String? streamingMsgId,
     Assistant? assistant,
+    Map<String, String>? customParamValues,
     ProviderEntriesState? entriesStateOverride,
   }) {
     return Completer<StreamResult>().future;
@@ -65,7 +70,16 @@ Widget _buildTestApp(_HangingStreamManager manager) {
       activeConversationIdProvider.overrideWith((ref) => 'test-conv'),
       providerEntriesProvider.overrideWith((ref) => ProviderEntriesNotifier()),
     ],
-    child: const MaterialApp(home: ChatPage()),
+    child: const MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: ChatPage()),
   );
 }
 
@@ -322,6 +336,74 @@ void main() {
   });
 
   group('reload of roundStarts-era messages repairs misaligned blocks', () {
+    testWidgets('partial reasoning keeps one trailing red error after reload',
+        (tester) async {
+      const errorText = '错误: simulated interruption';
+      final partialError = ChatMessage(
+        id: 'a-error',
+        role: 'assistant',
+        content: errorText,
+        isError: true,
+        reasoningSections: ['partial reasoning'],
+        toolCallRoundStarts: [0],
+        blocks: const [
+          ReasoningBlock(text: 'partial reasoning', isComplete: true),
+          ErrorBlock(message: errorText),
+        ],
+      );
+
+      SharedPreferences.setMockInitialValues({});
+      final conversation = Conversation(
+        id: 'test-conv',
+        title: 'Test Conversation',
+        createdAt: DateTime(2025, 1, 1),
+        updatedAt: DateTime(2025, 1, 1),
+        messages: [
+          ChatMessage(
+            id: 'u1',
+            role: 'user',
+            content: 'hello',
+            createdAt: DateTime(2025, 1, 1),
+          ),
+          partialError,
+        ],
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            conversationsProvider.overrideWith((ref) {
+              final notifier = ConversationsNotifier(ref);
+              notifier.state = [conversation];
+              return notifier;
+            }),
+            activeConversationIdProvider.overrideWith((ref) => 'test-conv'),
+            providerEntriesProvider
+                .overrideWith((ref) => ProviderEntriesNotifier()),
+          ],
+          child: const MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              supportedLocales: AppLocalizations.supportedLocales,
+              localizationsDelegates: const [
+                AppLocalizations.delegate,
+                GlobalMaterialLocalizations.delegate,
+                GlobalWidgetsLocalizations.delegate,
+                GlobalCupertinoLocalizations.delegate,
+              ],
+              home: ChatPage()),
+        ),
+      );
+      for (int i = 0; i < 40; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+
+      expect(find.text('思考完成'), findsOneWidget);
+      expect(find.text(errorText), findsOneWidget);
+      expect(find.text('发送失败'), findsNothing);
+
+      await _flushPendingTimers(tester);
+    });
+
     testWidgets(
         'interior-empty reasoning sections render their buttons after '
         'reload', (tester) async {
@@ -414,7 +496,16 @@ void main() {
             providerEntriesProvider
                 .overrideWith((ref) => ProviderEntriesNotifier()),
           ],
-          child: const MaterialApp(home: ChatPage()),
+          child: const MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              supportedLocales: AppLocalizations.supportedLocales,
+              localizationsDelegates: const [
+                AppLocalizations.delegate,
+                GlobalMaterialLocalizations.delegate,
+                GlobalWidgetsLocalizations.delegate,
+                GlobalCupertinoLocalizations.delegate,
+              ],
+              home: ChatPage()),
         ),
       );
       // Let _initialize + _loadConversationMessages (and the initial

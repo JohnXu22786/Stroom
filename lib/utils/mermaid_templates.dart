@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 
 /// Describes a mermaid diagram type with display info
 class MermaidDiagramType {
@@ -31,11 +32,100 @@ class MermaidTemplates {
   // ---------------------------------------------------------------------------
 
   /// Returns the [MermaidDiagramType] list (all supported types).
-  static List<MermaidDiagramType> getAllTypes() => _types;
+  static List<MermaidDiagramType> getAllTypes([AppLocalizations? strings]) {
+    if (strings == null) return _types;
+    return _types.map((type) {
+      final localized = switch (type.id) {
+        'flowchart' => (
+            strings.mermaidCatalogTypeFlowchart,
+            strings.mermaidCatalogDescriptionFlowchart,
+          ),
+        'sequenceDiagram' => (
+            strings.mermaidCatalogTypeSequenceDiagram,
+            strings.mermaidCatalogDescriptionSequenceDiagram,
+          ),
+        'classDiagram' => (
+            strings.mermaidCatalogTypeClassDiagram,
+            strings.mermaidCatalogDescriptionClassDiagram,
+          ),
+        'stateDiagram' => (
+            strings.mermaidCatalogTypeStateDiagram,
+            strings.mermaidCatalogDescriptionStateDiagram,
+          ),
+        'erDiagram' => (
+            strings.mermaidCatalogTypeErDiagram,
+            strings.mermaidCatalogDescriptionErDiagram,
+          ),
+        'gantt' => (
+            strings.mermaidCatalogTypeGantt,
+            strings.mermaidCatalogDescriptionGantt,
+          ),
+        'pie' => (
+            strings.mermaidCatalogTypePie,
+            strings.mermaidCatalogDescriptionPie,
+          ),
+        'journey' => (
+            strings.mermaidCatalogTypeJourney,
+            strings.mermaidCatalogDescriptionJourney,
+          ),
+        'gitGraph' => (
+            strings.mermaidCatalogTypeGitGraph,
+            strings.mermaidCatalogDescriptionGitGraph,
+          ),
+        'mindmap' => (
+            strings.mermaidCatalogTypeMindmap,
+            strings.mermaidCatalogDescriptionMindmap,
+          ),
+        'timeline' => (
+            strings.mermaidCatalogTypeTimeline,
+            strings.mermaidCatalogDescriptionTimeline,
+          ),
+        'block' => (
+            strings.mermaidCatalogTypeBlock,
+            strings.mermaidCatalogDescriptionBlock,
+          ),
+        'requirement' => (
+            strings.mermaidCatalogTypeRequirement,
+            strings.mermaidCatalogDescriptionRequirement,
+          ),
+        _ => (type.label, type.description),
+      };
+      return MermaidDiagramType(
+        id: type.id,
+        label: localized.$1,
+        icon: type.icon,
+        description: localized.$2,
+        keyword: type.keyword,
+      );
+    }).toList(growable: false);
+  }
 
   /// Returns a template string for the given [typeId].
   /// Returns empty string if the type is unknown.
-  static String getTemplate(String typeId) {
+  static String getTemplate(String typeId, {AppLocalizations? strings}) {
+    if (strings != null) {
+      final localized = switch (typeId) {
+        'flowchart' => strings.mermaidCatalogTemplateFlowchart,
+        'sequenceDiagram' => strings.mermaidCatalogTemplateSequenceDiagram,
+        'classDiagram' => strings.mermaidCatalogTemplateClassDiagram,
+        'stateDiagram' => strings.mermaidCatalogTemplateStateDiagram,
+        'erDiagram' => strings.mermaidCatalogTemplateErDiagram,
+        'gantt' => strings.mermaidCatalogTemplateGantt,
+        'pie' => strings.mermaidCatalogTemplatePie,
+        'journey' => strings.mermaidCatalogTemplateJourney,
+        'gitGraph' => strings.mermaidCatalogTemplateGitGraph,
+        'mindmap' => strings.mermaidCatalogTemplateMindmap,
+        'timeline' => strings.mermaidCatalogTemplateTimeline,
+        'block' => strings.mermaidCatalogTemplateBlock,
+        'requirement' => strings.mermaidCatalogTemplateRequirement,
+        _ => null,
+      };
+      if (localized != null) {
+        return localized
+            .replaceAll('<MERMAID_OPEN_BRACE>', '{')
+            .replaceAll('<MERMAID_CLOSE_BRACE>', '}');
+      }
+    }
     final generator = _generators[typeId];
     if (generator == null) return '';
     return generator();
@@ -51,11 +141,365 @@ class MermaidTemplates {
     return buf.toString();
   }
 
+  /// Assigns an unused ID to class, ER, or block entity snippets.
+  static String assignUniqueDiagramEntityId(
+    String code,
+    String snippet,
+    String diagramTypeId,
+  ) {
+    final patterns = switch (diagramTypeId) {
+      'classDiagram' => (
+          r'^([ \t]*class[ \t]+)(\S+)(?=[ \t]*\{)',
+          r'^[ \t]*class[ \t]+(?:"[^"]+"[ \t]+as[ \t]+)?(\S+)(?=[ \t]*(?:\{|$))|^[ \t]*(\S+)(?:[ \t]+"[^"]+")?[ \t]+[<|>*o().-]+[ \t]+(?:"[^"]+"[ \t]+)?(\S+)(?:[ \t]*:.*)?$|^[ \t]*(\S+?)(?:[ \t]+"[^"]+")?[ \t]*(?=[<|>*o().-]*[-.])[<|>*o().-]+[ \t]*(?:"[^"]+"[ \t]+)?(\S+?)(?:[ \t]*:.*)?$',
+        ),
+      'erDiagram' => (
+          r'^([ \t]*)(\S+)(?=[ \t]*\{)',
+          r'^[ \t]*(?:(\S+?)[ \t]*(?=[|{}oO.-]*[-.])[|{}oO.-]+[ \t]*(\S+?)[ \t]*(?::.*)?$|(\S+)[ \t]*\{|(\S+)[ \t]+[|{}oO.-]+[ \t]+(\S+)[ \t]*:.*$)',
+        ),
+      'block' => (
+          r'^([ \t]*)(\S+)(?=\[)',
+          r'(?:^|[ \t;<>.=~|\-]|--[ox])(\S+)(?=\[)|(?:^|[ \t;<>.=~|\-]|--[ox]|block:)(NewBlock\d*)(?=[ \t;]|$|\(|\{|:\d+|[-=<>.~|])',
+        ),
+      _ => null,
+    };
+    if (patterns == null) return snippet;
+
+    final snippetIdPattern = diagramTypeId == 'block' &&
+            RegExp(r'^[ \t]*block[ \t]*\r?\n').hasMatch(snippet)
+        ? RegExp(r'^([ \t]*)(\S+)(?=\[)', multiLine: true)
+        : RegExp(patterns.$1);
+    final snippetId = snippetIdPattern.firstMatch(snippet);
+    if (snippetId == null) return snippet;
+
+    final existingIds = <String>{};
+    final existingIdPattern = RegExp(patterns.$2);
+    for (final sourceLine in code.split('\n')) {
+      final line = sourceLine.trimRight();
+      if (line.trimLeft().startsWith('%%')) continue;
+      for (final existingId in existingIdPattern.allMatches(line)) {
+        for (var group = 1; group <= existingId.groupCount; group++) {
+          final entityId = existingId[group];
+          if (entityId != null) existingIds.add(entityId);
+        }
+      }
+    }
+
+    final baseId = snippetId[2]!;
+    var entityId = baseId;
+    var suffix = 1;
+    while (existingIds.contains(entityId)) {
+      entityId = '$baseId${suffix++}';
+    }
+
+    return snippet.replaceRange(
+      snippetId.start + snippetId[1]!.length,
+      snippetId.end,
+      entityId,
+    );
+  }
+
+  /// Assigns unused IDs to the nodes declared in a flowchart snippet.
+  static String assignUniqueFlowchartNodeIds(String code, String snippet) {
+    final snippetNodeIds = _flowchartNodeIds(snippet);
+    if (snippetNodeIds.isEmpty) return snippet;
+
+    final existingIds = _flowchartNodeIds(code);
+    final replacements = <String, String>{};
+    for (final baseId in snippetNodeIds) {
+      var nodeId = baseId;
+      var suffix = 1;
+      while (existingIds.contains(nodeId)) {
+        nodeId = '$baseId${suffix++}';
+      }
+      existingIds.add(nodeId);
+      replacements[baseId] = nodeId;
+    }
+
+    if (replacements.entries.every((entry) => entry.key == entry.value)) {
+      return snippet;
+    }
+
+    final nodeIds = replacements.keys.toList()
+      ..sort((a, b) => b.length.compareTo(a.length));
+    final nodeIdPattern = RegExp(
+      r'\b(?:' + nodeIds.map(RegExp.escape).join('|') + r')\b',
+    );
+    return snippet.replaceAllMapped(
+      nodeIdPattern,
+      (match) => replacements[match[0]]!,
+    );
+  }
+
+  /// Assigns an unused ID to a subgraph declared in a flowchart snippet.
+  static String assignUniqueFlowchartSubgraphId(String code, String snippet) {
+    final subgraphIdPattern = RegExp(
+      r'(?:^|;)[ \t]*subgraph[ \t]+([^\s;\[]+)',
+      multiLine: true,
+    );
+    final snippetSubgraphId = subgraphIdPattern.firstMatch(snippet);
+    if (snippetSubgraphId == null) return snippet;
+
+    final existingIds = <String>{};
+    for (final line in code.split('\n')) {
+      final flowchartSyntax = line.split('%%').first;
+      for (final existingSubgraphId in subgraphIdPattern.allMatches(
+        flowchartSyntax,
+      )) {
+        existingIds.add(existingSubgraphId[1]!);
+      }
+    }
+
+    final baseId = snippetSubgraphId[1]!;
+    var subgraphId = baseId;
+    var suffix = 1;
+    while (existingIds.contains(subgraphId)) {
+      subgraphId = '$baseId${suffix++}';
+    }
+
+    if (subgraphId == baseId) return snippet;
+    final subgraphIdStart = snippetSubgraphId.end - baseId.length;
+    return snippet.replaceRange(
+      subgraphIdStart,
+      snippetSubgraphId.end,
+      subgraphId,
+    );
+  }
+
+  /// Finds existing IDs from flowchart statements and their link endpoints.
+  static Set<String> _flowchartNodeIds(String code) {
+    final nodeIdPattern = RegExp(r'\b([A-Za-z_][A-Za-z0-9_]*)\b');
+    final usedIds = <String>{};
+
+    for (final line in code.split('\n')) {
+      final flowchartSyntax = _stripFlowchartLabelsAndComments(line);
+      for (final statement in flowchartSyntax.split(';')) {
+        if (statement.trim() == 'end') continue;
+
+        for (final match in nodeIdPattern.allMatches(statement)) {
+          final before = statement.substring(0, match.start).trimRight();
+          final after = statement.substring(match.end).trimLeft();
+          final startsNode = before.isEmpty ||
+              before.endsWith('&') ||
+              RegExp(r'(?:[ox])?[-=.~<>]{2,}[ox]?$').hasMatch(before);
+          final endsNode = after.isEmpty ||
+              after.startsWith(RegExp(r'(?:[ox])?[-=.~<>]{2,}[ox]?')) ||
+              after.startsWith(RegExp(r'^[\[({>@:]')) ||
+              after.startsWith('&');
+
+          if (startsNode && endsNode) usedIds.add(match[1]!);
+        }
+      }
+    }
+
+    return usedIds;
+  }
+
+  /// Removes label and comment text before checking node-ID syntax.
+  static String _stripFlowchartLabelsAndComments(String line) {
+    final buffer = StringBuffer();
+    final edgeLabelStartPattern = RegExp(r'(---|--|===|==|-\.)([ \t]+)');
+    var index = 0;
+
+    while (index < line.length) {
+      if (line.startsWith('%%', index)) break;
+
+      final char = line[index];
+      if (char == '"') {
+        index = _skipDelimitedText(line, index, '"', '"');
+        buffer.write(' ');
+        continue;
+      }
+
+      if (char == '[' || char == '(' || char == '{') {
+        index = _skipDelimitedText(
+            line,
+            index,
+            char,
+            switch (char) {
+              '[' => ']',
+              '(' => ')',
+              _ => '}',
+            });
+        buffer.write(' ');
+        continue;
+      }
+
+      final previous = index > 0 ? line[index - 1] : '';
+      if (char == '>' &&
+          previous.isNotEmpty &&
+          previous.trim().isNotEmpty &&
+          !'<>=-.~'.contains(previous)) {
+        final labelEnd = _asymmetricFlowchartLabelEnd(line, index + 1);
+        if (labelEnd != null) {
+          index = labelEnd;
+          buffer.write(' ');
+          continue;
+        }
+      }
+
+      if (char == '|') {
+        index = _skipDelimitedText(line, index, '|', '|');
+        buffer.write(' ');
+        continue;
+      }
+
+      final connectorMarkerChar = index > 0 ? line[index - 1] : '';
+      final isMarkedConnector =
+          (connectorMarkerChar == 'o' || connectorMarkerChar == 'x') &&
+              (index < 2 || !RegExp(r'[A-Za-z0-9_]').hasMatch(line[index - 2]));
+      final edgeLabelStart = !isMarkedConnector && (char == '-' || char == '=')
+          ? edgeLabelStartPattern.matchAsPrefix(line, index)
+          : null;
+      if (edgeLabelStart != null) {
+        final edgeLabelEnd = _flowchartEdgeLabelEnd(
+          line,
+          index + edgeLabelStart.end,
+        );
+        if (edgeLabelEnd != null) {
+          buffer
+            ..write(edgeLabelStart[1])
+            ..write(' ')
+            ..write(edgeLabelEnd.$2)
+            ..write(' ');
+          index = edgeLabelEnd.$1;
+          continue;
+        }
+      }
+
+      buffer.write(char);
+      index++;
+    }
+
+    return buffer.toString();
+  }
+
+  static int? _asymmetricFlowchartLabelEnd(String line, int start) {
+    var index = start;
+    var insideQuotes = false;
+    while (index < line.length) {
+      if (line[index] == r'\' && index + 1 < line.length) {
+        index += 2;
+        continue;
+      }
+      if (line[index] == '"') {
+        insideQuotes = !insideQuotes;
+      } else if (!insideQuotes && line[index] == ']') {
+        return index + 1;
+      }
+      index++;
+    }
+    return null;
+  }
+
+  static (int, String)? _flowchartEdgeLabelEnd(String line, int start) {
+    final edgeConnectorPattern = RegExp(r'(-->|---|==>|===|-\.->|\.->)');
+    var index = start;
+
+    while (index < line.length) {
+      if (line.startsWith('%%', index) || line[index] == ';') {
+        return null;
+      }
+      if (line[index] == '"') {
+        index = _skipDelimitedText(line, index, '"', '"');
+        continue;
+      }
+
+      final connector = edgeConnectorPattern.matchAsPrefix(line, index);
+      if (index > start &&
+          (line[index - 1] == ' ' || line[index - 1] == '\t') &&
+          connector != null) {
+        return (index + connector.end, connector[1]!);
+      }
+      index++;
+    }
+
+    return null;
+  }
+
+  static int _skipDelimitedText(
+    String text,
+    int start,
+    String opening,
+    String closing,
+  ) {
+    var index = start + opening.length;
+    if (opening == closing) {
+      var insideQuotes = false;
+      while (index < text.length) {
+        if (text[index] == r'\' && index + 1 < text.length) {
+          index += 2;
+          continue;
+        }
+        if (opening != '"' && text[index] == '"') {
+          insideQuotes = !insideQuotes;
+          index++;
+          continue;
+        }
+        if (!insideQuotes && text[index] == closing) return index + 1;
+        index++;
+      }
+      return index;
+    }
+
+    var depth = 1;
+    var insideQuotes = false;
+
+    while (index < text.length) {
+      final char = text[index];
+      if (char == r'\' && index + 1 < text.length) {
+        index += 2;
+        continue;
+      }
+      if (char == '"') {
+        insideQuotes = !insideQuotes;
+      } else if (!insideQuotes) {
+        if (char == opening) depth++;
+        if (char == closing && --depth == 0) return index + 1;
+      }
+      index++;
+    }
+
+    return index;
+  }
+
+  /// Assigns an unused ID to a requirement snippet for the current diagram.
+  static String assignUniqueRequirementId(String code, String snippet) {
+    final isRequirementDiagram = RegExp(
+      r'^[ \t]*requirementDiagram(?:[ \t]|$)',
+      multiLine: true,
+    ).hasMatch(code);
+    final isRequirementSnippet = RegExp(
+      r'^[ \t]*requirement[ \t]+\S+[ \t]*\{',
+      multiLine: true,
+    ).hasMatch(snippet);
+    if (!isRequirementDiagram || !isRequirementSnippet) return snippet;
+
+    final idPattern = RegExp(r'^([ \t]*id[ \t]*:[ \t]*)(\S+)', multiLine: true);
+    final snippetId = idPattern.firstMatch(snippet);
+    if (snippetId == null) return snippet;
+
+    final existingIds =
+        idPattern.allMatches(code).map((match) => match[2]!).toSet();
+    var nextId = 1;
+    while (existingIds.contains('$nextId')) {
+      nextId++;
+    }
+
+    return snippet.replaceRange(
+      snippetId.start,
+      snippetId.end,
+      '${snippetId[1]}$nextId',
+    );
+  }
+
   /// Adds a Gantt task that depends on the last task ID in [code].
   ///
   /// If the chart has tasks but none has an ID, one is assigned to the last
   /// task that does not itself depend on another task.
-  static String insertGanttDependencyTask(String code) {
+  static String insertGanttDependencyTask(
+    String code, {
+    AppLocalizations? strings,
+  }) {
     final lines = code.split('\n');
     final dateFormat = _ganttDateFormat(code);
     final taskIds = <String>[];
@@ -97,15 +541,24 @@ class MermaidTemplates {
     }
 
     var updatedCode = lines.join('\n');
+    final dependencyTaskName = strings?.localeName.startsWith('en') == true
+        ? strings!.mermaidCatalogGanttDependencyBaseTask
+        : '依赖基准任务';
+    final followUpTaskName = strings?.localeName.startsWith('en') == true
+        ? strings!.mermaidCatalogGanttDependentTaskName
+        : '后续任务';
     if (taskIds.isEmpty && lastRootTaskIndex < 0) {
       final startDate = _ganttStartDate(code);
       updatedCode = insertSnippet(
         updatedCode,
-        '  依赖基准任务 :$dependencyId, $startDate, 1d',
+        '  $dependencyTaskName :$dependencyId, $startDate, 1d',
       );
     }
 
-    return insertSnippet(updatedCode, '  后续任务 :after $dependencyId, 5d');
+    return insertSnippet(
+      updatedCode,
+      '  $followUpTaskName :after $dependencyId, 5d',
+    );
   }
 
   static List<String>? _ganttTaskAttributes(String line, String dateFormat) {
@@ -236,8 +689,8 @@ class MermaidTemplates {
       'Z': r'[+-]\d{2}:\d{2}',
     };
     final tokenPattern = RegExp(
-      r'\[[^\]]*\]|dddd|ddd|dd|d|'
-      r'YYYY|MMMM|MMM|YY|MM|M|Do|DD|D|'
+      r'\[[^\]]*\]|dddd|ddd|dd|Do|d|'
+      r'YYYY|MMMM|MMM|YY|MM|M|DD|D|'
       r'HH|H|hh|h|mm|m|ss|s|SSS|ZZ|Z|a|A',
     );
     final pattern = StringBuffer('^');
@@ -384,8 +837,8 @@ class MermaidTemplates {
     };
     return dateFormat.replaceAllMapped(
       RegExp(
-        r'\[[^\]]*\]|dddd|ddd|dd|d|'
-        r'YYYY|MMMM|MMM|YY|MM|M|Do|DD|D|'
+        r'\[[^\]]*\]|dddd|ddd|dd|Do|d|'
+        r'YYYY|MMMM|MMM|YY|MM|M|DD|D|'
         r'HH|H|hh|h|mm|m|ss|s|SSS|ZZ|Z|a|A',
       ),
       (match) {
@@ -727,7 +1180,7 @@ class MermaidTemplates {
     id: 1
     text: 用户能够使用账号密码登录系统
     risk: medium
-    verifiedMethod: test
+    verifyMethod: test
   }
   element 登录页面 {
     type: UI
@@ -735,17 +1188,263 @@ class MermaidTemplates {
   element 认证服务 {
     type: Service
   }
-  用户登录 - satisfies -> 登录页面
-  用户登录 - verifiedBy -> 认证服务''';
+  登录页面 - satisfies -> 用户登录
+  认证服务 - verifies -> 用户登录''';
+  }
+
+  static List<(String label, String snippet)> _requirementRelationshipSnippets(
+    String code,
+  ) {
+    final requirementId = RegExp(
+      r'^[ \t]*(?:requirement|functionalRequirement|interfaceRequirement|'
+      r'performanceRequirement|physicalRequirement|designConstraint)[ \t]+'
+      r'([^\s{]+)[ \t]*\{',
+      multiLine: true,
+      caseSensitive: false,
+    ).firstMatch(code)?[1];
+    final elementDeclarations = RegExp(
+      r'^[ \t]*element[ \t]+([^\s{]+)[ \t]*\{',
+      multiLine: true,
+      caseSensitive: false,
+    ).allMatches(code).toList();
+    if (requirementId == null || elementDeclarations.isEmpty) return const [];
+
+    final satisfiesElement = elementDeclarations.first[1]!;
+    var verificationElement = satisfiesElement;
+    for (final element in elementDeclarations) {
+      final closingBrace = code.indexOf('}', element.end);
+      if (closingBrace < 0) continue;
+
+      final elementBody = code.substring(element.end, closingBrace);
+      if (RegExp(
+        r'^[ \t]*type[ \t]*:[ \t]*Service[ \t]*$',
+        multiLine: true,
+        caseSensitive: false,
+      ).hasMatch(elementBody)) {
+        verificationElement = element[1]!;
+        break;
+      }
+    }
+
+    return [
+      ('添加关联', '  $satisfiesElement - satisfies -> $requirementId'),
+      ('添加验证', '  $verificationElement - verifies -> $requirementId'),
+    ];
   }
 
   // ---------------------------------------------------------------------------
   // Context-specific snippets for each diagram type
   // ---------------------------------------------------------------------------
 
+  static String? _gitGraphConfiguredMainBranch(String code) {
+    final mainBranchNamePattern = RegExp(
+      r'''["']?mainBranchName["']?\s*:\s*["']?([^\s"',}#]+)''',
+    );
+    final initDirectives = RegExp(r'%%\{\s*init\s*:\s*(.*?)\}%%', dotAll: true);
+    final gitGraphConfigPattern = RegExp(
+      r'''["']?gitGraph["']?\s*:\s*\{([^}]*)\}''',
+      dotAll: true,
+    );
+
+    for (final directive in initDirectives.allMatches(code)) {
+      final gitGraphConfig = gitGraphConfigPattern.firstMatch(directive[1]!);
+      final mainBranchName = mainBranchNamePattern.firstMatch(
+        gitGraphConfig?.group(1) ?? '',
+      );
+      if (mainBranchName != null) return mainBranchName[1];
+    }
+
+    final frontmatter = RegExp(
+      r'^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)',
+    ).firstMatch(code);
+    if (frontmatter == null) return null;
+
+    var gitGraphIndent = -1;
+    for (final line in frontmatter[1]!.split(RegExp(r'\r?\n'))) {
+      final trimmedLine = line.trimLeft();
+      if (trimmedLine.isEmpty || trimmedLine.startsWith('#')) continue;
+      final indentation = line.length - trimmedLine.length;
+      if (gitGraphIndent >= 0 && indentation <= gitGraphIndent) {
+        gitGraphIndent = -1;
+      }
+      if (gitGraphIndent < 0 &&
+          RegExp(r'''^["']?gitGraph["']?\s*:\s*(?:#.*)?$''')
+              .hasMatch(trimmedLine)) {
+        gitGraphIndent = indentation;
+        continue;
+      }
+      final inlineGitGraphConfig = gitGraphConfigPattern.firstMatch(
+        trimmedLine,
+      );
+      if (inlineGitGraphConfig != null) {
+        final mainBranchName = mainBranchNamePattern.firstMatch(
+          inlineGitGraphConfig[1]!,
+        );
+        if (mainBranchName != null) return mainBranchName[1];
+      }
+      if (gitGraphIndent >= 0 && indentation > gitGraphIndent) {
+        final mainBranchName = mainBranchNamePattern.firstMatch(trimmedLine);
+        if (mainBranchName != null) return mainBranchName[1];
+      }
+    }
+
+    return null;
+  }
+
+  static String? _gitGraphMergeTarget(String code) {
+    final branches = RegExp(
+      r'^\s*branch\s+(\S+)',
+      multiLine: true,
+    ).allMatches(code).map((match) => match[1]!).toSet();
+    final configuredMainBranch = _gitGraphConfiguredMainBranch(code);
+    final mainBranch = configuredMainBranch ?? 'main';
+    var activeBranch = mainBranch;
+
+    for (final checkout in RegExp(
+      r'^[ \t]*checkout[ \t]+(\S+)',
+      multiLine: true,
+    ).allMatches(code)) {
+      activeBranch = checkout[1]!;
+    }
+
+    final candidates = <String>{
+      if (branches.contains('develop') || configuredMainBranch == 'develop')
+        'develop',
+      ...branches,
+      mainBranch,
+    };
+    for (final branch in candidates) {
+      if (branch != activeBranch) return branch;
+    }
+    return null;
+  }
+
   /// Returns a list of "snippet buttons" for a given diagram [typeId].
   /// Each entry is (label, snippetText).
-  static List<(String label, String snippet)> getSnippets(String typeId) {
+  static List<(String label, String snippet)> getSnippets(
+    String typeId, {
+    String? code,
+    AppLocalizations? strings,
+  }) {
+    final snippets = _getSnippets(typeId, code: code);
+    if (strings == null || !strings.localeName.startsWith('en')) {
+      return snippets;
+    }
+    final labels = <String, String>{
+      '添加节点': strings.mermaidCatalogActionAddNode,
+      '添加菱形判断': strings.mermaidCatalogActionAddDecision,
+      '添加连接线': strings.mermaidCatalogActionAddEdge,
+      '添加子图': strings.mermaidCatalogActionAddSubgraph,
+      '添加参与者': strings.mermaidCatalogActionAddParticipant,
+      '添加请求': strings.mermaidCatalogActionAddRequest,
+      '添加响应': strings.mermaidCatalogActionAddResponse,
+      '添加备注': strings.mermaidCatalogActionAddNote,
+      '添加类': strings.mermaidCatalogActionAddClass,
+      '添加继承': strings.mermaidCatalogActionAddInheritance,
+      '添加关联': strings.mermaidCatalogActionAddRelationship,
+      '添加聚合': strings.mermaidCatalogActionAddAggregation,
+      '添加状态': strings.mermaidCatalogActionAddState,
+      '添加转换': strings.mermaidCatalogActionAddTransition,
+      '添加开始': strings.mermaidCatalogActionAddStart,
+      '添加结束': strings.mermaidCatalogActionAddEnd,
+      '添加实体': strings.mermaidCatalogActionAddEntity,
+      '添加一对多': strings.mermaidCatalogActionAddOneToMany,
+      '添加多对多': strings.mermaidCatalogActionAddManyToMany,
+      '添加一对一': strings.mermaidCatalogActionAddOneToOne,
+      '添加阶段': strings.mermaidCatalogActionAddPhase,
+      '添加任务': strings.mermaidCatalogActionAddTask,
+      '添加依赖任务': strings.mermaidCatalogActionAddDependentTask,
+      '添加里程碑': strings.mermaidCatalogActionAddMilestone,
+      '添加类别': strings.mermaidCatalogActionAddCategory,
+      '添加标题': strings.mermaidCatalogActionAddTitle,
+      '添加系统任务': strings.mermaidCatalogActionAddSystemTask,
+      '添加多人任务': strings.mermaidCatalogActionAddMultiPersonTask,
+      '添加提交': strings.mermaidCatalogActionAddCommit,
+      '创建分支': strings.mermaidCatalogActionCreateBranch,
+      '切换分支': strings.mermaidCatalogActionSwitchBranch,
+      '合并分支': strings.mermaidCatalogActionMergeBranch,
+      '添加分支': strings.mermaidCatalogActionAddBranch,
+      '添加子分支': strings.mermaidCatalogActionAddChildBranch,
+      '添加主题': strings.mermaidCatalogActionAddTopic,
+      '添加时间段': strings.mermaidCatalogActionAddPeriod,
+      '添加块': strings.mermaidCatalogActionAddBlock,
+      '添加列': strings.mermaidCatalogActionAddColumns,
+      '添加连接': strings.mermaidCatalogActionAddConnection,
+      '添加子块': strings.mermaidCatalogActionAddChildBlock,
+      '添加需求': strings.mermaidCatalogActionAddRequirement,
+      '添加元素': strings.mermaidCatalogActionAddElement,
+      '添加验证': strings.mermaidCatalogActionAddVerification,
+    };
+    const content = <(String, String), String>{
+      ('flowchart', '添加节点'): '  NewNode[New node]',
+      ('flowchart', '添加菱形判断'): '  Condition{Condition}',
+      ('flowchart', '添加子图'): 'subgraph 子图名称 [Subgraph]\n  Node1[Node 1]\nend',
+      ('sequenceDiagram', '添加请求'): 'A->>B: Request message',
+      ('sequenceDiagram', '添加响应'): 'B-->>A: Response message',
+      ('sequenceDiagram', '添加备注'): 'Note over A,B: Note',
+      ('sequenceDiagram', '添加参与者'): 'participant "New participant" as 新参与者',
+      ('classDiagram', '添加类'):
+          'class "New class" as 新类 {\n  +String attribute\n  +method() void\n}',
+      ('classDiagram', '添加继承'):
+          'class "Child" as 子类\nclass "Parent" as 父类\n子类 --|> 父类',
+      ('classDiagram', '添加关联'):
+          'class "Class A" as 类A\nclass "Class B" as 类B\n类A --> 类B',
+      ('classDiagram', '添加聚合'):
+          'class "Whole" as 整体\nclass "Part" as 部分\n整体 o-- 部分',
+      ('stateDiagram', '添加状态'): '  state "New state" as 新状态',
+      ('stateDiagram', '添加转换'):
+          '  state "State 1" as 状态1\n  state "State 2" as 状态2\n  状态1 --> 状态2',
+      ('stateDiagram', '添加开始'):
+          '  state "Initial state" as 初始状态\n  [*] --> 初始状态',
+      ('stateDiagram', '添加结束'): '  state "Final state" as 最终状态\n  最终状态 --> [*]',
+      ('erDiagram', '添加一对多'): '  实体A ||--o{ 实体B : owns',
+      ('erDiagram', '添加多对多'): '  实体A }o--o{ 实体B : relates',
+      ('erDiagram', '添加一对一'): '  实体A ||--|| 实体B : corresponds',
+      // Entity names are Mermaid identifiers; keep them stable across locales.
+      ('erDiagram', '添加实体'): '  新实体 {\n    int id PK\n    string name\n  }',
+      ('gantt', '添加阶段'): '  section New phase',
+      ('gantt', '添加任务'): '  New task :{date}, 7d',
+      ('gantt', '添加依赖任务'): '  Follow-up task :after a1, 5d',
+      ('gantt', '添加里程碑'): '  Milestone :milestone, {date}, 0d',
+      ('pie', '添加类别'): '  "New category" : 30',
+      ('pie', '添加标题'): 'title Pie chart title',
+      ('journey', '添加阶段'): '  section New phase',
+      ('journey', '添加任务'): '    New task: 3: User',
+      ('journey', '添加系统任务'): '    System process: 5: System',
+      ('journey', '添加多人任务'): '    Collaborative task: 4: User, System',
+      ('gitGraph', '添加提交'): '  commit id: "New commit"',
+      ('gitGraph', '添加分支'): '  branch 新分支',
+      ('gitGraph', '切换分支'): '  checkout 新分支',
+      ('mindmap', '添加分支'): '    New branch',
+      ('mindmap', '添加子分支'): '      Child branch',
+      ('mindmap', '添加主题'): '    New topic',
+      ('timeline', '添加时间段'): '  2024-Q1 : Event 1 : Event 2',
+      ('timeline', '添加标题'): 'title Timeline title',
+      ('block', '添加块'): '  NewBlock["New block"]',
+      ('block', '添加列'): '  columns 3',
+      ('block', '添加连接'): '  A --> B',
+      ('block', '添加子块'): '  block\n    A["Block A"]\n  end',
+      (
+        'requirement',
+        '添加需求'
+      ): '  requirement 新需求 {\n    id: 1\n    text: Requirement description\n  }',
+      ('requirement', '添加元素'): '  element 新元素 {\n    type: UI\n  }',
+    };
+    final date = _ganttStartDate(code ?? '');
+    return snippets
+        .map(
+          (item) => (
+            labels[item.$1] ?? item.$1,
+            (content[(typeId, item.$1)] ?? item.$2).replaceAll('{date}', date),
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  static List<(String label, String snippet)> _getSnippets(
+    String typeId, {
+    String? code,
+  }) {
     switch (typeId) {
       case 'flowchart':
         return [
@@ -783,11 +1482,12 @@ class MermaidTemplates {
           ('添加一对一', '  实体A ||--|| 实体B : 对应'),
         ];
       case 'gantt':
+        final startDate = _ganttStartDate(code ?? '');
         return [
           ('添加阶段', '  section 新阶段'),
-          ('添加任务', '  新任务 :2024-01-01, 7d'),
+          ('添加任务', '  新任务 :$startDate, 7d'),
           ('添加依赖任务', '  后续任务 :after a1, 5d'),
-          ('添加里程碑', '  里程碑 :milestone, 2024-01-15, 0d'),
+          ('添加里程碑', '  里程碑 :milestone, $startDate, 0d'),
         ];
       case 'pie':
         return [('添加类别', '  "新类别" : 30'), ('添加标题', 'title 饼图标题')];
@@ -799,11 +1499,12 @@ class MermaidTemplates {
           ('添加多人任务', '    协作任务: 4: 用户, 系统'),
         ];
       case 'gitGraph':
+        final mergeTarget = _gitGraphMergeTarget(code ?? _gitGraphTemplate());
         return [
           ('添加提交', '  commit id: "新提交"'),
           ('创建分支', '  branch 新分支'),
           ('切换分支', '  checkout 新分支'),
-          ('合并分支', '  merge 当前分支'),
+          if (mergeTarget != null) ('合并分支', '  merge $mergeTarget'),
         ];
       case 'mindmap':
         return [
@@ -821,11 +1522,13 @@ class MermaidTemplates {
           ('添加子块', '  block\n    A["块A"]\n  end'),
         ];
       case 'requirement':
+        final relationshipSnippets = _requirementRelationshipSnippets(
+          code ?? _requirementTemplate(),
+        );
         return [
           ('添加需求', '  requirement 新需求 {\n    id: 1\n    text: 需求描述\n  }'),
           ('添加元素', '  element 新元素 {\n    type: UI\n  }'),
-          ('添加关联', '  需求A - satisfies -> 元素B'),
-          ('添加验证', '  需求A - verifiedBy -> 元素B'),
+          ...relationshipSnippets,
         ];
       default:
         return [];

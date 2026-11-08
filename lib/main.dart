@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'services/app_log_service.dart';
+import 'services/asr_retry_storage.dart';
 import 'services/bundled_asset_licenses.dart';
 import 'services/browser_profile_service.dart';
 import 'services/video_player_init.dart';
@@ -22,6 +23,9 @@ import 'task_flow/services/task_flow_execution_service.dart';
 import 'services/background_service.dart';
 import 'services/desktop_app_service.dart';
 import 'services/notification_service.dart';
+
+final asrRetryAudioStoreProvider =
+    Provider<AsrRetryAudioStore>((ref) => AsrRetryAudioStore());
 
 /// Restore flow ownership independently so startup can leave child controls
 /// locked if the execution file cannot be trusted.
@@ -51,7 +55,30 @@ final catcatchStartupProvider = FutureProvider<void>((ref) async {
       FlowExecutionRestoreStatus.restoring;
   await ref.read(catcatchTasksProvider.notifier).restoreUnfinishedTasks();
   await ref.read(taskListProvider.notifier).restoreFromPersistence();
-  await ref.read(backgroundTasksProvider.notifier).restoreFromPersistence();
+  final backgroundNotifier = ref.read(backgroundTasksProvider.notifier);
+  await backgroundNotifier.restoreFromPersistence();
+  final retryAudioStore = ref.read(asrRetryAudioStoreProvider);
+  Future<void> pruneRetryAudio() async {
+    await retryAudioStore.prune(
+      () => backgroundNotifier.retryAudioReferencedIds,
+    );
+  }
+
+  if (backgroundNotifier.retryAudioCleanupSafe) {
+    try {
+      await pruneRetryAudio();
+    } catch (error, stackTrace) {
+      debugPrint(
+        '[Startup] ASR retry audio cleanup failed: $error\n$stackTrace',
+      );
+    }
+    for (final task in ref.read(backgroundTasksProvider)) {
+      if (task.type == BackgroundTaskType.asr &&
+          AsrRetryAudioStore.referencedIds(task.retryData).isNotEmpty) {
+        backgroundNotifier.registerTaskCleanup(task.id, pruneRetryAudio);
+      }
+    }
+  }
   await ref.read(taskFlowListProvider.notifier).restoreFromPersistence();
   final flowExecutionsRestored =
       await ref.read(taskFlowExecutionRestorationProvider.future);
@@ -169,6 +196,19 @@ void _initGlobalErrorHandling() {
   }
 }
 
+Widget _buildBootstrapLoadingScreen() {
+  return const MaterialApp(
+    home: Scaffold(
+      backgroundColor: Color(0xFF1E1E2E),
+      body: Center(
+        child: CircularProgressIndicator(
+          color: Color(0xFF89B4FA),
+        ),
+      ),
+    ),
+  );
+}
+
 Future<void> main() async {
   // 初始化全局错误处理（必须在 runApp 之前）
   _initGlobalErrorHandling();
@@ -177,18 +217,20 @@ Future<void> main() async {
     () async {
       try {
         WidgetsFlutterBinding.ensureInitialized();
+        // 桌面端：窗口管理器必须在 Flutter 首帧前拦截关闭事件。
+        // 在它完成后立即显示轻量加载页，再继续其余启动初始化。
+        if (DesktopAppService.isDesktopPlatform) {
+          await DesktopAppService.instance.initialize();
+        }
+        runApp(_buildBootstrapLoadingScreen());
         registerBundledAssetLicenses();
         await BrowserProfileService.applyPendingAction();
         await AppLogService.info('App', '应用启动: Stroom');
         registerVideoPlayer();
-        // 桌面端：在 runApp 之前初始化窗口管理器，
-        // 以便首帧后启用「关闭窗口 → 最小化到托盘」行为。
-        // 初始化失败不阻塞启动：窗口管理器不可用时降级为默认关闭行为。
+        // 桌面端同样初始化通知服务：窗口最小化/关闭后任务完成
+        // 通知需要走系统通知（in-app 横幅不可见）。
+        // initialize() 内部自带错误保护，失败不会阻塞启动。
         if (DesktopAppService.isDesktopPlatform) {
-          await DesktopAppService.instance.initialize();
-          // 桌面端同样初始化通知服务：窗口最小化/关闭后任务完成
-          // 通知需要走系统通知（in-app 横幅不可见）。
-          // initialize() 内部自带错误保护，失败不会阻塞启动。
           await NotificationService().initialize();
         }
         if (defaultTargetPlatform == TargetPlatform.android ||

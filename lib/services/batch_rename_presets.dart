@@ -2,6 +2,10 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/batch_rename_config.dart';
 
+class BatchRenamePresetWriteFailure extends StateError {
+  BatchRenamePresetWriteFailure() : super('保存方案失败');
+}
+
 /// User-named recipes only: never persist a selection or per-file override.
 class BatchRenamePresets {
   static const storageKey = 'batch_rename_presets_v1';
@@ -48,6 +52,6 @@ class BatchRenamePresets {
     if (!await prefs.setStringList(storageKey, [
       for (final e in presets.entries)
         jsonEncode({'name': e.key, 'config': e.value.toJson()}),
-    ])) throw StateError('保存方案失败');
+    ])) throw BatchRenamePresetWriteFailure();
   }
 }

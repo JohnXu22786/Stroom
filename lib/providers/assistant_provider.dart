@@ -4,7 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../l10n/app_localizations.dart';
 import '../models/assistant.dart';
+import 'locale_provider.dart';
 
 // ============================================================================
 // Provider: selected assistant ID for the current session
@@ -67,6 +69,11 @@ final assistantProvider =
   return notifier;
 });
 
+/// Completes after assistants have been read from persistence.
+final assistantInitialLoadProvider = FutureProvider<void>((ref) async {
+  await ref.watch(assistantProvider.notifier).ready;
+});
+
 class AssistantsNotifier extends StateNotifier<List<Assistant>> {
   AssistantsNotifier() : super([]);
 
@@ -78,8 +85,9 @@ class AssistantsNotifier extends StateNotifier<List<Assistant>> {
   // --------------------------------------------------------------------------
 
   Future<void> _load() async {
+    SharedPreferences? prefs;
     try {
-      final prefs = await SharedPreferences.getInstance();
+      prefs = await SharedPreferences.getInstance();
       final json = prefs.getString('assistants');
       if (json != null) {
         final list = (jsonDecode(json) as List).cast<Map<String, dynamic>>();
@@ -90,7 +98,11 @@ class AssistantsNotifier extends StateNotifier<List<Assistant>> {
     }
     // If no assistants, create a default one
     if (state.isEmpty) {
-      _createDefaultAssistant();
+      await _createDefaultAssistant(
+        appLocalizationsForLocale(
+          localeFromCode(prefs?.getString(localePreferenceKey)),
+        ),
+      );
     }
     // NOTE: Old conversation migration (null assistantId → default assistant)
     // is handled inside ConversationsNotifier._load() to avoid race conditions
@@ -119,12 +131,15 @@ class AssistantsNotifier extends StateNotifier<List<Assistant>> {
     }
   }
 
-  void _createDefaultAssistant() {
-    createAssistant(
-      name: '默认助手',
-      prompt: '你是一个有帮助的AI助手。请用中文回答用户的问题。',
-      emoji: '🤖',
-    );
+  Future<void> _createDefaultAssistant(AppLocalizations localizations) async {
+    state = [
+      Assistant(
+        name: localizations.builtInPromptGeneralName,
+        prompt: localizations.assistantDefaultPrompt,
+        emoji: '🤖',
+      ),
+    ];
+    await _persist();
   }
 
   // --------------------------------------------------------------------------
@@ -139,6 +154,15 @@ class AssistantsNotifier extends StateNotifier<List<Assistant>> {
     String description = '',
     AssistantSettings? settings,
     String? modelId,
+    String? remoteCatalogUrl,
+    String? remoteFileUrl,
+    String? remoteAssistantId,
+    String? remoteVersion,
+    String? remoteFormat,
+    String? remoteSha256,
+    String? remoteUpdatePolicy,
+    bool remoteSecurityReview = false,
+    Map<String, dynamic>? remoteExtensions,
   }) {
     final assistant = Assistant(
       name: name,
@@ -147,10 +171,52 @@ class AssistantsNotifier extends StateNotifier<List<Assistant>> {
       description: description,
       settings: settings,
       modelId: modelId,
+      remoteCatalogUrl: remoteCatalogUrl,
+      remoteFileUrl: remoteFileUrl,
+      remoteAssistantId: remoteAssistantId,
+      remoteVersion: remoteVersion,
+      remoteFormat: remoteFormat,
+      remoteSha256: remoteSha256,
+      remoteUpdatePolicy: remoteUpdatePolicy,
+      remoteSecurityReview: remoteSecurityReview,
+      remoteExtensions: remoteExtensions,
     );
     state = [...state, assistant];
     _persist();
     return assistant;
+  }
+
+  /// Applies a validated remote definition while preserving the local UUID
+  /// and user-owned update/review preferences.
+  void updateRemoteAssistant({
+    required String localId,
+    required Assistant replacement,
+    required String remoteVersion,
+    required String remoteFileUrl,
+    required String remoteFormat,
+    required String remoteSha256,
+    Map<String, dynamic>? remoteExtensions,
+  }) {
+    state = state.map((assistant) {
+      if (assistant.id != localId) return assistant;
+      return assistant.copyWith(
+        name: replacement.name,
+        prompt: replacement.prompt,
+        emoji: replacement.emoji,
+        description: replacement.description,
+        settings: replacement.settings,
+        defaultModelName: replacement.defaultModelName,
+        defaultModelId: replacement.defaultModelId,
+        defaultProviderName: replacement.defaultProviderName,
+        defaultToolNames: replacement.defaultToolNames,
+        remoteVersion: remoteVersion,
+        remoteFileUrl: remoteFileUrl,
+        remoteFormat: remoteFormat,
+        remoteSha256: remoteSha256,
+        remoteExtensions: remoteExtensions,
+      );
+    }).toList();
+    _persist();
   }
 
   /// Updates fields of an existing assistant.

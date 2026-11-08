@@ -103,15 +103,21 @@ class OcrInstructionsNotifier extends StateNotifier<List<OcrInstruction>> {
   /// load instead of racing.
   Future<void>? _loadFuture;
 
+  /// Tracks edits made while the initial preferences/provider load is pending.
+  int _userMutationVersion = 0;
+
   /// Loads persisted instructions once.
   Future<void> load() => _loadFuture ??= _doLoad();
 
   Future<void> _doLoad() async {
-    // Capture the entries synchronously — reading through [Ref] after an
-    // async gap may fail once the provider has been disposed.
-    final legacyEntries = _ref.read(providerEntriesProvider).entries;
+    final loadMutationVersion = _userMutationVersion;
+    // Capture the notifier and its load future before any async gap; reading
+    // through [Ref] later may fail if this provider has been disposed.
+    final providerEntriesNotifier = _ref.read(providerEntriesProvider.notifier);
+    final providerEntriesReady = providerEntriesNotifier.ready;
     try {
       final prefs = await SharedPreferences.getInstance();
+      if (!mounted) return;
       final json = prefs.getString(_storageKey);
       if (json != null && json.trim().isNotEmpty) {
         final list = (jsonDecode(json) as List)
@@ -119,16 +125,29 @@ class OcrInstructionsNotifier extends StateNotifier<List<OcrInstruction>> {
             .map((e) => OcrInstruction.fromMap(Map<String, dynamic>.from(e)))
             .where((i) => i.content.isNotEmpty)
             .toList();
-        state = list;
+        final preserveUserMutations =
+            _userMutationVersion != loadMutationVersion;
+        state = preserveUserMutations
+            ? [
+                ...list,
+                ...state.where((instruction) => !list.contains(instruction)),
+              ]
+            : list;
+        if (preserveUserMutations) await _persist();
         return;
       }
     } catch (e) {
       debugPrint('Failed to load OCR instructions: $e');
     }
+    await providerEntriesReady;
+    if (!mounted || !providerEntriesNotifier.mounted) return;
     // 旧版本按模型配置的指令一次性迁移进通用列表（仅当新存储从未写入时）。
-    final legacy = migrateLegacyOcrInstructions(legacyEntries);
+    final legacy = migrateLegacyOcrInstructions(
+      providerEntriesNotifier.state.entries,
+    );
     if (legacy.isNotEmpty) {
-      state = legacy;
+      final preserveUserMutations = _userMutationVersion != loadMutationVersion;
+      state = preserveUserMutations ? [...legacy, ...state] : legacy;
       await _persist();
     }
   }
@@ -147,6 +166,7 @@ class OcrInstructionsNotifier extends StateNotifier<List<OcrInstruction>> {
   Future<void> add(String name, String content) async {
     final trimmed = content.trim();
     if (trimmed.isEmpty) return;
+    _userMutationVersion++;
     state = [...state, OcrInstruction(name: name.trim(), content: trimmed)];
     await _persist();
   }
@@ -157,6 +177,7 @@ class OcrInstructionsNotifier extends StateNotifier<List<OcrInstruction>> {
     if (index < 0 || index >= state.length || trimmed.isEmpty) return;
     final next = [...state];
     next[index] = OcrInstruction(name: name.trim(), content: trimmed);
+    _userMutationVersion++;
     state = next;
     await _persist();
   }
@@ -165,6 +186,7 @@ class OcrInstructionsNotifier extends StateNotifier<List<OcrInstruction>> {
   Future<void> remove(int index) async {
     if (index < 0 || index >= state.length) return;
     final next = [...state]..removeAt(index);
+    _userMutationVersion++;
     state = next;
     await _persist();
   }

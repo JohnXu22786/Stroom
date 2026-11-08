@@ -13,10 +13,7 @@
 // ─── Deck kind ────────────────────────────────────────────────────────────
 
 /// Whether a deck is Normal or Filtered.
-enum DeckKind {
-  normal,
-  filtered,
-}
+enum DeckKind { normal, filtered }
 
 // ─── DeckCommon (shared state) ────────────────────────────────────────────
 
@@ -150,8 +147,8 @@ class Deck {
     return Deck(
       id: now + _idCounter,
       name: name,
-      mtimeSecs: now ~/ 1000,
-      creationDate: now ~/ 1000,
+      mtimeSecs: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      creationDate: DateTime.now().millisecondsSinceEpoch ~/ 1000,
       normalInfo: NormalDeckInfo(description: description),
     );
   }

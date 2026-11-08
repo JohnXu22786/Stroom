@@ -20,7 +20,7 @@ class Notetype {
   List<NoteField> fields; // (was: flds)
   List<NoteTemplate> templates; // (was: tmpls)
   String css;
-  List<dynamic> req; // [[ord, "all"|"any", [field ords...]], ...]
+  List<dynamic> req; // [[ord, "all"|"any"|"none", [field ords...]], ...]
   List<String> tags;
   String latexPre;
   String latexPost;
@@ -54,6 +54,7 @@ class Notetype {
     return Notetype(
       id: now,
       name: 'Basic',
+      mtime: DateTime.now().millisecondsSinceEpoch ~/ 1000,
       fields: [
         NoteField(name: 'Front', ord: 0, font: 'Arial', size: 20),
         NoteField(name: 'Back', ord: 1, font: 'Arial', size: 20),
@@ -67,10 +68,12 @@ class Notetype {
         ),
       ],
       req: [
-        0,
-        0,
-        [0]
-      ], // ord 0, all, field 0
+        [
+          0,
+          'all',
+          [0],
+        ],
+      ],
       sortFieldIndex: 0,
     );
   }
@@ -81,6 +84,7 @@ class Notetype {
     return Notetype(
       id: now + 1,
       name: 'Cloze',
+      mtime: DateTime.now().millisecondsSinceEpoch ~/ 1000,
       type: 1, // cloze
       fields: [
         NoteField(name: 'Text', ord: 0, font: 'Arial', size: 20),
@@ -95,9 +99,11 @@ class Notetype {
         ),
       ],
       req: [
-        0,
-        0,
-        [0]
+        [
+          0,
+          'any',
+          [0],
+        ],
       ],
       sortFieldIndex: 0,
     );

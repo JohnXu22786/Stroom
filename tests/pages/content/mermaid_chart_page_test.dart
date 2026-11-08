@@ -2,15 +2,27 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/mermaid_chart_page.dart';
 import 'package:stroom/services/manifest_database.dart';
+import 'package:stroom/utils/mermaid_folder_name_lock.dart';
+import 'package:stroom/utils/mermaid_templates.dart';
 import 'package:stroom/utils/text_manifest.dart';
 import 'package:stroom/widgets/folder_picker_dialog.dart';
 import 'package:stroom/widgets/mermaid_render_widget.dart';
+
+List<String> _requirementIds(String code) {
+  final matches = RegExp(
+    r'^[ \t]*id:[ \t]*([^\s]+)[ \t]*$',
+    multiLine: true,
+  ).allMatches(code);
+  return matches.map((match) => match.group(1)!).toList();
+}
 
 /// Builds the test app. [initialShowPreview] defaults to false to avoid
 /// InAppWebView platform not being initialized in test environment.
@@ -18,20 +30,136 @@ Widget _buildTestApp({
   String? initialCode,
   TextRecord? existingRecord,
   bool initialShowPreview = false,
+  VoidCallback? testOnlyBeforeChartFolderNameLock,
+  Future<void> Function(String name)? testOnlyAfterChartNameAllocation,
+  Future<void> Function()? testOnlyBeforeChartRecordUpdate,
 }) {
   return ProviderScope(
     child: MaterialApp(
+      locale: const Locale('zh', 'CN'),
+      supportedLocales: AppLocalizations.supportedLocales,
       home: MermaidChartPage(
         initialCode: initialCode,
         existingRecord: existingRecord,
         initialShowPreview: initialShowPreview,
+        testOnlyBeforeChartFolderNameLock: testOnlyBeforeChartFolderNameLock,
+        testOnlyAfterChartNameAllocation: testOnlyAfterChartNameAllocation,
+        testOnlyBeforeChartRecordUpdate: testOnlyBeforeChartRecordUpdate,
       ),
-      localizationsDelegates: [
-        DefaultMaterialLocalizations.delegate,
-        DefaultWidgetsLocalizations.delegate,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+    ),
+  );
+}
+
+Widget _buildConcurrentChartTestApp({
+  required Future<void> Function(String name) onFirstChartNameAllocation,
+  required VoidCallback onSecondFolderNameLockAttempt,
+  required Future<void> Function(String name) onSecondChartNameAllocation,
+}) {
+  return Directionality(
+    textDirection: TextDirection.ltr,
+    child: Row(
+      children: [
+        Expanded(
+          child: _buildTestApp(
+            initialCode: 'graph TD\n  A-->B',
+            initialShowPreview: false,
+            testOnlyAfterChartNameAllocation: onFirstChartNameAllocation,
+          ),
+        ),
+        Expanded(
+          child: _buildTestApp(
+            initialCode: 'graph TD\n  A-->C',
+            initialShowPreview: false,
+            testOnlyBeforeChartFolderNameLock: onSecondFolderNameLockAttempt,
+            testOnlyAfterChartNameAllocation: onSecondChartNameAllocation,
+          ),
+        ),
       ],
     ),
   );
+}
+
+Widget _buildSavedChartNavigationTestApp({
+  required TextRecord record,
+  required String content,
+  Future<void> Function(String name)? testOnlyAfterChartNameAllocation,
+}) {
+  return ProviderScope(
+    child: MaterialApp(
+      locale: const Locale('zh', 'CN'),
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Builder(
+        builder: (context) => Scaffold(
+          body: Center(
+            child: TextButton(
+              onPressed: () => Navigator.of(context).push<void>(
+                MaterialPageRoute<void>(
+                  builder: (_) => MermaidChartPage(
+                    initialCode: content,
+                    existingRecord: record,
+                    initialShowPreview: false,
+                    testOnlyAfterChartNameAllocation:
+                        testOnlyAfterChartNameAllocation,
+                  ),
+                ),
+              ),
+              child: const Text('Open saved chart'),
+            ),
+          ),
+        ),
+      ),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+    ),
+  );
+}
+
+Widget _buildNewChartNavigationTestApp() {
+  return ProviderScope(
+    child: MaterialApp(
+      locale: const Locale('zh', 'CN'),
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Builder(
+        builder: (context) => Scaffold(
+          body: Center(
+            child: TextButton(
+              onPressed: () => Navigator.of(context).push<void>(
+                MaterialPageRoute<void>(
+                  builder: (_) => const MermaidChartPage(
+                    initialShowPreview: false,
+                  ),
+                ),
+              ),
+              child: const Text('Open new chart'),
+            ),
+          ),
+        ),
+      ),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+    ),
+  );
+}
+
+Future<TextRecord> _addSavedMermaidChart(String content) async {
+  final bytes = Uint8List.fromList(utf8.encode(content));
+  final record = TextRecord(
+    id: 'saved-mermaid-chart',
+    name: 'saved-chart',
+    hash: computeTextHash(bytes),
+    format: 'mmd',
+    createdAt: DateTime.utc(2026, 1, 1),
+    size: bytes.length,
+    textLength: content.length,
+  );
+  await TextManifest.writeText(record.storagePath, content);
+  await TextManifest.addRecord(record);
+  return record;
+}
+
+Future<void> _simulateSystemBack(WidgetTester tester) async {
+  // ignore: invalid_use_of_visible_for_testing_member, invalid_use_of_protected_member
+  await tester.binding.handlePopRoute();
+  await tester.pumpAndSettle();
 }
 
 void main() {
@@ -40,11 +168,222 @@ void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     ManifestDatabase.enableTestMode();
+    ManifestDatabase.beforeJsonRecordRegistrationForTesting = null;
+    ManifestDatabase.beforeWebDataReadForTesting = null;
     TextManifest.beforeFolderLoadForTesting = null;
     TextManifest.invalidateCache();
   });
 
   group('MermaidChartPage', () {
+    testWidgets('new-chart app-bar back can stay editing or discard draft', (
+      tester,
+    ) async {
+      const draft = 'graph TD\n  A-->Unsaved';
+
+      await tester.pumpWidget(_buildNewChartNavigationTestApp());
+      await tester.tap(find.text('Open new chart'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).first, draft);
+      await tester.pump();
+
+      await tester.tap(find.byIcon(Icons.arrow_back));
+      await tester.pumpAndSettle();
+
+      expect(find.text('放弃修改？'), findsOneWidget);
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+      expect(find.byType(MermaidChartPage), findsOneWidget);
+      expect(
+        tester.widget<TextField>(find.byType(TextField).first).controller?.text,
+        draft,
+      );
+
+      await tester.tap(find.byIcon(Icons.arrow_back));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('放弃'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Open new chart'), findsOneWidget);
+      expect(find.byType(MermaidChartPage), findsNothing);
+    });
+
+    testWidgets('new-chart system back can stay editing or discard draft', (
+      tester,
+    ) async {
+      const draft = 'graph TD\n  A-->Unsaved';
+
+      await tester.pumpWidget(_buildNewChartNavigationTestApp());
+      await tester.tap(find.text('Open new chart'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).first, draft);
+      await tester.pump();
+
+      await _simulateSystemBack(tester);
+
+      expect(find.text('放弃修改？'), findsOneWidget);
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+      expect(find.byType(MermaidChartPage), findsOneWidget);
+      expect(
+        tester.widget<TextField>(find.byType(TextField).first).controller?.text,
+        draft,
+      );
+
+      await _simulateSystemBack(tester);
+      expect(find.text('放弃修改？'), findsOneWidget);
+      await tester.tap(find.text('放弃'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Open new chart'), findsOneWidget);
+      expect(find.byType(MermaidChartPage), findsNothing);
+    });
+
+    testWidgets('unmodified new chart still pops without confirmation', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_buildNewChartNavigationTestApp());
+      await tester.tap(find.text('Open new chart'));
+      await tester.pumpAndSettle();
+
+      await _simulateSystemBack(tester);
+
+      expect(find.text('放弃修改？'), findsNothing);
+      expect(find.text('Open new chart'), findsOneWidget);
+      expect(find.byType(MermaidChartPage), findsNothing);
+    });
+
+    testWidgets('saving a new chart exits without discard confirmation', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_buildNewChartNavigationTestApp());
+      await tester.tap(find.text('Open new chart'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byType(TextField).first,
+        'graph TD\n  A-->Saved',
+      );
+      await tester.pump();
+
+      await tester.tap(find.byIcon(Icons.save));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('根目录'));
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('确定'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('已保存到文本储存区:'), findsOneWidget);
+      expect(find.text('Open new chart'), findsOneWidget);
+      expect(find.byType(MermaidChartPage), findsNothing);
+      expect(find.text('放弃修改？'), findsNothing);
+      expect(
+        (await TextManifest.loadRecords()).where(
+          (record) => record.format == 'mmd',
+        ),
+        hasLength(1),
+      );
+    });
+
+    testWidgets('app-bar back can stay editing or discard the draft', (
+      tester,
+    ) async {
+      const original = 'graph TD\n  A-->B';
+      const draft = 'graph TD\n  A-->Unsaved';
+      final record = await _addSavedMermaidChart(original);
+
+      await tester.pumpWidget(
+        _buildSavedChartNavigationTestApp(record: record, content: original),
+      );
+      await tester.tap(find.text('Open saved chart'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).first, draft);
+      await tester.pump();
+
+      await tester.tap(find.byIcon(Icons.arrow_back));
+      await tester.pumpAndSettle();
+
+      expect(find.text('放弃修改？'), findsOneWidget);
+      expect(find.text('当前有未保存的修改，确定要放弃吗？'), findsOneWidget);
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(MermaidChartPage), findsOneWidget);
+      expect(
+        tester.widget<TextField>(find.byType(TextField).first).controller?.text,
+        draft,
+      );
+
+      await tester.tap(find.byIcon(Icons.arrow_back));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('放弃'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Open saved chart'), findsOneWidget);
+      expect(find.byType(MermaidChartPage), findsNothing);
+      expect(await TextManifest.readText(record.storagePath), original);
+      expect((await TextManifest.loadRecords()).single.hash, record.hash);
+    });
+
+    testWidgets('system back can stay editing or discard the draft', (
+      tester,
+    ) async {
+      const original = 'graph TD\n  A-->B';
+      const draft = 'graph TD\n  A-->Unsaved';
+      final record = await _addSavedMermaidChart(original);
+
+      await tester.pumpWidget(
+        _buildSavedChartNavigationTestApp(record: record, content: original),
+      );
+      await tester.tap(find.text('Open saved chart'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).first, draft);
+      await tester.pump();
+
+      await _simulateSystemBack(tester);
+
+      expect(find.text('放弃修改？'), findsOneWidget);
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+      expect(find.byType(MermaidChartPage), findsOneWidget);
+      expect(
+        tester.widget<TextField>(find.byType(TextField).first).controller?.text,
+        draft,
+      );
+
+      await _simulateSystemBack(tester);
+      expect(find.text('放弃修改？'), findsOneWidget);
+      await tester.tap(find.text('放弃'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Open saved chart'), findsOneWidget);
+      expect(find.byType(MermaidChartPage), findsNothing);
+      expect(await TextManifest.readText(record.storagePath), original);
+      expect((await TextManifest.loadRecords()).single.hash, record.hash);
+    });
+
+    testWidgets('unmodified saved chart still pops without confirmation', (
+      tester,
+    ) async {
+      const original = 'graph TD\n  A-->B';
+      final record = await _addSavedMermaidChart(original);
+
+      await tester.pumpWidget(
+        _buildSavedChartNavigationTestApp(record: record, content: original),
+      );
+      await tester.tap(find.text('Open saved chart'));
+      await tester.pumpAndSettle();
+
+      await _simulateSystemBack(tester);
+
+      expect(find.text('Open saved chart'), findsOneWidget);
+      expect(find.byType(MermaidChartPage), findsNothing);
+      expect(find.text('放弃修改？'), findsNothing);
+    });
+
     testWidgets('selecting flowchart loads template in editor', (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pump();
@@ -76,14 +415,13 @@ void main() {
       await tester.pumpWidget(
         const ProviderScope(
           child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
             home: MermaidChartPage(
               initialCode: initialCode,
               initialShowPreview: false,
             ),
-            localizationsDelegates: [
-              DefaultMaterialLocalizations.delegate,
-              DefaultWidgetsLocalizations.delegate,
-            ],
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
           ),
         ),
       );
@@ -95,6 +433,44 @@ void main() {
       expect(textField.controller?.text, contains('Custom'));
     });
 
+    testWidgets(
+      'stale GitGraph merge chip is safe without an alternate branch',
+      (tester) async {
+        const initialCode = 'gitGraph\n  checkout main';
+        await tester.pumpWidget(_buildTestApp(initialCode: initialCode));
+        await tester.pump();
+
+        final mergeChip = find.text('合并分支');
+        expect(mergeChip, findsOneWidget);
+        await tester.ensureVisible(mergeChip);
+        await tester.tap(mergeChip);
+        await tester.pump();
+
+        expect(tester.takeException(), isNull);
+        final textField =
+            tester.widget<TextField>(find.byType(TextField).first);
+        expect(textField.controller?.text, initialCode);
+      },
+    );
+
+    testWidgets('GitGraph merge chip inserts an existing alternate branch', (
+      tester,
+    ) async {
+      const initialCode = 'gitGraph\n  branch feature\n  checkout main';
+      await tester.pumpWidget(_buildTestApp(initialCode: initialCode));
+      await tester.pump();
+
+      final mergeChip = find.text('合并分支');
+      expect(mergeChip, findsOneWidget);
+      await tester.ensureVisible(mergeChip);
+      await tester.tap(mergeChip);
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
+      final textField = tester.widget<TextField>(find.byType(TextField).first);
+      expect(textField.controller?.text, contains('merge feature'));
+    });
+
     testWidgets('initialCode auto-detects sequenceDiagram type', (
       tester,
     ) async {
@@ -102,14 +478,13 @@ void main() {
       await tester.pumpWidget(
         const ProviderScope(
           child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
             home: MermaidChartPage(
               initialCode: initialCode,
               initialShowPreview: false,
             ),
-            localizationsDelegates: [
-              DefaultMaterialLocalizations.delegate,
-              DefaultWidgetsLocalizations.delegate,
-            ],
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
           ),
         ),
       );
@@ -131,6 +506,65 @@ void main() {
       expect(textField.controller?.text, contains('gantt'));
       expect(textField.controller?.text, contains('Test'));
     });
+
+    testWidgets('custom Requirement relationship chips insert declared nodes', (
+      tester,
+    ) async {
+      const initialCode = '''requirementDiagram
+  requirement account_access {
+    id: 1
+    text: Account access
+    risk: low
+    verifyMethod: test
+  }
+  element portal_ui {
+    type: UI
+  }
+  element auth_api {
+    type: Service
+  }''';
+      await tester.pumpWidget(_buildTestApp(initialCode: initialCode));
+      await tester.pump();
+
+      await tester.tap(find.text('添加关联'));
+      await tester.pump();
+
+      var editorCode = tester
+          .widget<TextField>(find.byType(TextField).first)
+          .controller!
+          .text;
+      expect(editorCode, contains('portal_ui - satisfies -> account_access'));
+      expect(editorCode, isNot(contains('登录页面')));
+
+      await tester.pump(const Duration(milliseconds: 801));
+      await tester.tap(find.text('添加验证'));
+      await tester.pump();
+
+      editorCode = tester
+          .widget<TextField>(find.byType(TextField).first)
+          .controller!
+          .text;
+      expect(editorCode, contains('auth_api - verifies -> account_access'));
+      expect(editorCode, isNot(contains('认证服务')));
+    });
+
+    testWidgets(
+      'hides Requirement relationship chips without endpoint classes',
+      (tester) async {
+        const initialCode = '''requirementDiagram
+  requirement account_access {
+    id: 1
+    text: Account access
+    risk: low
+    verifyMethod: test
+  }''';
+        await tester.pumpWidget(_buildTestApp(initialCode: initialCode));
+        await tester.pump();
+
+        expect(find.text('添加关联'), findsNothing);
+        expect(find.text('添加验证'), findsNothing);
+      },
+    );
 
     testWidgets('Gantt dependency snippet uses an existing task ID', (
       tester,
@@ -244,6 +678,10 @@ void main() {
         expect(
           textField.controller?.text,
           contains('后续任务 :after dependencyTask1, 5d'),
+        );
+        expect(
+          textField.controller?.text,
+          isNot(contains('依赖基准任务 :')),
         );
       },
     );
@@ -561,6 +999,403 @@ void main() {
       },
     );
 
+    testWidgets(
+      'system back cannot discard a chart while its save is committing',
+      (tester) async {
+        const originalContent = 'graph TD\n  A-->Original';
+        const capturedContent = 'graph TD\n  A-->Captured';
+        final record = await _addSavedMermaidChart(originalContent);
+        final saveReachedPublication = Completer<void>();
+        final releaseSave = Completer<void>();
+        addTearDown(() {
+          if (!releaseSave.isCompleted) releaseSave.complete();
+        });
+
+        await tester.pumpWidget(
+          _buildSavedChartNavigationTestApp(
+            record: record,
+            content: originalContent,
+            testOnlyAfterChartNameAllocation: (_) async {
+              saveReachedPublication.complete();
+              await releaseSave.future;
+            },
+          ),
+        );
+        await tester.tap(find.text('Open saved chart'));
+        await tester.pumpAndSettle();
+        await tester.enterText(find.byType(TextField).first, capturedContent);
+        await tester.pump();
+
+        await tester.tap(find.byIcon(Icons.save));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('根目录'));
+        await tester.pump(const Duration(milliseconds: 500));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('确定'));
+        await tester.pump();
+        await saveReachedPublication.future.timeout(const Duration(seconds: 5));
+        await tester.pump();
+
+        // The save has captured the editor content and is paused before it
+        // updates the existing record. A back action must not offer discard.
+        // ignore: invalid_use_of_visible_for_testing_member, invalid_use_of_protected_member
+        await tester.binding.handlePopRoute();
+        await tester.pump();
+        expect(find.text('放弃修改？'), findsNothing);
+        expect(find.byType(MermaidChartPage), findsOneWidget);
+        expect(
+          await TextManifest.readText(record.storagePath),
+          originalContent,
+        );
+
+        releaseSave.complete();
+        await tester.pumpAndSettle();
+
+        final savedRecord = (await TextManifest.loadRecords()).single;
+        expect(savedRecord.id, record.id);
+        expect(
+          savedRecord.hash,
+          computeTextHash(Uint8List.fromList(utf8.encode(capturedContent))),
+        );
+        expect(
+          await TextManifest.readText(savedRecord.storagePath),
+          capturedContent,
+        );
+        expect(find.text('Open saved chart'), findsOneWidget);
+        expect(find.byType(MermaidChartPage), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'save preserves editor content while waiting for the folder name lock',
+      (tester) async {
+        const initialContent = 'graph TD\n  A-->BeforeLock';
+        const editedContent = 'graph TD\n  A-->DuringLock';
+        final lockHeld = Completer<void>();
+        final releaseLock = Completer<void>();
+        final saveReachedLock = Completer<void>();
+        addTearDown(() {
+          if (!releaseLock.isCompleted) releaseLock.complete();
+        });
+
+        final heldLock = MermaidFolderNameLock.withLock('', () async {
+          lockHeld.complete();
+          await releaseLock.future;
+        });
+        await lockHeld.future;
+
+        await tester.pumpWidget(
+          _buildTestApp(
+            initialCode: initialContent,
+            initialShowPreview: false,
+            testOnlyBeforeChartFolderNameLock: () => saveReachedLock.complete(),
+          ),
+        );
+        await tester.pump();
+        final editor = find.byType(TextField).first;
+        final editorController = tester.widget<TextField>(editor).controller!;
+        await tester.enterText(editor, initialContent);
+        await tester.pump();
+
+        await tester.tap(find.byIcon(Icons.save));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('根目录'));
+        await tester.pump(const Duration(milliseconds: 500));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('确定'));
+        await tester.pump();
+        await saveReachedLock.future.timeout(const Duration(seconds: 5));
+        await tester.pump();
+
+        // The real folder lock is still held, so the save cannot publish yet.
+        // If the editor remains enabled, reproduce the user's late edit.
+        final field = tester.widget<TextField>(editor);
+        final editorCanChange = (field.enabled ?? true) && !field.readOnly;
+        if (editorCanChange) {
+          await tester.enterText(editor, editedContent);
+          await tester.pump();
+        }
+        final finalEditorContent = editorController.text;
+
+        releaseLock.complete();
+        await heldLock;
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+        await tester.pump(const Duration(milliseconds: 100));
+        await tester.pump(const Duration(milliseconds: 100));
+        await tester.pumpAndSettle();
+
+        final savedRecord = (await TextManifest.loadRecords()).singleWhere(
+          (record) => record.format == 'mmd',
+        );
+        expect(
+          savedRecord.hash,
+          computeTextHash(Uint8List.fromList(utf8.encode(finalEditorContent))),
+        );
+        expect(
+          await TextManifest.readText(savedRecord.storagePath),
+          finalEditorContent,
+        );
+        expect(find.byType(MermaidChartPage), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'rapid save activation during folder lookup does not stack pickers',
+      (tester) async {
+        final folderLoadStarted = Completer<void>();
+        final releaseFolderLoad = Completer<void>();
+        var folderLoadCount = 0;
+        addTearDown(() {
+          TextManifest.beforeFolderLoadForTesting = null;
+          if (!releaseFolderLoad.isCompleted) releaseFolderLoad.complete();
+        });
+        TextManifest.beforeFolderLoadForTesting = () async {
+          folderLoadCount++;
+          if (!folderLoadStarted.isCompleted) folderLoadStarted.complete();
+          await releaseFolderLoad.future;
+        };
+
+        await tester.pumpWidget(_buildTestApp(initialShowPreview: false));
+        await tester.pump();
+        await tester.enterText(
+          find.byType(TextField).first,
+          'graph TD\n  A-->B',
+        );
+        await tester.pump();
+
+        // Deliver two activations before yielding a frame. The first starts
+        // the asynchronous lookup while this same callback is still reachable.
+        final saveButton = find.ancestor(
+          of: find.byIcon(Icons.save),
+          matching: find.byType(IconButton),
+        );
+        final save = tester.widget<IconButton>(saveButton).onPressed!;
+        save();
+        await folderLoadStarted.future;
+        save();
+        await tester.pump();
+        final saveButtonDuringLookup = find.ancestor(
+          of: find.byIcon(Icons.save),
+          matching: find.byType(IconButton),
+        );
+        final saveIsLockedWhileLoading =
+            tester.widget<IconButton>(saveButtonDuringLookup).onPressed == null;
+
+        releaseFolderLoad.complete();
+        await tester.pumpAndSettle();
+
+        expect(
+          folderLoadCount,
+          1,
+          reason: 'Repeated activation should not start another folder lookup.',
+        );
+        expect(
+          saveIsLockedWhileLoading,
+          isTrue,
+          reason: 'The in-flight save should disable further activation.',
+        );
+        expect(find.text('保存图表'), findsOneWidget);
+        expect(find.byType(FolderPickerDialog), findsOneWidget);
+
+        await tester.tap(find.text('取消'));
+        await tester.pumpAndSettle();
+        expect(find.byIcon(Icons.save), findsOneWidget);
+        final saveButtonAfterCancel = find.ancestor(
+          of: find.byIcon(Icons.save),
+          matching: find.byType(IconButton),
+        );
+        expect(
+          tester.widget<IconButton>(saveButtonAfterCancel).onPressed,
+          isNotNull,
+        );
+      },
+    );
+
+    testWidgets('save write failure reports an error and unlocks save', (
+      tester,
+    ) async {
+      addTearDown(() {
+        ManifestDatabase.beforeJsonRecordRegistrationForTesting = null;
+      });
+      ManifestDatabase.beforeJsonRecordRegistrationForTesting = () {
+        throw StateError('simulated save failure');
+      };
+
+      await tester.pumpWidget(_buildTestApp(initialShowPreview: false));
+      await tester.pump();
+      const content = 'graph TD\n  A-->B';
+      await tester.enterText(find.byType(TextField).first, content);
+      await tester.pump();
+
+      await tester.tap(find.byIcon(Icons.save));
+      await tester.pumpAndSettle();
+      expect(find.text('保存图表'), findsOneWidget);
+
+      await tester.tap(find.text('根目录'));
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('确定'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(
+        find.text('保存失败: Bad state: simulated save failure'),
+        findsOneWidget,
+      );
+      final saveButton = find.ancestor(
+        of: find.byIcon(Icons.save),
+        matching: find.byType(IconButton),
+      );
+      expect(tester.widget<IconButton>(saveButton).onPressed, isNotNull);
+      expect(await TextManifest.loadRecords(), isEmpty);
+      final hash = computeTextHash(Uint8List.fromList(utf8.encode(content)));
+      expect(await TextManifest.readText('$hash.txt'), isNull);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets(
+      'record registration failure preserves a hash file referenced by an '
+      'existing record',
+      (tester) async {
+        addTearDown(() {
+          ManifestDatabase.beforeJsonRecordRegistrationForTesting = null;
+        });
+        const content = 'graph TD\n  A-->B';
+        final hash = computeTextHash(Uint8List.fromList(utf8.encode(content)));
+        final existingRecord = TextRecord(
+          name: 'existing chart',
+          hash: hash,
+          format: 'mmd',
+          createdAt: DateTime(2026),
+          size: utf8.encode(content).length,
+          textLength: content.length,
+        );
+        await TextManifest.writeText(existingRecord.storagePath, content);
+        await TextManifest.addRecord(existingRecord);
+        ManifestDatabase.beforeJsonRecordRegistrationForTesting = () {
+          throw StateError('simulated save failure');
+        };
+
+        await tester.pumpWidget(_buildTestApp(initialShowPreview: false));
+        await tester.pump();
+        await tester.enterText(find.byType(TextField).first, content);
+        await tester.pump();
+
+        await tester.tap(find.byIcon(Icons.save));
+        await tester.pumpAndSettle();
+        expect(find.text('保存图表'), findsOneWidget);
+
+        await tester.tap(find.text('根目录'));
+        await tester.pump(const Duration(milliseconds: 500));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('确定'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+        await tester.pump(const Duration(milliseconds: 100));
+        await tester.pump(const Duration(milliseconds: 100));
+
+        expect(
+          (await TextManifest.loadRecords()).map((record) => record.id),
+          [existingRecord.id],
+        );
+        expect(
+          await TextManifest.readText(existingRecord.storagePath),
+          content,
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'failed chart update removes unreferenced content and '
+      'preserves the original',
+      (tester) async {
+        final contentWriteComplete = Completer<void>();
+        final releaseUpdate = Completer<void>();
+        addTearDown(() {
+          if (!releaseUpdate.isCompleted) releaseUpdate.complete();
+        });
+        const originalContent = 'graph TD\n  A-->B';
+        const editedContent = 'graph TD\n  A-->C';
+        final originalRecord = TextRecord(
+          id: 'existing-chart-id',
+          name: 'existing-chart',
+          hash: computeTextHash(
+            Uint8List.fromList(utf8.encode(originalContent)),
+          ),
+          format: 'mmd',
+          createdAt: DateTime.utc(2024, 1, 1),
+          size: utf8.encode(originalContent).length,
+          textLength: originalContent.length,
+        );
+        final editedHash = computeTextHash(
+          Uint8List.fromList(utf8.encode(editedContent)),
+        );
+        await TextManifest.writeText(
+          originalRecord.storagePath,
+          originalContent,
+        );
+        await TextManifest.addRecord(originalRecord);
+
+        await tester.pumpWidget(
+          _buildTestApp(
+            initialCode: originalContent,
+            existingRecord: originalRecord,
+            initialShowPreview: false,
+            testOnlyBeforeChartRecordUpdate: () async {
+              contentWriteComplete.complete();
+              await releaseUpdate.future;
+              throw StateError('simulated update failure');
+            },
+          ),
+        );
+        await tester.pump();
+        await tester.enterText(find.byType(TextField).first, editedContent);
+        await tester.pump();
+        await tester.tap(find.byIcon(Icons.save));
+        await tester.pumpAndSettle();
+        expect(find.text('保存图表'), findsOneWidget);
+
+        await tester.tap(find.text('根目录'));
+        await tester.pump(const Duration(milliseconds: 500));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('确定'));
+        await tester.pump();
+        await contentWriteComplete.future.timeout(const Duration(seconds: 5));
+        try {
+          expect(
+            await TextManifest.readText('$editedHash.txt'),
+            editedContent,
+          );
+        } finally {
+          if (!releaseUpdate.isCompleted) releaseUpdate.complete();
+        }
+
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+        await tester.pump(const Duration(milliseconds: 100));
+        await tester.pump(const Duration(milliseconds: 100));
+
+        expect(
+          find.text('保存失败: Bad state: simulated update failure'),
+          findsOneWidget,
+        );
+        expect(await TextManifest.readText('$editedHash.txt'), isNull);
+        final savedRecords = await TextManifest.loadRecords();
+        expect(savedRecords.map((record) => record.id), [originalRecord.id]);
+        expect(savedRecords.single.hash, originalRecord.hash);
+        expect(
+          await TextManifest.readText(originalRecord.storagePath),
+          originalContent,
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+
     testWidgets('save with empty content shows error, no folder picker', (
       tester,
     ) async {
@@ -702,6 +1537,78 @@ void main() {
       expect(savedRecord.folder, '');
     });
 
+    testWidgets(
+      'new chart filename with mmd suffix gets type before extension',
+      (tester) async {
+        await tester.pumpWidget(_buildTestApp());
+        await tester.pump();
+
+        await tester.enterText(
+          find.byType(TextField).first,
+          'graph TD\n  A-->B',
+        );
+        await tester.pump();
+        await tester.tap(find.byIcon(Icons.save));
+        await tester.pumpAndSettle();
+
+        final fileNameField = find.byWidgetPredicate(
+          (widget) =>
+              widget is TextField &&
+              widget.decoration?.hintText == '输入文件名（自动添加 .mmd 后缀）',
+        );
+        await tester.enterText(fileNameField, 'chart.mmd');
+        await tester.tap(find.text('根目录'));
+        await tester.pump(const Duration(milliseconds: 500));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('确定'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+        await tester.pump(const Duration(milliseconds: 100));
+        await tester.pump(const Duration(milliseconds: 100));
+
+        final savedRecord = (await TextManifest.loadRecords()).singleWhere(
+          (record) => record.format == 'mmd',
+        );
+        expect(savedRecord.name, 'chart-流程图');
+      },
+    );
+
+    testWidgets('new chart filename containing only mmd suffix is rejected', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pump();
+
+      await tester.enterText(
+        find.byType(TextField).first,
+        'graph TD\n  A-->B',
+      );
+      await tester.pump();
+      await tester.tap(find.byIcon(Icons.save));
+      await tester.pumpAndSettle();
+
+      final fileNameField = find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField &&
+            widget.decoration?.hintText == '输入文件名（自动添加 .mmd 后缀）',
+      );
+      await tester.enterText(fileNameField, '.mmd');
+      await tester.tap(find.text('根目录'));
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('确定'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('文件名不能为空'), findsOneWidget);
+      expect(find.byType(MermaidChartPage), findsOneWidget);
+      expect(
+        (await TextManifest.loadRecords()).where(
+          (record) => record.format == 'mmd',
+        ),
+        isEmpty,
+      );
+    });
+
     testWidgets('save with empty filename shows error, does not save', (
       tester,
     ) async {
@@ -840,6 +1747,119 @@ void main() {
       );
     });
 
+    testWidgets(
+      'concurrent new charts in one folder get unique names and both save',
+      (tester) async {
+        const destinationFolder = 'chart-race-folder';
+        final firstNameAllocated = Completer<void>();
+        final secondFolderNameLockAttempted = Completer<void>();
+        final bothNamesAllocated = Completer<void>();
+        final releaseFirstNameAllocation = Completer<void>();
+        final bothManifestSavesStarted = Completer<void>();
+        final selectedNames = <String>[];
+        var manifestSaveCount = 0;
+        addTearDown(() {
+          ManifestDatabase.beforeWebDataSaveForTesting = null;
+          if (!releaseFirstNameAllocation.isCompleted) {
+            releaseFirstNameAllocation.complete();
+          }
+        });
+
+        Future<void> holdFirstNameAllocation(String name) async {
+          selectedNames.add(name);
+          firstNameAllocated.complete();
+          await releaseFirstNameAllocation.future;
+        }
+
+        Future<void> recordSecondNameAllocation(String name) async {
+          selectedNames.add(name);
+          if (selectedNames.length == 2) bothNamesAllocated.complete();
+        }
+
+        await TextManifest.addFolder(destinationFolder);
+        await tester.pumpWidget(
+          _buildConcurrentChartTestApp(
+            onFirstChartNameAllocation: holdFirstNameAllocation,
+            onSecondFolderNameLockAttempt: () {
+              secondFolderNameLockAttempted.complete();
+            },
+            onSecondChartNameAllocation: recordSecondNameAllocation,
+          ),
+        );
+        await tester.tap(find.byIcon(Icons.save).first);
+        await tester.pumpAndSettle();
+        await tester.tap(find.byIcon(Icons.save).last);
+        await tester.pumpAndSettle();
+        expect(find.byType(FolderPickerDialog), findsNWidgets(2));
+
+        ManifestDatabase.beforeWebDataSaveForTesting = () async {
+          manifestSaveCount++;
+          if (manifestSaveCount == 2) bothManifestSavesStarted.complete();
+        };
+
+        await tester.tap(find.text(destinationFolder).first);
+        await tester.pump(const Duration(milliseconds: 500));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('确定').first);
+        await tester.pump(const Duration(milliseconds: 500));
+        await tester.runAsync(
+          () => firstNameAllocated.future.timeout(
+            const Duration(seconds: 5),
+          ),
+        );
+
+        await tester.tap(find.text(destinationFolder).last);
+        await tester.pump(const Duration(milliseconds: 500));
+        await tester.pump(const Duration(milliseconds: 500));
+        await tester.tap(find.text('确定').last);
+        await tester.pump(const Duration(milliseconds: 500));
+        await tester.runAsync(
+          () async {
+            await secondFolderNameLockAttempted.future.timeout(
+              const Duration(seconds: 5),
+            );
+            await Future<void>.delayed(Duration.zero);
+          },
+        );
+        final secondNameSelectedBeforeFirstWasPublished =
+            selectedNames.length > 1;
+
+        releaseFirstNameAllocation.complete();
+        await tester.runAsync(() async {
+          await bothNamesAllocated.future.timeout(const Duration(seconds: 5));
+          await bothManifestSavesStarted.future.timeout(
+            const Duration(seconds: 5),
+          );
+          await Future<void>.delayed(Duration.zero);
+        });
+
+        expect(secondNameSelectedBeforeFirstWasPublished, isFalse);
+        expect(
+          selectedNames,
+          unorderedEquals(['我的图表-流程图', '我的图表-流程图 (2)']),
+        );
+        final savedRecords = (await TextManifest.loadRecordsUncached())
+            .where((record) => record.format == 'mmd')
+            .toList();
+        expect(savedRecords, hasLength(2));
+        expect(
+          savedRecords.map((record) => record.name),
+          unorderedEquals(['我的图表-流程图', '我的图表-流程图 (2)']),
+        );
+        expect(
+          savedRecords.map((record) => record.folder),
+          everyElement(destinationFolder),
+        );
+        expect(
+          await Future.wait(
+            savedRecords
+                .map((record) => TextManifest.readText(record.storagePath)),
+          ),
+          unorderedEquals(['graph TD\n  A-->B', 'graph TD\n  A-->C']),
+        );
+      },
+    );
+
     testWidgets('saving an edited chart updates its existing record in place', (
       tester,
     ) async {
@@ -929,6 +1949,90 @@ void main() {
       );
     });
 
+    testWidgets(
+      'committed chart edit still succeeds when old-file cleanup fails',
+      (tester) async {
+        final cleanupLogs = <String>[];
+        final originalDebugPrint = debugPrint;
+        debugPrint = (message, {wrapWidth}) {
+          if (message != null) cleanupLogs.add(message);
+        };
+        addTearDown(() {
+          ManifestDatabase.beforeWebDataSaveForTesting = null;
+          ManifestDatabase.beforeWebDataReadForTesting = null;
+        });
+
+        const originalContent = 'graph TD\n  A-->B';
+        const editedContent = 'graph TD\n  A-->C';
+        late final TextRecord originalRecord;
+        late final String editedHash;
+        try {
+          originalRecord = await _addSavedMermaidChart(originalContent);
+          editedHash = computeTextHash(
+            Uint8List.fromList(utf8.encode(editedContent)),
+          );
+          await tester.pumpWidget(
+            _buildSavedChartNavigationTestApp(
+              record: originalRecord,
+              content: originalContent,
+              testOnlyAfterChartNameAllocation: (_) async {
+                ManifestDatabase.beforeWebDataSaveForTesting = () async {
+                  ManifestDatabase.beforeWebDataSaveForTesting = null;
+                  ManifestDatabase.beforeWebDataReadForTesting = () async {
+                    ManifestDatabase.beforeWebDataReadForTesting = null;
+                    throw StateError('simulated old-file cleanup failure');
+                  };
+                  ManifestDatabase.invalidateWebDataCacheForTesting();
+                };
+              },
+            ),
+          );
+          await tester.tap(find.text('Open saved chart'));
+          await tester.pumpAndSettle();
+          await tester.enterText(find.byType(TextField).first, editedContent);
+          await tester.pump();
+          await tester.tap(find.byIcon(Icons.save));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('根目录'));
+          await tester.pump(const Duration(milliseconds: 500));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('确定'));
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 100));
+          await tester.pump(const Duration(milliseconds: 100));
+          await tester.pump(const Duration(milliseconds: 100));
+          await tester.pumpAndSettle();
+        } finally {
+          debugPrint = originalDebugPrint;
+        }
+
+        final savedRecord = (await TextManifest.loadRecordsUncached()).single;
+        expect(savedRecord.id, originalRecord.id);
+        expect(savedRecord.hash, editedHash);
+        expect(await TextManifest.readText('$editedHash.txt'), editedContent);
+        expect(
+          await TextManifest.readText(originalRecord.storagePath),
+          originalContent,
+        );
+
+        // The update is already persisted despite the cleanup failure. It
+        // must not leave the editor open with a false save-error message.
+        expect(find.textContaining('保存失败:'), findsNothing);
+        expect(find.text('Open saved chart'), findsOneWidget);
+        expect(find.byType(MermaidChartPage), findsNothing);
+        expect(
+          cleanupLogs,
+          contains(
+            contains(
+              'Failed to clean up old Mermaid chart file '
+              '${originalRecord.storagePath}',
+            ),
+          ),
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+
     // ═══════════════════════════════════════════════════
     // Editor Mode Switching (UI only, no WebView)
     // ═══════════════════════════════════════════════════
@@ -940,14 +2044,13 @@ void main() {
         await tester.pumpWidget(
           const ProviderScope(
             child: MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              supportedLocales: AppLocalizations.supportedLocales,
               home: MermaidChartPage(
                 initialCode: initialCode,
                 initialShowPreview: false,
               ),
-              localizationsDelegates: [
-                DefaultMaterialLocalizations.delegate,
-                DefaultWidgetsLocalizations.delegate,
-              ],
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
             ),
           ),
         );
@@ -979,14 +2082,13 @@ void main() {
         await tester.pumpWidget(
           const ProviderScope(
             child: MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              supportedLocales: AppLocalizations.supportedLocales,
               home: MermaidChartPage(
                 initialCode: initialCode,
                 initialShowPreview: false,
               ),
-              localizationsDelegates: [
-                DefaultMaterialLocalizations.delegate,
-                DefaultWidgetsLocalizations.delegate,
-              ],
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
             ),
           ),
         );
@@ -1016,14 +2118,13 @@ void main() {
       await tester.pumpWidget(
         const ProviderScope(
           child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
             home: MermaidChartPage(
               initialCode: initialCode,
               initialShowPreview: false,
             ),
-            localizationsDelegates: [
-              DefaultMaterialLocalizations.delegate,
-              DefaultWidgetsLocalizations.delegate,
-            ],
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
           ),
         ),
       );
@@ -1037,20 +2138,36 @@ void main() {
     });
 
     testWidgets(
+      'initialCode with multiline %%{init} directive detects sequence type',
+      (tester) async {
+        const initialCode = '''%%{init: {
+  "theme": "dark"
+}}%%
+sequenceDiagram
+  Alice->>Bob: Hi''';
+        await tester.pumpWidget(_buildTestApp(initialCode: initialCode));
+        await tester.pump();
+
+        expect(find.text('添加参与者'), findsOneWidget);
+        expect(find.text('添加请求'), findsOneWidget);
+        expect(find.text('添加节点'), findsNothing);
+      },
+    );
+
+    testWidgets(
       'initialCode with only %% comments falls back to flowchart snippets',
       (tester) async {
         const initialCode = '%% comment line 1\n%% comment line 2\n';
         await tester.pumpWidget(
           const ProviderScope(
             child: MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              supportedLocales: AppLocalizations.supportedLocales,
               home: MermaidChartPage(
                 initialCode: initialCode,
                 initialShowPreview: false,
               ),
-              localizationsDelegates: [
-                DefaultMaterialLocalizations.delegate,
-                DefaultWidgetsLocalizations.delegate,
-              ],
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
             ),
           ),
         );
@@ -1102,6 +2219,737 @@ void main() {
       final controller = tester.widget<TextField>(textField).controller;
       expect(controller?.text, contains('NewNode'));
     });
+
+    testWidgets('repeated flowchart node insertions use distinct IDs', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildTestApp(
+          initialCode: 'graph TD\n  A[Start] --> B[End]',
+          initialShowPreview: false,
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('添加节点'));
+      await tester.pump();
+      await tester.tap(find.text('添加节点'));
+      await tester.pump();
+
+      final textField = tester.widget<TextField>(find.byType(TextField).first);
+      final nodeIds = RegExp(
+        r'^\s*(NewNode\d*)\[新节点\]$',
+        multiLine: true,
+      ).allMatches(textField.controller!.text).map((match) => match[1]);
+
+      expect(nodeIds, ['NewNode', 'NewNode1']);
+    });
+
+    testWidgets('flowchart node insertion preserves existing NewNode label', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildTestApp(
+          initialCode: 'graph TD\n  NewNode[Existing] --> A[End]',
+          initialShowPreview: false,
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('添加节点'));
+      await tester.pump();
+
+      final textField = tester.widget<TextField>(find.byType(TextField).first);
+      final code = textField.controller!.text;
+
+      expect(code, contains('NewNode[Existing]'));
+      expect(code, contains('NewNode1[新节点]'));
+      expect(code, isNot(contains('NewNode[新节点]')));
+    });
+
+    testWidgets('flowchart node insertion skips IDs in link endpoints', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildTestApp(
+          initialCode: 'graph TD; NewNode~~~A; B <--> NewNode1; '
+              'NewNode2 o-- C; D x-- NewNode3; E --> NewNode4; '
+              'NewNode5 o-- NewNode6 --> H',
+          initialShowPreview: false,
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('添加节点'));
+      await tester.pump();
+
+      final textField = tester.widget<TextField>(find.byType(TextField).first);
+      final code = textField.controller!.text;
+
+      expect(code, contains('NewNode~~~A'));
+      expect(code, contains('B <--> NewNode1'));
+      expect(code, contains('NewNode2 o-- C'));
+      expect(code, contains('D x-- NewNode3'));
+      expect(code, contains('E --> NewNode4'));
+      expect(code, contains('NewNode5 o-- NewNode6 --> H'));
+      expect(code, contains('NewNode7[新节点]'));
+      expect(code, isNot(contains('NewNode[新节点]')));
+    });
+
+    testWidgets('flowchart node insertion ignores label and comment text', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildTestApp(
+          initialCode: 'graph TD\n%% NewNode\n'
+              '  A["NewNode --> quoted label"]\n'
+              '  B[NewNode --> unquoted label]\n'
+              '  C>label --> NewNode --> asymmetric label]\n'
+              r'  K>escaped \] --> NewNode --> asymmetric label]'
+              '\n'
+              '  D -- NewNode --> E\n'
+              '  I -- "label --> NewNode --> quoted edge label" --> J\n'
+              '  L -. NewNode .-> M\n'
+              '  F -->|NewNode| G\n'
+              '  H["NewNode %% label text"]\n',
+          initialShowPreview: false,
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('添加节点'));
+      await tester.pump();
+
+      final textField = tester.widget<TextField>(find.byType(TextField).first);
+      final code = textField.controller!.text;
+
+      expect(code, contains('%% NewNode'));
+      expect(code, contains('C>label --> NewNode --> asymmetric label]'));
+      expect(code, contains('D -- NewNode --> E'));
+      expect(code, contains('NewNode[新节点]'));
+      expect(code, isNot(contains('NewNode1[新节点]')));
+    });
+
+    testWidgets(
+      'repeated flowchart diamond snippets use IDs distinct from existing nodes',
+      (tester) async {
+        await tester.pumpWidget(
+          _buildTestApp(
+            initialCode:
+                'graph TD\n  Condition[Existing decision] --> Next[Continue]',
+            initialShowPreview: false,
+          ),
+        );
+        await tester.pump();
+
+        await tester.tap(find.text('添加菱形判断'));
+        await tester.pump();
+        await tester.tap(find.text('添加菱形判断'));
+        await tester.pump();
+
+        final textField =
+            tester.widget<TextField>(find.byType(TextField).first);
+        final code = textField.controller!.text;
+        final nodeIds = RegExp(
+          r'^\s*(Condition\d*)\{判断条件\}$',
+          multiLine: true,
+        ).allMatches(code).map((match) => match[1]).toList();
+
+        expect(code, contains('Condition[Existing decision]'));
+        expect(nodeIds, ['Condition1', 'Condition2']);
+        expect(nodeIds.toSet(), hasLength(2));
+      },
+    );
+
+    testWidgets(
+      'repeated flowchart connection snippets use distinct endpoint IDs',
+      (tester) async {
+        await tester.pumpWidget(
+          _buildTestApp(
+            initialCode:
+                'graph TD\n  Node1[Existing start] --> Node2[Existing end]',
+            initialShowPreview: false,
+          ),
+        );
+        await tester.pump();
+
+        await tester.tap(find.text('添加连接线'));
+        await tester.pump();
+        await tester.tap(find.text('添加连接线'));
+        await tester.pump();
+
+        final textField =
+            tester.widget<TextField>(find.byType(TextField).first);
+        final code = textField.controller!.text;
+        final edges = RegExp(
+          r'^\s*(Node\d+) --> (Node\d+)\s*$',
+          multiLine: true,
+        ).allMatches(code).toList();
+        final insertedNodeIds =
+            edges.expand((edge) => [edge[1]!, edge[2]!]).toSet();
+
+        expect(code, contains('Node1[Existing start] --> Node2[Existing end]'));
+        expect(edges, hasLength(2));
+        expect(edges.map((edge) => '${edge[1]} --> ${edge[2]}'), [
+          'Node11 --> Node21',
+          'Node12 --> Node22',
+        ]);
+        expect(insertedNodeIds, hasLength(4));
+        expect(insertedNodeIds, isNot(contains('Node1')));
+        expect(insertedNodeIds, isNot(contains('Node2')));
+      },
+    );
+
+    testWidgets(
+      'repeated flowchart subgraph snippets use distinct subgraph and node IDs',
+      (tester) async {
+        await tester.pumpWidget(
+          _buildTestApp(
+            initialCode: 'graph TD; subgraph 子图名称; Node1[Existing node]; end',
+            initialShowPreview: false,
+          ),
+        );
+        await tester.pump();
+
+        await tester.tap(find.text('添加子图'));
+        await tester.pump();
+        await tester.tap(find.text('添加子图'));
+        await tester.pump();
+
+        final textField =
+            tester.widget<TextField>(find.byType(TextField).first);
+        final code = textField.controller!.text;
+        final nodeIds = RegExp(
+          r'^\s*(Node\d+)\[节点1\]$',
+          multiLine: true,
+        ).allMatches(code).map((match) => match[1]).toList();
+        final subgraphIds = RegExp(
+          r'(?:^|;)\s*subgraph\s+([^\s;\[]+)',
+          multiLine: true,
+        ).allMatches(code).map((match) => match[1]).toList();
+
+        expect(code, contains('Node1[Existing node]'));
+        expect(nodeIds, ['Node11', 'Node12']);
+        expect(nodeIds.toSet(), hasLength(2));
+        expect(subgraphIds, ['子图名称', '子图名称1', '子图名称2']);
+        expect(subgraphIds.toSet(), hasLength(3));
+        expect(
+          RegExp(r'(?:^|;)\s*end\s*(?:;|$)', multiLine: true).allMatches(code),
+          hasLength(3),
+        );
+      },
+    );
+
+    testWidgets('repeated class snippet insertions use distinct class IDs', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildTestApp(
+          initialCode: 'classDiagram\n  新类 <|-- ExistingClass',
+          initialShowPreview: false,
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('添加类'));
+      await tester.pump();
+      await tester.tap(find.text('添加类'));
+      await tester.pump();
+
+      final textField = tester.widget<TextField>(find.byType(TextField).first);
+      final code = textField.controller!.text;
+      final classIds = RegExp(
+        r'^class (\S+) \{$',
+        multiLine: true,
+      ).allMatches(code).map((match) => match[1]);
+
+      expect(classIds, ['新类1', '新类2']);
+      expect(code, contains('  新类 <|-- ExistingClass'));
+      expect(code, contains('class 新类1 {\n  +String 属性\n  +方法() void\n}'));
+      expect(code, contains('class 新类2 {\n  +String 属性\n  +方法() void\n}'));
+    });
+
+    testWidgets('class snippets skip IDs in compact relationships', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildTestApp(
+          initialCode: 'classDiagram\n  新类--ExistingClass',
+          initialShowPreview: false,
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('添加类'));
+      await tester.pump();
+
+      final textField = tester.widget<TextField>(find.byType(TextField).first);
+      final code = textField.controller!.text;
+      final classIds = RegExp(
+        r'^class (\S+) \{$',
+        multiLine: true,
+      ).allMatches(code).map((match) => match[1]);
+
+      expect(classIds, ['新类1']);
+      expect(code, contains('  新类--ExistingClass'));
+      expect(code, contains('class 新类1 {\n  +String 属性\n  +方法() void\n}'));
+    });
+
+    testWidgets('class snippets skip IDs on CRLF lines with trailing space', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildTestApp(
+          initialCode: 'classDiagram\r\n  新类--ExistingClass \r\n',
+          initialShowPreview: false,
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('添加类'));
+      await tester.pump();
+
+      final textField = tester.widget<TextField>(find.byType(TextField).first);
+      final code = textField.controller!.text;
+      final classIds = RegExp(
+        r'^class (\S+) \{$',
+        multiLine: true,
+      ).allMatches(code).map((match) => match[1]);
+
+      expect(classIds, ['新类1']);
+      expect(code, contains('  新类--ExistingClass'));
+    });
+
+    testWidgets('class snippets skip compact right endpoints after letter o', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildTestApp(
+          initialCode: 'classDiagram\n  Foo--新类',
+          initialShowPreview: false,
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('添加类'));
+      await tester.pump();
+
+      final textField = tester.widget<TextField>(find.byType(TextField).first);
+      final code = textField.controller!.text;
+      final classIds = RegExp(
+        r'^class (\S+) \{$',
+        multiLine: true,
+      ).allMatches(code).map((match) => match[1]);
+
+      expect(classIds, ['新类1']);
+      expect(code, contains('  Foo--新类'));
+    });
+
+    testWidgets('class snippets skip IDs after embedded o in left endpoint', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildTestApp(
+          initialCode: 'classDiagram\n  Customer--新类',
+          initialShowPreview: false,
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('添加类'));
+      await tester.pump();
+
+      final textField = tester.widget<TextField>(find.byType(TextField).first);
+      final code = textField.controller!.text;
+      final classIds = RegExp(
+        r'^class (\S+) \{$',
+        multiLine: true,
+      ).allMatches(code).map((match) => match[1]);
+
+      expect(classIds, ['新类1']);
+      expect(code, contains('  Customer--新类'));
+    });
+
+    testWidgets('repeated ER snippet insertions use distinct entity IDs', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildTestApp(
+          initialCode: 'erDiagram\n  新实体 ||--o{ 已有实体 : owns',
+          initialShowPreview: false,
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('添加实体'));
+      await tester.pump();
+      await tester.tap(find.text('添加实体'));
+      await tester.pump();
+
+      final textField = tester.widget<TextField>(find.byType(TextField).first);
+      final code = textField.controller!.text;
+      final entityIds = RegExp(
+        r'^\s*(\S+) \{$',
+        multiLine: true,
+      ).allMatches(code).map((match) => match[1]);
+
+      expect(entityIds, ['新实体1', '新实体2']);
+      expect(code, contains('  新实体 ||--o{ 已有实体 : owns'));
+      expect(
+        code,
+        contains('  新实体1 {\n    int id PK\n    string name\n  }'),
+      );
+      expect(
+        code,
+        contains('  新实体2 {\n    int id PK\n    string name\n  }'),
+      );
+    });
+
+    testWidgets('ER snippets skip IDs in compact relationships', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildTestApp(
+          initialCode: 'erDiagram\n  新实体||--o{已有实体:owns\n  其他实体||--o{新实体',
+          initialShowPreview: false,
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('添加实体'));
+      await tester.pump();
+
+      final textField = tester.widget<TextField>(find.byType(TextField).first);
+      final code = textField.controller!.text;
+      final entityIds = RegExp(
+        r'^\s*(\S+) \{$',
+        multiLine: true,
+      ).allMatches(code).map((match) => match[1]);
+
+      expect(entityIds, ['新实体1']);
+      expect(code, contains('  新实体||--o{已有实体:owns'));
+      expect(code, contains('  其他实体||--o{新实体'));
+      expect(
+        code,
+        contains('  新实体1 {\n    int id PK\n    string name\n  }'),
+      );
+    });
+
+    testWidgets('ER snippets skip compact right endpoints after letter o', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildTestApp(
+          initialCode: 'erDiagram\n  Foo||--o{新实体',
+          initialShowPreview: false,
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('添加实体'));
+      await tester.pump();
+
+      final textField = tester.widget<TextField>(find.byType(TextField).first);
+      final code = textField.controller!.text;
+      final entityIds = RegExp(
+        r'^\s*(\S+) \{$',
+        multiLine: true,
+      ).allMatches(code).map((match) => match[1]);
+
+      expect(entityIds, ['新实体1']);
+      expect(code, contains('  Foo||--o{新实体'));
+    });
+
+    testWidgets('ER snippets skip IDs after embedded o in left endpoint', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildTestApp(
+          initialCode: 'erDiagram\n  Customer||--o{新实体',
+          initialShowPreview: false,
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('添加实体'));
+      await tester.pump();
+
+      final textField = tester.widget<TextField>(find.byType(TextField).first);
+      final code = textField.controller!.text;
+      final entityIds = RegExp(
+        r'^\s*(\S+) \{$',
+        multiLine: true,
+      ).allMatches(code).map((match) => match[1]);
+
+      expect(entityIds, ['新实体1']);
+      expect(code, contains('  Customer||--o{新实体'));
+    });
+
+    testWidgets('ER snippets skip IDs on CRLF lines with trailing space', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildTestApp(
+          initialCode: 'erDiagram\r\n  新实体||--o{已有实体:owns \r\n',
+          initialShowPreview: false,
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('添加实体'));
+      await tester.pump();
+
+      final textField = tester.widget<TextField>(find.byType(TextField).first);
+      final code = textField.controller!.text;
+      final entityIds = RegExp(
+        r'^\s*(\S+) \{$',
+        multiLine: true,
+      ).allMatches(code).map((match) => match[1]);
+
+      expect(entityIds, ['新实体1']);
+      expect(code, contains('  新实体||--o{已有实体:owns'));
+    });
+
+    testWidgets('repeated block snippet insertions use distinct block IDs', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildTestApp(
+          initialCode: 'block-beta\n  A["existing"] NewBlock["existing"]',
+          initialShowPreview: false,
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('添加块'));
+      await tester.pump();
+      await tester.tap(find.text('添加块'));
+      await tester.pump();
+
+      final textField = tester.widget<TextField>(find.byType(TextField).first);
+      final code = textField.controller!.text;
+      final blockIds = RegExp(
+        r'^\s*(NewBlock\d*)\["新块"\]$',
+        multiLine: true,
+      ).allMatches(code).map((match) => match[1]);
+
+      expect(blockIds, ['NewBlock1', 'NewBlock2']);
+      expect(code, contains('A["existing"] NewBlock["existing"]'));
+      expect(code, contains('  NewBlock1["新块"]'));
+      expect(code, contains('  NewBlock2["新块"]'));
+    });
+
+    testWidgets('repeated child block snippets use distinct child IDs', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildTestApp(
+          initialCode: 'block-beta\n  A["existing"]',
+          initialShowPreview: false,
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('添加子块'));
+      await tester.pump();
+      await tester.tap(find.text('添加子块'));
+      await tester.pump();
+
+      final textField = tester.widget<TextField>(find.byType(TextField).first);
+      final code = textField.controller!.text;
+      final childIds = RegExp(
+        r'^[ \t]*(A\d*)\["块A"\]$',
+        multiLine: true,
+      ).allMatches(code).map((match) => match[1]).toList();
+
+      expect(childIds, ['A1', 'A2']);
+      expect(code, contains('A["existing"]'));
+      expect(
+        RegExp(r'^[ \t]*block$', multiLine: true).allMatches(code),
+        hasLength(2),
+      );
+      expect(
+        RegExp(r'^[ \t]*end$', multiLine: true).allMatches(code),
+        hasLength(2),
+      );
+    });
+
+    testWidgets('repeated block snippets skip bare IDs before later blocks', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildTestApp(
+          initialCode: 'block-beta\n  NewBlock A["existing"]',
+          initialShowPreview: false,
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('添加块'));
+      await tester.pump();
+
+      final textField = tester.widget<TextField>(find.byType(TextField).first);
+      final code = textField.controller!.text;
+
+      expect(code, contains('  NewBlock A["existing"]'));
+      expect(code, contains('  NewBlock1["新块"]'));
+    });
+
+    testWidgets('repeated block snippets skip alternate block shapes', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildTestApp(
+          initialCode: 'block-beta\n  NewBlock("existing")',
+          initialShowPreview: false,
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('添加块'));
+      await tester.pump();
+
+      final textField = tester.widget<TextField>(find.byType(TextField).first);
+      final code = textField.controller!.text;
+
+      expect(code, contains('  NewBlock("existing")'));
+      expect(code, contains('  NewBlock1["新块"]'));
+    });
+
+    testWidgets('repeated block snippets skip width-qualified IDs', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildTestApp(
+          initialCode: 'block-beta\n  NewBlock["existing"]\n  NewBlock1:2',
+          initialShowPreview: false,
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('添加块'));
+      await tester.pump();
+
+      final textField = tester.widget<TextField>(find.byType(TextField).first);
+      final code = textField.controller!.text;
+
+      expect(code, contains('  NewBlock["existing"]'));
+      expect(code, contains('  NewBlock1:2'));
+      expect(code, contains('  NewBlock2["新块"]'));
+    });
+
+    testWidgets('block snippets skip IDs in nested block headers', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildTestApp(
+          initialCode:
+              'block-beta\n  NewBlock["existing"]\n  block:NewBlock1:2\n  end',
+          initialShowPreview: false,
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('添加块'));
+      await tester.pump();
+
+      final textField = tester.widget<TextField>(find.byType(TextField).first);
+      final code = textField.controller!.text;
+
+      expect(code, contains('  NewBlock["existing"]'));
+      expect(code, contains('  block:NewBlock1:2'));
+      expect(code, contains('  NewBlock2["新块"]'));
+    });
+
+    testWidgets('repeated block snippets skip IDs in unspaced links', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildTestApp(
+          initialCode: 'block-beta\n  NewBlock-->A\n  B-->NewBlock',
+          initialShowPreview: false,
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('添加块'));
+      await tester.pump();
+
+      final textField = tester.widget<TextField>(find.byType(TextField).first);
+      final code = textField.controller!.text;
+
+      expect(code, contains('  NewBlock-->A'));
+      expect(code, contains('  B-->NewBlock'));
+      expect(code, contains('  NewBlock1["新块"]'));
+    });
+
+    testWidgets(
+      'block snippets skip IDs after unspaced connector markers',
+      (tester) async {
+        await tester.pumpWidget(
+          _buildTestApp(
+            initialCode: 'block-beta\n  A--oNewBlock\n  B--xNewBlock1',
+            initialShowPreview: false,
+          ),
+        );
+        await tester.pump();
+
+        await tester.tap(find.text('添加块'));
+        await tester.pump();
+
+        final textField =
+            tester.widget<TextField>(find.byType(TextField).first);
+        final code = textField.controller!.text;
+
+        expect(code, contains('  A--oNewBlock'));
+        expect(code, contains('  B--xNewBlock1'));
+        expect(code, contains('  NewBlock2["新块"]'));
+      },
+    );
+
+    testWidgets(
+      'adding a requirement to the default diagram assigns a unique ID',
+      (tester) async {
+        await tester.pumpWidget(
+          _buildTestApp(
+            initialCode: MermaidTemplates.getTemplate('requirement'),
+            initialShowPreview: false,
+          ),
+        );
+        await tester.pump();
+
+        await tester.tap(find.text('添加需求'));
+        await tester.pump();
+
+        final textField = tester.widget<TextField>(
+          find.byType(TextField).first,
+        );
+        expect(_requirementIds(textField.controller!.text), ['1', '2']);
+      },
+    );
+
+    testWidgets(
+      'repeated requirement insertions assign distinct IDs',
+      (tester) async {
+        await tester.pumpWidget(
+          _buildTestApp(
+            initialCode: MermaidTemplates.getTemplate('requirement'),
+            initialShowPreview: false,
+          ),
+        );
+        await tester.pump();
+
+        await tester.tap(find.text('添加需求'));
+        await tester.pump();
+        await tester.tap(find.text('添加需求'));
+        await tester.pump();
+
+        final textField = tester.widget<TextField>(
+          find.byType(TextField).first,
+        );
+        expect(_requirementIds(textField.controller!.text), ['1', '2', '3']);
+      },
+    );
 
     testWidgets(
       'snippet insertion preserves final line without trailing newline',

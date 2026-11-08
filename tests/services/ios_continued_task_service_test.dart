@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -37,6 +38,12 @@ void main() {
       expect(IosContinuedTaskService.instance.isSupported, isFalse);
     });
 
+    if (kIsWeb) {
+      test('isSupported is false on Web without reading dart:io Platform', () {
+        expect(IosContinuedTaskService.instance.isSupported, isFalse);
+      });
+    }
+
     test('debugForceSupported enables the bridge for tests', () {
       IosContinuedTaskService.debugForceSupported = true;
       expect(IosContinuedTaskService.instance.isSupported, isTrue);
@@ -44,7 +51,7 @@ void main() {
 
     test('no channel calls are made when not supported', () async {
       final service = IosContinuedTaskService.instance;
-      await service.submit();
+      await service.submit(title: 'Background task');
       await service.updateProgress(50);
       await service.complete();
       expect(channelCalls, isEmpty);

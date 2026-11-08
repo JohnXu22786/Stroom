@@ -195,6 +195,149 @@ void main() {
 
   group('ChatPage scroll-to-bottom follow', () {
     testWidgets(
+        'content growth during an active auto-scroll animation is followed '
+        'after the animation settles', (tester) async {
+      final container = await pumpChat(tester);
+      await scrollToBottom(tester);
+      await startStreaming(tester);
+      await scrollToBottom(tester);
+
+      final pos = _chatPosition(tester);
+      final originalExtent = pos.maxScrollExtent;
+      final animation = pos.animateTo(
+        pos.maxScrollExtent - 10,
+        duration: const Duration(milliseconds: 600),
+        curve: Curves.linear,
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(pos.isScrollingNotifier.value, isTrue,
+          reason: 'precondition: a non-user scroll animation is active');
+
+      // This diagram-like expansion is larger than the 80px at-bottom
+      // window. It reproduces Mermaid layout growth without coupling this
+      // chat integration test to the webview renderer, and ensures the
+      // animation ticks cannot mistake the resulting gap for a user scroll.
+      streamChunk(
+        container,
+        'Mermaid chart expanded\nrow two\nrow three\nrow four\nrow five',
+      );
+      await tester.pump();
+      expect(
+        pos.maxScrollExtent - originalExtent,
+        greaterThan(80),
+        reason: 'precondition: rendering the chart grew content beyond the '
+            '80px at-bottom window',
+      );
+      await pumpUntil(
+        tester,
+        () => !_chatPosition(tester).isScrollingNotifier.value,
+      );
+      await animation;
+
+      expect(
+        _chatPosition(tester).maxScrollExtent - _chatPosition(tester).pixels,
+        lessThanOrEqualTo(10),
+        reason: 'the newest chart content must be visible after the active '
+            'scroll animation settles',
+      );
+      for (var i = 0; i < 4; i++) {
+        await tester.pump(const Duration(milliseconds: 500));
+      }
+    });
+
+    testWidgets(
+        'a pending growth follow is dropped when auto-scroll is disabled',
+        (tester) async {
+      final container = await pumpChat(tester);
+      await scrollToBottom(tester);
+      await startStreaming(tester);
+      await scrollToBottom(tester);
+
+      final pos = _chatPosition(tester);
+      final animation = pos.animateTo(
+        pos.maxScrollExtent - 10,
+        duration: const Duration(milliseconds: 600),
+        curve: Curves.linear,
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+      streamChunk(container, 'Mermaid chart expanded\nwith a second row');
+      await tester.pump();
+
+      // Move well outside the at-bottom window while the deferred follow is
+      // pending. This disables auto-scroll and cancels the animation.
+      pos.jumpTo((pos.pixels - 200).clamp(0.0, pos.maxScrollExtent));
+      await tester.pump();
+      await animation;
+      final readingOffset = pos.pixels;
+      expect(pos.maxScrollExtent - readingOffset, greaterThan(100),
+          reason: 'precondition: auto-scroll is disabled away from bottom');
+
+      for (var i = 0; i < 8; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      expect(
+        pos.pixels,
+        closeTo(readingOffset, 1),
+        reason: 'the consumed growth must not pull a reader back after '
+            'auto-scroll is disabled',
+      );
+      for (var i = 0; i < 4; i++) {
+        await tester.pump(const Duration(milliseconds: 500));
+      }
+    });
+
+    testWidgets(
+        'a user drag cancels a growth follow that was waiting on animation',
+        (tester) async {
+      final container = await pumpChat(tester);
+      await scrollToBottom(tester);
+      await startStreaming(tester);
+      await scrollToBottom(tester);
+
+      final pos = _chatPosition(tester);
+      final animation = pos.animateTo(
+        pos.maxScrollExtent - 10,
+        duration: const Duration(milliseconds: 600),
+        curve: Curves.linear,
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+      streamChunk(container, 'Mermaid chart expanded\nwith a second row');
+      await tester.pump();
+
+      // Deliver the same start notification that a finger drag sends. The
+      // animation remains active so this isolates the pending-follow gate.
+      final listFinder = find
+          .descendant(
+            of: find.byType(ChatPage),
+            matching: find.byType(Scrollable),
+            skipOffstage: false,
+          )
+          .first;
+      final listContext = tester.element(listFinder);
+      ScrollStartNotification(
+        metrics: pos,
+        context: listContext,
+        dragDetails: DragStartDetails(
+          globalPosition: tester.getCenter(listFinder),
+        ),
+      ).dispatch(listContext);
+
+      await pumpUntil(
+        tester,
+        () => !_chatPosition(tester).isScrollingNotifier.value,
+      );
+      await animation;
+      expect(
+        pos.maxScrollExtent - pos.pixels,
+        greaterThan(10),
+        reason: 'the queued growth follow must yield to the user drag',
+      );
+      for (var i = 0; i < 4; i++) {
+        await tester.pump(const Duration(milliseconds: 500));
+      }
+    });
+
+    testWidgets(
         'while at the bottom, a growing streaming message keeps the list '
         'pinned to the bottom', (tester) async {
       final container = await pumpChat(tester);

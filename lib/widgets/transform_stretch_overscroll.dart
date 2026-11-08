@@ -98,7 +98,7 @@ class _TransformStretchOverscrollState extends State<TransformStretchOverscroll>
   }
 
   bool _handleScrollNotification(ScrollNotification notification) {
-    if (notification.metrics.axis != widget.axis) {
+    if (notification.depth != 0 || notification.metrics.axis != widget.axis) {
       return false;
     }
     if (notification is OverscrollNotification) {

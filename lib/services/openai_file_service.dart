@@ -3,7 +3,10 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter/widgets.dart' show Locale;
+import '../l10n/app_localizations.dart';
 import '../providers/chat_api_shared.dart';
+import '../providers/locale_provider.dart';
 import '../utils/http_utils.dart';
 
 // ============================================================================
@@ -127,9 +130,29 @@ class OpenAiFileResult {
 class OpenAiFileService {
   final OpenAiFileUploadConfig config;
   final Dio _dio;
+  final Locale? Function()? _localeOverride;
 
-  OpenAiFileService({required this.config, Dio? dio})
-      : _dio = dio ??
+  AppLocalizations get _localizations =>
+      appLocalizationsForLocale(_localeOverride?.call());
+
+  Never _throwDioException(DioException error) {
+    throwWrappedDioException(
+      error,
+      messageBuilder: (statusCode, detail) {
+        final strings = _localizations;
+        return statusCode == null
+            ? strings.fileUploadRequestFailed(detail)
+            : strings.fileUploadRequestFailedStatus(statusCode, detail);
+      },
+    );
+  }
+
+  OpenAiFileService({
+    required this.config,
+    Dio? dio,
+    Locale? Function()? localeOverride,
+  })  : _localeOverride = localeOverride,
+        _dio = dio ??
             Dio(BaseOptions(
               headers: {
                 if (config.apiKey.isNotEmpty)
@@ -159,27 +182,28 @@ class OpenAiFileService {
     void Function(double progress)? onProgress,
     CancelToken? cancelToken,
   }) async {
+    final strings = _localizations;
     // ── Input validation ────────────────────────────────────────────
     if (config.apiKey.isEmpty) {
-      throw Exception('API 密钥未配置，无法上传文件');
+      throw Exception(strings.fileUploadApiKeyMissing);
     }
     if (config.baseUrl.isEmpty) {
-      throw Exception('API 地址未配置，无法上传文件');
+      throw Exception(strings.fileUploadApiUrlMissing);
     }
     if (bytes.isEmpty) {
-      throw Exception('文件内容为空');
+      throw Exception(strings.fileUploadContentEmpty);
     }
     final trimmedFilename = filename.trim();
     if (trimmedFilename.isEmpty) {
-      throw Exception('文件名为空');
+      throw Exception(strings.fileUploadFilenameEmpty);
     }
     final trimmedMime = mimeType.trim();
     if (trimmedMime.isEmpty) {
-      throw Exception('MIME 类型为空');
+      throw Exception(strings.fileUploadMimeTypeEmpty);
     }
     final trimmedPurpose = purpose.trim();
     if (trimmedPurpose.isEmpty) {
-      throw Exception('上传用途（purpose）为空');
+      throw Exception(strings.fileUploadPurposeEmpty);
     }
 
     // ── Select upload path ──────────────────────────────────────────
@@ -231,7 +255,7 @@ class OpenAiFileService {
         purpose,
       );
     } on DioException catch (e) {
-      throwWrappedDioException(e);
+      _throwDioException(e);
     }
   }
 
@@ -258,7 +282,7 @@ class OpenAiFileService {
     try {
       // Check cancellation before proceeding
       if (cancelToken?.isCancelled == true) {
-        throw Exception('上传已取消');
+        throw Exception(_localizations.fileUploadCanceled);
       }
 
       // Step 2: Split and upload parts
@@ -270,7 +294,7 @@ class OpenAiFileService {
           offset += config.partSizeBytes) {
         if (cancelToken?.isCancelled == true) {
           await _cancelUploadSafely(uploadId);
-          throw Exception('上传已取消');
+          throw Exception(_localizations.fileUploadCanceled);
         }
 
         final end = (offset + config.partSizeBytes > bytes.length)
@@ -330,11 +354,11 @@ class OpenAiFileService {
       final data = response.data as Map<String, dynamic>;
       final uploadId = data['id'] as String?;
       if (uploadId == null || uploadId.isEmpty) {
-        throw Exception('创建上传失败: 响应中缺少 upload id');
+        throw Exception(_localizations.fileUploadCreateMissingId);
       }
       return uploadId;
     } on DioException catch (e) {
-      throwWrappedDioException(e);
+      _throwDioException(e);
     }
   }
 
@@ -364,11 +388,11 @@ class OpenAiFileService {
       final data = response.data as Map<String, dynamic>;
       final partId = data['id'] as String?;
       if (partId == null || partId.isEmpty) {
-        throw Exception('上传分片失败: 响应中缺少 part id');
+        throw Exception(_localizations.fileUploadPartMissingId);
       }
       return partId;
     } on DioException catch (e) {
-      throwWrappedDioException(e);
+      _throwDioException(e);
     }
   }
 
@@ -409,7 +433,7 @@ class OpenAiFileService {
             purpose: purpose,
           );
         }
-        throw Exception('完成上传失败: 响应中缺少 file 对象');
+        throw Exception(_localizations.fileUploadCompleteMissingFile);
       }
 
       return OpenAiFileResult(
@@ -419,7 +443,7 @@ class OpenAiFileService {
         purpose: (fileData['purpose'] as String?) ?? purpose,
       );
     } on DioException catch (e) {
-      throwWrappedDioException(e);
+      _throwDioException(e);
     }
   }
 
@@ -465,7 +489,7 @@ class OpenAiFileService {
     }
 
     if (id == null || id.isEmpty) {
-      throw Exception('上传失败: 响应中缺少 file id');
+      throw Exception(_localizations.fileUploadMissingFileId);
     }
 
     return OpenAiFileResult(

@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:stroom/providers/image_provider.dart';
 import 'package:stroom/utils/folder_path_utils.dart';
@@ -26,6 +28,22 @@ Future<List<MapEntry<String, Uint8List>>?> showAppAlbumPickerDialog(
   );
 }
 
+/// Pauses file reads initiated by the picker in focused async lifecycle tests.
+@visibleForTesting
+Future<void> Function(String fileName)? beforeAppAlbumPickerReadForTesting;
+
+/// Overrides edited-image temp writes in focused async lifecycle tests.
+@visibleForTesting
+Future<void> Function(File file, Uint8List bytes)?
+    beforeAppAlbumPickerTempWriteForTesting;
+
+/// Supplies edited bytes without opening the editor in lifecycle tests.
+@visibleForTesting
+Future<Uint8List?> Function(String fileName, Uint8List imageBytes)?
+    appAlbumPickerEditImageForTesting;
+
+int _appAlbumPickerTempEditCounter = 0;
+
 class _AppAlbumPickerDialog extends ConsumerStatefulWidget {
   const _AppAlbumPickerDialog();
 
@@ -38,13 +56,23 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
   List<ImageRecord> _records = [];
   Set<String> _folders = {};
   bool _loading = true;
+  bool _loadFailed = false;
   String _currentFolder = '';
 
   // 多选状态: key = recordId, value = (fileName, bytes)
   final Map<String, MapEntry<String, Uint8List>> _selectedItems = {};
+  final Map<String, Object> _editAttempts = {};
+  final List<String> _selectionOrder = [];
+  final Map<String, Object> _pendingSelections = {};
+  final Map<String, Future<void>> _pendingReads = {};
+  Completer<void> _pendingSelectionChanged = Completer<void>();
+  bool _confirmingSelection = false;
+  bool _confirmationFailedRead = false;
+  bool _isClosing = false;
 
   /// Track temp file paths created during edit for cleanup on dialog close.
   final List<String> _tempEditFiles = [];
+  final Map<String, Future<void>> _pendingTempEditWrites = {};
 
   @override
   void initState() {
@@ -60,7 +88,17 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
 
   /// Clean up any temp edit files written to the cache directory.
   Future<void> _cleanupTempFiles() async {
-    for (final path in _tempEditFiles) {
+    final paths = List<String>.of(_tempEditFiles);
+    try {
+      await Future.wait<void>([
+        for (final path in paths)
+          if (_pendingTempEditWrites.containsKey(path))
+            _pendingTempEditWrites[path]!,
+      ]);
+    } catch (_) {
+      // A failed write can still leave a partial file to remove below.
+    }
+    for (final path in paths) {
       try {
         final file = File(path);
         if (await file.exists()) {
@@ -70,7 +108,7 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
         // Non-critical cleanup
       }
     }
-    _tempEditFiles.clear();
+    _tempEditFiles.removeWhere(paths.contains);
   }
 
   Future<void> _loadData() async {
@@ -84,13 +122,25 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
           _records = List<ImageRecord>.from(records);
           _folders = Set<String>.from(folders);
           _loading = false;
+          _loadFailed = false;
         });
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _loading = false);
+        setState(() {
+          _loading = false;
+          _loadFailed = true;
+        });
       }
     }
+  }
+
+  Future<void> _retryLoadData() async {
+    setState(() {
+      _loading = true;
+      _loadFailed = false;
+    });
+    await _loadData();
   }
 
   bool get _isRoot => _currentFolder.isEmpty;
@@ -116,56 +166,156 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
     setState(() => _currentFolder = parent);
   }
 
-  bool _isSelected(String recordId) => _selectedItems.containsKey(recordId);
+  bool _isSelected(String recordId) =>
+      _selectedItems.containsKey(recordId) ||
+      _pendingSelections.containsKey(recordId);
+
+  int get _selectionCount => _selectedItems.length + _pendingSelections.length;
+
+  List<MapEntry<String, MapEntry<String, Uint8List>>>
+      get _orderedSelectedItems {
+    return [
+      for (final key in _selectionOrder)
+        if (_selectedItems.containsKey(key))
+          MapEntry(key, _selectedItems[key]!),
+    ];
+  }
+
+  void _notifyPendingSelectionChanged() {
+    final changed = _pendingSelectionChanged;
+    _pendingSelectionChanged = Completer<void>();
+    changed.complete();
+  }
 
   Future<void> _toggleSelection(ImageRecord record) async {
     final key = record.id;
     if (_selectedItems.containsKey(key)) {
-      setState(() => _selectedItems.remove(key));
+      setState(() {
+        _selectedItems.remove(key);
+        _editAttempts.remove(key);
+        _selectionOrder.remove(key);
+      });
+      return;
+    }
+    if (_pendingSelections.containsKey(key)) {
+      setState(() {
+        _pendingSelections.remove(key);
+        _pendingReads.remove(key);
+        _selectionOrder.remove(key);
+      });
+      _notifyPendingSelectionChanged();
       return;
     }
 
-    // 读取文件数据
+    final token = Object();
+    setState(() {
+      _pendingSelections[key] = token;
+      _selectionOrder.add(key);
+    });
+    _notifyPendingSelectionChanged();
+    final read = _readSelection(record, token);
+    _pendingReads[key] = read;
+    await read;
+  }
+
+  Future<void> _readSelection(ImageRecord record, Object token) async {
     Uint8List? data;
     try {
+      await beforeAppAlbumPickerReadForTesting?.call(record.storagePath);
       data = await ImageManifest.readFile(record.storagePath);
     } catch (_) {}
-    if (data == null || data.isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('无法读取文件')),
-        );
-      }
+
+    if (!mounted ||
+        _isClosing ||
+        !identical(_pendingSelections[record.id], token)) {
       return;
     }
 
-    final fileName = '${record.name}.${record.format}';
+    final hasData = data != null && data.isNotEmpty;
     setState(() {
-      _selectedItems[key] = MapEntry(fileName, data!);
+      _pendingSelections.remove(record.id);
+      _pendingReads.remove(record.id);
+      if (hasData) {
+        _selectedItems[record.id] = MapEntry(
+          '${record.name}.${record.format}',
+          data!,
+        );
+      } else {
+        _selectionOrder.remove(record.id);
+        if (_confirmingSelection) _confirmationFailedRead = true;
+      }
     });
+    _notifyPendingSelectionChanged();
+    if (!hasData && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.appMediaUnreadable),
+        ),
+      );
+    }
   }
 
   void _clearSelection() {
     _cleanupTempFiles();
-    setState(() => _selectedItems.clear());
+    setState(() {
+      _selectedItems.clear();
+      _editAttempts.clear();
+      _selectionOrder.clear();
+      _pendingSelections.clear();
+      _pendingReads.clear();
+      _confirmationFailedRead = false;
+    });
+    _notifyPendingSelectionChanged();
+  }
+
+  Future<void> _confirmSelection() async {
+    if (_confirmingSelection || _loading || _loadFailed) return;
+    setState(() {
+      _confirmingSelection = true;
+      _confirmationFailedRead = false;
+    });
+    while (_pendingReads.isNotEmpty) {
+      await Future.any<void>([
+        Future.wait<void>(List<Future<void>>.of(_pendingReads.values)),
+        _pendingSelectionChanged.future,
+      ]);
+      if (!mounted || _isClosing) return;
+    }
+    if (!mounted || _isClosing) return;
+    if (_confirmationFailedRead) {
+      setState(() {
+        _confirmingSelection = false;
+        _confirmationFailedRead = false;
+      });
+      return;
+    }
+    Navigator.of(context).pop(
+      _orderedSelectedItems.map((entry) => entry.value).toList(),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final hasSelection = _selectedItems.isNotEmpty;
+    final l10n = AppLocalizations.of(context)!;
+    final hasSelection = _selectionCount > 0;
 
     return PopScope(
       canPop: _isRoot,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && !_isRoot) {
+        if (didPop) {
+          _isClosing = true;
+          _pendingSelections.clear();
+          _pendingReads.clear();
+          _notifyPendingSelectionChanged();
+        } else if (!_isRoot) {
           _navigateBack();
         }
       },
       child: Scaffold(
         backgroundColor: cs.surface,
         appBar: AppBar(
-          title: const Text('应用内相册'),
+          title: Text(l10n.chatAlbumPickerTitle),
           centerTitle: true,
           leading: IconButton(
             icon: const Icon(Icons.close),
@@ -177,7 +327,7 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
                 key: const Key('album_picker_clear_btn'),
                 onPressed: _clearSelection,
                 child: Text(
-                  '清除 (${_selectedItems.length})',
+                  l10n.appMediaClearSelection(_selectionCount),
                   style: const TextStyle(color: Colors.red),
                 ),
               ),
@@ -231,13 +381,15 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
                 ),
                 child: FilledButton.icon(
                   key: const Key('album_picker_confirm_btn'),
-                  onPressed: () {
-                    final result = _selectedItems.values.toList();
-                    Navigator.of(context).pop(result);
-                  },
+                  onPressed: _confirmingSelection || _loading || _loadFailed
+                      ? null
+                      : _confirmSelection,
                   icon: const Icon(Icons.check, size: 18),
                   label: Text(
-                      hasSelection ? '确定 (${_selectedItems.length})' : '确定'),
+                    hasSelection
+                        ? l10n.appMediaConfirmSelectionCount(_selectionCount)
+                        : l10n.appMediaConfirmSelection,
+                  ),
                 ),
               ),
             ),
@@ -248,8 +400,27 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
   }
 
   Widget _buildContent(ColorScheme cs) {
+    final l10n = AppLocalizations.of(context)!;
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_loadFailed) {
+      final l10n = AppLocalizations.of(context)!;
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(l10n.albumPickerLoadFailed),
+            const SizedBox(height: 8),
+            TextButton(
+              key: const Key('album_picker_retry_btn'),
+              onPressed: _retryLoadData,
+              child: Text(l10n.actionRetry),
+            ),
+          ],
+        ),
+      );
     }
 
     final subFolders = _subFolders;
@@ -268,7 +439,7 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
             ),
             const SizedBox(height: 12),
             Text(
-              _isRoot ? '暂无图片' : '此文件夹为空',
+              _isRoot ? l10n.chatAlbumPickerEmpty : l10n.appMediaEmptyFolder,
               style: TextStyle(
                 fontSize: 14,
                 color: cs.onSurfaceVariant,
@@ -309,8 +480,10 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
               const SizedBox(width: 12),
               Text(
                 parent.isEmpty
-                    ? '返回根目录'
-                    : '返回: ${FolderPathUtils.getFolderBaseName(parent)}',
+                    ? AppLocalizations.of(context)!.appMediaRoot
+                    : AppLocalizations.of(context)!.appMediaParentFolder(
+                        FolderPathUtils.getFolderBaseName(parent),
+                      ),
                 style: const TextStyle(fontSize: 15, color: Colors.blue),
               ),
               const Spacer(),
@@ -455,7 +628,7 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
   // ====================================================================
 
   Widget _buildPreviewBar(ColorScheme cs) {
-    final items = _selectedItems.entries.toList();
+    final items = _orderedSelectedItems;
 
     return Container(
       key: const Key('album_picker_preview_bar'),
@@ -473,7 +646,8 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 6, 12, 2),
             child: Text(
-              '已选择 ${items.length} 张图片',
+              AppLocalizations.of(context)!
+                  .appAlbumPickerSelectedImages(_selectionCount),
               style: TextStyle(
                 fontSize: 11,
                 color: cs.onSurfaceVariant,
@@ -493,7 +667,11 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
                   fileName: entry.key,
                   bytes: entry.value,
                   onRemove: () {
-                    setState(() => _selectedItems.remove(mapEntry.key));
+                    setState(() {
+                      _selectedItems.remove(mapEntry.key);
+                      _editAttempts.remove(mapEntry.key);
+                      _selectionOrder.remove(mapEntry.key);
+                    });
                   },
                   onTap: () =>
                       _onPreviewChipTap(mapEntry.key, entry.key, entry.value),
@@ -516,52 +694,88 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
     String fileName,
     Uint8List imageBytes,
   ) async {
-    // Show the fullscreen preview dialog with edit button
-    final shouldEdit = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => ImagePreviewDialog(
-        imageData: imageBytes,
-        fileName: fileName,
-      ),
-    );
-
-    if (shouldEdit != true || !mounted) return;
-
-    // User tapped edit — open quick editor
-    final editedBytes = await Navigator.push<Uint8List>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ExtendedImageEditorPage(
-          imageBytes: imageBytes,
+    late final Object editAttempt;
+    final editForTesting = appAlbumPickerEditImageForTesting;
+    final Uint8List? editedBytes;
+    if (editForTesting != null) {
+      editAttempt = Object();
+      _editAttempts[recordKey] = editAttempt;
+      editedBytes = await editForTesting(fileName, imageBytes);
+    } else {
+      // Show the fullscreen preview dialog with edit button
+      final shouldEdit = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => ImagePreviewDialog(
+          imageData: imageBytes,
           fileName: fileName,
         ),
-      ),
-    );
+      );
 
-    if (editedBytes == null || !mounted) return;
+      if (shouldEdit != true || !mounted) return;
+
+      editAttempt = Object();
+      _editAttempts[recordKey] = editAttempt;
+      // User tapped edit — open quick editor
+      editedBytes = await Navigator.push<Uint8List>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ExtendedImageEditorPage(
+            imageBytes: imageBytes,
+            fileName: fileName,
+          ),
+        ),
+      );
+    }
+
+    final editedImageBytes = editedBytes;
+    if (editedImageBytes == null || !mounted) return;
 
     // Save edited bytes to temp cache directory instead of overwriting original
+    String? tempPath;
     try {
       final tempDir = await getTemporaryDirectory();
-      final tempFileName =
-          'edited_${DateTime.now().millisecondsSinceEpoch}_$fileName';
+      if (!mounted) return;
+      final tempFileName = 'edited_${DateTime.now().millisecondsSinceEpoch}_'
+          '${_appAlbumPickerTempEditCounter++}_$fileName';
       final tempFile = File('${tempDir.path}/$tempFileName');
-      await tempFile.writeAsBytes(editedBytes);
-      _tempEditFiles.add(tempFile.path);
+      tempPath = tempFile.path;
+      _tempEditFiles.add(tempPath);
+      final write = beforeAppAlbumPickerTempWriteForTesting?.call(
+            tempFile,
+            editedImageBytes,
+          ) ??
+          tempFile.writeAsBytes(editedImageBytes);
+      _pendingTempEditWrites[tempFile.path] = write;
+      try {
+        await write;
+      } finally {
+        _pendingTempEditWrites.remove(tempFile.path);
+      }
     } catch (_) {
+      if (tempPath != null) {
+        _tempEditFiles.remove(tempPath);
+        try {
+          final file = File(tempPath);
+          if (await file.exists()) await file.delete();
+        } catch (_) {
+          // Best-effort cleanup of a partial temp file.
+        }
+      }
       // Temp file save is best-effort; we keep the bytes in memory
     }
 
-    // The picker may have been dismissed, or the item removed (and
-    // possibly re-added) while the temp save was in flight — only apply
-    // the edit if it is still the same entry.
+    // The picker may have been dismissed, the item removed, or a newer edit
+    // started while the temp save was in flight. Only apply the latest edit
+    // while its selected entry still exists.
     if (!mounted) return;
     final current = _selectedItems[recordKey];
-    if (current == null || !identical(current.value, imageBytes)) return;
+    if (current == null || !identical(_editAttempts[recordKey], editAttempt)) {
+      return;
+    }
 
     // Update the selected item in-memory with edited bytes
     setState(() {
-      _selectedItems[recordKey] = MapEntry(fileName, editedBytes);
+      _selectedItems[recordKey] = MapEntry(fileName, editedImageBytes);
     });
   }
 

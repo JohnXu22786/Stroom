@@ -57,6 +57,10 @@ class CustomParam {
   String defaultValue;
   String type;
 
+  /// Whether the model page intentionally overrides the provider's type and
+  /// default value for a same-name parameter.
+  bool typeDefaultOverridden;
+
   /// 选项值列表（与推理力度同款的胶囊块编辑）。
   /// 空时向后兼容：请求发送 [defaultValue]（旧数据）；非空时发送
   /// 第一个选项（排序决定默认值）。
@@ -73,6 +77,7 @@ class CustomParam {
     required this.paramName,
     this.defaultValue = '',
     this.type = 'string',
+    this.typeDefaultOverridden = false,
     List<String>? options,
     this.optionOrder = const [],
     Map<String, dynamic>? legacyFields,
@@ -86,6 +91,7 @@ class CustomParam {
         'paramName': paramName,
         'defaultValue': defaultValue,
         'type': type,
+        if (typeDefaultOverridden) 'typeDefaultOverridden': true,
         if (options.isNotEmpty) 'options': options,
         if (optionOrder.isNotEmpty) 'optionOrder': optionOrder,
       };
@@ -94,6 +100,7 @@ class CustomParam {
         paramName: map['paramName'] as String? ?? '',
         defaultValue: map['defaultValue'] as String? ?? '',
         type: map['type'] as String? ?? 'string',
+        typeDefaultOverridden: map['typeDefaultOverridden'] as bool? ?? false,
         options: (map['options'] as List?)?.cast<String>() ?? const [],
         optionOrder: (map['optionOrder'] as List?)?.cast<String>() ?? const [],
         legacyFields: _unknownFields(map, {
@@ -109,6 +116,7 @@ class CustomParam {
         paramName: paramName,
         defaultValue: defaultValue,
         type: type,
+        typeDefaultOverridden: typeDefaultOverridden,
         options: List.of(options),
         optionOrder: List<String>.from(optionOrder),
         legacyFields: Map<String, dynamic>.from(legacyFields),
@@ -438,9 +446,9 @@ List<ReasoningParam> mergeReasoningParams(
 
 /// 合并供应商级与模型级自定义参数，供模型配置页继承视图使用。
 ///
-/// 规则与 [mergeReasoningParams] 一致：模型同名参数覆盖（替换）供应商
-/// 参数；未被覆盖的供应商参数追加在模型参数之后；参数名为空的条目不
-/// 参与合并。供应商的自定义参数由此获得与推理参数相同的「继承视图」。
+/// 同名参数默认使用供应商的类型和默认值；模型页明确编辑过这两项时，
+/// 保留模型覆盖。同时保留模型保存的选项选择与顺序；未被覆盖的供应商
+/// 参数追加在模型参数之后；参数名为空的条目不参与合并。
 List<CustomParam> mergeCustomParams(
   List<CustomParam> providerParams,
   List<CustomParam> modelParams,
@@ -453,8 +461,22 @@ List<CustomParam> mergeCustomParams(
   }
   final result = <CustomParam>[];
   for (final p in modelParams) {
-    result.add(p);
-    providerByName.remove(p.paramName.trim());
+    final provider = providerByName.remove(p.paramName.trim());
+    if (provider == null) {
+      result.add(p);
+    } else {
+      result.add(
+        CustomParam(
+          paramName: p.paramName,
+          type: p.typeDefaultOverridden ? p.type : provider.type,
+          defaultValue:
+              p.typeDefaultOverridden ? p.defaultValue : provider.defaultValue,
+          typeDefaultOverridden: p.typeDefaultOverridden,
+          options: List.of(p.options),
+          optionOrder: List.of(p.optionOrder),
+        ),
+      );
+    }
   }
   result.addAll(providerByName.values);
   return result;

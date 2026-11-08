@@ -37,9 +37,6 @@ class Attachment {
   /// 避免同一会话内重复写盘（每次发送都会经过读取路径）。
   bool compressedCachePersisted = false;
 
-  /// Fields introduced by a newer app version, retained through legacy JSON.
-  final Map<String, dynamic> extraFields;
-
   Attachment({
     String? id,
     required this.fileName,
@@ -52,12 +49,10 @@ class Attachment {
     this.thumbnailPath,
     this.base64Data,
     this.conversationId,
-    this.extraFields = const {},
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now();
 
   Map<String, dynamic> toMap({bool includeBase64Data = false}) => {
-        ...extraFields,
         'id': id,
         'fileName': fileName,
         'mimeType': mimeType,
@@ -75,19 +70,6 @@ class Attachment {
       };
 
   factory Attachment.fromMap(Map<String, dynamic> map) {
-    const knownFields = {
-      'id',
-      'fileName',
-      'mimeType',
-      'fileType',
-      'hash',
-      'storagePath',
-      'fileSize',
-      'createdAt',
-      'thumbnailPath',
-      'conversationId',
-      'base64Data',
-    };
     // Defensive DateTime parsing
     DateTime? createdAt;
     final createdAtRaw = map['createdAt'];
@@ -113,9 +95,6 @@ class Attachment {
       // 仅对话草稿附件会序列化 base64Data（预压缩产物）；
       // 历史消息附件没有该字段，保持 null。
       base64Data: map['base64Data'] as String?,
-      extraFields: Map<String, dynamic>.fromEntries(
-        map.entries.where((entry) => !knownFields.contains(entry.key)),
-      ),
     );
   }
 
@@ -132,7 +111,6 @@ class Attachment {
     String? base64Data,
     String? conversationId,
     bool? compressedCachePersisted,
-    Map<String, dynamic>? extraFields,
   }) =>
       Attachment(
         id: id ?? this.id,
@@ -146,7 +124,6 @@ class Attachment {
         thumbnailPath: thumbnailPath ?? this.thumbnailPath,
         base64Data: base64Data ?? this.base64Data,
         conversationId: conversationId ?? this.conversationId,
-        extraFields: extraFields ?? this.extraFields,
       )..compressedCachePersisted =
           compressedCachePersisted ?? this.compressedCachePersisted;
 
@@ -160,14 +137,20 @@ class ChatMessage {
 
   final String id;
   final String role; // 'user' | 'assistant'
-  /// Original open-ended storage role when the UI model normalizes it.
   final String? originalRole;
-  final String content;
+  final String? _content;
+
+  /// The full text, materialized from [textSections] when needed.
+  String get content => _content ?? textSections?.join() ?? '';
   final DateTime createdAt;
   final List<Attachment> attachments;
   final bool isStreaming;
   final bool isError;
-  final String? reasoningContent;
+
+  /// Legacy single-string reasoning, derived from sections when not stored.
+  final String? _reasoningContent;
+  String? get reasoningContent =>
+      _reasoningContent ?? reasoningSections?.join('\n');
   final Map<String, dynamic>? rawRequest;
   final Map<String, dynamic>? rawResponse;
 
@@ -193,8 +176,7 @@ class ChatMessage {
   /// When null or empty, fall back to [content] as a single block.
   final List<String>? textSections;
 
-  /// Ordered assistant text and generated attachment references. Older
-  /// records omit this and continue rendering [content] plus [attachments].
+  /// Ordered protocol-neutral text and media parts retained with a message.
   final List<Map<String, dynamic>>? contentParts;
 
   /// Indices into [toolCalls] where each new tool-call round begins.
@@ -210,23 +192,18 @@ class ChatMessage {
 
   final List<MessageBlock>? blocks;
   final int schemaVersion;
-
-  /// Unrecognized fields from older/newer serialized records.
-  ///
-  /// This is a compatibility bag, not protocol metadata. Protocol-specific
-  /// values belong in `StroomMessage.extensions` on the neutral schema.
   final Map<String, dynamic> legacyFields;
 
   ChatMessage({
     String? id,
     required this.role,
     this.originalRole,
-    required this.content,
+    required String content,
     DateTime? createdAt,
     List<Attachment>? attachments,
     this.isStreaming = false,
     this.isError = false,
-    this.reasoningContent,
+    String? reasoningContent,
     this.rawRequest,
     this.rawResponse,
     this.toolCalls,
@@ -237,7 +214,10 @@ class ChatMessage {
     this.blocks,
     this.schemaVersion = currentSchemaVersion,
     this.legacyFields = const {},
+    bool contentFromTextSections = false,
   })  : id = id ?? const Uuid().v4(),
+        _content = contentFromTextSections ? null : content,
+        _reasoningContent = reasoningContent,
         createdAt = createdAt ?? DateTime.now(),
         attachments = attachments ?? [];
 
@@ -256,11 +236,15 @@ class ChatMessage {
   /// corruption (the "flash crash + half-broken history" bug).
   ///
   /// The sanitized copy is returned; the original map is NOT modified.
-  static Map<String, dynamic>? _sanitizeRawMap(Map<String, dynamic>? raw) {
+  static Map<String, dynamic>? _sanitizeRawMap(
+    Map<String, dynamic>? raw, {
+    bool compactRequest = false,
+  }) {
     if (raw == null) return null;
     try {
       final result = <String, dynamic>{};
-      for (final entry in raw.entries) {
+      final serializableRaw = compactRequest ? compactRawRequest(raw) : raw;
+      for (final entry in serializableRaw.entries) {
         // First make the value JSON-serializable (strip non-encodable types).
         final typed = _sanitizeJsonValue(entry.value);
         // Then strip large base64 content so the on-disk payload stays small.
@@ -286,6 +270,196 @@ class ChatMessage {
       // rather than letting a partial/serialization-error corrupt the save.
       return null;
     }
+  }
+
+  /// Compact historical chat content in a captured request before retaining it
+  /// with a message. Raw requests are diagnostics only; chat history is restored
+  /// from the protocol-neutral message list, so older request messages can be
+  /// represented by a marker while the current user input remains inspectable.
+  static Map<String, dynamic> compactRawRequest(Map<String, dynamic> raw) {
+    final body = raw['body'];
+    if (body is! Map) return Map<String, dynamic>.from(raw);
+    final messages = body['messages'];
+    if (messages is! List) return Map<String, dynamic>.from(raw);
+
+    // Tool loops append protocol messages after the original conversation.
+    // The newest user message without tool-result blocks is the current input
+    // (Anthropic encodes tool results as user messages too).
+    var currentUserMessage = -1;
+    for (var i = 0; i < messages.length; i++) {
+      final message = messages[i];
+      if (message is Map &&
+          message['role'] == 'user' &&
+          !_hasToolResult(message)) {
+        currentUserMessage = i;
+      }
+    }
+    if (currentUserMessage < 0) return Map<String, dynamic>.from(raw);
+
+    final compactMessages = <dynamic>[];
+    for (var i = 0; i < messages.length; i++) {
+      final message = messages[i];
+      if (message is! Map || message['role'] == 'system') {
+        compactMessages.add(message);
+        continue;
+      }
+
+      if (i > currentUserMessage) {
+        compactMessages.add(_compactGeneratedRawMessage(message));
+        continue;
+      }
+      if (i == currentUserMessage) {
+        compactMessages.add(_compactCurrentRawUserMessage(message));
+        continue;
+      }
+      if (message['content'] == null && message['reasoning_content'] == null) {
+        compactMessages.add(message);
+        continue;
+      }
+
+      final compactMessage = Map<String, dynamic>.from(message);
+      if (message['content'] != null) {
+        compactMessage['content'] = '[previous message content omitted]';
+      }
+      if (message['reasoning_content'] != null) {
+        compactMessage['reasoning_content'] =
+            '[previous message reasoning omitted]';
+      }
+      compactMessages.add(compactMessage);
+    }
+
+    return <String, dynamic>{
+      ...raw,
+      'body': <String, dynamic>{
+        ...Map<String, dynamic>.from(body),
+        'messages': compactMessages,
+      },
+    };
+  }
+
+  /// Keep the newest user text and attachment metadata in raw diagnostics while
+  /// dropping encoded attachment bytes from the in-memory copy retained on the
+  /// assistant message. The provider request body and canonical attachments are
+  /// separate objects and remain untouched.
+  static Map _compactCurrentRawUserMessage(Map message) {
+    final content = message['content'];
+    if (content is! List) return message;
+
+    final compactContent = content.map((part) {
+      if (part is! Map) return part;
+      switch (part['type']) {
+        case 'image_url':
+          return _compactRawPayloadInPart(part, 'image_url', 'url');
+        case 'video_url':
+          return _compactRawPayloadInPart(part, 'video_url', 'url');
+        case 'input_audio':
+          return _compactRawPayloadInPart(part, 'input_audio', 'data');
+        case 'image':
+        case 'document':
+          final source = part['source'];
+          if (source is! Map || source['type'] != 'base64') return part;
+          return _compactRawPayloadInPart(part, 'source', 'data');
+        case 'file':
+          return _compactRawPayloadInPart(part, 'file', 'file_data');
+        default:
+          return part;
+      }
+    }).toList();
+    return <dynamic, dynamic>{...message, 'content': compactContent};
+  }
+
+  static Map _compactRawPayloadInPart(
+    Map part,
+    String containerKey,
+    String payloadKey,
+  ) {
+    final container = part[containerKey];
+    if (container is! Map) return part;
+    final payload = container[payloadKey];
+    if (payload is! String) return part;
+    // compactRawRequest also runs during serialization and deserialization.
+    // Keep the original size in the marker instead of counting that marker as
+    // a new data URI payload on each pass.
+    if (payload.contains('[base64 data:')) return part;
+    final compactContainer = <dynamic, dynamic>{
+      ...container,
+      payloadKey: DataSanitizer.sanitizeBase64String(payload),
+    };
+    return <dynamic, dynamic>{...part, containerKey: compactContainer};
+  }
+
+  /// Keep protocol metadata from tool-loop messages while dropping their
+  /// generated payloads. These messages are diagnostics only; the rendered
+  /// assistant response and tool-call data are persisted separately.
+  static Map _compactGeneratedRawMessage(Map message) {
+    final role = message['role'];
+    if (role == 'assistant') {
+      final compactMessage = Map.from(message);
+      final content = message['content'];
+      if (content is String) {
+        compactMessage['content'] = '[generated assistant content omitted]';
+      } else if (content is List) {
+        compactMessage['content'] = content.map((part) {
+          if (part is! Map ||
+              (part['type'] != 'text' &&
+                  part['type'] != 'thinking' &&
+                  part['type'] != 'reasoning')) {
+            return part;
+          }
+          final textKey = part.containsKey('text')
+              ? 'text'
+              : part.containsKey('thinking')
+                  ? 'thinking'
+                  : 'reasoning';
+          if (part[textKey] == null) return part;
+          return <dynamic, dynamic>{
+            ...part,
+            textKey: '[generated assistant content omitted]',
+          };
+        }).toList();
+      }
+      if (message['reasoning_content'] != null) {
+        compactMessage['reasoning_content'] =
+            '[generated assistant reasoning omitted]';
+      }
+      return compactMessage;
+    }
+
+    if (role == 'tool' || role == 'function') {
+      return _compactToolResultMessage(message);
+    }
+    if (role == 'user' && _hasToolResult(message)) {
+      final compactMessage = Map.from(message);
+      final content = message['content'] as List;
+      compactMessage['content'] = content.map((part) {
+        if (part is! Map || part['type'] != 'tool_result') return part;
+        return _compactToolResultBlock(part);
+      }).toList();
+      return compactMessage;
+    }
+    return message;
+  }
+
+  static Map _compactToolResultMessage(Map message) {
+    if (message['content'] == null) return message;
+    return <dynamic, dynamic>{
+      ...message,
+      'content': '[tool result content omitted]',
+    };
+  }
+
+  static Map _compactToolResultBlock(Map block) {
+    if (block['content'] == null) return block;
+    return <dynamic, dynamic>{
+      ...block,
+      'content': '[tool result content omitted]',
+    };
+  }
+
+  static bool _hasToolResult(Map message) {
+    final content = message['content'];
+    return content is List &&
+        content.any((part) => part is Map && part['type'] == 'tool_result');
   }
 
   /// Recursively sanitize a single value for JSON serialization.
@@ -331,41 +505,106 @@ class ChatMessage {
     return null;
   }
 
-  Map<String, dynamic> toMap() => {
-        ...legacyFields,
-        'schemaVersion': schemaVersion,
-        'id': id,
-        'role': originalRole ?? role,
+  static Map<String, dynamic>? _compactDeserializedRawRequest(dynamic value) {
+    final rawRequest = safeCastToMap(value);
+    return rawRequest == null ? null : compactRawRequest(rawRequest);
+  }
+
+  static bool _matchesJoinedSections(
+    List<String>? sections,
+    String value, {
+    String separator = '',
+    bool skipEmptySections = false,
+  }) {
+    if (sections == null) return false;
+    var expectedLength = 0;
+    var sectionCount = 0;
+    for (final section in sections) {
+      if (skipEmptySections && section.isEmpty) continue;
+      expectedLength += section.length;
+      sectionCount++;
+    }
+    if (sectionCount == 0) return false;
+    if (sectionCount > 1) {
+      expectedLength += separator.length * (sectionCount - 1);
+    }
+    if (expectedLength != value.length) return false;
+
+    var offset = 0;
+    var emittedSections = 0;
+    for (final section in sections) {
+      if (skipEmptySections && section.isEmpty) continue;
+      if (emittedSections > 0) {
+        if (!value.startsWith(separator, offset)) return false;
+        offset += separator.length;
+      }
+      if (!value.startsWith(section, offset)) return false;
+      offset += section.length;
+      emittedSections++;
+    }
+    return true;
+  }
+
+  Map<String, dynamic> toMap() {
+    final hasCanonicalSections = (toolCallRoundStarts?.isNotEmpty ?? false) ||
+        ((toolCalls == null || toolCalls!.isEmpty) &&
+            !(blocks?.any((block) => block is ToolCallBlock) ?? false) &&
+            ((reasoningSections?.isNotEmpty ?? false) ||
+                (textSections?.isNotEmpty ?? false)));
+    final errorBlocks = hasCanonicalSections
+        ? blocks?.whereType<ErrorBlock>().toList()
+        : blocks;
+    final savedReasoningContent = _reasoningContent;
+    return {
+      ...legacyFields,
+      'schemaVersion': schemaVersion,
+      'id': id,
+      'role': originalRole ?? role,
+      if (_content != null &&
+          !(_content!.isEmpty && (textSections?.isNotEmpty ?? false)) &&
+          !_matchesJoinedSections(
+            textSections,
+            _content!,
+            skipEmptySections:
+                toolCallRoundStarts == null || toolCallRoundStarts!.isEmpty,
+          ))
         'content': content,
-        'createdAt': createdAt.toIso8601String(),
-        'attachments': attachments.map((a) => a.toMap()).toList(),
-        if (isStreaming) 'isStreaming': true,
-        if (isError) 'isError': true,
-        if (reasoningContent != null) 'reasoningContent': reasoningContent,
-        // Sanitize raw maps to ensure JSON-serializable output.
-        // This prevents non-serializable types (Dio ResponseBody, DateTime,
-        // custom objects, etc.) from silently breaking conversation persistence.
-        if (rawRequest != null) 'rawRequest': _sanitizeRawMap(rawRequest),
-        if (rawResponse != null) 'rawResponse': _sanitizeRawMap(rawResponse),
-        // Persist tool calls if present and non-empty.
-        if (toolCalls != null && toolCalls!.isNotEmpty)
-          'toolCalls': toolCalls!.map((tc) => tc.toMap()).toList(),
-        // Persist reasoning sections if present and non-empty.
-        if (reasoningSections != null && reasoningSections!.isNotEmpty)
-          'reasoningSections': reasoningSections!.toList(),
-        // Persist per-round text sections if present and non-empty.
-        if (textSections != null && textSections!.isNotEmpty)
-          'textSections': textSections!.toList(),
-        if (contentParts != null && contentParts!.isNotEmpty)
-          'contentParts': contentParts!
-              .map((part) => Map<String, dynamic>.from(part))
-              .toList(),
-        // Persist round boundary indices for multi-tool grouping.
-        if (toolCallRoundStarts != null && toolCallRoundStarts!.isNotEmpty)
-          'toolCallRoundStarts': toolCallRoundStarts!.toList(),
-        if (blocks != null && blocks!.isNotEmpty)
-          'blocks': blocks!.map((b) => b.toMap()).toList(),
-      };
+      'createdAt': createdAt.toIso8601String(),
+      'attachments': attachments.map((a) => a.toMap()).toList(),
+      if (isStreaming) 'isStreaming': true,
+      if (isError) 'isError': true,
+      if (savedReasoningContent != null &&
+          !_matchesJoinedSections(reasoningSections, savedReasoningContent,
+              separator: '\n',
+              skipEmptySections:
+                  toolCallRoundStarts == null || toolCallRoundStarts!.isEmpty))
+        'reasoningContent': savedReasoningContent,
+      // Sanitize raw maps to ensure JSON-serializable output.
+      // This prevents non-serializable types (Dio ResponseBody, DateTime,
+      // custom objects, etc.) from silently breaking conversation persistence.
+      if (rawRequest != null)
+        'rawRequest': _sanitizeRawMap(rawRequest, compactRequest: true),
+      if (rawResponse != null) 'rawResponse': _sanitizeRawMap(rawResponse),
+      // Persist tool calls if present and non-empty.
+      if (toolCalls != null && toolCalls!.isNotEmpty)
+        'toolCalls': toolCalls!.map((tc) => tc.toMap()).toList(),
+      // Persist reasoning sections if present and non-empty.
+      if (reasoningSections != null && reasoningSections!.isNotEmpty)
+        'reasoningSections': reasoningSections!.toList(),
+      // Persist per-round text sections if present and non-empty.
+      if (textSections != null && textSections!.isNotEmpty)
+        'textSections': textSections!.toList(),
+      if (contentParts != null && contentParts!.isNotEmpty)
+        'contentParts': contentParts!
+            .map((part) => Map<String, dynamic>.from(part))
+            .toList(),
+      // Persist round boundary indices for multi-tool grouping.
+      if (toolCallRoundStarts != null && toolCallRoundStarts!.isNotEmpty)
+        'toolCallRoundStarts': toolCallRoundStarts!.toList(),
+      if (errorBlocks != null && errorBlocks.isNotEmpty)
+        'blocks': errorBlocks.map((b) => b.toMap()).toList(),
+    };
+  }
 
   factory ChatMessage.fromMap(Map<String, dynamic> map) {
     const knownKeys = {
@@ -476,6 +715,11 @@ class ChatMessage {
       if (textSections.isEmpty) textSections = null;
     }
 
+    final rawContent = map['content'];
+    final content = rawContent is String ? rawContent : '';
+    final contentFromTextSections = rawContent is String
+        ? _matchesJoinedSections(textSections, content)
+        : textSections != null;
     final contentPartsRaw = map['contentParts'];
     final contentParts = contentPartsRaw is List
         ? contentPartsRaw
@@ -490,19 +734,26 @@ class ChatMessage {
       originalRole: roleRaw is String && roleRaw != roleStr ? roleRaw : null,
       // 防御：content 非 String（损坏数据）时回退空串，
       // 不抛 TypeError 丢弃整条消息（与其他字段防御风格一致）
-      content: map['content'] is String ? map['content'] as String : '',
+      content: content,
+      contentFromTextSections: contentFromTextSections,
       createdAt: createdAt,
       attachments: attachments,
       isStreaming: map['isStreaming'] is bool ? map['isStreaming'] : false,
       isError: map['isError'] is bool ? map['isError'] : false,
       // A wrong-typed optional field should not make Conversation.fromMap
       // discard the entire message while recovering the rest of the history.
-      reasoningContent: map['reasoningContent'] is String
+      reasoningContent: map['reasoningContent'] is String &&
+              !_matchesJoinedSections(
+                reasoningSections,
+                map['reasoningContent'] as String,
+                separator: '\n',
+                skipEmptySections: !keepEmptySections,
+              )
           ? map['reasoningContent'] as String
           : null,
       // Use safe casting so non-Map rawRequest/rawResponse values don't throw
       // a TypeError, which would skip the ENTIRE message in Conversation.fromMap.
-      rawRequest: safeCastToMap(map['rawRequest']),
+      rawRequest: _compactDeserializedRawRequest(map['rawRequest']),
       rawResponse: safeCastToMap(map['rawResponse']),
       toolCalls: toolCalls,
       reasoningSections: reasoningSections,
@@ -538,6 +789,7 @@ class ChatMessage {
     List<Attachment>? attachments,
     bool? isStreaming,
     bool? isError,
+    bool stripRawData = false,
     String? reasoningContent,
     Map<String, dynamic>? rawRequest,
     Map<String, dynamic>? rawResponse,
@@ -552,14 +804,15 @@ class ChatMessage {
         id: id,
         role: role ?? this.role,
         originalRole: role == null ? originalRole : null,
-        content: content ?? this.content,
+        content: content ?? (_content == null ? '' : this.content),
+        contentFromTextSections: _content == null && content == null,
         createdAt: createdAt ?? this.createdAt,
         attachments: attachments ?? this.attachments,
         isStreaming: isStreaming ?? this.isStreaming,
         isError: isError ?? this.isError,
-        reasoningContent: reasoningContent ?? this.reasoningContent,
-        rawRequest: rawRequest ?? this.rawRequest,
-        rawResponse: rawResponse ?? this.rawResponse,
+        reasoningContent: reasoningContent ?? _reasoningContent,
+        rawRequest: stripRawData ? null : rawRequest ?? this.rawRequest,
+        rawResponse: stripRawData ? null : rawResponse ?? this.rawResponse,
         toolCalls: toolCalls ?? this.toolCalls,
         reasoningSections: reasoningSections ?? this.reasoningSections,
         textSections: textSections ?? this.textSections,
@@ -572,4 +825,22 @@ class ChatMessage {
 
   @override
   String toString() => 'ChatMessage(id: $id, role: $role)';
+}
+
+/// Reuses section-backed message text while one API request is being prepared.
+///
+/// The cache is deliberately owned by the caller and cleared after request
+/// construction so finalized messages do not retain a second full-text copy.
+class RequestContentCache {
+  final Map<ChatMessage, String> _contentByMessage = {};
+
+  String contentFor(ChatMessage message) =>
+      _contentByMessage.putIfAbsent(message, () => message.content);
+
+  void retainOnly(Iterable<ChatMessage> messages) {
+    final retained = messages.toSet();
+    _contentByMessage.removeWhere((message, _) => !retained.contains(message));
+  }
+
+  void clear() => _contentByMessage.clear();
 }

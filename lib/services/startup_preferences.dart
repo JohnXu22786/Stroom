@@ -3,11 +3,9 @@ import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, kIsWeb, TargetPlatform, visibleForTesting;
 import 'package:shared_preferences/shared_preferences.dart';
-
-import 'startup_preferences_android_stub.dart'
-    if (dart.library.io) 'startup_preferences_android.dart'
-    as startup_preferences_android;
-
+import 'startup_preferences_android_options_stub.dart'
+    if (dart.library.io) 'startup_preferences_android_options_io.dart'
+    as android_preferences;
 import 'startup_preferences_io_stub.dart'
     if (dart.library.io) 'startup_preferences_io.dart'
     as startup_preferences_io;
@@ -54,8 +52,8 @@ class StartupPreferences {
   }
 
   static SharedPreferencesAsync _asyncPreferences() =>
-      defaultTargetPlatform == TargetPlatform.android
-          ? startup_preferences_android.createAndroidPreferences()
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android
+          ? SharedPreferencesAsync(options: android_preferences.options)
           : SharedPreferencesAsync();
 
   // Web retains its existing localStorage namespace. The browser only offers

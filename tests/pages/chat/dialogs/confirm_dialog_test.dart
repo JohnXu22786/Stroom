@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:stroom/pages/chat/dialogs/confirm_dialog.dart';
 
 void main() {
@@ -10,6 +12,14 @@ void main() {
         bool retried = false;
         await tester.pumpWidget(
           MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
             home: Builder(
               builder: (context) => ElevatedButton(
                 onPressed: () => showRetryEditConfirmDialog(
@@ -41,6 +51,14 @@ void main() {
         bool confirmed = false;
         await tester.pumpWidget(
           MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
             home: Builder(
               builder: (context) => ElevatedButton(
                 onPressed: () => showRetryEditConfirmDialog(
@@ -71,6 +89,14 @@ void main() {
         bool deleted = false;
         await tester.pumpWidget(
           MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
             home: Builder(
               builder: (context) => ElevatedButton(
                 onPressed: () => showDeleteConfirmDialog(

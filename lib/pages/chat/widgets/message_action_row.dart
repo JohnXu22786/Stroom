@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:stroom/l10n/app_localizations.dart';
+
 import 'action_button.dart';
 
 /// Action button row for chat messages (copy, save, retry/edit, raw data
@@ -61,10 +63,14 @@ class MessageActionRow extends StatelessWidget {
   Widget build(BuildContext context) {
     // Assert that callbacks are provided when their corresponding buttons are
     // visible. This catches misconfigured callers at development time.
-    assert(!showRawData || onViewRawData != null,
-        'onViewRawData must be provided when showRawData is true');
-    assert(!showJsonInspection || onJsonInspection != null,
-        'onJsonInspection must be provided when showJsonInspection is true');
+    assert(
+      !showRawData || onViewRawData != null,
+      'onViewRawData must be provided when showRawData is true',
+    );
+    assert(
+      !showJsonInspection || onJsonInspection != null,
+      'onJsonInspection must be provided when showJsonInspection is true',
+    );
 
     // Build children dynamically so SizedBox spacers only appear between
     // consecutive visible buttons. This avoids orphaned spacers that create
@@ -73,7 +79,7 @@ class MessageActionRow extends StatelessWidget {
       // [1] Copy — always visible
       ActionButton(
         icon: Icons.copy,
-        tooltip: '复制',
+        tooltip: AppLocalizations.of(context)!.chatCopy,
         onPressed: onCopy,
       ),
     ];
@@ -84,7 +90,7 @@ class MessageActionRow extends StatelessWidget {
       children.add(
         ActionButton(
           icon: Icons.save,
-          tooltip: '保存',
+          tooltip: AppLocalizations.of(context)!.actionSave,
           onPressed: onSave!,
         ),
       );
@@ -95,7 +101,9 @@ class MessageActionRow extends StatelessWidget {
     children.add(
       ActionButton(
         icon: isAi ? Icons.refresh : Icons.edit_outlined,
-        tooltip: isAi ? '重试' : '编辑',
+        tooltip: isAi
+            ? AppLocalizations.of(context)!.actionRetry
+            : AppLocalizations.of(context)!.actionEdit,
         onPressed: onRetryOrEdit,
       ),
     );
@@ -106,7 +114,9 @@ class MessageActionRow extends StatelessWidget {
       children.add(
         ActionButton(
           icon: Icons.data_exploration,
-          tooltip: isAi ? '查看响应数据' : '查看请求数据',
+          tooltip: isAi
+              ? AppLocalizations.of(context)!.chatViewResponseData
+              : AppLocalizations.of(context)!.chatViewRequestData,
           onPressed: onViewRawData!,
         ),
       );
@@ -118,7 +128,7 @@ class MessageActionRow extends StatelessWidget {
       children.add(
         ActionButton(
           icon: Icons.code,
-          tooltip: 'JSON 审查',
+          tooltip: AppLocalizations.of(context)!.chatInspectJson,
           onPressed: onJsonInspection!,
         ),
       );
@@ -129,14 +139,11 @@ class MessageActionRow extends StatelessWidget {
     children.add(
       ActionButton(
         icon: Icons.delete_outline,
-        tooltip: '删除',
+        tooltip: AppLocalizations.of(context)!.actionDelete,
         onPressed: onDelete,
       ),
     );
 
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: children,
-    );
+    return Row(mainAxisSize: MainAxisSize.min, children: children);
   }
 }

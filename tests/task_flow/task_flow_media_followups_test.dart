@@ -88,6 +88,8 @@ class _Manager extends ChatStreamManager {
     required String text,
     required String convId,
     required List<ChatMessage> history,
+    List<ChatMessage>? requestHistoryOverride,
+    List<ChatMessage>? historyOnSuccess,
     List<ToolDefinition> tools = const [],
     bool reasoning = false,
     String reasoningEffort = 'medium',
@@ -95,6 +97,7 @@ class _Manager extends ChatStreamManager {
     String? selectedAccountId,
     String? streamingMsgId,
     Assistant? assistant,
+    Map<String, String>? customParamValues,
     ProviderEntriesState? entriesStateOverride,
   }) async {
     starts++;

@@ -40,6 +40,31 @@ class _GatedCatCatchNotifier extends CatCatchNotifier {
   }
 }
 
+// Fail one delete to model a handle held by the cancelled download.
+class _RetryProgressFile implements File {
+  _RetryProgressFile(this.file, this.onFirstDelete);
+
+  final File file;
+  final void Function() onFirstDelete;
+  int deleteAttempts = 0;
+
+  @override
+  Future<bool> exists() => file.exists();
+
+  @override
+  Future<FileSystemEntity> delete({bool recursive = false}) async {
+    deleteAttempts++;
+    if (deleteAttempts == 1) {
+      onFirstDelete();
+      throw FileSystemException('download handle still open', file.path);
+    }
+    return file.delete(recursive: recursive);
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 // ============================================================================
 // Tests
 // ============================================================================
@@ -192,6 +217,72 @@ void main() {
     // Tests
     // ====================================================================
 
+    test('preserves a replacement checkpoint created during cleanup', () async {
+      final removed = createTask(id: 'reused', status: TaskStatus.running);
+      final progress = File(p.join(
+        appDir,
+        'catcatch',
+        '.progress',
+        'reused_dl_progress.json',
+      ))
+        ..createSync(recursive: true);
+      final owners = <CatCatchTask>[];
+      final cleanup = CatCatchNotifier.cleanupTaskFiles(
+        removed,
+        appDirPath: appDir,
+        remainingTasksProvider: () => owners,
+      );
+      // Cleanup has started, but its async exists check has not resumed.
+      owners.add(createTask(id: 'reused', status: TaskStatus.paused));
+      progress.writeAsStringSync('replacement checkpoint');
+      await cleanup;
+      expect(progress.readAsStringSync(), 'replacement checkpoint');
+
+      owners.clear();
+      await CatCatchNotifier.cleanupTaskFiles(removed, appDirPath: appDir);
+      expect(progress.existsSync(), isFalse);
+    });
+
+    test('rechecks checkpoint ownership before retrying a failed delete',
+        () async {
+      final removed = createTask(id: 'reused', status: TaskStatus.running);
+      final progress = File(p.join(
+        appDir,
+        'catcatch',
+        '.progress',
+        'reused_dl_progress.json',
+      ))
+        ..createSync(recursive: true);
+      final owners = <CatCatchTask>[];
+      final retryFile = _RetryProgressFile(progress, () {
+        owners.add(createTask(id: 'reused', status: TaskStatus.running));
+        progress.writeAsStringSync('replacement checkpoint');
+      });
+      await IOOverrides.runZoned(
+        () => CatCatchNotifier.cleanupTaskFiles(
+          removed,
+          appDirPath: appDir,
+          remainingTasksProvider: () => owners,
+        ),
+        createFile: (path) {
+          expect(path, progress.path);
+          return retryFile;
+        },
+      );
+      expect(retryFile.deleteAttempts, 1);
+      expect(progress.readAsStringSync(), 'replacement checkpoint');
+
+      // With no replacement, the existing retry must still finish cleanup.
+      owners.clear();
+      final unownedRetry = _RetryProgressFile(progress, () {});
+      await IOOverrides.runZoned(
+        () => CatCatchNotifier.cleanupTaskFiles(removed, appDirPath: appDir),
+        createFile: (_) => unownedRetry,
+      );
+      expect(unownedRetry.deleteAttempts, 2);
+      expect(progress.existsSync(), isFalse);
+    });
+
     test('deletes temp download file and progress for running task', () async {
       final media = createMedia();
       final taskId = 'test-1';
@@ -268,27 +359,34 @@ void main() {
       // Create segment parts dir (naming: .{mergedFilename}_parts/)
       final downloadDir = Directory(p.join(appDir, 'catcatch', 'downloads'));
       await downloadDir.create(recursive: true);
-      // For playlist with name='playlist' and ext='m3u8', buildDownloadFileName returns
-      // 'playlist.m3u8', basenameWithoutExtension = 'playlist', so merged file is
-      // 'playlist_merged.ts' and parts dir is '.playlist_merged.ts_parts'
-      final partsDir =
-          Directory(p.join(downloadDir.path, '.playlist_merged.ts_parts'));
+      // Playlist merges can use either TS or fMP4 based on the manifest.
+      final partsDirs = [
+        Directory(p.join(downloadDir.path, '.playlist_merged.ts_parts')),
+        Directory(p.join(downloadDir.path, '.playlist_merged.mp4_parts')),
+      ];
+      final partsDir = partsDirs.first;
       await partsDir.create(recursive: true);
       await File(p.join(partsDir.path, 'part_0')).writeAsString('data');
 
-      // Create merged playlist file
-      await File(p.join(downloadDir.path, 'playlist_merged.ts'))
-          .writeAsString('data');
+      for (final dir in partsDirs.skip(1)) {
+        await dir.create(recursive: true);
+        await File(p.join(dir.path, 'part_0')).writeAsString('data');
+      }
+      final mergedFiles = [
+        File(p.join(downloadDir.path, 'playlist_merged.ts')),
+        File(p.join(downloadDir.path, 'playlist_merged.mp4')),
+      ];
+      for (final file in mergedFiles) {
+        await file.writeAsString('data');
+      }
 
-      expect(partsDir.existsSync(), isTrue);
-      expect(File(p.join(downloadDir.path, 'playlist_merged.ts')).existsSync(),
-          isTrue);
+      expect(partsDirs.every((dir) => dir.existsSync()), isTrue);
+      expect(mergedFiles.every((file) => file.existsSync()), isTrue);
 
       await CatCatchNotifier.cleanupTaskFiles(task, appDirPath: appDir);
 
-      expect(partsDir.existsSync(), isFalse);
-      expect(File(p.join(downloadDir.path, 'playlist_merged.ts')).existsSync(),
-          isFalse);
+      expect(partsDirs.every((dir) => !dir.existsSync()), isTrue);
+      expect(mergedFiles.every((file) => !file.existsSync()), isTrue);
     });
 
     test('deletes converted file for playlist downloads (merged naming)',
@@ -514,6 +612,95 @@ void main() {
         isFalse,
         reason: 'Non-dot-prefixed temp file should be deleted for paused task',
       );
+    });
+
+    test('preserves media files while another task still uses them', () async {
+      const fileName = 'test_video.mp4';
+      final removedTask = createTask(
+        id: 'removed-sharing-task',
+        status: TaskStatus.paused,
+        selectedMedia: createMedia(),
+        downloadedFilePath: p.join(
+          appDir,
+          'catcatch',
+          'downloads',
+          'unique.mp4',
+        ),
+      );
+      final remainingTask = createTask(
+        id: 'remaining-sharing-task',
+        status: TaskStatus.running,
+        selectedMedia: createMedia(),
+      );
+
+      await createTempFiles(removedTask.id, fileName);
+      await createTempFiles(remainingTask.id, fileName);
+
+      final downloadDir = Directory(p.join(appDir, 'catcatch', 'downloads'));
+      final noDotTemp = File(p.join(
+        downloadDir.path,
+        '$fileName${DefaultRules.tempFileSuffix}',
+      ));
+      final dotTemp = File(p.join(
+        downloadDir.path,
+        '.$fileName${DefaultRules.tempFileSuffix}',
+      ));
+      final downloadFile = File(p.join(downloadDir.path, fileName));
+      final mergedFile = File(p.join(downloadDir.path, 'test_video_merged.ts'));
+      final partsDir = Directory(
+        p.join(downloadDir.path, '.test_video_merged.ts_parts'),
+      );
+      final convertedFile =
+          File(p.join(appDir, 'catcatch', 'converted', fileName));
+      final removedProgress = File(p.join(
+        appDir,
+        'catcatch',
+        '.progress',
+        '${removedTask.id}_dl_progress.json',
+      ));
+      final remainingProgress = File(p.join(
+        appDir,
+        'catcatch',
+        '.progress',
+        '${remainingTask.id}_dl_progress.json',
+      ));
+      final uniqueDownload = File(removedTask.downloadedFilePath!);
+
+      await dotTemp.writeAsString('shared dot temp');
+      await downloadFile.writeAsString('shared download');
+      await mergedFile.writeAsString('shared merged');
+      await partsDir.create(recursive: true);
+      await File(p.join(partsDir.path, 'part_0')).writeAsString('shared part');
+      await uniqueDownload.writeAsString('removed task download');
+
+      await CatCatchNotifier.cleanupTaskFiles(
+        removedTask,
+        appDirPath: appDir,
+        remainingTasks: [remainingTask],
+      );
+
+      expect(removedProgress.existsSync(), isFalse);
+      expect(remainingProgress.existsSync(), isTrue);
+      expect(uniqueDownload.existsSync(), isFalse);
+      expect(noDotTemp.existsSync(), isTrue);
+      expect(dotTemp.existsSync(), isTrue);
+      expect(downloadFile.existsSync(), isTrue);
+      expect(mergedFile.existsSync(), isTrue);
+      expect(partsDir.existsSync(), isTrue);
+      expect(convertedFile.existsSync(), isTrue);
+
+      await CatCatchNotifier.cleanupTaskFiles(
+        remainingTask,
+        appDirPath: appDir,
+      );
+
+      expect(remainingProgress.existsSync(), isFalse);
+      expect(noDotTemp.existsSync(), isFalse);
+      expect(dotTemp.existsSync(), isFalse);
+      expect(downloadFile.existsSync(), isFalse);
+      expect(mergedFile.existsSync(), isFalse);
+      expect(partsDir.existsSync(), isFalse);
+      expect(convertedFile.existsSync(), isFalse);
     });
   });
 }

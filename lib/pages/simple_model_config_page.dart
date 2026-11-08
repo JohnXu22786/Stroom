@@ -1,6 +1,11 @@
 import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:stroom/l10n/app_localizations.dart';
+import 'package:stroom/widgets/stroom_menu_style.dart';
+
 import '../providers/provider_config.dart';
+import 'model_config_shared.dart';
 
 /// 简洁模型配置编辑页面（适用于 OCR、ASR 等不需要 TTS 特有字段的类型）
 /// 包含：模型名称（可选）、模型ID（必填）、自定义参数（可选）
@@ -61,8 +66,8 @@ class _SimpleModelConfigPageState extends State<SimpleModelConfigPage> {
     final modelId = _modelIdController.text.trim();
     if (modelId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('模型 ID 为必填项'),
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.modelIdRequired),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -77,8 +82,10 @@ class _SimpleModelConfigPageState extends State<SimpleModelConfigPage> {
       final name = param.paramName.trim();
       if (name.isEmpty || param.defaultValue.trim().isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('自定义参数的参数名和默认值不能为空'),
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context)!.modelCustomParamRequired,
+            ),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -87,7 +94,9 @@ class _SimpleModelConfigPageState extends State<SimpleModelConfigPage> {
       if (!seenNames.add(name)) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('已存在该参数: $name'),
+            content: Text(
+              AppLocalizations.of(context)!.modelParamDuplicate(name),
+            ),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -100,7 +109,10 @@ class _SimpleModelConfigPageState extends State<SimpleModelConfigPage> {
         } catch (_) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('参数 "$name" 的默认值不是合法 JSON：${param.defaultValue}'),
+              content: Text(
+                AppLocalizations.of(context)!
+                    .modelParamJsonInvalid(name, param.defaultValue),
+              ),
               behavior: SnackBarBehavior.floating,
             ),
           );
@@ -133,8 +145,10 @@ class _SimpleModelConfigPageState extends State<SimpleModelConfigPage> {
   @override
   Widget build(BuildContext context) {
     final title = _isEditing
-        ? (widget.model!.name.isNotEmpty ? widget.model!.name : '编辑模型')
-        : '添加模型';
+        ? (widget.model!.name.isNotEmpty
+            ? widget.model!.name
+            : AppLocalizations.of(context)!.modelEditTitle)
+        : AppLocalizations.of(context)!.modelCreateTitle;
 
     return Scaffold(
       appBar: AppBar(
@@ -142,7 +156,7 @@ class _SimpleModelConfigPageState extends State<SimpleModelConfigPage> {
         actions: [
           TextButton(
             onPressed: _isSaving ? null : _save,
-            child: const Text('保存'),
+            child: Text(AppLocalizations.of(context)!.mermaidSaveButton),
           ),
         ],
       ),
@@ -152,12 +166,15 @@ class _SimpleModelConfigPageState extends State<SimpleModelConfigPage> {
           // ==========================================================
           // 模型名称
           // ==========================================================
-          const Text('模型名称', style: TextStyle(fontWeight: FontWeight.w600)),
+          Text(
+            AppLocalizations.of(context)!.modelNameLabel,
+            style: TextStyle(fontWeight: FontWeight.w600),
+          ),
           const SizedBox(height: 8),
           TextField(
             controller: _nameController,
-            decoration: const InputDecoration(
-              hintText: '输入显示名称（可选）',
+            decoration: InputDecoration(
+              hintText: AppLocalizations.of(context)!.modelNameHint,
               border: OutlineInputBorder(),
             ),
           ),
@@ -166,12 +183,15 @@ class _SimpleModelConfigPageState extends State<SimpleModelConfigPage> {
           // ==========================================================
           // 模型 ID
           // ==========================================================
-          const Text('模型 ID *', style: TextStyle(fontWeight: FontWeight.w600)),
+          Text(
+            '${AppLocalizations.of(context)!.modelIdLabel} *',
+            style: TextStyle(fontWeight: FontWeight.w600),
+          ),
           const SizedBox(height: 8),
           TextField(
             controller: _modelIdController,
-            decoration: const InputDecoration(
-              hintText: '如 gpt-4o',
+            decoration: InputDecoration(
+              hintText: AppLocalizations.of(context)!.modelIdExample('gpt-4o'),
               border: OutlineInputBorder(),
             ),
           ),
@@ -182,12 +202,16 @@ class _SimpleModelConfigPageState extends State<SimpleModelConfigPage> {
           // ==========================================================
           Row(
             children: [
-              const Text('自定义参数',
-                  style: TextStyle(fontWeight: FontWeight.w600)),
+              Text(
+                AppLocalizations.of(context)!.chatCustomParameters,
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
               const Spacer(),
               TextButton.icon(
                 icon: const Icon(Icons.add, size: 18),
-                label: const Text('添加参数'),
+                label: Text(
+                  AppLocalizations.of(context)!.assistantAddParameter,
+                ),
                 onPressed: _addCustomParam,
               ),
             ],
@@ -195,10 +219,13 @@ class _SimpleModelConfigPageState extends State<SimpleModelConfigPage> {
           const SizedBox(height: 8),
 
           if (_customParams.isEmpty)
-            const Padding(
+            Padding(
               padding: EdgeInsets.symmetric(vertical: 16),
               child: Center(
-                child: Text('暂无自定义参数', style: TextStyle(color: Colors.grey)),
+                child: Text(
+                  AppLocalizations.of(context)!.assistantNoCustomParameters,
+                  style: TextStyle(color: Colors.grey),
+                ),
               ),
             )
           else
@@ -220,10 +247,14 @@ class _SimpleModelConfigPageState extends State<SimpleModelConfigPage> {
                             child: TextFormField(
                               initialValue: param.paramName,
                               decoration: InputDecoration(
-                                labelText: '参数名',
+                                labelText: AppLocalizations.of(context)!
+                                    .assistantParameterName,
                                 border: const OutlineInputBorder(),
                                 isDense: true,
-                                errorText: isDuplicate ? '已存在该参数' : null,
+                                errorText: isDuplicate
+                                    ? AppLocalizations.of(context)!
+                                        .modelParamExists
+                                    : null,
                                 errorStyle: const TextStyle(fontSize: 11),
                               ),
                               onChanged: (v) {
@@ -243,15 +274,21 @@ class _SimpleModelConfigPageState extends State<SimpleModelConfigPage> {
                             padding: const EdgeInsets.symmetric(horizontal: 8),
                             child: DropdownButtonHideUnderline(
                               child: DropdownButton<String>(
+                                dropdownColor: StroomMenuStyle.surface(context),
+                                borderRadius: StroomMenuStyle.borderRadius,
                                 value: param.type,
                                 isDense: true,
                                 items: ParamType.values
-                                    .map((t) => DropdownMenuItem(
-                                          value: t.value,
-                                          child: Text(t.label,
-                                              style: const TextStyle(
-                                                  fontSize: 13)),
-                                        ))
+                                    .map(
+                                      (t) => DropdownMenuItem(
+                                        value: t.value,
+                                        child: Text(
+                                          localizedParamTypeLabel(
+                                              AppLocalizations.of(context)!, t),
+                                          style: const TextStyle(fontSize: 13),
+                                        ),
+                                      ),
+                                    )
                                     .toList(),
                                 onChanged: (v) {
                                   if (v != null) {
@@ -263,10 +300,14 @@ class _SimpleModelConfigPageState extends State<SimpleModelConfigPage> {
                           ),
                           const SizedBox(width: 4),
                           IconButton(
-                            icon: const Icon(Icons.delete,
-                                color: Colors.red, size: 20),
+                            icon: const Icon(
+                              Icons.delete,
+                              color: Colors.red,
+                              size: 20,
+                            ),
                             onPressed: () => _removeCustomParam(i),
-                            tooltip: '删除参数',
+                            tooltip:
+                                AppLocalizations.of(context)!.modelParamDelete,
                           ),
                         ],
                       ),
@@ -274,8 +315,10 @@ class _SimpleModelConfigPageState extends State<SimpleModelConfigPage> {
                       TextFormField(
                         initialValue: param.defaultValue,
                         decoration: InputDecoration(
-                          labelText: '默认参数值',
-                          hintText: param.paramType.defaultValueHint,
+                          labelText: AppLocalizations.of(context)!
+                              .modelParamDefaultValue,
+                          hintText: localizedParamTypeDefaultValueHint(
+                              AppLocalizations.of(context)!, param.paramType),
                           border: const OutlineInputBorder(),
                           isDense: true,
                         ),

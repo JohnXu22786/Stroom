@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/foundation.dart';
@@ -5,6 +7,7 @@ import 'package:flutter_background_service_platform_interface/flutter_background
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 import 'package:stroom/services/background_service.dart';
+import 'package:stroom/services/startup_preferences.dart';
 
 /// A mock implementation of FlutterBackgroundServicePlatform for testing
 /// persistence behavior. Extends the real platform interface to control
@@ -17,6 +20,9 @@ class MockBackgroundServicePlatform extends FlutterBackgroundServicePlatform {
   bool _throwOnCheck = false;
   bool _deferStopCompletion = false;
   bool _stopRequested = false;
+  bool _holdStoppedCheck = false;
+  Completer<void>? _stoppedCheckStarted;
+  Completer<void>? _releaseStoppedCheck;
   final Set<int> _throwOnCheckCalls = {};
   int _serviceRunningCheckCount = 0;
 
@@ -46,6 +52,18 @@ class MockBackgroundServicePlatform extends FlutterBackgroundServicePlatform {
 
   void deferStopCompletion() {
     _deferStopCompletion = true;
+  }
+
+  void holdStoppedCheck() {
+    _holdStoppedCheck = true;
+    _stoppedCheckStarted = Completer<void>();
+    _releaseStoppedCheck = Completer<void>();
+  }
+
+  Future<void> get stoppedCheckStarted => _stoppedCheckStarted!.future;
+
+  void releaseStoppedCheck() {
+    _releaseStoppedCheck!.complete();
   }
 
   void completeDelayedStop() {
@@ -84,7 +102,13 @@ class MockBackgroundServicePlatform extends FlutterBackgroundServicePlatform {
         _throwOnCheckCalls.contains(_serviceRunningCheckCount)) {
       throw 'Simulated check error';
     }
-    return _isRunning;
+    final isRunning = _isRunning;
+    if (!isRunning && _holdStoppedCheck) {
+      _holdStoppedCheck = false;
+      _stoppedCheckStarted!.complete();
+      await _releaseStoppedCheck!.future;
+    }
+    return isRunning;
   }
 
   @override
@@ -114,6 +138,107 @@ class _FailingEnabledPreferenceStore extends InMemorySharedPreferencesStore {
   }
 }
 
+class _RejectFailedStopRollbackStore extends InMemorySharedPreferencesStore {
+  _RejectFailedStopRollbackStore(Map<String, Object> data,
+      {this.throwOnDisable = false})
+      : super.withData(data);
+
+  final bool throwOnDisable;
+  bool _stopIntentWasDisabled = false;
+  bool _rejectEnabledRestorationWrites = true;
+  int _readFailuresRemaining = 0;
+  int readAttempts = 0;
+
+  void allowEnabledRestorationWrites() {
+    _rejectEnabledRestorationWrites = false;
+  }
+
+  void failNextReads(int count) {
+    _readFailuresRemaining = count;
+  }
+
+  @override
+  Future<Map<String, Object>> getAll() async {
+    readAttempts++;
+    if (_readFailuresRemaining > 0) {
+      _readFailuresRemaining--;
+      throw StateError('Simulated preference read error');
+    }
+    return super.getAll();
+  }
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) {
+    if (valueType == 'Bool' && key == 'flutter.background_service_enabled') {
+      if (value == false) {
+        _stopIntentWasDisabled = true;
+        if (throwOnDisable) throw StateError('Simulated disable write error');
+      }
+      if (value == true &&
+          _stopIntentWasDisabled &&
+          _rejectEnabledRestorationWrites) {
+        return Future<bool>.value(false);
+      }
+    }
+    return super.setValue(valueType, key, value);
+  }
+
+  Future<bool> persistEnabledFromNativeRecovery() =>
+      super.setValue('Bool', 'flutter.background_service_enabled', true);
+}
+
+class _RejectFailedStopRestoreMarkerOnceStore
+    extends _RejectFailedStopRollbackStore {
+  _RejectFailedStopRestoreMarkerOnceStore(Map<String, Object> data)
+      : super(data);
+
+  bool _rejectedPendingMarker = false;
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) {
+    if (valueType == 'Bool' &&
+        key == 'flutter.background_service_failed_stop_restore_pending' &&
+        value == true &&
+        !_rejectedPendingMarker) {
+      _rejectedPendingMarker = true;
+      return Future<bool>.value(false);
+    }
+    return super.setValue(valueType, key, value);
+  }
+}
+
+class _FailingPreferenceReadStore extends InMemorySharedPreferencesStore {
+  _FailingPreferenceReadStore(
+    Map<String, Object> data, {
+    this.failReads = true,
+  }) : super.withData(data);
+
+  bool failReads;
+
+  @override
+  Future<Map<String, Object>> getAll() async {
+    if (failReads) {
+      throw StateError('Simulated preference read error');
+    }
+    return super.getAll();
+  }
+}
+
+class _FailOncePreferenceReadStore extends InMemorySharedPreferencesStore {
+  _FailOncePreferenceReadStore(Map<String, Object> data) : super.withData(data);
+
+  bool _failedInitialRead = false;
+
+  @override
+  Future<Map<String, Object>> getAll() async {
+    if (!_failedInitialRead) {
+      _failedInitialRead = true;
+      throw StateError('Simulated transient preference read error');
+    }
+    return super.getAll();
+  }
+}
+
 class _FailingDesktopCloseMinimizePreferenceStore
     extends InMemorySharedPreferencesStore {
   _FailingDesktopCloseMinimizePreferenceStore(Map<String, Object> data)
@@ -128,11 +253,61 @@ class _FailingDesktopCloseMinimizePreferenceStore
   }
 }
 
+class _FailingRecoveryPreferenceStore extends InMemorySharedPreferencesStore {
+  _FailingRecoveryPreferenceStore(
+    Map<String, Object> data, {
+    required Set<String> failedKeys,
+    this.throwOnWrite = false,
+  })  : _failedKeys = failedKeys,
+        super.withData(data);
+
+  final Set<String> _failedKeys;
+  final bool throwOnWrite;
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) {
+    if (valueType == 'Bool' && _failedKeys.contains(key)) {
+      if (throwOnWrite) {
+        return Future<bool>.error(
+            StateError('Simulated preference write error'));
+      }
+      return Future<bool>.value(false);
+    }
+    return super.setValue(valueType, key, value);
+  }
+}
+
+class _DelayedRejectedWatchdogWriteStore
+    extends InMemorySharedPreferencesStore {
+  _DelayedRejectedWatchdogWriteStore(Map<String, Object> data)
+      : super.withData(data);
+
+  final firstWatchdogWriteStarted = Completer<void>();
+  final releaseFirstWatchdogWrite = Completer<void>();
+  int watchdogEnableWriteCount = 0;
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) async {
+    if (valueType == 'Bool' &&
+        key == 'flutter.background_service_watchdog' &&
+        value == true) {
+      watchdogEnableWriteCount++;
+      if (watchdogEnableWriteCount == 1) {
+        firstWatchdogWriteStarted.complete();
+        await releaseFirstWatchdogWrite.future;
+        return false;
+      }
+    }
+    return super.setValue(valueType, key, value);
+  }
+}
+
 Future<SharedPreferencesStorePlatform> _rejectEnabledPreferenceWrites(
-    SharedPreferences preferences) async {
+    SharedPreferences preferences,
+    {bool initiallyEnabled = false}) async {
   final originalStore = SharedPreferencesStorePlatform.instance;
   SharedPreferencesStorePlatform.instance = _FailingEnabledPreferenceStore({
-    'flutter.background_service_enabled': false,
+    'flutter.background_service_enabled': initiallyEnabled,
   });
   await preferences.reload();
   return originalStore;
@@ -146,6 +321,26 @@ Future<SharedPreferencesStorePlatform>
       _FailingDesktopCloseMinimizePreferenceStore({
     'flutter.desktop_close_minimize': true,
   });
+  await preferences.reload();
+  return originalStore;
+}
+
+Future<SharedPreferencesStorePlatform> _failRecoveryPreferenceWrites(
+  SharedPreferences preferences, {
+  required bool throwOnWrite,
+}) async {
+  final originalStore = SharedPreferencesStorePlatform.instance;
+  SharedPreferencesStorePlatform.instance = _FailingRecoveryPreferenceStore(
+    {
+      'flutter.background_service_watchdog': false,
+      'flutter.background_service_cold_start_restore': false,
+    },
+    failedKeys: {
+      'flutter.background_service_watchdog',
+      'flutter.background_service_cold_start_restore',
+    },
+    throwOnWrite: throwOnWrite,
+  );
   await preferences.reload();
   return originalStore;
 }
@@ -259,6 +454,910 @@ void main() {
     });
 
     test(
+        'cold start during completed stop request does not restore explicit stop',
+        () async {
+      final mock = registerMockPlatform()
+        ..setServiceRunning(true)
+        ..holdStoppedCheck();
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('background_service_enabled', true);
+
+      await withAndroidPlatform(() async {
+        final stopping = stopBackgroundService();
+        await mock.stoppedCheckStarted;
+
+        // The stop request has taken effect. Simulate a new process before
+        // the old stop path would persist enabled=false.
+        resetBackgroundServiceLifecycleStateForTesting();
+        await restoreBackgroundServiceOnColdStart();
+        final restoredDuringStop = mock._isRunning;
+
+        mock.releaseStoppedCheck();
+        expect(await stopping, isTrue);
+        expect(
+          restoredDuringStop,
+          isFalse,
+          reason: 'cold-start restore must see the stop intent even after the '
+              'service has stopped but before the stop operation returns',
+        );
+      });
+    });
+
+    test('stopBackgroundService persists stop intent before disabling watchdog',
+        () async {
+      final mock = registerMockPlatform()..setServiceRunning(true);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('background_service_enabled', true);
+      var enabledWhenWatchdogDisabled = true;
+
+      // Model a process restart at the boundary where the native watchdog is
+      // disabled. The cold-start decision must already see the durable stop.
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('com.johntsui.stroom/keepalive'),
+        (MethodCall methodCall) async {
+          keepAliveCalls.add(methodCall);
+          if (methodCall.method == 'stopKeepAlive') {
+            await prefs.reload();
+            enabledWhenWatchdogDisabled =
+                prefs.getBool('background_service_enabled') ?? true;
+            resetBackgroundServiceLifecycleStateForTesting();
+            await restoreBackgroundServiceOnColdStart();
+          }
+          return true;
+        },
+      );
+
+      await withAndroidPlatform(() async {
+        expect(await stopBackgroundService(), isTrue);
+      });
+
+      expect(enabledWhenWatchdogDisabled, isFalse);
+      expect(
+        mock._isRunning,
+        isFalse,
+        reason: 'a cold start at watchdog cancellation must not restore the '
+            'explicitly stopped service',
+      );
+    });
+
+    test(
+        'stopBackgroundService does not cancel watchdog when persistence fails',
+        () async {
+      final mock = registerMockPlatform();
+      mock.setServiceRunning(true);
+
+      final prefs = await SharedPreferences.getInstance();
+      final originalStore = await _rejectEnabledPreferenceWrites(
+        prefs,
+        initiallyEnabled: true,
+      );
+      addTearDown(() {
+        SharedPreferencesStorePlatform.instance = originalStore;
+      });
+
+      await withAndroidPlatform(() async {
+        expect(await stopBackgroundService(), isFalse);
+        await prefs.reload();
+        expect(prefs.getBool('background_service_enabled'), isTrue);
+        await rearmKeepAliveOnResume();
+      });
+
+      expect(mock._isRunning, isFalse);
+      expect(
+        keepAliveCalls.any((call) => call.method == 'stopKeepAlive'),
+        isFalse,
+        reason: 'a rejected stop intent must not leave the persisted enabled '
+            'state without watchdog recovery',
+      );
+      expect(
+        keepAliveCalls.any((call) => call.method == 'startKeepAlive'),
+        isFalse,
+      );
+      expect(
+        keepAliveCalls.any((call) => call.method == 'rearmKeepAlive'),
+        isFalse,
+      );
+    });
+
+    test(
+        'stopBackgroundService accepts rejected disable with missing preference',
+        () async {
+      final mock = registerMockPlatform()..setServiceRunning(true);
+      final prefs = await SharedPreferences.getInstance();
+      final originalStore = SharedPreferencesStorePlatform.instance;
+      SharedPreferencesStorePlatform.instance =
+          _FailingEnabledPreferenceStore({});
+      addTearDown(() {
+        SharedPreferencesStorePlatform.instance = originalStore;
+      });
+      await prefs.reload();
+      expect(prefs.getBool('background_service_enabled'), isNull);
+
+      await withAndroidPlatform(() async {
+        expect(await stopBackgroundService(), isTrue);
+        await prefs.reload();
+      });
+
+      expect(mock._isRunning, isFalse);
+      expect(prefs.getBool('background_service_enabled'), isNull);
+      expect(
+        keepAliveCalls.map((call) => call.method),
+        contains('stopKeepAlive'),
+      );
+    });
+
+    test('failed stop request restores enabled intent and watchdog recovery',
+        () async {
+      final mock = registerMockPlatform()
+        ..setServiceRunning(true)
+        ..setThrowOnCheckCalls({2});
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('background_service_enabled', true);
+
+      await withAndroidPlatform(() async {
+        expect(await stopBackgroundService(), isFalse);
+        await prefs.reload();
+        expect(prefs.getBool('background_service_enabled'), isTrue);
+      });
+
+      expect(
+        keepAliveCalls.any((call) => call.method == 'stopKeepAlive'),
+        isFalse,
+      );
+      expect(
+        keepAliveCalls.any((call) => call.method == 'rearmKeepAlive'),
+        isTrue,
+        reason: 'a failed stop must retain enabled intent and recovery',
+      );
+      expect(mock._isRunning, isFalse);
+    });
+
+    test(
+        'implicit cleanup preserves pending failed-stop recovery after cold start',
+        () async {
+      final mock = registerMockPlatform()
+        ..setServiceRunning(true)
+        ..setThrowOnCheckCalls({2});
+      final prefs = await SharedPreferences.getInstance();
+      final originalStore = SharedPreferencesStorePlatform.instance;
+      final store = _RejectFailedStopRollbackStore({
+        'flutter.background_service_enabled': true,
+        'flutter.background_service_watchdog': true,
+      });
+      SharedPreferencesStorePlatform.instance = store;
+      await prefs.reload();
+      SharedPreferences? activePreferences = prefs;
+      addTearDown(() {
+        SharedPreferencesStorePlatform.instance = originalStore;
+      });
+
+      var nativeRecoveryAvailable = false;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('com.johntsui.stroom/keepalive'),
+        (MethodCall methodCall) async {
+          keepAliveCalls.add(methodCall);
+          final arguments = methodCall.arguments;
+          final restoringEnabledIntent =
+              methodCall.method == 'rearmKeepAlive' &&
+                  arguments is Map &&
+                  arguments['restoreEnabledIntent'] == true;
+          if (restoringEnabledIntent && nativeRecoveryAvailable) {
+            await store.persistEnabledFromNativeRecovery();
+            await activePreferences!.reload();
+          }
+          return !restoringEnabledIntent || nativeRecoveryAvailable;
+        },
+      );
+
+      await withAndroidPlatform(() async {
+        expect(await stopBackgroundService(), isFalse);
+        await prefs.reload();
+        expect(prefs.getBool('background_service_enabled'), isFalse,
+            reason: 'both the Dart rollback and first native recovery fail');
+        expect(
+          prefs.getBool('background_service_failed_stop_restore_pending'),
+          isTrue,
+          reason: 'the pending recovery must survive process death',
+        );
+      });
+
+      // A fresh process must retry pending intent restoration before reading
+      // the stale disabled service preference.
+      SharedPreferences.resetStatic();
+      resetBackgroundServiceLifecycleStateForTesting();
+      mock.setServiceRunning(false);
+      await withAndroidPlatform(() async {
+        final restartedPrefs = await SharedPreferences.getInstance();
+        activePreferences = restartedPrefs;
+        expect(restartedPrefs.getBool('background_service_enabled'), isFalse);
+        expect(
+          restartedPrefs
+              .getBool('background_service_failed_stop_restore_pending'),
+          isTrue,
+        );
+        await restoreBackgroundServiceOnColdStart();
+        await restartedPrefs.reload();
+        expect(restartedPrefs.getBool('background_service_enabled'), isFalse,
+            reason:
+                'unavailable native recovery must leave stale intent alone');
+        expect(
+          restartedPrefs
+              .getBool('background_service_failed_stop_restore_pending'),
+          isTrue,
+          reason: 'failed cold-start recovery must retain the durable marker',
+        );
+
+        // The stop was not confirmed, so model the shared service still
+        // running when task cleanup reaches the stale disabled preference.
+        mock.setServiceRunning(true);
+        final readsBeforeCleanup = store.readAttempts;
+        store.failNextReads(2);
+        SharedPreferences.resetStatic();
+        resetBackgroundServiceLifecycleStateForTesting();
+        expect(
+          await stopBackgroundServiceIfNotUserEnabled(),
+          isFalse,
+          reason: 'implicit cleanup must defer when recovery-marker reads fail',
+        );
+        expect(
+          store.readAttempts,
+          readsBeforeCleanup + 2,
+          reason: 'cleanup must not fall through to read stale disabled intent',
+        );
+        final preferencesAfterCleanup = await SharedPreferences.getInstance();
+        activePreferences = preferencesAfterCleanup;
+        await preferencesAfterCleanup.reload();
+        expect(preferencesAfterCleanup.getBool('background_service_enabled'),
+            isFalse);
+        expect(
+          preferencesAfterCleanup
+              .getBool('background_service_failed_stop_restore_pending'),
+          isTrue,
+          reason: 'implicit cleanup must preserve the only recovery marker',
+        );
+        expect(mock._isRunning, isTrue,
+            reason: 'implicit cleanup must not stop the shared service');
+        expect(
+          keepAliveCalls.where((call) => call.method == 'stopKeepAlive'),
+          isEmpty,
+          reason:
+              'implicit cleanup must not cancel pending keep-alive recovery',
+        );
+
+        // Once native recovery returns, the still-pending marker can restore
+        // the user's enabled intent on a later cold-start attempt.
+        nativeRecoveryAvailable = true;
+        await restoreBackgroundServiceOnColdStart();
+        await restartedPrefs.reload();
+        expect(restartedPrefs.getBool('background_service_enabled'), isTrue,
+            reason: 'a later cold-start retry must restore enabled intent');
+        expect(
+          restartedPrefs
+              .getBool('background_service_failed_stop_restore_pending'),
+          isFalse,
+        );
+      });
+      expect(mock._isRunning, isTrue,
+          reason: 'the recovered durable intent must survive process death');
+
+      final recoveryCalls = keepAliveCalls
+          .where((call) => call.method == 'rearmKeepAlive')
+          .toList();
+      expect(recoveryCalls, hasLength(4));
+      expect(
+        recoveryCalls.take(3).map((call) => call.arguments),
+        everyElement({'restoreEnabledIntent': true}),
+        reason: 'each pending attempt must request native intent restoration',
+      );
+      expect(recoveryCalls.last.arguments, isNull,
+          reason: 'ordinary cold-start rearming must retain normal behavior');
+    });
+
+    test(
+        'failed stop retries a rejected marker write before native recovery fails',
+        () async {
+      final mock = registerMockPlatform()
+        ..setServiceRunning(true)
+        ..setThrowOnCheckCalls({2});
+      final prefs = await SharedPreferences.getInstance();
+      final originalStore = SharedPreferencesStorePlatform.instance;
+      final store = _RejectFailedStopRestoreMarkerOnceStore({
+        'flutter.background_service_enabled': true,
+        'flutter.background_service_watchdog': true,
+      });
+      SharedPreferencesStorePlatform.instance = store;
+      await prefs.reload();
+      SharedPreferences? activePreferences = prefs;
+      addTearDown(() {
+        SharedPreferencesStorePlatform.instance = originalStore;
+      });
+
+      var nativeRecoveryAvailable = false;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('com.johntsui.stroom/keepalive'),
+        (MethodCall methodCall) async {
+          keepAliveCalls.add(methodCall);
+          final arguments = methodCall.arguments;
+          final restoringEnabledIntent =
+              methodCall.method == 'rearmKeepAlive' &&
+                  arguments is Map &&
+                  arguments['restoreEnabledIntent'] == true;
+          if (restoringEnabledIntent && nativeRecoveryAvailable) {
+            await store.persistEnabledFromNativeRecovery();
+            await activePreferences!.reload();
+          }
+          return !restoringEnabledIntent || nativeRecoveryAvailable;
+        },
+      );
+
+      await withAndroidPlatform(() async {
+        expect(await stopBackgroundService(), isFalse);
+        await prefs.reload();
+        expect(prefs.getBool('background_service_enabled'), isFalse);
+        expect(
+          prefs.getBool('background_service_failed_stop_restore_pending'),
+          isTrue,
+          reason: 'a rejected first marker write must be retried before '
+              'native recovery can fail and leave only in-memory intent',
+        );
+      });
+
+      // The native fallback failed. A fresh process must still see the
+      // retried marker and recover the enabled intent.
+      SharedPreferences.resetStatic();
+      resetBackgroundServiceLifecycleStateForTesting();
+      mock.setServiceRunning(false);
+      nativeRecoveryAvailable = true;
+      await withAndroidPlatform(() async {
+        final restartedPrefs = await SharedPreferences.getInstance();
+        activePreferences = restartedPrefs;
+        expect(
+          restartedPrefs
+              .getBool('background_service_failed_stop_restore_pending'),
+          isTrue,
+        );
+        await restoreBackgroundServiceOnColdStart();
+        await restartedPrefs.reload();
+        expect(restartedPrefs.getBool('background_service_enabled'), isTrue);
+        expect(
+          restartedPrefs
+              .getBool('background_service_failed_stop_restore_pending'),
+          isFalse,
+        );
+      });
+      expect(mock._isRunning, isTrue);
+      final intentRestoreCalls = keepAliveCalls.where(
+        (call) =>
+            call.method == 'rearmKeepAlive' &&
+            call.arguments is Map &&
+            call.arguments['restoreEnabledIntent'] == true,
+      );
+      expect(intentRestoreCalls, hasLength(2));
+    });
+
+    for (final (priorMarker, readFailures, throwOnDisable) in [
+      (true, 0, false),
+      (true, 0, true),
+      (true, 2, false),
+      (false, 0, false),
+      (null, 0, false),
+    ]) {
+      test(
+          'repeated failed stop preserves prior durable recovery intent (marker=$priorMarker, read failures=$readFailures, disable throws=$throwOnDisable)',
+          () async {
+        final mock = registerMockPlatform()
+          ..setServiceRunning(true)
+          ..setThrowOnCheck(true);
+        final originalStore = SharedPreferencesStorePlatform.instance;
+        final store = _RejectFailedStopRollbackStore({
+          'flutter.background_service_enabled': false,
+          if (priorMarker != null)
+            'flutter.background_service_failed_stop_restore_pending':
+                priorMarker,
+          'flutter.background_service_watchdog': true,
+        }, throwOnDisable: throwOnDisable);
+        store.failNextReads(readFailures);
+        SharedPreferencesStorePlatform.instance = store;
+        SharedPreferences.resetStatic();
+        addTearDown(() {
+          SharedPreferencesStorePlatform.instance = originalStore;
+        });
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(
+          const MethodChannel('com.johntsui.stroom/keepalive'),
+          (MethodCall methodCall) async {
+            keepAliveCalls.add(methodCall);
+            if (methodCall.method == 'rearmKeepAlive') return false;
+            return true;
+          },
+        );
+
+        await withAndroidPlatform(() async {
+          expect(await stopBackgroundService(), isFalse);
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.reload();
+          expect(prefs.getBool('background_service_enabled'), isFalse);
+          expect(
+            prefs.getBool('background_service_failed_stop_restore_pending'),
+            priorMarker == true ? isTrue : isNot(isTrue),
+            reason: 'an unconfirmed stop must retain possible recovery intent '
+                'without creating it when the marker is known absent',
+          );
+
+          // A late stop and process death must still leave cold-start recovery.
+          mock
+            ..setThrowOnCheck(false)
+            ..setServiceRunning(false);
+          store.allowEnabledRestorationWrites();
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+              .setMockMethodCallHandler(
+            const MethodChannel('com.johntsui.stroom/keepalive'),
+            (MethodCall methodCall) async {
+              if (methodCall.method == 'rearmKeepAlive' &&
+                  methodCall.arguments is Map &&
+                  methodCall.arguments['restoreEnabledIntent'] == true) {
+                await store.persistEnabledFromNativeRecovery();
+                await (await SharedPreferences.getInstance()).reload();
+              }
+              return true;
+            },
+          );
+          SharedPreferences.resetStatic();
+          resetBackgroundServiceLifecycleStateForTesting();
+          await restoreBackgroundServiceOnColdStart();
+          expect(mock._isRunning, priorMarker == true);
+          final restoredPrefs = await SharedPreferences.getInstance();
+          await restoredPrefs.reload();
+          expect(restoredPrefs.getBool('background_service_enabled'),
+              priorMarker == true);
+        });
+      });
+    }
+
+    test('explicit stop clears pending failed-stop recovery before cold start',
+        () async {
+      final mock = registerMockPlatform()
+        ..setServiceRunning(true)
+        ..setThrowOnCheckCalls({2});
+      final prefs = await SharedPreferences.getInstance();
+      final originalStore = SharedPreferencesStorePlatform.instance;
+      final store = _RejectFailedStopRollbackStore({
+        'flutter.background_service_enabled': true,
+        'flutter.background_service_watchdog': true,
+      });
+      SharedPreferencesStorePlatform.instance = store;
+      await prefs.reload();
+      addTearDown(() {
+        SharedPreferencesStorePlatform.instance = originalStore;
+      });
+
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('com.johntsui.stroom/keepalive'),
+        (MethodCall methodCall) async {
+          keepAliveCalls.add(methodCall);
+          if (methodCall.method == 'rearmKeepAlive') return false;
+          return true;
+        },
+      );
+
+      await withAndroidPlatform(() async {
+        expect(await stopBackgroundService(), isFalse);
+        await prefs.reload();
+        expect(
+          prefs.getBool('background_service_failed_stop_restore_pending'),
+          isTrue,
+        );
+
+        mock.setServiceRunning(false);
+        expect(await stopBackgroundService(), isTrue);
+        await prefs.reload();
+        expect(prefs.getBool('background_service_enabled'), isFalse);
+        expect(
+          prefs.getBool('background_service_failed_stop_restore_pending'),
+          isFalse,
+        );
+
+        SharedPreferences.resetStatic();
+        resetBackgroundServiceLifecycleStateForTesting();
+        await restoreBackgroundServiceOnColdStart();
+      });
+
+      expect(mock._isRunning, isFalse,
+          reason: 'cold start must honor the later explicit stop');
+      expect(
+        keepAliveCalls.where((call) =>
+            call.method == 'rearmKeepAlive' &&
+            call.arguments is Map &&
+            call.arguments['restoreEnabledIntent'] == true),
+        hasLength(1),
+        reason: 'cold start must not retry the cleared failed-stop marker',
+      );
+    });
+
+    test('explicit stop clears pending marker when its initial read fails',
+        () async {
+      final mock = registerMockPlatform()..setServiceRunning(true);
+      final originalStore = SharedPreferencesStorePlatform.instance;
+      final store = _FailOncePreferenceReadStore({
+        'flutter.background_service_enabled': true,
+        'flutter.background_service_failed_stop_restore_pending': true,
+        'flutter.background_service_watchdog': true,
+      });
+      SharedPreferencesStorePlatform.instance = store;
+      SharedPreferences.resetStatic();
+      final originalLegacyPreferenceMode =
+          StartupPreferences.debugUseLegacyPreferencesForTesting;
+      StartupPreferences.debugUseLegacyPreferencesForTesting = true;
+      SharedPreferences? activePreferences;
+      addTearDown(() {
+        SharedPreferencesStorePlatform.instance = originalStore;
+        StartupPreferences.debugUseLegacyPreferencesForTesting =
+            originalLegacyPreferenceMode;
+      });
+
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('com.johntsui.stroom/keepalive'),
+        (MethodCall methodCall) async {
+          keepAliveCalls.add(methodCall);
+          final arguments = methodCall.arguments;
+          if (methodCall.method == 'rearmKeepAlive' &&
+              arguments is Map &&
+              arguments['restoreEnabledIntent'] == true) {
+            await store.setValue(
+              'Bool',
+              'flutter.background_service_enabled',
+              true,
+            );
+            await activePreferences!.reload();
+          }
+          return true;
+        },
+      );
+
+      await withAndroidPlatform(() async {
+        expect(await stopBackgroundService(), isTrue);
+        activePreferences = await SharedPreferences.getInstance();
+        await activePreferences!.reload();
+        expect(
+            activePreferences!.getBool('background_service_enabled'), isFalse);
+
+        SharedPreferences.resetStatic();
+        resetBackgroundServiceLifecycleStateForTesting();
+        mock.setServiceRunning(false);
+        final restartedPreferences = await SharedPreferences.getInstance();
+        activePreferences = restartedPreferences;
+        await restoreBackgroundServiceOnColdStart();
+        await restartedPreferences.reload();
+        expect(restartedPreferences.getBool('background_service_enabled'),
+            isFalse);
+      });
+
+      expect(mock._isRunning, isFalse,
+          reason: 'cold start must not revive an explicitly stopped service');
+      expect(
+        keepAliveCalls.where((call) =>
+            call.method == 'rearmKeepAlive' &&
+            call.arguments is Map &&
+            call.arguments['restoreEnabledIntent'] == true),
+        isEmpty,
+        reason: 'a marker read error must not leave stale restore intent',
+      );
+    });
+
+    test('explicit stop clears unknown pending marker after both reads fail',
+        () async {
+      final mock = registerMockPlatform()..setServiceRunning(true);
+      final originalStore = SharedPreferencesStorePlatform.instance;
+      final store = _RejectFailedStopRollbackStore({
+        'flutter.background_service_enabled': false,
+        'flutter.background_service_failed_stop_restore_pending': true,
+        'flutter.background_service_watchdog': true,
+      });
+      store.failNextReads(2);
+      SharedPreferencesStorePlatform.instance = store;
+      SharedPreferences.resetStatic();
+      addTearDown(() {
+        SharedPreferencesStorePlatform.instance = originalStore;
+      });
+
+      await withAndroidPlatform(() async {
+        expect(await stopBackgroundService(), isTrue);
+        final activePreferences = await SharedPreferences.getInstance();
+        await activePreferences.reload();
+        expect(
+            activePreferences.getBool('background_service_enabled'), isFalse);
+
+        SharedPreferences.resetStatic();
+        resetBackgroundServiceLifecycleStateForTesting();
+        mock.setServiceRunning(false);
+        final restartedPreferences = await SharedPreferences.getInstance();
+        await restoreBackgroundServiceOnColdStart();
+        await restartedPreferences.reload();
+        expect(restartedPreferences.getBool('background_service_enabled'),
+            isFalse);
+      });
+
+      expect(mock._isRunning, isFalse,
+          reason: 'cold start must not revive an explicitly stopped service');
+      expect(
+        keepAliveCalls.where((call) =>
+            call.method == 'rearmKeepAlive' &&
+            call.arguments is Map &&
+            call.arguments['restoreEnabledIntent'] == true),
+        isEmpty,
+        reason: 'a marker read error must not leave stale restore intent',
+      );
+    });
+
+    test('cold start retries failed-stop marker after transient read error',
+        () async {
+      final mock = registerMockPlatform()..setServiceRunning(false);
+      final originalStore = SharedPreferencesStorePlatform.instance;
+      final store = _FailOncePreferenceReadStore({
+        'flutter.background_service_enabled': false,
+        'flutter.background_service_failed_stop_restore_pending': true,
+        'flutter.background_service_watchdog': true,
+      });
+      SharedPreferencesStorePlatform.instance = store;
+      SharedPreferences.resetStatic();
+      final originalLegacyPreferenceMode =
+          StartupPreferences.debugUseLegacyPreferencesForTesting;
+      StartupPreferences.debugUseLegacyPreferencesForTesting = true;
+      SharedPreferences? activePreferences;
+      addTearDown(() {
+        SharedPreferencesStorePlatform.instance = originalStore;
+        StartupPreferences.debugUseLegacyPreferencesForTesting =
+            originalLegacyPreferenceMode;
+      });
+
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('com.johntsui.stroom/keepalive'),
+        (MethodCall methodCall) async {
+          keepAliveCalls.add(methodCall);
+          final arguments = methodCall.arguments;
+          if (methodCall.method == 'rearmKeepAlive' &&
+              arguments is Map &&
+              arguments['restoreEnabledIntent'] == true) {
+            final preferences =
+                activePreferences ??= await SharedPreferences.getInstance();
+            await store.setValue(
+              'Bool',
+              'flutter.background_service_enabled',
+              true,
+            );
+            await preferences.reload();
+          }
+          return true;
+        },
+      );
+
+      await withAndroidPlatform(() async {
+        await restoreBackgroundServiceOnColdStart();
+        final preferences =
+            activePreferences ??= await SharedPreferences.getInstance();
+        await preferences.reload();
+        expect(preferences.getBool('background_service_enabled'), isTrue,
+            reason: 'cold start must restore intent after a transient marker '
+                'read error');
+        expect(
+          preferences.getBool('background_service_failed_stop_restore_pending'),
+          isFalse,
+        );
+      });
+
+      expect(mock._isRunning, isTrue,
+          reason: 'a transient marker read error must not skip cold-start '
+              'service restoration');
+      expect(
+        keepAliveCalls.where((call) =>
+            call.method == 'rearmKeepAlive' &&
+            call.arguments is Map &&
+            call.arguments['restoreEnabledIntent'] == true),
+        hasLength(1),
+        reason: 'cold start must retry the persisted failed-stop intent',
+      );
+    });
+
+    for (final pendingMarker in [true, false, null]) {
+      test(
+          'cold start retries unknown marker without enabling disabled intent (marker=$pendingMarker)',
+          () async {
+        final mock = registerMockPlatform()..setServiceRunning(false);
+        final originalStore = SharedPreferencesStorePlatform.instance;
+        final store = _RejectFailedStopRollbackStore({
+          'flutter.background_service_enabled': false,
+          if (pendingMarker != null)
+            'flutter.background_service_failed_stop_restore_pending':
+                pendingMarker,
+        })
+          ..failNextReads(2);
+        SharedPreferencesStorePlatform.instance = store;
+        SharedPreferences.resetStatic();
+        final originalLegacyPreferenceMode =
+            StartupPreferences.debugUseLegacyPreferencesForTesting;
+        StartupPreferences.debugUseLegacyPreferencesForTesting = true;
+        addTearDown(() {
+          SharedPreferencesStorePlatform.instance = originalStore;
+          StartupPreferences.debugUseLegacyPreferencesForTesting =
+              originalLegacyPreferenceMode;
+        });
+
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(
+          const MethodChannel('com.johntsui.stroom/keepalive'),
+          (MethodCall call) async {
+            keepAliveCalls.add(call);
+            final arguments = call.arguments;
+            if (call.method == 'rearmKeepAlive' &&
+                arguments is Map &&
+                arguments['restoreEnabledIntent'] == true) {
+              await store.persistEnabledFromNativeRecovery();
+              final preferences = await SharedPreferences.getInstance();
+              await preferences.reload();
+            }
+            return true;
+          },
+        );
+
+        await withAndroidPlatform(() async {
+          await restoreBackgroundServiceOnColdStart();
+          final preferences = await SharedPreferences.getInstance();
+          await preferences.reload();
+          expect(preferences.getBool('background_service_enabled'),
+              pendingMarker == true,
+              reason: 'only a confirmed pending marker may restore enabled '
+                  'intent after store access resumes');
+          expect(mock._isRunning, pendingMarker == true);
+          expect(
+            keepAliveCalls.where((call) =>
+                call.method == 'rearmKeepAlive' &&
+                call.arguments is Map &&
+                call.arguments['restoreEnabledIntent'] == true),
+            hasLength(pendingMarker == true ? 1 : 0),
+          );
+          expect(store.readAttempts, greaterThan(2),
+              reason: 'the initial marker reads must both fail before the '
+                  'store becomes accessible');
+        });
+      });
+    }
+
+    test('failed iOS stop retries durable intent restoration on cold start',
+        () async {
+      final mock = registerMockPlatform()
+        ..setServiceRunning(true)
+        ..setThrowOnCheckCalls({2});
+      final originalStore = SharedPreferencesStorePlatform.instance;
+      final store = _RejectFailedStopRollbackStore({
+        'flutter.background_service_enabled': true,
+        'flutter.background_service_watchdog': true,
+      });
+      SharedPreferencesStorePlatform.instance = store;
+      SharedPreferences.resetStatic();
+      final originalLegacyPreferenceMode =
+          StartupPreferences.debugUseLegacyPreferencesForTesting;
+      StartupPreferences.debugUseLegacyPreferencesForTesting = true;
+      addTearDown(() {
+        SharedPreferencesStorePlatform.instance = originalStore;
+        StartupPreferences.debugUseLegacyPreferencesForTesting =
+            originalLegacyPreferenceMode;
+      });
+
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      try {
+        expect(await stopBackgroundService(), isFalse);
+        var preferences = await SharedPreferences.getInstance();
+        await preferences.reload();
+        expect(preferences.getBool('background_service_enabled'), isFalse);
+        expect(
+          preferences.getBool('background_service_failed_stop_restore_pending'),
+          isTrue,
+          reason: 'iOS must persist failed-stop intent when the Dart rollback '
+              'write is rejected',
+        );
+
+        // Simulate a fresh process after the preference store can accept the
+        // retry. Cold start must restore durable intent before reading false.
+        store.allowEnabledRestorationWrites();
+        mock.setServiceRunning(false);
+        SharedPreferences.resetStatic();
+        resetBackgroundServiceLifecycleStateForTesting();
+        await restoreBackgroundServiceOnColdStart();
+        preferences = await SharedPreferences.getInstance();
+        await preferences.reload();
+        expect(preferences.getBool('background_service_enabled'), isTrue);
+        expect(
+          preferences.getBool('background_service_failed_stop_restore_pending'),
+          isFalse,
+        );
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+
+      expect(mock._isRunning, isTrue,
+          reason: 'iOS cold start must restore service after the durable '
+              'enabled-intent retry');
+      expect(keepAliveCalls, isEmpty,
+          reason: 'iOS has no Android keep-alive channel calls');
+    });
+
+    for (final watchdogEnabled in [true, false]) {
+      test(
+          'failed stop recovers durable enabled intent when Dart rollback write is rejected (watchdog=$watchdogEnabled)',
+          () async {
+        final mock = registerMockPlatform()
+          ..setServiceRunning(true)
+          ..setThrowOnCheckCalls({2});
+        final prefs = await SharedPreferences.getInstance();
+        final originalStore = SharedPreferencesStorePlatform.instance;
+        final store = _RejectFailedStopRollbackStore(
+          {
+            'flutter.background_service_enabled': true,
+            'flutter.background_service_watchdog': watchdogEnabled,
+          },
+        );
+        SharedPreferencesStorePlatform.instance = store;
+        await prefs.reload();
+        expect(await isWatchdogEnabled(), watchdogEnabled);
+        addTearDown(() {
+          SharedPreferencesStorePlatform.instance = originalStore;
+        });
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(
+          const MethodChannel('com.johntsui.stroom/keepalive'),
+          (MethodCall methodCall) async {
+            keepAliveCalls.add(methodCall);
+            final arguments = methodCall.arguments;
+            if (methodCall.method == 'rearmKeepAlive' &&
+                arguments is Map &&
+                arguments['restoreEnabledIntent'] == true) {
+              await store.persistEnabledFromNativeRecovery();
+            }
+            return true;
+          },
+        );
+
+        await withAndroidPlatform(() async {
+          expect(await stopBackgroundService(), isFalse);
+          await prefs.reload();
+        });
+
+        expect(prefs.getBool('background_service_enabled'), isTrue,
+            reason: 'native recovery must durably restore enabled intent after '
+                'the Dart rollback write is rejected');
+        final recoveryCall = keepAliveCalls.firstWhere(
+          (call) => call.method == 'rearmKeepAlive',
+        );
+        expect(
+          recoveryCall.arguments,
+          {'restoreEnabledIntent': true},
+          reason: 'native recovery must receive the failed-stop intent even '
+              'when watchdog scheduling is disabled',
+        );
+
+        // A new process must recover from the backing preference alone.
+        SharedPreferences.resetStatic();
+        resetBackgroundServiceLifecycleStateForTesting();
+        mock.setServiceRunning(false);
+        await withAndroidPlatform(() async {
+          final restartedPrefs = await SharedPreferences.getInstance();
+          expect(restartedPrefs.getBool('background_service_enabled'), isTrue);
+          await restoreBackgroundServiceOnColdStart();
+        });
+
+        expect(mock._isRunning, isTrue,
+            reason: 'cold-start recovery must not depend on the old process '
+                'choice after a failed stop');
+      });
+    }
+
+    test(
         'restoreBackgroundServiceOnColdStart starts service when previously enabled',
         () async {
       final mock = registerMockPlatform();
@@ -279,6 +1378,36 @@ void main() {
       } finally {
         debugDefaultTargetPlatformOverride = null;
       }
+    });
+
+    test(
+        'restoreBackgroundServiceOnColdStart does not assume enabled when preference read fails',
+        () async {
+      final mock = registerMockPlatform();
+      mock.setServiceRunning(false);
+      final originalStore = SharedPreferencesStorePlatform.instance;
+      SharedPreferencesStorePlatform.instance = _FailingPreferenceReadStore({
+        'flutter.background_service_enabled': true,
+      });
+      addTearDown(() {
+        SharedPreferencesStorePlatform.instance = originalStore;
+      });
+
+      await withAndroidPlatform(() async {
+        await restoreBackgroundServiceOnColdStart();
+      });
+
+      expect(
+        mock._isRunning,
+        isFalse,
+        reason: 'a failed read does not confirm that the service was enabled',
+      );
+      expect(
+        keepAliveCalls.any((call) => call.method == 'rearmKeepAlive'),
+        isTrue,
+        reason: 'unknown intent must leave recovery to the native persisted-'
+            'state check without starting the service immediately',
+      );
     });
 
     test(
@@ -330,6 +1459,12 @@ void main() {
         await restoreBackgroundServiceOnColdStart();
         // Service should remain not running
         expect(mock._isRunning, isFalse);
+        expect(
+          keepAliveCalls.any((call) => call.method == 'rearmKeepAlive'),
+          isFalse,
+          reason: 'a readable disabled preference does not need watchdog '
+              'recovery',
+        );
       } finally {
         debugDefaultTargetPlatformOverride = null;
       }
@@ -353,8 +1488,8 @@ void main() {
     });
 
     test(
-        'restoreBackgroundServiceOnColdStart does nothing when cold-start restore toggle is off',
-        () async {
+        'restoreBackgroundServiceOnColdStart keeps service stopped but rearms '
+        'watchdog when cold-start restore is off', () async {
       final mock = registerMockPlatform();
       mock.setServiceRunning(false);
       mock.setStartResult(true);
@@ -362,6 +1497,7 @@ void main() {
       // Service was previously enabled...
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('background_service_enabled', true);
+      await prefs.setBool('background_service_watchdog', true);
       // ...but the user disabled cold-start auto-restore.
       await setColdStartRestoreEnabled(false);
 
@@ -370,6 +1506,11 @@ void main() {
         await restoreBackgroundServiceOnColdStart();
         // Service must NOT be started
         expect(mock._isRunning, isFalse);
+        expect(prefs.getBool('background_service_enabled'), isTrue);
+        expect(
+          keepAliveCalls.map((call) => call.method),
+          contains('rearmKeepAlive'),
+        );
       } finally {
         debugDefaultTargetPlatformOverride = null;
       }
@@ -389,6 +1530,64 @@ void main() {
       expect(await isColdStartRestoreEnabled(), isTrue);
       await setColdStartRestoreEnabled(false);
       expect(await isColdStartRestoreEnabled(), isFalse);
+    });
+
+    test('recovery toggle setters report rejected preference writes', () async {
+      final prefs = await SharedPreferences.getInstance();
+      final originalStore = await _failRecoveryPreferenceWrites(
+        prefs,
+        throwOnWrite: false,
+      );
+      addTearDown(() {
+        SharedPreferencesStorePlatform.instance = originalStore;
+      });
+
+      expect(await setWatchdogEnabled(true), isFalse);
+      expect(await setColdStartRestoreEnabled(true), isFalse);
+      expect(prefs.getBool('background_service_watchdog'), isFalse);
+      expect(prefs.getBool('background_service_cold_start_restore'), isFalse);
+    });
+
+    test('recovery toggle setters report preference write errors', () async {
+      final prefs = await SharedPreferences.getInstance();
+      final originalStore = await _failRecoveryPreferenceWrites(
+        prefs,
+        throwOnWrite: true,
+      );
+      addTearDown(() {
+        SharedPreferencesStorePlatform.instance = originalStore;
+      });
+
+      expect(await setWatchdogEnabled(true), isFalse);
+      expect(await setColdStartRestoreEnabled(true), isFalse);
+      expect(prefs.getBool('background_service_watchdog'), isFalse);
+      expect(prefs.getBool('background_service_cold_start_restore'), isFalse);
+    });
+
+    test('a failed watchdog write cannot roll back a later successful write',
+        () async {
+      final prefs = await SharedPreferences.getInstance();
+      final originalStore = SharedPreferencesStorePlatform.instance;
+      final store = _DelayedRejectedWatchdogWriteStore({
+        'flutter.background_service_watchdog': false,
+      });
+      SharedPreferencesStorePlatform.instance = store;
+      await prefs.reload();
+      addTearDown(() {
+        SharedPreferencesStorePlatform.instance = originalStore;
+      });
+
+      final failedWrite = setWatchdogEnabled(true);
+      await store.firstWatchdogWriteStarted.future;
+      final successfulWrite = setWatchdogEnabled(true);
+      await Future<void>.delayed(Duration.zero);
+      final writesBeforeFirstCompletes = store.watchdogEnableWriteCount;
+      store.releaseFirstWatchdogWrite.complete();
+
+      expect(await failedWrite, isFalse);
+      expect(await successfulWrite, isTrue);
+      expect(writesBeforeFirstCompletes, 1);
+      expect(prefs.getBool('background_service_watchdog'), isTrue);
     });
 
     test('battery reminder toggle defaults to enabled and persists', () async {
@@ -527,6 +1726,35 @@ void main() {
       );
     });
 
+    test('persistent start recovers when a redundant enabled write is rejected',
+        () async {
+      final mock = registerMockPlatform()..setServiceRunning(false);
+      final prefs = await SharedPreferences.getInstance();
+      final originalStore = await _rejectEnabledPreferenceWrites(
+        prefs,
+        initiallyEnabled: true,
+      );
+      addTearDown(() {
+        SharedPreferencesStorePlatform.instance = originalStore;
+      });
+      await prefs.reload();
+      expect(prefs.getBool('background_service_enabled'), isTrue);
+
+      await withAndroidPlatform(() async {
+        expect(await startBackgroundService(), isTrue);
+        await prefs.reload();
+      });
+
+      expect(mock._isRunning, isTrue);
+      expect(prefs.getBool('background_service_enabled'), isTrue);
+      expect(
+        keepAliveCalls.map((call) => call.method),
+        contains('startKeepAlive'),
+        reason: 'saved enabled intent must still arm service recovery after a '
+            'redundant preference write is rejected',
+      );
+    });
+
     test(
         'startBackgroundService reports watchdog scheduling failure without disabling the service',
         () async {
@@ -646,16 +1874,61 @@ void main() {
       );
     });
 
-    test('successful temporary start does not arm the watchdog', () async {
+    test('temporary start leaves disabled persistent intent unchanged',
+        () async {
       registerMockPlatform();
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('background_service_enabled', false);
+
+      await withAndroidPlatform(() async {
+        expect(await startBackgroundService(persistEnabled: false), isTrue);
+        await prefs.reload();
+      });
+
+      expect(prefs.getBool('background_service_enabled'), isFalse);
+      expect(keepAliveCalls, isEmpty);
+    });
+
+    test(
+        'temporary start does not assume unreadable persistent intent is enabled',
+        () async {
+      registerMockPlatform();
+      final originalStore = SharedPreferencesStorePlatform.instance;
+      SharedPreferencesStorePlatform.instance = _FailingPreferenceReadStore({
+        'flutter.background_service_enabled': false,
+      });
+      addTearDown(() {
+        SharedPreferencesStorePlatform.instance = originalStore;
+      });
 
       await withAndroidPlatform(() async {
         expect(await startBackgroundService(persistEnabled: false), isTrue);
       });
 
+      expect(keepAliveCalls, isEmpty);
+    });
+
+    test('temporary start rearms watchdog when persistent intent is enabled',
+        () async {
+      final mock = registerMockPlatform();
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('background_service_enabled', true);
+
+      await withAndroidPlatform(() async {
+        expect(await startBackgroundService(persistEnabled: false), isTrue);
+        await prefs.reload();
+      });
+
+      expect(mock._isRunning, isTrue);
+      expect(prefs.getBool('background_service_enabled'), isTrue);
       expect(
-        keepAliveCalls.any((call) => call.method == 'startKeepAlive'),
-        isFalse,
+        keepAliveCalls.map((call) => call.method),
+        contains('rearmKeepAlive'),
+      );
+      expect(
+        keepAliveCalls.map((call) => call.method),
+        isNot(contains('startKeepAlive')),
+        reason: 'a temporary start must preserve watchdog backoff state',
       );
     });
 
@@ -822,6 +2095,73 @@ void main() {
           reason: '冷启动恢复是补武装场景，不得清零失败计数');
     });
 
+    test(
+        'cold-start read failure safely rearms without undoing a persisted stop',
+        () async {
+      final mock = registerMockPlatform()..setServiceRunning(true);
+      final originalStore = SharedPreferencesStorePlatform.instance;
+      final store = _FailingPreferenceReadStore(
+        {'flutter.background_service_enabled': true},
+        failReads: false,
+      );
+      SharedPreferencesStorePlatform.instance = store;
+      addTearDown(() {
+        SharedPreferencesStorePlatform.instance = originalStore;
+        SharedPreferences.resetStatic();
+      });
+
+      final prefs = await SharedPreferences.getInstance();
+      await withAndroidPlatform(() async {
+        expect(await stopBackgroundService(), isTrue);
+      });
+      expect(
+        prefs.getBool('background_service_enabled'),
+        isFalse,
+        reason: 'the explicit stop must persist disabled intent',
+      );
+
+      // A new preferences instance must read the disabled choice from the
+      // backing store before its subsequent read failure is introduced.
+      SharedPreferences.resetStatic();
+      final coldStartPrefs = await SharedPreferences.getInstance();
+      expect(
+        coldStartPrefs.getBool('background_service_enabled'),
+        isFalse,
+        reason: 'the disabled choice must survive a process restart',
+      );
+
+      SharedPreferences.resetStatic();
+      store.failReads = true;
+      resetBackgroundServiceLifecycleStateForTesting();
+      keepAliveCalls.clear();
+
+      await withAndroidPlatform(() async {
+        await restoreBackgroundServiceOnColdStart();
+      });
+
+      expect(
+        mock._isRunning,
+        isFalse,
+        reason: 'a preference read failure must not restart a service the '
+            'user explicitly stopped',
+      );
+      expect(
+        keepAliveCalls.any((call) => call.method == 'rearmKeepAlive'),
+        isTrue,
+        reason: 'unknown intent may re-arm because the native watchdog checks '
+            'the durable enabled state before recovery',
+      );
+
+      store.failReads = false;
+      SharedPreferences.resetStatic();
+      final persistedStopPrefs = await SharedPreferences.getInstance();
+      expect(
+        persistedStopPrefs.getBool('background_service_enabled'),
+        isFalse,
+        reason: 're-arming recovery must not change the durable stop choice',
+      );
+    });
+
     test('cold-start restore re-arms the watchdog when service startup throws',
         () async {
       final mock = registerMockPlatform();
@@ -912,6 +2252,97 @@ void main() {
       // 补武装不得清零失败计数（持久失败环境下看门狗应保持退避）。
       expect(keepAliveCalls.any((c) => c.method == 'startKeepAlive'), isFalse,
           reason: 'resume 是补武装场景，不得使用带计数清零的 startKeepAlive');
+    });
+
+    test('rearmKeepAliveOnResume serializes watchdog rearm with explicit stop',
+        () async {
+      registerMockPlatform();
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('background_service_enabled', true);
+      await prefs.setBool('background_service_watchdog', true);
+
+      final firstRearmStarted = Completer<void>();
+      final releaseFirstRearm = Completer<void>();
+      final resumeRearmStarted = Completer<void>();
+      final releaseResumeRearm = Completer<void>();
+      final stopKeepAliveStarted = Completer<void>();
+      var rearmCount = 0;
+      var watchdogArmed = false;
+
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('com.johntsui.stroom/keepalive'),
+        (MethodCall methodCall) async {
+          keepAliveCalls.add(methodCall);
+          if (methodCall.method == 'rearmKeepAlive') {
+            rearmCount++;
+            if (rearmCount == 1) {
+              firstRearmStarted.complete();
+              await releaseFirstRearm.future;
+            } else if (rearmCount == 2) {
+              resumeRearmStarted.complete();
+              await releaseResumeRearm.future;
+            }
+            watchdogArmed = true;
+          } else if (methodCall.method == 'stopKeepAlive') {
+            stopKeepAliveStarted.complete();
+            watchdogArmed = false;
+          }
+          return true;
+        },
+      );
+
+      await withAndroidPlatform(() async {
+        final recovery = rearmBackgroundServiceWatchdog();
+        await firstRearmStarted.future;
+
+        final resume = rearmKeepAliveOnResume();
+        // Let the unlocked resume path pass its enabled-intent check and pause
+        // at the second rearm while the first operation still holds the lock.
+        await Future<void>.delayed(Duration.zero);
+        final stop = stopBackgroundService();
+        releaseFirstRearm.complete();
+
+        await resumeRearmStarted.future;
+        await Future<void>.delayed(Duration.zero);
+        final stopReachedNativeCancellation = stopKeepAliveStarted.isCompleted;
+        releaseResumeRearm.complete();
+        await Future.wait([recovery, resume, stop]);
+
+        expect(
+          watchdogArmed,
+          isFalse,
+          reason: 'a completed explicit stop must leave no watchdog alarm '
+              'armed',
+        );
+        expect(
+          stopReachedNativeCancellation,
+          isFalse,
+          reason: 'stop must wait until the resume rearm releases the '
+              'lifecycle lock',
+        );
+      });
+    });
+
+    test('rearmKeepAliveOnResume proceeds when enabled preference read fails',
+        () async {
+      registerMockPlatform();
+      final originalStore = SharedPreferencesStorePlatform.instance;
+      SharedPreferencesStorePlatform.instance = _FailingPreferenceReadStore({
+        'flutter.background_service_enabled': true,
+      });
+      addTearDown(() {
+        SharedPreferencesStorePlatform.instance = originalStore;
+      });
+
+      await withAndroidPlatform(() async {
+        await rearmKeepAliveOnResume();
+      });
+
+      expect(
+        keepAliveCalls.map((call) => call.method),
+        contains('rearmKeepAlive'),
+      );
     });
 
     test('rearmKeepAliveOnResume reports watchdog scheduling failure',

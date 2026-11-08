@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -5,6 +6,22 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/providers/ocr_instructions_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
+
+class _DelayedProviderEntriesNotifier extends ProviderEntriesNotifier {
+  final _ready = Completer<void>();
+  final _readyRequested = Completer<void>();
+
+  @override
+  Future<void> get ready {
+    if (!_readyRequested.isCompleted) _readyRequested.complete();
+    return _ready.future;
+  }
+
+  void completeWithEntries(List<ProviderEntry> entries) {
+    state = ProviderEntriesState(entries: entries, isLoaded: true);
+    _ready.complete();
+  }
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -226,6 +243,50 @@ void main() {
       container.dispose();
     });
 
+    test('preserves a user add while the stored list is loading', () async {
+      final stored = OcrInstruction(name: '已保存', content: '旧指令');
+      final added = OcrInstruction(name: '新建', content: '新指令');
+      SharedPreferences.setMockInitialValues({
+        'ocr_instructions': jsonEncode([stored.toMap()]),
+      });
+      await SharedPreferences.getInstance();
+
+      final container = _containerWithEntries([]);
+      addTearDown(container.dispose);
+      final notifier = container.read(ocrInstructionsProvider.notifier);
+      await notifier.add(added.name, added.content);
+      await notifier.load();
+
+      expect(container.read(ocrInstructionsProvider), [stored, added]);
+      final prefs = await SharedPreferences.getInstance();
+      expect(
+        prefs.getString('ocr_instructions'),
+        jsonEncode([stored.toMap(), added.toMap()]),
+      );
+    });
+
+    test('does not duplicate an add already present in the stored list',
+        () async {
+      final added = OcrInstruction(name: '已保存', content: '同一条指令');
+      SharedPreferences.setMockInitialValues({
+        'ocr_instructions': jsonEncode([added.toMap()]),
+      });
+      // Resolve the preferences singleton first. Provider creation starts its
+      // load synchronously; adding immediately then runs before that load's
+      // first await resumes, reproducing the actual startup race.
+      await SharedPreferences.getInstance();
+
+      final container = _containerWithEntries([]);
+      addTearDown(container.dispose);
+      final notifier = container.read(ocrInstructionsProvider.notifier);
+      await notifier.add(added.name, added.content);
+      await notifier.load();
+
+      expect(container.read(ocrInstructionsProvider), [added]);
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('ocr_instructions'), jsonEncode([added.toMap()]));
+    });
+
     test('seeds from legacy per-model instructions when store is empty',
         () async {
       final container = _containerWithEntries([
@@ -238,6 +299,74 @@ void main() {
         OcrInstruction(name: '发票', content: '提取发票号码和金额'),
       ]);
       container.dispose();
+    });
+
+    test('waits for provider entries before migrating legacy instructions',
+        () async {
+      final legacyInstructions = [
+        {'name': '发票', 'content': '提取发票号码和金额'},
+      ];
+      SharedPreferences.setMockInitialValues({
+        'provider_entries': jsonEncode([
+          _ocrEntryWithInstructions(legacyInstructions).toMap(),
+        ]),
+      });
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+
+      final instructionsNotifier =
+          container.read(ocrInstructionsProvider.notifier);
+      final entriesState = container.read(providerEntriesProvider);
+      expect(entriesState.isLoaded, isFalse);
+      expect(entriesState.entries, isEmpty);
+      await instructionsNotifier.load();
+
+      const migrated = [
+        OcrInstruction(name: '发票', content: '提取发票号码和金额'),
+      ];
+      expect(container.read(ocrInstructionsProvider), migrated);
+      expect(container.read(providerEntriesProvider).isLoaded, isTrue);
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(
+        prefs.getString('ocr_instructions'),
+        jsonEncode([
+          {'name': '发票', 'content': '提取发票号码和金额'},
+        ]),
+      );
+    });
+
+    test('preserves a user add while provider entries load for migration',
+        () async {
+      await SharedPreferences.getInstance();
+      final providerEntriesNotifier = _DelayedProviderEntriesNotifier();
+      final container = ProviderContainer(
+        overrides: [
+          providerEntriesProvider.overrideWith((ref) {
+            return providerEntriesNotifier;
+          }),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final notifier = container.read(ocrInstructionsProvider.notifier);
+      await Future<void>.delayed(Duration.zero);
+      final added = OcrInstruction(name: '新建', content: '新指令');
+      await notifier.add(added.name, added.content);
+      providerEntriesNotifier.completeWithEntries([
+        _ocrEntryWithInstructions([
+          {'name': '已迁移', 'content': '旧版指令'},
+        ]),
+      ]);
+      await notifier.load();
+
+      const migrated = OcrInstruction(name: '已迁移', content: '旧版指令');
+      expect(container.read(ocrInstructionsProvider), [migrated, added]);
+      final prefs = await SharedPreferences.getInstance();
+      expect(
+        prefs.getString('ocr_instructions'),
+        jsonEncode([migrated.toMap(), added.toMap()]),
+      );
     });
 
     test('does not re-migrate once the store has been written', () async {

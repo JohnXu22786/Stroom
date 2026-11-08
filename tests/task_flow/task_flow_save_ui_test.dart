@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/task_flow/pages/task_flow_builder_page.dart';
 import 'package:stroom/task_flow/providers/task_flow_provider.dart';
 
@@ -22,6 +23,9 @@ Future<void> _openBuilder(WidgetTester tester, _ControlledNotifier notifier,
   await tester.pumpWidget(ProviderScope(
     overrides: [taskFlowListProvider.overrideWith((ref) => notifier)],
     child: MaterialApp(
+      locale: const Locale('zh', 'CN'),
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
       home: Builder(builder: (context) {
         return Scaffold(
           body: TextButton(
@@ -64,7 +68,7 @@ void main() {
     expect(find.text('保存失败，更改仍保留，请重试'), findsOneWidget);
     expect(find.text('draft name'), findsOneWidget);
     expect(find.text('draft description'), findsOneWidget);
-    await tester.pageBack();
+    await tester.tap(find.byType(BackButton));
     await tester.pumpAndSettle();
     expect(find.text('放弃未保存的更改？'), findsOneWidget);
     await tester.tap(find.text('继续编辑'));
@@ -125,7 +129,7 @@ void main() {
     await tester.pump();
     notifier.writes.single.complete(false);
     await tester.pumpAndSettle();
-    await tester.pageBack();
+    await tester.tap(find.byType(BackButton));
     await tester.pumpAndSettle();
     await tester.tap(find.text('放弃'));
     await tester.pumpAndSettle();
@@ -147,7 +151,7 @@ void main() {
     await tester.pumpAndSettle();
     final retry =
         tester.widget<SnackBarAction>(find.byType(SnackBarAction)).onPressed;
-    await tester.pageBack();
+    await tester.tap(find.byType(BackButton));
     await tester.pumpAndSettle();
     await tester.tap(find.text('放弃'));
     await tester.pumpAndSettle();

@@ -3,10 +3,13 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart' show Locale;
 
+import '../l10n/app_localizations.dart';
 import '../models/ai_stream_event.dart';
 import '../services/sse_client.dart';
 import 'chat_api_shared.dart';
+import 'locale_provider.dart';
 
 part 'anthropic_stream_parser.dart';
 
@@ -33,6 +36,7 @@ class AnthropicChatProvider extends BaseChatProvider {
   final String _baseUrl;
   final String _name;
   final Dio _dio;
+  final Locale? Function()? _localeOverride;
   Map<String, dynamic>? _lastRequestBody;
   Map<String, dynamic>? _lastResponseData;
   Map<String, String>? _lastRequestHeaders;
@@ -45,22 +49,24 @@ class AnthropicChatProvider extends BaseChatProvider {
     required String baseUrl,
     required String apiKey,
     String name = 'Anthropic',
+    Locale? Function()? localeOverride,
+    Dio? dio,
   })  : _baseUrl = baseUrl,
         _apiKey = apiKey,
         _name = name,
-        _dio = Dio(
-          BaseOptions(
-            baseUrl: '',
-            headers: {
-              'Content-Type': 'application/json',
-              'anthropic-version': kAnthropicApiVersion,
-              if (apiKey.isNotEmpty) 'x-api-key': apiKey,
-              ...openRouterAppHeaders,
-            },
-            connectTimeout: const Duration(seconds: 10),
-            receiveTimeout: const Duration(seconds: 60),
-          ),
-        );
+        _localeOverride = localeOverride,
+        _dio = dio ??
+            Dio(BaseOptions(
+              baseUrl: '',
+              headers: {
+                'Content-Type': 'application/json',
+                'anthropic-version': kAnthropicApiVersion,
+                if (apiKey.isNotEmpty) 'x-api-key': apiKey,
+                ...openRouterAppHeaders,
+              },
+              connectTimeout: const Duration(seconds: 10),
+              receiveTimeout: const Duration(seconds: 60),
+            ));
 
   @override
   String get name => _name;
@@ -94,8 +100,9 @@ class AnthropicChatProvider extends BaseChatProvider {
   /// - 输入 = input_tokens + cache_read + cache_creation（缓存 token
   ///   同样占用上下文）；仅当 > 0 时写入（message_delta 无输入字段）。
   /// - 输出 = output_tokens。
-  /// - cost：兼容 num 与数字字符串（部分网关）；两端点重复上报
-  ///   total_cost 时取较大值而非累加，避免双计。
+  /// - cost：兼容 num 与数字字符串（部分网关）；重复上报时以后到的
+  ///   usage 快照为准，绝不把同一请求的多次 total_cost 相加。
+  @visibleForTesting
   static void mergeAnthropicUsage(Map<String, dynamic> localUsage, Map usage) {
     final input = usageNumberToDouble(usage['input_tokens'])?.toInt() ?? 0;
     final cacheRead =
@@ -108,12 +115,7 @@ class AnthropicChatProvider extends BaseChatProvider {
     if (output != null) localUsage['outputTokens'] = output;
     final cost = usageNumberToDouble(usage['total_cost']) ??
         usageNumberToDouble(usage['cost']);
-    if (cost != null) {
-      final existing = (localUsage['cost'] as num?)?.toDouble() ?? 0;
-      if (cost > existing) {
-        localUsage['cost'] = cost;
-      }
-    }
+    if (cost != null) localUsage['cost'] = cost;
   }
 
   // TODO: 可从 CustomParam 中提取模型列表，目前暂无可信数据源，留空。
@@ -215,7 +217,12 @@ class AnthropicChatProvider extends BaseChatProvider {
     Map<String, dynamic>? extraParams,
     String? system,
   }) async {
-    if (_apiKey.isEmpty) throw Exception('API key not configured');
+    if (_apiKey.isEmpty) {
+      throw Exception(
+        appLocalizationsForLocale(_localeOverride?.call())
+            .chatApiKeyNotConfigured,
+      );
+    }
 
     final body = _buildBody(
       messages,
@@ -267,7 +274,10 @@ class AnthropicChatProvider extends BaseChatProvider {
 
       final contentBlocks = response.data['content'] as List?;
       if (contentBlocks == null || contentBlocks.isEmpty) {
-        throw Exception('API 返回了空的 content 列表');
+        throw Exception(
+          appLocalizationsForLocale(_localeOverride?.call())
+              .chatContentBlocksMissing,
+        );
       }
       final parts = <String>[];
       for (final block in contentBlocks) {
@@ -277,7 +287,10 @@ class AnthropicChatProvider extends BaseChatProvider {
         }
       }
       if (parts.isEmpty) {
-        throw Exception('API 返回内容为空');
+        throw Exception(
+          appLocalizationsForLocale(_localeOverride?.call())
+              .chatResponseContentEmpty,
+        );
       }
       return parts.join('');
     } on DioException catch (e) {
@@ -301,9 +314,16 @@ class AnthropicChatProvider extends BaseChatProvider {
       } else {
         detail = '$body';
       }
-      throw Exception('API 请求失败 (HTTP $statusCode): $detail');
+      throw Exception(
+        appLocalizationsForLocale(_localeOverride?.call())
+            .chatHttpRequestFailed(statusCode, detail),
+      );
     } catch (e) {
-      throw Exception('请求失败: $e');
+      throw Exception(
+        appLocalizationsForLocale(_localeOverride?.call()).chatRequestFailed(
+          '$e',
+        ),
+      );
     }
   }
 
@@ -323,7 +343,10 @@ class AnthropicChatProvider extends BaseChatProvider {
     String? system,
   }) async* {
     if (_apiKey.isEmpty) {
-      throw Exception('API key not configured');
+      throw Exception(
+        appLocalizationsForLocale(_localeOverride?.call())
+            .chatApiKeyNotConfigured,
+      );
     }
 
     final body = _buildBody(
@@ -358,6 +381,22 @@ class AnthropicChatProvider extends BaseChatProvider {
     final acc = AnthropicStreamAccumulator();
     // 本次请求的 usage（局部收集，per-request 隔离）
     Map<String, dynamic>? localUsage;
+    var usageEmitted = false;
+    var emittedCost = 0.0;
+
+    AIStreamEvent usageUpdate() {
+      final snapshot = Map<String, dynamic>.from(localUsage!);
+      final totalCost =
+          snapshot['cost'] is num ? (snapshot['cost'] as num).toDouble() : null;
+      final costIncrement = totalCost == null ? null : totalCost - emittedCost;
+      if (totalCost != null) emittedCost = totalCost;
+      usageEmitted = true;
+      return AIStreamEvent(
+        '',
+        usage: snapshot,
+        usageCostIncrement: costIncrement,
+      );
+    }
 
     try {
       _lastResponseStatusCode = 200;
@@ -372,6 +411,7 @@ class AnthropicChatProvider extends BaseChatProvider {
         },
         jsonEncode(body),
         cancelToken: cancelToken,
+        locale: _localeOverride?.call(),
         onResponseHeaders: (headers) {
           _lastResponseHeaders = headers;
         },
@@ -396,16 +436,24 @@ class AnthropicChatProvider extends BaseChatProvider {
             if (usage is Map) {
               localUsage ??= {};
               mergeAnthropicUsage(localUsage, usage);
+              yield usageUpdate();
             }
           } else if (data['type'] == 'message_delta') {
             final usage = data['usage'];
             if (usage is Map) {
               localUsage ??= {};
               mergeAnthropicUsage(localUsage, usage);
+              yield usageUpdate();
             }
           }
 
-          final events = processAnthropicStreamData(data, acc);
+          final events = processAnthropicStreamData(
+            data,
+            acc,
+            localizations: () => appLocalizationsForLocale(
+              _localeOverride?.call(),
+            ),
+          );
           for (final e in events) {
             yield e;
           }
@@ -456,17 +504,25 @@ class AnthropicChatProvider extends BaseChatProvider {
       // 错误轮也可能已产生计费 usage：先产出计量事件再上抛
       if (localUsage != null && localUsage.isNotEmpty) {
         _lastUsage = localUsage;
+      }
+      if (localUsage != null && localUsage.isNotEmpty && !usageEmitted) {
         yield AIStreamEvent('', usage: localUsage);
       }
       rethrow;
+    } finally {
+      // The service keeps its per-conversation copy until the manager
+      // snapshots rawRequest. Do not retain this shared provider copy after
+      // the stream, and do not clear a newer concurrent request's slot.
+      if (identical(_lastRequestBody, body)) _lastRequestBody = null;
     }
 
     // 流结束后：产出 usage 计量（per-request 隔离），
     // 同时填充诊断槽（与 lastResponseData 同语义）
-    if (localUsage != null && localUsage.isNotEmpty) {
+    if (localUsage != null && localUsage.isNotEmpty && !usageEmitted) {
       _lastUsage = localUsage;
       yield AIStreamEvent('', usage: localUsage);
     }
+    if (localUsage != null && localUsage.isNotEmpty) _lastUsage = localUsage;
 
     // 流结束后：产出 thinking 签名（供下一轮链重建续接 extended thinking）
     // 防御规则（避免下一轮 400）：

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/files_page.dart';
 import 'package:stroom/pages/files_page_shared.dart';
 import 'package:stroom/services/manifest_database.dart';
@@ -10,11 +11,10 @@ import 'package:stroom/utils/text_manifest.dart';
 Widget _buildTestApp() {
   return const ProviderScope(
     child: MaterialApp(
+      locale: const Locale('zh', 'CN'),
+      supportedLocales: AppLocalizations.supportedLocales,
       home: FilesPage(),
-      localizationsDelegates: [
-        DefaultMaterialLocalizations.delegate,
-        DefaultWidgetsLocalizations.delegate,
-      ],
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
     ),
   );
 }
@@ -29,8 +29,49 @@ void main() {
   });
 
   group('FilesPage tab navigation - widget tests', () {
-    testWidgets('double-tap on same tab increments reset signal',
-        (tester) async {
+    testWidgets('localizes tab labels and reorder controls in English', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: MaterialApp(
+            locale: Locale('en', 'US'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: FilesPage(),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.widgetWithText(Tab, 'Text'), findsOneWidget);
+      expect(find.widgetWithText(Tab, 'Audio'), findsOneWidget);
+      expect(find.widgetWithText(Tab, 'Images'), findsOneWidget);
+      expect(find.widgetWithText(Tab, 'Videos'), findsOneWidget);
+
+      await tester.longPress(find.byKey(const Key('files_tab_bar_gesture')));
+      await tester.pumpAndSettle();
+      expect(find.text('Reorder Tabs'), findsOneWidget);
+      expect(find.text('Cancel'), findsOneWidget);
+      expect(find.text('Done'), findsOneWidget);
+    });
+
+    testWidgets('localizes reorder controls in Simplified Chinese', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      await tester.longPress(find.byKey(const Key('files_tab_bar_gesture')));
+      await tester.pumpAndSettle();
+      expect(find.text('排序标签'), findsOneWidget);
+      expect(find.text('取消'), findsOneWidget);
+      expect(find.text('确定'), findsOneWidget);
+    });
+
+    testWidgets('double-tap on same tab increments reset signal', (
+      tester,
+    ) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pumpAndSettle();
 
@@ -68,8 +109,9 @@ void main() {
       );
     });
 
-    testWidgets('switching tabs and back does NOT trigger reset signal',
-        (tester) async {
+    testWidgets('switching tabs and back does NOT trigger reset signal', (
+      tester,
+    ) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pumpAndSettle();
 
@@ -83,10 +125,12 @@ void main() {
       );
 
       // Get reset signal values before switching
-      final textResetBefore =
-          container.read(fileTabFolderResetSignalProvider(0));
-      final audioResetBefore =
-          container.read(fileTabFolderResetSignalProvider(1));
+      final textResetBefore = container.read(
+        fileTabFolderResetSignalProvider(0),
+      );
+      final audioResetBefore = container.read(
+        fileTabFolderResetSignalProvider(1),
+      );
 
       // Switch to audio tab
       final audioTab = find.widgetWithText(Tab, '音频');
@@ -114,59 +158,60 @@ void main() {
     });
 
     testWidgets(
-        'reorder keeps the viewed tab and does not spuriously reset on first tap',
-        (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
+      'reorder keeps the viewed tab and does not spuriously reset on first tap',
+      (tester) async {
+        await tester.pumpWidget(_buildTestApp());
+        await tester.pumpAndSettle();
 
-      final container = ProviderScope.containerOf(
-        tester.element(find.byType(TabBar)),
-      );
+        final container = ProviderScope.containerOf(
+          tester.element(find.byType(TabBar)),
+        );
 
-      // 先切到音频标签（逻辑标签 1）
-      await tester.tap(find.widgetWithText(Tab, '音频'));
-      await tester.pumpAndSettle();
+        // 先切到音频标签（逻辑标签 1）
+        await tester.tap(find.widgetWithText(Tab, '音频'));
+        await tester.pumpAndSettle();
 
-      // 长按标签栏打开排序对话框
-      // （该对话框此前会因 ReorderableListView 的 shrinkWrap 视口
-      // 在 AlertDialog intrinsic 测量下崩溃 —— 必须能正常渲染）
-      await tester.longPress(find.byKey(const Key('files_tab_bar_gesture')));
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('files_reorder_dialog')), findsOneWidget);
-      expect(tester.takeException(), isNull, reason: '排序对话框必须能正常渲染');
+        // 长按标签栏打开排序对话框
+        // （该对话框此前会因 ReorderableListView 的 shrinkWrap 视口
+        // 在 AlertDialog intrinsic 测量下崩溃 —— 必须能正常渲染）
+        await tester.longPress(find.byKey(const Key('files_tab_bar_gesture')));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('files_reorder_dialog')), findsOneWidget);
+        expect(tester.takeException(), isNull, reason: '排序对话框必须能正常渲染');
 
-      // 通过排序回调模拟把「文本」拖到「音频」之后。
-      // onReorderItem 的 newIndex 已是移除后的索引：
-      // 真实拖拽中框架会传 (0, 1)。
-      final listView = tester.widget<ReorderableListView>(
-        find.byType(ReorderableListView),
-      );
-      listView.onReorderItem?.call(0, 1);
-      await tester.pumpAndSettle();
+        // 通过排序回调模拟把「文本」拖到「音频」之后。
+        // onReorderItem 的 newIndex 已是移除后的索引：
+        // 真实拖拽中框架会传 (0, 1)。
+        final listView = tester.widget<ReorderableListView>(
+          find.byType(ReorderableListView),
+        );
+        listView.onReorderItem?.call(0, 1);
+        await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(const Key('files_reorder_confirm_btn')));
-      await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('files_reorder_confirm_btn')));
+        await tester.pumpAndSettle();
 
-      // 顺序变为 音频/文本/图片/视频，且当前查看的标签（音频）保持不变
-      expect(container.read(fileTabOrderProvider), [1, 0, 2, 3]);
+        // 顺序变为 音频/文本/图片/视频，且当前查看的标签（音频）保持不变
+        expect(container.read(fileTabOrderProvider), [1, 0, 2, 3]);
 
-      // 排序后第一次点按当前标签不得触发「双击重置」误判
-      final resetBefore = container.read(fileTabFolderResetSignalProvider(1));
-      await tester.tap(find.widgetWithText(Tab, '音频'));
-      await tester.pumpAndSettle();
-      expect(
-        container.read(fileTabFolderResetSignalProvider(1)),
-        resetBefore,
-        reason: '排序后的第一次点按不应触发重置信号',
-      );
+        // 排序后第一次点按当前标签不得触发「双击重置」误判
+        final resetBefore = container.read(fileTabFolderResetSignalProvider(1));
+        await tester.tap(find.widgetWithText(Tab, '音频'));
+        await tester.pumpAndSettle();
+        expect(
+          container.read(fileTabFolderResetSignalProvider(1)),
+          resetBefore,
+          reason: '排序后的第一次点按不应触发重置信号',
+        );
 
-      // 连续第二次点按才触发重置
-      await tester.tap(find.widgetWithText(Tab, '音频'));
-      await tester.pumpAndSettle();
-      expect(
-        container.read(fileTabFolderResetSignalProvider(1)),
-        resetBefore + 1,
-      );
-    });
+        // 连续第二次点按才触发重置
+        await tester.tap(find.widgetWithText(Tab, '音频'));
+        await tester.pumpAndSettle();
+        expect(
+          container.read(fileTabFolderResetSignalProvider(1)),
+          resetBefore + 1,
+        );
+      },
+    );
   });
 }

@@ -17,6 +17,7 @@ typedef OcrTextWriter = Future<String> Function(
 typedef OcrTextRecordWriter = Future<void> Function(TextRecord record,
     {void Function()? beforeCommit});
 typedef OcrTextRecordsLoader = Future<List<TextRecord>> Function();
+typedef OcrTextFileDeleter = Future<bool> Function(String fileName);
 
 /// Publishes an OCR result and its manifest record as one cancellable save.
 /// The OCR runner and the task-list save-only retry share this implementation.
@@ -30,6 +31,8 @@ class OcrResultSaver {
   final OcrTextWriter _writeText;
   final OcrTextRecordWriter _addRecord;
   final OcrTextRecordsLoader _loadRecordsUncached;
+  final OcrTextFileDeleter _deleteTextFile;
+  final BackgroundTask? _taskGeneration;
 
   OcrResultSaver({
     required this.taskId,
@@ -41,16 +44,25 @@ class OcrResultSaver {
     OcrTextWriter? writeText,
     OcrTextRecordWriter? addRecord,
     OcrTextRecordsLoader? loadRecordsUncached,
-  })  : _cancelToken = cancelToken ?? CancelToken(),
+    OcrTextFileDeleter? deleteTextFile,
+  })  : _taskGeneration = notifier.taskById(taskId),
+        _cancelToken = cancelToken ?? CancelToken(),
         _writeText = writeText ?? TextManifest.writeText,
         _addRecord = addRecord ?? TextManifest.addRecord,
         _loadRecordsUncached =
-            loadRecordsUncached ?? TextManifest.loadRecordsUncached;
+            loadRecordsUncached ?? TextManifest.loadRecordsUncached,
+        _deleteTextFile = deleteTextFile ?? TextManifest.deleteFile;
 
   void cancel() => _cancelToken.cancel('已取消');
 
+  bool get _ownsTaskGeneration {
+    final taskGeneration = _taskGeneration;
+    return taskGeneration != null &&
+        notifier.taskById(taskId)?.hasSameGenerationAs(taskGeneration) == true;
+  }
+
   void _checkActive() {
-    if (!notifier.mounted || !notifier.state.any((task) => task.id == taskId)) {
+    if (!notifier.mounted || !_ownsTaskGeneration) {
       cancel();
     }
     if (_cancelToken.isCancelled) throw _cancelToken.cancelError!;
@@ -71,35 +83,57 @@ class OcrResultSaver {
       throw StateError('不完整的 OCR 结果需要明确选择保存为部分结果');
     }
 
+    _checkActive();
+    final taskGeneration = _taskGeneration!;
     if (!task.resultIsComplete && allowPartial) {
-      notifier.markPartialResultSaveRequested(taskId);
+      if (!await notifier.markPartialResultSaveRequested(taskId)) {
+        throw StateError('不完整的 OCR 结果保存选择未能持久化');
+      }
+      _checkActive();
     }
-    notifier.registerCancellation(taskId, cancel);
-    notifier.startSaveRetry(taskId);
+    _checkActive();
+    if (!notifier.startSaveRetry(taskId)) {
+      throw StateError('OCR结果保存重试已开始');
+    }
+    final cancellationOwner = notifier.registerCancellationForGeneration(
+      taskId,
+      taskGeneration,
+      cancel,
+    );
     try {
+      _checkActive();
       return await saveResult(
         task.result!,
         isComplete: task.resultIsComplete,
         allowPartial: allowPartial || task.partialSaveRequested,
       );
     } catch (error) {
-      if (!_cancelToken.isCancelled && notifier.mounted) {
-        final current =
-            notifier.state.where((task) => task.id == taskId).firstOrNull;
-        if (current != null) {
+      if (!_cancelToken.isCancelled &&
+          notifier.mounted &&
+          _ownsTaskGeneration) {
+        final current = notifier.taskById(taskId);
+        if (current != null && current.hasSameGenerationAs(taskGeneration)) {
           for (var i = 0; i < current.steps.length; i++) {
+            if (_cancelToken.isCancelled || !_ownsTaskGeneration) break;
             if (current.steps[i].running) {
               notifier.updateStep(taskId, i, failed: true, error: '$error');
             } else if (current.steps[i].status == BgStepStatus.pending) {
               notifier.updateStep(taskId, i, skipped: true);
             }
           }
-          notifier.failTask(taskId, error: 'OCR结果保存失败: $error');
+          if (!_cancelToken.isCancelled && _ownsTaskGeneration) {
+            notifier.failTask(taskId, error: 'OCR结果保存失败: $error');
+          }
         }
       }
       rethrow;
     } finally {
-      notifier.unregisterCancellation(taskId);
+      if (cancellationOwner != null) {
+        notifier.unregisterCancellationForGeneration(
+          taskId,
+          cancellationOwner,
+        );
+      }
     }
   }
 
@@ -109,6 +143,9 @@ class OcrResultSaver {
     required bool isComplete,
     bool allowPartial = false,
   }) async {
+    if (!isComplete && text.isEmpty) {
+      throw StateError('空的 OCR 部分结果不能保存');
+    }
     if (!isComplete && !allowPartial) {
       throw StateError('不完整的 OCR 结果不能自动保存');
     }
@@ -117,8 +154,12 @@ class OcrResultSaver {
     return TextManifest.withSaveLock(hash, () async {
       _checkActive();
       final fileName = '$hash.txt';
+      var recordName = title;
+      if (!isComplete) {
+        recordName += notifier.localizations.ocrPartialResultSuffix;
+      }
       final record = TextRecord(
-        name: isComplete ? title : '$title（部分结果）',
+        name: recordName,
         hash: hash,
         createdAt: DateTime.now(),
         size: bytes.length,
@@ -149,6 +190,7 @@ class OcrResultSaver {
         _checkActive();
 
         notifier.updateStep(taskId, 4, completed: true);
+        _checkActive();
         notifier.completeTask(
           taskId,
           downloadedFilePath: publishedPath,
@@ -181,7 +223,7 @@ class OcrResultSaver {
         if (records.any((item) => item.id == record.id)) return;
       }
       if (!existed && !records.any((item) => item.hash == hash)) {
-        await TextManifest.deleteFile(fileName);
+        await _deleteUnreferencedTextFile(fileName);
       }
     } catch (error) {
       debugPrint('[OcrResultSaver] Rollback lookup failed: $error');
@@ -194,13 +236,22 @@ class OcrResultSaver {
         final records = await _loadRecordsUncached();
         if (records.any((item) => item.id == record.id)) return;
         if (!existed && !records.any((item) => item.hash == hash)) {
-          await TextManifest.deleteFile(fileName);
+          await _deleteUnreferencedTextFile(fileName);
         }
       } catch (cleanupError) {
         // Without a confirmed reference list, preserve the content-addressed file.
         debugPrint(
             '[OcrResultSaver] Rollback cleanup could not be confirmed: $cleanupError');
       }
+    }
+  }
+
+  Future<void> _deleteUnreferencedTextFile(String fileName) async {
+    if (!await _deleteTextFile(fileName)) {
+      debugPrint(
+        '[OcrResultSaver] Rollback cleanup could not be confirmed: '
+        'deleteFile returned false for $fileName',
+      );
     }
   }
 }

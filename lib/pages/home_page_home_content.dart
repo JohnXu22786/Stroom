@@ -89,7 +89,7 @@ extension _HomePageHomeContentExt on _HomePageState {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        '欢迎使用 Stroom',
+                        AppLocalizations.of(context)!.homeWelcome,
                         style: TextStyle(
                           fontSize: 22,
                           fontWeight: FontWeight.bold,
@@ -103,13 +103,17 @@ extension _HomePageHomeContentExt on _HomePageState {
               ),
               const SizedBox(height: 4),
               Text(
-                '选择一个功能模块开始使用',
+                AppLocalizations.of(context)!.homeChooseModule,
                 style: TextStyle(fontSize: 14, color: cs.onSurfaceVariant),
               ),
               const SizedBox(height: 16),
               // Status card — shows task counts by status
               _buildStatusCard(
-                  context, inProgressCount, completedCount, failedCount),
+                context,
+                inProgressCount,
+                completedCount,
+                failedCount,
+              ),
               const SizedBox(height: 16),
               // Full-width task flow entry below recent tasks
               _buildTaskFlowCard(context),
@@ -154,7 +158,7 @@ extension _HomePageHomeContentExt on _HomePageState {
       _buildModuleCard(
         icon: Icons.text_snippet,
         label: 'OCR',
-        subtitle: '文字识别',
+        subtitle: AppLocalizations.of(context)!.homeOcrSubtitle,
         color: Colors.teal,
         onTap: () {
           Navigator.push(
@@ -165,8 +169,8 @@ extension _HomePageHomeContentExt on _HomePageState {
       ),
       _buildModuleCard(
         icon: Icons.multitrack_audio,
-        label: '语音识别',
-        subtitle: '语音转文字',
+        label: AppLocalizations.of(context)!.homeAsrTitle,
+        subtitle: AppLocalizations.of(context)!.homeAsrSubtitle,
         color: Colors.deepPurple,
         onTap: () {
           Navigator.push(
@@ -177,8 +181,8 @@ extension _HomePageHomeContentExt on _HomePageState {
       ),
       _buildModuleCard(
         icon: Icons.language,
-        label: '下载网页资源',
-        subtitle: '下载网页中的音视频',
+        label: AppLocalizations.of(context)!.homeWebDownloadTitle,
+        subtitle: AppLocalizations.of(context)!.homeWebDownloadSubtitle,
         color: Colors.purple,
         onTap: () {
           Navigator.push(
@@ -189,72 +193,62 @@ extension _HomePageHomeContentExt on _HomePageState {
       ),
       _buildModuleCard(
         icon: Icons.music_note,
-        label: '音频分离',
-        subtitle: '从视频中提取音频',
+        label: AppLocalizations.of(context)!.homeAudioSeparationTitle,
+        subtitle: AppLocalizations.of(context)!.homeAudioSeparationSubtitle,
         color: Colors.indigo,
         onTap: () {
           Navigator.push(
             context,
-            MaterialPageRoute(
-              builder: (_) => const AudioSeparationPage(),
-            ),
+            MaterialPageRoute(builder: (_) => const AudioSeparationPage()),
           );
         },
       ),
       _buildModuleCard(
         icon: Icons.record_voice_over,
-        label: '语音合成',
-        subtitle: '文字转语音',
+        label: AppLocalizations.of(context)!.homeTtsTitle,
+        subtitle: AppLocalizations.of(context)!.homeTtsSubtitle,
         color: Colors.cyan,
         onTap: () {
           Navigator.push(
             context,
-            MaterialPageRoute(
-              builder: (_) => const TTSCreatePage(),
-            ),
+            MaterialPageRoute(builder: (_) => const TTSCreatePage()),
           );
         },
       ),
       _buildModuleCard(
         icon: Icons.account_tree,
-        label: '图表制作',
-        subtitle: 'Mermaid图表编辑',
+        label: AppLocalizations.of(context)!.homeChartsTitle,
+        subtitle: AppLocalizations.of(context)!.homeChartsSubtitle,
         color: Colors.orange,
         onTap: () {
           Navigator.push(
             context,
-            MaterialPageRoute(
-              builder: (_) => const MermaidChartPage(),
-            ),
+            MaterialPageRoute(builder: (_) => const MermaidChartPage()),
           );
         },
       ),
       _buildModuleCard(
         icon: Icons.functions,
-        label: '数学绘图',
-        subtitle: '函数绘图',
+        label: AppLocalizations.of(context)!.homeMathTitle,
+        subtitle: AppLocalizations.of(context)!.homeMathSubtitle,
         color: Colors.blue,
         onTap: () {
           Navigator.push(
             context,
-            MaterialPageRoute(
-              builder: (_) => const MathDrawingPage(),
-            ),
+            MaterialPageRoute(builder: (_) => const MathDrawingPage()),
           );
         },
       ),
       _buildModuleCard(
         icon: Icons.auto_stories,
-        label: 'Anki闪卡',
-        subtitle: '记忆辅助系统',
+        label: AppLocalizations.of(context)!.homeAnkiTitle,
+        subtitle: AppLocalizations.of(context)!.homeAnkiSubtitle,
         // blueGrey: 与 OCR 的 teal 区分，同时贴近 Anki 品牌蓝
         color: Colors.blueGrey,
         onTap: () {
           Navigator.push(
             context,
-            MaterialPageRoute(
-              builder: (_) => const AnkiDroidPage(),
-            ),
+            MaterialPageRoute(builder: (_) => const AnkiDroidPage()),
           );
         },
       ),
@@ -336,9 +330,7 @@ extension _HomePageHomeContentExt on _HomePageState {
         onTap: () {
           Navigator.push(
             context,
-            MaterialPageRoute(
-              builder: (_) => const TaskFlowListPage(),
-            ),
+            MaterialPageRoute(builder: (_) => const TaskFlowListPage()),
           );
         },
         child: Padding(
@@ -353,11 +345,7 @@ extension _HomePageHomeContentExt on _HomePageState {
                   color: cs.tertiary.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(
-                  Icons.account_tree,
-                  size: 22,
-                  color: cs.tertiary,
-                ),
+                child: Icon(Icons.account_tree, size: 22, color: cs.tertiary),
               ),
               const SizedBox(width: 12),
               // Text content
@@ -366,7 +354,7 @@ extension _HomePageHomeContentExt on _HomePageState {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '任务流',
+                      AppLocalizations.of(context)!.homeTaskFlowTitle,
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
@@ -376,8 +364,9 @@ extension _HomePageHomeContentExt on _HomePageState {
                     const SizedBox(height: 2),
                     Text(
                       taskFlows.isEmpty
-                          ? '创建一个自动化任务流，依次执行多个功能'
-                          : '${taskFlows.length} 个任务流 · 点击管理',
+                          ? AppLocalizations.of(context)!.homeTaskFlowEmpty
+                          : AppLocalizations.of(context)!
+                              .homeTaskFlowManage(taskFlows.length),
                       style: TextStyle(
                         fontSize: 12,
                         color: cs.onSurfaceVariant,
@@ -395,11 +384,7 @@ extension _HomePageHomeContentExt on _HomePageState {
                   color: cs.tertiary.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Icon(
-                  Icons.chevron_right,
-                  size: 18,
-                  color: cs.tertiary,
-                ),
+                child: Icon(Icons.chevron_right, size: 18, color: cs.tertiary),
               ),
             ],
           ),
@@ -450,7 +435,6 @@ extension _HomePageHomeContentExt on _HomePageState {
                 ),
                 const SizedBox(height: 6),
                 Row(
-                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Container(
                       width: 8,
@@ -461,11 +445,17 @@ extension _HomePageHomeContentExt on _HomePageState {
                       ),
                     ),
                     const SizedBox(width: 5),
-                    Text(
-                      label,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: cs.onSurfaceVariant,
+                    Expanded(
+                      child: Text(
+                        label,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        softWrap: true,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: cs.onSurfaceVariant,
+                        ),
                       ),
                     ),
                   ],
@@ -492,7 +482,7 @@ extension _HomePageHomeContentExt on _HomePageState {
               child: Row(
                 children: [
                   Text(
-                    '最近任务',
+                    AppLocalizations.of(context)!.homeRecentTasks,
                     style: TextStyle(
                       fontSize: 12,
                       color: cs.onSurfaceVariant,
@@ -520,7 +510,7 @@ extension _HomePageHomeContentExt on _HomePageState {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            '查看全部',
+                            AppLocalizations.of(context)!.homeViewAll,
                             style: TextStyle(
                               fontSize: 12,
                               color: cs.primary,
@@ -550,19 +540,19 @@ extension _HomePageHomeContentExt on _HomePageState {
               children: [
                 _statusItem(
                   count: inProgressCount,
-                  label: '进行中',
+                  label: AppLocalizations.of(context)!.statusInProgress,
                   dotColor: const Color(0xFFFF9800), // orange
                   tabIndex: 1,
                 ),
                 _statusItem(
                   count: completedCount,
-                  label: '已完成',
+                  label: AppLocalizations.of(context)!.statusCompleted,
                   dotColor: const Color(0xFF4CAF50), // green
                   tabIndex: 2,
                 ),
                 _statusItem(
                   count: failedCount,
-                  label: '失败',
+                  label: AppLocalizations.of(context)!.statusFailed,
                   dotColor: const Color(0xFFF44336), // red
                   tabIndex: 3,
                 ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/widgets/mermaid_render_widget.dart';
 
 void main() {
@@ -62,16 +63,21 @@ void main() {
       final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
       expect(html, contains('window.setZoom'));
       expect(html, contains('window.setPanZoom'));
-      // Should clamp zoom between 0.1 and 10
-      expect(html, contains('Math.max(0.1, Math.min(10, level))'));
+      // Preserve the auto-fit scale below the manual zoom floor.
+      expect(
+        html,
+        contains(
+            'var minZoom = oldZoom < 0.1 && level <= oldZoom ? oldZoom : 0.1;'),
+      );
+      expect(html, contains('Math.max(minZoom, Math.min(10, level))'));
     });
 
     testWidgets('HTML contains mermaid initialization code', (tester) async {
       final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
       expect(html, contains('mermaid.initialize'));
       expect(html, contains('mermaid.run'));
-      expect(html, contains('securityLevel'));
-      expect(html, contains("'loose'"));
+      expect(html, contains("securityLevel: 'antiscript'"));
+      expect(html, isNot(contains("securityLevel: 'loose'")));
     });
 
     testWidgets('HTML contains viewport meta tag for mobile', (tester) async {
@@ -94,9 +100,15 @@ void main() {
       expect(html, contains('onTransformChanged'));
     });
 
-    testWidgets('zoom is clamped between 0.1 and 10', (tester) async {
+    testWidgets('zoom preserves a sub-floor fit and retains the manual floor',
+        (tester) async {
       final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
-      expect(html, contains('Math.max(0.1, Math.min(10, level))'));
+      expect(
+        html,
+        contains(
+            'var minZoom = oldZoom < 0.1 && level <= oldZoom ? oldZoom : 0.1;'),
+      );
+      expect(html, contains('Math.max(minZoom, Math.min(10, level))'));
     });
 
     testWidgets('full gesture JS handles pinch-to-zoom and pan',
@@ -147,6 +159,9 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: widget,
           ),

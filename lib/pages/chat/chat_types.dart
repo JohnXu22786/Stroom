@@ -9,7 +9,36 @@ sealed class MessageSegment {}
 
 class TextSegment extends MessageSegment {
   final String text;
-  TextSegment(this.text);
+
+  /// Index of this text section in the live stream, when available.
+  /// Completed sections keep this identity across live segment rebuilds.
+  final int? chunkIndex;
+
+  /// Immutable deltas used for live plain-text rendering. Keeping the pieces
+  /// separate avoids joining and reparsing the entire growing section.
+  final List<String>? liveTextFragments;
+
+  /// Latest Markdown append for the active renderer session. The session
+  /// retains only its active block and sealed widgets, not an accumulated
+  /// copy of the full section.
+  final String? liveMarkdownAppend;
+  final int? liveMarkdownSequence;
+
+  /// Existing full text supplied once when a stream switches from a snapshot
+  /// or plain-text view into incremental Markdown rendering.
+  final String? liveMarkdownSeed;
+
+  TextSegment(this.text,
+      {this.chunkIndex,
+      this.liveTextFragments,
+      this.liveMarkdownAppend,
+      this.liveMarkdownSequence,
+      this.liveMarkdownSeed});
+}
+
+class ErrorSegment extends MessageSegment {
+  final String message;
+  ErrorSegment(this.message);
 }
 
 class ToolCallSegment extends MessageSegment {
@@ -67,9 +96,18 @@ List<MessageSegment> mergeConsecutiveTextSegments(
   if (segments.isEmpty) return [];
   final merged = <MessageSegment>[];
   for (final seg in segments) {
-    if (seg is TextSegment && merged.isNotEmpty && merged.last is TextSegment) {
+    if (seg is TextSegment &&
+        seg.liveMarkdownAppend == null &&
+        seg.liveTextFragments == null &&
+        merged.isNotEmpty &&
+        merged.last is TextSegment &&
+        (merged.last as TextSegment).liveMarkdownAppend == null &&
+        (merged.last as TextSegment).liveTextFragments == null) {
       final last = merged.last as TextSegment;
-      merged[merged.length - 1] = TextSegment(last.text + seg.text);
+      merged[merged.length - 1] = TextSegment(
+        last.text + seg.text,
+        chunkIndex: last.chunkIndex,
+      );
     } else {
       merged.add(seg);
     }
@@ -154,7 +192,7 @@ List<MessageSegment> _buildWithRounds(
 
     // Text before this round's tool calls
     if (i < textChunks.length && textChunks[i].isNotEmpty) {
-      segments.add(TextSegment(textChunks[i]));
+      segments.add(TextSegment(textChunks[i], chunkIndex: i));
     }
 
     // All tool calls in this round (grouped together)
@@ -179,7 +217,7 @@ List<MessageSegment> _buildWithRounds(
       );
     }
     if (i < textChunks.length && textChunks[i].isNotEmpty) {
-      segments.add(TextSegment(textChunks[i]));
+      segments.add(TextSegment(textChunks[i], chunkIndex: i));
     }
   }
 
@@ -217,7 +255,7 @@ List<MessageSegment> _buildLegacy(
     }
 
     if (i < textChunks.length && textChunks[i].isNotEmpty) {
-      segments.add(TextSegment(textChunks[i]));
+      segments.add(TextSegment(textChunks[i], chunkIndex: i));
     }
 
     if (i < toolCalls.length) {
@@ -249,6 +287,12 @@ final reasoningEffortProvider = StateProvider<String>((ref) => 'medium');
 final reasoningParamValuesProvider = StateProvider<Map<String, String>>(
   (ref) => {},
 );
+
+/// Runtime selections for configured provider/model custom parameters. `null`
+/// means the composer has not customized them yet, preserving configured
+/// defaults; a map is the complete enabled/value set after first interaction.
+final customParamValuesProvider =
+    StateProvider<Map<String, String>?>((ref) => null);
 
 // ── Block converters ─────────────────────────────────────────────────
 
@@ -286,7 +330,7 @@ List<MessageSegment> blocksToSegments(List<MessageBlock> blocks) {
           ),
         );
       case ErrorBlock(:final message):
-        segs.add(TextSegment('[Error: $message]'));
+        segs.add(ErrorSegment(message));
       case UnknownMessageBlock():
         // Keep unknown protocol content in persistence; do not mislabel it as
         // an error or render fabricated text in the chat transcript.

@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'dart:io' show Platform;
 
-import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
+import 'package:flutter/foundation.dart'
+    show debugPrint, kIsWeb, visibleForTesting;
 import 'package:flutter/services.dart';
 
 /// iOS 26+ 常驻后台任务桥接（BGContinuedProcessingTask）。
@@ -31,7 +32,7 @@ class IosContinuedTaskService {
   /// 当前平台是否支持常驻后台任务（iOS 26+）。
   bool get isSupported {
     if (debugForceSupported) return true;
-    if (!Platform.isIOS) return false;
+    if (kIsWeb || !Platform.isIOS) return false;
     try {
       final parts = Platform.operatingSystemVersion.split('.');
       final major = parts.isEmpty ? 0 : int.tryParse(parts.first) ?? 0;
@@ -45,11 +46,11 @@ class IosContinuedTaskService {
   ///
   /// 幂等：原生侧在已有激活任务时跳过提交；任务被系统终止后
   /// 下一次同步会自动重新建立保护（App 回到前台时）。
-  Future<void> submit({String? title}) async {
+  Future<void> submit({required String title}) async {
     if (!isSupported) return;
     try {
       await _channel.invokeMethod('submit', {
-        'title': title ?? 'Stroom 后台任务',
+        'title': title,
       });
     } catch (e) {
       debugPrint('[IosContinuedTask] submit failed: $e');

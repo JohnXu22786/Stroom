@@ -1,8 +1,14 @@
 import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:stroom/l10n/app_localizations.dart';
+import 'package:stroom/widgets/stroom_menu_style.dart';
+
+import '../models/ocr_batch_execution.dart';
 import '../providers/provider_config.dart';
 import '../widgets/code_editor_field.dart';
 import 'llm_model_config_shared.dart';
+import 'model_config_shared.dart';
 
 /// OCR 模型配置编辑页面
 /// 包含基本设置、OCR 参数（temperature/topP/maxTokens）
@@ -12,8 +18,13 @@ import 'llm_model_config_shared.dart';
 /// 不再按模型设置。
 class OcrModelConfigPage extends StatefulWidget {
   final ModelConfig? model; // null = 新建, non-null = 编辑
+  final int? providerRequestSizeBudgetBytes;
 
-  const OcrModelConfigPage({super.key, this.model});
+  const OcrModelConfigPage({
+    super.key,
+    this.model,
+    this.providerRequestSizeBudgetBytes,
+  });
 
   @override
   State<OcrModelConfigPage> createState() => _OcrModelConfigPageState();
@@ -23,8 +34,10 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
   late final TextEditingController _nameController;
   late final TextEditingController _modelIdController;
   late final TextEditingController _maxTokensController;
+  late final TextEditingController _requestSizeBudgetController;
   late List<CustomParam> _customParams;
   final Map<int, String?> _jsonErrors = {};
+  final Map<int, int> _customParamValueFieldRevisions = {};
 
   // Slider values
   double _temperature = 0.0;
@@ -46,11 +59,16 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
       // New model: check if any field is non-empty or any param changed
       if (_nameController.text.isNotEmpty) return true;
       if (_modelIdController.text.isNotEmpty) return true;
-      if (_customParams.any((p) => p.paramName.isNotEmpty)) return true;
+      if (_customParams.any(
+        (p) => p.paramName.isNotEmpty || p.defaultValue.isNotEmpty,
+      )) {
+        return true;
+      }
       if (_enableTemperature || _enableTopP || _enableMaxTokens) {
         return true;
       }
       if (_maxTokensController.text.isNotEmpty) return true;
+      if (_requestSizeBudgetController.text.isNotEmpty) return true;
       if (_temperature != 0.0) return true;
       if (_topP != 1.0) return true;
       return false;
@@ -82,6 +100,16 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
         _maxTokensController.text) {
       return true;
     }
+    final originalRequestBudget = m.typeConfig['requestSizeBudgetBytes'];
+    final originalRequestBudgetText = originalRequestBudget is num
+        ? (originalRequestBudget / (1024 * 1024)).toString().replaceFirst(
+              RegExp(r'\.0$'),
+              '',
+            )
+        : '';
+    if (originalRequestBudgetText != _requestSizeBudgetController.text) {
+      return true;
+    }
     // Custom params (simple check via serialization)
     final originalCustom = m.customParams.map((p) => p.toMap()).toList();
     final currentCustom = _customParams.map((p) => p.toMap()).toList();
@@ -95,6 +123,8 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
     final m = widget.model;
     _nameController = TextEditingController(text: m?.name ?? '');
     _modelIdController = TextEditingController(text: m?.modelId ?? '');
+    _nameController.addListener(_handleControllerChanged);
+    _modelIdController.addListener(_handleControllerChanged);
 
     // Initialize OCR-specific params from typeConfig
     _temperature = (m?.typeConfig['temperature'] as num?)?.toDouble() ?? 0.0;
@@ -109,6 +139,16 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
     _maxTokensController = TextEditingController(
       text: maxTokens != null ? maxTokens.toString() : '',
     );
+    _maxTokensController.addListener(_handleControllerChanged);
+    final requestSizeBudgetBytes = m?.typeConfig['requestSizeBudgetBytes'];
+    _requestSizeBudgetController = TextEditingController(
+      text: requestSizeBudgetBytes is num
+          ? (requestSizeBudgetBytes / (1024 * 1024)).toString().replaceFirst(
+                RegExp(r'\.0$'),
+                '',
+              )
+          : '',
+    )..addListener(_handleControllerChanged);
 
     _customParams = (m?.customParams ?? []).map((p) => p.copy()).toList();
     // Initialize JSON validation for existing params
@@ -117,11 +157,20 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
     }
   }
 
+  void _handleControllerChanged() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void dispose() {
+    _nameController.removeListener(_handleControllerChanged);
+    _modelIdController.removeListener(_handleControllerChanged);
+    _maxTokensController.removeListener(_handleControllerChanged);
+    _requestSizeBudgetController.removeListener(_handleControllerChanged);
     _nameController.dispose();
     _modelIdController.dispose();
     _maxTokensController.dispose();
+    _requestSizeBudgetController.dispose();
     super.dispose();
   }
 
@@ -140,6 +189,7 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
       _jsonErrors
         ..clear()
         ..addAll(newErrors);
+      _customParamValueFieldRevisions.clear();
     });
   }
 
@@ -156,6 +206,7 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
       _jsonErrors
         ..clear()
         ..addAll(newErrors);
+      _customParamValueFieldRevisions.clear();
     });
   }
 
@@ -174,6 +225,23 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
 
   bool _jsonParamHasError(int index) => _jsonErrors.containsKey(index);
 
+  String _effectiveCustomParamValue(CustomParam param) {
+    if (param.type == 'json' || param.options.isEmpty) {
+      return param.defaultValue;
+    }
+    return param.options.first;
+  }
+
+  void _setEffectiveCustomParamValue(CustomParam param, String value) {
+    if (param.type != 'json' && param.options.isNotEmpty) {
+      // Keep the default fallback and any inherited alternate options intact;
+      // OCR sends the first option for non-JSON custom parameters.
+      param.options[0] = value;
+    } else {
+      param.defaultValue = value;
+    }
+  }
+
   // ===================================================================
   // 保存
   // ===================================================================
@@ -182,24 +250,75 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
     final modelId = _modelIdController.text.trim();
     if (modelId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('请输入模型 ID'),
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.modelIdRequired),
           behavior: SnackBarBehavior.floating,
         ),
       );
       return;
     }
 
-    // 验证自定义参数：参数名和默认值不能为空，参数名不能重复，
-    // 且 JSON 类型的默认值必须是合法 JSON
+    // 验证参数名唯一且非空；缺少默认值时需有非空的有效选项，
+    // 并校验请求实际使用的参数值。
     final seenNames = <String>{};
     for (int i = 0; i < _customParams.length; i++) {
       final param = _customParams[i];
       final name = param.paramName.trim();
-      if (name.isEmpty || param.defaultValue.trim().isEmpty) {
+      // OCR requests use the first option for non-JSON parameters.
+      final value = param.type != 'json' && param.options.isNotEmpty
+          ? param.options.first.trim()
+          : param.defaultValue.trim();
+      final hasEffectiveOption =
+          param.type != 'json' && param.options.isNotEmpty && value.isNotEmpty;
+      if (name == 'stream') {
+        var isNonStreaming = false;
+        if (param.type == 'boolean') {
+          isNonStreaming = value.toLowerCase() == 'false';
+        } else if (param.type == 'json') {
+          try {
+            isNonStreaming = jsonDecode(value) == false;
+          } on FormatException {
+            // The JSON validation below reports malformed values.
+          }
+        }
+        if (!isNonStreaming) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                AppLocalizations.of(context)!.modelParamReserved(
+                  '$name=true',
+                ),
+              ),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          return;
+        }
+      }
+      if (const {
+        'model',
+        'messages',
+        'temperature',
+        'top_p',
+        'max_tokens',
+      }.contains(name)) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('自定义参数的参数名和默认值不能为空'),
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context)!.modelParamReserved(name),
+            ),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+      if (name.isEmpty ||
+          (param.defaultValue.trim().isEmpty && !hasEffectiveOption)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context)!.modelCustomParamRequired,
+            ),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -208,25 +327,60 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
       if (!seenNames.add(name)) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('已存在该参数: $name'),
+            content: Text(
+              AppLocalizations.of(context)!.modelParamDuplicate(name),
+            ),
             behavior: SnackBarBehavior.floating,
           ),
         );
         return;
       }
-      // JSON 类型的默认值必须是合法 JSON
-      if (param.type == 'json' && param.defaultValue.trim().isNotEmpty) {
+      if (param.type == 'json') {
         try {
-          jsonDecode(param.defaultValue.trim());
+          jsonDecode(value);
         } catch (_) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('参数 "$name" 的默认值不是合法 JSON：${param.defaultValue}'),
+              content: Text(
+                AppLocalizations.of(context)!
+                    .modelParamJsonInvalid(name, param.defaultValue),
+              ),
               behavior: SnackBarBehavior.floating,
             ),
           );
           return;
         }
+      } else if (param.type == 'number' && value.isNotEmpty) {
+        final number = num.tryParse(value);
+        if (number == null || !number.isFinite) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                AppLocalizations.of(context)!.modelParamFinite(
+                  name,
+                  AppLocalizations.of(context)!.modelParamDefaultValue,
+                  value,
+                ),
+              ),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          return;
+        }
+      } else if (param.type == 'boolean' &&
+          value.isNotEmpty &&
+          value.toLowerCase() != 'true' &&
+          value.toLowerCase() != 'false') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context)!
+                  .modelParamBooleanExpected(name, value),
+            ),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
       }
     }
 
@@ -252,30 +406,52 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
     typeConfig['enableTopP'] = _enableTopP;
     typeConfig['enableMaxTokens'] = _enableMaxTokens;
 
-    // Parse optional maxTokens
-    final maxTokensStr = _maxTokensController.text.trim();
-    if (maxTokensStr.isNotEmpty) {
-      final maxTokens = int.tryParse(maxTokensStr);
-      if (maxTokens == null || maxTokens <= 0) {
+    // Validate and serialize maxTokens only when enabled. A disabled field
+    // retains its text, which may be stale or invalid.
+    if (_enableMaxTokens) {
+      final maxTokensStr = _maxTokensController.text.trim();
+      if (maxTokensStr.isNotEmpty) {
+        final maxTokens = int.tryParse(maxTokensStr);
+        if (maxTokens == null || maxTokens <= 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                AppLocalizations.of(context)!.modelMaxTokensPositive,
+              ),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          setState(() => _isSaving = false);
+          return;
+        }
+        typeConfig['maxTokens'] = maxTokens;
+      } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('最大 Token 数必须为正整数'),
+          SnackBar(
+            content: Text(AppLocalizations.of(context)!.modelUnsavedMaxTokens),
             behavior: SnackBarBehavior.floating,
           ),
         );
         setState(() => _isSaving = false);
         return;
       }
-      typeConfig['maxTokens'] = maxTokens;
-    } else if (_enableMaxTokens) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('最大 Token 数已启用但未填写'),
-          behavior: SnackBarBehavior.floating,
-        ),
+    }
+
+    final requestSizeBudgetText = _requestSizeBudgetController.text.trim();
+    if (requestSizeBudgetText.isNotEmpty) {
+      final budgetBytes = ocrRequestSizeBudgetBytesFromMib(
+        requestSizeBudgetText,
       );
-      setState(() => _isSaving = false);
-      return;
+      if (budgetBytes == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(AppLocalizations.of(context)!.ocrJsonSizePositive),
+          ),
+        );
+        setState(() => _isSaving = false);
+        return;
+      }
+      typeConfig['requestSizeBudgetBytes'] = budgetBytes;
     }
 
     // Instructions are now generic (configured on the OCR page, not per
@@ -311,8 +487,10 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
   @override
   Widget build(BuildContext context) {
     final title = _isEditing
-        ? (widget.model!.name.isNotEmpty ? widget.model!.name : '编辑模型')
-        : '添加模型';
+        ? (widget.model!.name.isNotEmpty
+            ? widget.model!.name
+            : AppLocalizations.of(context)!.modelEditTitle)
+        : AppLocalizations.of(context)!.modelCreateTitle;
     final cs = Theme.of(context).colorScheme;
 
     return PopScope(
@@ -322,17 +500,17 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
         final discard = await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
-            title: const Text('放弃修改？'),
-            content: const Text('当前有未保存的修改，确定要放弃吗？'),
+            title: Text(AppLocalizations.of(context)!.modelDiscardTitle),
+            content: Text(AppLocalizations.of(context)!.modelDiscardBody),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('取消'),
+                child: Text(AppLocalizations.of(context)!.batchDlgCancel),
               ),
               TextButton(
                 onPressed: () => Navigator.pop(ctx, true),
                 style: TextButton.styleFrom(foregroundColor: Colors.red),
-                child: const Text('放弃'),
+                child: Text(AppLocalizations.of(context)!.taskFlowUiDiscard),
               ),
             ],
           ),
@@ -347,7 +525,7 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
           actions: [
             TextButton(
               onPressed: _isSaving ? null : _save,
-              child: const Text('保存'),
+              child: Text(AppLocalizations.of(context)!.mermaidSaveButton),
             ),
           ],
         ),
@@ -358,7 +536,7 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
             // 基本设置
             // ==========================================================
             Text(
-              '基本设置',
+              AppLocalizations.of(context)!.assistantBasicTab,
               style: TextStyle(
                 fontWeight: FontWeight.w700,
                 fontSize: 16,
@@ -369,17 +547,17 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
 
             // 模型名称
             LabeledTextField(
-              label: '模型名称',
+              label: AppLocalizations.of(context)!.modelNameLabel,
               controller: _nameController,
-              hintText: '输入显示名称（可选）',
+              hintText: AppLocalizations.of(context)!.modelNameHint,
             ),
             const SizedBox(height: 16),
 
             // 模型 ID
             LabeledTextField(
-              label: '模型 ID',
+              label: AppLocalizations.of(context)!.modelIdLabel,
               controller: _modelIdController,
-              hintText: '如 gpt-4o',
+              hintText: AppLocalizations.of(context)!.modelIdExample('gpt-4o'),
               required: true,
             ),
             const SizedBox(height: 24),
@@ -388,7 +566,7 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
             // OCR 参数设置（全部可选）
             // ==========================================================
             Text(
-              'OCR 参数',
+              AppLocalizations.of(context)!.ocrParamsTitle,
               style: TextStyle(
                 fontWeight: FontWeight.w700,
                 fontSize: 16,
@@ -397,9 +575,7 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
             ),
             const SizedBox(height: 4),
             Text(
-              '基于 OpenAI 兼容的视觉 Chat Completions 格式（OCR 通常即调用此类'
-              '接口），以下参数均为可选，不填写/不开启则不发送。其他供应商特有'
-              '参数（需其接口支持）可在下方自定义参数中添加。',
+              AppLocalizations.of(context)!.ocrParamsHelp,
               style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
             ),
             const SizedBox(height: 12),
@@ -408,7 +584,7 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
 
             // Temperature
             LlmToggleSlider(
-              label: '温度 (Temperature)',
+              label: AppLocalizations.of(context)!.modelTemperature,
               value: _temperature,
               min: 0.0,
               max: 2.0,
@@ -416,7 +592,7 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
               enabled: _enableTemperature,
               onChanged: (v) => setState(() => _temperature = v),
               onToggle: (v) => setState(() => _enableTemperature = v),
-              description: '控制输出的随机性，OCR 推荐使用较低的数值',
+              description: AppLocalizations.of(context)!.modelTemperatureHelp,
             ),
 
             // Top P
@@ -429,18 +605,44 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
               enabled: _enableTopP,
               onChanged: (v) => setState(() => _topP = v),
               onToggle: (v) => setState(() => _enableTopP = v),
-              description: '核采样参数，控制词汇选择的累积概率',
+              description: AppLocalizations.of(context)!.llmTopPHelp,
             ),
 
             // Max Tokens
             LlmToggleTextField(
-              label: '最大 Token 数',
+              label: AppLocalizations.of(context)!.assistantMaxTokens,
               controller: _maxTokensController,
               enabled: _enableMaxTokens,
               onToggle: (v) => setState(() => _enableMaxTokens = v),
-              hintText: '如 4096',
+              hintText: AppLocalizations.of(context)!.llmMaxTokensHint,
               keyboardType: TextInputType.number,
-              description: '每次响应最多生成的 token 数',
+              description: AppLocalizations.of(context)!.llmTokensPerResponse,
+            ),
+
+            const SizedBox(height: 16),
+            TextField(
+              key: const Key('ocr_model_request_size_budget_mib'),
+              controller: _requestSizeBudgetController,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              decoration: InputDecoration(
+                labelText: AppLocalizations.of(context)!.ocrRequestSizeOverride,
+                hintText: AppLocalizations.of(context)!.ocrInheritProvider,
+                suffixText: 'MiB',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              widget.providerRequestSizeBudgetBytes == null
+                  ? AppLocalizations.of(context)!.ocrBudgetDefault
+                  : AppLocalizations.of(context)!.ocrBudgetValue(
+                      ocrRequestSizeBudgetMib(
+                        widget.providerRequestSizeBudgetBytes!,
+                      ).toString(),
+                    ),
+              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
             ),
 
             const SizedBox(height: 24),
@@ -450,14 +652,16 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
             // ==========================================================
             Row(
               children: [
-                const Text(
-                  '自定义参数',
+                Text(
+                  AppLocalizations.of(context)!.chatCustomParameters,
                   style: TextStyle(fontWeight: FontWeight.w600),
                 ),
                 const Spacer(),
                 TextButton.icon(
                   icon: const Icon(Icons.add, size: 18),
-                  label: const Text('添加参数'),
+                  label: Text(
+                    AppLocalizations.of(context)!.assistantAddParameter,
+                  ),
                   onPressed: _addCustomParam,
                 ),
               ],
@@ -465,10 +669,13 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
             const SizedBox(height: 8),
 
             if (_customParams.isEmpty)
-              const Padding(
+              Padding(
                 padding: EdgeInsets.symmetric(vertical: 16),
                 child: Center(
-                  child: Text('暂无自定义参数', style: TextStyle(color: Colors.grey)),
+                  child: Text(
+                    AppLocalizations.of(context)!.assistantNoCustomParameters,
+                    style: TextStyle(color: Colors.grey),
+                  ),
                 ),
               )
             else
@@ -493,10 +700,14 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
                               child: TextFormField(
                                 initialValue: param.paramName,
                                 decoration: InputDecoration(
-                                  labelText: '参数名',
+                                  labelText: AppLocalizations.of(context)!
+                                      .assistantParameterName,
                                   border: const OutlineInputBorder(),
                                   isDense: true,
-                                  errorText: isDuplicate ? '已存在该参数' : null,
+                                  errorText: isDuplicate
+                                      ? AppLocalizations.of(context)!
+                                          .modelParamExists
+                                      : null,
                                   errorStyle: const TextStyle(fontSize: 11),
                                 ),
                                 onChanged: (v) {
@@ -518,14 +729,20 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
                               ),
                               child: DropdownButtonHideUnderline(
                                 child: DropdownButton<String>(
-                                  value: param.type,
+                                  dropdownColor: StroomMenuStyle.surface(
+                                    context,
+                                  ),
+                                  borderRadius: StroomMenuStyle.borderRadius,
+                                  value: param.paramType.value,
                                   isDense: true,
                                   items: ParamType.values
                                       .map(
                                         (t) => DropdownMenuItem(
                                           value: t.value,
                                           child: Text(
-                                            t.label,
+                                            localizedParamTypeLabel(
+                                                AppLocalizations.of(context)!,
+                                                t),
                                             style: const TextStyle(
                                               fontSize: 13,
                                             ),
@@ -552,7 +769,8 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
                                 size: 20,
                               ),
                               onPressed: () => _removeCustomParam(i),
-                              tooltip: '删除参数',
+                              tooltip: AppLocalizations.of(context)!
+                                  .modelParamDelete,
                             ),
                           ],
                         ),
@@ -562,7 +780,13 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
                           children: [
                             Expanded(
                               child: TextFormField(
-                                initialValue: param.defaultValue,
+                                key: ValueKey((
+                                  i,
+                                  param.type != 'json' &&
+                                      param.options.isNotEmpty,
+                                  _customParamValueFieldRevisions[i] ?? 0,
+                                )),
+                                initialValue: _effectiveCustomParamValue(param),
                                 minLines: 4,
                                 maxLines: 8,
                                 style: const TextStyle(
@@ -573,8 +797,11 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
                                   CodeSmartInputFormatter(),
                                 ],
                                 decoration: InputDecoration(
-                                  labelText: '默认参数值',
-                                  hintText: param.paramType.defaultValueHint,
+                                  labelText: AppLocalizations.of(context)!
+                                      .modelParamDefaultValue,
+                                  hintText: localizedParamTypeDefaultValueHint(
+                                      AppLocalizations.of(context)!,
+                                      param.paramType),
                                   border: const OutlineInputBorder(),
                                   errorBorder: OutlineInputBorder(
                                     borderSide: BorderSide(
@@ -593,7 +820,7 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
                                   alignLabelWithHint: true,
                                 ),
                                 onChanged: (v) {
-                                  param.defaultValue = v;
+                                  _setEffectiveCustomParamValue(param, v);
                                   _validateJsonField(i, param);
                                   setState(() {});
                                 },
@@ -602,15 +829,26 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
                             const SizedBox(width: 4),
                             IconButton(
                               icon: const Icon(Icons.fullscreen, size: 20),
-                              tooltip: '全屏编辑',
+                              tooltip: AppLocalizations.of(context)!
+                                  .chatFullscreenEdit,
                               onPressed: () {
                                 showJsonValueEditorDialog(
                                   context,
-                                  initialValue: param.defaultValue,
-                                  hintText: param.paramType.defaultValueHint,
+                                  initialValue:
+                                      _effectiveCustomParamValue(param),
+                                  hintText: localizedParamTypeDefaultValueHint(
+                                      AppLocalizations.of(context)!,
+                                      param.paramType),
                                   type: param.type,
                                   onSave: (result) {
-                                    param.defaultValue = result;
+                                    _setEffectiveCustomParamValue(
+                                      param,
+                                      result,
+                                    );
+                                    _customParamValueFieldRevisions[i] =
+                                        (_customParamValueFieldRevisions[i] ??
+                                                0) +
+                                            1;
                                     _validateJsonField(i, param);
                                     setState(() {});
                                   },

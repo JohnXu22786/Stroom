@@ -1,4 +1,5 @@
 import 'package:sqflite/sqflite.dart';
+
 import '../models/card.dart';
 
 /// Data access object for the `cards` table.
@@ -13,14 +14,20 @@ class CardDao {
   }
 
   Future<List<Card>> listByDeck(int deckId) async {
-    final rows =
-        await _db.query('cards', where: 'did = ?', whereArgs: [deckId]);
+    final rows = await _db.query(
+      'cards',
+      where: 'did = ?',
+      whereArgs: [deckId],
+    );
     return rows.map(Card.fromMap).toList();
   }
 
   Future<List<Card>> listByNote(int noteId) async {
-    final rows =
-        await _db.query('cards', where: 'nid = ?', whereArgs: [noteId]);
+    final rows = await _db.query(
+      'cards',
+      where: 'nid = ?',
+      whereArgs: [noteId],
+    );
     return rows.map(Card.fromMap).toList();
   }
 
@@ -43,8 +50,11 @@ class CardDao {
   }
 
   Future<List<Card>> listByQueue(int deckId, int queueValue) async {
-    final rows = await _db.query('cards',
-        where: 'did = ? AND queue = ?', whereArgs: [deckId, queueValue]);
+    final rows = await _db.query(
+      'cards',
+      where: 'did = ? AND queue = ?',
+      whereArgs: [deckId, queueValue],
+    );
     return rows.map(Card.fromMap).toList();
   }
 
@@ -65,23 +75,58 @@ class CardDao {
   }
 
   Future<int> insert(Card card) async {
-    await _db.insert('cards', card.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.replace);
+    card
+      ..mtime = DateTime.now().millisecondsSinceEpoch ~/ 1000
+      ..usn = -1;
+    await _db.insert(
+      'cards',
+      card.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+    await _touchCollection();
     return card.id;
   }
 
   Future<void> update(Card card) async {
-    await _db
-        .update('cards', card.toMap(), where: 'id = ?', whereArgs: [card.id]);
+    card
+      ..mtime = DateTime.now().millisecondsSinceEpoch ~/ 1000
+      ..usn = -1;
+    await _db.update(
+      'cards',
+      card.toMap(),
+      where: 'id = ?',
+      whereArgs: [card.id],
+    );
+    await _touchCollection();
   }
 
   Future<void> delete(int id) async {
-    await _db.delete('cards', where: 'id = ?', whereArgs: [id]);
+    await _db.transaction((txn) async {
+      final removed = await txn.delete(
+        'cards',
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+      if (removed > 0) {
+        await txn.delete('revlog', where: 'cid = ?', whereArgs: [id]);
+        await txn.insert('graves', {'usn': -1, 'oid': id, 'type': 0});
+        await txn.rawUpdate('UPDATE col SET mod = ? WHERE id = 1', [
+          DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        ]);
+      }
+    });
   }
 
+  Future<void> _touchCollection() => _db.rawUpdate(
+        'UPDATE col SET mod = ? WHERE id = 1',
+        [DateTime.now().millisecondsSinceEpoch ~/ 1000],
+      );
+
   Future<int> totalCount(int deckId) async {
-    final result = await _db
-        .rawQuery('SELECT COUNT(*) AS cnt FROM cards WHERE did = ?', [deckId]);
+    final result = await _db.rawQuery(
+      'SELECT COUNT(*) AS cnt FROM cards WHERE did = ?',
+      [deckId],
+    );
     return result.first['cnt'] as int;
   }
 
@@ -92,7 +137,9 @@ class CardDao {
 
   Future<int> countByQueueAll(int queueValue) async {
     final result = await _db.rawQuery(
-        'SELECT COUNT(*) AS cnt FROM cards WHERE queue = ?', [queueValue]);
+      'SELECT COUNT(*) AS cnt FROM cards WHERE queue = ?',
+      [queueValue],
+    );
     return result.first['cnt'] as int;
   }
 

@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import '../../l10n/app_localizations.dart';
 import '../models/io_type.dart';
 
 /// Displays an [IOType] with an icon and label in a chip-like container.
@@ -7,13 +9,37 @@ import '../models/io_type.dart';
 /// The [type] parameter determines the icon and color shown.
 class IOTypeIndicator extends StatelessWidget {
   final IOType type;
+  final List<IOType>? possibleTypes;
   final bool isInput;
+  final String? labelOverride;
 
-  const IOTypeIndicator({super.key, required this.type, this.isInput = true});
+  const IOTypeIndicator({
+    super.key,
+    required this.type,
+    this.possibleTypes,
+    this.isInput = true,
+    this.labelOverride,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final (IconData icon, Color color) = _typeData(type);
+    final strings = AppLocalizations.of(context)!;
+    final localizedType = switch (type) {
+      IOType.text => strings.taskFlowIoTypeText,
+      IOType.audio => strings.taskFlowIoTypeAudio,
+      IOType.video => strings.taskFlowIoTypeVideo,
+      IOType.image => strings.taskFlowIoTypeImage,
+      IOType.url => strings.taskFlowIoTypeLink,
+      IOType.file => strings.taskFlowIoTypeFile,
+      IOType.any => strings.taskFlowIoTypeAny,
+    };
+    final union = possibleTypes?.toSet();
+    final isAudioVideoUnion = union != null &&
+        union.contains(IOType.audio) &&
+        union.contains(IOType.video);
+    final (IconData icon, Color color) = isAudioVideoUnion
+        ? (Icons.perm_media, const Color(0xFF673AB7))
+        : _typeData(type);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -28,7 +54,9 @@ class IOTypeIndicator extends StatelessWidget {
           Icon(icon, size: 12, color: color),
           const SizedBox(width: 4),
           Text(
-            isInput ? '输入: ${type.label}' : '输出: ${type.label}',
+            isInput
+                ? strings.taskFlowUiInputLabel(localizedType)
+                : strings.taskFlowUiOutputLabel(labelOverride ?? localizedType),
             style: TextStyle(
               fontSize: 10,
               color: color,

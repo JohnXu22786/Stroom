@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:path/path.dart' as p;
 import '../../services/storage_service.dart';
+import '../../providers/locale_provider.dart';
 import '../../services/background_service.dart';
 import 'package:uuid/uuid.dart';
 import 'package:dio/dio.dart' show CancelToken;
@@ -13,9 +14,11 @@ import '../models/catcatch_task.dart';
 import 'catcatch_provider_shared.dart';
 import '../models/media_resource.dart';
 import '../engine/task_executor.dart';
+import '../engine/sniffing_engine.dart';
 import '../config/default_rules.dart';
 import '../engine/executor_save.dart';
 import '../../utils/atomic_file.dart';
+import '../../task_flow/services/flow_temporary_artifact_storage.dart';
 
 // =============================================================================
 // Provider 定义
@@ -45,19 +48,62 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
 
   /// 当前运行中的取消令牌映射（taskId → CancelToken）
   final Map<String, CancelToken> _cancelTokens = {};
+  final Expando<Object> _cancelTokenOwners = Expando<Object>();
 
-  Future<void>? _pendingWrite;
+  Future<bool>? _pendingWrite;
   int _serviceCleanupGeneration = 0;
+  int _persistedServiceCleanupGeneration = 0;
   Completer<void>? _removalBarrier;
   List<CatCatchTask>? _disposedSnapshot;
-  Future<void>? _disposedPersistence;
+  Future<bool>? _disposedPersistence;
+  int _activeTaskRestorations = 0;
+  bool _taskRestoreNeedsRetry = false;
+  bool _snapshotWriteDeferred = false;
+  final Set<String> _removedTaskIdsDuringRestore = {};
+  static const int _initialTaskRestoreRetryDelaySeconds = 1;
+  static const int _maximumTaskRestoreRetryDelaySeconds = 60;
+  Timer? _taskRestoreRetryTimer;
+  int _taskRestoreRetryDelaySeconds = _initialTaskRestoreRetryDelaySeconds;
+
+  bool get _restoringTasks => _activeTaskRestorations > 0;
 
   CatCatchNotifier(this.ref) : super([]);
 
   @override
   void dispose() {
+    _cancelTaskRestoreRetry();
     _disposedSnapshot = List.of(state);
     super.dispose();
+  }
+
+  void _scheduleTaskRestoreRetry() {
+    if (!mounted || _taskRestoreRetryTimer != null) return;
+    _taskRestoreRetryTimer = Timer(
+      Duration(seconds: _taskRestoreRetryDelaySeconds),
+      () {
+        _taskRestoreRetryTimer = null;
+        if (!mounted) return;
+        if (_activeTaskRestorations > 0) {
+          _scheduleTaskRestoreRetry();
+          return;
+        }
+        unawaited(restoreUnfinishedTasks());
+      },
+    );
+
+    final nextDelaySeconds = _taskRestoreRetryDelaySeconds * 2;
+    _taskRestoreRetryDelaySeconds =
+        nextDelaySeconds < _maximumTaskRestoreRetryDelaySeconds
+            ? nextDelaySeconds
+            : _maximumTaskRestoreRetryDelaySeconds;
+  }
+
+  void _cancelTaskRestoreRetry({bool resetDelay = false}) {
+    _taskRestoreRetryTimer?.cancel();
+    _taskRestoreRetryTimer = null;
+    if (resetDelay) {
+      _taskRestoreRetryDelaySeconds = _initialTaskRestoreRetryDelaySeconds;
+    }
   }
 
   // ===========================================================================
@@ -78,11 +124,48 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
       {String videoFolder = '',
       String audioFolder = '',
       String? taskId,
+      bool flowManagedSelection = false,
+      bool deferSingleResourceSelection = false}) {
+    return _addTask(url, expectedDurationSec,
+        videoFolder: videoFolder,
+        audioFolder: audioFolder,
+        taskId: taskId,
+        flowManagedSelection: flowManagedSelection,
+        deferSingleResourceSelection: deferSingleResourceSelection);
+  }
+
+  /// Adds a task-flow download whose saved file belongs to its execution and
+  /// block rather than the user's selected media folder.
+  String addTemporaryTask(String url, int expectedDurationSec,
+      {String? taskId,
+      required String executionId,
+      required String blockId,
+      bool flowManagedSelection = false,
+      bool deferSingleResourceSelection = false}) {
+    return _addTask(url, expectedDurationSec,
+        taskId: taskId,
+        temporaryExecutionId: executionId,
+        temporaryBlockId: blockId,
+        flowManagedSelection: flowManagedSelection,
+        deferSingleResourceSelection: deferSingleResourceSelection);
+  }
+
+  String _addTask(String url, int expectedDurationSec,
+      {String videoFolder = '',
+      String audioFolder = '',
+      String? taskId,
+      String? temporaryExecutionId,
+      String? temporaryBlockId,
+      bool flowManagedSelection = false,
       bool deferSingleResourceSelection = false}) {
     final id = taskId ?? const Uuid().v4();
     final metadata = <String, String>{
       if (videoFolder.isNotEmpty) 'videoFolder': videoFolder,
       if (audioFolder.isNotEmpty) 'audioFolder': audioFolder,
+      if (temporaryExecutionId != null)
+        flowTemporaryExecutionIdKey: temporaryExecutionId,
+      if (temporaryBlockId != null) flowTemporaryBlockIdKey: temporaryBlockId,
+      if (flowManagedSelection) CatCatchTask.flowManagedSelectionKey: 'true',
       if (deferSingleResourceSelection) 'deferSingleResourceSelection': 'true',
     };
     final task = CatCatchTask(
@@ -93,10 +176,15 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
       createdAt: DateTime.now(),
       metadata: metadata,
     );
+    _removedTaskIdsDuringRestore.remove(id);
     state = [...state, task];
     unawaited(_persistTasks());
 
     // 异步开始执行
+    final previousCancelToken = _cancelTokens[id];
+    if (previousCancelToken != null && !previousCancelToken.isCancelled) {
+      previousCancelToken.cancel();
+    }
     _executeTask(task);
 
     return id;
@@ -104,7 +192,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
 
   /// 暂停任务
   void pauseTask(String id) {
-    final index = state.indexWhere((t) => t.id == id);
+    final index = state.lastIndexWhere((t) => t.id == id);
     if (index < 0) return;
 
     // 取消当前操作
@@ -120,37 +208,49 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
         else
           state[i],
     ];
+    unawaited(_persistTasks());
   }
 
   /// 继续任务（从暂停状态恢复）
   void resumeTask(String id) {
-    final index = state.indexWhere((t) => t.id == id);
+    final index = state.lastIndexWhere((t) => t.id == id);
     if (index < 0) return;
     if (state[index].status != TaskStatus.paused) return;
 
     final task = state[index];
+    final latestRuntimeTask = state.lastWhere((t) => t.id == id);
+    final resumeSnapshot = task.copyWith(
+      steps: latestRuntimeTask.steps,
+      detectedMedia: latestRuntimeTask.detectedMedia,
+      selectedMedia: latestRuntimeTask.selectedMedia,
+      progress: latestRuntimeTask.progress,
+      downloadedFilePath: latestRuntimeTask.downloadedFilePath,
+      downloadedBytes: latestRuntimeTask.downloadedBytes,
+      clearSelectedMedia: latestRuntimeTask.selectedMedia == null,
+      clearDownloadedFilePath: latestRuntimeTask.downloadedFilePath == null,
+    );
     // 如果卡在 userSelecting 步骤，让 _executeSteps 自然处理
 
     // 找到第一个未完成的步骤
     StepType? firstIncomplete;
     int firstIncompleteIndex = -1;
-    for (int i = 0; i < task.steps.length; i++) {
-      if (!task.steps[i].completed) {
-        firstIncomplete = task.steps[i].type;
+    for (int i = 0; i < resumeSnapshot.steps.length; i++) {
+      if (!resumeSnapshot.steps[i].completed) {
+        firstIncomplete = resumeSnapshot.steps[i].type;
         firstIncompleteIndex = i;
         break;
       }
     }
 
     // 重置该步骤及之后为 pending
-    final newSteps = List<StepStatus>.from(task.steps);
+    final newSteps = List<StepStatus>.from(resumeSnapshot.steps);
     if (firstIncompleteIndex >= 0) {
       for (int i = firstIncompleteIndex; i < newSteps.length; i++) {
         newSteps[i] = StepStatus.pending(newSteps[i].type);
       }
     }
 
-    final updated = task.copyWith(
+    final updated = resumeSnapshot.copyWith(
       status: TaskStatus.running,
       steps: newSteps,
       clearError: true,
@@ -168,9 +268,42 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
     }
   }
 
+  /// Returns resources found in the interactive browser to the same paused
+  /// CatCatch task and continues after the fetch step.
+  void continueAfterBrowserRecovery(
+    String id, {
+    required List<String> mediaUrls,
+    Map<String, String> mimeTypesByUrl = const {},
+    Map<String, String> initiatorsByUrl = const {},
+    String? pageUrl,
+    String? pageTitle,
+    Map<String, String> cookieHeadersByUrl = const {},
+  }) {
+    final index = state.lastIndexWhere((task) => task.id == id);
+    if (index < 0) return;
+    final task = state[index];
+    final resources = recoveredBrowserMediaResources(
+      mediaUrls: mediaUrls,
+      fallbackInitiator: pageUrl ?? task.url,
+      initiatorsByUrl: initiatorsByUrl,
+      mimeTypesByUrl: mimeTypesByUrl,
+    );
+    final updated = task.resumeAfterBrowserRecovery(
+      recoveredMedia: resources,
+      pageTitle: pageTitle,
+      cookieHeadersByUrl: cookieHeadersByUrl,
+    );
+    if (updated == null) return;
+    state = [
+      for (var i = 0; i < state.length; i++)
+        if (i == index) updated else state[i],
+    ];
+    _executeTaskFrom(updated, StepType.parsingPlaylist);
+  }
+
   /// 重试失败的任务（从头开始）
   void retryTask(String id) {
-    final index = state.indexWhere((t) => t.id == id);
+    final index = state.lastIndexWhere((t) => t.id == id);
     if (index < 0) return;
     if (state[index].status != TaskStatus.failed) return;
 
@@ -193,7 +326,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
 
   /// 从指定步骤重试
   void retryStep(String taskId, StepType stepType) {
-    final index = state.indexWhere((t) => t.id == taskId);
+    final index = state.lastIndexWhere((t) => t.id == taskId);
     if (index < 0) return;
 
     final task = state[index];
@@ -228,6 +361,8 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
 
   /// 删除任务
   void removeTask(String id) {
+    _removedTaskIdsDuringRestore.add(id);
+
     // 如果任务正在运行，取消
     final cancelToken = _cancelTokens.remove(id);
     if (cancelToken != null && !cancelToken.isCancelled) {
@@ -235,11 +370,29 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
     }
 
     // 查找被删除的任务，用于清理文件
-    final task = state.where((t) => t.id == id).firstOrNull;
-    unawaited(_cleanupTaskFiles(task));
+    final removedTasks = state.where((t) => t.id == id).toList();
+    final remainingTasks = state.where((t) => t.id != id).toList();
+    for (final task in removedTasks) {
+      unawaited(_cleanupTaskFiles(task, remainingTasks: remainingTasks));
+    }
 
-    state = state.where((t) => t.id != id).toList();
+    state = remainingTasks;
     _persistTasks();
+  }
+
+  Future<bool> clearDownloadedFilePath(String id) async {
+    if (!mounted) return false;
+    state = state.map((task) {
+      if (task.id != id) return task;
+      final metadata = Map<String, String>.from(task.metadata)
+        ..remove(flowTemporaryExecutionIdKey)
+        ..remove(flowTemporaryBlockIdKey);
+      return task.copyWith(clearDownloadedFilePath: true, metadata: metadata);
+    }).toList();
+    final barrier = _removalBarrier;
+    if (barrier != null) await barrier.future;
+    if (!mounted) return false;
+    return _writeSnapshot(state);
   }
 
   /// Save removals before publishing them; absent IDs also retry disk cleanup.
@@ -255,29 +408,51 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
     final gate = Completer<void>();
     _removalBarrier = gate;
     try {
-      final proposed = state.where((t) => !removedIds.contains(t.id)).toList();
+      final removalTargets = Set<Object>.identity()
+        ..addAll(state
+            .where((task) => removedIds.contains(task.id))
+            .map((task) => task.runtimeIdentity));
+      final proposed = state
+          .where((task) => !removalTargets.contains(task.runtimeIdentity))
+          .toList();
+      // A deferred or failed write retains the selected rows, so it must not
+      // leave restore tombstones that would discard them during reconciliation.
       if (!await _writeSnapshot(proposed)) return false;
+      if (cleanupGeneration > _persistedServiceCleanupGeneration) {
+        _persistedServiceCleanupGeneration = cleanupGeneration;
+      }
       if (mounted) {
-        final removed = state.where((t) => removedIds.contains(t.id)).toList();
-        state = state.where((t) => !removedIds.contains(t.id)).toList();
+        final removed = state
+            .where((task) => removalTargets.contains(task.runtimeIdentity))
+            .toList();
+        final remaining = state
+            .where((task) => !removalTargets.contains(task.runtimeIdentity))
+            .toList();
+        state = remaining;
         for (final id in removedIds) {
-          final token = _cancelTokens.remove(id);
-          if (token != null && !token.isCancelled) token.cancel();
+          final token = _cancelTokens[id];
+          if (token != null &&
+              removalTargets.contains(_cancelTokenOwners[token])) {
+            _cancelTokens.remove(id);
+            if (!token.isCancelled) token.cancel();
+          }
         }
         for (final task in removed) {
-          unawaited(_cleanupTaskFiles(task));
-        }
-        if (!_hasRunningTasks() &&
-            cleanupGeneration == _serviceCleanupGeneration) {
-          await stopBackgroundServiceIfNotUserEnabled();
+          unawaited(_cleanupTaskFiles(task, remainingTasks: remaining));
         }
       }
       if (!mounted) {
         // Deferred ordinary writes own this snapshot after disposal. Only a
-        // successful removal may remove these IDs from its final flush.
+        // successful removal may remove its selected rows from the final flush.
         _disposedSnapshot = _disposedSnapshot
-            ?.where((task) => !removedIds.contains(task.id))
+            ?.where((task) => !removalTargets.contains(task.runtimeIdentity))
             .toList();
+      }
+      final remainingTasks = mounted ? state : _disposedSnapshot;
+      if (cleanupGeneration == _serviceCleanupGeneration &&
+          remainingTasks != null &&
+          !remainingTasks.any((task) => task.status == TaskStatus.running)) {
+        await stopBackgroundServiceIfNotUserEnabled();
       }
       return true;
     } finally {
@@ -287,11 +462,17 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
   }
 
   /// 清理任务关联的临时文件
-  Future<void> _cleanupTaskFiles(CatCatchTask? task) async {
+  Future<void> _cleanupTaskFiles(CatCatchTask? task,
+      {Iterable<CatCatchTask> remainingTasks = const []}) async {
     if (task == null) return;
     try {
       final appDirPath = await AppStorage.directory;
-      await cleanupTaskFiles(task, appDirPath: appDirPath);
+      Iterable<CatCatchTask> currentRemainingTasks() =>
+          mounted ? state : (_disposedSnapshot ?? remainingTasks);
+      await cleanupTaskFiles(task,
+          appDirPath: appDirPath,
+          remainingTasks: currentRemainingTasks(),
+          remainingTasksProvider: currentRemainingTasks);
     } catch (e) {
       debugPrint('[CatCatchNotifier] Failed to clean up task files: $e');
     }
@@ -304,54 +485,88 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
   /// [appDirPath] 可选，指定应用目录路径；未指定时使用 [AppStorage.directory]。
   @visibleForTesting
   static Future<void> cleanupTaskFiles(CatCatchTask task,
-      {String? appDirPath}) async {
+      {String? appDirPath,
+      Iterable<CatCatchTask> remainingTasks = const [],
+      Iterable<CatCatchTask> Function()? remainingTasksProvider}) async {
     final appDir = appDirPath ?? await AppStorage.directory;
+    Iterable<CatCatchTask> currentRemainingTasks() =>
+        remainingTasksProvider?.call() ?? remainingTasks;
+
+    bool isInUse(String path) {
+      final normalizedPath = _normalizedFilePath(path);
+      for (final remainingTask in currentRemainingTasks()) {
+        final downloadedFilePath = remainingTask.downloadedFilePath;
+        if (downloadedFilePath != null &&
+            _normalizedFilePath(downloadedFilePath) == normalizedPath) {
+          return true;
+        }
+        if (remainingTask.status != TaskStatus.completed &&
+            _mediaDerivedArtifacts(remainingTask, appDir).any((artifact) =>
+                _normalizedFilePath(artifact.path) == normalizedPath)) {
+          return true;
+        }
+      }
+      return false;
+    }
 
     // 1. 删除分段下载进度跟踪
     final progressPath =
         p.join(appDir, 'catcatch', '.progress', '${task.id}_dl_progress.json');
-    await _deleteFileBestEffort(File(progressPath));
+    await _deleteFileBestEffort(File(progressPath),
+        shouldDelete: () =>
+            !currentRemainingTasks().any((current) => current.id == task.id));
 
     // 2. 对于未完成的任务，删除它已记录的 downloadedFilePath
     // （放在前面处理，与 selectedMedia 无关）
     if (task.downloadedFilePath != null &&
         task.status != TaskStatus.completed) {
-      await _deleteFileBestEffort(File(task.downloadedFilePath!));
+      final downloadedFilePath = task.downloadedFilePath!;
+      await _deleteFileBestEffort(File(downloadedFilePath),
+          shouldDelete: () => !isInUse(downloadedFilePath));
     }
 
     // 3. 如果没有已选媒体资源，说明还没开始下载，无需进一步清理
     if (task.selectedMedia == null) return;
 
-    final fileName = buildDownloadFileName(task.selectedMedia!, task.metadata);
+    for (final artifact in _mediaDerivedArtifacts(task, appDir)) {
+      bool shouldDelete() => !isInUse(artifact.path);
+      if (artifact is Directory) {
+        await _deleteDirBestEffort(artifact, shouldDelete: shouldDelete);
+      } else if (artifact is File) {
+        await _deleteFileBestEffort(artifact, shouldDelete: shouldDelete);
+      }
+    }
+  }
+
+  static String _normalizedFilePath(String path) =>
+      p.normalize(p.absolute(path));
+
+  static List<FileSystemEntity> _mediaDerivedArtifacts(
+      CatCatchTask task, String appDir) {
+    final media = task.selectedMedia;
+    if (media == null) return const [];
+
+    final fileName = buildDownloadFileName(media, task.metadata);
     final downloadDir = p.join(appDir, 'catcatch', 'downloads');
     final convertDir = p.join(appDir, 'catcatch', 'converted');
-
-    // 4. 临时下载文件 (.filename.catcatch_tmp, filename.catcatch_tmp)
-    // DownloadManager.downloadFile 实际写入的是无前导点的文件名，
-    // 但 task_executor 也传入了带前导点的路径用于断点续传检测，两者都清理。
-    for (final prefix in ['', '.']) {
-      await _deleteFileBestEffort(File(p.join(
-          downloadDir, '$prefix$fileName${DefaultRules.tempFileSuffix}')));
-    }
-
-    // 5. 下载目录中的源文件（尚未保存到 completed 目录）
-    await _deleteFileBestEffort(File(p.join(downloadDir, fileName)));
-
-    // 6. 播放列表合并后的文件 (playlist_merged.ts)
-    final mergedName = '${p.basenameWithoutExtension(fileName)}_merged.ts';
-    await _deleteFileBestEffort(File(p.join(downloadDir, mergedName)));
-
-    // 7. 分段下载的临时目录 (.playlist_merged.ts_parts/)
-    final partsDirName = '.${mergedName}_parts';
-    await _deleteDirBestEffort(Directory(p.join(downloadDir, partsDirName)));
-
-    // 8. 转换后的文件 (converted/ 目录)
-    // 播放列表的转换输入是合并后的文件 (xxx_merged.ts)，因此转换产物
-    // 名为 xxx_merged.mp4；普通文件的转换输入是下载文件本身。
-    final convertBase = task.selectedMedia!.isPlaylist
-        ? p.basenameWithoutExtension(mergedName)
+    final mergedBaseName = '${p.basenameWithoutExtension(fileName)}_merged';
+    final convertBase = media.isPlaylist
+        ? mergedBaseName
         : p.basenameWithoutExtension(fileName);
-    await _deleteFileBestEffort(File(p.join(convertDir, '$convertBase.mp4')));
+    // The downloader writes the non-dot temp file while the executor checks
+    // the dot-prefixed variant when resuming.
+    final tempSuffix = DefaultRules.tempFileSuffix;
+    return [
+      File(p.join(downloadDir, '$fileName$tempSuffix')),
+      File(p.join(downloadDir, '.$fileName$tempSuffix')),
+      File(p.join(downloadDir, fileName)),
+      for (final extension in ['ts', 'mp4']) ...[
+        File(p.join(downloadDir, '$mergedBaseName.$extension')),
+        Directory(p.join(downloadDir, '.$mergedBaseName.${extension}_parts')),
+      ],
+      // Playlist conversions use the merged file basename for the output.
+      File(p.join(convertDir, '$convertBase.mp4')),
+    ];
   }
 
   /// 删除文件（尽力而为，失败时短暂重试）。
@@ -359,10 +574,12 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
   /// 取消下载后写入句柄可能尚未释放（Windows 上打开的文件无法删除），
   /// 因此重试几次直到句柄释放，避免残留半下载文件。
   /// 重试间隔为 150ms × 尝试次数（锁定句柄的单元测试依赖该节奏）。
-  static Future<void> _deleteFileBestEffort(File file) async {
+  static Future<void> _deleteFileBestEffort(File file,
+      {bool Function()? shouldDelete}) async {
     for (var attempt = 0; attempt < 4; attempt++) {
       try {
         if (await file.exists()) {
+          if (shouldDelete != null && !shouldDelete()) return;
           await file.delete();
         }
         return;
@@ -374,10 +591,12 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
   }
 
   /// 删除目录（递归），失败时短暂重试（与 [_deleteFileBestEffort] 同理）。
-  static Future<void> _deleteDirBestEffort(Directory dir) async {
+  static Future<void> _deleteDirBestEffort(Directory dir,
+      {bool Function()? shouldDelete}) async {
     for (var attempt = 0; attempt < 4; attempt++) {
       try {
         if (await dir.exists()) {
+          if (shouldDelete != null && !shouldDelete()) return;
           await dir.delete(recursive: true);
         }
         return;
@@ -394,7 +613,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
   /// 当下载的文件是 ts/flv 等特殊格式或来自播放列表时，
   /// 任务会暂停等待用户确认。调用此方法表示用户同意继续转换。
   void confirmAndContinue(String taskId) {
-    final index = state.indexWhere((t) => t.id == taskId);
+    final index = state.lastIndexWhere((t) => t.id == taskId);
     if (index < 0) return;
 
     final task = state[index];
@@ -416,8 +635,26 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
   /// [mergeAudioUrl] 如果非空，表示需要将指定音频 URL 合并到选中的视频中。
   void selectMedia(String taskId, MediaResource media,
       {String? mergeAudioUrl}) {
-    final index = state.indexWhere((t) => t.id == taskId);
+    final index = state.lastIndexWhere((t) => t.id == taskId);
     if (index < 0) return;
+    final encodedCandidates =
+        state[index].metadata[CatCatchTask.flowSelectionCandidatesKey];
+    if (encodedCandidates != null) {
+      final candidates =
+          (jsonDecode(encodedCandidates) as List).cast<String>().toSet();
+      final identityVersioned = state[index].metadata.containsKey(
+            CatCatchTask.flowSelectionCandidatesIdentityVersionKey,
+          );
+      if (!CatCatchTask.flowSelectionCandidateAllowed(
+        candidates: candidates,
+        identity: media.selectionIdentity,
+        url: media.url,
+        hasByteRange: media.hasByteRange,
+        identityVersioned: identityVersioned,
+      )) {
+        return;
+      }
+    }
 
     // 标记 userSelecting 步骤为已完成
     final steps = state[index].steps.map((s) {
@@ -429,6 +666,8 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
 
     // 如果传入了合并音频 URL，存入任务元数据
     Map<String, String> metadata = Map.from(state[index].metadata);
+    metadata.remove(CatCatchTask.flowSelectionCandidatesKey);
+    metadata.remove(CatCatchTask.flowSelectionCandidatesIdentityVersionKey);
     if (mergeAudioUrl != null && mergeAudioUrl.isNotEmpty) {
       metadata['mergeAudioUrl'] = mergeAudioUrl;
       metadata['mergeMode'] = 'audio_video';
@@ -452,6 +691,27 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
     _executeTaskFrom(task, StepType.downloading);
   }
 
+  /// Narrows the task-flow ambiguity picker without changing CatCatch's
+  /// detected resource list. The allow-list rejects stale UI selections.
+  void setFlowSelectionCandidates(
+      String taskId, List<MediaResource> candidates) {
+    final index = state.lastIndexWhere((task) => task.id == taskId);
+    if (index < 0) return;
+    final task = state[index];
+    final metadata = Map<String, String>.from(task.metadata)
+      ..[CatCatchTask.flowManagedSelectionKey] = 'true'
+      ..[CatCatchTask.flowSelectionCandidatesIdentityVersionKey] =
+          CatCatchTask.flowSelectionCandidatesIdentityVersion
+      ..[CatCatchTask.flowSelectionCandidatesKey] = jsonEncode(
+          candidates.map((media) => media.selectionIdentity).toList());
+    final updated = task.copyWith(metadata: metadata);
+    state = [
+      for (int i = 0; i < state.length; i++)
+        if (i == index) updated else state[i],
+    ];
+    unawaited(_persistTasks());
+  }
+
   /// 批量选择多个媒体资源进行下载
   ///
   /// 第一个资源走正常 `selectMedia` 流程，其余资源作为独立子任务直接进入下载步骤。
@@ -470,7 +730,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
     selectMedia(parentTaskId, mediaList.first, mergeAudioUrl: mergeAudioUrl);
 
     // 其余资源：创建子任务，跳过分析直接下载
-    final parentIndex = state.indexWhere((t) => t.id == parentTaskId);
+    final parentIndex = state.lastIndexWhere((t) => t.id == parentTaskId);
     if (parentIndex < 0) return;
     final parent = state[parentIndex];
 
@@ -513,7 +773,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
   ///
   /// 当用户选择"保留原始格式"时调用，跳过 ffmpeg 转换直接进入保存步骤。
   void skipConversion(String taskId) {
-    final index = state.indexWhere((t) => t.id == taskId);
+    final index = state.lastIndexWhere((t) => t.id == taskId);
     if (index < 0) return;
 
     // 标记 converting 步骤为已跳过
@@ -543,9 +803,28 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
 
   /// 恢复所有持久化的任务（应用启动时调用）
   Future<void> restoreUnfinishedTasks() async {
+    _cancelTaskRestoreRetry();
+    _activeTaskRestorations++;
     try {
+      // A previous restore may have queued its reconciled snapshot without
+      // awaiting it. Wait before loading so a later restore cannot read stale
+      // data while that write is still pending.
+      final pendingWrite = _pendingWrite;
+      if (pendingWrite != null &&
+          !await pendingWrite &&
+          !_taskRestoreNeedsRetry &&
+          !_snapshotWriteDeferred) {
+        debugPrint(
+          '[CatCatchNotifier] Skipping restore after a task snapshot write failed',
+        );
+        _taskRestoreNeedsRetry = true;
+        _scheduleTaskRestoreRetry();
+        return;
+      }
+
       final tasks = await _loadPersistedTasks();
-      if (tasks.isEmpty) return;
+
+      final removedTaskIds = Set<String>.of(_removedTaskIdsDuringRestore);
 
       // 迁移旧数据：userSelecting 中但 detectedMedia 为空的任务标记为失败
       final migrated = [
@@ -567,20 +846,49 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
             task,
       ];
 
-      // 加载全部任务，running 的改为 paused，其余保持原样（包括 failed 中的原始错误）
+      // The current state may have changed while loading. Keep its latest
+      // version for matching IDs and append concurrent tasks after the file
+      // snapshot, while still normalizing tasks restored after a process restart.
+      final currentTasks = <String, CatCatchTask>{
+        for (final task in state)
+          if (!removedTaskIds.contains(task.id)) task.id: task,
+      };
+      final restoredTasks = <String, CatCatchTask>{};
+      for (final task in migrated) {
+        if (removedTaskIds.contains(task.id)) continue;
+        restoredTasks[task.id] = task.status == TaskStatus.running
+            ? task.copyWith(status: TaskStatus.paused, error: '应用重启，已暂停')
+            : task;
+      }
+
+      final hadConcurrentChanges =
+          state.isNotEmpty || removedTaskIds.isNotEmpty;
       state = [
-        for (final task in migrated)
-          if (task.status == TaskStatus.running)
-            task.copyWith(status: TaskStatus.paused, error: '应用重启，已暂停')
-          else
-            task,
+        for (final task in restoredTasks.values)
+          currentTasks.remove(task.id) ?? task,
+        ...currentTasks.values,
       ];
+      _taskRestoreNeedsRetry = false;
+      _cancelTaskRestoreRetry(resetDelay: true);
+      if (hadConcurrentChanges) unawaited(_persistTasks());
 
       debugPrint(
         '[CatCatchNotifier] Restored ${tasks.length} tasks from persistence',
       );
     } catch (e) {
+      _taskRestoreNeedsRetry = true;
+      _scheduleTaskRestoreRetry();
       debugPrint('[CatCatchNotifier] Failed to restore tasks: $e');
+    } finally {
+      _activeTaskRestorations--;
+      if (_activeTaskRestorations == 0) {
+        // Keep removals until a safe snapshot lands so a later retry cannot
+        // reintroduce tasks from the older on-disk snapshot.
+        if (_snapshotWriteDeferred && !_taskRestoreNeedsRetry) {
+          _snapshotWriteDeferred = false;
+          unawaited(_persistTasks());
+        }
+      }
     }
   }
 
@@ -634,6 +942,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
         task: task,
         onUpdate: onUpdate,
         cancelToken: cancelToken,
+        locale: ref.read(localeProvider),
       );
 
   @visibleForTesting
@@ -648,10 +957,11 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
         fromStep: fromStep,
         onUpdate: onUpdate,
         cancelToken: cancelToken,
+        locale: ref.read(localeProvider),
       );
 
   void _markTaskFailedAfterBackgroundServiceStartup(String taskId) {
-    final index = state.indexWhere((current) => current.id == taskId);
+    final index = state.lastIndexWhere((current) => current.id == taskId);
     if (index < 0) return;
 
     _serviceCleanupGeneration++;
@@ -665,12 +975,13 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
         else
           state[i],
     ];
-    _persistTasks(stopServiceWhenIdle: false);
+    _persistTasks();
   }
 
   /// 执行任务
   Future<void> _executeTask(CatCatchTask task) async {
     final cancelToken = CancelToken();
+    _cancelTokenOwners[cancelToken] = task.runtimeIdentity;
     _cancelTokens[task.id] = cancelToken;
 
     try {
@@ -695,7 +1006,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
               !identical(_cancelTokens[task.id], cancelToken)) {
             return;
           }
-          final index = state.indexWhere((t) => t.id == updated.id);
+          final index = state.lastIndexWhere((t) => t.id == updated.id);
           if (index >= 0) {
             final currentStatus = state[index].status;
             // 如果外部已将任务暂停，保留暂停状态，不覆盖
@@ -735,7 +1046,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
       }
       debugPrint('[CatCatchNotifier] Task execution error: $e');
       // 更新为失败状态
-      final index = state.indexWhere((t) => t.id == task.id);
+      final index = state.lastIndexWhere((t) => t.id == task.id);
       if (index >= 0) {
         state = [
           for (int i = 0; i < state.length; i++)
@@ -758,12 +1069,17 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
 
   /// 从指定步骤执行
   Future<void> _executeTaskFrom(CatCatchTask task, StepType fromStep) async {
+    final previousCancelToken = _cancelTokens[task.id];
     final cancelToken = CancelToken();
+    _cancelTokenOwners[cancelToken] = task.runtimeIdentity;
     _cancelTokens[task.id] = cancelToken;
+    if (previousCancelToken != null && !previousCancelToken.isCancelled) {
+      previousCancelToken.cancel();
+    }
 
     try {
       // Task status does not indicate whether the background service is alive.
-      final index = state.indexWhere((current) => current.id == task.id);
+      final index = state.lastIndexWhere((current) => current.id == task.id);
       if (index >= 0 && state[index].status != TaskStatus.running) {
         state = [
           for (int i = 0; i < state.length; i++)
@@ -794,25 +1110,41 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
               !identical(_cancelTokens[task.id], cancelToken)) {
             return;
           }
-          final index = state.indexWhere((t) => t.id == updated.id);
+          final index = state.lastIndexWhere((t) => t.id == updated.id);
           if (index >= 0) {
-            final currentStatus = state[index].status;
-            // 如果外部已将任务暂停，保留暂停状态，不覆盖
-            if (currentStatus == TaskStatus.paused &&
-                updated.status == TaskStatus.running) {
-              state = [
-                for (int i = 0; i < state.length; i++)
-                  if (i == index)
-                    updated.copyWith(status: TaskStatus.paused)
-                  else
-                    state[i],
-              ];
-            } else {
-              state = [
-                for (int i = 0; i < state.length; i++)
-                  if (i == index) updated else state[i],
-              ];
+            final current = state[index];
+            final mergedMetadata = Map<String, String>.from(current.metadata);
+            for (final key in task.metadata.keys) {
+              if (!updated.metadata.containsKey(key)) {
+                mergedMetadata.remove(key);
+              }
             }
+            for (final entry in updated.metadata.entries) {
+              if (task.metadata[entry.key] != entry.value) {
+                mergedMetadata[entry.key] = entry.value;
+              }
+            }
+
+            final runtimeUpdate = updated.copyWith(
+              url: current.url,
+              expectedDurationSec: current.expectedDurationSec,
+              title:
+                  current.title != task.title ? current.title : updated.title,
+              createdAt: current.createdAt,
+              statusChangedAt: updated.status == task.status
+                  ? current.statusChangedAt
+                  : updated.statusChangedAt,
+              metadata: mergedMetadata,
+            );
+            final next = current.status == TaskStatus.paused &&
+                    updated.status == TaskStatus.running
+                // 如果外部已将任务暂停，保留暂停状态，不覆盖
+                ? runtimeUpdate.copyWith(status: TaskStatus.paused)
+                : runtimeUpdate;
+            state = [
+              for (int i = 0; i < state.length; i++)
+                if (i == index) next else state[i],
+            ];
           }
           _persistTasks();
         },
@@ -830,7 +1162,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
         return;
       }
       debugPrint('[CatCatchNotifier] Task retry error: $e');
-      final index = state.indexWhere((t) => t.id == task.id);
+      final index = state.lastIndexWhere((t) => t.id == task.id);
       if (index >= 0) {
         state = [
           for (int i = 0; i < state.length; i++)
@@ -873,55 +1205,102 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
     if (!mounted) {
       final snapshot = _disposedSnapshot;
       if (snapshot == null) return Future<void>.value();
-      return _disposedPersistence ??= _writeSnapshot(snapshot).then((_) {});
+      final persistence = _disposedPersistence ??= _writeSnapshot(snapshot);
+      return persistence.then(
+        (writeSucceeded) => _completeSnapshotPersistence(
+          snapshot: snapshot,
+          generation: generation,
+          stopServiceWhenIdle: stopServiceWhenIdle,
+          writeSucceeded: writeSucceeded,
+        ),
+      );
     }
     final snapshot = state;
-    return _writeSnapshot(snapshot).then((_) async {
-      // A write queued while a task was running must not stop the service if
-      // that task failed before the write completed.
-      if (stopServiceWhenIdle &&
-          mounted &&
-          generation == _serviceCleanupGeneration &&
-          !snapshot.any((task) => task.status == TaskStatus.running) &&
-          !_hasRunningTasks()) {
-        await stopBackgroundServiceIfNotUserEnabled();
-      }
-    });
+    return _writeSnapshot(snapshot).then(
+      (writeSucceeded) => _completeSnapshotPersistence(
+        snapshot: snapshot,
+        generation: generation,
+        stopServiceWhenIdle: stopServiceWhenIdle,
+        writeSucceeded: writeSucceeded,
+      ),
+    );
+  }
+
+  Future<void> _completeSnapshotPersistence({
+    required List<CatCatchTask> snapshot,
+    required int generation,
+    required bool stopServiceWhenIdle,
+    required bool writeSucceeded,
+  }) async {
+    if (writeSucceeded && generation > _persistedServiceCleanupGeneration) {
+      _persistedServiceCleanupGeneration = generation;
+    }
+    // Recheck after the write: an earlier queued snapshot may have already
+    // persisted this cleanup generation while this snapshot was pending.
+    final currentSnapshot = mounted ? state : (_disposedSnapshot ?? snapshot);
+    if (stopServiceWhenIdle &&
+        generation <= _persistedServiceCleanupGeneration &&
+        generation == _serviceCleanupGeneration &&
+        !snapshot.any((task) => task.status == TaskStatus.running) &&
+        !currentSnapshot.any((task) => task.status == TaskStatus.running)) {
+      await stopBackgroundServiceIfNotUserEnabled();
+    }
   }
 
   Future<bool> _writeSnapshot(List<CatCatchTask> snapshot) {
-    final previous = _pendingWrite ?? Future<void>.value();
+    final deferWhenQueued =
+        _taskRestoreNeedsRetry || _activeTaskRestorations > 0;
+    if (deferWhenQueued) _snapshotWriteDeferred = true;
+    final previous = _pendingWrite?.then<void>((_) {}) ?? Future<void>.value();
     final write = previous.then((_) async {
       try {
         final file = await _tasksFile();
+        if (deferWhenQueued ||
+            _taskRestoreNeedsRetry ||
+            _activeTaskRestorations > 0) {
+          _snapshotWriteDeferred = true;
+          return false;
+        }
         final data = snapshot.map((t) => t.toMap()).toList();
         // 原子写入：防止中途崩溃留下半截 JSON 导致任务列表丢失。
         await AtomicFile.writeString(file, jsonEncode(data));
+        if (_activeTaskRestorations == 0 && !_taskRestoreNeedsRetry) {
+          final persistedTaskIds = snapshot.map((task) => task.id).toSet();
+          _removedTaskIdsDuringRestore
+              .removeWhere((id) => !persistedTaskIds.contains(id));
+          _snapshotWriteDeferred = false;
+        }
         return true;
       } catch (e) {
         debugPrint('[CatCatchNotifier] Failed to persist tasks: $e');
         return false;
       }
     });
-    _pendingWrite = write.then<void>((_) {});
+    _pendingWrite = write;
     return write;
+  }
+
+  /// Waits for queued task snapshots to settle in deterministic tests.
+  @visibleForTesting
+  Future<void> waitForTaskSnapshotWritesForTesting() async {
+    while (true) {
+      final pendingWrite = _pendingWrite;
+      if (pendingWrite == null) return;
+      await pendingWrite;
+      if (identical(pendingWrite, _pendingWrite)) return;
+    }
   }
 
   /// 从本地文件加载任务列表
   Future<List<CatCatchTask>> _loadPersistedTasks() async {
-    try {
-      final file = await _tasksFile();
-      if (!await file.exists()) return [];
-      final content = await file.readAsString();
-      if (content.isEmpty) return [];
-      final list = jsonDecode(content) as List;
-      return list
-          .map((m) => CatCatchTask.fromMap(Map<String, dynamic>.from(m as Map)))
-          .toList();
-    } catch (e) {
-      debugPrint('[CatCatchNotifier] Failed to load persisted tasks: $e');
-      return [];
-    }
+    final file = await _tasksFile();
+    if (!await file.exists()) return [];
+    final content = await file.readAsString();
+    if (content.isEmpty) return [];
+    final list = jsonDecode(content) as List;
+    return list
+        .map((m) => CatCatchTask.fromMap(Map<String, dynamic>.from(m as Map)))
+        .toList();
   }
 
   /// 持久化文件路径
@@ -937,4 +1316,48 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
     }
     return File(p.join(catcatchDir.path, 'tasks.json'));
   }
+}
+
+List<MediaResource> recoveredBrowserMediaResources({
+  required List<String> mediaUrls,
+  required String fallbackInitiator,
+  Map<String, String> initiatorsByUrl = const {},
+  Map<String, String> mimeTypesByUrl = const {},
+}) {
+  final resources = <MediaResource>[];
+  final seen = <String>{};
+  for (final url in mediaUrls) {
+    if (!url.startsWith('http') || !seen.add(url)) continue;
+    resources.add(recoveredBrowserMediaResource(
+      url: url,
+      initiator: initiatorsByUrl[url] ?? fallbackInitiator,
+      mimeType: mimeTypesByUrl[url],
+    ));
+  }
+  return resources;
+}
+
+MediaResource recoveredBrowserMediaResource({
+  required String url,
+  required String initiator,
+  String? mimeType,
+}) {
+  final (name, ext) = SniffingEngine.parseFileName(url);
+  final normalizedMimeType = mimeType?.split(';').first.trim().toLowerCase();
+  final isPlaylist = ['m3u8', 'm3u', 'mpd'].contains(ext) ||
+      normalizedMimeType == 'application/vnd.apple.mpegurl' ||
+      normalizedMimeType == 'application/x-mpegurl' ||
+      normalizedMimeType == 'application/dash+xml';
+  final isPlayableByMime = normalizedMimeType?.startsWith('audio/') == true ||
+      normalizedMimeType?.startsWith('video/') == true;
+  return MediaResource(
+    url: url,
+    name: name,
+    ext: ext,
+    mimeType: mimeType,
+    initiator: initiator,
+    isPlayable: !isPlaylist &&
+        (isPlayableByMime || (ext.isNotEmpty && !['ts', 'ev1'].contains(ext))),
+    isPlaylist: isPlaylist,
+  );
 }
