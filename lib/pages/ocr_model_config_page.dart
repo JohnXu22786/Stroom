@@ -733,7 +733,7 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
                                     context,
                                   ),
                                   borderRadius: StroomMenuStyle.borderRadius,
-                                  value: param.type,
+                                  value: param.paramType.value,
                                   isDense: true,
                                   items: ParamType.values
                                       .map(

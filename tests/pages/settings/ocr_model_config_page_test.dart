@@ -205,6 +205,42 @@ void main() {
   });
 
   group('OcrModelConfigPage custom parameter validation', () {
+    testWidgets(
+      'opens and saves a model with an unsupported stored parameter type',
+      (tester) async {
+        ModelConfig? saved;
+        final model = ModelConfig(
+          name: 'OCR模型',
+          modelId: 'qwen-vl-ocr',
+          customParams: [
+            CustomParam(
+              paramName: 'legacy',
+              type: 'legacy_blob',
+              defaultValue: 'preserve me',
+            ),
+          ],
+        );
+
+        await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
+
+        await _enterField(tester, 0, 'Edited OCR模型');
+        final typeDropdown = find.byType(DropdownButton<String>);
+        await _scrollTo(tester, typeDropdown);
+        expect(
+          tester.widget<DropdownButton<String>>(typeDropdown).value,
+          'string',
+        );
+
+        await tester.tap(find.text('保存'));
+        await tester.pumpAndSettle();
+
+        expect(saved, isNotNull);
+        expect(saved!.name, 'Edited OCR模型');
+        expect(saved!.customParams.single.type, 'legacy_blob');
+        expect(saved!.customParams.single.defaultValue, 'preserve me');
+      },
+    );
+
     testWidgets('switching to JSON displays its default value', (tester) async {
       final model = ModelConfig(
         name: 'OCR模型',
