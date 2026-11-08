@@ -676,9 +676,7 @@ class _ReasoningPanelDialogState extends ConsumerState<_ReasoningPanelDialog>
                             key: ValueKey(
                               'reasoning-markdown:$convId:${widget.messageId}:${widget.sectionIndex}',
                             ),
-                            data: isPanelStreaming
-                                ? widget.initialReasoningText
-                                : _displayText,
+                            data: _displayText,
                             selectable: true,
                             shrinkWrap: true,
                             physics: const NeverScrollableScrollPhysics(),
