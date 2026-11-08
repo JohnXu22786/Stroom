@@ -58,9 +58,7 @@ void main() {
       final firstColor = bubble.color;
 
       await tester.pump(const Duration(milliseconds: 500));
-      final middleColor = tester
-          .widget<Icon>(iconFinder)
-          .color;
+      final middleColor = tester.widget<Icon>(iconFinder).color;
       expect(middleColor, isNot(firstColor));
       expect(middleColor!.a, lessThan(firstColor!.a));
       expect(middleColor.r, firstColor.r);

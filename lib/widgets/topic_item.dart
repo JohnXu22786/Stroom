@@ -44,10 +44,10 @@ class TopicItem extends StatelessWidget {
     final brightness = Theme.of(context).brightness;
     final isDark = brightness == Brightness.dark;
     final statusColor = isFailed
-            ? cs.error
-            : isUnread
-                ? Color.lerp(cs.primary, Colors.green, 0.55)
-                : null;
+        ? cs.error
+        : isUnread
+            ? Color.lerp(cs.primary, Colors.green, 0.55)
+            : null;
 
     final title = topic.title.isEmpty
         ? AppLocalizations.of(context)!.topicItemNew
