@@ -14,6 +14,7 @@ class MarkerMatchingTests(unittest.TestCase):
         marker = "IOS_RAW_UTF8_ROUNDTRIP:5374726f6f6d20e5ada6e4b9a020f09f9982"
 
         self.assertTrue(contains_marker(f"\x1b[32m{marker}\x1b[0m\n", marker))
+        self.assertTrue(contains_marker(f"\x1b[1G\x1b[0K\n{marker}\n", marker))
 
     def test_only_one_of_the_explicit_raw_utf8_outcomes_matches(self):
         markers = (

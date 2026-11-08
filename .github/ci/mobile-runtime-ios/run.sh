@@ -88,7 +88,7 @@ raw_expression="(()=>{console.log('IOS_NODE_RUNTIME_'+process.version);let value
 raw_markers=$'IOS_RAW_UTF8_ROUNDTRIP:5374726f6f6d20e5ada6e4b9a020f09f9982\nIOS_RAW_UTF8_RANGEERROR:RangeError:Index out of range'
 run_node raw-runtime "$raw_markers" 60 -p "$raw_expression"
 
-npm_expression="(()=>{let fs=require('node:fs');let source=new TextDecoder().decode(fs.readFileSync('$shim'));eval(source);process.argv=['node','$npm','ci','--prefix','$fixture','--cache','$cache','--no-audit','--no-fund','--registry=https://registry.npmjs.org','--replace-registry-host=always','--fetch-retries=0'];process.on('exit',()=>console.log('IOS_NPM_CI_PROCESS_EXIT:'+String(process.exitCode||0)));return require('$npm')})()"
+npm_expression="(()=>{let fs=require('node:fs');let source=new TextDecoder().decode(fs.readFileSync('$shim'));eval(source);process.argv=['node','$npm','ci','--prefix','$fixture','--cache','$cache','--no-audit','--no-fund','--progress=false','--registry=https://registry.npmjs.org','--replace-registry-host=always','--fetch-retries=0'];process.on('exit',()=>process.stdout.write('\\nIOS_NPM_CI_PROCESS_EXIT:'+String(process.exitCode||0)+'\\n'));return require('$npm')})()"
 run_node npm-ci IOS_NPM_CI_PROCESS_EXIT:0 360 -p "$npm_expression"
 
 verify_expression="(()=>{let fs=require('node:fs');let source=new TextDecoder().decode(fs.readFileSync('$shim'));eval(source);return require('$fixture/verify-install.cjs')})()"
