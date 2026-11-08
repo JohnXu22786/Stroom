@@ -6,6 +6,7 @@ import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 
+import '../l10n/app_localizations.dart';
 import '../providers/chat_api_provider.dart';
 import '../providers/provider_config.dart';
 import '../utils/audio_codecs.dart';
@@ -491,6 +492,7 @@ class AsrFailureDiagnostic implements Exception {
   final int? chunkIndex;
   final int? chunkCount;
   final String message;
+  final bool hasNetworkFailurePrefix;
 
   const AsrFailureDiagnostic({
     required this.category,
@@ -498,6 +500,7 @@ class AsrFailureDiagnostic implements Exception {
     required this.message,
     this.chunkIndex,
     this.chunkCount,
+    this.hasNetworkFailurePrefix = false,
   });
 
   factory AsrFailureDiagnostic.fromError(
@@ -515,6 +518,7 @@ class AsrFailureDiagnostic implements Exception {
         chunkIndex: chunkIndex ?? error.chunkIndex,
         chunkCount: chunkCount ?? error.chunkCount,
         message: error.message,
+        hasNetworkFailurePrefix: error.hasNetworkFailurePrefix,
       );
     }
     final dioError = error is DioException ? error : null;
@@ -584,6 +588,8 @@ class AsrFailureDiagnostic implements Exception {
       chunkIndex: chunkIndex,
       chunkCount: chunkCount,
       message: sanitizeAsrDiagnostic(safeMessage, apiKey: apiKey),
+      hasNetworkFailurePrefix:
+          status == null && dioError != null && _isNetworkFailure(dioError),
     );
   }
 
@@ -593,6 +599,52 @@ class AsrFailureDiagnostic implements Exception {
         ? ''
         : ' chunk $chunkIndex${chunkCount == null ? '' : '/$chunkCount'}';
     return 'ASR ${category.name} at ${stage.name}$chunk: $message';
+  }
+
+  String localizedString(AppLocalizations strings) {
+    final localizedCategory = switch (category) {
+      AsrFailureCategory.authentication =>
+        strings.asrFailureCategoryAuthentication,
+      AsrFailureCategory.rateLimit => strings.asrFailureCategoryRateLimit,
+      AsrFailureCategory.sizeLimit => strings.asrFailureCategorySizeLimit,
+      AsrFailureCategory.network => strings.asrFailureCategoryNetwork,
+      AsrFailureCategory.responseParsing =>
+        strings.asrFailureCategoryResponseParsing,
+      AsrFailureCategory.localProcessing =>
+        strings.asrFailureCategoryLocalProcessing,
+      AsrFailureCategory.provider => strings.asrFailureCategoryProvider,
+      AsrFailureCategory.unknown => strings.asrFailureCategoryUnknown,
+    };
+    final localizedStage = switch (stage) {
+      AsrFailureStage.preprocessing => strings.asrFailureStagePreprocessing,
+      AsrFailureStage.encoding => strings.asrFailureStageEncoding,
+      AsrFailureStage.validation => strings.asrFailureStageValidation,
+      AsrFailureStage.request => strings.asrFailureStageRequest,
+      AsrFailureStage.uploading => strings.asrFailureStageUploading,
+      AsrFailureStage.waiting => strings.asrFailureStageWaiting,
+      AsrFailureStage.receiving => strings.asrFailureStageReceiving,
+      AsrFailureStage.response => strings.asrFailureStageResponse,
+      AsrFailureStage.parsing => strings.asrFailureStageParsing,
+      AsrFailureStage.storage => strings.asrFailureStageStorage,
+    };
+    final chunk = chunkIndex == null
+        ? ''
+        : chunkCount == null
+            ? strings.asrFailureChunkIndex(chunkIndex!)
+            : strings.asrFailureChunkPosition(chunkIndex!, chunkCount!);
+    const networkPrefix = '请求失败: ';
+    final localizedMessage =
+        hasNetworkFailurePrefix && message.startsWith(networkPrefix)
+            ? strings.asrFailureRequestFailed(
+                message.substring(networkPrefix.length),
+              )
+            : message;
+    return strings.asrFailureDiagnosticFormat(
+      localizedCategory,
+      localizedStage,
+      chunk,
+      localizedMessage,
+    );
   }
 }
 
@@ -848,6 +900,10 @@ class AsrChunkResult {
   final String? text;
   final String? subtitle;
   final String? error;
+
+  /// In-memory diagnostic used to localize app-authored framing. It is
+  /// intentionally excluded from retry persistence.
+  final AsrFailureDiagnostic? diagnostic;
   final List<AsrTranscriptSegment>? segments;
   final List<AsrTranscriptSegment>? words;
 
@@ -861,9 +917,30 @@ class AsrChunkResult {
     this.text,
     this.subtitle,
     this.error,
+    this.diagnostic,
     this.segments,
     this.words,
   });
+
+  factory AsrChunkResult.withDiagnostic({
+    required int index,
+    required double startSeconds,
+    required double endSeconds,
+    required AsrChunkStatus status,
+    required AsrFailureDiagnostic diagnostic,
+    int? totalChunks,
+    String? planFingerprint,
+  }) =>
+      AsrChunkResult(
+        index: index,
+        startSeconds: startSeconds,
+        endSeconds: endSeconds,
+        totalChunks: totalChunks,
+        planFingerprint: planFingerprint,
+        status: status,
+        error: diagnostic.toString(),
+        diagnostic: diagnostic,
+      );
 
   /// Retry persistence omits provider error text, which may contain request
   /// data, while retaining successful transcript text and timing offsets.
@@ -973,7 +1050,68 @@ class AsrChunkedTranscriptionException implements Exception {
         uncertainOutcome ? '; 请求结果不确定，已停止重试以避免重复提交。请重新选择音频后新建任务。' : '';
     return '$summary: $details$checkpointFailure$recoveryGuidance';
   }
+
+  String localizedString(AppLocalizations strings) {
+    var totalChunkCount = recoveryChunks.length;
+    for (final chunk in recoveryChunks) {
+      final plannedCount = chunk.totalChunks;
+      if (plannedCount != null) {
+        totalChunkCount = plannedCount;
+        break;
+      }
+    }
+    final succeededCount = recoveryChunks
+        .where((chunk) => chunk.status == AsrChunkStatus.succeeded)
+        .length;
+    final details = recoveryChunks.map((chunk) {
+      final chunkError =
+          chunk.diagnostic?.localizedString(strings) ?? chunk.error.toString();
+      final status = switch (chunk.status) {
+        AsrChunkStatus.succeeded => strings.asrChunkSucceeded(chunk.text ?? ''),
+        AsrChunkStatus.failed => strings.asrChunkFailed(chunkError),
+        AsrChunkStatus.uncertain => strings.asrChunkUncertain(chunkError),
+      };
+      return strings.asrChunkDetails(
+        chunk.index + 1,
+        chunk.startSeconds.toStringAsFixed(3),
+        chunk.endSeconds.toStringAsFixed(3),
+        status,
+      );
+    }).join(strings.asrChunkDetailsSeparator);
+    final summary = succeededCount == 0
+        ? strings.asrChunkAllFailed(totalChunkCount)
+        : strings.asrChunkIncomplete(succeededCount, totalChunkCount);
+    final checkpointDetail = switch (cause) {
+      AsrFailureDiagnostic diagnostic =>
+        strings.asrChunkCheckpointFailure(diagnostic.localizedString(strings)),
+      null => null,
+      _ => strings.asrChunkCheckpointFailure(sanitizeAsrDiagnostic('$cause')),
+    };
+    final checkpointFailure = checkpointDetail == null
+        ? ''
+        : '${strings.asrChunkDetailsSeparator}$checkpointDetail';
+    final uncertainOutcome = recoveryChunks.any(
+      (chunk) => chunk.status == AsrChunkStatus.uncertain,
+    );
+    final recoveryGuidance = uncertainOutcome
+        ? '${strings.asrChunkDetailsSeparator}${strings.asrChunkUncertainGuidance}'
+        : '';
+    return '$summary: $details$checkpointFailure$recoveryGuidance';
+  }
 }
+
+/// Formats app-authored ASR failure framing for user-facing task feedback.
+/// Provider diagnostics, transcripts, and other dynamic details remain intact.
+String formatAsrTaskFailure(
+  Object error,
+  AppLocalizations strings,
+) =>
+    switch (error) {
+      AsrFailureDiagnostic diagnostic => diagnostic.localizedString(strings),
+      AsrChunkedTranscriptionException exception =>
+        exception.localizedString(strings),
+      _ => error.toString(),
+    };
 
 class _AsrProviderErrorResponseException implements Exception {
   const _AsrProviderErrorResponseException(this.message);
@@ -1126,6 +1264,19 @@ class AsrService {
     int? chunkIndex,
     int? chunkCount,
   }) =>
+      _diagnostic(
+        error,
+        stage: stage,
+        chunkIndex: chunkIndex,
+        chunkCount: chunkCount,
+      ).toString();
+
+  AsrFailureDiagnostic _diagnostic(
+    Object error, {
+    required AsrFailureStage stage,
+    int? chunkIndex,
+    int? chunkCount,
+  }) =>
       AsrFailureDiagnostic.fromError(
         error,
         stage: stage,
@@ -1137,7 +1288,7 @@ class AsrService {
             ? lastResponseStatusCode
             : null,
         apiKey: config.apiKey,
-      ).toString();
+      );
 
   Never _throwLocalValidation(String message) {
     throw AsrFailureDiagnostic.fromError(
@@ -1898,21 +2049,23 @@ class AsrService {
       AsrChunkStatus status, {
       Object? error,
       AsrFailureStage stage = AsrFailureStage.request,
-    }) =>
-        AsrChunkResult(
-          index: 0,
-          startSeconds: 0,
-          endSeconds: durationSeconds,
-          totalChunks: 1,
-          planFingerprint: planFingerprint,
-          status: status,
-          error: _diagnosticError(
-            error ?? Exception('未知错误'),
-            stage: stage,
-            chunkIndex: 1,
-            chunkCount: 1,
-          ),
-        );
+    }) {
+      final diagnostic = _diagnostic(
+        error ?? Exception('未知错误'),
+        stage: stage,
+        chunkIndex: 1,
+        chunkCount: 1,
+      );
+      return AsrChunkResult.withDiagnostic(
+        index: 0,
+        startSeconds: 0,
+        endSeconds: durationSeconds,
+        totalChunks: 1,
+        planFingerprint: planFingerprint,
+        status: status,
+        diagnostic: diagnostic,
+      );
+    }
 
     List<AsrChunkResult> planWith(AsrChunkResult chunk) => [
           for (final prior in priorChunks)
@@ -2085,7 +2238,7 @@ class AsrService {
             : AsrChunkStatus.failed,
         diagnostic,
       );
-      throw Exception(diagnostic.toString());
+      throw diagnostic;
     } on Exception catch (e) {
       final stage = response == null
           ? AsrFailureStage.request
@@ -2104,7 +2257,7 @@ class AsrService {
             : AsrChunkStatus.uncertain,
         diagnostic,
       );
-      throw Exception(diagnostic.toString());
+      throw diagnostic;
     } on Object catch (e) {
       await onRequestFailure?.call(AsrChunkStatus.uncertain, e);
       rethrow;
@@ -2142,20 +2295,22 @@ class AsrService {
       AsrChunkStatus status, {
       Object? error,
       AsrFailureStage stage = AsrFailureStage.request,
-    }) =>
-        AsrChunkResult(
-          index: 0,
-          startSeconds: 0,
-          endSeconds: 0,
-          totalChunks: 1,
-          status: status,
-          error: _diagnosticError(
-            error ?? Exception('未知错误'),
-            stage: stage,
-            chunkIndex: 1,
-            chunkCount: 1,
-          ),
-        );
+    }) {
+      final diagnostic = _diagnostic(
+        error ?? Exception('未知错误'),
+        stage: stage,
+        chunkIndex: 1,
+        chunkCount: 1,
+      );
+      return AsrChunkResult.withDiagnostic(
+        index: 0,
+        startSeconds: 0,
+        endSeconds: 0,
+        totalChunks: 1,
+        status: status,
+        diagnostic: diagnostic,
+      );
+    }
 
     List<AsrChunkResult> planWith(AsrChunkResult chunk) => [
           for (final prior in priorChunks)
@@ -2284,7 +2439,7 @@ class AsrService {
       if (failure.status == AsrChunkStatus.uncertain) {
         throw AsrChunkedTranscriptionException([failure]);
       }
-      throw Exception(_diagnosticError(e, stage: _requestFailureStage(e)));
+      throw _diagnostic(e, stage: _requestFailureStage(e));
     } on Object catch (e) {
       final failure = createChunk(AsrChunkStatus.uncertain, error: e);
       await reportChunk(failure);
@@ -2757,19 +2912,20 @@ class AsrService {
       } on Object catch (error) {
         if (error is DioException && CancelToken.isCancel(error)) rethrow;
         _throwIfAsrCancelled(cancelToken);
-        final failure = AsrChunkResult(
+        final diagnostic = _diagnostic(
+          error,
+          stage: AsrFailureStage.preprocessing,
+          chunkIndex: i + 1,
+          chunkCount: preparedChunks.length,
+        );
+        final failure = AsrChunkResult.withDiagnostic(
           index: i,
           startSeconds: chunkOffset,
           endSeconds: chunkEndSeconds,
           totalChunks: preparedChunks.length,
           planFingerprint: planFingerprint,
           status: AsrChunkStatus.failed,
-          error: _diagnosticError(
-            error,
-            stage: AsrFailureStage.preprocessing,
-            chunkIndex: i + 1,
-            chunkCount: preparedChunks.length,
-          ),
+          diagnostic: diagnostic,
         );
         chunkResults.add(failure);
         await reportChunk(failure);
@@ -2787,19 +2943,20 @@ class AsrService {
       } on Object catch (error) {
         if (error is DioException && CancelToken.isCancel(error)) rethrow;
         _throwIfAsrCancelled(cancelToken);
-        final failure = AsrChunkResult(
+        final diagnostic = _diagnostic(
+          error,
+          stage: AsrFailureStage.encoding,
+          chunkIndex: i + 1,
+          chunkCount: preparedChunks.length,
+        );
+        final failure = AsrChunkResult.withDiagnostic(
           index: i,
           startSeconds: chunkOffset,
           endSeconds: chunkEndSeconds,
           totalChunks: preparedChunks.length,
           planFingerprint: planFingerprint,
           status: AsrChunkStatus.failed,
-          error: _diagnosticError(
-            error,
-            stage: AsrFailureStage.encoding,
-            chunkIndex: i + 1,
-            chunkCount: preparedChunks.length,
-          ),
+          diagnostic: diagnostic,
         );
         chunkResults.add(failure);
         await reportChunk(failure);
@@ -2859,19 +3016,20 @@ class AsrService {
           explanation: '重新编码后的片段超过上传预算，已在记录请求尝试前停止上传。',
           stage: AsrFailureStage.encoding,
         );
-        final failure = AsrChunkResult(
+        final diagnostic = _diagnostic(
+          sizeLimit,
+          stage: AsrFailureStage.encoding,
+          chunkIndex: i + 1,
+          chunkCount: preparedChunks.length,
+        );
+        final failure = AsrChunkResult.withDiagnostic(
           index: i,
           startSeconds: chunkOffset,
           endSeconds: chunkEndSeconds,
           totalChunks: preparedChunks.length,
           planFingerprint: planFingerprint,
           status: AsrChunkStatus.failed,
-          error: _diagnosticError(
-            sizeLimit,
-            stage: AsrFailureStage.encoding,
-            chunkIndex: i + 1,
-            chunkCount: preparedChunks.length,
-          ),
+          diagnostic: diagnostic,
         );
         chunkResults.add(failure);
         await reportChunk(failure);
@@ -2944,7 +3102,13 @@ class AsrService {
           'AsrService',
           '切块 ${i + 1}/${preparedChunks.length} 转写失败: ${_diagnosticError(e, stage: _requestFailureStage(e), chunkIndex: i + 1, chunkCount: preparedChunks.length)}',
         );
-        final failedChunk = AsrChunkResult(
+        final diagnostic = _diagnostic(
+          e,
+          stage: _requestFailureStage(e),
+          chunkIndex: i + 1,
+          chunkCount: preparedChunks.length,
+        );
+        final failedChunk = AsrChunkResult.withDiagnostic(
           index: i,
           startSeconds: chunkOffset,
           endSeconds: chunkEndSeconds,
@@ -2953,12 +3117,7 @@ class AsrService {
           status: _isOutcomeUncertain(e)
               ? AsrChunkStatus.uncertain
               : AsrChunkStatus.failed,
-          error: _diagnosticError(
-            e,
-            stage: _requestFailureStage(e),
-            chunkIndex: i + 1,
-            chunkCount: preparedChunks.length,
-          ),
+          diagnostic: diagnostic,
         );
         chunkResults.add(failedChunk);
         await reportChunk(failedChunk);
@@ -2982,36 +3141,32 @@ class AsrService {
             responseReceived && e is! _AsrProviderErrorResponseException
                 ? AsrChunkStatus.uncertain
                 : publicStatus;
-        final failedChunk = AsrChunkResult(
+        final diagnostic = _diagnostic(
+          e,
+          stage: failureStage,
+          chunkIndex: i + 1,
+          chunkCount: preparedChunks.length,
+        );
+        final failedChunk = AsrChunkResult.withDiagnostic(
           index: i,
           startSeconds: chunkOffset,
           endSeconds: chunkEndSeconds,
           totalChunks: preparedChunks.length,
           planFingerprint: planFingerprint,
           status: publicStatus,
-          error: _diagnosticError(
-            e,
-            stage: failureStage,
-            chunkIndex: i + 1,
-            chunkCount: preparedChunks.length,
-          ),
+          diagnostic: diagnostic,
         );
         chunkResults.add(failedChunk);
         final recoveryChunk = recoveryStatus == publicStatus
             ? failedChunk
-            : AsrChunkResult(
+            : AsrChunkResult.withDiagnostic(
                 index: i,
                 startSeconds: chunkOffset,
                 endSeconds: chunkEndSeconds,
                 totalChunks: preparedChunks.length,
                 planFingerprint: planFingerprint,
                 status: recoveryStatus,
-                error: _diagnosticError(
-                  e,
-                  stage: failureStage,
-                  chunkIndex: i + 1,
-                  chunkCount: preparedChunks.length,
-                ),
+                diagnostic: diagnostic,
               );
         await reportChunk(recoveryChunk);
         if (recoveryStatus == AsrChunkStatus.uncertain) {

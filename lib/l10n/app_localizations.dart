@@ -17598,6 +17598,203 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Retry'**
   String get startupRecoveryRetry;
+
+  /// No description provided for @asrFailureDiagnosticFormat.
+  ///
+  /// In en, this message translates to:
+  /// **'ASR {category} at {stage}{chunk}: {message}'**
+  String asrFailureDiagnosticFormat(
+    Object category,
+    Object stage,
+    Object chunk,
+    Object message,
+  );
+
+  /// No description provided for @asrFailureChunkPosition.
+  ///
+  /// In en, this message translates to:
+  /// **', chunk {index}/{count}'**
+  String asrFailureChunkPosition(Object index, Object count);
+
+  /// No description provided for @asrFailureRequestFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Request failed: {detail}'**
+  String asrFailureRequestFailed(Object detail);
+
+  /// No description provided for @asrChunkAllFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Chunked transcription failed ({count} chunks, none succeeded)'**
+  String asrChunkAllFailed(Object count);
+
+  /// No description provided for @asrChunkIncomplete.
+  ///
+  /// In en, this message translates to:
+  /// **'Chunked transcription is incomplete ({succeeded}/{count} chunks succeeded)'**
+  String asrChunkIncomplete(Object succeeded, Object count);
+
+  /// No description provided for @asrChunkSucceeded.
+  ///
+  /// In en, this message translates to:
+  /// **'Succeeded: {detail}'**
+  String asrChunkSucceeded(Object detail);
+
+  /// No description provided for @asrChunkFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed: {detail}'**
+  String asrChunkFailed(Object detail);
+
+  /// No description provided for @asrChunkUncertain.
+  ///
+  /// In en, this message translates to:
+  /// **'Outcome uncertain: {detail}'**
+  String asrChunkUncertain(Object detail);
+
+  /// No description provided for @asrChunkDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'Chunk {index} ({start}–{end}s) {status}'**
+  String asrChunkDetails(Object index, Object start, Object end, Object status);
+
+  /// No description provided for @asrChunkCheckpointFailure.
+  ///
+  /// In en, this message translates to:
+  /// **'Saving chunk status failed: {detail}'**
+  String asrChunkCheckpointFailure(Object detail);
+
+  /// No description provided for @asrChunkUncertainGuidance.
+  ///
+  /// In en, this message translates to:
+  /// **'Request outcome is uncertain. Retrying has stopped to avoid duplicate submissions. Select the audio again to create a new task.'**
+  String get asrChunkUncertainGuidance;
+
+  /// No description provided for @asrFailureChunkIndex.
+  ///
+  /// In en, this message translates to:
+  /// **', chunk {index}'**
+  String asrFailureChunkIndex(Object index);
+
+  /// No description provided for @asrChunkDetailsSeparator.
+  ///
+  /// In en, this message translates to:
+  /// **'; '**
+  String get asrChunkDetailsSeparator;
+
+  /// No description provided for @asrRecognitionFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'ASR recognition failed: {detail}'**
+  String asrRecognitionFailed(Object detail);
+
+  /// No description provided for @asrFailureCategoryAuthentication.
+  ///
+  /// In en, this message translates to:
+  /// **'authentication'**
+  String get asrFailureCategoryAuthentication;
+
+  /// No description provided for @asrFailureCategoryRateLimit.
+  ///
+  /// In en, this message translates to:
+  /// **'rate limit'**
+  String get asrFailureCategoryRateLimit;
+
+  /// No description provided for @asrFailureCategorySizeLimit.
+  ///
+  /// In en, this message translates to:
+  /// **'size limit'**
+  String get asrFailureCategorySizeLimit;
+
+  /// No description provided for @asrFailureCategoryNetwork.
+  ///
+  /// In en, this message translates to:
+  /// **'network'**
+  String get asrFailureCategoryNetwork;
+
+  /// No description provided for @asrFailureCategoryResponseParsing.
+  ///
+  /// In en, this message translates to:
+  /// **'response parsing'**
+  String get asrFailureCategoryResponseParsing;
+
+  /// No description provided for @asrFailureCategoryLocalProcessing.
+  ///
+  /// In en, this message translates to:
+  /// **'local processing'**
+  String get asrFailureCategoryLocalProcessing;
+
+  /// No description provided for @asrFailureCategoryProvider.
+  ///
+  /// In en, this message translates to:
+  /// **'provider'**
+  String get asrFailureCategoryProvider;
+
+  /// No description provided for @asrFailureCategoryUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'unknown'**
+  String get asrFailureCategoryUnknown;
+
+  /// No description provided for @asrFailureStagePreprocessing.
+  ///
+  /// In en, this message translates to:
+  /// **'preprocessing'**
+  String get asrFailureStagePreprocessing;
+
+  /// No description provided for @asrFailureStageEncoding.
+  ///
+  /// In en, this message translates to:
+  /// **'encoding'**
+  String get asrFailureStageEncoding;
+
+  /// No description provided for @asrFailureStageValidation.
+  ///
+  /// In en, this message translates to:
+  /// **'validation'**
+  String get asrFailureStageValidation;
+
+  /// No description provided for @asrFailureStageRequest.
+  ///
+  /// In en, this message translates to:
+  /// **'request'**
+  String get asrFailureStageRequest;
+
+  /// No description provided for @asrFailureStageUploading.
+  ///
+  /// In en, this message translates to:
+  /// **'uploading'**
+  String get asrFailureStageUploading;
+
+  /// No description provided for @asrFailureStageWaiting.
+  ///
+  /// In en, this message translates to:
+  /// **'waiting'**
+  String get asrFailureStageWaiting;
+
+  /// No description provided for @asrFailureStageReceiving.
+  ///
+  /// In en, this message translates to:
+  /// **'receiving'**
+  String get asrFailureStageReceiving;
+
+  /// No description provided for @asrFailureStageResponse.
+  ///
+  /// In en, this message translates to:
+  /// **'response'**
+  String get asrFailureStageResponse;
+
+  /// No description provided for @asrFailureStageParsing.
+  ///
+  /// In en, this message translates to:
+  /// **'parsing'**
+  String get asrFailureStageParsing;
+
+  /// No description provided for @asrFailureStageStorage.
+  ///
+  /// In en, this message translates to:
+  /// **'storage'**
+  String get asrFailureStageStorage;
 }
 
 class _AppLocalizationsDelegate

@@ -6020,5 +6020,105 @@
   "startupMigrationRestart": "立即重启",
   "startupRecoveryTitle": "应用启动异常",
   "startupRecoveryFallbackMessage": "启动过程中遇到数据格式问题，已自动修复，请重试。",
-  "startupRecoveryRetry": "重试"
+  "startupRecoveryRetry": "重试",
+  "asrFailureDiagnosticFormat": "ASR {category}（{stage}）{chunk}：{message}",
+  "@asrFailureDiagnosticFormat": {
+    "placeholders": {
+      "category": {},
+      "stage": {},
+      "chunk": {},
+      "message": {}
+    }
+  },
+  "asrFailureChunkPosition": "，第 {index}/{count} 段",
+  "@asrFailureChunkPosition": {
+    "placeholders": {
+      "index": {},
+      "count": {}
+    }
+  },
+  "asrFailureRequestFailed": "请求失败：{detail}",
+  "@asrFailureRequestFailed": {
+    "placeholders": {
+      "detail": {}
+    }
+  },
+  "asrChunkAllFailed": "分段转写全部失败（共 {count} 段，均未成功）",
+  "@asrChunkAllFailed": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "asrChunkIncomplete": "分段转写未完成（{succeeded}/{count} 段成功）",
+  "@asrChunkIncomplete": {
+    "placeholders": {
+      "succeeded": {},
+      "count": {}
+    }
+  },
+  "asrChunkSucceeded": "成功：{detail}",
+  "@asrChunkSucceeded": {
+    "placeholders": {
+      "detail": {}
+    }
+  },
+  "asrChunkFailed": "失败：{detail}",
+  "@asrChunkFailed": {
+    "placeholders": {
+      "detail": {}
+    }
+  },
+  "asrChunkUncertain": "结果不确定：{detail}",
+  "@asrChunkUncertain": {
+    "placeholders": {
+      "detail": {}
+    }
+  },
+  "asrChunkDetails": "第 {index} 段（{start}–{end} 秒）{status}",
+  "@asrChunkDetails": {
+    "placeholders": {
+      "index": {},
+      "start": {},
+      "end": {},
+      "status": {}
+    }
+  },
+  "asrChunkCheckpointFailure": "保存分段状态失败：{detail}",
+  "@asrChunkCheckpointFailure": {
+    "placeholders": {
+      "detail": {}
+    }
+  },
+  "asrChunkUncertainGuidance": "请求结果不确定。为避免重复提交，已停止重试。请重新选择音频后新建任务。",
+  "asrFailureChunkIndex": "，分段 {index}",
+  "@asrFailureChunkIndex": {
+    "placeholders": {
+      "index": {}
+    }
+  },
+  "asrChunkDetailsSeparator": "；",
+  "asrRecognitionFailed": "语音识别失败：{detail}",
+  "@asrRecognitionFailed": {
+    "placeholders": {
+      "detail": {}
+    }
+  },
+  "asrFailureCategoryAuthentication": "认证失败",
+  "asrFailureCategoryRateLimit": "请求过于频繁",
+  "asrFailureCategorySizeLimit": "文件过大",
+  "asrFailureCategoryNetwork": "网络",
+  "asrFailureCategoryResponseParsing": "响应解析",
+  "asrFailureCategoryLocalProcessing": "本地处理",
+  "asrFailureCategoryProvider": "服务商",
+  "asrFailureCategoryUnknown": "未知",
+  "asrFailureStagePreprocessing": "预处理",
+  "asrFailureStageEncoding": "编码",
+  "asrFailureStageValidation": "验证",
+  "asrFailureStageRequest": "请求",
+  "asrFailureStageUploading": "上传",
+  "asrFailureStageWaiting": "等待",
+  "asrFailureStageReceiving": "接收响应",
+  "asrFailureStageResponse": "响应",
+  "asrFailureStageParsing": "解析",
+  "asrFailureStageStorage": "保存"
 }

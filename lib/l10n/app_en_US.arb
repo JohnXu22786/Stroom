@@ -6020,5 +6020,105 @@
   "startupMigrationRestart": "Restart now",
   "startupRecoveryTitle": "App startup error",
   "startupRecoveryFallbackMessage": "A data format issue was encountered during startup and repaired automatically. Please try again.",
-  "startupRecoveryRetry": "Retry"
+  "startupRecoveryRetry": "Retry",
+  "asrFailureDiagnosticFormat": "ASR {category} at {stage}{chunk}: {message}",
+  "@asrFailureDiagnosticFormat": {
+    "placeholders": {
+      "category": {},
+      "stage": {},
+      "chunk": {},
+      "message": {}
+    }
+  },
+  "asrFailureChunkPosition": ", chunk {index}/{count}",
+  "@asrFailureChunkPosition": {
+    "placeholders": {
+      "index": {},
+      "count": {}
+    }
+  },
+  "asrFailureRequestFailed": "Request failed: {detail}",
+  "@asrFailureRequestFailed": {
+    "placeholders": {
+      "detail": {}
+    }
+  },
+  "asrChunkAllFailed": "Chunked transcription failed ({count} chunks, none succeeded)",
+  "@asrChunkAllFailed": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "asrChunkIncomplete": "Chunked transcription is incomplete ({succeeded}/{count} chunks succeeded)",
+  "@asrChunkIncomplete": {
+    "placeholders": {
+      "succeeded": {},
+      "count": {}
+    }
+  },
+  "asrChunkSucceeded": "Succeeded: {detail}",
+  "@asrChunkSucceeded": {
+    "placeholders": {
+      "detail": {}
+    }
+  },
+  "asrChunkFailed": "Failed: {detail}",
+  "@asrChunkFailed": {
+    "placeholders": {
+      "detail": {}
+    }
+  },
+  "asrChunkUncertain": "Outcome uncertain: {detail}",
+  "@asrChunkUncertain": {
+    "placeholders": {
+      "detail": {}
+    }
+  },
+  "asrChunkDetails": "Chunk {index} ({start}–{end}s) {status}",
+  "@asrChunkDetails": {
+    "placeholders": {
+      "index": {},
+      "start": {},
+      "end": {},
+      "status": {}
+    }
+  },
+  "asrChunkCheckpointFailure": "Saving chunk status failed: {detail}",
+  "@asrChunkCheckpointFailure": {
+    "placeholders": {
+      "detail": {}
+    }
+  },
+  "asrChunkUncertainGuidance": "Request outcome is uncertain. Retrying has stopped to avoid duplicate submissions. Select the audio again to create a new task.",
+  "asrFailureChunkIndex": ", chunk {index}",
+  "@asrFailureChunkIndex": {
+    "placeholders": {
+      "index": {}
+    }
+  },
+  "asrChunkDetailsSeparator": "; ",
+  "asrRecognitionFailed": "ASR recognition failed: {detail}",
+  "@asrRecognitionFailed": {
+    "placeholders": {
+      "detail": {}
+    }
+  },
+  "asrFailureCategoryAuthentication": "authentication",
+  "asrFailureCategoryRateLimit": "rate limit",
+  "asrFailureCategorySizeLimit": "size limit",
+  "asrFailureCategoryNetwork": "network",
+  "asrFailureCategoryResponseParsing": "response parsing",
+  "asrFailureCategoryLocalProcessing": "local processing",
+  "asrFailureCategoryProvider": "provider",
+  "asrFailureCategoryUnknown": "unknown",
+  "asrFailureStagePreprocessing": "preprocessing",
+  "asrFailureStageEncoding": "encoding",
+  "asrFailureStageValidation": "validation",
+  "asrFailureStageRequest": "request",
+  "asrFailureStageUploading": "uploading",
+  "asrFailureStageWaiting": "waiting",
+  "asrFailureStageReceiving": "receiving",
+  "asrFailureStageResponse": "response",
+  "asrFailureStageParsing": "parsing",
+  "asrFailureStageStorage": "storage"
 }

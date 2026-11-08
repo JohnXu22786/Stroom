@@ -3,6 +3,8 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter/widgets.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/services/asr_service.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/utils/audio_codecs.dart';
@@ -35,6 +37,36 @@ class _CapturingAdapter implements HttpClientAdapter {
     return ResponseBody.fromString(
       '{"text":"Hello world"}',
       200,
+      headers: {
+        Headers.contentTypeHeader: [Headers.jsonContentType],
+      },
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+class _FailingAdapter implements HttpClientAdapter {
+  final int statusCode;
+  final String message;
+
+  _FailingAdapter(this.statusCode, this.message);
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<dynamic>? cancelFuture,
+  ) async {
+    if (requestStream != null) {
+      await for (final _ in requestStream) {}
+    }
+    return ResponseBody.fromString(
+      jsonEncode({
+        'error': {'message': message}
+      }),
+      statusCode,
       headers: {
         Headers.contentTypeHeader: [Headers.jsonContentType],
       },
@@ -204,6 +236,177 @@ Uint8List _buildMonoMsAdpcmWav({
 }
 
 void main() {
+  group('ASR localized diagnostics', () {
+    test('failure framing is localized and preserves dynamic details', () {
+      const diagnostic = AsrFailureDiagnostic(
+        category: AsrFailureCategory.provider,
+        stage: AsrFailureStage.response,
+        chunkIndex: 1,
+        chunkCount: 3,
+        message: 'HTTP 503: upstream node west-2 unavailable',
+      );
+
+      final english = diagnostic.localizedString(
+        lookupAppLocalizations(const Locale('en', 'US')),
+      );
+      final chinese = diagnostic.localizedString(
+        lookupAppLocalizations(const Locale('zh', 'CN')),
+      );
+
+      expect(english, contains('ASR provider at response, chunk 1/3'));
+      expect(chinese, contains('ASR 服务商（响应），第 1/3 段'));
+      expect(english, contains('HTTP 503: upstream node west-2 unavailable'));
+      expect(chinese, contains('HTTP 503: upstream node west-2 unavailable'));
+      const providerDetail = AsrFailureDiagnostic(
+        category: AsrFailureCategory.provider,
+        stage: AsrFailureStage.response,
+        message: '请求失败: provider returned this detail',
+      );
+      expect(
+        providerDetail.localizedString(
+          lookupAppLocalizations(const Locale('zh', 'CN')),
+        ),
+        contains('请求失败: provider returned this detail'),
+      );
+    });
+
+    test('network wrapper is localized and preserves its dynamic cause', () {
+      final diagnostic = AsrFailureDiagnostic.fromError(
+        DioException(
+          requestOptions: RequestOptions(path: '/transcribe'),
+          type: DioExceptionType.connectionError,
+          error: 'SocketException: connection reset by peer',
+        ),
+        stage: AsrFailureStage.request,
+      );
+
+      final english = diagnostic.localizedString(
+        lookupAppLocalizations(const Locale('en', 'US')),
+      );
+      final chinese = diagnostic.localizedString(
+        lookupAppLocalizations(const Locale('zh', 'CN')),
+      );
+      expect(english, contains('Request failed: '));
+      expect(chinese, contains('请求失败：'));
+      expect(english, contains('SocketException: connection reset by peer'));
+      expect(chinese, contains('SocketException: connection reset by peer'));
+    });
+
+    test('URL request failure retains diagnostic type for localization',
+        () async {
+      const config = AsrConfig(
+        apiKey: 'test-key',
+        host: 'https://api.test.com/v1/audio/transcriptions',
+        uploadMethod: AudioUploadMethod.url,
+      );
+      final dio = Dio()
+        ..httpClientAdapter = _FailingAdapter(401, 'backend rejected tenant');
+      final service = AsrService(config: config, dio: dio);
+
+      late final AsrFailureDiagnostic failure;
+      try {
+        await service.transcribeFromUrl('https://files.test.com/audio.wav');
+        fail('Expected the request to fail');
+      } on AsrFailureDiagnostic catch (error) {
+        failure = error;
+      } finally {
+        service.close();
+        dio.close();
+      }
+
+      final chinese = formatAsrTaskFailure(
+        failure,
+        lookupAppLocalizations(const Locale('zh', 'CN')),
+      );
+      expect(chinese, contains('认证失败'));
+      expect(chinese, contains('HTTP 401'));
+      expect(chinese, contains('backend rejected tenant'));
+    });
+
+    test('chunk summary localizes labels and preserves dynamic details', () {
+      const failureDiagnostic = AsrFailureDiagnostic(
+        category: AsrFailureCategory.provider,
+        stage: AsrFailureStage.response,
+        chunkIndex: 2,
+        chunkCount: 3,
+        message: 'HTTP 502: upstream node west-2 unavailable',
+      );
+      final failedChunk = AsrChunkResult.withDiagnostic(
+        index: 1,
+        startSeconds: 2,
+        endSeconds: 4,
+        totalChunks: 3,
+        status: AsrChunkStatus.failed,
+        diagnostic: failureDiagnostic,
+      );
+      expect(failedChunk.toMap().containsKey('diagnostic'), isFalse);
+
+      final exception = AsrChunkedTranscriptionException([
+        const AsrChunkResult(
+          index: 0,
+          startSeconds: 0,
+          endSeconds: 2,
+          totalChunks: 3,
+          status: AsrChunkStatus.succeeded,
+          text: 'Keep this transcript verbatim.',
+        ),
+        failedChunk,
+        const AsrChunkResult(
+          index: 2,
+          startSeconds: 4,
+          endSeconds: 6,
+          totalChunks: 3,
+          status: AsrChunkStatus.uncertain,
+          error: 'request trace id 84af',
+        ),
+      ]);
+
+      final english = exception.localizedString(
+        lookupAppLocalizations(const Locale('en', 'US')),
+      );
+      final chinese = exception.localizedString(
+        lookupAppLocalizations(const Locale('zh', 'CN')),
+      );
+      final oneShotFailure = AsrChunkedTranscriptionException(
+        [failedChunk],
+        cause: failureDiagnostic,
+      );
+      final oneShotEnglish = formatAsrTaskFailure(
+        oneShotFailure,
+        lookupAppLocalizations(const Locale('en', 'US')),
+      );
+      final oneShotChinese = formatAsrTaskFailure(
+        oneShotFailure,
+        lookupAppLocalizations(const Locale('zh', 'CN')),
+      );
+
+      expect(english, contains('Chunked transcription is incomplete'));
+      expect(chinese, contains('分段转写未完成'));
+      expect(oneShotEnglish, contains('provider at response, chunk 2/3'));
+      expect(oneShotChinese, contains('服务商（响应），第 2/3 段'));
+      expect(oneShotEnglish,
+          contains('HTTP 502: upstream node west-2 unavailable'));
+      expect(oneShotChinese,
+          contains('HTTP 502: upstream node west-2 unavailable'));
+      expect(
+        english,
+        contains('Retrying has stopped to avoid duplicate submissions'),
+      );
+      expect(chinese, contains('为避免重复提交，已停止重试'));
+      expect(english, contains('provider at response, chunk 2/3'));
+      expect(chinese, contains('服务商（响应），第 2/3 段'));
+      for (final summary in [english, chinese]) {
+        expect(summary, contains('Keep this transcript verbatim.'));
+        expect(summary, contains('HTTP 502: upstream node west-2 unavailable'));
+        expect(summary, contains('request trace id 84af'));
+        expect(summary, contains('0.000'));
+        expect(summary, contains('2.000'));
+      }
+      expect(english, contains('Chunk 1'));
+      expect(chinese, contains('第 1 段'));
+    });
+  });
+
   group('AsrService', () {
     group('AsrConfig', () {
       test('normalizedHost strips trailing slash', () {
