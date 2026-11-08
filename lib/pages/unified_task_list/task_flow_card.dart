@@ -112,7 +112,10 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
         children: [
           // ── Header (always visible) ──
           InkWell(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: const BorderRadius.vertical(
+              top: Radius.circular(16),
+              bottom: Radius.circular(0),
+            ),
             onTap: () => setState(() => _expanded = !_expanded),
             child: Padding(
               padding: const EdgeInsets.all(12),
