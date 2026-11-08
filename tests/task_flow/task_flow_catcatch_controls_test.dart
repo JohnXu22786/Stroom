@@ -137,6 +137,18 @@ CatCatchTask _task(List<MediaResource> media, {bool confirmation = false}) =>
 void main() {
   const one = MediaResource(url: 'https://x/one.mp4', name: 'one', ext: 'mp4');
   const two = MediaResource(url: 'https://x/two.mp4', name: 'two', ext: 'mp4');
+  testWidgets('resource selection is titled with the source page title',
+      (tester) async {
+    final task = _task([one]).copyWith(
+      title: 'Fallback task title',
+      metadata: {'pageTitle': 'The source page'},
+    );
+
+    await _pump(tester, task);
+
+    expect(find.text('The source page'), findsOneWidget);
+  });
+
   testWidgets(
       'flow media selection replaces the resource without spawning siblings',
       (tester) async {

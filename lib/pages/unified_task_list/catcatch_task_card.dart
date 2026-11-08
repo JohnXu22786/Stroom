@@ -735,6 +735,10 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
     if (mediaList.isEmpty) return const SizedBox.shrink();
 
     final selectedIdentities = _getSelectedIdentities(task.id);
+    final rawPageTitle = task.metadata['pageTitle'];
+    final pageTitle = rawPageTitle is String && rawPageTitle.trim().isNotEmpty
+        ? rawPageTitle.trim()
+        : task.title.trim();
     final isSegment = (MediaResource media) => media.isPlaylistSegment;
     final selectableMedia = selection.selectableMedia;
     final segments = selectableMedia.where(isSegment).toList();
@@ -757,6 +761,17 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Text(
+            pageTitle.isNotEmpty ? pageTitle : truncateUrl(task.url),
+            key: const Key('catcatch_selection_title'),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context)
+                .textTheme
+                .titleMedium
+                ?.copyWith(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 8),
           Text(
             selectedIdentities.isNotEmpty
                 ? AppLocalizations.of(context)!.catcatchSelectedResources(
