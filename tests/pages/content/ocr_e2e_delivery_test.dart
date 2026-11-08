@@ -254,7 +254,6 @@ void main() {
 
   tearDown(() async {
     if (background.mounted) background.dispose();
-    await background.pendingPersistence;
     BackgroundTaskNotifier.debugStorageDirectoryOverride = null;
     await taskDirectory.delete(recursive: true);
   });
@@ -403,6 +402,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('Recognized text'), findsOneWidget);
+    await tester.runAsync(() => background.pendingPersistence);
   });
 
   test('failed OCR task restores its image after restart and retries to save',
@@ -482,6 +482,7 @@ void main() {
     await retryRunner.run();
     expect(background.state.firstWhere((task) => task.id == retryId).status,
         TaskStatus.completed);
+    await background.pendingPersistence;
     final record = (await TextManifest.loadRecords()).single;
     expect(
         await TextManifest.readText(record.storageFileName), 'Recovered text');
