@@ -4,7 +4,7 @@ This prototype is tracked in the `v0.7` line as an isolated feasibility harness.
 
 The Android and iOS Simulator CI workflows check:
 
-1. Node runtime version and the unmodified Node Mobile UTF-8 module-loading failure (RangeError: Index out of range).
+1. Node runtime version and raw UTF-8 behavior. Android requires the known unmodified Node Mobile module-loading failure (RangeError: Index out of range). iOS checks a Unicode Buffer round-trip and records either the exact decoded bytes or that specific RangeError; any other result fails. Simulator behavior is therefore measured rather than assumed to match across platforms.
 2. A separately loaded, committed UTF-8 compatibility shim, followed by a clean `npm ci` into an app-private fixture directory from the checked-in manifest and lockfile. The manifest uses a real npm `overrides` entry pinning transitive `fast-uri` to 3.1.0.
 3. Runtime verification of the installed override, TypeScript-to-JavaScript transpilation with Sucrase, and execution of the result.
 4. MCP `initialize`, `tools/list`, and `tools/call` using the SDK's linked in-memory client/server transport.

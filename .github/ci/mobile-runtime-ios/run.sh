@@ -4,6 +4,10 @@ set -euo pipefail
 app=${1:?usage: run.sh <testnode.app> <temp-dir>}
 temp=${2:?usage: run.sh <testnode.app> <temp-dir>}
 bundle_id='nodejsmobile.test'
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+
+python3 "$script_dir/test_log_marker.py"
+node "$script_dir/test_raw_utf8_check.js"
 
 device=$(xcrun simctl list devices available --json | python3 -c '
 import json, sys
@@ -74,16 +78,18 @@ run_node() {
   status=$?
   set -e
   cat "$log"
-  if [[ $status -ne 0 ]] || ! grep -Fq "$required_marker" "$log"; then
+  if [[ $status -ne 0 ]] || ! python3 "$script_dir/check_log_marker.py" "$log" "$required_marker"
+  then
     echo "$label failed (exit $status; expected marker: $required_marker)." >&2
     exit 1
   fi
 }
 
-raw_expression="(()=>{console.log('IOS_NODE_RUNTIME_'+process.version);let fs=require('node:fs');let expectedFailure=false;try{fs.readFileSync('$shim','utf8');Buffer.from('Stroom 学习 🙂','utf8').toString('utf8')}catch(error){console.log('IOS_RAW_UTF8_FAILURE:'+error.name+':'+error.message);expectedFailure=error instanceof RangeError&&error.message.includes('Index out of range')}if(!expectedFailure){console.log('RESULT:FAIL');throw new Error('Expected the unpatched UTF-8 RangeError was not reproduced')}console.log('IOS_RAW_UTF8_FAILURE_CONFIRMED');console.log('RESULT:PASS')})()"
-run_node raw-runtime IOS_RAW_UTF8_FAILURE_CONFIRMED 60 -p "$raw_expression"
+raw_expression="console.log('IOS_NODE_RUNTIME_'+process.version),$(cat "$script_dir/raw_utf8_check.js")"
+raw_markers=$'IOS_RAW_UTF8_ROUNDTRIP:5374726f6f6d20e5ada6e4b9a020f09f9982\nIOS_RAW_UTF8_RANGEERROR:RangeError:Index out of range'
+run_node raw-runtime "$raw_markers" 60 -p "$raw_expression"
 
-npm_expression="(()=>{let fs=require('node:fs');let source=new TextDecoder().decode(fs.readFileSync('$shim'));eval(source);process.argv=['node','$npm','ci','--prefix','$fixture','--cache','$cache','--no-audit','--no-fund','--registry=https://registry.npmjs.org','--replace-registry-host=always','--fetch-retries=0'];process.on('exit',()=>console.log('IOS_NPM_CI_PROCESS_EXIT:'+String(process.exitCode||0)));return require('$npm')})()"
+npm_expression="(()=>{let fs=require('node:fs');let source=new TextDecoder().decode(fs.readFileSync('$shim'));eval(source);process.argv=['node','$npm','ci','--prefix','$fixture','--cache','$cache','--no-audit','--no-fund','--progress=false','--registry=https://registry.npmjs.org','--replace-registry-host=always','--fetch-retries=0'];process.on('exit',()=>process.stdout.write('\\nIOS_NPM_CI_PROCESS_EXIT:'+String(process.exitCode||0)+'\\n'));return require('$npm')})()"
 run_node npm-ci IOS_NPM_CI_PROCESS_EXIT:0 360 -p "$npm_expression"
 
 verify_expression="(()=>{let fs=require('node:fs');let source=new TextDecoder().decode(fs.readFileSync('$shim'));eval(source);return require('$fixture/verify-install.cjs')})()"
