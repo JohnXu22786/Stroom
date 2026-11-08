@@ -36,12 +36,14 @@ void main() {
       expect(find.text('总卡片数'), findsOneWidget);
       final plate = tester.widget<Container>(
         find
-            .byWidgetPredicate(
-              (widget) =>
-                  widget is Container &&
-                  widget.decoration is BoxDecoration &&
-                  (widget.decoration! as BoxDecoration).borderRadius ==
-                      BorderRadius.circular(8),
+            .ancestor(
+              of: find.byIcon(Icons.auto_stories),
+              matching: find.byWidgetPredicate(
+                (widget) =>
+                    widget is Container &&
+                    widget.width == 44 &&
+                    widget.height == 44,
+              ),
             )
             .first,
       );
