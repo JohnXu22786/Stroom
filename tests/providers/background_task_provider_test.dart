@@ -25953,7 +25953,7 @@ void main() {
             {
               'imageIndex': 0,
               'status': 'failed',
-              'error': 'Provider quota exceeded',
+              'error': '识别失败',
             },
           ],
         };
@@ -25995,18 +25995,27 @@ void main() {
     test(
       'partial restore does not rewrite credential-bearing skipped OCR page errors',
       () async {
-        const credential = 'opaque-page-provider-key-586';
+        const credential = '识别失败';
         final skippedRow = <String, dynamic>{
           'type': 'ocr',
           'title': 'Malformed OCR row with credential-bearing page outcome',
           'status': 'not-a-task-status',
           'createdAt': DateTime.utc(2026).toIso8601String(),
           'steps': <dynamic>[],
+          'apiKey': credential,
+          'retryData': {
+            'type': 'ocr',
+            'version': OcrRetrySnapshot.currentVersion,
+            'images': <dynamic>[],
+            'batchMode': 'joint',
+            'perImageConcurrency': 1,
+            'requestSizeBudgetBytes': 1024,
+          },
           'ocrPageOutcomes': [
             {
               'imageIndex': 0,
               'status': 'failed',
-              'error': 'Provider rejected API key: $credential',
+              'error': credential,
             },
           ],
         };
