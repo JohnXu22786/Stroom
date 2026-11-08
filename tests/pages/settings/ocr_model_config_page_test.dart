@@ -219,9 +219,7 @@ void main() {
         final model = ModelConfig(
           name: 'OCR模型',
           modelId: 'qwen-vl-ocr',
-          customParams: [
-            CustomParam(paramName: reservedName, defaultValue: '1'),
-          ],
+          customParams: [CustomParam(paramName: reservedName)],
         );
 
         await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
