@@ -39,32 +39,34 @@ Widget _app({
 
 void main() {
   testWidgets(
-    'running conversation pulses the theme primary each second',
+    'running conversation pulses the inactive icon style each second',
     (tester) async {
       await tester.pumpWidget(_app(isRunning: true));
 
-      final bubble = tester.widget<Icon>(
-        find.byIcon(Icons.chat_bubble_outline_rounded),
+      final cs = Theme.of(tester.element(find.byType(TopicItem))).colorScheme;
+      final iconFinder = find.byIcon(Icons.chat_bubble_outline_rounded);
+      final bubble = tester.widget<Icon>(iconFinder);
+      expect(bubble.color, cs.onSurfaceVariant);
+
+      final tile = tester.widget<Container>(
+        find.ancestor(of: iconFinder, matching: find.byType(Container)).first,
       );
-      final primary =
-          Theme.of(tester.element(find.byType(TopicItem))).colorScheme.primary;
-      expect(
-        primary,
-        isNot(ColorScheme.fromSeed(seedColor: Colors.blue).primary),
-      );
-      expect(bubble.color, primary);
+      final decoration = tile.decoration! as BoxDecoration;
+      expect(decoration.color, cs.primaryContainer.withValues(alpha: 0.3));
+      expect(decoration.border, isNull);
+
       final firstColor = bubble.color;
 
       await tester.pump(const Duration(milliseconds: 500));
       final middleColor = tester
-          .widget<Icon>(find.byIcon(Icons.chat_bubble_outline_rounded))
+          .widget<Icon>(iconFinder)
           .color;
       expect(middleColor, isNot(firstColor));
+      expect(middleColor!.a, lessThan(firstColor!.a));
+      expect(middleColor.r, firstColor.r);
 
       await tester.pump(const Duration(milliseconds: 500));
-      final cycleColor = tester
-          .widget<Icon>(find.byIcon(Icons.chat_bubble_outline_rounded))
-          .color;
+      final cycleColor = tester.widget<Icon>(iconFinder).color;
       expect(cycleColor, firstColor);
     },
   );

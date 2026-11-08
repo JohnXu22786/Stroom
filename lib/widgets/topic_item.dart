@@ -43,9 +43,7 @@ class TopicItem extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final brightness = Theme.of(context).brightness;
     final isDark = brightness == Brightness.dark;
-    final statusColor = isRunning
-        ? cs.primary
-        : isFailed
+    final statusColor = isFailed
             ? cs.error
             : isUnread
                 ? Color.lerp(cs.primary, Colors.green, 0.55)
@@ -93,11 +91,11 @@ class TopicItem extends StatelessWidget {
                     width: 40,
                     height: 40,
                     decoration: BoxDecoration(
-                      color: statusColor != null
+                      color: statusColor != null && !isRunning
                           ? statusColor.withValues(alpha: 0.12)
                           : cs.primaryContainer.withValues(alpha: 0.3),
                       borderRadius: BorderRadius.circular(10),
-                      border: statusColor == null
+                      border: statusColor == null || isRunning
                           ? null
                           : Border.all(
                               color: statusColor.withValues(alpha: 0.45),
@@ -106,7 +104,9 @@ class TopicItem extends StatelessWidget {
                     ),
                     child: Center(
                       child: isRunning
-                          ? _PulsingConversationIcon(color: statusColor!)
+                          ? _PulsingConversationIcon(
+                              color: cs.onSurfaceVariant,
+                            )
                           : Icon(
                               topic.isPinned
                                   ? Icons.push_pin
