@@ -72,6 +72,8 @@
     var panY = 0;
     var fitComplete = false;
     var pendingZoomOperations = [];
+    var lastViewportWidth = 0;
+    var lastViewportHeight = 0;
     window.zoomInputQueueReady = false;
 
     function zoomInputTimestamp() {
@@ -327,6 +329,8 @@
       zoomLevel = Math.min(10, Math.min(vw / sw, vh / sh));
       panX = (vw - sw * zoomLevel) / 2;
       panY = (vh - sh * zoomLevel) / 2;
+      lastViewportWidth = vw;
+      lastViewportHeight = vh;
       updateTransform();
       notifyTransform();
       fitComplete = true;
@@ -339,7 +343,12 @@
       if (!fitComplete) return;
       var viewport = document.getElementById('viewport');
       if (!viewport || viewport.clientWidth <= 0 || viewport.clientHeight <= 0) return;
-      window.fitToViewport();
+      panX += (viewport.clientWidth - lastViewportWidth) / 2;
+      panY += (viewport.clientHeight - lastViewportHeight) / 2;
+      lastViewportWidth = viewport.clientWidth;
+      lastViewportHeight = viewport.clientHeight;
+      updateTransform();
+      notifyTransform();
     });
 
     var isDragging = false;
