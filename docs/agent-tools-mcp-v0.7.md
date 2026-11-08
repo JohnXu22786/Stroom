@@ -22,6 +22,7 @@ Stroom does not currently host an MCP server. The in-app chat also has a separat
 - PR #1436 is merged to `v0.7` as `1ab1fc82a992b2ab79d15641dbe9f71dfb6fb65a`. It adds persisted, conversation-scoped `todowrite`; `stroom_media_list`, `stroom_ocr`, and `stroom_asr`; `stroom_tts`; and `stroom_taskflow_list`, `stroom_taskflow_run`, `stroom_taskflow_status`, and `stroom_taskflow_control`.
 - Text Storage tools (`stroom_space_list`, `stroom_space_search`, `stroom_space_read`, and `stroom_space_write`) were merged in PR #1395 as `6f8834c50c6d51b1a89dc44093b408756465faea`. CI run [42086514364](https://github.com/JohnXu22786/Stroom/actions/runs/42086514364) passed all checks, including the six platform message-view smoke tests and Text Storage service tests.
 - Stroom remains an MCP client for configured external servers. These in-app tools do not add a local MCP server endpoint or promise arbitrary npm package compatibility.
+- A separate Node Mobile feasibility prototype is tracked in [`tools/mobile-runtime-poc/README.md`](../tools/mobile-runtime-poc/README.md). Its Android and iOS Simulator checks cover a locked npm fixture, TS transpilation, and in-process MCP API calls; it is test evidence only and does not mean Stroom embeds Node/npm or supports arbitrary installed packages.
 
 ### Reusable application capabilities
 
@@ -102,5 +103,5 @@ The existing web file store uses IndexedDB and does not provide a general raw-fi
 - A standalone MCP server endpoint for other applications to connect to Stroom.
 - Arbitrary device filesystem access, shell execution, hidden settings access, and tool-driven flow editing.
 - Additional app capabilities (for example, image/video generation or browser control) until their user-facing scope and permission model are defined.
-- Running arbitrary user-installed npm MCP packages on mobile is a separate runtime feasibility effort; this first-party tool plan does not claim that capability.
+- Embedding a Node/npm runtime in Stroom and running arbitrary user-installed npm MCP packages on mobile remain separate product work; the feasibility prototype does not claim that capability.
 
