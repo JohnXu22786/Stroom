@@ -4,7 +4,6 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter/widgets.dart' show Locale;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:stroom/providers/locale_provider.dart';
 import 'package:stroom/services/openai_file_service.dart';
 
 // ============================================================================
@@ -167,7 +166,7 @@ void main() {
       await expectLater(
         OpenAiFileService(
           config: _testConfig().copyWith(apiKey: ''),
-          localizations: () => appLocalizationsForLocale(locale),
+          localeOverride: () => locale,
         ).uploadFile(
           bytes: bytes,
           filename: 'test.txt',
@@ -203,7 +202,7 @@ void main() {
         OpenAiFileService(
           config: _testConfig(),
           dio: _mockDio(adapter),
-          localizations: () => appLocalizationsForLocale(locale),
+          localeOverride: () => locale,
         ).uploadFile(
           bytes: bytes,
           filename: 'test.txt',
@@ -218,8 +217,10 @@ void main() {
       );
     }
 
+    locale = const Locale('en', 'US');
     await expectMissingFileId(
         'File upload failed: response is missing file id');
+    locale = const Locale('zh', 'CN');
     await expectMissingFileId('上传失败：响应中缺少 file id');
   });
 
@@ -386,7 +387,7 @@ void main() {
         final service = OpenAiFileService(
           config: _testConfig(),
           dio: _mockDio(adapter),
-          localizations: () => appLocalizationsForLocale(locale),
+          localeOverride: () => locale,
         );
         await expectLater(
           service.uploadFile(

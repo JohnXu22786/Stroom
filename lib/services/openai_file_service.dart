@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter/widgets.dart' show Locale;
 import '../l10n/app_localizations.dart';
 import '../providers/chat_api_shared.dart';
 import '../providers/locale_provider.dart';
@@ -129,13 +130,16 @@ class OpenAiFileResult {
 class OpenAiFileService {
   final OpenAiFileUploadConfig config;
   final Dio _dio;
-  final AppLocalizations Function() _localizations;
+  final Locale? Function()? _localeOverride;
+
+  AppLocalizations get _localizations =>
+      appLocalizationsForLocale(_localeOverride?.call());
 
   Never _throwDioException(DioException error) {
     throwWrappedDioException(
       error,
       messageBuilder: (statusCode, detail) {
-        final strings = _localizations();
+        final strings = _localizations;
         return statusCode == null
             ? strings.fileUploadRequestFailed(detail)
             : strings.fileUploadRequestFailedStatus(statusCode, detail);
@@ -146,9 +150,8 @@ class OpenAiFileService {
   OpenAiFileService({
     required this.config,
     Dio? dio,
-    AppLocalizations Function()? localizations,
-  })  : _localizations =
-            localizations ?? (() => appLocalizationsForLocale(null)),
+    Locale? Function()? localeOverride,
+  })  : _localeOverride = localeOverride,
         _dio = dio ??
             Dio(BaseOptions(
               headers: {
@@ -179,7 +182,7 @@ class OpenAiFileService {
     void Function(double progress)? onProgress,
     CancelToken? cancelToken,
   }) async {
-    final strings = _localizations();
+    final strings = _localizations;
     // ── Input validation ────────────────────────────────────────────
     if (config.apiKey.isEmpty) {
       throw Exception(strings.fileUploadApiKeyMissing);
@@ -279,7 +282,7 @@ class OpenAiFileService {
     try {
       // Check cancellation before proceeding
       if (cancelToken?.isCancelled == true) {
-        throw Exception(_localizations().fileUploadCanceled);
+        throw Exception(_localizations.fileUploadCanceled);
       }
 
       // Step 2: Split and upload parts
@@ -291,7 +294,7 @@ class OpenAiFileService {
           offset += config.partSizeBytes) {
         if (cancelToken?.isCancelled == true) {
           await _cancelUploadSafely(uploadId);
-          throw Exception(_localizations().fileUploadCanceled);
+          throw Exception(_localizations.fileUploadCanceled);
         }
 
         final end = (offset + config.partSizeBytes > bytes.length)
@@ -351,7 +354,7 @@ class OpenAiFileService {
       final data = response.data as Map<String, dynamic>;
       final uploadId = data['id'] as String?;
       if (uploadId == null || uploadId.isEmpty) {
-        throw Exception(_localizations().fileUploadCreateMissingId);
+        throw Exception(_localizations.fileUploadCreateMissingId);
       }
       return uploadId;
     } on DioException catch (e) {
@@ -385,7 +388,7 @@ class OpenAiFileService {
       final data = response.data as Map<String, dynamic>;
       final partId = data['id'] as String?;
       if (partId == null || partId.isEmpty) {
-        throw Exception(_localizations().fileUploadPartMissingId);
+        throw Exception(_localizations.fileUploadPartMissingId);
       }
       return partId;
     } on DioException catch (e) {
@@ -430,7 +433,7 @@ class OpenAiFileService {
             purpose: purpose,
           );
         }
-        throw Exception(_localizations().fileUploadCompleteMissingFile);
+        throw Exception(_localizations.fileUploadCompleteMissingFile);
       }
 
       return OpenAiFileResult(
@@ -486,7 +489,7 @@ class OpenAiFileService {
     }
 
     if (id == null || id.isEmpty) {
-      throw Exception(_localizations().fileUploadMissingFileId);
+      throw Exception(_localizations.fileUploadMissingFileId);
     }
 
     return OpenAiFileResult(
