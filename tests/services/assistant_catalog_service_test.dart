@@ -55,10 +55,18 @@ void main() {
           service.fetchCatalog('http://example.com/catalog.json'),
           throwsA(isA<FormatException>()),
         );
-        await expectLater(
-          service.fetchCatalog('https://127.0.0.1/catalog.json'),
-          throwsA(isA<FormatException>()),
-        );
+        for (final host in [
+          '127.0.0.1',
+          '[::1]',
+          '[0:0:0:0:0:0:0:1]',
+          '[::ffff:127.0.0.1]',
+          '[::ffff:172.16.0.1]',
+        ]) {
+          await expectLater(
+            service.fetchCatalog('https://$host/catalog.json'),
+            throwsA(isA<FormatException>()),
+          );
+        }
         expect(requestCount, 0);
         service.close();
       },

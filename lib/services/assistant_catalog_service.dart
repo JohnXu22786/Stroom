@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
@@ -154,32 +155,43 @@ class AssistantCatalogService {
         host.endsWith('.test')) {
       return true;
     }
-    final parts = host.split('.');
-    if (parts.length == 4 &&
-        parts.every((part) => int.tryParse(part) != null)) {
-      final octets = parts.map(int.parse).toList();
-      if (octets.any((part) => part < 0 || part > 255)) return true;
-      return octets[0] == 10 ||
-          octets[0] == 127 ||
-          octets[0] == 0 ||
-          (octets[0] == 169 && octets[1] == 254) ||
-          (octets[0] == 172 && octets[1] >= 16 && octets[1] <= 31) ||
-          (octets[0] == 192 && octets[1] == 168);
-    }
-    if (host.contains(':')) {
-      return host == '::1' ||
-          host.startsWith('fc') ||
-          host.startsWith('fd') ||
-          host.startsWith('fe8') ||
-          host.startsWith('fe9') ||
-          host.startsWith('fea') ||
-          host.startsWith('feb') ||
-          host.startsWith('::ffff:127.') ||
-          host.startsWith('::ffff:10.') ||
-          host.startsWith('::ffff:192.168.');
-    }
-    return false;
+    final address = InternetAddress.tryParse(host);
+    if (address == null) return false;
+    final bytes = address.rawAddress;
+    if (bytes.length == 4) return _isPrivateIpv4(bytes);
+    if (bytes.length != 16) return true;
+
+    // IPv4-mapped IPv6 addresses use the same private-range policy as IPv4.
+    final isIpv4Mapped = bytes.take(10).every((byte) => byte == 0) &&
+        bytes[10] == 0xff &&
+        bytes[11] == 0xff;
+    if (isIpv4Mapped) return _isPrivateIpv4(bytes.sublist(12));
+
+    final isUnspecified = bytes.every((byte) => byte == 0);
+    final isLoopback =
+        bytes.take(15).every((byte) => byte == 0) && bytes[15] == 1;
+    final isUniqueLocal = bytes[0] & 0xfe == 0xfc;
+    final isLinkLocal = bytes[0] == 0xfe && bytes[1] & 0xc0 == 0x80;
+    final isSiteLocal = bytes[0] == 0xfe && bytes[1] & 0xc0 == 0xc0;
+    final isMulticast = bytes[0] == 0xff;
+    return isUnspecified ||
+        isLoopback ||
+        isUniqueLocal ||
+        isLinkLocal ||
+        isSiteLocal ||
+        isMulticast;
   }
+
+  static bool _isPrivateIpv4(List<int> octets) =>
+      octets[0] == 0 ||
+      octets[0] == 10 ||
+      octets[0] == 127 ||
+      (octets[0] == 169 && octets[1] == 254) ||
+      (octets[0] == 172 && octets[1] >= 16 && octets[1] <= 31) ||
+      (octets[0] == 192 && octets[1] == 168) ||
+      (octets[0] == 100 && octets[1] >= 64 && octets[1] <= 127) ||
+      (octets[0] == 192 && octets[1] == 0 && octets[2] == 0) ||
+      (octets[0] == 198 && (octets[1] == 18 || octets[1] == 19));
 
   static bool _sameOrigin(Uri a, Uri b) =>
       a.scheme == b.scheme &&
