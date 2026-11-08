@@ -3,10 +3,11 @@ import 'assistant_catalog_service.dart';
 
 class AssistantUpdateService {
   static Future<DownloadedRemoteAssistant?> checkForUpdate(
-    Assistant assistant,
-  ) async {
+    Assistant assistant, {
+    AssistantCatalogService? catalogService,
+  }) async {
     final catalogUrl = assistant.remoteCatalogUrl;
-    final service = AssistantCatalogService();
+    final service = catalogService ?? AssistantCatalogService();
     try {
       if (catalogUrl != null && catalogUrl.isNotEmpty) {
         final catalog = await service.fetchCatalog(catalogUrl);
@@ -37,7 +38,7 @@ class AssistantUpdateService {
       }
       return remote;
     } finally {
-      service.close();
+      if (catalogService == null) service.close();
     }
   }
 }
