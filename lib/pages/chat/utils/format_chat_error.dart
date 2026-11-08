@@ -14,22 +14,25 @@ String formatChatErrorMessage(
   final l10n = appLocalizationsForLocale(locale);
   final errorStr = error.toString();
 
-  if (errorStr.contains('请先配置聊天供应商')) {
-    final details = _detailsAroundKnownMessage(
-      errorStr,
-      '请先配置聊天供应商',
-    );
+  final providerMessage = _firstKnownMessage(errorStr, [
+    l10n.chatMissingProvider,
+    '请先配置聊天供应商',
+  ]);
+  if (providerMessage != null) {
+    final details = _detailsAroundKnownMessage(errorStr, providerMessage);
     return _withDetails(
       '${l10n.chatErrorPrefix}${l10n.chatErrorProviderNotConfigured}',
       details,
     );
   }
 
-  if (errorStr.contains('API key not configured')) {
-    final details = _detailsAroundKnownMessage(
-      errorStr,
-      'API key not configured',
-    );
+  final apiKeyMessage = _firstKnownMessage(errorStr, [
+    'API key is not configured',
+    'API key not configured',
+    'API 密钥未配置',
+  ]);
+  if (apiKeyMessage != null) {
+    final details = _detailsAroundKnownMessage(errorStr, apiKeyMessage);
     return _withDetails(
       '${l10n.chatErrorPrefix}${l10n.chatErrorApiKeyNotConfigured}',
       details,
@@ -95,10 +98,15 @@ String? _detailsAroundFirstKnownMessage(
   String error,
   List<String> knownMessages,
 ) {
+  final knownMessage = _firstKnownMessage(error, knownMessages);
+  return knownMessage == null
+      ? null
+      : _detailsAroundKnownMessage(error, knownMessage);
+}
+
+String? _firstKnownMessage(String error, List<String> knownMessages) {
   for (final knownMessage in knownMessages) {
-    if (error.contains(knownMessage)) {
-      return _detailsAroundKnownMessage(error, knownMessage);
-    }
+    if (error.contains(knownMessage)) return knownMessage;
   }
   return null;
 }

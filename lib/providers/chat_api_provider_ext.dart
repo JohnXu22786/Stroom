@@ -1,6 +1,6 @@
 part of 'chat_api_provider.dart';
 
-extension _OpenAICompatibleChatProviderExt on OpenAICompatibleChatProvider {
+extension OpenAICompatibleChatProviderExt on OpenAICompatibleChatProvider {
   /// Build the request body map.
   ///
   /// [messages] 已由 ChatService 预处理为 API 格式
@@ -28,6 +28,10 @@ extension _OpenAICompatibleChatProviderExt on OpenAICompatibleChatProvider {
   }
 
   /// 非流式请求的 Dio 错误处理：填充诊断槽后抛出标准异常。
+  @visibleForTesting
+  Exception handleChatDioErrorForTesting(DioException e) =>
+      _handleChatDioError(e);
+
   Exception _handleChatDioError(DioException e) {
     _lastResponseStatusCode = e.response?.statusCode;
     _lastResponseHeaders = e.response?.headers.map;
@@ -48,7 +52,10 @@ extension _OpenAICompatibleChatProviderExt on OpenAICompatibleChatProvider {
     } else {
       detail = '$body';
     }
-    return Exception('API 请求失败 (HTTP $statusCode): $detail');
+    return Exception(
+      appLocalizationsForLocale(_localeOverride?.call())
+          .chatHttpRequestFailed(statusCode, detail),
+    );
   }
 
   /// 流式请求错误时的诊断槽重置与填充：

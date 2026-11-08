@@ -5,9 +5,11 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart' show Locale;
 
+import '../l10n/app_localizations.dart';
 import '../models/ai_stream_event.dart';
 import '../services/sse_client.dart';
 import 'chat_api_shared.dart';
+import 'locale_provider.dart';
 
 part 'anthropic_stream_parser.dart';
 
@@ -48,21 +50,23 @@ class AnthropicChatProvider extends BaseChatProvider {
     required String apiKey,
     String name = 'Anthropic',
     Locale? Function()? localeOverride,
+    Dio? dio,
   })  : _baseUrl = baseUrl,
         _apiKey = apiKey,
         _name = name,
         _localeOverride = localeOverride,
-        _dio = Dio(BaseOptions(
-          baseUrl: '',
-          headers: {
-            'Content-Type': 'application/json',
-            'anthropic-version': kAnthropicApiVersion,
-            if (apiKey.isNotEmpty) 'x-api-key': apiKey,
-            ...openRouterAppHeaders,
-          },
-          connectTimeout: const Duration(seconds: 10),
-          receiveTimeout: const Duration(seconds: 60),
-        ));
+        _dio = dio ??
+            Dio(BaseOptions(
+              baseUrl: '',
+              headers: {
+                'Content-Type': 'application/json',
+                'anthropic-version': kAnthropicApiVersion,
+                if (apiKey.isNotEmpty) 'x-api-key': apiKey,
+                ...openRouterAppHeaders,
+              },
+              connectTimeout: const Duration(seconds: 10),
+              receiveTimeout: const Duration(seconds: 60),
+            ));
 
   @override
   String get name => _name;
@@ -211,7 +215,12 @@ class AnthropicChatProvider extends BaseChatProvider {
     Map<String, dynamic>? extraParams,
     String? system,
   }) async {
-    if (_apiKey.isEmpty) throw Exception('API key not configured');
+    if (_apiKey.isEmpty) {
+      throw Exception(
+        appLocalizationsForLocale(_localeOverride?.call())
+            .chatApiKeyNotConfigured,
+      );
+    }
 
     final body = _buildBody(messages,
         model: model,
@@ -260,7 +269,10 @@ class AnthropicChatProvider extends BaseChatProvider {
 
       final contentBlocks = response.data['content'] as List?;
       if (contentBlocks == null || contentBlocks.isEmpty) {
-        throw Exception('API 返回了空的 content 列表');
+        throw Exception(
+          appLocalizationsForLocale(_localeOverride?.call())
+              .chatContentBlocksMissing,
+        );
       }
       final parts = <String>[];
       for (final block in contentBlocks) {
@@ -270,7 +282,10 @@ class AnthropicChatProvider extends BaseChatProvider {
         }
       }
       if (parts.isEmpty) {
-        throw Exception('API 返回内容为空');
+        throw Exception(
+          appLocalizationsForLocale(_localeOverride?.call())
+              .chatResponseContentEmpty,
+        );
       }
       return parts.join('');
     } on DioException catch (e) {
@@ -294,9 +309,16 @@ class AnthropicChatProvider extends BaseChatProvider {
       } else {
         detail = '$body';
       }
-      throw Exception('API 请求失败 (HTTP $statusCode): $detail');
+      throw Exception(
+        appLocalizationsForLocale(_localeOverride?.call())
+            .chatHttpRequestFailed(statusCode, detail),
+      );
     } catch (e) {
-      throw Exception('请求失败: $e');
+      throw Exception(
+        appLocalizationsForLocale(_localeOverride?.call()).chatRequestFailed(
+          '$e',
+        ),
+      );
     }
   }
 
@@ -316,7 +338,10 @@ class AnthropicChatProvider extends BaseChatProvider {
     String? system,
   }) async* {
     if (_apiKey.isEmpty) {
-      throw Exception('API key not configured');
+      throw Exception(
+        appLocalizationsForLocale(_localeOverride?.call())
+            .chatApiKeyNotConfigured,
+      );
     }
 
     final body = _buildBody(messages,
@@ -414,7 +439,13 @@ class AnthropicChatProvider extends BaseChatProvider {
             }
           }
 
-          final events = processAnthropicStreamData(data, acc);
+          final events = processAnthropicStreamData(
+            data,
+            acc,
+            localizations: () => appLocalizationsForLocale(
+              _localeOverride?.call(),
+            ),
+          );
           for (final e in events) {
             yield e;
           }

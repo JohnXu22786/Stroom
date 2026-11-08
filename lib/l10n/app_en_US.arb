@@ -6133,5 +6133,38 @@
   "asrFailureStageReceiving": "receiving",
   "asrFailureStageResponse": "response",
   "asrFailureStageParsing": "parsing",
-  "asrFailureStageStorage": "storage"
+  "asrFailureStageStorage": "storage",
+  "chatMissingProvider": "Please configure a chat provider first",
+  "anthropicStreamApiError": "Anthropic API error: {detail}",
+  "@anthropicStreamApiError": { "placeholders": { "detail": {} } },
+  "anthropicStreamUnknownError": "Unknown error",
+  "chatHttpRequestFailed": "API request failed (HTTP {statusCode}): {detail}",
+  "@chatHttpRequestFailed": {
+    "placeholders": { "statusCode": {}, "detail": {} }
+  },
+  "fileUploadApiKeyMissing": "API key is not configured; file upload is unavailable",
+  "fileUploadApiUrlMissing": "API URL is not configured; file upload is unavailable",
+  "fileUploadContentEmpty": "File content is empty",
+  "fileUploadFilenameEmpty": "File name is empty",
+  "fileUploadMimeTypeEmpty": "MIME type is empty",
+  "fileUploadPurposeEmpty": "Upload purpose is empty",
+  "fileUploadCanceled": "File upload was canceled",
+  "fileUploadCreateMissingId": "Upload creation failed: response is missing upload id",
+  "fileUploadPartMissingId": "Part upload failed: response is missing part id",
+  "fileUploadCompleteMissingFile": "Upload completion failed: response is missing file object",
+  "fileUploadMissingFileId": "File upload failed: response is missing file id",
+  "fileUploadRequestFailedStatus": "File upload request failed (HTTP {statusCode}): {detail}",
+  "@fileUploadRequestFailedStatus": {
+    "placeholders": { "statusCode": {}, "detail": {} }
+  },
+  "fileUploadRequestFailed": "File upload request failed: {detail}",
+  "@fileUploadRequestFailed": { "placeholders": { "detail": {} } },
+  "chatApiKeyNotConfigured": "API key is not configured",
+  "chatStreamError": "API stream error: {detail}",
+  "@chatStreamError": { "placeholders": { "detail": {} } },
+  "chatChoicesMissing": "API response has no choices",
+  "chatContentBlocksMissing": "API response has no content blocks",
+  "chatResponseContentEmpty": "API response content is empty",
+  "chatRequestFailed": "Request failed: {detail}",
+  "@chatRequestFailed": { "placeholders": { "detail": {} } }
 }

@@ -13,7 +13,10 @@ import 'package:dio/dio.dart';
 /// Message format:
 /// - With HTTP status: `Exception('请求失败 (HTTP $statusCode): $detail')`
 /// - Without HTTP status (connection error): `Exception('请求失败: $detail')`
-Never throwWrappedDioException(DioException e) {
+Never throwWrappedDioException(
+  DioException e, {
+  String Function(int? statusCode, String detail)? messageBuilder,
+}) {
   final statusCode = e.response?.statusCode ?? 0;
   String detail;
   final body = e.response?.data;
@@ -24,6 +27,9 @@ Never throwWrappedDioException(DioException e) {
     detail = body;
   } else {
     detail = '$e';
+  }
+  if (messageBuilder != null) {
+    throw Exception(messageBuilder(statusCode > 0 ? statusCode : null, detail));
   }
   if (statusCode > 0) {
     throw Exception('请求失败 (HTTP $statusCode): $detail');

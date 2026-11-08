@@ -17813,6 +17813,144 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'storage'**
   String get asrFailureStageStorage;
+
+  /// No description provided for @chatMissingProvider.
+  ///
+  /// In en, this message translates to:
+  /// **'Please configure a chat provider first'**
+  String get chatMissingProvider;
+
+  /// No description provided for @anthropicStreamApiError.
+  ///
+  /// In en, this message translates to:
+  /// **'Anthropic API error: {detail}'**
+  String anthropicStreamApiError(Object detail);
+
+  /// No description provided for @anthropicStreamUnknownError.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown error'**
+  String get anthropicStreamUnknownError;
+
+  /// No description provided for @chatHttpRequestFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'API request failed (HTTP {statusCode}): {detail}'**
+  String chatHttpRequestFailed(Object statusCode, Object detail);
+
+  /// No description provided for @fileUploadApiKeyMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'API key is not configured; file upload is unavailable'**
+  String get fileUploadApiKeyMissing;
+
+  /// No description provided for @fileUploadApiUrlMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'API URL is not configured; file upload is unavailable'**
+  String get fileUploadApiUrlMissing;
+
+  /// No description provided for @fileUploadContentEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'File content is empty'**
+  String get fileUploadContentEmpty;
+
+  /// No description provided for @fileUploadFilenameEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'File name is empty'**
+  String get fileUploadFilenameEmpty;
+
+  /// No description provided for @fileUploadMimeTypeEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'MIME type is empty'**
+  String get fileUploadMimeTypeEmpty;
+
+  /// No description provided for @fileUploadPurposeEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'Upload purpose is empty'**
+  String get fileUploadPurposeEmpty;
+
+  /// No description provided for @fileUploadCanceled.
+  ///
+  /// In en, this message translates to:
+  /// **'File upload was canceled'**
+  String get fileUploadCanceled;
+
+  /// No description provided for @fileUploadCreateMissingId.
+  ///
+  /// In en, this message translates to:
+  /// **'Upload creation failed: response is missing upload id'**
+  String get fileUploadCreateMissingId;
+
+  /// No description provided for @fileUploadPartMissingId.
+  ///
+  /// In en, this message translates to:
+  /// **'Part upload failed: response is missing part id'**
+  String get fileUploadPartMissingId;
+
+  /// No description provided for @fileUploadCompleteMissingFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Upload completion failed: response is missing file object'**
+  String get fileUploadCompleteMissingFile;
+
+  /// No description provided for @fileUploadMissingFileId.
+  ///
+  /// In en, this message translates to:
+  /// **'File upload failed: response is missing file id'**
+  String get fileUploadMissingFileId;
+
+  /// No description provided for @fileUploadRequestFailedStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'File upload request failed (HTTP {statusCode}): {detail}'**
+  String fileUploadRequestFailedStatus(Object statusCode, Object detail);
+
+  /// No description provided for @fileUploadRequestFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'File upload request failed: {detail}'**
+  String fileUploadRequestFailed(Object detail);
+
+  /// No description provided for @chatApiKeyNotConfigured.
+  ///
+  /// In en, this message translates to:
+  /// **'API key is not configured'**
+  String get chatApiKeyNotConfigured;
+
+  /// No description provided for @chatStreamError.
+  ///
+  /// In en, this message translates to:
+  /// **'API stream error: {detail}'**
+  String chatStreamError(Object detail);
+
+  /// No description provided for @chatChoicesMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'API response has no choices'**
+  String get chatChoicesMissing;
+
+  /// No description provided for @chatContentBlocksMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'API response has no content blocks'**
+  String get chatContentBlocksMissing;
+
+  /// No description provided for @chatResponseContentEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'API response content is empty'**
+  String get chatResponseContentEmpty;
+
+  /// No description provided for @chatRequestFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Request failed: {detail}'**
+  String chatRequestFailed(Object detail);
 }
 
 class _AppLocalizationsDelegate

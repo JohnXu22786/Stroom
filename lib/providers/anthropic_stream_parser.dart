@@ -21,8 +21,9 @@ class AnthropicStreamAccumulator {
 @visibleForTesting
 List<AIStreamEvent> processAnthropicStreamData(
   Map<String, dynamic> data,
-  AnthropicStreamAccumulator acc,
-) {
+  AnthropicStreamAccumulator acc, {
+  AppLocalizations Function()? localizations,
+}) {
   final events = <AIStreamEvent>[];
   final type = data['type'] as String?;
   switch (type) {
@@ -84,8 +85,11 @@ List<AIStreamEvent> processAnthropicStreamData(
 
     case 'error':
       final err = data['error'] as Map<String, dynamic>?;
-      final msg = err?['message'] as String? ?? '未知错误';
-      throw Exception('Anthropic API 错误: $msg');
+      final strings =
+          (localizations ?? () => appLocalizationsForLocale(null))();
+      final msg =
+          err?['message'] as String? ?? strings.anthropicStreamUnknownError;
+      throw Exception(strings.anthropicStreamApiError(msg));
 
     case 'message_stop':
       break;
