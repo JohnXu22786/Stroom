@@ -1231,6 +1231,30 @@ bool _legacyOcrHasShortOpaqueAlphaKey(String value) =>
       maximumVowelRatio: 0.1,
     );
 
+bool _legacyOcrHasInterleavedAlphaNumericCredentialShape(String value) {
+  final normalized = value.toLowerCase();
+  var letterCount = 0;
+  var digitCount = 0;
+  var categoryTransitions = 0;
+  var previousIsDigit = false;
+  for (var index = 0; index < normalized.length; index++) {
+    final codeUnit = normalized.codeUnitAt(index);
+    final isDigit = codeUnit >= 48 && codeUnit <= 57;
+    if (isDigit) {
+      digitCount++;
+    } else if (codeUnit >= 97 && codeUnit <= 122) {
+      letterCount++;
+    } else {
+      return false;
+    }
+    if (index > 0 && isDigit != previousIsDigit) categoryTransitions++;
+    previousIsDigit = isDigit;
+  }
+  if (letterCount < 4 || digitCount < 2) return false;
+
+  return categoryTransitions >= 4 && normalized.split('').toSet().length >= 6;
+}
+
 bool _legacyOcrHasLongConsonantRun(String value) =>
     RegExp(r'[bcdfghjklmnpqrstvwxz]{6,}', caseSensitive: false).hasMatch(value);
 
@@ -1655,7 +1679,8 @@ bool _legacyOcrCanMatchOpenMaskPrefixWithinToken(String prefix) {
     return true;
   }
   if (prefix.length == 9) {
-    return _legacyOcrHasAscendingAlphabetRun(prefix);
+    return _legacyOcrHasAscendingAlphabetRun(prefix) ||
+        _legacyOcrHasInterleavedAlphaNumericCredentialShape(prefix);
   }
   return _legacyOcrHasShortOpaqueAlphaKey(prefix) ||
       _legacyOcrHasHighAlphabeticEntropy(
