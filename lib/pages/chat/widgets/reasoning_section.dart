@@ -263,6 +263,10 @@ class _ReasoningPanelDialogState extends ConsumerState<_ReasoningPanelDialog>
   bool _userScrolledUp = false;
   final StringBuffer _displayBuffer = StringBuffer();
   String? _displaySnapshot;
+  String? _markdownAppend;
+  int _markdownAppendSequence = 0;
+  int _markdownAppendCount = 0;
+  int _markdownSessionGeneration = 0;
   int _previousTextLength = 0;
   int _lastReasoningSequence = -1;
   int _pendingReasoningPrefixLength = 0;
@@ -383,11 +387,18 @@ class _ReasoningPanelDialogState extends ConsumerState<_ReasoningPanelDialog>
     final skippedLength = _pendingReasoningPrefixLength;
     _pendingReasoningPrefixLength = 0;
     if (append.text.length <= skippedLength) return;
-    _displayBuffer.write(append.text.substring(skippedLength));
+    final delta = append.text.substring(skippedLength);
+    _displayBuffer.write(delta);
     _displaySnapshot = null;
+    _markdownAppend = delta;
+    _markdownAppendSequence++;
+    _markdownAppendCount++;
   }
 
   void _setDisplayText(String text) {
+    if (_displayBuffer.length != text.length) {
+      _markdownSessionGeneration++;
+    }
     _displayBuffer
       ..clear()
       ..write(text);
@@ -437,19 +448,17 @@ class _ReasoningPanelDialogState extends ConsumerState<_ReasoningPanelDialog>
         setState(() => _appendReasoningUpdate(next));
       });
     }
-    if (widget.sectionIndex < allSections.length) {
+    if (widget.sectionIndex < allSections.length &&
+        allSections[widget.sectionIndex].length > _displayBuffer.length) {
       final providerText = allSections[widget.sectionIndex];
-      if (providerText.length >= _displayBuffer.length) {
-        _setDisplayText(providerText);
-      }
+      _setDisplayText(providerText);
     }
-    // Materialize the incrementally accumulated content once for this render.
-    final displayText = _displayText;
+    final displayLength = _displayBuffer.length;
 
     // Auto-scroll to bottom when new content arrives, unless the user
     // has manually scrolled up (interrupted auto-scroll).
-    if (displayText.length > _previousTextLength) {
-      _previousTextLength = displayText.length;
+    if (displayLength > _previousTextLength) {
+      _previousTextLength = displayLength;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!_userScrolledUp && _scrollController.hasClients) {
           _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
@@ -467,7 +476,7 @@ class _ReasoningPanelDialogState extends ConsumerState<_ReasoningPanelDialog>
         : false;
     final isStreamActive =
         convId != null ? ref.watch(isStreamingProvider(convId)) : false;
-    final hasReasoningContent = displayText.isNotEmpty;
+    final hasReasoningContent = displayLength > 0;
     final isReasoningComplete =
         hasReasoningContent && (hasFirstToken || !isStreamActive);
 
@@ -478,7 +487,7 @@ class _ReasoningPanelDialogState extends ConsumerState<_ReasoningPanelDialog>
     // open-time snapshot passed from the section.)
     final isPanelStreaming = !isReasoningComplete;
 
-    final showEmpty = displayText.isEmpty && !isReasoningComplete;
+    final showEmpty = displayLength == 0 && !isReasoningComplete;
 
     // Detect completion transitions to drive the corner checkmark sequence.
     // The first build only records the initial state (a panel opened after
@@ -664,10 +673,28 @@ class _ReasoningPanelDialogState extends ConsumerState<_ReasoningPanelDialog>
                           controller: _scrollController,
                           padding: const EdgeInsets.all(16),
                           child: MarkdownWidget(
-                            data: displayText,
+                            key: ValueKey(
+                              'reasoning-markdown:$convId:${widget.messageId}:${widget.sectionIndex}',
+                            ),
+                            data: isPanelStreaming
+                                ? widget.initialReasoningText
+                                : _displayText,
                             selectable: true,
                             shrinkWrap: true,
                             physics: const NeverScrollableScrollPhysics(),
+                            incremental: isPanelStreaming,
+                            incrementalKey: isPanelStreaming
+                                ? '$convId:${widget.messageId}:${widget.sectionIndex}:${isDark}:$_markdownSessionGeneration'
+                                : null,
+                            incrementalAppend:
+                                isPanelStreaming ? _markdownAppend : null,
+                            incrementalSequence:
+                                isPanelStreaming && _markdownAppend != null
+                                    ? _markdownAppendSequence
+                                    : null,
+                            incrementalInitialUpdateCount: _markdownAppendCount,
+                            fullTextOnInvalidation:
+                                isPanelStreaming ? () => _displayText : null,
                             config: markdownConfig,
                             markdownGenerator: markdownGenerator,
                           ),
