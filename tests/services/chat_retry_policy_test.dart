@@ -183,6 +183,34 @@ void main() {
       expect(calls, 2);
     });
 
+    test('preserves non-throttle streaming response body for diagnostics',
+        () async {
+      final failure = DioException(
+        requestOptions: RequestOptions(path: '/chat'),
+        response: Response(
+          requestOptions: RequestOptions(path: '/chat'),
+          statusCode: 429,
+          data: ResponseBody(
+            Stream.value(Uint8List.fromList(
+              utf8.encode('{"error":{"type":"insufficient_quota"}}'),
+            )),
+            429,
+          ),
+        ),
+        type: DioExceptionType.badResponse,
+      );
+
+      await expectLater(
+        retryRateLimitedStream<String>(
+          () => Stream.error(failure),
+          delay: (_) async {},
+        ),
+        emitsError(same(failure)),
+      );
+
+      expect(failure.response!.data, contains('insufficient_quota'));
+    });
+
     test('cancellation interrupts a pending retry delay', () async {
       final cancelSignal = Completer<void>();
       final delayStarted = Completer<void>();

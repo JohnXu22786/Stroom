@@ -6,6 +6,22 @@ extension _ChatStreamManagerEventsExt on ChatStreamManager {
   void _handleStreamEvent(
       ChatEvent event, _ConversationStreamState state, String convId) {
     switch (event) {
+      case InputTranscriptEvent _:
+        // Provider-side transcription belongs to the user turn; it is not
+        // assistant output and is already retained by the audio request.
+        break;
+      case MediaAttachmentsEvent e:
+        final order = e.contentOrder ?? state.nextContentOrder++;
+        for (final attachment in e.attachments) {
+          final owned = attachment.copyWith(conversationId: convId);
+          state.mediaAttachments.add(owned);
+          state.orderedContentParts.add({
+            'type': 'attachment',
+            'attachmentId': owned.id,
+            'contentOrder': order,
+          });
+        }
+        break;
       case TextEvent e:
         if (!state.hasReceivedFirstToken) {
           state.hasReceivedFirstToken = true;

@@ -1437,7 +1437,8 @@ extension _ChatPageBubblesExt on _ChatPageState {
                 fontSize: 14,
               ),
             )
-          else if (!isStreaming && chatMsg?.contentParts?.isNotEmpty == true) ...[
+          else if (!isStreaming &&
+              chatMsg?.contentParts?.isNotEmpty == true) ...[
             ..._buildOrderedAssistantContent(
               message: message,
               chatMsg: chatMsg!,
@@ -1453,8 +1454,7 @@ extension _ChatPageBubblesExt on _ChatPageState {
               isStreaming: isStreaming,
               hasSearchMatch: hasSearchMatch,
             ),
-          ]
-          else if (segments != null && segments.isNotEmpty)
+          ] else if (segments != null && segments.isNotEmpty)
             ..._buildSegmentWidgets(
               messageId: message.id,
               segments: segments,
@@ -1499,7 +1499,8 @@ extension _ChatPageBubblesExt on _ChatPageState {
               config: markdownConfig,
               markdownGenerator: markdownGenerator,
             ),
-          if (attachments.isNotEmpty && chatMsg?.contentParts?.isNotEmpty != true)
+          if (attachments.isNotEmpty &&
+              chatMsg?.contentParts?.isNotEmpty != true)
             Padding(
               key: const ValueKey('assistant-message-attachment-area'),
               padding: const EdgeInsets.only(top: 8, bottom: 4),
@@ -1529,9 +1530,8 @@ extension _ChatPageBubblesExt on _ChatPageState {
       for (final attachment in chatMsg.attachments) attachment.id: attachment,
     };
     var occurrenceOffset = 0;
-    final messageFirstMatchIndex = hasSearchMatch
-        ? _searchMatchFirstIndexByMessageId[message.id]!
-        : 0;
+    final messageFirstMatchIndex =
+        hasSearchMatch ? _searchMatchFirstIndexByMessageId[message.id]! : 0;
     Widget buildPart(Map<String, dynamic> part, int index) {
       if (part['type'] == 'text' && part['text'] is String) {
         final text = part['text'] as String;

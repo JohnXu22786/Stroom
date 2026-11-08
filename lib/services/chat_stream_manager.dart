@@ -19,6 +19,7 @@ import '../providers/system_assistant_provider.dart';
 import '../providers/locale_provider.dart'
     show appLocalizationsForLocale, localeProvider;
 import '../providers/provider_config.dart';
+import 'conversation_media_storage.dart' show sanitizeConversationMediaJson;
 import 'app_log_service.dart';
 import 'chat_adapter.dart';
 import 'chat_protocol.dart' show rebuildToolResultText;
@@ -107,11 +108,26 @@ class ChatStreamManager {
     String? fullReply,
     required List<String> reasoningSections,
     required bool hasAccumulatedToolCalls,
+    bool hasMediaAttachments = false,
   }) {
     return (textSections?.any((section) => section.isNotEmpty) ??
             (fullReply?.isNotEmpty ?? false)) ||
         reasoningSections.any((s) => s.isNotEmpty) ||
-        hasAccumulatedToolCalls;
+        hasAccumulatedToolCalls ||
+        hasMediaAttachments;
+  }
+
+  @visibleForTesting
+  static void upsertPartialAssistantMessage(
+    List<ChatMessage> history,
+    ChatMessage partial,
+  ) {
+    final index = history.indexWhere((message) => message.id == partial.id);
+    if (index < 0) {
+      history.add(partial);
+    } else {
+      history[index] = partial;
+    }
   }
 
   ChatStreamManager([this._ref])
@@ -347,6 +363,7 @@ class ChatStreamManager {
     String? streamingMsgId,
     Assistant? assistant,
     ProviderEntriesState? entriesStateOverride,
+    String? selectedAccountId,
   }) async {
     // If this conversation already has a stream running, return the
     // pending future so the caller awaits the same result.
@@ -447,6 +464,7 @@ class ChatStreamManager {
       convId,
       assistant: assistant,
       entriesState: entriesStateOverride ?? _ref?.read(providerEntriesProvider),
+      selectedAccountId: selectedAccountId,
     );
 
     // ── 对话级计费累计（per-request 事件驱动） ──
@@ -565,6 +583,7 @@ class ChatStreamManager {
                 assistant: assistant,
                 entriesState:
                     entriesStateOverride ?? _ref?.read(providerEntriesProvider),
+                selectedAccountId: selectedAccountId,
                 onToolCallIntent: () => state.toolCallStarted = true,
                 onTextDelta: state.appendText,
                 onRequestBody: (body) => state.requestBodySnapshot = body,

@@ -1096,6 +1096,7 @@ class ChatAdapter {
     String convId = '',
     Assistant? assistant,
     ProviderEntriesState? entriesState,
+    String? selectedAccountId,
     void Function()? onToolCallIntent,
     void Function(String text)? onTextDelta,
     void Function(Map<String, dynamic> body)? onRequestBody,
@@ -1107,6 +1108,7 @@ class ChatAdapter {
             convId,
             assistant: assistant,
             entriesState: entriesState,
+            selectedAccountId: selectedAccountId,
           )
         : currentChatService;
     if (svc == null) {

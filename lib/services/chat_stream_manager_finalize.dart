@@ -139,6 +139,7 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
     final textChunks =
         state.hasSyntheticErrorReply ? <String>[] : finalTextChunks;
     final hasTextContent = textChunks.any((chunk) => chunk.isNotEmpty);
+    final fullReasoning = state.reasoningSections.join('\n');
     try {
       // 纯工具轮取消时 fullReply 为空但 accumulatedToolCalls 非空：
       // 仍要持久化 assistant 消息，否则中断标记（[工具执行被中断]）

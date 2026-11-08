@@ -37,6 +37,9 @@ class Attachment {
   /// 避免同一会话内重复写盘（每次发送都会经过读取路径）。
   bool compressedCachePersisted = false;
 
+  /// Preserve attachment metadata unknown to this version across saves.
+  final Map<String, dynamic> extraFields;
+
   Attachment({
     String? id,
     required this.fileName,
@@ -49,10 +52,12 @@ class Attachment {
     this.thumbnailPath,
     this.base64Data,
     this.conversationId,
+    this.extraFields = const {},
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now();
 
   Map<String, dynamic> toMap({bool includeBase64Data = false}) => {
+        ...extraFields,
         'id': id,
         'fileName': fileName,
         'mimeType': mimeType,
@@ -70,6 +75,19 @@ class Attachment {
       };
 
   factory Attachment.fromMap(Map<String, dynamic> map) {
+    const knownFields = {
+      'id',
+      'fileName',
+      'mimeType',
+      'fileType',
+      'hash',
+      'storagePath',
+      'fileSize',
+      'createdAt',
+      'thumbnailPath',
+      'conversationId',
+      'base64Data',
+    };
     // Defensive DateTime parsing
     DateTime? createdAt;
     final createdAtRaw = map['createdAt'];
@@ -95,6 +113,9 @@ class Attachment {
       // 仅对话草稿附件会序列化 base64Data（预压缩产物）；
       // 历史消息附件没有该字段，保持 null。
       base64Data: map['base64Data'] as String?,
+      extraFields: Map<String, dynamic>.fromEntries(
+        map.entries.where((entry) => !knownFields.contains(entry.key)),
+      ),
     );
   }
 
@@ -111,6 +132,7 @@ class Attachment {
     String? base64Data,
     String? conversationId,
     bool? compressedCachePersisted,
+    Map<String, dynamic>? extraFields,
   }) =>
       Attachment(
         id: id ?? this.id,
@@ -124,6 +146,7 @@ class Attachment {
         thumbnailPath: thumbnailPath ?? this.thumbnailPath,
         base64Data: base64Data ?? this.base64Data,
         conversationId: conversationId ?? this.conversationId,
+        extraFields: extraFields ?? this.extraFields,
       )..compressedCachePersisted =
           compressedCachePersisted ?? this.compressedCachePersisted;
 

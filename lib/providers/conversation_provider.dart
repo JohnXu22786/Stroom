@@ -185,6 +185,9 @@ class Conversation {
   /// 该对话记录模型的供应商名称（绝对身份的一部分）。
   String? lastUsedProviderName;
 
+  /// Last completed assistant message read by the user.
+  String? lastReadMessageId;
+
   /// 最近一次请求的实际输入 token 数（来自 API 返回的 usage，非估算）。
   /// 用于标题栏下方的上下文显示与压缩触发判断。null = 尚无计量。
   int? lastInputTokens;
@@ -238,6 +241,7 @@ class Conversation {
     this.lastUsedModelName,
     this.lastUsedModelId,
     this.lastUsedProviderName,
+    this.lastReadMessageId,
     this.lastInputTokens,
     this.lastOutputTokens,
     this.totalCost = 0,
@@ -289,6 +293,7 @@ class Conversation {
           'lastUsedModelId': lastUsedModelId,
         if (lastUsedProviderName != null && lastUsedProviderName!.isNotEmpty)
           'lastUsedProviderName': lastUsedProviderName,
+        if (lastReadMessageId != null) 'lastReadMessageId': lastReadMessageId,
         if (lastInputTokens != null) 'lastInputTokens': lastInputTokens,
         if (lastOutputTokens != null) 'lastOutputTokens': lastOutputTokens,
         if (totalCost > 0) 'totalCost': totalCost,
@@ -319,6 +324,7 @@ class Conversation {
       'lastUsedModelName',
       'lastUsedModelId',
       'lastUsedProviderName',
+      'lastReadMessageId',
       'lastInputTokens',
       'lastOutputTokens',
       'totalCost',
@@ -419,6 +425,17 @@ class Conversation {
     final lastUsedModel = lastUsedRaw is String ? lastUsedRaw : null;
     final lastUsedIdRaw = map['lastUsedModelId'];
     final lastUsedProviderRaw = map['lastUsedProviderName'];
+    final lastReadMessageRaw = map['lastReadMessageId'];
+    var lastReadMessageId =
+        lastReadMessageRaw is String ? lastReadMessageRaw : null;
+    if (lastReadMessageRaw is! String) {
+      for (final message in messages.reversed) {
+        if (message.role == 'assistant' && !message.isStreaming) {
+          lastReadMessageId = message.id;
+          break;
+        }
+      }
+    }
 
     // 数值字段统一用 num 兼容（web 端 JSON 大整数可能反序列化为
     // double，如 sortOrder 存成 3.0）；类型不匹配时给默认值而非
@@ -476,6 +493,7 @@ class Conversation {
       lastUsedModelId: lastUsedIdRaw is String ? lastUsedIdRaw : null,
       lastUsedProviderName:
           lastUsedProviderRaw is String ? lastUsedProviderRaw : null,
+      lastReadMessageId: lastReadMessageId,
       lastInputTokens: lastInputRaw is num ? lastInputRaw.toInt() : null,
       lastOutputTokens: lastOutputRaw is num ? lastOutputRaw.toInt() : null,
       totalCost:
@@ -620,6 +638,11 @@ final conversationsProvider =
     .._repositoryLifecycle = lifecycle;
   notifier._initialLoad = notifier._load();
   return notifier;
+});
+
+/// Completes after paged conversation data has loaded from persistence.
+final conversationsInitialLoadProvider = FutureProvider<void>((ref) async {
+  await ref.watch(conversationsProvider.notifier).ready;
 });
 
 class ConversationsNotifier extends StateNotifier<List<Conversation>> {

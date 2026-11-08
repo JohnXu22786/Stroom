@@ -25,7 +25,8 @@ class AttachmentStorage {
     String extension, {
     String? stableId,
   }) {
-    final uniqueId = stableId ?? '${_now().millisecondsSinceEpoch}_${_uuid.v4()}';
+    final uniqueId =
+        stableId ?? '${_now().millisecondsSinceEpoch}_${_uuid.v4()}';
     return '${hash}_$uniqueId.$extension';
   }
 

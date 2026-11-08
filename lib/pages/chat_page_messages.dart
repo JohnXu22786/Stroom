@@ -24,11 +24,12 @@ extension _ChatPageMessagesExt on _ChatPageState {
     rebuiltBlocks.addAll(message.blocks?.whereType<ErrorBlock>() ?? const []);
     final hasCanonicalFields = message.toolCallRoundStarts != null ||
         ((message.toolCalls == null || message.toolCalls!.isEmpty) &&
-            !(message.blocks?.any((block) => block is ToolCallBlock) ?? false) &&
-            (message.reasoningSections != null || message.textSections != null));
-    final blocks = hasCanonicalFields
-        ? rebuiltBlocks
-        : (message.blocks ?? rebuiltBlocks);
+            !(message.blocks?.any((block) => block is ToolCallBlock) ??
+                false) &&
+            (message.reasoningSections != null ||
+                message.textSections != null));
+    final blocks =
+        hasCanonicalFields ? rebuiltBlocks : (message.blocks ?? rebuiltBlocks);
     final segments = blocksToSegments(blocks);
     final hasText = segments.any(
       (segment) => segment is TextSegment && segment.text.trim().isNotEmpty,

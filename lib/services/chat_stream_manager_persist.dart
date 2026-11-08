@@ -23,9 +23,12 @@ extension _ChatStreamManagerPersistExt on ChatStreamManager {
     if (s.cancelledByUser) return;
     // 纯工具轮（无文本/推理但已有工具结果）也要持久化——并行执行时
     // 一轮的全部工具同时启动，崩溃会一次丢失所有工具卡片。
-    if (!s.hasTextContent &&
-        !s.hasReasoningContent &&
-        s.accumulatedToolCalls.isEmpty) {
+    if (!ChatStreamManager.partialPersistHasContent(
+      textSections: s.textChunks,
+      reasoningSections: s.reasoningSections,
+      hasAccumulatedToolCalls: s.accumulatedToolCalls.isNotEmpty,
+      hasMediaAttachments: s.mediaAttachments.isNotEmpty,
+    )) {
       return;
     }
     if (s._isPersisting) return;
@@ -37,13 +40,35 @@ extension _ChatStreamManagerPersistExt on ChatStreamManager {
       return;
     }
     try {
-      final checkpoint = s.streamCheckpointDelta();
-      await ref.read(conversationsProvider.notifier).updateMessagesPeriodically(
+      final partial = ChatMessage(
+        role: 'assistant',
+        content: s.hasSyntheticErrorReply ? s.fullReply : '',
+        contentFromTextSections: !s.hasSyntheticErrorReply && s.hasTextContent,
+        id: s.streamingMsgId ?? '',
+        attachments: s.mediaAttachments
+            .map((attachment) => attachment.copyWith(conversationId: s.convId))
+            .toList(growable: false),
+        toolCalls: s.accumulatedToolCalls.isEmpty
+            ? null
+            : List<ToolCallData>.from(s.accumulatedToolCalls),
+        reasoningSections: s.reasoningSections.isEmpty
+            ? null
+            : List<String>.from(s.reasoningSections),
+        textSections:
+            s.textChunks.any((chunk) => chunk.isNotEmpty) ? s.textChunks : null,
+        contentParts: s.mediaAttachments.isEmpty
+            ? null
+            : _orderedAssistantContentParts(s),
+        toolCallRoundStarts: s.toolCallRoundStarts.isEmpty
+            ? (s.accumulatedToolCalls.isEmpty ? null : [0])
+            : List<int>.from(s.toolCallRoundStarts),
+      );
+      ChatStreamManager.upsertPartialAssistantMessage(s.history, partial);
+      await ref.read(conversationsProvider.notifier).updateMessages(
             s.convId,
-            checkpoint: checkpoint,
+            List<ChatMessage>.from(s.history),
             resetTemporaryCountdown: true,
           );
-      s.markStreamCheckpointPersisted(checkpoint);
     } catch (e) {
       debugPrint('[ChatStreamManager] 定期持久化失败: $e');
     } finally {

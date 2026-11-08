@@ -154,13 +154,13 @@ abstract class AppLocalizations {
   /// **'Chinese (Simplified)'**
   String get languageNameChinese;
 
-  /// Search hint in the language picker.
+  /// No description provided for @languageSearchHint.
   ///
   /// In en, this message translates to:
   /// **'Search languages'**
   String get languageSearchHint;
 
-  /// Empty-state text in the language picker.
+  /// No description provided for @languageNoMatches.
   ///
   /// In en, this message translates to:
   /// **'No matching languages'**
@@ -9114,6 +9114,9 @@ abstract class AppLocalizations {
   String modelParamDuplicate(String name);
 
   /// No description provided for @modelParamReserved.
+  ///
+  /// In en, this message translates to:
+  /// **'Reserved OCR parameter name: {name}'**
   String modelParamReserved(String name);
 
   /// No description provided for @modelParamName.
@@ -16163,12 +16166,21 @@ abstract class AppLocalizations {
   String bgTaskOcrResultIncomplete(String finishReason);
 
   /// No description provided for @ocrResultPageHeading.
+  ///
+  /// In en, this message translates to:
+  /// **'Image {index}'**
   String ocrResultPageHeading(String index);
 
   /// No description provided for @ocrResultPageHeadingWithName.
+  ///
+  /// In en, this message translates to:
+  /// **'Image {index}: {name}'**
   String ocrResultPageHeadingWithName(String index, String name);
 
   /// No description provided for @ocrPartialResultSuffix.
+  ///
+  /// In en, this message translates to:
+  /// **' (partial result)'**
   String get ocrPartialResultSuffix;
 
   /// No description provided for @bgTaskOcrPagesIncomplete.

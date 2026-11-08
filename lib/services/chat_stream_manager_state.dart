@@ -66,7 +66,8 @@ class StreamResult {
   /// Whether the stream produced any text or media content.
   bool get hasContent =>
       _fullReply?.isNotEmpty ??
-      (textSections.any((section) => section.isNotEmpty) || attachments.isNotEmpty);
+      (textSections.any((section) => section.isNotEmpty) ||
+          attachments.isNotEmpty);
 }
 
 // ============================================================================

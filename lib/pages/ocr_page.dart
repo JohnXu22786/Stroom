@@ -33,6 +33,7 @@ import 'ocr/ocr_instruction_dialog.dart';
 import 'ocr/ocr_shared.dart';
 import 'ocr/ocr_retry_snapshot.dart';
 import 'provider_config_page.dart';
+import '../services/llm_model_group_provider.dart';
 export 'ocr/ocr_shared.dart';
 
 // ============================================================================
@@ -49,6 +50,8 @@ class _ModelOption {
   final String host;
   final String apiKey;
   final int requestSizeBudgetBytes;
+  final String? routingGroupId;
+  final String? routingAccountId;
   const _ModelOption(
     this.model,
     this.configId,
@@ -57,6 +60,8 @@ class _ModelOption {
     this.host,
     this.apiKey,
     this.requestSizeBudgetBytes,
+    this.routingGroupId,
+    this.routingAccountId,
   );
 }
 
@@ -78,6 +83,11 @@ List<_ModelOption> _getOcrModelOptions(WidgetRef ref) {
           modelValue: e.model.typeConfig['requestSizeBudgetBytes'],
           providerValue: e.config.typeConfig['requestSizeBudgetBytes'],
         ),
+        llmModelGroupIdForConfig(e.config) ??
+            llmOcrModelGroupIdForConfig(e.config.id, e.model.id),
+        llmModelGroupIdForConfig(e.config) == null
+            ? llmOcrAccountIdForConfig(e.config.id)
+            : null,
       ),
   ];
 }
@@ -2840,6 +2850,11 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       model: selectedOption.model.modelId,
       systemPrompt: strings.ocrDefaultSystemPrompt,
       requestSizeBudgetBytes: requestSizeBudgetBytes,
+      routingGroupId: selectedOption.routingGroupId,
+      routingLocalModelId: selectedOption.modelRecordId,
+      routingAccountId: selectedOption.routingAccountId,
+      routingDisplayName:
+          '${selectedOption.providerName} · ${selectedOption.model.name}',
       typeConfig: Map<String, dynamic>.from(selectedOption.model.typeConfig),
       customParams:
           selectedOption.model.customParams.map((p) => p.copy()).toList(),

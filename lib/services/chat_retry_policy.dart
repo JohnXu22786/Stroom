@@ -142,6 +142,11 @@ Future<bool> _isRateLimit(Object error) async {
   final responseBody = responseData is ResponseBody
       ? await _readResponseBody(responseData)
       : _flattenErrorDetails(responseData);
+  // Preserve a buffered stream body for the downstream provider error handler;
+  // classification must not consume the only copy of the API diagnostics.
+  if (responseData is ResponseBody && error.response != null) {
+    error.response!.data = responseBody;
+  }
   final details = [
     responseBody,
     error.response?.statusMessage ?? '',
@@ -189,7 +194,7 @@ Future<String> _readResponseBody(ResponseBody body) async {
       <int>[],
       (buffer, chunk) => buffer..addAll(chunk),
     );
-    return utf8.decode(bytes, allowMalformed: true).toLowerCase();
+    return utf8.decode(bytes, allowMalformed: true);
   } catch (_) {
     return '';
   }

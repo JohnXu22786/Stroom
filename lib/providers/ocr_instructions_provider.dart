@@ -105,12 +105,15 @@ class OcrInstructionsNotifier extends StateNotifier<List<OcrInstruction>> {
 
   /// Tracks edits made while the initial preferences/provider load is pending.
   int _userMutationVersion = 0;
+  final List<({String kind, OcrInstruction? before, OcrInstruction? after})>
+      _pendingLoadMutations = [];
 
   /// Loads persisted instructions once.
   Future<void> load() => _loadFuture ??= _doLoad();
 
   Future<void> _doLoad() async {
     final loadMutationVersion = _userMutationVersion;
+    final loadMutationIndex = _pendingLoadMutations.length;
     // Capture the notifier and its load future before any async gap; reading
     // through [Ref] later may fail if this provider has been disposed.
     final providerEntriesNotifier = _ref.read(providerEntriesProvider.notifier);
@@ -128,12 +131,10 @@ class OcrInstructionsNotifier extends StateNotifier<List<OcrInstruction>> {
         final preserveUserMutations =
             _userMutationVersion != loadMutationVersion;
         state = preserveUserMutations
-            ? [
-                ...list,
-                ...state.where((instruction) => !list.contains(instruction)),
-              ]
+            ? _replayPendingLoadMutations(list, loadMutationIndex)
             : list;
         if (preserveUserMutations) await _persist();
+        _clearReplayedMutations();
         return;
       }
     } catch (e) {
@@ -147,9 +148,43 @@ class OcrInstructionsNotifier extends StateNotifier<List<OcrInstruction>> {
     );
     if (legacy.isNotEmpty) {
       final preserveUserMutations = _userMutationVersion != loadMutationVersion;
-      state = preserveUserMutations ? [...legacy, ...state] : legacy;
+      state = preserveUserMutations
+          ? _replayPendingLoadMutations(legacy, loadMutationIndex)
+          : legacy;
       await _persist();
     }
+    _clearReplayedMutations();
+  }
+
+  List<OcrInstruction> _replayPendingLoadMutations(
+    List<OcrInstruction> loaded,
+    int startIndex,
+  ) {
+    final merged = List<OcrInstruction>.from(loaded);
+    for (final mutation in _pendingLoadMutations.skip(startIndex)) {
+      switch (mutation.kind) {
+        case 'add':
+          if (mutation.after != null) merged.add(mutation.after!);
+          break;
+        case 'update':
+          final before = mutation.before;
+          final index = before == null ? -1 : merged.indexOf(before);
+          if (index >= 0 && mutation.after != null) {
+            merged[index] = mutation.after!;
+          }
+          break;
+        case 'remove':
+          final before = mutation.before;
+          final index = before == null ? -1 : merged.indexOf(before);
+          if (index >= 0) merged.removeAt(index);
+          break;
+      }
+    }
+    return merged;
+  }
+
+  void _clearReplayedMutations() {
+    _pendingLoadMutations.clear();
   }
 
   Future<void> _persist() async {
@@ -167,7 +202,9 @@ class OcrInstructionsNotifier extends StateNotifier<List<OcrInstruction>> {
     final trimmed = content.trim();
     if (trimmed.isEmpty) return;
     _userMutationVersion++;
-    state = [...state, OcrInstruction(name: name.trim(), content: trimmed)];
+    final instruction = OcrInstruction(name: name.trim(), content: trimmed);
+    state = [...state, instruction];
+    _pendingLoadMutations.add((kind: 'add', before: null, after: instruction));
     await _persist();
   }
 
@@ -176,18 +213,23 @@ class OcrInstructionsNotifier extends StateNotifier<List<OcrInstruction>> {
     final trimmed = content.trim();
     if (index < 0 || index >= state.length || trimmed.isEmpty) return;
     final next = [...state];
-    next[index] = OcrInstruction(name: name.trim(), content: trimmed);
+    final before = next[index];
+    final after = OcrInstruction(name: name.trim(), content: trimmed);
+    next[index] = after;
     _userMutationVersion++;
     state = next;
+    _pendingLoadMutations.add((kind: 'update', before: before, after: after));
     await _persist();
   }
 
   /// 删除 [index] 处的指令。
   Future<void> remove(int index) async {
     if (index < 0 || index >= state.length) return;
-    final next = [...state]..removeAt(index);
+    final next = [...state];
+    final removed = next.removeAt(index);
     _userMutationVersion++;
     state = next;
+    _pendingLoadMutations.add((kind: 'remove', before: removed, after: null));
     await _persist();
   }
 }

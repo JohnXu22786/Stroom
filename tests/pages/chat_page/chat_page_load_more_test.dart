@@ -109,6 +109,9 @@ class _CompletingStreamManager extends ChatStreamManager {
     required String text,
     required String convId,
     required List<ChatMessage> history,
+    List<ChatMessage>? requestHistoryOverride,
+    List<ChatMessage>? historyOnSuccess,
+    Map<String, String>? customParamValues,
     List<ToolDefinition> tools = const [],
     bool reasoning = false,
     String reasoningEffort = 'medium',
@@ -293,6 +296,18 @@ class _DelayedRemoveChatController extends InMemoryChatController {
     }
     await super.removeMessage(message, animated: animated);
   }
+}
+
+Future<bool> removeMessagesWhilePageOwned({
+  required dynamic controller,
+  required List<Message> messages,
+  required bool Function() isPageOwner,
+}) async {
+  for (final message in messages) {
+    if (!isPageOwner()) return false;
+    await controller.removeMessage(message);
+  }
+  return isPageOwner();
 }
 
 void main() {

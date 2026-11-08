@@ -1210,7 +1210,7 @@ class _McpEmptyState extends StatelessWidget {
             style: Theme.of(context)
                 .textTheme
                 .titleSmall
-                 ?.copyWith(color: cs.onSurface, fontWeight: FontWeight.w600),
+                ?.copyWith(color: cs.onSurface, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 4),
           Text(

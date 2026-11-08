@@ -6,8 +6,11 @@ import 'package:flutter/widgets.dart' show Locale;
 
 import '../l10n/app_localizations.dart';
 import '../providers/chat_api_provider.dart';
+import '../providers/anthropic_chat_provider.dart' show kAnthropicApiVersion;
+import '../providers/llm_routed_chat_provider.dart';
 import '../providers/provider_config.dart';
 import '../models/ocr_batch_execution.dart';
+import '../ai_gateway/ai_gateway.dart';
 
 import '../utils/http_utils.dart';
 import '../utils/http_timeout.dart';
@@ -24,6 +27,10 @@ class OcrConfig {
   final String apiKey;
   final String host;
   final String? systemPrompt;
+  final String? routingGroupId;
+  final String? routingLocalModelId;
+  final String? routingAccountId;
+  final String? routingDisplayName;
 
   /// Type-specific config (temperature, topP, maxTokens, userInstruction, etc.)
   final Map<String, dynamic> typeConfig;
@@ -37,6 +44,10 @@ class OcrConfig {
     required this.apiKey,
     required this.host,
     this.systemPrompt,
+    this.routingGroupId,
+    this.routingLocalModelId,
+    this.routingAccountId,
+    this.routingDisplayName,
     this.typeConfig = const {},
     this.customParams = const [],
     this.requestSizeBudgetBytes = defaultOcrRequestSizeBudgetBytes,
@@ -72,6 +83,10 @@ class OcrConfig {
     String? apiKey,
     String? host,
     String? systemPrompt,
+    String? routingGroupId,
+    String? routingLocalModelId,
+    String? routingAccountId,
+    String? routingDisplayName,
     Map<String, dynamic>? typeConfig,
     List<CustomParam>? customParams,
     int? requestSizeBudgetBytes,
@@ -81,6 +96,10 @@ class OcrConfig {
         apiKey: apiKey ?? this.apiKey,
         host: host ?? this.host,
         systemPrompt: systemPrompt ?? this.systemPrompt,
+        routingGroupId: routingGroupId ?? this.routingGroupId,
+        routingLocalModelId: routingLocalModelId ?? this.routingLocalModelId,
+        routingAccountId: routingAccountId ?? this.routingAccountId,
+        routingDisplayName: routingDisplayName ?? this.routingDisplayName,
         typeConfig: typeConfig ?? this.typeConfig,
         customParams: customParams ?? this.customParams,
         requestSizeBudgetBytes:
@@ -149,6 +168,7 @@ class OcrService {
   final Dio _dio;
   final bool _usesInjectedDio;
   final Duration? _sendTimeoutOverride;
+  final Future<AiGatewayFacade>? _routingRuntime;
 
   // ── Diagnostic capture (mirrors chat_api_provider pattern) ───────────
   /// The last request body sent to the API.
@@ -269,7 +289,11 @@ class OcrService {
     Duration? connectTimeout,
     Duration? sendTimeout,
     Duration? receiveTimeout,
+    Future<AiGatewayFacade>? routingRuntime,
   })  : _sendTimeoutOverride = sendTimeout,
+        _routingRuntime = config.routingGroupId == null
+            ? null
+            : routingRuntime ?? AiGateway.sharedPlatform(),
         _usesInjectedDio = dio != null,
         _dio = dio ??
             Dio(
@@ -387,7 +411,7 @@ class OcrService {
       }
 
       final body = _buildRequestBody(contents);
-      final encodedBytes = _ensureRequestWithinSizeBudget(body);
+      _ensureRequestWithinSizeBudget(body);
       requestCredentialValues = {
         ...requestCredentialValues,
         ...OcrDiagnosticSnapshot.credentialValuesFromRequest({
@@ -397,12 +421,11 @@ class OcrService {
       }.toList(growable: false);
 
       lastRequestBody = body;
-      final response = await _dio.post(
-        lastRequestUrl!,
-        data: body,
-        options: _requestOptions(encodedBytes: encodedBytes),
+      final response = await _sendRequest(
+        body: body,
         cancelToken: cancelToken,
-        onSendProgress: _uploadProgress(onSendProgress, onStage),
+        onSendProgress: onSendProgress,
+        onStage: onStage,
       );
 
       stopwatch.stop();
@@ -513,7 +536,7 @@ class OcrService {
       }
 
       final body = _buildRequestBody(contents);
-      final encodedBytes = _ensureRequestWithinSizeBudget(body);
+      _ensureRequestWithinSizeBudget(body);
       requestCredentialValues = {
         ...requestCredentialValues,
         ...OcrDiagnosticSnapshot.credentialValuesFromRequest({
@@ -523,12 +546,11 @@ class OcrService {
       }.toList(growable: false);
 
       lastRequestBody = body;
-      final response = await _dio.post(
-        lastRequestUrl!,
-        data: body,
-        options: _requestOptions(encodedBytes: encodedBytes),
+      final response = await _sendRequest(
+        body: body,
         cancelToken: cancelToken,
-        onSendProgress: _uploadProgress(onSendProgress, onStage),
+        onSendProgress: onSendProgress,
+        onStage: onStage,
       );
 
       stopwatch.stop();
@@ -645,6 +667,445 @@ class OcrService {
       );
     }
     return encodedBytes;
+  }
+
+  Future<_OcrResponse> _sendRequest({
+    required Map<String, dynamic> body,
+    CancelToken? cancelToken,
+    ProgressCallback? onSendProgress,
+    void Function(OcrRequestStage)? onStage,
+  }) async {
+    final groupId = config.routingGroupId;
+    if (groupId == null) {
+      final response = await _dio.post(
+        _chatUrl,
+        data: body,
+        options: _requestOptions(encodedBytes: _encodedBodyLength(body)),
+        cancelToken: cancelToken,
+        onSendProgress: _uploadProgress(onSendProgress, onStage),
+      );
+      return _OcrResponse(
+        statusCode: response.statusCode ?? 0,
+        data: response.data,
+        headers: response.headers.map,
+        requestOptions: response.requestOptions,
+      );
+    }
+
+    final runtime = await _routingRuntime!;
+    final localModelId = config.routingLocalModelId ?? config.model;
+    final legacyAccountId = config.routingAccountId;
+    if (legacyAccountId != null) {
+      await runtime.ensureLegacyOcrModelGroup(
+        accountId: legacyAccountId,
+        groupId: groupId,
+        localModelId: localModelId,
+        upstreamModelId: config.model,
+        displayName: config.routingDisplayName ?? config.model,
+        baseUrl: config.normalizedHost,
+        apiKey: config.apiKey,
+      );
+    }
+    onStage?.call(OcrRequestStage.uploading);
+    final execution = await runtime.executeForGroupId<_OcrResponse>(
+      groupId: groupId,
+      localModelId: localModelId,
+      requiredCapabilities: const {'vision'},
+      supportedConnectorTypes: {
+        ...llmRoutedChatSupportedConnectorTypes('openai.chat_completions'),
+        ...llmRoutedChatSupportedConnectorTypes('openai.responses'),
+        ...llmRoutedChatSupportedConnectorTypes('anthropic.messages'),
+        ...llmRoutedChatSupportedConnectorTypes(
+          'google.gemini.generate_content',
+        ),
+        ...llmRoutedChatSupportedConnectorTypes(
+          'google.gemini.interactions',
+        ),
+        ...llmRoutedChatSupportedConnectorTypes('ollama.chat'),
+      },
+      candidateFilter: (candidate) {
+        final protocolId = llmRoutedChatProtocolForAccountModel(
+          account: candidate.account,
+          upstreamModelId: candidate.upstreamModelId,
+          endpointType: builtinDefaultApiProtocolForConnector(
+            candidate.account.connectorType,
+          ),
+        );
+        return llmRoutedChatSupportedConnectorTypes(protocolId)
+            .contains(candidate.account.connectorType);
+      },
+      request: (candidate, progress) async {
+        if (cancelToken?.isCancelled == true) {
+          throw cancelToken!.cancelError!;
+        }
+        final protocolId = llmRoutedChatProtocolForAccountModel(
+          account: candidate.account,
+          upstreamModelId: candidate.upstreamModelId,
+          endpointType: builtinDefaultApiProtocolForConnector(
+            candidate.account.connectorType,
+          ),
+        );
+        final protocolRequest = _buildProtocolRequest(
+          body,
+          modelId: candidate.upstreamModelId,
+          protocolId: protocolId,
+        );
+        final routedBody = protocolRequest.body;
+        onSendProgress?.call(
+          0,
+          utf8.encode(jsonEncode(routedBody)).length,
+        );
+        lastRequestBody = routedBody;
+        final baseUrl = candidate.account.endpointConfig['baseUrl'] ??
+            candidate.account.endpointConfig['host'] ??
+            candidate.account.endpointConfig['apiBase'];
+        lastRequestUrl = baseUrl is String ? baseUrl : null;
+        lastRequestHeaders = {
+          'Content-Type': 'application/json',
+          if (protocolId == 'anthropic.messages')
+            'anthropic-version': kAnthropicApiVersion,
+        };
+        lastResponseData = null;
+        lastResponseStatusCode = null;
+        lastResponseHeaders = null;
+        final AiGatewayResponse response;
+        try {
+          response = await runtime.executor.request(
+            account: candidate.account,
+            modelId: candidate.upstreamModelId,
+            body: routedBody,
+            nativeFormat: switch (protocolId) {
+              'openai.responses' => 'responses',
+              'anthropic.messages' => 'anthropic',
+              _ => null,
+            },
+            cancelToken: cancelToken,
+            onSendProgress: _uploadProgress(onSendProgress, onStage),
+            onRequestSent: progress.markRequestSent,
+            connectTimeout:
+                _dio.options.connectTimeout ?? connectTimeoutDefault,
+            sendTimeout: _sendTimeoutOverride ??
+                sendTimeoutForBytes(utf8.encode(jsonEncode(routedBody)).length),
+            receiveTimeout:
+                _dio.options.receiveTimeout ?? receiveTimeoutFallback,
+          );
+        } on AiGatewayExecutionException catch (error) {
+          if (error.kind != AiGatewayFailureKind.request) rethrow;
+          lastResponseStatusCode = error.statusCode;
+          lastResponseHeaders = {
+            for (final entry in error.headers.entries) entry.key: [entry.value],
+          };
+          rethrow;
+        }
+        final responseData = _decodeRoutedResponse(response.body);
+        final data = _normalizeRoutedResponse(protocolId, responseData);
+        lastResponseStatusCode = response.statusCode;
+        lastResponseHeaders = response.headers;
+        lastResponseData = responseData is Map
+            ? Map<String, dynamic>.from(responseData)
+            : <String, dynamic>{'raw': '$responseData'};
+        final apiError = data is Map ? data['error'] : null;
+        if (apiError is Map) {
+          final rawCode = apiError['code'] ?? apiError['type'];
+          throw AiGatewayExecutionException(
+            kind: AiGatewayFailureKind.request,
+            code: rawCode is String ? rawCode : null,
+          );
+        }
+        await _recordRoutedUsage(
+          progress,
+          data,
+          response.observation,
+          runtime: runtime,
+          accountId: candidate.account.id,
+        );
+        return _OcrResponse(
+          statusCode: response.statusCode,
+          data: data,
+          rawData: responseData,
+          headers: response.headers,
+          requestOptions: RequestOptions(
+            path: lastRequestUrl ?? _chatUrl,
+            data: routedBody,
+            headers: lastRequestHeaders ?? const {},
+          ),
+        );
+      },
+    );
+    return execution.value;
+  }
+
+  Future<void> _recordRoutedUsage(
+    AiGatewayRouteProgress progress,
+    Object? response,
+    AiGatewayConnectorObservation observation, {
+    required AiGatewayFacade runtime,
+    required String accountId,
+  }) async {
+    final reported = observation.requestUsage;
+    if (reported.isKnown &&
+        reported.unit != null &&
+        reported.value != null &&
+        reported.unit != 'requests') {
+      await progress.recordUsage(
+        unit: reported.unit!,
+        value: reported.value!,
+        source: 'provider',
+      );
+    }
+    if (observation.remainingQuota.isKnown ||
+        observation.quotaSignals.values.any((metric) => metric.isKnown)) {
+      try {
+        await runtime.accountManagement.recordQuotaObservation(
+          accountId: accountId,
+          remainingQuota: observation.remainingQuota,
+          quotaSignals: observation.quotaSignals,
+        );
+      } catch (_) {
+        // Connector quota is observational and cannot fail successful OCR.
+      }
+    }
+    if (response is! Map || response['usage'] is! Map) return;
+    final usage = OpenAICompatibleChatProvider.normalizeUsage(
+      response['usage'],
+    );
+    if (usage == null) return;
+    final observedUnit =
+        reported.isKnown && reported.value != null ? reported.unit : null;
+    final input = usage['inputTokens'];
+    final output = usage['outputTokens'];
+    if ((input is num || output is num) && observedUnit != 'tokens') {
+      await progress.recordUsage(
+        unit: 'tokens',
+        value: (input is num ? input : 0) + (output is num ? output : 0),
+        source: 'provider',
+      );
+    }
+    final cost = usage['cost'];
+    if (cost is num && observedUnit != 'usd') {
+      await progress.recordUsage(unit: 'usd', value: cost, source: 'provider');
+    }
+  }
+
+  Object? _decodeRoutedResponse(Object? response) {
+    if (response is List<int>) {
+      return jsonDecode(utf8.decode(response));
+    }
+    if (response is String) return jsonDecode(response);
+    return response;
+  }
+
+  AiGatewayEncodedProtocolRequest _buildProtocolRequest(
+    Map<String, dynamic> body, {
+    required String modelId,
+    required String protocolId,
+  }) {
+    final rawMessages = body['messages'];
+    if (rawMessages is! List) {
+      throw const FormatException('OCR request has no messages.');
+    }
+    final protocolOptions = <String, dynamic>{
+      for (final entry in body.entries)
+        if (!const {
+          'model',
+          'messages',
+          'stream',
+          'max_tokens',
+          'temperature',
+        }.contains(entry.key))
+          entry.key: entry.value,
+    };
+    if (protocolId == 'google.gemini.generate_content' &&
+        protocolOptions['top_p'] is num) {
+      final generationConfig = protocolOptions['generationConfig'] is Map
+          ? Map<String, dynamic>.from(
+              protocolOptions['generationConfig'] as Map,
+            )
+          : <String, dynamic>{};
+      generationConfig['topP'] = protocolOptions.remove('top_p');
+      protocolOptions['generationConfig'] = generationConfig;
+    } else if (protocolId == 'google.gemini.interactions' &&
+        protocolOptions['top_p'] is num) {
+      final generationConfig = protocolOptions['generationConfig'] is Map
+          ? Map<String, dynamic>.from(
+              protocolOptions['generationConfig'] as Map,
+            )
+          : <String, dynamic>{};
+      generationConfig['top_p'] = protocolOptions.remove('top_p');
+      protocolOptions['generationConfig'] = generationConfig;
+    }
+    final request = AiGatewayProtocolBridges.buildRequest(
+      protocolId,
+      AiGatewayProtocolRequest(
+        modelId: modelId,
+        messages: rawMessages
+            .whereType<Map>()
+            .map(
+              (message) => AiGatewayProtocolBridges.openAiChatCompletions
+                  .toStroom(Map<String, dynamic>.from(message)),
+            )
+            .toList(growable: false),
+        stream: false,
+        maxOutputTokens: body['max_tokens'] is num
+            ? (body['max_tokens'] as num).toInt()
+            : null,
+        temperature: body['temperature'] is num
+            ? (body['temperature'] as num).toDouble()
+            : null,
+        options: protocolOptions,
+      ),
+    );
+    if (request == null) {
+      throw UnsupportedError('OCR does not support protocol $protocolId.');
+    }
+    return request;
+  }
+
+  Object? _normalizeRoutedResponse(String protocolId, Object? response) {
+    if (response is! Map) return response;
+    final data = Map<String, dynamic>.from(response);
+    if (data['choices'] is List || data.containsKey('error')) return data;
+
+    String text = '';
+    String? finishReason;
+    Map<String, dynamic>? usage;
+    Object? refusal;
+    switch (protocolId) {
+      case 'openai.responses':
+        final outputText = data['output_text'];
+        if (outputText is String) {
+          text = outputText;
+        } else if (data['output'] is List) {
+          for (final item in data['output'] as List) {
+            if (item is! Map || item['content'] is! List) continue;
+            for (final part in item['content'] as List) {
+              if (part is! Map) continue;
+              final partType = part['type'];
+              if (partType == 'output_text' && part['text'] is String) {
+                text += part['text'] as String;
+              } else if (partType == 'refusal') {
+                refusal = part['refusal'];
+              }
+            }
+          }
+        }
+        if (data['status'] == 'incomplete') {
+          final incomplete = data['incomplete_details'];
+          finishReason =
+              incomplete is Map && incomplete['reason'] == 'max_output_tokens'
+                  ? 'length'
+                  : 'incomplete';
+        }
+        usage = _normalizeProtocolUsage(data['usage']);
+      case 'anthropic.messages':
+        final content = data['content'];
+        if (content is List) {
+          for (final part in content) {
+            if (part is! Map) continue;
+            if (part['type'] == 'text' && part['text'] is String) {
+              text += part['text'] as String;
+            } else if (part['type'] == 'tool_use') {
+              continue;
+            }
+          }
+        }
+        refusal = data['stop_reason'] == 'refusal' ? data['stop_reason'] : null;
+        if (data['stop_reason'] == 'max_tokens') finishReason = 'length';
+        usage = _normalizeProtocolUsage(data['usage']);
+      case 'google.gemini.generate_content':
+        final candidates = data['candidates'];
+        if (candidates is List &&
+            candidates.isNotEmpty &&
+            candidates.first is Map) {
+          final candidate = candidates.first as Map;
+          final content = candidate['content'];
+          final parts = content is Map ? content['parts'] : null;
+          if (parts is List) {
+            for (final part in parts) {
+              if (part is Map && part['text'] is String) {
+                text += part['text'] as String;
+              }
+            }
+          }
+          final candidateFinishReason = candidate['finishReason'];
+          if (candidateFinishReason == 'MAX_TOKENS') {
+            finishReason = 'length';
+          } else if (candidateFinishReason is String &&
+              candidateFinishReason != 'STOP') {
+            finishReason = candidateFinishReason;
+          }
+        }
+        usage = _normalizeProtocolUsage(data['usageMetadata']);
+      case 'google.gemini.interactions':
+        final output = data['output'] ?? data['outputs'];
+        if (output is String) {
+          text = output;
+        } else if (output is List) {
+          for (final part in output.whereType<Map>()) {
+            if ((part['type'] == 'text' || part['type'] == 'output_text') &&
+                part['text'] is String) {
+              text += part['text'] as String;
+            } else if (part['type'] == 'model_output' &&
+                part['content'] is List) {
+              for (final content in part['content'] as List) {
+                if (content is Map &&
+                    content['type'] == 'text' &&
+                    content['text'] is String) {
+                  text += content['text'] as String;
+                }
+              }
+            }
+          }
+        }
+        final status = data['status'];
+        if (status == 'incomplete' || status == 'requires_action') {
+          finishReason = status as String;
+        }
+        usage = _normalizeProtocolUsage(data['usage']);
+      case 'ollama.chat':
+        final message = data['message'];
+        if (message is Map && message['content'] is String) {
+          text = message['content'] as String;
+        }
+        if (data['done'] == false || data['done_reason'] == 'length') {
+          finishReason = 'length';
+        }
+        usage = _normalizeProtocolUsage({
+          'input_tokens': data['prompt_eval_count'],
+          'output_tokens': data['eval_count'],
+        });
+      default:
+        return data;
+    }
+
+    return {
+      'choices': [
+        {
+          'finish_reason': finishReason ?? 'stop',
+          'message': {
+            'content': text,
+            ...?(refusal == null ? null : {'refusal': refusal}),
+          },
+        },
+      ],
+      ...?(usage == null ? null : {'usage': usage}),
+    };
+  }
+
+  Map<String, dynamic>? _normalizeProtocolUsage(Object? rawUsage) {
+    if (rawUsage is! Map) return null;
+    final usage = Map<String, dynamic>.from(rawUsage);
+    if (usage['promptTokenCount'] is num) {
+      usage['input_tokens'] = usage['promptTokenCount'];
+    }
+    if (usage['candidatesTokenCount'] is num) {
+      usage['output_tokens'] = usage['candidatesTokenCount'];
+    }
+    if (usage['total_cost'] == null && usage['cost'] == null) {
+      final cost = usage['totalCost'] ?? usage['costUsd'];
+      if (cost is num) usage['cost'] = cost;
+    }
+    return usage;
   }
 
   Options _requestOptions({required int encodedBytes}) => Options(
@@ -975,4 +1436,20 @@ OcrService createOcrServiceFromConfig({
       ),
     ),
   );
+}
+
+class _OcrResponse {
+  final int statusCode;
+  final Object? data;
+  final Object? rawData;
+  final Headers headers;
+  final RequestOptions requestOptions;
+
+  _OcrResponse({
+    required this.statusCode,
+    required this.data,
+    this.rawData,
+    required Map<String, List<String>> headers,
+    required this.requestOptions,
+  }) : headers = Headers.fromMap(headers);
 }

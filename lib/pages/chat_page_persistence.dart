@@ -363,7 +363,7 @@ extension _ChatPagePersistenceExt on _ChatPageState {
           : <ChatMessage>[
               ...historyForRequestPrefix,
               historyForStream.last,
-      ];
+            ];
       final saveFuture = _saveMessages(
         capturedConvId: convId,
         resetTemporaryCountdown: true,

@@ -3,8 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
-// ignore: implementation_imports
-import 'package:file_picker/src/platform/file_picker_platform_interface.dart';
+import 'package:file_picker_platform_interface/file_picker_platform_interface.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -19,6 +18,7 @@ import 'package:stroom/task_flow/pages/task_flow_builder_page.dart';
 import 'package:stroom/task_flow/providers/task_flow_provider.dart';
 import 'package:stroom/task_flow/services/task_flow_execution_service.dart';
 import 'package:stroom/services/chat_protocol.dart' show maxAttachmentBytes;
+import '../fake_file_picker.dart';
 
 class _Documents extends PathProviderPlatform {
   _Documents(this.path);
@@ -29,43 +29,36 @@ class _Documents extends PathProviderPlatform {
 }
 
 class _InputPicker extends FilePickerPlatform {
-  _InputPicker(this.path,
-      {this.pending, this.reportedSize = 6, this.onPick, this.readStream});
+  _InputPicker(this.path, {this.pending, this.reportedSize = 6, this.onPick});
   final String? path;
-  final Completer<FilePickerResult?>? pending;
+  final Completer<List<PlatformFile>>? pending;
   final int reportedSize;
   final Completer<void>? onPick;
-  final Stream<List<int>>? readStream;
 
   @override
-  Future<FilePickerResult?> pickFiles({
+  Future<List<PlatformFile>> pickFiles({
     String? dialogTitle,
     String? initialDirectory,
     FileType type = FileType.any,
     List<String>? allowedExtensions,
     Function(FilePickerStatus)? onFileLoading,
     int compressionQuality = 0,
-    bool allowMultiple = false,
-    bool withData = false,
-    bool withReadStream = false,
-    bool lockParentWindow = false,
-    bool readSequential = false,
-    bool cancelUploadOnWindowBlur = true,
+    AndroidOptions androidOptions = const AndroidOptions(),
+    DarwinOptions darwinOptions = const DarwinOptions(),
+    WindowsOptions windowsOptions = const WindowsOptions(),
+    LinuxOptions linuxOptions = const LinuxOptions(),
+    WebOptions webOptions = const WebOptions(),
   }) async {
     expect(type, FileType.any);
-    expect(allowMultiple, isTrue);
-    expect(withData, isFalse);
-    expect(withReadStream, isTrue);
     if (onPick != null && !onPick!.isCompleted) onPick!.complete();
     if (pending != null) return pending!.future;
-    return FilePickerResult([
-      PlatformFile(
+    return [
+      FakePlatformFile(
         name: 'notes.pdf',
-        size: reportedSize,
-        path: path,
-        readStream: readStream,
+        reportedLength: reportedSize,
+        localPath: path,
       ),
-    ]);
+    ];
   }
 }
 
@@ -147,7 +140,7 @@ void main() {
     testWidgets('a pending file picker disables starting and removing inputs',
         (tester) async {
       final originalPicker = FilePickerPlatform.instance;
-      final pending = Completer<FilePickerResult?>();
+      final pending = Completer<List<PlatformFile>>();
       FilePickerPlatform.instance = _InputPicker('', pending: pending);
       addTearDown(() => FilePickerPlatform.instance = originalPicker);
       await _pumpRunMode(
@@ -172,7 +165,7 @@ void main() {
                   of: find.byTooltip('移除'), matching: find.byType(IconButton)))
               .onPressed,
           isNull);
-      pending.complete(null);
+      pending.complete(const []);
       await tester.pumpAndSettle();
       expect(_startButtonEnabled(tester), isTrue);
     });
@@ -288,7 +281,6 @@ void main() {
         null,
         reportedSize: maxAttachmentBytes + 1,
         onPick: pickerCalled,
-        readStream: Stream<List<int>>.value(List<int>.filled(32, 0)),
       );
       PathProviderPlatform.instance = _Documents(directory.path);
       addTearDown(() {

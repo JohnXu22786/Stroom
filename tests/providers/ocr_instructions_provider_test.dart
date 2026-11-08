@@ -265,6 +265,27 @@ void main() {
       );
     });
 
+    test('replays edits and removals made while stored instructions load',
+        () async {
+      final stored = OcrInstruction(name: '已保存', content: '旧指令');
+      SharedPreferences.setMockInitialValues({
+        'ocr_instructions': jsonEncode([stored.toMap()]),
+      });
+      await SharedPreferences.getInstance();
+
+      final container = _containerWithEntries([]);
+      addTearDown(container.dispose);
+      final notifier = container.read(ocrInstructionsProvider.notifier);
+      await notifier.add('临时', '新建指令');
+      await notifier.update(0, '临时', '编辑后的指令');
+      await notifier.remove(0);
+      await notifier.load();
+
+      expect(container.read(ocrInstructionsProvider), [stored]);
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('ocr_instructions'), jsonEncode([stored.toMap()]));
+    });
+
     test('does not duplicate an add already present in the stored list',
         () async {
       final added = OcrInstruction(name: '已保存', content: '同一条指令');
