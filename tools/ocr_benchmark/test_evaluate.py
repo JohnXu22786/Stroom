@@ -114,6 +114,127 @@ class EvaluateTests(unittest.TestCase):
             report = json.loads(output_path.read_text(encoding="utf-8"))
             self.assertEqual(report["status"], "pending")
 
+    def test_cli_rejects_output_that_is_the_predictions_file(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest_path = root / "manifest.json"
+            predictions_path = root / "predictions.json"
+            manifest_path.write_text(json.dumps(small_manifest()), encoding="utf-8")
+            original_predictions = json.dumps(predictions([]))
+            predictions_path.write_text(original_predictions, encoding="utf-8")
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "evaluate.py"),
+                    "--manifest",
+                    str(manifest_path),
+                    "--predictions",
+                    str(predictions_path),
+                    "--output",
+                    str(predictions_path),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("output path conflicts with input file", result.stderr)
+            self.assertEqual(predictions_path.read_text(encoding="utf-8"), original_predictions)
+
+    def test_cli_rejects_output_symlink_to_predictions_file(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest_path = root / "manifest.json"
+            predictions_path = root / "predictions.json"
+            output_alias = root / "report.json"
+            manifest_path.write_text(json.dumps(small_manifest()), encoding="utf-8")
+            original_predictions = json.dumps(predictions([]))
+            predictions_path.write_text(original_predictions, encoding="utf-8")
+            output_alias.symlink_to(predictions_path)
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "evaluate.py"),
+                    "--manifest",
+                    str(manifest_path),
+                    "--predictions",
+                    str(predictions_path),
+                    "--output",
+                    str(output_alias),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("output path conflicts with input file", result.stderr)
+            self.assertEqual(predictions_path.read_text(encoding="utf-8"), original_predictions)
+
+    def test_cli_rejects_output_alias_of_manifest_when_verifying_fixtures(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest_path = root / "manifest.json"
+            alias_path = root / "manifest-alias.json"
+            manifest_path.write_text(json.dumps(small_manifest()), encoding="utf-8")
+            alias_path.symlink_to(manifest_path)
+            original_manifest = manifest_path.read_text(encoding="utf-8")
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "evaluate.py"),
+                    "--manifest",
+                    str(manifest_path),
+                    "--verify-fixtures",
+                    "--output",
+                    str(alias_path),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("output path conflicts with input file", result.stderr)
+            self.assertEqual(manifest_path.read_text(encoding="utf-8"), original_manifest)
+
+    def test_cli_rejects_output_that_is_the_baseline_file(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest_path = root / "manifest.json"
+            predictions_path = root / "predictions.json"
+            baseline_path = root / "baseline.json"
+            manifest_path.write_text(json.dumps(small_manifest()), encoding="utf-8")
+            predictions_path.write_text(json.dumps(predictions([])), encoding="utf-8")
+            original_baseline = json.dumps(predictions([]))
+            baseline_path.write_text(original_baseline, encoding="utf-8")
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "evaluate.py"),
+                    "--manifest",
+                    str(manifest_path),
+                    "--predictions",
+                    str(predictions_path),
+                    "--baseline",
+                    str(baseline_path),
+                    "--output",
+                    str(baseline_path),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("output path conflicts with input file", result.stderr)
+            self.assertEqual(baseline_path.read_text(encoding="utf-8"), original_baseline)
+
     def test_cli_rejects_lone_surrogate_prediction_without_traceback_or_report(self):
         with TemporaryDirectory() as directory:
             root = Path(directory)

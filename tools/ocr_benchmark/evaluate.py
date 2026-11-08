@@ -2488,6 +2488,28 @@ def _read_json(path: Path) -> dict[str, Any]:
     return value
 
 
+def _reject_output_input_collision(
+    output_path: Path | None,
+    input_paths: list[tuple[str, Path]],
+) -> None:
+    if output_path is None:
+        return
+
+    try:
+        resolved_output = output_path.resolve()
+        for option, input_path in input_paths:
+            if resolved_output == input_path.resolve() or (
+                output_path.exists()
+                and input_path.exists()
+                and output_path.samefile(input_path)
+            ):
+                raise EvaluationError(
+                    f"--output path conflicts with input file {option}: {input_path}"
+                )
+    except (OSError, RuntimeError) as error:
+        raise EvaluationError(f"cannot resolve output or input path: {error}") from error
+
+
 def main(argv: list[str] | None = None) -> int:
     default_manifest = Path(__file__).with_name("manifest.json")
     parser = argparse.ArgumentParser(description=__doc__)
@@ -2506,10 +2528,17 @@ def main(argv: list[str] | None = None) -> int:
         if args.verify_fixtures:
             if args.predictions or args.baseline:
                 parser.error("--verify-fixtures cannot be combined with prediction files")
+            _reject_output_input_collision(
+                args.output, [("--manifest", args.manifest)]
+            )
             result = {"status": "fixtures_verified", **verify_fixtures(args.manifest)}
         else:
             if args.predictions is None:
                 parser.error("--predictions is required unless --verify-fixtures is used")
+            input_paths = [("--manifest", args.manifest), ("--predictions", args.predictions)]
+            if args.baseline is not None:
+                input_paths.append(("--baseline", args.baseline))
+            _reject_output_input_collision(args.output, input_paths)
             manifest = _read_json(args.manifest)
             candidate = evaluate_predictions(
                 manifest, _read_json(args.predictions)
