@@ -25,6 +25,7 @@ import 'package:stroom/services/conversation_repository.dart';
 import 'package:stroom/services/conversation_record_adapter.dart';
 import 'package:stroom/services/conversation_repository_memory.dart';
 import 'package:stroom/widgets/llm/tool_call_card.dart';
+import 'package:stroom/widgets/code_block_source_widget.dart';
 
 import 'chat_page_test.dart' show createChatTestApp;
 import 'package:stroom/l10n/app_localizations.dart';
@@ -122,7 +123,9 @@ class _CompletingStreamManager extends ChatStreamManager {
     Assistant? assistant,
     ProviderEntriesState? entriesStateOverride,
   }) async {
-    receivedHistories.add(List<ChatMessage>.from(history));
+    receivedHistories.add(
+      List<ChatMessage>.from(requestHistoryOverride ?? history),
+    );
     final reply = ChatMessage(
       id: streamingMsgId ?? 'assistant-after-send',
       role: 'assistant',
@@ -532,8 +535,8 @@ void main() {
         of: find.byType(Chat),
         matching: find.byWidgetPredicate(
           (widget) =>
-              widget is SelectableText &&
-              (widget.data?.contains('needle-code-only') ?? false),
+              widget is CodeBlockSourceView &&
+              widget.code.contains('needle-code-only'),
         ),
       );
       expect(target, findsOneWidget);

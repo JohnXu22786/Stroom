@@ -1280,7 +1280,7 @@ void main() {
   });
 
   group('OcrPage - async image validation races', () {
-    testWidgets('does not restore a selection cleared during OCR startup', (
+    testWidgets('locks image selection while OCR startup validates images', (
       tester,
     ) async {
       final validationStarted = Completer<void>();
@@ -1308,15 +1308,14 @@ void main() {
       await tester.pump();
       await validationStarted.future;
 
-      await tester.tap(find.byKey(const Key('ocr_clear_button')));
-      await tester.pump();
+      final clearButton = tester.widget<IconButton>(
+        find.byKey(const Key('ocr_clear_button')),
+      );
+      expect(clearButton.onPressed, isNull);
+      expect(find.text('已选 2 张图片'), findsOneWidget);
+
       finishValidation.complete();
       await tester.pump();
-      await tester.pumpAndSettle();
-
-      expect(find.text('已选 2 张图片'), findsNothing);
-      expect(find.text('图片列表已变化，请重新开始识别。'), findsOneWidget);
-      expect(find.text('开始识别'), findsOneWidget);
     });
 
     testWidgets('applies an edit to the same image after it is reordered', (
@@ -1789,6 +1788,8 @@ void main() {
 
       await tester.tap(find.byKey(const Key('ocr_clear_button')));
       await tester.pump();
+      await tester.tap(find.byKey(const Key('ocr_confirm_clear')));
+      await tester.pumpAndSettle();
       finishValidation.complete();
       await tester.pump();
       await tester.pumpAndSettle();

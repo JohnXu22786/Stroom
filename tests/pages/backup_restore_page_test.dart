@@ -98,7 +98,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.pump(const Duration(seconds: 10));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('清除所选数据'));
+      await tester.tap(find.widgetWithText(FilledButton, '清除所选数据'));
       await tester.pumpAndSettle();
 
       // Button-based restart prompt (mirrors the startup migration dialog),

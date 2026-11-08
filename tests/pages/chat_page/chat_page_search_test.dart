@@ -205,12 +205,8 @@ void main() {
       expect(scrolledToMatch, isTrue,
           reason: 'navigation must scroll until the matched message is built');
 
-      // Let the observer finish its final alignment (it scrolls iteratively
-      // and then animates to the target position) before measuring.
-      for (var i = 0; i < 40; i++) {
-        await tester.pump(const Duration(milliseconds: 16));
-      }
-
+      // Measure while the lazily built target is in view. Further pumps can
+      // let the scroll animation continue past the target and unmount it.
       final bubbleRect = tester.getRect(matchInChat);
       final pageSize = tester.getSize(find.byType(ChatPage));
       expect(bubbleRect.top, lessThan(pageSize.height),

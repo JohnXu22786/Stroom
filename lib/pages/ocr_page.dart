@@ -748,6 +748,26 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           matches.add(index);
         }
       }
+      // OCR retry snapshots written before the LLM model-group migration
+      // refer to the legacy OCR config, while the selectable option now uses
+      // its stable namespaced group ID. Resolve that deterministic alias so
+      // a restored task continues to use the same model after migration.
+      if (matches.isEmpty &&
+          _selectedConfigId != null &&
+          _selectedModelRecordId != null) {
+        final migratedGroupId = llmOcrModelGroupIdForConfig(
+          _selectedConfigId!,
+          _selectedModelRecordId!,
+        );
+        for (var index = 0; index < modelOptions.length; index++) {
+          final option = modelOptions[index];
+          if (option.configId == migratedGroupId &&
+              option.modelRecordId == _selectedModelRecordId) {
+            matches.add(index);
+          }
+        }
+        if (matches.length == 1) _selectedConfigId = migratedGroupId;
+      }
       return matches.length == 1 ? matches.single : null;
     }
     if (_modelSelectionNeedsReselection ||

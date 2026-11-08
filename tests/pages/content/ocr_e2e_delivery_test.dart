@@ -318,12 +318,16 @@ void main() {
             task.status == TaskStatus.failed,
       ),
     );
-    expect(adapter.requests, hasLength(1));
     final pageTask = background.state.single;
     expect(
       pageTask.status,
       TaskStatus.completed,
       reason: 'OCR task failed: ${pageTask.error}',
+    );
+    expect(
+      adapter.requests,
+      hasLength(1),
+      reason: 'OCR task error: ${pageTask.error}',
     );
     expect(pageTask.result, 'Recognized text');
     final editedPayload = prepareOcrImagePayloadSync(
