@@ -261,6 +261,17 @@ void main() {
         await _scrollTo(tester, valueField);
         expect(tester.widget<TextField>(valueField).controller!.text, '1.0');
 
+        await tester.tap(find.byIcon(Icons.fullscreen));
+        await tester.pumpAndSettle();
+        final editorField = find.descendant(
+          of: find.byType(Dialog),
+          matching: find.byType(TextField),
+        );
+        await tester.enterText(editorField, '1.25');
+        await tester.tap(find.byIcon(Icons.check));
+        await tester.pumpAndSettle();
+        expect(tester.widget<TextField>(valueField).controller!.text, '1.25');
+
         await tester.enterText(valueField, '1.5');
         await tester.pump();
         await tester.tap(find.text('保存'));

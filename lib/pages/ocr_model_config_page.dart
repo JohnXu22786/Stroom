@@ -37,6 +37,7 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
   late final TextEditingController _requestSizeBudgetController;
   late List<CustomParam> _customParams;
   final Map<int, String?> _jsonErrors = {};
+  final Map<int, int> _customParamValueFieldRevisions = {};
 
   // Slider values
   double _temperature = 0.0;
@@ -188,6 +189,7 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
       _jsonErrors
         ..clear()
         ..addAll(newErrors);
+      _customParamValueFieldRevisions.clear();
     });
   }
 
@@ -204,6 +206,7 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
       _jsonErrors
         ..clear()
         ..addAll(newErrors);
+      _customParamValueFieldRevisions.clear();
     });
   }
 
@@ -777,13 +780,13 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
                           children: [
                             Expanded(
                               child: TextFormField(
-                                key: ValueKey(
-                                  param.type == 'json' || param.options.isEmpty
-                                      ? 'default-value'
-                                      : 'first-option',
-                                ),
-                                initialValue:
-                                    _effectiveCustomParamValue(param),
+                                key: ValueKey((
+                                  i,
+                                  param.type != 'json' &&
+                                      param.options.isNotEmpty,
+                                  _customParamValueFieldRevisions[i] ?? 0,
+                                )),
+                                initialValue: _effectiveCustomParamValue(param),
                                 minLines: 4,
                                 maxLines: 8,
                                 style: const TextStyle(
@@ -842,6 +845,10 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
                                       param,
                                       result,
                                     );
+                                    _customParamValueFieldRevisions[i] =
+                                        (_customParamValueFieldRevisions[i] ??
+                                            0) +
+                                        1;
                                     _validateJsonField(i, param);
                                     setState(() {});
                                   },
