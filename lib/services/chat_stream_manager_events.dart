@@ -7,8 +7,16 @@ extension _ChatStreamManagerEventsExt on ChatStreamManager {
       ChatEvent event, _ConversationStreamState state, String convId) {
     switch (event) {
       case InputTranscriptEvent _:
-        // Provider-side transcription belongs to the user turn; it is not
-        // assistant output and is already retained by the audio request.
+        // The chat service records the transcript in its request history,
+        // but the manager owns the persisted stream history. Mirror it there
+        // so recognized speech remains on the user message.
+        final userMessageIndex = state.history.lastIndexWhere(
+          (message) => message.role == 'user',
+        );
+        if (userMessageIndex >= 0) {
+          state.history[userMessageIndex] =
+              state.history[userMessageIndex].copyWith(content: event.text);
+        }
         break;
       case MediaAttachmentsEvent e:
         final eventOrder = e.contentOrder;

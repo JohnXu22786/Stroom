@@ -8,6 +8,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/pages/provider_config_detail_page.dart';
 import 'package:stroom/providers/provider_config.dart';
@@ -830,7 +831,9 @@ void main() {
               (ref) => ProviderEntriesNotifierFake(),
             ),
           ],
-          child: const MaterialApp(
+          child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
             home: ProviderConfigDetailPage(
               entryId: 'test_entry_id',
               configIndex: 0,

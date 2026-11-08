@@ -653,6 +653,13 @@ class BackupService {
           sourcePath: p.join(appDir, 'task_flow_temporary'),
           useStreaming: useStreaming,
         );
+        await _addDirectoryPlanFiles(
+          diskFiles,
+          memoryFiles,
+          archivePrefix: 'ocr_retry_cache',
+          sourcePath: p.join(appDir, 'ocr_retry_cache'),
+          useStreaming: useStreaming,
+        );
       }
       await _addTaskStatePlanFile(
         diskFiles,
@@ -1148,6 +1155,7 @@ class BackupService {
           'task_state/',
           'task_flow_attachments/',
           'task_flow_temporary/',
+          'ocr_retry_cache/',
           'catcatch/completed/',
           for (final directory in _catCatchRuntimeSubdirectories)
             'catcatch/$directory/',
@@ -2030,6 +2038,11 @@ class BackupService {
             archive,
             archivePrefix: 'task_flow_temporary',
             sourcePath: p.join(appDir, 'task_flow_temporary'),
+          );
+          await _addDirectoryToArchive(
+            archive,
+            archivePrefix: 'ocr_retry_cache',
+            sourcePath: p.join(appDir, 'ocr_retry_cache'),
           );
         }
         await _addTaskStateFileToArchive(
@@ -7770,6 +7783,7 @@ const List<String> _restoreKnownDirs = [
   'task_state',
   'task_flow_attachments',
   'task_flow_temporary',
+  'ocr_retry_cache',
 ];
 
 /// 根据 selection 决定哪些目录需要恢复。
@@ -7797,6 +7811,7 @@ bool _shouldRestoreDir(String dir, BackupSelection selection) {
       return selection.tasks;
     case 'task_flow_attachments':
     case 'task_flow_temporary':
+    case 'ocr_retry_cache':
       return selection.tasks && selection.includeMediaFiles;
     case 'attachments':
       return selection.chatRecordsAndAttachments && selection.includeMediaFiles;

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/pages/backup_restore_page.dart';
 import 'package:stroom/services/backup_service.dart' show BackupSelection;
@@ -12,6 +13,8 @@ Widget createTestApp({
 }) {
   return ProviderScope(
     child: MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: BackupRestorePage(clearDataForTest: clearDataForTest),
     ),
   );

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
@@ -12,6 +13,7 @@ import 'package:stroom/services/conversation_repository_memory.dart';
 import 'package:stroom/services/llm_account_migration_service.dart';
 import 'package:stroom/services/llm_credential_store.dart';
 import 'package:stroom/services/manifest_database.dart';
+import 'package:stroom/services/storage_service.dart';
 import 'package:stroom/utils/text_manifest.dart';
 
 const _settingsAndTextRestoreSelection = BackupSelection(
@@ -120,6 +122,39 @@ void main() {
       BackupService.restoreFromBytesForTest(incomplete),
       throwsA(isA<BackupValidationException>()),
     );
+  });
+
+  test('backs up and restores OCR retry image cache with task media', () async {
+    final appDir = await AppStorage.directory;
+    const cacheRelativePath = 'ocr_retry_cache/backup-roundtrip.bin';
+    final cacheFile = File('$appDir/$cacheRelativePath');
+    await cacheFile.parent.create(recursive: true);
+    const cacheContent = 'ocr retry image bytes';
+    await cacheFile.writeAsString(cacheContent);
+    try {
+      final bytes = await BackupService.buildBackupBytesForTest();
+      final archive = ZipDecoder().decodeBytes(bytes);
+      expect(archive.findFile(cacheRelativePath), isNotNull);
+
+      await cacheFile.delete();
+      await BackupService.restoreFromBytesForTest(
+        bytes,
+        selection: const BackupSelection(
+          chatRecordsAndAttachments: false,
+          settings: false,
+          pictures: false,
+          audio: false,
+          videos: false,
+          texts: false,
+          tasks: true,
+          ankiData: false,
+          browserCookies: false,
+        ),
+      );
+      expect(await cacheFile.readAsString(), cacheContent);
+    } finally {
+      if (await cacheFile.exists()) await cacheFile.delete();
+    }
   });
 
   test(

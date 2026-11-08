@@ -7,6 +7,7 @@ import 'package:file_picker_platform_interface/file_picker_platform_interface.da
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:stroom/services/storage_service.dart';
 
@@ -98,6 +99,8 @@ Future<String> _pumpRunMode(WidgetTester tester, TaskFlowBlock block,
           taskFlowExecutionServiceProvider.overrideWithValue(control),
       ],
       child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: TaskFlowBuilderPage(
           flowId: flowId,
           startInRunMode: true,
