@@ -20,6 +20,7 @@ import '../providers/locale_provider.dart'
     show appLocalizationsForLocale, localeProvider;
 import '../providers/provider_config.dart';
 import 'conversation_media_storage.dart' show sanitizeConversationMediaJson;
+import '../ai_gateway/ai_gateway.dart' show AiGateway;
 import 'app_log_service.dart';
 import 'chat_adapter.dart';
 import 'chat_protocol.dart' show rebuildToolResultText;
@@ -133,7 +134,10 @@ class ChatStreamManager {
   ChatStreamManager([this._ref])
       : _transportRetryPolicy = const TransportRetryPolicy(),
         _retryDelay = null {
-    _adapter = ChatAdapter(localeOverride: () => _ref?.read(localeProvider));
+    _adapter = ChatAdapter(
+      routingRuntime: _ref == null ? null : AiGateway.sharedPlatform(),
+      localeOverride: () => _ref?.read(localeProvider),
+    );
   }
 
   @visibleForTesting
@@ -144,7 +148,10 @@ class ChatStreamManager {
   })  : _ref = ref,
         _transportRetryPolicy = transportRetryPolicy,
         _retryDelay = retryDelay {
-    _adapter = ChatAdapter(localeOverride: () => _ref?.read(localeProvider));
+    _adapter = ChatAdapter(
+      routingRuntime: _ref == null ? null : AiGateway.sharedPlatform(),
+      localeOverride: () => _ref?.read(localeProvider),
+    );
   }
 
   // ── 公开 getter ──

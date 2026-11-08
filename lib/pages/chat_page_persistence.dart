@@ -375,7 +375,7 @@ extension _ChatPagePersistenceExt on _ChatPageState {
         capturedConvId: convId,
         historyOverride: historyForStream,
         requestHistoryOverride: requestHistory,
-        historyOnSuccess: historyForStream,
+        historyOnSuccess: requestHistory ?? historyForStream,
       );
       await saveFuture;
 
