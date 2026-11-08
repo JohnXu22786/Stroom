@@ -1,8 +1,9 @@
 name: Release Build
 
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
     inputs:
       tag:
@@ -28,7 +29,20 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
+  create-release-draft:
+    if: ${{ github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create release draft with generated notes
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          draft: true
+          generate_release_notes: true
+
   prepare-version:
+    needs: create-release-draft
+    if: ${{ always() && (needs.create-release-draft.result == 'success' || needs.create-release-draft.result == 'skipped') }}
     runs-on: ubuntu-latest
     outputs:
       app_version: ${{ steps.extract-version.outputs.app_version }}
@@ -58,28 +72,21 @@ jobs:
           echo "app_version=$TAG" >> "$GITHUB_OUTPUT"
 
       # 构建信息：发布时间 + 更新内容，写入应用「版本信息」面板。
-      # - release 事件：取自 GitHub Release 的发布时间与 Release 说明。
-      # - workflow_dispatch：优先取该 tag 对应 release 的真实发布时间
-      #   与说明 —— 重建旧 tag 时，用户安装的仍是该 release 的发布时间点，
-      #   晚于它的发布才算新版本；tag 不存在（如按分支手动构建）时回退到
-      #   当前 UTC 时间、无更新内容。
+      # - tag push：从预先创建的 release draft 读取创建时间和自动生成的说明。
+      # - workflow_dispatch：优先取该 tag 对应 release 的发布时间与说明；
+      #   重建旧 tag 时保留原发布时间，tag 无关联 release 时回退到当前 UTC 时间。
       # 更新内容压缩后再 Base64 写入 JSON，避免大型发布说明超过
       # Flutter/Gradle 的进程参数长度限制。
       - id: build-info
         run: |
           RELEASE_NOTES_FILE="$RUNNER_TEMP/release-notes.txt"
-          if [ "${{ github.event_name }}" = "release" ]; then
-            RELEASE_TIME="$(jq -r '.release.published_at // empty' "$GITHUB_EVENT_PATH")"
-            jq -j '.release.body // ""' "$GITHUB_EVENT_PATH" > "$RELEASE_NOTES_FILE"
+          RELEASE_JSON="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" 2>/dev/null || true)"
+          RELEASE_TIME="$(printf '%s' "$RELEASE_JSON" | jq -r '.published_at // .created_at // empty' 2>/dev/null || true)"
+          if [ -z "$RELEASE_TIME" ]; then
+            RELEASE_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            : > "$RELEASE_NOTES_FILE"
           else
-            RELEASE_TIME="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" -q '.published_at // empty' 2>/dev/null || true)"
-            if [ -z "$RELEASE_TIME" ]; then
-              RELEASE_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-              : > "$RELEASE_NOTES_FILE"
-            else
-              gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" 2>/dev/null \
-                | jq -j '.body // ""' > "$RELEASE_NOTES_FILE" || true
-            fi
+            printf '%s' "$RELEASE_JSON" | jq -j '.body // ""' > "$RELEASE_NOTES_FILE" || true
           fi
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.include_release_notes }}" != "true" ]; then
             : > "$RELEASE_NOTES_FILE"
@@ -147,6 +154,7 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.TAG }}
+          draft: ${{ github.event_name == 'push' }}
           files: artifacts/stroom-windows-x64-installer-*.exe
 
 
@@ -220,6 +228,7 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.TAG }}
+          draft: ${{ github.event_name == 'push' }}
           files: stroom-macos-arm64-release-*.zip
 
   # x86_64 is cross-compiled on ARM64 via Xcode cross-compilation.
@@ -292,6 +301,7 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.TAG }}
+          draft: ${{ github.event_name == 'push' }}
           files: stroom-macos-x64-release-*.zip
 
   linux:
@@ -323,6 +333,7 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.TAG }}
+          draft: ${{ github.event_name == 'push' }}
           files: stroom-linux-x64-release-*.zip
 
   web:
@@ -350,6 +361,7 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.TAG }}
+          draft: ${{ github.event_name == 'push' }}
           files: stroom-web-release-*.zip
 
   ios:
@@ -392,6 +404,7 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.TAG }}
+          draft: ${{ github.event_name == 'push' }}
           files: stroom-ios-unsigned-*.ipa
 
   android:
@@ -436,4 +449,17 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.TAG }}
+          draft: ${{ github.event_name == 'push' }}
           files: stroom-android-release-*.apk
+
+
+  publish-release:
+    if: ${{ github.event_name == 'push' }}
+    needs: [windows, macos-arm64, macos-x64, linux, web, ios, android]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish release after all platform builds succeed
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          draft: false
