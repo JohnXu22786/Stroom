@@ -53,7 +53,11 @@ class _ThemeDisplaySettingsPageState
         key: const Key('theme-display-settings-list'),
         padding: const EdgeInsets.all(16),
         children: [
-          _buildSectionHeader(context, strings.themeDisplayThemeSection),
+          _buildSectionHeader(
+            context,
+            strings.themeDisplayThemeSection,
+            key: const Key('theme-display-settings-theme-header'),
+          ),
           Card(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -192,8 +196,9 @@ class _ThemeDisplaySettingsPageState
     );
   }
 
-  Widget _buildSectionHeader(BuildContext context, String title) {
+  Widget _buildSectionHeader(BuildContext context, String title, {Key? key}) {
     return Padding(
+      key: key,
       padding: const EdgeInsets.only(bottom: 12),
       child: Text(
         title,

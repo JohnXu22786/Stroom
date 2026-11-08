@@ -192,7 +192,7 @@ void main() {
         )
         .first;
     await tester.scrollUntilVisible(
-      find.text('浅色模式'),
+      find.byKey(const Key('theme-display-settings-theme-header')),
       -300,
       scrollable: pageScrollable,
     );
