@@ -220,6 +220,18 @@ class Assistant {
   /// 该字段（包括空集合）。
   final Set<String>? defaultToolNames;
 
+  /// Remote catalog identity and update settings. These are local marketplace
+  /// metadata and are deliberately not part of the assistant prompt schema.
+  final String? remoteCatalogUrl;
+  final String? remoteFileUrl;
+  final String? remoteAssistantId;
+  final String? remoteVersion;
+  final String? remoteFormat;
+  final String? remoteSha256;
+  final String? remoteUpdatePolicy;
+  final bool remoteSecurityReview;
+  final Map<String, dynamic>? remoteExtensions;
+
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -235,6 +247,15 @@ class Assistant {
     this.defaultModelId,
     this.defaultProviderName,
     this.defaultToolNames,
+    this.remoteCatalogUrl,
+    this.remoteFileUrl,
+    this.remoteAssistantId,
+    this.remoteVersion,
+    this.remoteFormat,
+    this.remoteSha256,
+    this.remoteUpdatePolicy,
+    this.remoteSecurityReview = false,
+    this.remoteExtensions,
     DateTime? createdAt,
     DateTime? updatedAt,
   })  : id = id ?? const Uuid().v4(),
@@ -259,6 +280,16 @@ class Assistant {
         // 非 null 时总是写出（含空集合）：区分"配置过但全关"与"从未配置"。
         if (defaultToolNames != null)
           'defaultToolNames': defaultToolNames!.toList(),
+        if (remoteCatalogUrl != null) 'remoteCatalogUrl': remoteCatalogUrl,
+        if (remoteFileUrl != null) 'remoteFileUrl': remoteFileUrl,
+        if (remoteAssistantId != null) 'remoteAssistantId': remoteAssistantId,
+        if (remoteVersion != null) 'remoteVersion': remoteVersion,
+        if (remoteFormat != null) 'remoteFormat': remoteFormat,
+        if (remoteSha256 != null) 'remoteSha256': remoteSha256,
+        if (remoteUpdatePolicy != null)
+          'remoteUpdatePolicy': remoteUpdatePolicy,
+        if (remoteSecurityReview) 'remoteSecurityReview': true,
+        if (remoteExtensions != null) 'remoteExtensions': remoteExtensions,
         'createdAt': createdAt.toIso8601String(),
         'updatedAt': updatedAt.toIso8601String(),
       };
@@ -301,6 +332,17 @@ class Assistant {
       defaultModelId: map['defaultModelId'] as String?,
       defaultProviderName: map['defaultProviderName'] as String?,
       defaultToolNames: defaultToolNames,
+      remoteCatalogUrl: map['remoteCatalogUrl'] as String?,
+      remoteFileUrl: map['remoteFileUrl'] as String?,
+      remoteAssistantId: map['remoteAssistantId'] as String?,
+      remoteVersion: map['remoteVersion'] as String?,
+      remoteFormat: map['remoteFormat'] as String?,
+      remoteSha256: map['remoteSha256'] as String?,
+      remoteUpdatePolicy: map['remoteUpdatePolicy'] as String?,
+      remoteSecurityReview: (map['remoteSecurityReview'] as bool?) ?? false,
+      remoteExtensions: map['remoteExtensions'] == null
+          ? null
+          : Map<String, dynamic>.from(map['remoteExtensions'] as Map),
       createdAt: map['createdAt'] != null
           ? DateTime.parse(map['createdAt'] as String)
           : null,
@@ -322,6 +364,15 @@ class Assistant {
     String? defaultModelId,
     String? defaultProviderName,
     Set<String>? defaultToolNames,
+    String? remoteCatalogUrl,
+    String? remoteFileUrl,
+    String? remoteAssistantId,
+    String? remoteVersion,
+    String? remoteFormat,
+    String? remoteSha256,
+    String? remoteUpdatePolicy,
+    bool? remoteSecurityReview,
+    Map<String, dynamic>? remoteExtensions,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) =>
@@ -337,6 +388,15 @@ class Assistant {
         defaultModelId: defaultModelId ?? this.defaultModelId,
         defaultProviderName: defaultProviderName ?? this.defaultProviderName,
         defaultToolNames: defaultToolNames ?? this.defaultToolNames,
+        remoteCatalogUrl: remoteCatalogUrl ?? this.remoteCatalogUrl,
+        remoteFileUrl: remoteFileUrl ?? this.remoteFileUrl,
+        remoteAssistantId: remoteAssistantId ?? this.remoteAssistantId,
+        remoteVersion: remoteVersion ?? this.remoteVersion,
+        remoteFormat: remoteFormat ?? this.remoteFormat,
+        remoteSha256: remoteSha256 ?? this.remoteSha256,
+        remoteUpdatePolicy: remoteUpdatePolicy ?? this.remoteUpdatePolicy,
+        remoteSecurityReview: remoteSecurityReview ?? this.remoteSecurityReview,
+        remoteExtensions: remoteExtensions ?? this.remoteExtensions,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
       );

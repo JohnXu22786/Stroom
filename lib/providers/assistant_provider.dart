@@ -154,6 +154,15 @@ class AssistantsNotifier extends StateNotifier<List<Assistant>> {
     String description = '',
     AssistantSettings? settings,
     String? modelId,
+    String? remoteCatalogUrl,
+    String? remoteFileUrl,
+    String? remoteAssistantId,
+    String? remoteVersion,
+    String? remoteFormat,
+    String? remoteSha256,
+    String? remoteUpdatePolicy,
+    bool remoteSecurityReview = false,
+    Map<String, dynamic>? remoteExtensions,
   }) {
     final assistant = Assistant(
       name: name,
@@ -162,10 +171,52 @@ class AssistantsNotifier extends StateNotifier<List<Assistant>> {
       description: description,
       settings: settings,
       modelId: modelId,
+      remoteCatalogUrl: remoteCatalogUrl,
+      remoteFileUrl: remoteFileUrl,
+      remoteAssistantId: remoteAssistantId,
+      remoteVersion: remoteVersion,
+      remoteFormat: remoteFormat,
+      remoteSha256: remoteSha256,
+      remoteUpdatePolicy: remoteUpdatePolicy,
+      remoteSecurityReview: remoteSecurityReview,
+      remoteExtensions: remoteExtensions,
     );
     state = [...state, assistant];
     _persist();
     return assistant;
+  }
+
+  /// Applies a validated remote definition while preserving the local UUID
+  /// and user-owned update/review preferences.
+  void updateRemoteAssistant({
+    required String localId,
+    required Assistant replacement,
+    required String remoteVersion,
+    required String remoteFileUrl,
+    required String remoteFormat,
+    required String remoteSha256,
+    Map<String, dynamic>? remoteExtensions,
+  }) {
+    state = state.map((assistant) {
+      if (assistant.id != localId) return assistant;
+      return assistant.copyWith(
+        name: replacement.name,
+        prompt: replacement.prompt,
+        emoji: replacement.emoji,
+        description: replacement.description,
+        settings: replacement.settings,
+        defaultModelName: replacement.defaultModelName,
+        defaultModelId: replacement.defaultModelId,
+        defaultProviderName: replacement.defaultProviderName,
+        defaultToolNames: replacement.defaultToolNames,
+        remoteVersion: remoteVersion,
+        remoteFileUrl: remoteFileUrl,
+        remoteFormat: remoteFormat,
+        remoteSha256: remoteSha256,
+        remoteExtensions: remoteExtensions,
+      );
+    }).toList();
+    _persist();
   }
 
   /// Updates fields of an existing assistant.

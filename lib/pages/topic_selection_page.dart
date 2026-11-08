@@ -3,9 +3,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 
 import '../pages/assistant_selection_page.dart';
+import '../models/assistant.dart';
 import '../providers/assistant_provider.dart';
 import '../providers/conversation_provider.dart';
 import '../providers/chat_stream_provider.dart';
+import '../providers/chat_manager_provider.dart';
+import '../providers/provider_config.dart';
+import '../services/assistant_prompt_safety_review.dart';
+import '../services/assistant_update_service.dart';
+import '../services/assistant_tool_policy.dart';
+import '../services/chat_adapter.dart' show resolveModelRef;
 import '../widgets/llm/assistant_avatar.dart';
 import '../widgets/search_panel.dart';
 import '../widgets/topic_item.dart';
@@ -23,6 +30,144 @@ class TopicSelectionPage extends ConsumerStatefulWidget {
 class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
   bool _selectionMode = false;
   final Set<String> _selectedIds = {};
+  bool _checkedRemoteAssistant = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkSelectedAssistantForUpdate();
+    });
+  }
+
+  Future<void> _checkSelectedAssistantForUpdate() async {
+    if (_checkedRemoteAssistant || !mounted) return;
+    _checkedRemoteAssistant = true;
+    try {
+      await ref.read(assistantInitialLoadProvider.future);
+      if (!mounted) return;
+      final assistant = ref.read(selectedAssistantProvider);
+      if (assistant == null || assistant.remoteAssistantId == null) return;
+      final update = await AssistantUpdateService.checkForUpdate(assistant);
+      if (!mounted || update == null) return;
+      if (assistant.remoteUpdatePolicy == 'automatic') {
+        await _applyRemoteUpdate(assistant, update);
+      } else {
+        final isZh = Localizations.localeOf(context).languageCode == 'zh';
+        final apply = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: Text(isZh ? '助手有更新' : 'Assistant update available'),
+            content: Text(isZh
+                ? '${assistant.name} 有新版本 ${update.definition.version}。现在查看并更新吗？'
+                : '${assistant.name} has version ${update.definition.version}. Review and update now?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: Text(isZh ? '稍后' : 'Later'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: Text(isZh ? '更新' : 'Update'),
+              ),
+            ],
+          ),
+        );
+        if (apply == true && mounted) await _applyRemoteUpdate(assistant, update);
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Assistant update check failed: $error')),
+        );
+      }
+    }
+  }
+
+  Future<void> _applyRemoteUpdate(
+    Assistant assistant,
+    DownloadedRemoteAssistant update,
+  ) async {
+    final definition = update.definition;
+    final requestedTools = definition.defaultToolNames;
+    final supportedTools = supportedAssistantToolNames(
+      ref.read(providerEntriesProvider),
+    );
+    if (requestedTools != null && !supportedTools.containsAll(requestedTools)) {
+      throw FormatException('Update contains unsupported Stroom tool names.');
+    }
+    if (assistant.remoteSecurityReview) {
+      final entries = ref.read(providerEntriesProvider);
+      final review = await AssistantPromptSafetyReview.review(
+        adapter: ref.read(chatStreamManagerProvider).adapter,
+        entriesState: entries,
+        assistantId: definition.id,
+        prompt: definition.prompt,
+        settings: definition.settings.toMap(),
+      );
+      if (!review.approved) {
+        if (mounted) {
+          final isZh = Localizations.localeOf(context).languageCode == 'zh';
+          await showDialog<void>(
+            context: context,
+            builder: (dialogContext) => AlertDialog(
+              title: Text(isZh ? '安全审查未通过' : 'Safety review rejected update'),
+              content: Text(review.reason),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: Text(isZh ? '关闭' : 'Close'),
+                ),
+              ],
+            ),
+          );
+        }
+        return;
+      }
+    }
+
+    final entries = ref.read(providerEntriesProvider);
+    final adapter = ref.read(chatStreamManagerProvider).adapter;
+    final models = adapter.availableModels(entries);
+    final remoteModel = resolveModelRef(
+      models: models,
+      modelId: definition.defaultModelId,
+      providerName: definition.defaultProviderName,
+      displayName: definition.defaultModelName,
+    );
+    final existingModel = resolveModelRef(
+      models: models,
+      modelId: assistant.defaultModelId,
+      providerName: assistant.defaultProviderName,
+      displayName: assistant.defaultModelName,
+    );
+    final replacement = Assistant(
+      name: definition.name,
+      description: definition.description,
+      emoji: definition.emoji,
+      prompt: definition.prompt,
+      settings: definition.settings,
+      defaultModelName: (remoteModel ?? existingModel)?.displayName,
+      defaultModelId: (remoteModel ?? existingModel)?.modelId,
+      defaultProviderName: (remoteModel ?? existingModel)?.providerName,
+      defaultToolNames: requestedTools ?? assistant.defaultToolNames,
+    );
+    ref.read(assistantProvider.notifier).updateRemoteAssistant(
+          localId: assistant.id,
+          replacement: replacement,
+          remoteVersion: definition.version,
+          remoteFileUrl: update.fileUrl,
+          remoteFormat: update.format,
+          remoteSha256: update.sha256,
+          remoteExtensions: definition.extensions,
+        );
+    if (mounted) {
+      final isZh = Localizations.localeOf(context).languageCode == 'zh';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(isZh ? '助手已更新' : 'Assistant updated')),
+      );
+    }
+  }
 
   /// 置顶优先、块内保持原有顺序（稳定排序——Dart 的 List.sort 在元素
   /// 超过 33 个时使用不稳定快排，会任意重排等键元素，导致对话多时
