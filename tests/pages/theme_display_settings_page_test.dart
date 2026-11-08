@@ -172,7 +172,10 @@ void main() {
 
     expect(find.text('dark'), findsOneWidget);
 
-    await tester.tap(find.text('Chinese (Simplified)（简体中文）'));
+    final chineseLanguage = find.text('Chinese (Simplified)（简体中文）');
+    await tester.ensureVisible(chineseLanguage);
+    await tester.pumpAndSettle();
+    await tester.tap(chineseLanguage);
     await tester.pumpAndSettle();
     expect(
       (await SharedPreferences.getInstance()).getString(localePreferenceKey),
@@ -267,7 +270,7 @@ void main() {
     expect(find.text('主题与显示'), findsOneWidget);
     expect(find.byTooltip('返回'), findsOneWidget);
     expect(find.text('主题'), findsOneWidget);
-    expect(find.text('英语'), findsOneWidget);
-    expect(find.text('简体中文'), findsOneWidget);
+    expect(find.text('英语（English）'), findsOneWidget);
+    expect(find.text('简体中文（简体中文）'), findsOneWidget);
   });
 }
