@@ -7,6 +7,7 @@ bundle_id='nodejsmobile.test'
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 
 python3 "$script_dir/test_log_marker.py"
+node "$script_dir/test_raw_utf8_check.js"
 
 device=$(xcrun simctl list devices available --json | python3 -c '
 import json, sys
@@ -84,7 +85,7 @@ run_node() {
   fi
 }
 
-raw_expression="(()=>{console.log('IOS_NODE_RUNTIME_'+process.version);let value='Stroom 学习 🙂';try{let decoded=Buffer.from(value,'utf8').toString('utf8');if(decoded!==value)throw new Error('UTF-8 round-trip mismatch');console.log('IOS_RAW_UTF8_ROUNDTRIP:'+Buffer.from(decoded,'utf8').toString('hex'))}catch(error){if(!(error instanceof RangeError&&error.message==='Index out of range')){console.log('RESULT:FAIL');throw error}console.log('IOS_RAW_UTF8_RANGEERROR:'+error.name+':'+error.message)}console.log('RESULT:PASS')})()"
+raw_expression="console.log('IOS_NODE_RUNTIME_'+process.version),$(cat "$script_dir/raw_utf8_check.js")"
 raw_markers=$'IOS_RAW_UTF8_ROUNDTRIP:5374726f6f6d20e5ada6e4b9a020f09f9982\nIOS_RAW_UTF8_RANGEERROR:RangeError:Index out of range'
 run_node raw-runtime "$raw_markers" 60 -p "$raw_expression"
 
