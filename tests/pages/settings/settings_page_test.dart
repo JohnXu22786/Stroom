@@ -211,6 +211,17 @@ void main() {
     });
   });
 
+  group('SettingsPage - built-in web search supplier', () {
+    testWidgets('shows the built-in entry without persisting it',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({'provider_entries': '[]'});
+
+      await _pumpSettingsTestApp(tester);
+
+      expect(find.text(kBuiltinWebSearchEntryName), findsOneWidget);
+    });
+  });
+
   // ─────────────────────────────────────────────────────────────────────
   // 上下文管理设置（压缩触发设置面板）
   // ─────────────────────────────────────────────────────────────────────
