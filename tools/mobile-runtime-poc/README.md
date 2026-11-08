@@ -13,6 +13,8 @@ The MCP test runs both endpoints in the same embedded Node process. It does **no
 
 The Android workflow downloads the official Node Mobile v18.20.4 release, verifies its published archive SHA-256, and packages the x86_64 library only for emulator testing. The iOS workflow downloads the official v18.20.4 iOS framework, verifies its published SHA-256, and runs the upstream sample in an iOS Simulator. Both workflows download npm 10.8.2, verify its published SHA-512 integrity, and bundle it only into the sample app. The npm package is Artistic-2.0 licensed; its license file is included in the test app. These are not Stroom release artifacts or release-size estimates.
 
+The Android CI runner removes the upstream sample's unconditional `AtExitHook` failure sentinel. It polls each Node launch for an explicit result marker and fails after a bounded wait if no marker appears.
+
 ## Lifecycle bridge experiment
 
 Both simulator workflows install eleven local npm fixtures and core-js 3.45.1 through npm 10.8.2 while the embedded Node process is running:

@@ -95,13 +95,31 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
 
-          path = Path("nodejs-mobile/tools/mobile-test/android/testnode/app/src/main/java/com/janeasystems/test/testnode/MainActivity.java")
+          # Replace the upstream unconditional AtExitHook sentinel with the POC's bounded marker polling.
+          path = Path("nodejs-mobile/tools/mobile-test/android/testnode/app/src/main/cpp/native-lib.cpp")
           source = path.read_text()
-          original = 'Log.i(TAG, "RESULT:FAIL");'
-          diagnostic = 'Log.i(TAG, "RESULT:FAIL " + e.getClass().getName() + ": " + e.getMessage());\n                Log.i(TAG, Log.getStackTraceString(e));'
-          if source.count(original) != 1:
-              raise SystemExit("Unexpected upstream MainActivity failure handler")
-          path.write_text(source.replace(original, diagnostic))
+          replacements = [
+              (
+                  'void AtExitHook()\n'
+                  '{\n'
+                  '    // If the process is exiting, we might has well say it has failed,\n'
+                  '    //because if it doesn\'t have a RESULT line before, it will block\n'
+                  '    //the test suite until a timeout occurs.\n'
+                  '    fprintf(stdout,"RESULT:FAIL\\n");\n'
+                  '}',
+                  '',
+              ),
+              (
+                  '    // Registers atExitHook\n'
+                  '    atexit(AtExitHook);',
+                  '    // The Stroom POC runner polls explicit per-launch results with a timeout.',
+              ),
+          ]
+          for original, replacement in replacements:
+              if source.count(original) != 1:
+                  raise SystemExit("Unexpected upstream Node Mobile result handler")
+              source = source.replace(original, replacement)
+          path.write_text(source)
           PY
 
       - name: Build upstream Android sample app

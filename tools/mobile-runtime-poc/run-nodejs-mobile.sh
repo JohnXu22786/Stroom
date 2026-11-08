@@ -97,10 +97,6 @@ run_node() {
     echo "The Node Mobile test app reported an uncaught failure after $label emitted its pass marker." >&2
     return 1
   fi
-  if [[ "$expected_app_result" == fail ]] && ! grep -Fq 'RESULT:FAIL' <<<"$log"; then
-    echo "The Node Mobile test app did not report the expected failure for $label." >&2
-    return 1
-  fi
 }
 
 run_expected_raw_failure() {
@@ -155,7 +151,7 @@ for lifecycle_case in javascript async-javascript async-exit async-exit-default 
   expected_app_result=pass
   case "$lifecycle_case" in
     async-exit-default|async-failure|async-timeout|child-process|native-command)
-      expected_app_result=fail
+      expected_app_result=either
       ;;
   esac
   run_node "npm lifecycle bridge: $lifecycle_case" \
