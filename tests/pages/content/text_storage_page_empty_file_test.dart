@@ -31,7 +31,8 @@ class _EmptyTextPicker extends FilePickerPlatform {
     WindowsOptions windowsOptions = const WindowsOptions(),
     LinuxOptions linuxOptions = const LinuxOptions(),
     WebOptions webOptions = const WebOptions(),
-  }) async => [input];
+  }) async =>
+      [input];
 
   @override
   Future<Uri?> saveFile({
@@ -52,13 +53,13 @@ class _EmptyTextPicker extends FilePickerPlatform {
 }
 
 Widget _buildApp() => const ProviderScope(
-  child: MaterialApp(
-    locale: Locale('zh', 'CN'),
-    supportedLocales: AppLocalizations.supportedLocales,
-    localizationsDelegates: AppLocalizations.localizationsDelegates,
-    home: TextStoragePage(),
-  ),
-);
+      child: MaterialApp(
+        locale: Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: TextStoragePage(),
+      ),
+    );
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
