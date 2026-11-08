@@ -82,6 +82,29 @@ class _CapturingSuccessAdapter implements HttpClientAdapter {
   void close({bool force = false}) {}
 }
 
+class _IncompleteOcrAdapter implements HttpClientAdapter {
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<dynamic>? cancelFuture,
+  ) async {
+    if (requestStream != null) {
+      await for (final _ in requestStream) {}
+    }
+    return ResponseBody.fromString(
+      '{"choices":[{"message":{"content":"partial OCR text"},"finish_reason":"length"}]}',
+      200,
+      headers: {
+        Headers.contentTypeHeader: [Headers.jsonContentType],
+      },
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -259,6 +282,56 @@ void main() {
       dio.close(force: true);
     }
   });
+
+  test(
+    'incomplete OCR keeps partial text marked incomplete after restore',
+    () async {
+      final source =
+          await File('${directory.path}/partial.png').writeAsBytes(_validPng());
+      final dio = Dio()..httpClientAdapter = _IncompleteOcrAdapter();
+
+      try {
+        await expectLater(
+          executeOcrBlock(
+            block: ocrBlock(),
+            def: BlockTypeDefinition.ocr,
+            input: source.path,
+            execId: execId,
+            execNotifier: executions,
+            flowSubTask: subTask,
+            bgNotifier: background,
+            providerEntries: providerForOcr(),
+            ocrDio: dio,
+          ),
+          throwsA(isA<BlockExecutionException>().having(
+            (error) => error.message,
+            'message',
+            contains('不完整结果（finish_reason=length）'),
+          )),
+        );
+      } finally {
+        dio.close(force: true);
+      }
+
+      final failedTask = background.state.single;
+      expect(failedTask.status, TaskStatus.failed);
+      expect(failedTask.result, 'partial OCR text');
+      expect(failedTask.resultIsComplete, isFalse);
+      expect(failedTask.error, contains('不完整结果（finish_reason=length）'));
+      expect(
+        executions.execution(execId)?.subTasks.single.status,
+        TaskStatus.failed,
+      );
+
+      await background.pendingPersistence;
+      final restored = BackgroundTaskNotifier();
+      addTearDown(restored.dispose);
+      expect(await restored.restoreFromPersistence(), isTrue);
+      final restoredTask = restored.taskById(failedTask.id)!;
+      expect(restoredTask.result, 'partial OCR text');
+      expect(restoredTask.resultIsComplete, isFalse);
+    },
+  );
 
   test('OCR rejects oversized WebFileStore input before request dispatch',
       () async {

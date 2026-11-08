@@ -254,6 +254,7 @@ void main() {
 
   tearDown(() async {
     if (background.mounted) background.dispose();
+    BackgroundTaskNotifier.debugDisablePersistence = false;
     BackgroundTaskNotifier.debugStorageDirectoryOverride = null;
     await taskDirectory.delete(recursive: true);
   });
@@ -261,6 +262,10 @@ void main() {
   testWidgets('page pick, edit, submit, save, open, and task-flow parity', (
     tester,
   ) async {
+    // This test verifies delivery parity, not task persistence. The dedicated
+    // restore/retry test below exercises that path with real async I/O.
+    BackgroundTaskNotifier.debugDisablePersistence = true;
+
     final localizations = lookupAppLocalizations(const Locale('zh', 'CN'));
     sourceImage = (await tester.runAsync(_createEnginePng))!;
     final adapter = _ScriptedOcrAdapter([
@@ -481,6 +486,7 @@ void main() {
     await retryRunner.run();
     expect(background.state.firstWhere((task) => task.id == retryId).status,
         TaskStatus.completed);
+    await background.pendingPersistence;
     final record = (await TextManifest.loadRecords()).single;
     expect(
         await TextManifest.readText(record.storageFileName), 'Recovered text');
