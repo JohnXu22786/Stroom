@@ -6291,13 +6291,11 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     if (!_ocrCacheOwnershipLoaded || !_ocrCacheCleanupSafe) return null;
     final tasks = mounted ? state : (_disposedSnapshot ?? const []);
     return {
-      for (final task in tasks)
-        ..._ocrCacheReferencesFromTask(task),
+      for (final task in tasks) ..._ocrCacheReferencesFromTask(task),
       ..._persistedOcrCacheReferences,
       ..._referencesFromSkippedTaskEntries(),
       for (final removedTasks in _pendingTaskRemovalCleanupTasks.values)
-        for (final task in removedTasks)
-          ..._ocrCacheReferencesFromTask(task),
+        for (final task in removedTasks) ..._ocrCacheReferencesFromTask(task),
     };
   }
 
