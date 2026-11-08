@@ -42,8 +42,9 @@ final streamingMsgIdProvider =
     StateProvider.family<String?, String>((ref, convId) => null);
 
 /// Legacy full-reply slot retained for callers that still seed stream state
-/// directly. Production streaming keeps text only in
-/// [streamingTextSectionsProvider] and derives the full reply when rendering.
+/// directly. Non-empty updates are cumulative appends; callers must publish an
+/// empty reset before replacing a reply. Production streaming keeps text only
+/// in [streamingTextSectionsProvider] and derives the full reply when rendering.
 final streamingFullReplyProvider =
     StateProvider.family<String, String>((ref, convId) => '');
 
