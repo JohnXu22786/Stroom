@@ -17,6 +17,7 @@ import 'package:stroom/pages/ocr/ocr_retry_snapshot.dart';
 import 'package:stroom/pages/ocr_page.dart';
 import 'package:stroom/pages/text_preview_edit_page.dart';
 import 'package:stroom/providers/background_task_provider.dart';
+import 'package:stroom/providers/locale_provider.dart';
 import 'package:stroom/providers/ocr_instructions_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/providers/task_provider_shared.dart';
@@ -80,6 +81,11 @@ final _typeConfig = <String, dynamic>{
   'enableTopP': true,
   'topP': 0.8,
 };
+
+class _FixedLocaleController extends LocaleSelectionController {
+  @override
+  Locale? build() => const Locale('zh', 'CN');
+}
 
 OcrConfig _ocrConfig() => OcrConfig(
       host: 'https://ocr.test/v1/chat/completions',
@@ -150,6 +156,7 @@ Widget _deliveryApp({
 }) =>
     ProviderScope(
       overrides: [
+        localeProvider.overrideWith(_FixedLocaleController.new),
         providerEntriesProvider.overrideWith((ref) {
           final notifier = ProviderEntriesNotifier();
           notifier.state = ProviderEntriesState(entries: [_ocrEntry()]);
@@ -254,6 +261,7 @@ void main() {
   testWidgets('page pick, edit, submit, save, open, and task-flow parity', (
     tester,
   ) async {
+    final localizations = lookupAppLocalizations(const Locale('zh', 'CN'));
     sourceImage = (await tester.runAsync(_createEnginePng))!;
     final adapter = _ScriptedOcrAdapter([
       (200, 'Recognized text'),
@@ -310,6 +318,11 @@ void main() {
     );
     expect((editedPayload.width, editedPayload.height), (6, 8));
     final pageBody = _requestBody(adapter.requests.first);
+    final pageMessages = pageBody['messages'] as List;
+    expect(
+      pageMessages.first['content'],
+      localizations.ocrDefaultSystemPrompt,
+    );
     expect(pageBody['max_tokens'], 1536);
     expect(pageBody['temperature'], 0.2);
     expect(pageBody['top_p'], 0.8);
@@ -349,6 +362,7 @@ void main() {
         flowSubTask: subTask,
         bgNotifier: background,
         providerEntries: ProviderEntriesState(entries: [_ocrEntry()]),
+        localizations: localizations,
         ocrDio: flowDio,
       ),
     );
