@@ -130,6 +130,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   late Directory directory;
   late BackgroundTaskNotifier notifier;
+  late Locale locale;
   late _ControlledAdapter adapter;
   late OcrTaskRunner runner;
   late String id;
@@ -145,7 +146,10 @@ void main() {
     TextManifest.invalidateCache();
     directory = await Directory.systemTemp.createTemp('ocr_owned_');
     BackgroundTaskNotifier.debugStorageDirectoryOverride = directory.path;
-    notifier = BackgroundTaskNotifier();
+    locale = const Locale('zh', 'CN');
+    notifier = BackgroundTaskNotifier(
+      localizationsResolver: () => lookupAppLocalizations(locale),
+    );
     id = notifier.addTask(type: BackgroundTaskType.ocr, title: 'owned');
     adapter = _ControlledAdapter();
     saves = 0;
@@ -372,6 +376,46 @@ void main() {
       ]);
     },
   );
+
+  test('per-image result headings follow the current English locale', () async {
+    locale = const Locale('en', 'US');
+    final englishAdapter = _OutOfOrderAdapter();
+    final pageRunner = OcrTaskRunner(
+      taskId: id,
+      notifier: notifier,
+      config: _config,
+      images: [
+        (Uint8List.fromList([1]), 'png'),
+        (Uint8List.fromList([2]), 'png'),
+      ],
+      imageNames: ['scan.png', '  '],
+      executionMode: OcrBatchMode.perImage,
+      perImageConcurrency: 2,
+      title: 'owned',
+      folder: 'captured folder',
+      serviceFactory: (config) => OcrService(
+        config: config,
+        dio: Dio()..httpClientAdapter = englishAdapter,
+      ),
+      writeText: TextManifest.writeText,
+      onSaved: () {},
+    );
+
+    final running = pageRunner.run();
+    await englishAdapter.twoRequests.future.timeout(
+      const Duration(seconds: 2),
+    );
+    englishAdapter.complete(1, text: 'first page text');
+    englishAdapter.complete(2, text: 'second page text');
+    await running;
+
+    expect(
+      notifier.state.single.result,
+      '--- Image 1: scan.png ---\nfirst page text\n\n'
+      '--- Image 2 ---\nsecond page text',
+    );
+    expect(notifier.state.single.result, isNot(contains('第 ')));
+  });
 
   test('failed empty per-image batch stays incomplete', () async {
     final emptyFailedAdapter = _OutOfOrderAdapter();
@@ -1316,6 +1360,7 @@ void main() {
 
     final task = notifier.state.single;
     var failFirstPartialWrite = true;
+    locale = const Locale('en', 'US');
     final saver = OcrResultSaver(
       taskId: id,
       notifier: notifier,
@@ -1344,8 +1389,39 @@ void main() {
     expect(notifier.state.single.partialSaveRequested, isTrue);
     expect(notifier.state.single.resultSavedAsPartial, isTrue);
     final record = (await TextManifest.loadRecords()).single;
-    expect(record.name, 'owned（部分结果）');
+    expect(record.name, 'owned (partial result)');
     expect(await TextManifest.readText(record.storageFileName), 'owned text');
+  });
+
+  test('partial-save retry resolves the locale when it writes the record',
+      () async {
+    notifier.setResult(id, 'owned partial text', isComplete: false);
+    notifier.failTask(id, error: 'incomplete OCR result');
+    var failFirstWrite = true;
+    locale = const Locale('en', 'US');
+    final saver = OcrResultSaver(
+      taskId: id,
+      notifier: notifier,
+      title: 'owned',
+      folder: 'captured folder',
+      onSaved: () {},
+      writeText: (name, text, {beforeCommit}) async {
+        if (failFirstWrite) {
+          failFirstWrite = false;
+          throw const FileSystemException('injected partial write failure');
+        }
+        return TextManifest.writeText(name, text, beforeCommit: beforeCommit);
+      },
+    );
+
+    await expectLater(
+      saver.retryTaskResult(allowPartial: true),
+      throwsA(isA<FileSystemException>()),
+    );
+    locale = const Locale('zh', 'CN');
+    await saver.retryTaskResult();
+
+    expect((await TextManifest.loadRecords()).single.name, 'owned（部分结果）');
   });
 
   test(

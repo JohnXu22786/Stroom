@@ -154,8 +154,11 @@ class OcrResultSaver {
     return TextManifest.withSaveLock(hash, () async {
       _checkActive();
       final fileName = '$hash.txt';
+      final partialSuffix = isComplete
+          ? ''
+          : notifier.localizations.ocrPartialResultSuffix;
       final record = TextRecord(
-        name: isComplete ? title : '$title（部分结果）',
+        name: '$title$partialSuffix',
         hash: hash,
         createdAt: DateTime.now(),
         size: bytes.length,

@@ -562,9 +562,11 @@ class OcrTaskRunner {
           .where((outcome) => outcome.text?.isNotEmpty == true)
           .map((outcome) {
         final name = imageNames[outcome.imageIndex]?.trim();
+        final strings = notifier.localizations;
+        final index = (outcome.imageIndex + 1).toString();
         final label = name == null || name.isEmpty
-            ? '第 ' + (outcome.imageIndex + 1).toString() + ' 张图片'
-            : '第 ' + (outcome.imageIndex + 1).toString() + ' 张图片：' + name;
+            ? strings.ocrResultPageHeading(index)
+            : strings.ocrResultPageHeadingWithName(index, name);
         return '--- ' + label + ' ---\n' + outcome.text!;
       }).join('\n\n');
 

@@ -5404,6 +5404,20 @@
       }
     }
   },
+  "ocrResultPageHeading": "Image {index}",
+  "@ocrResultPageHeading": {
+    "placeholders": {
+      "index": { "type": "String" }
+    }
+  },
+  "ocrResultPageHeadingWithName": "Image {index}: {name}",
+  "@ocrResultPageHeadingWithName": {
+    "placeholders": {
+      "index": { "type": "String" },
+      "name": { "type": "String" }
+    }
+  },
+  "ocrPartialResultSuffix": " (partial result)",
   "bgTaskOcrPagesIncomplete": "Some images were not fully recognized: {details}",
   "@bgTaskOcrPagesIncomplete": {
     "placeholders": {

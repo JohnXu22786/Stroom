@@ -9189,6 +9189,19 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String ocrResultPageHeading(String index) {
+    return '第 $index 张图片';
+  }
+
+  @override
+  String ocrResultPageHeadingWithName(String index, String name) {
+    return '第 $index 张图片：$name';
+  }
+
+  @override
+  String get ocrPartialResultSuffix => '（部分结果）';
+
+  @override
   String bgTaskOcrPagesIncomplete(String details) {
     return '部分图片 OCR 未完成：$details';
   }
@@ -19560,6 +19573,19 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String bgTaskOcrResultIncomplete(String finishReason) {
     return 'OCR 返回了不完整结果（finish_reason=$finishReason）';
   }
+
+  @override
+  String ocrResultPageHeading(String index) {
+    return '第 $index 张图片';
+  }
+
+  @override
+  String ocrResultPageHeadingWithName(String index, String name) {
+    return '第 $index 张图片：$name';
+  }
+
+  @override
+  String get ocrPartialResultSuffix => '（部分结果）';
 
   @override
   String bgTaskOcrPagesIncomplete(String details) {
