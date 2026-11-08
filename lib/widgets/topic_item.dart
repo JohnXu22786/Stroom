@@ -316,3 +316,4 @@ class _PulsingConversationIconState extends State<_PulsingConversationIcon>
     );
   }
 }
+
