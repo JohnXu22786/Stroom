@@ -10,12 +10,18 @@ extension _ChatStreamManagerEventsExt on ChatStreamManager {
         // The chat service records the transcript in its request history,
         // but the manager owns the persisted stream history. Mirror it there
         // so recognized speech remains on the user message.
+        final transcript = event.text.trim();
         final userMessageIndex = state.history.lastIndexWhere(
           (message) => message.role == 'user',
         );
-        if (userMessageIndex >= 0) {
-          state.history[userMessageIndex] =
-              state.history[userMessageIndex].copyWith(content: event.text);
+        if (transcript.isNotEmpty && userMessageIndex >= 0) {
+          final userMessage = state.history[userMessageIndex];
+          final content = userMessage.content.trim();
+          if (content != transcript && !content.endsWith(transcript)) {
+            state.history[userMessageIndex] = userMessage.copyWith(
+              content: content.isEmpty ? transcript : '$content\n$transcript',
+            );
+          }
         }
         break;
       case MediaAttachmentsEvent e:

@@ -24,6 +24,29 @@ void chatStreamManagerGroup4() {
     manager.dispose();
   });
 
+  test('keeps typed text when a realtime transcript arrives', () async {
+    SharedPreferences.setMockInitialValues({});
+    final manager = ChatStreamManager();
+    final provider = _MockProvider([
+      [
+        const AIStreamEvent('', inputTranscript: 'recognized user speech'),
+        AIStreamEvent('assistant reply'),
+      ],
+    ]);
+    manager.adapter.forceService(_makeChatService(provider));
+
+    final result = await manager.startStreaming(
+      text: 'typed prompt',
+      convId: 'conv-input-transcript-with-text',
+      history: [_userMsg('typed prompt', 'u-input-audio-with-text')],
+    );
+
+    expect(result.history.first.role, 'user');
+    expect(
+        result.history.first.content, 'typed prompt\nrecognized user speech');
+    manager.dispose();
+  });
+
   group('ChatStreamManager - reasoning buffer non-duplication', () {
     test(
       'each reasoning section contains only its own content (not previous sections)',
