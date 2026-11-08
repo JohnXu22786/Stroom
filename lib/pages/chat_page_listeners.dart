@@ -182,6 +182,14 @@ extension _ChatPageListenersExt on _ChatPageState {
       if (msgId == null) return;
       _livePlainTextFragments
           .removeWhere((key, _) => key.startsWith('$msgId:'));
+      if (!ref.read(isStreamingProvider(convId)) &&
+          !next.any((section) => section.isNotEmpty)) {
+        // Stream cleanup publishes [''] after STOP or completion. The live
+        // segments have already been finalized for the visible message, so
+        // rebuilding from the now-cleared tool/reasoning providers would
+        // erase its retained cards and reasoning sections.
+        return;
+      }
       if (!next.any((section) => section.isNotEmpty)) {
         // Empty text chunks are published at tool-round boundaries. Keep the
         // TextStream placeholder so tool-only rounds render through their
