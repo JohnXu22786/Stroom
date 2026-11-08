@@ -43,6 +43,7 @@ class FolderPathUtils {
   static String? _validateName(String name, String kind, int maxLength) {
     final trimmed = name.trim();
     if (trimmed.isEmpty) return '$kind不能为空';
+    if (name != name.trimRight()) return '$kind不能以空白结尾';
     if (trimmed.length > maxLength) return '$kind不能超过$maxLength个字符';
     if (_illegalChars.hasMatch(name)) {
       return '$kind不能包含 Windows 非法字符';

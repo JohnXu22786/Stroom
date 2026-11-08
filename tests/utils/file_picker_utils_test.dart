@@ -161,4 +161,18 @@ void main() {
       throwsStateError,
     );
   });
+
+  test('rejects export paths that collide after Windows trims trailing spaces',
+      () {
+    expect(
+      () => validateUserVisibleExportPaths(files: const ['report ']),
+      throwsArgumentError,
+    );
+    expect(
+      () => validateUserVisibleExportPaths(
+        files: const ['report', 'report '],
+      ),
+      throwsArgumentError,
+    );
+  });
 }
