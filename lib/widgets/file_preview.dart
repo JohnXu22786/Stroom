@@ -46,47 +46,57 @@ class FilePreviewChip extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
 
     return GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: Container(
-        width: 72,
         margin: const EdgeInsets.only(right: 8),
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Stack(
               clipBehavior: Clip.none,
               children: [
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: cs.surfaceContainerHigh,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: cs.outlineVariant,
-                      width: 0.5,
-                    ),
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minWidth: 48,
+                    minHeight: 48,
+                    maxWidth: isImage ? 64 : 48,
+                    maxHeight: isImage ? 52 : 48,
                   ),
-                  clipBehavior: Clip.antiAlias,
-                  child: isImage
-                      ? ExtendedImage.memory(
-                          imageBytes!,
-                          fit: BoxFit.cover,
-                          width: 48,
-                          height: 48,
-                          loadStateChanged: (state) {
-                            if (state.extendedImageLoadState ==
-                                LoadState.failed) {
-                              return const SizedBox(
-                                width: 48,
-                                height: 48,
-                                child: Icon(Icons.image_outlined, size: 24),
-                              );
-                            }
-                            return null;
-                          },
-                        )
-                      : Icon(_fileIcon(), size: 24, color: cs.onSurfaceVariant),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: cs.surfaceContainerHigh,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: cs.outlineVariant,
+                        width: 0.5,
+                      ),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: isImage
+                        ? ExtendedImage.memory(
+                            imageBytes!,
+                            fit: BoxFit.contain,
+                            loadStateChanged: (state) {
+                              if (state.extendedImageLoadState ==
+                                  LoadState.failed) {
+                                return const SizedBox(
+                                  width: 48,
+                                  height: 48,
+                                  child: Icon(Icons.image_outlined, size: 24),
+                                );
+                              }
+                              return null;
+                            },
+                          )
+                        : SizedBox(
+                            width: 48,
+                            height: 48,
+                            child: Icon(_fileIcon(),
+                                size: 24, color: cs.onSurfaceVariant),
+                          ),
+                  ),
                 ),
                 if (onRemove != null)
                   Positioned(
