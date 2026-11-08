@@ -688,12 +688,11 @@ class _ReasoningPanelDialogState extends ConsumerState<_ReasoningPanelDialog>
                                 : null,
                             incrementalAppend:
                                 isPanelStreaming ? _markdownAppend : null,
-                            incrementalSequence: isPanelStreaming &&
-                                    _markdownAppend != null
-                                ? _markdownAppendSequence
-                                : null,
-                            incrementalInitialUpdateCount:
-                                _markdownAppendCount,
+                            incrementalSequence:
+                                isPanelStreaming && _markdownAppend != null
+                                    ? _markdownAppendSequence
+                                    : null,
+                            incrementalInitialUpdateCount: _markdownAppendCount,
                             fullTextOnInvalidation:
                                 isPanelStreaming ? () => _displayText : null,
                             config: markdownConfig,
