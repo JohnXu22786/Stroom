@@ -11,10 +11,15 @@ extension _ChatStreamManagerEventsExt on ChatStreamManager {
         // assistant output and is already retained by the audio request.
         break;
       case MediaAttachmentsEvent e:
-        final order = e.contentOrder ?? state.nextContentOrder++;
+        final eventOrder = e.contentOrder;
         for (var index = 0; index < e.attachments.length; index++) {
           final attachment = e.attachments[index];
-          final attachmentOrder = order + index;
+          final storedOrder = attachment.extraFields['stroom.contentOrder'];
+          final attachmentOrder = storedOrder is int
+              ? storedOrder + state.contentOrderOffset
+              : eventOrder == null
+                  ? state.nextContentOrder
+                  : eventOrder + state.contentOrderOffset + index;
           final owned = attachment.copyWith(conversationId: convId);
           state.mediaAttachments.add(owned);
           state.orderedContentParts.add({
@@ -29,7 +34,9 @@ extension _ChatStreamManagerEventsExt on ChatStreamManager {
         break;
       case TextEvent e:
         if (e.text.isNotEmpty) {
-          final order = e.contentOrder ?? state.nextContentOrder++;
+          final order = e.contentOrder == null
+              ? state.nextContentOrder
+              : e.contentOrder! + state.contentOrderOffset;
           state.orderedContentParts.add({
             'type': 'text',
             'text': e.text,
@@ -79,6 +86,10 @@ extension _ChatStreamManagerEventsExt on ChatStreamManager {
         }
 
       case ReasoningSectionEndEvent e:
+        // Each provider request restarts contentOrder at zero. A follow-up
+        // tool request belongs to the same assistant reply, so offset its
+        // visible content after the completed rounds.
+        state.contentOrderOffset = state.nextContentOrder;
         // Drain the last visible text delta before sealing this round. The
         // service waits for this event before building the tool-chain message
         // or requesting the next round.
