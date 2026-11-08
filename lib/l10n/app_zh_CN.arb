@@ -6133,5 +6133,38 @@
   "asrFailureStageReceiving": "接收响应",
   "asrFailureStageResponse": "响应",
   "asrFailureStageParsing": "解析",
-  "asrFailureStageStorage": "保存"
+  "asrFailureStageStorage": "保存",
+  "chatMissingProvider": "请先配置聊天供应商",
+  "anthropicStreamApiError": "Anthropic API 错误：{detail}",
+  "@anthropicStreamApiError": { "placeholders": { "detail": {} } },
+  "anthropicStreamUnknownError": "未知错误",
+  "chatHttpRequestFailed": "API 请求失败 (HTTP {statusCode})：{detail}",
+  "@chatHttpRequestFailed": {
+    "placeholders": { "statusCode": {}, "detail": {} }
+  },
+  "fileUploadApiKeyMissing": "API 密钥未配置，无法上传文件",
+  "fileUploadApiUrlMissing": "API 地址未配置，无法上传文件",
+  "fileUploadContentEmpty": "文件内容为空",
+  "fileUploadFilenameEmpty": "文件名为空",
+  "fileUploadMimeTypeEmpty": "MIME 类型为空",
+  "fileUploadPurposeEmpty": "上传用途（purpose）为空",
+  "fileUploadCanceled": "上传已取消",
+  "fileUploadCreateMissingId": "创建上传失败：响应中缺少 upload id",
+  "fileUploadPartMissingId": "上传分片失败：响应中缺少 part id",
+  "fileUploadCompleteMissingFile": "完成上传失败：响应中缺少 file 对象",
+  "fileUploadMissingFileId": "上传失败：响应中缺少 file id",
+  "fileUploadRequestFailedStatus": "文件上传请求失败 (HTTP {statusCode})：{detail}",
+  "@fileUploadRequestFailedStatus": {
+    "placeholders": { "statusCode": {}, "detail": {} }
+  },
+  "fileUploadRequestFailed": "文件上传请求失败：{detail}",
+  "@fileUploadRequestFailed": { "placeholders": { "detail": {} } },
+  "chatApiKeyNotConfigured": "API 密钥未配置",
+  "chatStreamError": "API 流式错误：{detail}",
+  "@chatStreamError": { "placeholders": { "detail": {} } },
+  "chatChoicesMissing": "API 返回的 choices 列表为空",
+  "chatContentBlocksMissing": "API 返回的 content 列表为空",
+  "chatResponseContentEmpty": "API 返回内容为空",
+  "chatRequestFailed": "请求失败：{detail}",
+  "@chatRequestFailed": { "placeholders": { "detail": {} } }
 }

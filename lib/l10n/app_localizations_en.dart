@@ -10743,6 +10743,93 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get asrFailureStageStorage => 'storage';
+
+  @override
+  String get chatMissingProvider => 'Please configure a chat provider first';
+
+  @override
+  String anthropicStreamApiError(Object detail) {
+    return 'Anthropic API error: $detail';
+  }
+
+  @override
+  String get anthropicStreamUnknownError => 'Unknown error';
+
+  @override
+  String chatHttpRequestFailed(Object statusCode, Object detail) {
+    return 'API request failed (HTTP $statusCode): $detail';
+  }
+
+  @override
+  String get fileUploadApiKeyMissing =>
+      'API key is not configured; file upload is unavailable';
+
+  @override
+  String get fileUploadApiUrlMissing =>
+      'API URL is not configured; file upload is unavailable';
+
+  @override
+  String get fileUploadContentEmpty => 'File content is empty';
+
+  @override
+  String get fileUploadFilenameEmpty => 'File name is empty';
+
+  @override
+  String get fileUploadMimeTypeEmpty => 'MIME type is empty';
+
+  @override
+  String get fileUploadPurposeEmpty => 'Upload purpose is empty';
+
+  @override
+  String get fileUploadCanceled => 'File upload was canceled';
+
+  @override
+  String get fileUploadCreateMissingId =>
+      'Upload creation failed: response is missing upload id';
+
+  @override
+  String get fileUploadPartMissingId =>
+      'Part upload failed: response is missing part id';
+
+  @override
+  String get fileUploadCompleteMissingFile =>
+      'Upload completion failed: response is missing file object';
+
+  @override
+  String get fileUploadMissingFileId =>
+      'File upload failed: response is missing file id';
+
+  @override
+  String fileUploadRequestFailedStatus(Object statusCode, Object detail) {
+    return 'File upload request failed (HTTP $statusCode): $detail';
+  }
+
+  @override
+  String fileUploadRequestFailed(Object detail) {
+    return 'File upload request failed: $detail';
+  }
+
+  @override
+  String get chatApiKeyNotConfigured => 'API key is not configured';
+
+  @override
+  String chatStreamError(Object detail) {
+    return 'API stream error: $detail';
+  }
+
+  @override
+  String get chatChoicesMissing => 'API response has no choices';
+
+  @override
+  String get chatContentBlocksMissing => 'API response has no content blocks';
+
+  @override
+  String get chatResponseContentEmpty => 'API response content is empty';
+
+  @override
+  String chatRequestFailed(Object detail) {
+    return 'Request failed: $detail';
+  }
 }
 
 /// The translations for English, as used in the United States (`en_US`).
@@ -21483,4 +21570,91 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get asrFailureStageStorage => 'storage';
+
+  @override
+  String get chatMissingProvider => 'Please configure a chat provider first';
+
+  @override
+  String anthropicStreamApiError(Object detail) {
+    return 'Anthropic API error: $detail';
+  }
+
+  @override
+  String get anthropicStreamUnknownError => 'Unknown error';
+
+  @override
+  String chatHttpRequestFailed(Object statusCode, Object detail) {
+    return 'API request failed (HTTP $statusCode): $detail';
+  }
+
+  @override
+  String get fileUploadApiKeyMissing =>
+      'API key is not configured; file upload is unavailable';
+
+  @override
+  String get fileUploadApiUrlMissing =>
+      'API URL is not configured; file upload is unavailable';
+
+  @override
+  String get fileUploadContentEmpty => 'File content is empty';
+
+  @override
+  String get fileUploadFilenameEmpty => 'File name is empty';
+
+  @override
+  String get fileUploadMimeTypeEmpty => 'MIME type is empty';
+
+  @override
+  String get fileUploadPurposeEmpty => 'Upload purpose is empty';
+
+  @override
+  String get fileUploadCanceled => 'File upload was canceled';
+
+  @override
+  String get fileUploadCreateMissingId =>
+      'Upload creation failed: response is missing upload id';
+
+  @override
+  String get fileUploadPartMissingId =>
+      'Part upload failed: response is missing part id';
+
+  @override
+  String get fileUploadCompleteMissingFile =>
+      'Upload completion failed: response is missing file object';
+
+  @override
+  String get fileUploadMissingFileId =>
+      'File upload failed: response is missing file id';
+
+  @override
+  String fileUploadRequestFailedStatus(Object statusCode, Object detail) {
+    return 'File upload request failed (HTTP $statusCode): $detail';
+  }
+
+  @override
+  String fileUploadRequestFailed(Object detail) {
+    return 'File upload request failed: $detail';
+  }
+
+  @override
+  String get chatApiKeyNotConfigured => 'API key is not configured';
+
+  @override
+  String chatStreamError(Object detail) {
+    return 'API stream error: $detail';
+  }
+
+  @override
+  String get chatChoicesMissing => 'API response has no choices';
+
+  @override
+  String get chatContentBlocksMissing => 'API response has no content blocks';
+
+  @override
+  String get chatResponseContentEmpty => 'API response content is empty';
+
+  @override
+  String chatRequestFailed(Object detail) {
+    return 'Request failed: $detail';
+  }
 }

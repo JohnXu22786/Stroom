@@ -54,6 +54,26 @@ void main() {
       expect(apiKeyError, contains(apiKeyDetails));
     });
 
+    test('retains setup guidance for localized provider errors', () {
+      final providerError = formatChatErrorMessage(
+        Exception('Please configure a chat provider first'),
+        locale: const Locale('en', 'US'),
+      );
+      final englishApiKeyError = formatChatErrorMessage(
+        Exception('API key is not configured'),
+        locale: const Locale('en', 'US'),
+      );
+      final apiKeyError = formatChatErrorMessage(
+        Exception('API 密钥未配置'),
+        locale: const Locale('zh', 'CN'),
+      );
+
+      expect(providerError, contains('Open Settings to configure a provider'));
+      expect(englishApiKeyError,
+          contains('API key is not configured. Check Settings'));
+      expect(apiKeyError, contains('API Key 未配置，请检查设置'));
+    });
+
     test('returns "未配置聊天供应商" message for adapter not configured', () {
       final result = formatChatErrorMessageInChinese(Exception('请先配置聊天供应商'));
       expect(result, contains('错误:'));

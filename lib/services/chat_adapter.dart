@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
 import 'package:flutter/widgets.dart' show Locale;
 
+import '../l10n/app_localizations.dart';
 import '../models/assistant.dart'
     show Assistant, AssistantSettings, CustomParameter;
 import '../models/chat_event.dart';
@@ -10,6 +11,7 @@ import '../models/chat_message.dart';
 import '../models/mcp.dart';
 import '../models/tool_call.dart';
 import '../providers/chat_api_provider.dart';
+import '../providers/locale_provider.dart';
 import '../providers/provider_config.dart';
 import '../utils/provider_models.dart' show resolveProviderModel;
 import 'chat_protocol.dart';
@@ -807,7 +809,9 @@ class ChatAdapter {
     final svc =
         convId.isNotEmpty ? getOrCreateService(convId) : currentChatService;
     if (svc == null) {
-      return Stream.error('请先配置聊天供应商');
+      return Stream.error(
+        appLocalizationsForLocale(_localeOverride?.call()).chatMissingProvider,
+      );
     }
     return svc.sendStream(
       text,
@@ -845,7 +849,9 @@ class ChatAdapter {
             assistant: assistant, entriesState: entriesState)
         : currentChatService;
     if (svc == null) {
-      return Stream.error('请先配置聊天供应商');
+      return Stream.error(
+        appLocalizationsForLocale(_localeOverride?.call()).chatMissingProvider,
+      );
     }
     return svc.sendStreamWithTools(
       text,

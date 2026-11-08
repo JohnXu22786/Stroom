@@ -10184,6 +10184,87 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get asrFailureStageStorage => '保存';
+
+  @override
+  String get chatMissingProvider => '请先配置聊天供应商';
+
+  @override
+  String anthropicStreamApiError(Object detail) {
+    return 'Anthropic API 错误：$detail';
+  }
+
+  @override
+  String get anthropicStreamUnknownError => '未知错误';
+
+  @override
+  String chatHttpRequestFailed(Object statusCode, Object detail) {
+    return 'API 请求失败 (HTTP $statusCode)：$detail';
+  }
+
+  @override
+  String get fileUploadApiKeyMissing => 'API 密钥未配置，无法上传文件';
+
+  @override
+  String get fileUploadApiUrlMissing => 'API 地址未配置，无法上传文件';
+
+  @override
+  String get fileUploadContentEmpty => '文件内容为空';
+
+  @override
+  String get fileUploadFilenameEmpty => '文件名为空';
+
+  @override
+  String get fileUploadMimeTypeEmpty => 'MIME 类型为空';
+
+  @override
+  String get fileUploadPurposeEmpty => '上传用途（purpose）为空';
+
+  @override
+  String get fileUploadCanceled => '上传已取消';
+
+  @override
+  String get fileUploadCreateMissingId => '创建上传失败：响应中缺少 upload id';
+
+  @override
+  String get fileUploadPartMissingId => '上传分片失败：响应中缺少 part id';
+
+  @override
+  String get fileUploadCompleteMissingFile => '完成上传失败：响应中缺少 file 对象';
+
+  @override
+  String get fileUploadMissingFileId => '上传失败：响应中缺少 file id';
+
+  @override
+  String fileUploadRequestFailedStatus(Object statusCode, Object detail) {
+    return '文件上传请求失败 (HTTP $statusCode)：$detail';
+  }
+
+  @override
+  String fileUploadRequestFailed(Object detail) {
+    return '文件上传请求失败：$detail';
+  }
+
+  @override
+  String get chatApiKeyNotConfigured => 'API 密钥未配置';
+
+  @override
+  String chatStreamError(Object detail) {
+    return 'API 流式错误：$detail';
+  }
+
+  @override
+  String get chatChoicesMissing => 'API 返回的 choices 列表为空';
+
+  @override
+  String get chatContentBlocksMissing => 'API 返回的 content 列表为空';
+
+  @override
+  String get chatResponseContentEmpty => 'API 返回内容为空';
+
+  @override
+  String chatRequestFailed(Object detail) {
+    return '请求失败：$detail';
+  }
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).
@@ -20365,4 +20446,85 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get asrFailureStageStorage => '保存';
+
+  @override
+  String get chatMissingProvider => '请先配置聊天供应商';
+
+  @override
+  String anthropicStreamApiError(Object detail) {
+    return 'Anthropic API 错误：$detail';
+  }
+
+  @override
+  String get anthropicStreamUnknownError => '未知错误';
+
+  @override
+  String chatHttpRequestFailed(Object statusCode, Object detail) {
+    return 'API 请求失败 (HTTP $statusCode)：$detail';
+  }
+
+  @override
+  String get fileUploadApiKeyMissing => 'API 密钥未配置，无法上传文件';
+
+  @override
+  String get fileUploadApiUrlMissing => 'API 地址未配置，无法上传文件';
+
+  @override
+  String get fileUploadContentEmpty => '文件内容为空';
+
+  @override
+  String get fileUploadFilenameEmpty => '文件名为空';
+
+  @override
+  String get fileUploadMimeTypeEmpty => 'MIME 类型为空';
+
+  @override
+  String get fileUploadPurposeEmpty => '上传用途（purpose）为空';
+
+  @override
+  String get fileUploadCanceled => '上传已取消';
+
+  @override
+  String get fileUploadCreateMissingId => '创建上传失败：响应中缺少 upload id';
+
+  @override
+  String get fileUploadPartMissingId => '上传分片失败：响应中缺少 part id';
+
+  @override
+  String get fileUploadCompleteMissingFile => '完成上传失败：响应中缺少 file 对象';
+
+  @override
+  String get fileUploadMissingFileId => '上传失败：响应中缺少 file id';
+
+  @override
+  String fileUploadRequestFailedStatus(Object statusCode, Object detail) {
+    return '文件上传请求失败 (HTTP $statusCode)：$detail';
+  }
+
+  @override
+  String fileUploadRequestFailed(Object detail) {
+    return '文件上传请求失败：$detail';
+  }
+
+  @override
+  String get chatApiKeyNotConfigured => 'API 密钥未配置';
+
+  @override
+  String chatStreamError(Object detail) {
+    return 'API 流式错误：$detail';
+  }
+
+  @override
+  String get chatChoicesMissing => 'API 返回的 choices 列表为空';
+
+  @override
+  String get chatContentBlocksMissing => 'API 返回的 content 列表为空';
+
+  @override
+  String get chatResponseContentEmpty => 'API 返回内容为空';
+
+  @override
+  String chatRequestFailed(Object detail) {
+    return '请求失败：$detail';
+  }
 }
