@@ -266,6 +266,13 @@ extension _ChatPageListenersExt on _ChatPageState {
     final isAppend = next.startsWith(prior);
     final sequence = (_legacyFullReplySequences[key] ?? 0) + (isAppend ? 1 : 2);
     if (prior.isEmpty) {
+      // A legacy full-reply snapshot can be the first visible text update,
+      // while the tool/reasoning provider notifications that preceded it
+      // were missed during stream attachment. Reconcile the live segment
+      // cache once from the current provider state before replacing its text
+      // chunk with the incremental Markdown segment. Later cumulative
+      // snapshots stay on the delta path and avoid rebuilding the reply.
+      _rebuildLiveSegments(msgId);
       final segments = _chatSegments[msgId];
       if (segments?.any(
               (segment) => segment is TextSegment && segment.chunkIndex == 0) ==
