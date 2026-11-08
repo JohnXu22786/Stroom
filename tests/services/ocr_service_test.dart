@@ -434,6 +434,24 @@ void main() {
         );
       });
       test(
+        'recognizeBatch rejects an empty image before sending a request',
+        () async {
+          final adapter = _CountingAdapter();
+          final dio = Dio()..httpClientAdapter = adapter;
+          final service = OcrService(config: _testOcrConfig, dio: dio);
+
+          await expectLater(
+            service.recognizeBatch(
+              imageBytesList: [(Uint8List(0), 'jpeg')],
+            ),
+            throwsA(isA<ArgumentError>()),
+          );
+
+          expect(adapter.requestCount, 0);
+          service.close();
+        },
+      );
+      test(
           'encoded JSON request budget accepts its boundary and rejects one byte over before send',
           () async {
         final bytes = Uint8List.fromList([1, 2, 3, 4]);

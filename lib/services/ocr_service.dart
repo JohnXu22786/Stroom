@@ -488,6 +488,9 @@ class OcrService {
     if (imageBytesList.isEmpty) {
       throw ArgumentError('imageBytesList must not be empty');
     }
+    if (imageBytesList.any((image) => image.$1.isEmpty)) {
+      throw ArgumentError('imageBytesList must not contain empty image bytes');
+    }
 
     final stopwatch = Stopwatch()..start();
     var requestCredentialValues = _beginDiagnosticCapture(
