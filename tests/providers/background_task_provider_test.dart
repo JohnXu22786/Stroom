@@ -20758,6 +20758,96 @@ void main() {
     );
 
     test(
+      'OCR result text does not retain cache blobs but retry references do',
+      () async {
+        WebFileStore.enableTestMode();
+        const firstTaskId = 'ocr-shared-cache-owner-one';
+        const secondTaskId = 'ocr-shared-cache-owner-two';
+        final orphanData = await OcrRetryStorage.cacheSnapshot(
+          taskId: 'ocr-result-text-orphan',
+          snapshot: OcrRetrySnapshot.capture(
+            images: [
+              OcrRetryImage(
+                bytes: Uint8List.fromList([1, 2, 3]),
+                format: 'png',
+              ),
+            ],
+          ),
+        );
+        final orphanReference =
+            OcrRetryStorage.referencesFromSnapshot(orphanData).single;
+        final sharedData = await OcrRetryStorage.cacheSnapshot(
+          taskId: firstTaskId,
+          snapshot: OcrRetrySnapshot.capture(
+            images: [
+              OcrRetryImage(
+                bytes: Uint8List.fromList([4, 5, 6]),
+                format: 'png',
+              ),
+            ],
+          ),
+        );
+        final sharedReference =
+            OcrRetryStorage.referencesFromSnapshot(sharedData).single;
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(
+          jsonEncode([
+            {
+              'id': 'ocr-result-text-only',
+              'type': 'ocr',
+              'title': 'OCR result mentioning a cache path',
+              'status': 'completed',
+              'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+              'steps': <dynamic>[],
+              'result': 'Recognized text: $orphanReference',
+            },
+            for (final taskId in [firstTaskId, secondTaskId])
+              {
+                'id': taskId,
+                'type': 'ocr',
+                'title': 'OCR task with a shared retry image',
+                'status': 'failed',
+                'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+                'steps': <dynamic>[],
+                'retryData': sharedData,
+              },
+          ]),
+        );
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          expect(await notifier.restoreFromPersistence(), isTrue);
+          expect(
+            notifier.ocrCacheReferencesFromLoadedSnapshotForCleanup(),
+            {sharedReference},
+          );
+          final references = await notifier.ocrCacheReferencesForCleanup();
+          expect(references, {sharedReference});
+          await OcrRetryStorage.deleteUnreferenced(
+            candidates: {orphanReference},
+            referenced: references!,
+          );
+          expect(await OcrRetryStorage.read(orphanReference), isNull);
+          expect(await OcrRetryStorage.read(sharedReference), isNotNull);
+
+          expect(await notifier.removeTasksPersisted([firstTaskId]), isTrue);
+          expect(
+            await notifier.ocrCacheReferencesForCleanup(),
+            {sharedReference},
+            reason: 'the second retry task remains a shared cache owner',
+          );
+          expect(await notifier.removeTasksPersisted([secondTaskId]), isTrue);
+          expect(await notifier.ocrCacheReferencesForCleanup(), isEmpty);
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+          WebFileStore.disableTestMode();
+        }
+      },
+    );
+
+    test(
       'loaded OCR cache ownership retains refs until a snapshot write succeeds',
       () async {
         WebFileStore.enableTestMode();

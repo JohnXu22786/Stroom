@@ -185,7 +185,7 @@ void main() {
       tester.widget<MaterialApp>(find.byType(MaterialApp)).locale,
       const Locale('zh', 'CN'),
     );
-    await tester.scrollUntilVisible(find.text('主题'), -300);
+    await tester.scrollUntilVisible(find.text('浅色模式'), -300);
     await tester.pumpAndSettle();
     expect(find.text('浅色模式'), findsOneWidget);
     expect(find.text('深色模式'), findsOneWidget);
