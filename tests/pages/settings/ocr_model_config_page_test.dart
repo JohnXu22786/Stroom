@@ -205,16 +205,14 @@ void main() {
   });
 
   group('OcrModelConfigPage custom parameter validation', () {
-    testWidgets('rejects OCR request and built-in parameter names', (
-      tester,
-    ) async {
-      for (final reservedName in [
-        'model',
-        'messages',
-        'temperature',
-        'top_p',
-        'max_tokens',
-      ]) {
+    for (final reservedName in [
+      'model',
+      'messages',
+      'temperature',
+      'top_p',
+      'max_tokens',
+    ]) {
+      testWidgets('rejects reserved parameter name $reservedName', (tester) async {
         ModelConfig? saved;
         final model = ModelConfig(
           name: 'OCR模型',
@@ -228,8 +226,8 @@ void main() {
 
         expect(saved, isNull, reason: 'Should reject $reservedName');
         expect(find.text('不能使用保留的 OCR 参数名：$reservedName'), findsOneWidget);
-      }
-    });
+      });
+    }
 
     testWidgets('saves a valid custom parameter name', (tester) async {
       ModelConfig? saved;
