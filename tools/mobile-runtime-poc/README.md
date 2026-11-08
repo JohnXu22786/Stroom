@@ -11,9 +11,9 @@ The Android and iOS Simulator CI workflows check:
 
 The MCP test runs both endpoints in the same embedded Node process. It does **not** test a separately spawned MCP server or Stroom's host transport.
 
-The Android workflow downloads the official Node Mobile v18.20.4 release, verifies its published archive SHA-256, and packages the x86_64 library only for emulator testing. The iOS workflow downloads the official v18.20.4 iOS framework, verifies its published SHA-256, and runs the upstream sample in an iOS Simulator. Both workflows download npm 10.8.2, verify its published SHA-512 integrity, and bundle it only into the sample app. The npm package is Artistic-2.0 licensed; its license file is included in the test app. These are not Stroom release artifacts or release-size estimates.
+The Android workflow downloads the official Node Mobile v18.20.4 release, verifies its published archive SHA-256, and packages the x86_64 library only for emulator testing. Its upstream Gradle 6.7.1 sample wrapper uses the official `downloads.gradle.org` distribution and verifies the pinned SHA-256 because the default URL redirects to GitHub Releases. The iOS workflow downloads the official v18.20.4 iOS framework, verifies its published SHA-256, and runs the upstream sample in an iOS Simulator. Both workflows download npm 10.8.2, verify its published SHA-512 integrity, and bundle it only into the sample app. The npm package is Artistic-2.0 licensed; its license file is included in the test app. These are not Stroom release artifacts or release-size estimates.
 
-The Android CI runner removes the upstream sample's unconditional `AtExitHook` failure sentinel. It polls each Node launch for an explicit result marker and fails after a bounded wait if no marker appears.
+The Android CI runner removes the upstream sample's unconditional `AtExitHook` failure sentinel. It polls each Node launch for an explicit result marker and fails after a bounded wait if no marker appears. Marker checks accept only `TestNode` info-priority runtime output, so the sample's verbose `Args:` echo and error source lines cannot satisfy a check. A focused regression test covers both the echoed-argument failure and a real runtime marker.
 
 ## Lifecycle bridge experiment
 

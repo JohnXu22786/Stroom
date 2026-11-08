@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+marker_matcher="$script_dir/logcat_runtime_marker.py"
+
 package='nodejsmobile.test.testnode'
 component='nodejsmobile.test.testnode/nodejsmobile.test.testnode.MainActivity'
 files='/data/user/0/nodejsmobile.test.testnode/files'
@@ -80,20 +83,23 @@ run_node() {
       # being mistaken for this run.
       log=$(adb logcat -d --pid="$pid" -v threadtime -s 'TestNode:V' nodejs:E '*:S' 2>/dev/null || true)
     fi
-    if grep -Fq "$marker" <<<"$log" || grep -Fq 'RESULT:FAIL' <<<"$log"; then
+    if python3 "$marker_matcher" "$marker" <<<"$log" || \
+      python3 "$marker_matcher" 'RESULT:FAIL' <<<"$log"; then
       break
     fi
     sleep 1
   done
   printf '%s\n' "===== $label =====" "$log"
-  if ! grep -Fq "$marker" <<<"$log" || ! grep -Fq 'RESULT:PASS' <<<"$log"; then
+  if ! python3 "$marker_matcher" "$marker" <<<"$log" || \
+    ! python3 "$marker_matcher" 'RESULT:PASS' <<<"$log"; then
     echo "===== Full logcat tail after $label ====="
     adb logcat -d -v threadtime -t 400 2>&1 || true
     echo "===== App process after $label ====="
     adb shell pidof "$package" 2>&1 || true
     return 1
   fi
-  if [[ "$expected_app_result" == pass ]] && grep -Fq 'RESULT:FAIL' <<<"$log"; then
+  if [[ "$expected_app_result" == pass ]] && \
+    python3 "$marker_matcher" 'RESULT:FAIL' <<<"$log"; then
     echo "The Node Mobile test app reported an uncaught failure after $label emitted its pass marker." >&2
     return 1
   fi
