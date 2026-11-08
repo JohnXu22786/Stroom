@@ -44,6 +44,7 @@ void main() {
         'stroom-json-v1 / stroom-yaml-v1 / stroom-markdown-yaml-v1',
       ),
       260,
+      scrollable: find.byType(Scrollable).last,
     );
     expect(
       find.textContaining(

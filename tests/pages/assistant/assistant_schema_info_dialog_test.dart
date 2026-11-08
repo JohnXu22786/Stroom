@@ -27,14 +27,20 @@ void main() {
     await tester.scrollUntilVisible(
       find.text('temperature / enableTemperature'),
       260,
+      scrollable: find.byType(Scrollable).first,
     );
     expect(find.textContaining('0–2 / bool'), findsOneWidget);
     await tester.scrollUntilVisible(
       find.text('maxTokens / enableMaxTokens'),
       260,
+      scrollable: find.byType(Scrollable).first,
     );
     expect(find.text('maxTokens / enableMaxTokens'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('defaultToolNames'), 260);
+    await tester.scrollUntilVisible(
+      find.text('defaultToolNames'),
+      260,
+      scrollable: find.byType(Scrollable).first,
+    );
     expect(find.textContaining('todowrite, web_search'), findsOneWidget);
   });
 }
