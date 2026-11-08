@@ -9,6 +9,39 @@ import 'package:stroom/providers/task_provider.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  testWidgets('failed OCR with an empty result hides partial-save action', (
+    tester,
+  ) async {
+    final notifier = BackgroundTaskNotifier();
+    final task = BackgroundTask(
+      id: 'empty-partial-save',
+      type: BackgroundTaskType.ocr,
+      title: 'OCR识别全部失败',
+      status: TaskStatus.failed,
+      result: '',
+      resultIsComplete: false,
+      error: '所有页面识别尝试均失败',
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [backgroundTasksProvider.overrideWith((ref) => notifier)],
+        child: MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          home: Scaffold(body: BackgroundTaskCard(task: task)),
+        ),
+      ),
+    );
+    await tester.tap(find.text('OCR识别全部失败'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text('保存部分结果'), findsNothing);
+    expect(find.text('重试'), findsOneWidget);
+  });
+
   testWidgets('failed OCR with a result offers save-only retry', (
     tester,
   ) async {

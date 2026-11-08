@@ -648,7 +648,7 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
         if (hasRetryPage &&
             task.type == BackgroundTaskType.ocr &&
             task.status == TaskStatus.failed &&
-            task.result != null)
+            task.result?.isNotEmpty == true)
           _actionButton(
             icon: Icons.save_outlined,
             label: task.resultIsComplete
