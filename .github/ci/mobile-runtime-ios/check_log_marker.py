@@ -11,7 +11,11 @@ ANSI_CONTROL = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\)
 def contains_marker(output: str, expected_markers: str) -> bool:
     output = ANSI_CONTROL.sub("", output)
     expected = set(expected_markers.splitlines())
-    return any(line in expected for line in output.splitlines())
+    return any(
+        line == marker or line.startswith(marker + " ")
+        for line in output.splitlines()
+        for marker in expected
+    )
 
 
 if __name__ == "__main__":
