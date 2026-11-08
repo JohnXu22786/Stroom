@@ -1409,7 +1409,8 @@ extension _ChatPageBubblesExt on _ChatPageState {
           // and we don't have reasoning content, show JumpingDots.
           // Reasoning content already shows "推理中" button.
           if (isWaitingForFirstToken &&
-              (reasoningSections == null || reasoningSections.isEmpty))
+              (reasoningSections == null || reasoningSections.isEmpty) &&
+              (segments == null || segments.isEmpty))
             const Padding(
               padding: EdgeInsets.symmetric(
                 vertical: 8,

@@ -261,9 +261,13 @@ extension _ChatPageListenersExt on _ChatPageState {
       );
       return;
     }
-    if (next == prior) return;
+    if (next.length == prior.length && next == prior) return;
 
-    final isAppend = next.startsWith(prior);
+    // This compatibility provider carries cumulative snapshots. Growth is an
+    // append by contract; callers that start a replacement must publish the
+    // empty reset first. Avoid scanning the entire previous reply with
+    // startsWith on every token, which makes a long stream quadratic.
+    final isAppend = prior.isEmpty || next.length > prior.length;
     final sequence = (_legacyFullReplySequences[key] ?? 0) + (isAppend ? 1 : 2);
     if (prior.isEmpty) {
       // A legacy full-reply snapshot can be the first visible text update,
