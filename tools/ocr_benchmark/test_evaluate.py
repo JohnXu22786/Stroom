@@ -439,7 +439,135 @@ class EvaluateTests(unittest.TestCase):
         self.assertEqual(result.stdout, "")
         self.assertFalse(output_path.exists())
 
-    def test_reading_order_uses_a_valid_later_repeated_anchor_occurrence(self):
+    def test_reading_order_does_not_score_independently_chosen_repeated_occurrences(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "repeated-three-anchor",
+                    "gold_text": "A B C",
+                    "reading_order": ["A", "B", "C"],
+                    "categories": ["english"],
+                }
+            ]
+        }
+
+        report = evaluate_predictions(
+            manifest,
+            predictions(
+                [
+                    {
+                        "fixture_id": "repeated-three-anchor",
+                        "text": "C B A C B A",
+                    }
+                ]
+            ),
+        )
+
+        self.assertEqual(report["metrics"]["reading_order_score"]["value"], 0)
+
+    def test_reading_order_scores_all_pairs_for_three_anchors_in_order(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "three-anchor-order",
+                    "gold_text": "A B C",
+                    "reading_order": ["A", "B", "C"],
+                    "categories": ["english"],
+                }
+            ]
+        }
+
+        report = evaluate_predictions(
+            manifest,
+            predictions([{"fixture_id": "three-anchor-order", "text": "A B C"}]),
+        )
+
+        self.assertEqual(report["metrics"]["reading_order_score"]["value"], 1)
+
+    def test_reading_order_scores_no_pairs_for_three_anchors_reversed(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "three-anchor-reverse",
+                    "gold_text": "A B C",
+                    "reading_order": ["A", "B", "C"],
+                    "categories": ["english"],
+                }
+            ]
+        }
+
+        report = evaluate_predictions(
+            manifest,
+            predictions(
+                [{"fixture_id": "three-anchor-reverse", "text": "C B A"}]
+            ),
+        )
+
+        self.assertEqual(report["metrics"]["reading_order_score"]["value"], 0)
+
+    def test_reading_order_scores_pairs_from_one_assignment_when_partially_reversed(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "partially-reversed",
+                    "gold_text": "A B C",
+                    "reading_order": ["A", "B", "C"],
+                    "categories": ["english"],
+                }
+            ]
+        }
+
+        report = evaluate_predictions(
+            manifest,
+            predictions([{"fixture_id": "partially-reversed", "text": "B A C"}]),
+        )
+
+        self.assertEqual(report["metrics"]["reading_order_score"]["value"], 2 / 3)
+
+    def test_reading_order_handles_many_anchors(self):
+        anchors = [f"<anchor-{index:02}>" for index in range(32)]
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "many-anchors",
+                    "gold_text": " ".join(anchors),
+                    "reading_order": anchors,
+                    "categories": ["english"],
+                }
+            ]
+        }
+
+        report = evaluate_predictions(
+            manifest,
+            predictions(
+                [{"fixture_id": "many-anchors", "text": " ".join(anchors)}]
+            ),
+        )
+
+        self.assertEqual(report["metrics"]["reading_order_score"]["value"], 1)
+
+    def test_reading_order_keeps_missing_anchor_pairs_incorrect(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "missing-middle-anchor",
+                    "gold_text": "A B C",
+                    "reading_order": ["A", "B", "C"],
+                    "categories": ["english"],
+                }
+            ]
+        }
+
+        report = evaluate_predictions(
+            manifest,
+            predictions(
+                [{"fixture_id": "missing-middle-anchor", "text": "A C"}]
+            ),
+        )
+
+        self.assertEqual(report["metrics"]["reading_order_score"]["value"], 1 / 3)
+
+    def test_reading_order_uses_first_occurrence_for_repeated_anchors(self):
         manifest = {
             "fixtures": [
                 {
@@ -458,7 +586,7 @@ class EvaluateTests(unittest.TestCase):
             ),
         )
 
-        self.assertEqual(report["metrics"]["reading_order_score"]["value"], 1)
+        self.assertEqual(report["metrics"]["reading_order_score"]["value"], 0)
 
     def test_reading_order_rejects_repeated_anchors_in_genuinely_reversed_order(self):
         manifest = {
