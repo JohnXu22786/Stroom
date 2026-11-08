@@ -276,10 +276,10 @@ void main() {
       final container = _containerWithEntries([]);
       addTearDown(container.dispose);
       final notifier = container.read(ocrInstructionsProvider.notifier);
-      await notifier.add('临时', '新建指令');
-      await notifier.update(0, '临时', '编辑后的指令');
-      await notifier.remove(0);
-      await notifier.load();
+      final add = notifier.add('临时', '新建指令');
+      final update = notifier.update(0, '临时', '编辑后的指令');
+      final remove = notifier.remove(0);
+      await Future.wait([add, update, remove, notifier.load()]);
 
       expect(container.read(ocrInstructionsProvider), [stored]);
       final prefs = await SharedPreferences.getInstance();

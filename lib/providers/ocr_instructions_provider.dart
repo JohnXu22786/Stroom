@@ -164,7 +164,9 @@ class OcrInstructionsNotifier extends StateNotifier<List<OcrInstruction>> {
     for (final mutation in _pendingLoadMutations.skip(startIndex)) {
       switch (mutation.kind) {
         case 'add':
-          if (mutation.after != null) merged.add(mutation.after!);
+          if (mutation.after != null && !merged.contains(mutation.after)) {
+            merged.add(mutation.after!);
+          }
           break;
         case 'update':
           final before = mutation.before;

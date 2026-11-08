@@ -452,9 +452,10 @@ class OcrService {
         {'statusCode': response.statusCode},
         excludedValues: [config.apiKey, ...responseCredentialValues],
       )?['statusCode'] as int?;
-      lastResponseData = response.data is Map
-          ? Map<String, dynamic>.from(response.data as Map)
-          : <String, dynamic>{'raw': '${response.data}'};
+      final diagnosticData = response.rawData ?? response.data;
+      lastResponseData = diagnosticData is Map
+          ? Map<String, dynamic>.from(diagnosticData)
+          : <String, dynamic>{'raw': '$diagnosticData'};
       lastResponseHeaders = response.headers.map;
       _lastRequestId = OcrDiagnosticSnapshot.requestIdFromHeaders(
             response.headers.map,
