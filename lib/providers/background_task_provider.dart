@@ -6235,8 +6235,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
                   _sanitizeOcrTaskError(
                         outcomeError,
                         null,
-                        additionalCredentialValues:
-                            pageOutcomeCredentialValues,
+                        additionalCredentialValues: pageOutcomeCredentialValues,
                       ) !=
                       outcomeError)) {
             return false;

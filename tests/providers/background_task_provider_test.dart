@@ -25975,14 +25975,14 @@ void main() {
           final rows = jsonDecode(await file.readAsString()) as List;
           expect(
             rows.whereType<Map>().singleWhere(
-              (row) => row['title'] == skippedRow['title'],
-            ),
+                  (row) => row['title'] == skippedRow['title'],
+                ),
             skippedRow,
           );
           expect(
             rows.whereType<Map>().any(
-              (row) => row['id'] == 'safe-partial-ocr-outcome-trigger',
-            ),
+                  (row) => row['id'] == 'safe-partial-ocr-outcome-trigger',
+                ),
             isTrue,
           );
         } finally {
