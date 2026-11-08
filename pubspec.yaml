@@ -153,6 +153,8 @@ flutter:
     - assets/vendor/
     - assets/vendor/native/
     - assets/vendor/mermaid/
+    - assets/vendor/mathlive/
+    - assets/vendor/mathlive/fonts/
     - web/data_integrity_json_worker.js
 
   generate: true
