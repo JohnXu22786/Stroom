@@ -12,6 +12,7 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
     required String convId,
     required Object? streamError,
     required ChatService? snappedChatService,
+    required List<String> finalTextChunks,
   }) async {
     // Deliver any sub-throttle reasoning tail before the stream state is
     // cleared. Normal section-end events flush this same delta earlier.
@@ -136,7 +137,7 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
     // error replies are not represented by text sections and stay explicit.
     final fullReply = state.hasSyntheticErrorReply ? state.fullReply : null;
     final textChunks =
-        state.hasSyntheticErrorReply ? <String>[] : state.textChunks;
+        state.hasSyntheticErrorReply ? <String>[] : finalTextChunks;
     final hasTextContent = textChunks.any((chunk) => chunk.isNotEmpty);
     try {
       // 纯工具轮取消时 fullReply 为空但 accumulatedToolCalls 非空：
@@ -262,7 +263,7 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
       debugPrint('[ChatStreamManager] 结果构造失败: $e\n$s');
       result = StreamResult(
         history: List.from(state.history),
-        fullReply: fullReply ?? state.textChunks.join(),
+        fullReply: fullReply ?? finalTextChunks.join(),
         cancelled: wasCancelled,
       );
     }
