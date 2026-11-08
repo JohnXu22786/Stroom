@@ -158,7 +158,11 @@ class AssistantCatalogService {
     if (bytes == null) {
       // Reject malformed numeric and IPv6-looking literals rather than
       // letting alternate parser spellings reach the HTTP client.
-      return host.contains(':') || RegExp(r'^[0-9.]+$').hasMatch(host);
+      return host.contains(':') ||
+          RegExp(
+            r'^(?:0x[0-9a-f]+|[0-9]+)(?:\.(?:0x[0-9a-f]+|[0-9]+))*$',
+            caseSensitive: false,
+          ).hasMatch(host);
     }
     if (bytes.length == 4) return _isPrivateIpv4(bytes);
     if (bytes.length != 16) return true;
@@ -264,7 +268,11 @@ class AssistantCatalogService {
     if (parts.length != 4) return null;
     final octets = <int>[];
     for (final part in parts) {
-      if (part.isEmpty || !RegExp(r'^\d+$').hasMatch(part)) return null;
+      if (part.isEmpty ||
+          (part.length > 1 && part.startsWith('0')) ||
+          !RegExp(r'^\d+$').hasMatch(part)) {
+        return null;
+      }
       final octet = int.tryParse(part);
       if (octet == null || octet > 255) return null;
       octets.add(octet);
