@@ -1,7 +1,7 @@
 name: stroom
 description: A Flutter app combining FlClash UI architecture with camera functionality.
 publish_to: "none"
-version: 0.5.2
+version: 0.5.3
 
 environment:
   sdk: ">=3.13.7 <4.0.0"
@@ -119,6 +119,14 @@ dev_dependencies:
   video_player_platform_interface: ^6.9.0
   # Run collection sync integration tests against real SQLite transactions.
   sqflite_common_ffi: ^2.4.4
+
+# sqflite_common_ffi is used only by tests. Use Ubuntu's SQLite library there
+# so Linux CI does not depend on downloading sqlite3's GitHub release asset.
+hooks:
+  user_defines:
+    sqlite3:
+      source:
+        linux: system
 
 dependency_overrides:
   markdown:
