@@ -224,10 +224,40 @@ class MermaidTemplates {
     final nodeIdPattern = RegExp(
       r'\b(?:' + nodeIds.map(RegExp.escape).join('|') + r')\b',
     );
-    return snippet.replaceAllMapped(
-      nodeIdPattern,
-      (match) => replacements[match[0]]!,
-    );
+    final replacementOffsets = <(int, int, String)>[];
+    var lineOffset = 0;
+    for (final line in snippet.split('\n')) {
+      final syntaxLine = _stripFlowchartLabelsAndComments(
+        line,
+        preserveOffsets: true,
+      );
+      for (final match in nodeIdPattern.allMatches(syntaxLine)) {
+        final before = syntaxLine.substring(0, match.start).trimRight();
+        final after = syntaxLine.substring(match.end).trimLeft();
+        final startsNode = before.isEmpty ||
+            before.endsWith('&') ||
+            RegExp(r'(?:[ox])?[-=.~<>]{2,}[ox]?$').hasMatch(before);
+        final endsNode = after.isEmpty ||
+            after.startsWith(RegExp(r'(?:[ox])?[-=.~<>]{2,}[ox]?')) ||
+            after.startsWith(RegExp(r'^[\[({>@:]')) ||
+            after.startsWith('&');
+        final replacement = replacements[match[0]];
+        if (startsNode && endsNode && replacement != null) {
+          replacementOffsets.add((
+            lineOffset + match.start,
+            lineOffset + match.end,
+            replacement,
+          ));
+        }
+      }
+      lineOffset += line.length + 1;
+    }
+
+    var result = snippet;
+    for (final (start, end, replacement) in replacementOffsets.reversed) {
+      result = result.replaceRange(start, end, replacement);
+    }
+    return result;
   }
 
   /// Assigns an unused ID to a subgraph declared in a flowchart snippet.
@@ -295,22 +325,30 @@ class MermaidTemplates {
   }
 
   /// Removes label and comment text before checking node-ID syntax.
-  static String _stripFlowchartLabelsAndComments(String line) {
+  static String _stripFlowchartLabelsAndComments(
+    String line, {
+    bool preserveOffsets = false,
+  }) {
     final buffer = StringBuffer();
     final edgeLabelStartPattern = RegExp(r'(---|--|===|==|-\.)([ \t]+)');
     var index = 0;
 
     while (index < line.length) {
-      if (line.startsWith('%%', index)) break;
+      if (line.startsWith('%%', index)) {
+        if (preserveOffsets) buffer.write(' ' * (line.length - index));
+        break;
+      }
 
       final char = line[index];
       if (char == '"') {
+        final labelStart = index;
         index = _skipDelimitedText(line, index, '"', '"');
-        buffer.write(' ');
+        buffer.write(preserveOffsets ? ' ' * (index - labelStart) : ' ');
         continue;
       }
 
       if (char == '[' || char == '(' || char == '{') {
+        final labelStart = index;
         index = _skipDelimitedText(
             line,
             index,
@@ -320,7 +358,7 @@ class MermaidTemplates {
               '(' => ')',
               _ => '}',
             });
-        buffer.write(' ');
+        buffer.write(preserveOffsets ? ' ' * (index - labelStart) : ' ');
         continue;
       }
 
@@ -329,17 +367,19 @@ class MermaidTemplates {
           previous.isNotEmpty &&
           previous.trim().isNotEmpty &&
           !'<>=-.~'.contains(previous)) {
+        final labelStart = index;
         final labelEnd = _asymmetricFlowchartLabelEnd(line, index + 1);
         if (labelEnd != null) {
           index = labelEnd;
-          buffer.write(' ');
+          buffer.write(preserveOffsets ? ' ' * (index - labelStart) : ' ');
           continue;
         }
       }
 
       if (char == '|') {
+        final labelStart = index;
         index = _skipDelimitedText(line, index, '|', '|');
-        buffer.write(' ');
+        buffer.write(preserveOffsets ? ' ' * (index - labelStart) : ' ');
         continue;
       }
 
@@ -356,11 +396,20 @@ class MermaidTemplates {
           index + edgeLabelStart.end,
         );
         if (edgeLabelEnd != null) {
-          buffer
-            ..write(edgeLabelStart[1])
-            ..write(' ')
-            ..write(edgeLabelEnd.$2)
-            ..write(' ');
+          if (preserveOffsets) {
+            final labelContentStart = index + edgeLabelStart.end;
+            final edgeConnectorStart = edgeLabelEnd.$1 - edgeLabelEnd.$2.length;
+            buffer
+              ..write(line.substring(index, labelContentStart))
+              ..write(' ' * (edgeConnectorStart - labelContentStart))
+              ..write(edgeLabelEnd.$2);
+          } else {
+            buffer
+              ..write(edgeLabelStart[1])
+              ..write(' ')
+              ..write(edgeLabelEnd.$2)
+              ..write(' ');
+          }
           index = edgeLabelEnd.$1;
           continue;
         }

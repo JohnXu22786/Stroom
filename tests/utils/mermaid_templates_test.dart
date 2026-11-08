@@ -157,6 +157,19 @@ void main() {
     });
   });
 
+  group('MermaidTemplates - flowchart snippet IDs', () {
+    test('renames colliding IDs without changing label text', () {
+      final snippet = 'Condition{Condition} --> Result[Condition]';
+
+      final result = MermaidTemplates.assignUniqueFlowchartNodeIds(
+        'flowchart TD\nCondition[Existing]',
+        snippet,
+      );
+
+      expect(result, 'Condition1{Condition} --> Result[Condition]');
+    });
+  });
+
   group('MermaidTemplates - requirement diagram relationships', () {
     test(
       'uses supported element-to-requirement relationships in the template',
