@@ -1252,8 +1252,7 @@ bool _legacyOcrHasInterleavedAlphaNumericCredentialShape(String value) {
   }
   if (letterCount < 4 || digitCount < 2) return false;
 
-  return categoryTransitions >= 4 &&
-      normalized.split('').toSet().length >= 6;
+  return categoryTransitions >= 4 && normalized.split('').toSet().length >= 6;
 }
 
 bool _legacyOcrHasLongConsonantRun(String value) =>
