@@ -115,6 +115,11 @@ void main() {
   });
 
   group('FolderPathUtils.validateFileName', () {
+    test('rejects trailing whitespace', () {
+      expect(FolderPathUtils.validateFileName('report '), isNotNull);
+      expect(FolderPathUtils.validateFileName('report'), isNull);
+    });
+
     test('rejects Windows superscript COM and LPT device names', () {
       const reservedNames = [
         'COM¹',
