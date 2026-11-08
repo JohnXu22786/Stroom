@@ -78,15 +78,25 @@ jobs:
       # 更新内容压缩后再 Base64 写入 JSON，避免大型发布说明超过
       # Flutter/Gradle 的进程参数长度限制。
       - id: build-info
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           RELEASE_NOTES_FILE="$RUNNER_TEMP/release-notes.txt"
-          RELEASE_JSON="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" 2>/dev/null || true)"
-          RELEASE_TIME="$(printf '%s' "$RELEASE_JSON" | jq -r '.published_at // .created_at // empty' 2>/dev/null || true)"
+          RELEASE_ERROR_FILE="$RUNNER_TEMP/release-api-error.txt"
+          if ! RELEASE_JSON="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" 2>"$RELEASE_ERROR_FILE")"; then
+            if [ "${{ github.event_name }}" = "workflow_dispatch" ] && grep -q 'HTTP 404' "$RELEASE_ERROR_FILE"; then
+              RELEASE_JSON='{}'
+            else
+              cat "$RELEASE_ERROR_FILE" >&2
+              exit 1
+            fi
+          fi
+          RELEASE_TIME="$(printf '%s' "$RELEASE_JSON" | jq -r '.published_at // .created_at // empty')"
           if [ -z "$RELEASE_TIME" ]; then
             RELEASE_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
             : > "$RELEASE_NOTES_FILE"
           else
-            printf '%s' "$RELEASE_JSON" | jq -j '.body // ""' > "$RELEASE_NOTES_FILE" || true
+            printf '%s' "$RELEASE_JSON" | jq -j '.body // ""' > "$RELEASE_NOTES_FILE"
           fi
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.include_release_notes }}" != "true" ]; then
             : > "$RELEASE_NOTES_FILE"
