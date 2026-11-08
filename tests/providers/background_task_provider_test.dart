@@ -17334,6 +17334,45 @@ void main() {
     );
 
     test(
+      'legacy OCR instruction migration redacts embedded mixed alphanumeric open-mask prefixes',
+      () {
+        const credentialEcho = 'xab1Cd2Ef3';
+        const instruction = 'Please transcribe $credentialEcho';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-embedded-mixed-alphanumeric-open-mask-prefix-echo',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer ab1Cd2Ef3…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+        final migratedInstruction = OcrRetrySnapshot.fromMap(
+          task.retryData!,
+        ).instructionContent;
+
+        expect(migratedInstruction, 'Please transcribe [redacted]');
+        expect(persisted, contains('Please transcribe [redacted]'));
+        expect(migratedInstruction, isNot(contains(credentialEcho)));
+        expect(persisted, isNot(contains(credentialEcho)));
+      },
+    );
+
+    test(
       'legacy OCR instruction migration redacts embedded long open-mask prefixes',
       () {
         const apiKey = 'xqwrtypsdf123';
