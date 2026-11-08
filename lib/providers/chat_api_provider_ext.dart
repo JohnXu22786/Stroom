@@ -103,7 +103,9 @@ extension OpenAICompatibleChatProviderExt on OpenAICompatibleChatProvider {
   ///
   /// 与 `chatStream` 中的 toolCallAccumulators 状态配合使用。
   void _accumulateToolCallDeltas(
-      Map<String, dynamic> data, Map<int, Map<String, dynamic>> accumulators) {
+      Map<String, dynamic> data,
+      Map<int, Map<String, dynamic>> accumulators,
+      Map<int, StringBuffer> argumentBuffers) {
     // Tool call deltas (streamed in chunks by index) — handled here
     // because accumulation requires state across multiple SSE events.
     final choices = data['choices'] as List?;
@@ -128,8 +130,10 @@ extension OpenAICompatibleChatProviderExt on OpenAICompatibleChatProvider {
               final accFn = acc['function'] as Map<String, dynamic>;
               if (fn['name'] != null) accFn['name'] = fn['name'];
               if (fn['arguments'] != null) {
-                accFn['arguments'] = (accFn['arguments'] as String? ?? '') +
-                    (fn['arguments'] as String);
+                final arguments = fn['arguments'] as String;
+                argumentBuffers
+                    .putIfAbsent(index, StringBuffer.new)
+                    .write(arguments);
               }
             }
           }
@@ -140,16 +144,21 @@ extension OpenAICompatibleChatProviderExt on OpenAICompatibleChatProvider {
 
   /// 流结束时将累计的 tool_calls 组装为事件（若无累计则返回 null）。
   AIStreamEvent? _buildToolCallEvent(
-      Map<int, Map<String, dynamic>> accumulators) {
+      Map<int, Map<String, dynamic>> accumulators,
+      Map<int, StringBuffer> argumentBuffers) {
     // After stream ends, yield tool calls if any were accumulated
     if (accumulators.isEmpty) return null;
-    final toolCalls = accumulators.entries
-        .map((e) => {
-              'id': e.value['id'] as String? ?? 'call_${e.key}',
-              'type': e.value['type'] as String? ?? 'function',
-              'function': e.value['function'] as Map<String, dynamic>? ?? {},
-            })
-        .toList();
+    final toolCalls = accumulators.entries.map((e) {
+      final function =
+          e.value['function'] as Map<String, dynamic>? ?? <String, dynamic>{};
+      final arguments = argumentBuffers[e.key];
+      if (arguments != null) function['arguments'] = arguments.toString();
+      return {
+        'id': e.value['id'] as String? ?? 'call_${e.key}',
+        'type': e.value['type'] as String? ?? 'function',
+        'function': function,
+      };
+    }).toList();
     return AIStreamEvent('', toolCalls: toolCalls);
   }
 }
