@@ -2289,9 +2289,12 @@ def _validate_png(image_bytes: bytes, fixture_id: str) -> None:
             if chunk_type in (b"cHRM", b"gAMA", b"sRGB") and palette_seen:
                 raise invalid()
             if chunk_type == b"cHRM":
-                if chunk_length != 32 or any(
-                    value > 100000
-                    for (value,) in struct.iter_unpack(">I", chunk_data)
+                if chunk_length != 32:
+                    raise invalid()
+                chromaticities = struct.unpack(">IIIIIIII", chunk_data)
+                if any(value > 100000 for value in chromaticities) or any(
+                    x + y > 100000
+                    for x, y in zip(chromaticities[::2], chromaticities[1::2])
                 ):
                     raise invalid()
             if chunk_type == b"gAMA" and (

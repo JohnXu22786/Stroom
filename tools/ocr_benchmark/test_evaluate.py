@@ -4689,6 +4689,16 @@ class EvaluateTests(unittest.TestCase):
         )
         self._assert_fixture_png_rejected(malformed_png)
 
+    def test_fixture_verification_rejects_chromaticity_pair_sum_above_png_range(self):
+        malformed_png = (
+            b"\x89PNG\r\n\x1a\n"
+            + png_chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0))
+            + png_chunk(b"cHRM", struct.pack(">IIIIIIII", 80000, 80000, 1, 1, 1, 1, 1, 1))
+            + png_chunk(b"IDAT", zlib.compress(b"\x00\x00\x00\x00"))
+            + png_chunk(b"IEND", b"")
+        )
+        self._assert_fixture_png_rejected(malformed_png)
+
     def test_fixture_verification_rejects_unsupported_exif_chunk(self):
         malformed_png = (
             b"\x89PNG\r\n\x1a\n"
@@ -4703,7 +4713,7 @@ class EvaluateTests(unittest.TestCase):
         valid_png = (
             b"\x89PNG\r\n\x1a\n"
             + png_chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 1, 3, 0, 0, 0))
-            + png_chunk(b"cHRM", struct.pack(">IIIIIIII", *([1] * 8)))
+            + png_chunk(b"cHRM", struct.pack(">IIIIIIII", *([50000] * 8)))
             + png_chunk(b"gAMA", struct.pack(">I", 100000))
             + png_chunk(b"sBIT", b"\x08\x08\x08")
             + png_chunk(b"sRGB", b"\x00")
