@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
@@ -155,9 +154,12 @@ class AssistantCatalogService {
         host.endsWith('.test')) {
       return true;
     }
-    final address = InternetAddress.tryParse(host);
-    if (address == null) return false;
-    final bytes = address.rawAddress;
+    final bytes = _parseIpAddress(host);
+    if (bytes == null) {
+      // Reject malformed numeric and IPv6-looking literals rather than
+      // letting alternate parser spellings reach the HTTP client.
+      return host.contains(':') || RegExp(r'^[0-9.]+$').hasMatch(host);
+    }
     if (bytes.length == 4) return _isPrivateIpv4(bytes);
     if (bytes.length != 16) return true;
 
@@ -174,24 +176,101 @@ class AssistantCatalogService {
     final isLinkLocal = bytes[0] == 0xfe && bytes[1] & 0xc0 == 0x80;
     final isSiteLocal = bytes[0] == 0xfe && bytes[1] & 0xc0 == 0xc0;
     final isMulticast = bytes[0] == 0xff;
+    final isDocumentation = bytes[0] == 0x20 &&
+        bytes[1] == 0x01 &&
+        bytes[2] == 0x0d &&
+        bytes[3] == 0xb8;
     return isUnspecified ||
         isLoopback ||
         isUniqueLocal ||
         isLinkLocal ||
         isSiteLocal ||
-        isMulticast;
+        isMulticast ||
+        isDocumentation;
   }
 
   static bool _isPrivateIpv4(List<int> octets) =>
       octets[0] == 0 ||
       octets[0] == 10 ||
       octets[0] == 127 ||
+      octets[0] >= 224 ||
       (octets[0] == 169 && octets[1] == 254) ||
       (octets[0] == 172 && octets[1] >= 16 && octets[1] <= 31) ||
       (octets[0] == 192 && octets[1] == 168) ||
       (octets[0] == 100 && octets[1] >= 64 && octets[1] <= 127) ||
       (octets[0] == 192 && octets[1] == 0 && octets[2] == 0) ||
-      (octets[0] == 198 && (octets[1] == 18 || octets[1] == 19));
+      (octets[0] == 192 && octets[1] == 0 && octets[2] == 2) ||
+      (octets[0] == 192 && octets[1] == 88 && octets[2] == 99) ||
+      (octets[0] == 198 && (octets[1] == 18 || octets[1] == 19)) ||
+      (octets[0] == 198 && octets[1] == 51 && octets[2] == 100) ||
+      (octets[0] == 203 && octets[1] == 0 && octets[2] == 113);
+
+  static List<int>? _parseIpAddress(String host) {
+    if (!host.contains(':')) return _parseIpv4(host);
+
+    final compressionIndex = host.indexOf('::');
+    if (compressionIndex >= 0 &&
+        host.indexOf('::', compressionIndex + 2) >= 0) {
+      return null;
+    }
+    final leftText =
+        compressionIndex < 0 ? host : host.substring(0, compressionIndex);
+    final rightText =
+        compressionIndex < 0 ? '' : host.substring(compressionIndex + 2);
+    final left = _parseIpv6Groups(leftText);
+    final right = _parseIpv6Groups(rightText);
+    if (left == null || right == null) return null;
+    final groupCount = left.length + right.length;
+    if ((compressionIndex < 0 && groupCount != 8) ||
+        (compressionIndex >= 0 && groupCount >= 8)) {
+      return null;
+    }
+    final groups = [
+      ...left,
+      if (compressionIndex >= 0) ...List<int>.filled(8 - groupCount, 0),
+      ...right,
+    ];
+    return [
+      for (final group in groups) ...[group >> 8, group & 0xff],
+    ];
+  }
+
+  static List<int>? _parseIpv6Groups(String section) {
+    if (section.isEmpty) return const [];
+    final parts = section.split(':');
+    final groups = <int>[];
+    for (var index = 0; index < parts.length; index++) {
+      final part = parts[index];
+      if (part.isEmpty) return null;
+      if (part.contains('.')) {
+        if (index != parts.length - 1) return null;
+        final ipv4 = _parseIpv4(part);
+        if (ipv4 == null) return null;
+        groups
+          ..add((ipv4[0] << 8) | ipv4[1])
+          ..add((ipv4[2] << 8) | ipv4[3]);
+        continue;
+      }
+      if (part.length > 4 || !RegExp(r'^[0-9a-fA-F]+$').hasMatch(part)) {
+        return null;
+      }
+      groups.add(int.parse(part, radix: 16));
+    }
+    return groups;
+  }
+
+  static List<int>? _parseIpv4(String host) {
+    final parts = host.split('.');
+    if (parts.length != 4) return null;
+    final octets = <int>[];
+    for (final part in parts) {
+      if (part.isEmpty || !RegExp(r'^\d+$').hasMatch(part)) return null;
+      final octet = int.tryParse(part);
+      if (octet == null || octet > 255) return null;
+      octets.add(octet);
+    }
+    return octets;
+  }
 
   static bool _sameOrigin(Uri a, Uri b) =>
       a.scheme == b.scheme &&

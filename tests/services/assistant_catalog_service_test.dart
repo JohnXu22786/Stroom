@@ -41,7 +41,7 @@ void main() {
     });
 
     test(
-      'rejects non-HTTPS and private host URLs before making a request',
+      'rejects non-HTTPS and nonpublic IP URLs before making a request',
       () async {
         var requestCount = 0;
         final service = AssistantCatalogService(
@@ -57,10 +57,12 @@ void main() {
         );
         for (final host in [
           '127.0.0.1',
+          '192.0.2.10',
           '[::1]',
           '[0:0:0:0:0:0:0:1]',
           '[::ffff:127.0.0.1]',
           '[::ffff:172.16.0.1]',
+          '[2001:db8::1]',
         ]) {
           await expectLater(
             service.fetchCatalog('https://$host/catalog.json'),
