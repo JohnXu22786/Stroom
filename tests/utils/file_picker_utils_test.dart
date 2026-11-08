@@ -139,4 +139,26 @@ void main() {
     expect(names, contains('旅行/空目录/'));
     expect(names, isNot(contains('hash123.jpg')));
   });
+
+  test('export paths reject case-only collisions for portable extraction', () {
+    expect(
+      () => validateUserVisibleExportPaths(
+        files: const ['Notes.txt', 'notes.txt'],
+      ),
+      throwsStateError,
+    );
+    expect(
+      () => validateUserVisibleExportPaths(
+        folders: const ['Audio', 'audio'],
+      ),
+      throwsStateError,
+    );
+    expect(
+      () => validateUserVisibleExportPaths(
+        files: const ['Audio/clip.wav'],
+        folders: const ['audio'],
+      ),
+      throwsStateError,
+    );
+  });
 }

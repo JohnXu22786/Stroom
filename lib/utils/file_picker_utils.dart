@@ -75,13 +75,26 @@ void validateUserVisibleExportPaths({
     return segments.join('/');
   }
 
+  String portablePathKey(String path) => path.toLowerCase();
+
   final filePaths = <String>{};
   final directoryPaths = <String>{};
+  final directorySpellings = <String, String>{};
+
+  void addDirectory(String path) {
+    final key = portablePathKey(path);
+    final existingSpelling = directorySpellings[key];
+    if (existingSpelling != null && existingSpelling != path) {
+      throw StateError('Case-insensitive export folder collision: $path');
+    }
+    directorySpellings[key] = path;
+    directoryPaths.add(key);
+  }
 
   void addDirectoryAndAncestors(String path) {
     final segments = path.split('/');
     for (var i = 1; i <= segments.length; i++) {
-      directoryPaths.add(segments.take(i).join('/'));
+      addDirectory(segments.take(i).join('/'));
     }
   }
 
@@ -90,7 +103,7 @@ void validateUserVisibleExportPaths({
   }
   for (final file in files) {
     final path = safePath(file);
-    if (!filePaths.add(path)) {
+    if (!filePaths.add(portablePathKey(path))) {
       throw StateError('Duplicate export file path: $path');
     }
     final segments = path.split('/');

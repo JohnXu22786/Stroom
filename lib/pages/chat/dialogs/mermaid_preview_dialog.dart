@@ -403,6 +403,13 @@ class _MermaidPreviewDialogContentState
         return;
       }
 
+      // This dialog applies toolbar zoom directly instead of routing through
+      // MermaidRenderWidget's pending-operation flush. Mark the shared HTML
+      // template's input queue ready first, or applyZoomDeltasAfterFit keeps
+      // queueing every delta indefinitely.
+      await controller.evaluateJavascript(
+        source: 'window.applyZoomOperationsAfterFit([])',
+      );
       _canApplyZoomDeltasAfterFit = true;
       await _flushPendingZoomDeltas(controller);
     } catch (_) {
