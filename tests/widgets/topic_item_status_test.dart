@@ -39,7 +39,7 @@ Widget _app({
 
 void main() {
   testWidgets(
-    'running conversation pulses the inactive icon style each second',
+    'running conversation pulses the inactive icon style every 1.5 seconds',
     (tester) async {
       await tester.pumpWidget(_app(isRunning: true));
 
@@ -57,13 +57,13 @@ void main() {
 
       final firstColor = bubble.color;
 
-      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump(const Duration(milliseconds: 750));
       final middleColor = tester.widget<Icon>(iconFinder).color;
       expect(middleColor, isNot(firstColor));
       expect(middleColor!.a, lessThan(firstColor!.a));
       expect(middleColor.r, firstColor.r);
 
-      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump(const Duration(milliseconds: 750));
       final cycleColor = tester.widget<Icon>(iconFinder).color;
       expect(cycleColor, firstColor);
     },
@@ -79,6 +79,21 @@ void main() {
       bubble.color,
       Theme.of(tester.element(find.byType(TopicItem))).colorScheme.error,
     );
+    final tile = tester.widget<Container>(
+      find
+          .ancestor(
+            of: find.byIcon(Icons.chat_bubble_outline_rounded),
+            matching: find.byType(Container),
+          )
+          .first,
+    );
+    final decoration = tile.decoration! as BoxDecoration;
+    expect(decoration.border, isNull);
+    expect(
+      decoration.color,
+      Theme.of(tester.element(find.byType(TopicItem))).colorScheme.error
+          .withValues(alpha: 0.12),
+    );
   });
 
   testWidgets('completed unread conversation uses a muted theme green', (
@@ -91,6 +106,20 @@ void main() {
     );
     final cs = Theme.of(tester.element(find.byType(TopicItem))).colorScheme;
     expect(bubble.color, Color.lerp(cs.primary, Colors.green, 0.55));
+    final tile = tester.widget<Container>(
+      find
+          .ancestor(
+            of: find.byIcon(Icons.chat_bubble_outline_rounded),
+            matching: find.byType(Container),
+          )
+          .first,
+    );
+    final decoration = tile.decoration! as BoxDecoration;
+    expect(decoration.border, isNull);
+    expect(
+      decoration.color,
+      Color.lerp(cs.primary, Colors.green, 0.55)!.withValues(alpha: 0.12),
+    );
   });
 
   testWidgets('unread green adapts to the dark theme blue', (tester) async {

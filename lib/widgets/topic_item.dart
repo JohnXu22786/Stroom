@@ -95,12 +95,6 @@ class TopicItem extends StatelessWidget {
                           ? statusColor.withValues(alpha: 0.12)
                           : cs.primaryContainer.withValues(alpha: 0.3),
                       borderRadius: BorderRadius.circular(10),
-                      border: statusColor == null || isRunning
-                          ? null
-                          : Border.all(
-                              color: statusColor.withValues(alpha: 0.45),
-                              width: 1,
-                            ),
                     ),
                     child: Center(
                       child: isRunning
@@ -285,7 +279,7 @@ class _PulsingConversationIconState extends State<_PulsingConversationIcon>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller = AnimationController(
     vsync: this,
-    duration: const Duration(seconds: 1),
+    duration: const Duration(milliseconds: 1500),
   )..repeat();
 
   @override
