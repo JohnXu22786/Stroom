@@ -16162,6 +16162,15 @@ abstract class AppLocalizations {
   /// **'OCR returned an incomplete result (finish_reason={finishReason})'**
   String bgTaskOcrResultIncomplete(String finishReason);
 
+  /// No description provided for @ocrResultPageHeading.
+  String ocrResultPageHeading(String index);
+
+  /// No description provided for @ocrResultPageHeadingWithName.
+  String ocrResultPageHeadingWithName(String index, String name);
+
+  /// No description provided for @ocrPartialResultSuffix.
+  String get ocrPartialResultSuffix;
+
   /// No description provided for @bgTaskOcrPagesIncomplete.
   ///
   /// In en, this message translates to:

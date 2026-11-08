@@ -5404,6 +5404,20 @@
       }
     }
   },
+  "ocrResultPageHeading": "第 {index} 张图片",
+  "@ocrResultPageHeading": {
+    "placeholders": {
+      "index": { "type": "String" }
+    }
+  },
+  "ocrResultPageHeadingWithName": "第 {index} 张图片：{name}",
+  "@ocrResultPageHeadingWithName": {
+    "placeholders": {
+      "index": { "type": "String" },
+      "name": { "type": "String" }
+    }
+  },
+  "ocrPartialResultSuffix": "（部分结果）",
   "bgTaskOcrPagesIncomplete": "部分图片 OCR 未完成：{details}",
   "@bgTaskOcrPagesIncomplete": {
     "placeholders": {

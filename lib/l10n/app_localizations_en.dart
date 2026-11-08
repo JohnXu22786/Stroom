@@ -9697,6 +9697,19 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String ocrResultPageHeading(String index) {
+    return 'Image $index';
+  }
+
+  @override
+  String ocrResultPageHeadingWithName(String index, String name) {
+    return 'Image $index: $name';
+  }
+
+  @override
+  String get ocrPartialResultSuffix => ' (partial result)';
+
+  @override
   String bgTaskOcrPagesIncomplete(String details) {
     return 'Some images were not fully recognized: $details';
   }
@@ -20636,6 +20649,19 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String bgTaskOcrResultIncomplete(String finishReason) {
     return 'OCR returned an incomplete result (finish_reason=$finishReason)';
   }
+
+  @override
+  String ocrResultPageHeading(String index) {
+    return 'Image $index';
+  }
+
+  @override
+  String ocrResultPageHeadingWithName(String index, String name) {
+    return 'Image $index: $name';
+  }
+
+  @override
+  String get ocrPartialResultSuffix => ' (partial result)';
 
   @override
   String bgTaskOcrPagesIncomplete(String details) {
