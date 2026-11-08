@@ -65,13 +65,13 @@ jobs:
 
       - name: Prepare official Node library and POC fixtures
         run: |
-          curl --fail --location --retry 2 \
+          curl --fail --location --retry 8 --retry-all-errors --retry-delay 5 --retry-max-time 600 \
             https://github.com/nodejs-mobile/nodejs-mobile/releases/download/v18.20.4/nodejs-mobile-v18.20.4-android.zip \
             --output "$RUNNER_TEMP/nodejs-mobile-android.zip"
           printf '%s  %s\n' \
             bd7321eaa1a7602fbe0bb87302df2d79d87835cf4363fbdd17c350dbb485c2af \
             "$RUNNER_TEMP/nodejs-mobile-android.zip" | sha256sum --check
-          curl --fail --location --retry 2 \
+          curl --fail --location --retry 8 --retry-all-errors --retry-delay 5 --retry-max-time 600 \
             https://registry.npmjs.org/npm/-/npm-10.8.2.tgz \
             --output "$RUNNER_TEMP/npm-10.8.2.tgz"
           expected_npm_integrity='sha512-x/AIjFIKRllrhcb48dqUNAAZl0ig9+qMuN91RpZo3Cb2+zuibfh+KISl6+kVVyktDz230JKc208UkQwwMqyB+w=='
@@ -124,7 +124,17 @@ jobs:
 
       - name: Build upstream Android sample app
         working-directory: nodejs-mobile/tools/mobile-test/android/testnode
-        run: ./gradlew --no-daemon assembleDebug
+        run: |
+          for attempt in 1 2 3 4; do
+            if ./gradlew --no-daemon assembleDebug; then
+              exit 0
+            fi
+            if [[ "$attempt" -lt 4 ]]; then
+              echo "Gradle build attempt $attempt failed; retrying after 10 seconds."
+              sleep 10
+            fi
+          done
+          exit 1
 
       - name: Set up Java 17 for emulator SDK tools
         uses: actions/setup-java@v4
