@@ -2423,7 +2423,9 @@ def _validate_png(image_bytes: bytes, fixture_id: str) -> None:
     raise invalid()
 
 
-def verify_fixtures(manifest_path: Path) -> dict[str, Any]:
+def verify_fixtures(
+    manifest_path: Path, output_path: Path | None = None
+) -> dict[str, Any]:
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
@@ -2454,6 +2456,9 @@ def verify_fixtures(manifest_path: Path) -> dict[str, Any]:
         image_path = (root / image).resolve()
         if not image_path.is_relative_to(root):
             raise EvaluationError(f"{fixture_id}: image path escapes fixture root")
+        _reject_output_input_collision(
+            output_path, [("fixture image", image_path)]
+        )
         try:
             image_bytes = image_path.read_bytes()
         except OSError as error:
@@ -2531,7 +2536,10 @@ def main(argv: list[str] | None = None) -> int:
             _reject_output_input_collision(
                 args.output, [("--manifest", args.manifest)]
             )
-            result = {"status": "fixtures_verified", **verify_fixtures(args.manifest)}
+            result = {
+                "status": "fixtures_verified",
+                **verify_fixtures(args.manifest, args.output),
+            }
         else:
             if args.predictions is None:
                 parser.error("--predictions is required unless --verify-fixtures is used")
