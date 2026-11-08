@@ -91,7 +91,9 @@ void main() {
     expect(decoration.border, isNull);
     expect(
       decoration.color,
-      Theme.of(tester.element(find.byType(TopicItem))).colorScheme.error
+      Theme.of(tester.element(find.byType(TopicItem)))
+          .colorScheme
+          .error
           .withValues(alpha: 0.12),
     );
   });
