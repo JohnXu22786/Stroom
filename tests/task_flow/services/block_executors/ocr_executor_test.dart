@@ -327,8 +327,9 @@ void main() {
       final restored = BackgroundTaskNotifier();
       addTearDown(restored.dispose);
       expect(await restored.restoreFromPersistence(), isTrue);
-      expect(restored.state.single.result, 'partial OCR text');
-      expect(restored.state.single.resultIsComplete, isFalse);
+      final restoredTask = restored.taskById(failedTask.id)!;
+      expect(restoredTask.result, 'partial OCR text');
+      expect(restoredTask.resultIsComplete, isFalse);
     },
   );
 
