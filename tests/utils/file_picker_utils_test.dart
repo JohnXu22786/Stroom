@@ -139,4 +139,18 @@ void main() {
     expect(names, contains('旅行/空目录/'));
     expect(names, isNot(contains('hash123.jpg')));
   });
+
+  test('rejects export paths that collide after Windows trims trailing spaces',
+      () {
+    expect(
+      () => validateUserVisibleExportPaths(files: const ['report ']),
+      throwsArgumentError,
+    );
+    expect(
+      () => validateUserVisibleExportPaths(
+        files: const ['report', 'report '],
+      ),
+      throwsArgumentError,
+    );
+  });
 }

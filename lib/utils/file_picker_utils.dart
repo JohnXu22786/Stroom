@@ -72,6 +72,9 @@ void validateUserVisibleExportPaths({
     )) {
       throw ArgumentError.value(path, 'path', 'Invalid export path');
     }
+    if (segments.any((segment) => segment != segment.trimRight())) {
+      throw ArgumentError.value(path, 'path', 'Invalid export path');
+    }
     return segments.join('/');
   }
 
