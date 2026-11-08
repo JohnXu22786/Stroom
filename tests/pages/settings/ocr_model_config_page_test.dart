@@ -212,7 +212,7 @@ void main() {
       'top_p',
       'max_tokens',
     ]) {
-      testWidgets('rejects reserved parameter name $reservedName', (tester) async {
+      testWidgets('rejects reserved name $reservedName', (tester) async {
         ModelConfig? saved;
         final model = ModelConfig(
           name: 'OCR模型',
