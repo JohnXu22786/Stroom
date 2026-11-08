@@ -1,6 +1,7 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart' show debugPrint, immutable;
+import 'package:flutter/foundation.dart'
+    show debugPrint, immutable, visibleForTesting;
 
 import '../l10n/app_localizations.dart';
 import '../providers/locale_provider.dart';
@@ -73,12 +74,14 @@ class StartupSequenceController {
     String? blockedMessage,
   }) {
     if (!_events.isClosed) {
-      _events.add(StartupCheckProgress(
-        message: message,
-        detail: detail,
-        isWorking: isWorking,
-        blockedMessage: blockedMessage,
-      ));
+      _events.add(
+        StartupCheckProgress(
+          message: message,
+          detail: detail,
+          isWorking: isWorking,
+          blockedMessage: blockedMessage,
+        ),
+      );
     }
   }
 
@@ -97,21 +100,24 @@ class StartupSequenceController {
       try {
         if (await hasPendingUpdateRestart()) {
           debugPrint(
-              '[StartupSequenceController] Clearing update restart flag');
+            '[StartupSequenceController] Clearing update restart flag',
+          );
           await clearPendingUpdateRestart();
         }
       } catch (error) {
         debugPrint(
-            '[StartupSequenceController] Update flag read failed: $error');
+          '[StartupSequenceController] Update flag read failed: $error',
+        );
       }
 
-      _publish('正在检查数据安全...', '0/5');
+      _publish(l10n.startupProgressDataSafety, '0/5');
       await Future<void>.delayed(const Duration(milliseconds: 50));
 
       final versionAhead = await StartupCheckService.checkVersionAhead();
       if (versionAhead != null) {
         debugPrint(
-            '[StartupSequenceController] Data version is ahead: $versionAhead');
+          '[StartupSequenceController] Data version is ahead: $versionAhead',
+        );
         final blocked = l10n.startupSafetyNewerDataVersion(versionAhead);
         _publish('', '', isWorking: false, blockedMessage: blocked);
         return StartupCheckOutcome(blockedMessage: blocked);
@@ -135,7 +141,7 @@ class StartupSequenceController {
       }
       unawaited(DataSafetyManager.cleanupOrphans().catchError((_) {}));
 
-      _publish('正在检查数据格式版本...', '1/5');
+      _publish(l10n.startupProgressFormatVersion, '1/5');
       await Future<void>.delayed(const Duration(milliseconds: 50));
       await AppLogService.info('StartupSequenceController', '开始检查数据格式版本');
 
@@ -148,7 +154,8 @@ class StartupSequenceController {
         );
       } catch (error) {
         debugPrint(
-            '[StartupSequenceController] checkFormatVersion failed: $error');
+          '[StartupSequenceController] checkFormatVersion failed: $error',
+        );
         if (error is StartupPreferencesUnavailable ||
             error is StartupDataValidationUnavailable) {
           rethrow;
@@ -178,7 +185,7 @@ class StartupSequenceController {
         const Duration(milliseconds: _statusVisibilityDelayMs),
       );
 
-      _publish('正在验证数据格式...', '2/5');
+      _publish(l10n.startupProgressDataFormat, '2/5');
       await Future<void>.delayed(const Duration(milliseconds: 50));
       await AppLogService.info('StartupSequenceController', '开始验证数据格式');
       List<StartupIssue> formatIssues;
@@ -190,7 +197,8 @@ class StartupSequenceController {
         );
       } catch (error) {
         debugPrint(
-            '[StartupSequenceController] validateDataFormats failed: $error');
+          '[StartupSequenceController] validateDataFormats failed: $error',
+        );
         if (error is StartupDataValidationUnavailable ||
             error is StartupPreferencesUnavailable) {
           rethrow;
@@ -206,7 +214,7 @@ class StartupSequenceController {
         const Duration(milliseconds: _statusVisibilityDelayMs),
       );
 
-      _publish('正在检查数据完整性...', '3/5');
+      _publish(l10n.startupProgressDataIntegrity, '3/5');
       await Future<void>.delayed(const Duration(milliseconds: 50));
       await AppLogService.info('StartupSequenceController', '开始检查数据完整性');
       List<StartupIssue> integrityIssues;
@@ -218,7 +226,8 @@ class StartupSequenceController {
         );
       } catch (error) {
         debugPrint(
-            '[StartupSequenceController] checkDataIntegrity failed: $error');
+          '[StartupSequenceController] checkDataIntegrity failed: $error',
+        );
         if (error is StartupDataValidationUnavailable ||
             error is StartupPreferencesUnavailable) {
           rethrow;
@@ -234,34 +243,35 @@ class StartupSequenceController {
         const Duration(milliseconds: _statusVisibilityDelayMs),
       );
 
-      _publish('正在处理检查结果...', '4/5');
+      _publish(l10n.startupProgressResults, '4/5');
       await Future<void>.delayed(const Duration(milliseconds: 200));
       final allIssues = <StartupIssue>[...formatIssues, ...integrityIssues];
       String? warning;
       if (allIssues.isNotEmpty) {
         for (final issue in allIssues) {
           debugPrint(
-              '[StartupSequenceController] ${issue.severity.name}: ${issue.message}');
+            '[StartupSequenceController] ${issue.severity.name}: ${issue.message}',
+          );
         }
         final errors = allIssues
             .where((issue) => issue.severity == StartupIssueSeverity.error)
-            .map((issue) => issue.message)
+            .map((issue) => startupIssueDisplayMessage(issue.message, l10n))
             .toList();
         final warnings = allIssues
             .where((issue) => issue.severity == StartupIssueSeverity.warning)
-            .map((issue) => issue.message)
+            .map((issue) => startupIssueDisplayMessage(issue.message, l10n))
             .toList();
         if (errors.isNotEmpty || warnings.isNotEmpty) {
           final summary = StringBuffer();
           if (errors.isNotEmpty) {
-            summary.writeln('发现 ${errors.length} 个数据问题:');
+            summary.writeln(l10n.startupWarningErrorCount(errors.length));
             for (final message in errors) {
               summary.writeln('  • $message');
             }
           }
           if (warnings.isNotEmpty) {
             if (summary.isNotEmpty) summary.writeln();
-            summary.writeln('${warnings.length} 个警告:');
+            summary.writeln(l10n.startupWarningWarningCount(warnings.length));
             for (final message in warnings) {
               summary.writeln('  • $message');
             }
@@ -276,10 +286,10 @@ class StartupSequenceController {
       }
       _publish(
         warning != null
-            ? '启动完成（注意: $warning）'
+            ? l10n.startupProgressCompleteWithWarnings(warning)
             : migrationResult.needsMigration
-                ? '数据检查完成，准备启动应用'
-                : '准备启动应用',
+                ? l10n.startupProgressCompleteAfterMigration
+                : l10n.startupProgressReady,
         '5/5',
         isWorking: false,
       );
@@ -306,4 +316,77 @@ class StartupSequenceController {
       );
     }
   }
+}
+
+/// Localizes a raw startup validation diagnostic for the progress summary.
+@visibleForTesting
+String startupIssueDisplayMessage(String message, AppLocalizations l10n) {
+  if (message == 'provider_entries 数据格式错误：不是合法的 JSON 数组') {
+    return l10n.startupIssueProviderEntriesInvalid;
+  }
+  if (message == 'conversations 数据格式错误：不是合法的 JSON 数组') {
+    return l10n.startupIssueConversationsInvalid;
+  }
+
+  final providerEntry = RegExp(r'^provider_entries\[(\d+)\]: 条目为 null 或类型无效$')
+      .firstMatch(message);
+  if (providerEntry != null) {
+    return l10n.startupIssueProviderEntryInvalid(providerEntry[1]!);
+  }
+  final providerField = RegExp(
+    r'^provider_entries\[(\d+)\]: (id|type|name) 字段缺失或为空$',
+  ).firstMatch(message);
+  if (providerField != null) {
+    final index = providerField[1]!;
+    return switch (providerField[2]) {
+      'id' => l10n.startupIssueProviderIdMissing(index),
+      'type' => l10n.startupIssueProviderTypeMissing(index),
+      _ => l10n.startupIssueProviderNameMissing(index),
+    };
+  }
+  final providerList = RegExp(
+    r'^provider_entries\[(\d+)\]\.([^:]+): 字段不是合法列表$',
+  ).firstMatch(message);
+  if (providerList != null) {
+    return l10n.startupIssueProviderListInvalid(
+      providerList[1]!,
+      providerList[2]!,
+    );
+  }
+  final nestedProviderItem = RegExp(
+    r'^provider_entries\[(\d+)\]\.([A-Za-z]+)\[(\d+)\]: 条目不是合法对象，可能会导致解析闪退$',
+  ).firstMatch(message);
+  if (nestedProviderItem != null) {
+    return l10n.startupIssueProviderNestedItemInvalid(
+      nestedProviderItem[1]!,
+      '${nestedProviderItem[2]}[${nestedProviderItem[3]}]',
+    );
+  }
+  final conversationEntry =
+      RegExp(r'^conversations\[(\d+)\]: 会话为 null 或类型无效$').firstMatch(message);
+  if (conversationEntry != null) {
+    return l10n.startupIssueConversationInvalid(conversationEntry[1]!);
+  }
+  final conversationField = RegExp(
+    r'^conversations\[(\d+)\]: (id|messages) 字段(缺失|不是合法列表)$',
+  ).firstMatch(message);
+  if (conversationField != null) {
+    final index = conversationField[1]!;
+    if (conversationField[2] == 'id') {
+      return l10n.startupIssueConversationIdMissing(index);
+    }
+    return conversationField[3] == '缺失'
+        ? l10n.startupIssueConversationMessagesMissing(index)
+        : l10n.startupIssueConversationMessagesInvalid(index);
+  }
+  final unknownProvider = RegExp(
+    r'^provider_entries\[(\d+)\]: 未知的供应商类型 "([\s\S]*)"，应用可能无法正常使用该供应商$',
+  ).firstMatch(message);
+  if (unknownProvider != null) {
+    return l10n.startupIssueUnknownProviderType(
+      unknownProvider[1]!,
+      unknownProvider[2]!,
+    );
+  }
+  return message;
 }

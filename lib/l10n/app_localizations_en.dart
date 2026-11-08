@@ -10830,6 +10830,109 @@ class AppLocalizationsEn extends AppLocalizations {
   String chatRequestFailed(Object detail) {
     return 'Request failed: $detail';
   }
+
+  @override
+  String get startupTagline => 'Your learning assistant';
+
+  @override
+  String get startupProgressDataSafety => 'Checking data safety...';
+
+  @override
+  String get startupProgressFormatVersion => 'Checking data format version...';
+
+  @override
+  String get startupProgressDataFormat => 'Validating data formats...';
+
+  @override
+  String get startupProgressDataIntegrity => 'Checking data integrity...';
+
+  @override
+  String get startupProgressResults => 'Processing check results...';
+
+  @override
+  String startupProgressCompleteWithWarnings(Object warning) {
+    return 'Startup complete (note: $warning)';
+  }
+
+  @override
+  String get startupProgressCompleteAfterMigration =>
+      'Data checks complete. Preparing to start the app.';
+
+  @override
+  String get startupProgressReady => 'Preparing to start the app.';
+
+  @override
+  String startupWarningErrorCount(Object count) {
+    return 'Found $count data issue(s):';
+  }
+
+  @override
+  String startupWarningWarningCount(Object count) {
+    return '$count warning(s):';
+  }
+
+  @override
+  String get startupIssueProviderEntriesInvalid =>
+      'Provider entries have an invalid format: expected a JSON array.';
+
+  @override
+  String startupIssueProviderEntryInvalid(Object index) {
+    return 'Provider entry $index is null or has an invalid type.';
+  }
+
+  @override
+  String startupIssueProviderIdMissing(Object index) {
+    return 'Provider entry $index is missing an ID or has an empty ID.';
+  }
+
+  @override
+  String startupIssueProviderTypeMissing(Object index) {
+    return 'Provider entry $index is missing a type or has an empty type.';
+  }
+
+  @override
+  String startupIssueProviderNameMissing(Object index) {
+    return 'Provider entry $index is missing a name or has an empty name.';
+  }
+
+  @override
+  String startupIssueProviderListInvalid(Object index, Object field) {
+    return 'Provider entry $index field $field is not a valid list.';
+  }
+
+  @override
+  String startupIssueProviderNestedItemInvalid(Object index, Object field) {
+    return 'Provider entry $index, $field contains an invalid item that may cause a parsing failure.';
+  }
+
+  @override
+  String get startupIssueConversationsInvalid =>
+      'Conversations have an invalid format: expected a JSON array.';
+
+  @override
+  String startupIssueConversationInvalid(Object index) {
+    return 'Conversation $index is null or has an invalid type.';
+  }
+
+  @override
+  String startupIssueConversationIdMissing(Object index) {
+    return 'Conversation $index is missing an ID.';
+  }
+
+  @override
+  String startupIssueConversationMessagesMissing(Object index) {
+    return 'Conversation $index is missing its messages field.';
+  }
+
+  @override
+  String startupIssueConversationMessagesInvalid(Object index) {
+    return 'Conversation $index messages field is not a valid list.';
+  }
+
+  @override
+  String startupIssueUnknownProviderType(Object index, Object type) {
+    return 'Provider entry $index uses unknown provider type \"$type\" and may not work correctly.';
+  }
 }
 
 /// The translations for English, as used in the United States (`en_US`).
@@ -21656,5 +21759,108 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   @override
   String chatRequestFailed(Object detail) {
     return 'Request failed: $detail';
+  }
+
+  @override
+  String get startupTagline => 'Your learning assistant';
+
+  @override
+  String get startupProgressDataSafety => 'Checking data safety...';
+
+  @override
+  String get startupProgressFormatVersion => 'Checking data format version...';
+
+  @override
+  String get startupProgressDataFormat => 'Validating data formats...';
+
+  @override
+  String get startupProgressDataIntegrity => 'Checking data integrity...';
+
+  @override
+  String get startupProgressResults => 'Processing check results...';
+
+  @override
+  String startupProgressCompleteWithWarnings(Object warning) {
+    return 'Startup complete (note: $warning)';
+  }
+
+  @override
+  String get startupProgressCompleteAfterMigration =>
+      'Data checks complete. Preparing to start the app.';
+
+  @override
+  String get startupProgressReady => 'Preparing to start the app.';
+
+  @override
+  String startupWarningErrorCount(Object count) {
+    return 'Found $count data issue(s):';
+  }
+
+  @override
+  String startupWarningWarningCount(Object count) {
+    return '$count warning(s):';
+  }
+
+  @override
+  String get startupIssueProviderEntriesInvalid =>
+      'Provider entries have an invalid format: expected a JSON array.';
+
+  @override
+  String startupIssueProviderEntryInvalid(Object index) {
+    return 'Provider entry $index is null or has an invalid type.';
+  }
+
+  @override
+  String startupIssueProviderIdMissing(Object index) {
+    return 'Provider entry $index is missing an ID or has an empty ID.';
+  }
+
+  @override
+  String startupIssueProviderTypeMissing(Object index) {
+    return 'Provider entry $index is missing a type or has an empty type.';
+  }
+
+  @override
+  String startupIssueProviderNameMissing(Object index) {
+    return 'Provider entry $index is missing a name or has an empty name.';
+  }
+
+  @override
+  String startupIssueProviderListInvalid(Object index, Object field) {
+    return 'Provider entry $index field $field is not a valid list.';
+  }
+
+  @override
+  String startupIssueProviderNestedItemInvalid(Object index, Object field) {
+    return 'Provider entry $index, $field contains an invalid item that may cause a parsing failure.';
+  }
+
+  @override
+  String get startupIssueConversationsInvalid =>
+      'Conversations have an invalid format: expected a JSON array.';
+
+  @override
+  String startupIssueConversationInvalid(Object index) {
+    return 'Conversation $index is null or has an invalid type.';
+  }
+
+  @override
+  String startupIssueConversationIdMissing(Object index) {
+    return 'Conversation $index is missing an ID.';
+  }
+
+  @override
+  String startupIssueConversationMessagesMissing(Object index) {
+    return 'Conversation $index is missing its messages field.';
+  }
+
+  @override
+  String startupIssueConversationMessagesInvalid(Object index) {
+    return 'Conversation $index messages field is not a valid list.';
+  }
+
+  @override
+  String startupIssueUnknownProviderType(Object index, Object type) {
+    return 'Provider entry $index uses unknown provider type \"$type\" and may not work correctly.';
   }
 }

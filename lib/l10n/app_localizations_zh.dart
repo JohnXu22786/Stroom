@@ -10265,6 +10265,106 @@ class AppLocalizationsZh extends AppLocalizations {
   String chatRequestFailed(Object detail) {
     return '请求失败：$detail';
   }
+
+  @override
+  String get startupTagline => '你的学习助手';
+
+  @override
+  String get startupProgressDataSafety => '正在检查数据安全...';
+
+  @override
+  String get startupProgressFormatVersion => '正在检查数据格式版本...';
+
+  @override
+  String get startupProgressDataFormat => '正在验证数据格式...';
+
+  @override
+  String get startupProgressDataIntegrity => '正在检查数据完整性...';
+
+  @override
+  String get startupProgressResults => '正在处理检查结果...';
+
+  @override
+  String startupProgressCompleteWithWarnings(Object warning) {
+    return '启动完成（注意：$warning）';
+  }
+
+  @override
+  String get startupProgressCompleteAfterMigration => '数据检查完成，正在准备启动应用。';
+
+  @override
+  String get startupProgressReady => '正在准备启动应用。';
+
+  @override
+  String startupWarningErrorCount(Object count) {
+    return '发现 $count 个数据问题：';
+  }
+
+  @override
+  String startupWarningWarningCount(Object count) {
+    return '$count 个警告：';
+  }
+
+  @override
+  String get startupIssueProviderEntriesInvalid => '服务商条目格式错误：应为 JSON 数组。';
+
+  @override
+  String startupIssueProviderEntryInvalid(Object index) {
+    return '服务商条目 $index 为空或类型无效。';
+  }
+
+  @override
+  String startupIssueProviderIdMissing(Object index) {
+    return '服务商条目 $index 缺少 ID 或 ID 为空。';
+  }
+
+  @override
+  String startupIssueProviderTypeMissing(Object index) {
+    return '服务商条目 $index 缺少类型或类型为空。';
+  }
+
+  @override
+  String startupIssueProviderNameMissing(Object index) {
+    return '服务商条目 $index 缺少名称或名称为空。';
+  }
+
+  @override
+  String startupIssueProviderListInvalid(Object index, Object field) {
+    return '服务商条目 $index 的 $field 字段不是有效列表。';
+  }
+
+  @override
+  String startupIssueProviderNestedItemInvalid(Object index, Object field) {
+    return '服务商条目 $index 的 $field 中有无效项目，可能导致解析失败。';
+  }
+
+  @override
+  String get startupIssueConversationsInvalid => '会话数据格式错误：应为 JSON 数组。';
+
+  @override
+  String startupIssueConversationInvalid(Object index) {
+    return '会话 $index 为空或类型无效。';
+  }
+
+  @override
+  String startupIssueConversationIdMissing(Object index) {
+    return '会话 $index 缺少 ID。';
+  }
+
+  @override
+  String startupIssueConversationMessagesMissing(Object index) {
+    return '会话 $index 缺少消息字段。';
+  }
+
+  @override
+  String startupIssueConversationMessagesInvalid(Object index) {
+    return '会话 $index 的消息字段不是有效列表。';
+  }
+
+  @override
+  String startupIssueUnknownProviderType(Object index, Object type) {
+    return '服务商条目 $index 使用未知类型“$type”，可能无法正常工作。';
+  }
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).
@@ -20526,5 +20626,105 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   @override
   String chatRequestFailed(Object detail) {
     return '请求失败：$detail';
+  }
+
+  @override
+  String get startupTagline => '你的学习助手';
+
+  @override
+  String get startupProgressDataSafety => '正在检查数据安全...';
+
+  @override
+  String get startupProgressFormatVersion => '正在检查数据格式版本...';
+
+  @override
+  String get startupProgressDataFormat => '正在验证数据格式...';
+
+  @override
+  String get startupProgressDataIntegrity => '正在检查数据完整性...';
+
+  @override
+  String get startupProgressResults => '正在处理检查结果...';
+
+  @override
+  String startupProgressCompleteWithWarnings(Object warning) {
+    return '启动完成（注意：$warning）';
+  }
+
+  @override
+  String get startupProgressCompleteAfterMigration => '数据检查完成，正在准备启动应用。';
+
+  @override
+  String get startupProgressReady => '正在准备启动应用。';
+
+  @override
+  String startupWarningErrorCount(Object count) {
+    return '发现 $count 个数据问题：';
+  }
+
+  @override
+  String startupWarningWarningCount(Object count) {
+    return '$count 个警告：';
+  }
+
+  @override
+  String get startupIssueProviderEntriesInvalid => '服务商条目格式错误：应为 JSON 数组。';
+
+  @override
+  String startupIssueProviderEntryInvalid(Object index) {
+    return '服务商条目 $index 为空或类型无效。';
+  }
+
+  @override
+  String startupIssueProviderIdMissing(Object index) {
+    return '服务商条目 $index 缺少 ID 或 ID 为空。';
+  }
+
+  @override
+  String startupIssueProviderTypeMissing(Object index) {
+    return '服务商条目 $index 缺少类型或类型为空。';
+  }
+
+  @override
+  String startupIssueProviderNameMissing(Object index) {
+    return '服务商条目 $index 缺少名称或名称为空。';
+  }
+
+  @override
+  String startupIssueProviderListInvalid(Object index, Object field) {
+    return '服务商条目 $index 的 $field 字段不是有效列表。';
+  }
+
+  @override
+  String startupIssueProviderNestedItemInvalid(Object index, Object field) {
+    return '服务商条目 $index 的 $field 中有无效项目，可能导致解析失败。';
+  }
+
+  @override
+  String get startupIssueConversationsInvalid => '会话数据格式错误：应为 JSON 数组。';
+
+  @override
+  String startupIssueConversationInvalid(Object index) {
+    return '会话 $index 为空或类型无效。';
+  }
+
+  @override
+  String startupIssueConversationIdMissing(Object index) {
+    return '会话 $index 缺少 ID。';
+  }
+
+  @override
+  String startupIssueConversationMessagesMissing(Object index) {
+    return '会话 $index 缺少消息字段。';
+  }
+
+  @override
+  String startupIssueConversationMessagesInvalid(Object index) {
+    return '会话 $index 的消息字段不是有效列表。';
+  }
+
+  @override
+  String startupIssueUnknownProviderType(Object index, Object type) {
+    return '服务商条目 $index 使用未知类型“$type”，可能无法正常工作。';
   }
 }
