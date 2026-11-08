@@ -120,6 +120,16 @@ jobs:
                   raise SystemExit("Unexpected upstream Node Mobile result handler")
               source = source.replace(original, replacement)
           path.write_text(source)
+
+          # Keep the upstream Gradle version while avoiding its GitHub Release redirect.
+          wrapper = Path("nodejs-mobile/tools/mobile-test/android/testnode/gradle/wrapper/gradle-wrapper.properties")
+          wrapper_lines = wrapper.read_text().splitlines()
+          url_lines = [i for i, line in enumerate(wrapper_lines) if line.startswith("distributionUrl=")]
+          if len(url_lines) != 1 or "distributionSha256Sum=" in "\n".join(wrapper_lines):
+              raise SystemExit("Unexpected upstream Gradle wrapper configuration")
+          wrapper_lines[url_lines[0]] = "distributionUrl=https\\://downloads.gradle.org/distributions/gradle-6.7.1-all.zip"
+          wrapper_lines.append("distributionSha256Sum=22449f5231796abd892c98b2a07c9ceebe4688d192cd2d6763f8e3bf8acbedeb")
+          wrapper.write_text("\n".join(wrapper_lines) + "\n")
           PY
 
       - name: Build upstream Android sample app
