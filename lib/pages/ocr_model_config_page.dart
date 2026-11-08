@@ -222,6 +222,23 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
 
   bool _jsonParamHasError(int index) => _jsonErrors.containsKey(index);
 
+  String _effectiveCustomParamValue(CustomParam param) {
+    if (param.type == 'json' || param.options.isEmpty) {
+      return param.defaultValue;
+    }
+    return param.options.first;
+  }
+
+  void _setEffectiveCustomParamValue(CustomParam param, String value) {
+    if (param.type != 'json' && param.options.isNotEmpty) {
+      // Keep the default fallback and any inherited alternate options intact;
+      // OCR sends the first option for non-JSON custom parameters.
+      param.options[0] = value;
+    } else {
+      param.defaultValue = value;
+    }
+  }
+
   // ===================================================================
   // 保存
   // ===================================================================
@@ -760,7 +777,13 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
                           children: [
                             Expanded(
                               child: TextFormField(
-                                initialValue: param.defaultValue,
+                                key: ValueKey(
+                                  param.type == 'json' || param.options.isEmpty
+                                      ? 'default-value'
+                                      : 'first-option',
+                                ),
+                                initialValue:
+                                    _effectiveCustomParamValue(param),
                                 minLines: 4,
                                 maxLines: 8,
                                 style: const TextStyle(
@@ -794,7 +817,7 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
                                   alignLabelWithHint: true,
                                 ),
                                 onChanged: (v) {
-                                  param.defaultValue = v;
+                                  _setEffectiveCustomParamValue(param, v);
                                   _validateJsonField(i, param);
                                   setState(() {});
                                 },
@@ -808,13 +831,17 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
                               onPressed: () {
                                 showJsonValueEditorDialog(
                                   context,
-                                  initialValue: param.defaultValue,
+                                  initialValue:
+                                      _effectiveCustomParamValue(param),
                                   hintText: localizedParamTypeDefaultValueHint(
                                       AppLocalizations.of(context)!,
                                       param.paramType),
                                   type: param.type,
                                   onSave: (result) {
-                                    param.defaultValue = result;
+                                    _setEffectiveCustomParamValue(
+                                      param,
+                                      result,
+                                    );
                                     _validateJsonField(i, param);
                                     setState(() {});
                                   },
