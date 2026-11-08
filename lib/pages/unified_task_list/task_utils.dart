@@ -110,7 +110,7 @@ Widget buildStatusChip(TaskStatus status, AppLocalizations strings) {
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
         decoration: BoxDecoration(
           color: Colors.blue.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(10),
         ),
         child: Text(
           strings.taskFlowCardRunning,
@@ -122,7 +122,7 @@ Widget buildStatusChip(TaskStatus status, AppLocalizations strings) {
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
         decoration: BoxDecoration(
           color: Colors.green.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(10),
         ),
         child: Text(
           strings.taskFlowCardCompleted,
@@ -134,7 +134,7 @@ Widget buildStatusChip(TaskStatus status, AppLocalizations strings) {
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
         decoration: BoxDecoration(
           color: Colors.red.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(10),
         ),
         child: Text(
           strings.taskFlowCardFailed,
@@ -146,7 +146,7 @@ Widget buildStatusChip(TaskStatus status, AppLocalizations strings) {
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
         decoration: BoxDecoration(
           color: Colors.orange.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(10),
         ),
         child: Text(
           strings.taskFlowCardPaused,
@@ -158,7 +158,7 @@ Widget buildStatusChip(TaskStatus status, AppLocalizations strings) {
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
         decoration: BoxDecoration(
           color: Colors.purple.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(10),
         ),
         child: Text(
           strings.taskFlowCardWaiting,
