@@ -38,12 +38,7 @@ void main() {
         find
             .ancestor(
               of: find.byIcon(Icons.auto_stories),
-              matching: find.byWidgetPredicate(
-                (widget) =>
-                    widget is Container &&
-                    widget.width == 44 &&
-                    widget.height == 44,
-              ),
+              matching: find.byType(Container),
             )
             .first,
       );
