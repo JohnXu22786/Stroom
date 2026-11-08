@@ -117,6 +117,16 @@ jobs:
               lib/services/ocr_result_saver.dart)
                 test_f="tests/services/ocr_task_runner_test.dart"
                 ;;
+              lib/pages/assistant/assistant_defaults_tab.dart|\
+              lib/pages/assistant/assistant_shared.dart)
+                test_f="tests/pages/assistant_pages_test.dart"
+                ;;
+              lib/pages/notification_settings_page.dart)
+                test_f="tests/pages/settings/settings_page_test.dart"
+                ;;
+              lib/pages/ocr/ocr_instruction_dialog.dart)
+                test_f="tests/pages/content/ocr_page_test.dart"
+                ;;
               lib/catcatch/engine/js_hook_script.dart)
                 test_f="tests/catcatch/js_hook_script_test.cjs"
                 ;;

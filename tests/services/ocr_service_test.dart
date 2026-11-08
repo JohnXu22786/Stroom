@@ -804,6 +804,32 @@ void main() {
         expect(result.finishReason, 'stop');
       });
 
+      for (final finishReason in [
+        'end_turn',
+        'END_TURN',
+        'stop_sequence',
+        'STOP_SEQUENCE',
+      ]) {
+        test('recognize keeps $finishReason responses complete', () async {
+          final dio = _mockDioWithSuccess({
+            'choices': [
+              {
+                'finish_reason': finishReason,
+                'message': {'content': 'complete OCR text'},
+              },
+            ],
+          });
+          final service = OcrService(config: _testOcrConfig, dio: dio);
+
+          final result = await service.recognize(
+            imageBytes: Uint8List.fromList([1, 2, 3]),
+          );
+
+          expect(result.isComplete, isTrue);
+          expect(result.finishReason, finishReason);
+        });
+      }
+
       test('custom params cannot replace protected request fields', () async {
         for (final protectedName in ['model', 'messages']) {
           var sent = false;
@@ -1203,6 +1229,38 @@ void main() {
         expect(result.isComplete, isTrue);
         expect(result.finishReason, 'stop');
       });
+
+      for (final finishReason in [
+        'end_turn',
+        'END_TURN',
+        'stop_sequence',
+        'STOP_SEQUENCE',
+      ]) {
+        test(
+          'recognizeBatch keeps $finishReason responses complete',
+          () async {
+            final dio = _mockDioWithSuccess({
+              'choices': [
+                {
+                  'finish_reason': finishReason,
+                  'message': {'content': 'complete batch OCR text'},
+                },
+              ],
+            });
+            final service = OcrService(config: _testOcrConfig, dio: dio);
+
+            final result = await service.recognizeBatch(
+              imageBytesList: [
+                (Uint8List.fromList([1, 2, 3]), 'jpeg'),
+                (Uint8List.fromList([4, 5, 6]), 'png'),
+              ],
+            );
+
+            expect(result.isComplete, isTrue);
+            expect(result.finishReason, finishReason);
+          },
+        );
+      }
 
       test('recognizeBatch extracts text when content is a List', () async {
         final dio = _mockDioWithSuccess({

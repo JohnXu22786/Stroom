@@ -129,7 +129,10 @@ class OcrResult {
 }
 
 bool _isCompleteOcrFinishReason(String? finishReason) =>
-    finishReason == null || finishReason == 'stop';
+    finishReason == null ||
+    const {'stop', 'end_turn', 'stop_sequence'}.contains(
+      finishReason.toLowerCase(),
+    );
 
 // ============================================================================
 // OCR Service
