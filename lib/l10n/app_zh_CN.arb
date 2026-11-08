@@ -9,6 +9,8 @@
   "themeModeSystem": "跟随系统",
   "languageNameEnglish": "英语",
   "languageNameChinese": "简体中文",
+  "languageSearchHint": "搜索语言",
+  "languageNoMatches": "没有匹配的语言",
   "builtInPromptGeneralName": "通用助手",
   "builtInPromptGeneralDescription": "全能型AI助手，适用于日常对话和各类问题解答",
   "builtInPromptGeneralPrompt": "你是一个有帮助的AI助手。请使用用户所用的语言回答问题。回答简洁明了，逻辑清晰。如果遇到不确定的信息，请坦诚说明。",
@@ -3928,7 +3930,7 @@
   "ttsNormal": "正常",
   "ttsVolume": "音量",
   "ttsInstruction": "语气指令（instruction）",
-  "ttsInstructionHint": "例如: Speak in a cheerful and excited tone",
+  "ttsInstructionHint": "例如：请用愉快、兴奋的语气说话",
   "ttsCustomParams": "自定义参数",
   "ttsDefaultValue": "默认: {value}",
   "@ttsDefaultValue": {

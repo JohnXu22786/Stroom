@@ -37,6 +37,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get languageNameChinese => 'Chinese (Simplified)';
 
   @override
+  String get languageSearchHint => 'Search languages';
+
+  @override
+  String get languageNoMatches => 'No matching languages';
+
+  @override
   String get builtInPromptGeneralName => 'General Assistant';
 
   @override
@@ -10970,6 +10976,12 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get languageNameChinese => 'Chinese (Simplified)';
+
+  @override
+  String get languageSearchHint => 'Search languages';
+
+  @override
+  String get languageNoMatches => 'No matching languages';
 
   @override
   String get builtInPromptGeneralName => 'General Assistant';
