@@ -6292,13 +6292,20 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     final tasks = mounted ? state : (_disposedSnapshot ?? const []);
     return {
       for (final task in tasks)
-        ..._ocrCacheReferencesInPersistedValue(task.toMap()),
+        ..._ocrCacheReferencesFromTask(task),
       ..._persistedOcrCacheReferences,
       ..._referencesFromSkippedTaskEntries(),
       for (final removedTasks in _pendingTaskRemovalCleanupTasks.values)
         for (final task in removedTasks)
-          ..._ocrCacheReferencesInPersistedValue(task.toMap()),
+          ..._ocrCacheReferencesFromTask(task),
     };
+  }
+
+  Set<String> _ocrCacheReferencesFromTask(BackgroundTask task) {
+    if (task.type == BackgroundTaskType.ocr) {
+      return OcrRetryStorage.referencesFromSnapshot(task.retryData);
+    }
+    return _ocrCacheReferencesInPersistedValue(task.toMap());
   }
 
   Future<Set<String>?> _ocrCacheReferencesForCleanup() async {
@@ -6730,17 +6737,15 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   ) {
     final references = <String>{};
     for (final task in tasks) {
-      final serialized = task.toMap();
       if (task.type == BackgroundTaskType.ocr) {
         references.addAll(
           OcrRetryStorage.referencesFromSnapshot(task.retryData),
         );
-        // OCR images can carry large legacy Base64 payloads; recognized cache
-        // references are collected above, so scan only its other serialized
-        // fields recursively.
-        serialized.remove('retryData');
+        // Cache ownership belongs to retry image references. Result text and
+        // other task fields may contain path-like text without owning a blob.
+        continue;
       }
-      references.addAll(_ocrCacheReferencesInPersistedValue(serialized));
+      references.addAll(_ocrCacheReferencesInPersistedValue(task.toMap()));
     }
     references.addAll(_referencesFromSkippedTaskEntries(entries));
     return references;
