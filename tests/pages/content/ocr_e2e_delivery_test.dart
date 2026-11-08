@@ -254,6 +254,7 @@ void main() {
 
   tearDown(() async {
     if (background.mounted) background.dispose();
+    await background.pendingPersistence;
     BackgroundTaskNotifier.debugStorageDirectoryOverride = null;
     await taskDirectory.delete(recursive: true);
   });
