@@ -509,6 +509,7 @@ extension _ChatPageStreamingExt on _ChatPageState {
       reasoningParamValues: reasoningParamValues,
       customParamValues: customParamValues,
       streamingMsgId: aiMsgId,
+      assistant: selectedAssistant,
       selectedAccountId: _takeNextRequestAccountId(effectiveConvId),
     );
     _attachStreamPage(manager, effectiveConvId, aiMsgId);
