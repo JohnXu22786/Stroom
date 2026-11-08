@@ -179,13 +179,20 @@ class OcrTaskRunner {
   }
 
   void _syncPerImageSteps() {
-    if (_cancelToken.isCancelled ||
-        !notifier.mounted ||
-        !_ownsTaskGeneration) {
+    if (_cancelToken.isCancelled || !notifier.mounted || !_ownsTaskGeneration) {
       return;
     }
     final task = notifier.taskById(taskId);
     if (task == null || task.steps.length < 4) return;
+
+    if (_perImageRequestStages.isEmpty) {
+      final steps = List<BgTaskStep>.of(task.steps);
+      steps[1] = steps[1].copyWith(
+        label: notifier.localizations.bgStepUploadImage,
+      );
+      notifier.setSteps(taskId, steps);
+      return;
+    }
 
     final activeStages = _perImageRequestStages.values.toList();
     final hasPendingPages = task.ocrPageOutcomes.any(

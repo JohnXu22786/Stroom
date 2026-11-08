@@ -47,7 +47,11 @@ Future<Map<String, dynamic>?> parseStreamErrorBody(DioException e) async {
       for (final chunk in bytes) {
         allBytes.addAll(chunk);
       }
-      return <String, dynamic>{'raw': utf8.decode(allBytes)};
+      final parsedBody = <String, dynamic>{'raw': utf8.decode(allBytes)};
+      // Retry classification and downstream diagnostics both need the same
+      // response after the one-shot stream has been read.
+      e.response!.data = parsedBody;
+      return parsedBody;
     } catch (_) {
       return null;
     }

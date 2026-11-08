@@ -625,7 +625,9 @@ void main() {
       taskId: id,
       notifier: notifier,
       config: _config,
-      images: [(Uint8List.fromList([1]), 'png')],
+      images: [
+        (Uint8List.fromList([1]), 'png')
+      ],
       executionMode: OcrBatchMode.perImage,
       perImageConcurrency: 1,
       title: 'owned',

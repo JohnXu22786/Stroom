@@ -5,6 +5,8 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/providers/chat_api_shared.dart'
+    show parseStreamErrorBody;
 import 'package:stroom/services/chat_retry_policy.dart';
 
 void main() {
@@ -176,6 +178,39 @@ void main() {
             type: DioExceptionType.badResponse,
           ));
         }
+        return Stream.value('ok');
+      }, policy: const RateLimitRetryPolicy(jitter: false), delay: (_) async {})
+          .toList();
+
+      expect(calls, 2);
+    });
+
+    test('retries after diagnostics have buffered a streaming error body',
+        () async {
+      var calls = 0;
+      final failure = DioException(
+        requestOptions: RequestOptions(path: '/chat'),
+        response: Response(
+          requestOptions: RequestOptions(path: '/chat'),
+          statusCode: 429,
+          data: ResponseBody(
+            Stream.value(
+              Uint8List.fromList(
+                utf8.encode('{"error":{"type":"rate_limit_error"}}'),
+              ),
+            ),
+            429,
+          ),
+        ),
+        type: DioExceptionType.badResponse,
+      );
+
+      final diagnostics = await parseStreamErrorBody(failure);
+      expect(diagnostics?['raw'], contains('rate_limit_error'));
+
+      await retryRateLimitedStream<String>(() {
+        calls++;
+        if (calls == 1) return Stream.error(failure);
         return Stream.value('ok');
       }, policy: const RateLimitRetryPolicy(jitter: false), delay: (_) async {})
           .toList();
