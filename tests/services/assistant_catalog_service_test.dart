@@ -141,8 +141,7 @@ void main() {
   });
 }
 
-String _assistantJson({required String version}) =>
-    '''
+String _assistantJson({required String version}) => '''
 {
   "schemaVersion": 1,
   "id": "stroom.test",

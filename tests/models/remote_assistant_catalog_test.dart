@@ -78,7 +78,8 @@ Be helpful.
     test('validates custom parameter names and types', () {
       final definition = RemoteAssistantDefinition.parse(
         _assistantJson(
-          settings: '"customParameters": [{"name":"vendor.option","type":"json","value":{"enabled":true}}]',
+          settings:
+              '"customParameters": [{"name":"vendor.option","type":"json","value":{"enabled":true}}]',
         ),
       );
       expect(definition.settings.customParameters.single.name, 'vendor.option');
@@ -86,7 +87,8 @@ Be helpful.
       expect(
         () => RemoteAssistantDefinition.parse(
           _assistantJson(
-            settings: '"customParameters": [{"name":"vendor..option","type":"string","value":"x"}]',
+            settings:
+                '"customParameters": [{"name":"vendor..option","type":"string","value":"x"}]',
           ),
         ),
         throwsA(isA<FormatException>()),
@@ -137,8 +139,7 @@ assistants:
   });
 }
 
-String _assistantJson({String settings = '', String extra = ''}) =>
-    '''
+String _assistantJson({String settings = '', String extra = ''}) => '''
 {
   "schemaVersion": 1,
   "id": "stroom.test",
