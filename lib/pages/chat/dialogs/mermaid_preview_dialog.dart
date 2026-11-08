@@ -757,7 +757,7 @@ class _MermaidPreviewDialogContentState
                           color: cs.surfaceContainerHighest.withValues(
                             alpha: 0.85,
                           ),
-                          borderRadius: BorderRadius.circular(20),
+                          borderRadius: BorderRadius.circular(16),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
@@ -838,7 +838,7 @@ class _MermaidPreviewDialogContentState
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(16),
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),

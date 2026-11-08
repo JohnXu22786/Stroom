@@ -127,7 +127,7 @@ class _OcrInstructionManageDialogState
                               color: cs.surfaceContainerLow.withValues(
                                 alpha: 0.5,
                               ),
-                              borderRadius: BorderRadius.circular(10),
+                              borderRadius: BorderRadius.circular(8),
                               border: Border.all(
                                 color: cs.outlineVariant.withValues(
                                   alpha: 0.4,

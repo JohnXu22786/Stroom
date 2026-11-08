@@ -489,7 +489,7 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
               decoration: BoxDecoration(
                 color: Colors.red.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
                 _l10n.audioRecordingRecording,
@@ -501,7 +501,7 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
               decoration: BoxDecoration(
                 color: Colors.orange.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
                 _l10n.audioRecordingPaused,
@@ -628,7 +628,7 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
               scaleFactor: 25.0,
             ),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(8),
               color: Colors.black.withValues(alpha: 0.05),
             ),
             padding: const EdgeInsets.symmetric(horizontal: 8),

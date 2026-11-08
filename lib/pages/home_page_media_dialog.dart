@@ -154,7 +154,7 @@ extension _HomePageMediaDialogExt on _HomePageState {
                                                               alpha: 0.12,
                                                             ),
                                                   borderRadius:
-                                                      BorderRadius.circular(4),
+                                                      BorderRadius.circular(8),
                                                 ),
                                                 child: Text(
                                                   media.isPlaylistSegment

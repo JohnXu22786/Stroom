@@ -850,7 +850,7 @@ class _McpServerConfigDialogState
         padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
         decoration: BoxDecoration(
           color: selected ? cs.primaryContainer : cs.surfaceContainerHigh,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: selected ? cs.primary : cs.outlineVariant,
             width: selected ? 2 : 1,

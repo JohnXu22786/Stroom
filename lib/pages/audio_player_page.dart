@@ -146,7 +146,7 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (ctx) => Padding(
         padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
@@ -683,7 +683,7 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
                                         .colorScheme
                                         .primary
                                         .withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(6),
+                                    borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
@@ -729,7 +729,7 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
                                         .colorScheme
                                         .primary
                                         .withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(6),
+                                    borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
@@ -834,7 +834,7 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
             child: Card(
               elevation: 6,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(16),
               ),
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -1034,7 +1034,7 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
                   ),
                   decoration: BoxDecoration(
                     color: Colors.grey[200],
-                    borderRadius: BorderRadius.circular(6),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
                     '${_playbackSpeed.toStringAsFixed(1)}x',

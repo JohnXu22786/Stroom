@@ -57,7 +57,7 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
       elevation: 0,
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         side: BorderSide(color: colorScheme.outlineVariant, width: 0.5),
       ),
       child: Column(
@@ -66,7 +66,7 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
           // ── Header (always visible) ──
           InkWell(
             borderRadius: const BorderRadius.vertical(
-              top: Radius.circular(12),
+              top: Radius.circular(16),
               bottom: Radius.circular(0),
             ),
             onTap: () => setState(() => _expanded = !_expanded),
@@ -436,7 +436,7 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
                     color: cs.surfaceContainerLow,
-                    borderRadius: BorderRadius.circular(6),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
                     widget.task.text,
@@ -495,7 +495,7 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                   ),
                   decoration: BoxDecoration(
                     color: Colors.red.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(6),
+                    borderRadius: BorderRadius.circular(8),
                     border: Border.all(
                       color: Colors.red.withValues(alpha: 0.25),
                     ),
@@ -612,7 +612,7 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
                       color: Colors.grey.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(4),
+                      borderRadius: BorderRadius.circular(8),
                     ),
                     child: SelectableText(
                       task.originalRequest!,
@@ -640,7 +640,7 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
                       color: Colors.red.withValues(alpha: 0.05),
-                      borderRadius: BorderRadius.circular(4),
+                      borderRadius: BorderRadius.circular(8),
                     ),
                     child: SelectableText(
                       task.originalResponse!,

@@ -1022,7 +1022,7 @@ class _BrowserPageState extends State<BrowserPage> {
           decoration: InputDecoration(
             hintText: l10n.browserAddressHint,
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(16),
               borderSide: BorderSide.none,
             ),
             filled: true,

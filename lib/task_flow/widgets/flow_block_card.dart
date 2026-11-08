@@ -108,7 +108,7 @@ class FlowBlockCard extends ConsumerWidget {
         Card(
           elevation: 0,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(16),
             side: BorderSide(
               color: validationMessage != null
                   ? cs.error
@@ -119,7 +119,7 @@ class FlowBlockCard extends ConsumerWidget {
             ),
           ),
           child: InkWell(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(16),
             onTap: onTap,
             child: Padding(
               padding: const EdgeInsets.all(12),
@@ -264,7 +264,7 @@ class FlowBlockCard extends ConsumerWidget {
                       padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(
                         color: cs.surfaceContainerLow,
-                        borderRadius: BorderRadius.circular(6),
+                        borderRadius: BorderRadius.circular(8),
                       ),
                       child: Wrap(
                         spacing: 6,
@@ -336,7 +336,7 @@ class FlowBlockCard extends ConsumerWidget {
         Card(
           elevation: 0,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(16),
             side: BorderSide(color: cs.error.withValues(alpha: 0.4), width: 1),
           ),
           child: Padding(

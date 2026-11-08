@@ -664,7 +664,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
                 onPressed: _createNewText,
                 style: ElevatedButton.styleFrom(
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                 ),
                 icon: const Icon(Icons.add_circle_outline, size: 20),
@@ -683,7 +683,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
                 onPressed: _importTextFile,
                 style: ElevatedButton.styleFrom(
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                 ),
                 icon: const Icon(Icons.file_download_outlined, size: 20),

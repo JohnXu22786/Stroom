@@ -313,7 +313,7 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
                   ),
                   decoration: BoxDecoration(
                     color: cs.primaryContainer,
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
                     localizations.messageSearchMatchCount(result.matchCount),

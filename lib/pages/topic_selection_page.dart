@@ -504,7 +504,7 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: cs.primaryContainer.withValues(alpha: 0.3),
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(16),
                     border: Border.all(
                       color: cs.primaryContainer,
                       width: 0.5,
@@ -605,7 +605,7 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                                   Material(
                                 elevation: 2,
                                 color: cs.surfaceContainerLow,
-                                borderRadius: BorderRadius.circular(12),
+                                borderRadius: BorderRadius.circular(16),
                                 child: child,
                               ),
                               itemBuilder: (context, index) {

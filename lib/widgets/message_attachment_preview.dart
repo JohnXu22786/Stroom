@@ -66,7 +66,7 @@ class MessageAttachmentPreview extends StatelessWidget {
               child: Container(
                 decoration: BoxDecoration(
                   color: cs.surfaceContainerHigh,
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(8),
                   border: Border.all(
                     color: cs.outlineVariant,
                     width: 0.5,

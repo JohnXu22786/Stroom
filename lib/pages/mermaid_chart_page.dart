@@ -884,7 +884,7 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(16),
           onTap: () {
             setState(() {
               _isSplitSwapped = !_isSplitSwapped;
@@ -895,7 +895,7 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
             height: 48,
             decoration: BoxDecoration(
               color: cs.surfaceContainerHighest.withValues(alpha: 0.85),
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(16),
             ),
             child: Icon(
               Icons.swap_horiz,

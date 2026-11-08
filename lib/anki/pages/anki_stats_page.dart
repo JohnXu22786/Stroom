@@ -123,7 +123,7 @@ class _StatCard extends StatelessWidget {
             height: 44,
             decoration: BoxDecoration(
                 color: color.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(12)),
+                borderRadius: BorderRadius.circular(8)),
             child: Icon(icon, color: color, size: 22),
           ),
           const SizedBox(width: 12),
@@ -157,7 +157,7 @@ class _ProgressBar extends StatelessWidget {
             Text(label, style: TextStyle(fontSize: 14, color: cs.onSurface)),
             const SizedBox(height: 8),
             ClipRRect(
-              borderRadius: BorderRadius.circular(6),
+              borderRadius: BorderRadius.circular(8),
               child: LinearProgressIndicator(
                   value: value,
                   minHeight: 12,

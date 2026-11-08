@@ -1003,7 +1003,7 @@ class _BackgroundOptimizationPageState
             ),
           ),
           InkWell(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(8),
             onTap: () => _showDetailDialog(theme, title, detail),
             child: Padding(
               padding: const EdgeInsets.all(4),

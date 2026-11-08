@@ -70,7 +70,7 @@ Future<void> showMediaPreview(
     context: context,
     isScrollControlled: true,
     shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
     ),
     builder: (ctx) =>
         MediaPreviewSheet(resource: resource, taskTitle: taskTitle),

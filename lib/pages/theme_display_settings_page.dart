@@ -109,7 +109,7 @@ class _ThemeDisplaySettingsPageState
                       hintText: strings.languageSearchHint,
                       prefixIcon: const Icon(Icons.search),
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(8),
                       ),
                       isDense: true,
                     ),
@@ -178,7 +178,7 @@ class _ThemeDisplaySettingsPageState
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
               color: colorScheme.secondaryContainer,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
               language.id,

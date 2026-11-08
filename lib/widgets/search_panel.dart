@@ -109,7 +109,7 @@ class _SearchPanelState extends State<SearchPanel> {
                     hintText: AppLocalizations.of(context)!.searchPanelHint,
                     prefixIcon: const Icon(Icons.search),
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(8),
                     ),
                     filled: true,
                     fillColor: cs.surfaceContainerHighest.withValues(
@@ -218,14 +218,14 @@ class _SearchPanelState extends State<SearchPanel> {
       margin: const EdgeInsets.only(bottom: 8),
       color: isDark ? cs.surfaceContainerHigh : cs.surfaceContainerLow,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         side: BorderSide(
           color: cs.outlineVariant.withValues(alpha: 0.5),
           width: 0.5,
         ),
       ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         onTap: () => widget.onConversationSelected(conv),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -236,7 +236,7 @@ class _SearchPanelState extends State<SearchPanel> {
                 height: 40,
                 decoration: BoxDecoration(
                   color: cs.primaryContainer.withValues(alpha: 0.3),
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(
                   conv.isPinned

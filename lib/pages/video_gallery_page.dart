@@ -778,7 +778,7 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
                 onPressed: _recordVideo,
                 style: ElevatedButton.styleFrom(
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                 ),
                 icon: const Icon(Icons.videocam, size: 20),
@@ -797,7 +797,7 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
                 onPressed: _importFromGallery,
                 style: ElevatedButton.styleFrom(
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                 ),
                 icon: const Icon(Icons.photo_library_outlined, size: 20),
@@ -833,7 +833,7 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
                   ),
                   decoration: BoxDecoration(
                     color: Colors.black54,
-                    borderRadius: BorderRadius.circular(4),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
                     formatDuration(file.duration),
@@ -934,7 +934,7 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
                         ),
                         decoration: BoxDecoration(
                           color: Colors.black54,
-                          borderRadius: BorderRadius.circular(4),
+                          borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
                           formatDuration(file.duration),

@@ -234,7 +234,7 @@ extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
                         width: 110,
                         decoration: BoxDecoration(
                           border: Border.all(color: Colors.grey.shade400),
-                          borderRadius: BorderRadius.circular(4),
+                          borderRadius: BorderRadius.circular(8),
                         ),
                         padding: const EdgeInsets.symmetric(horizontal: 8),
                         child: DropdownButtonHideUnderline(

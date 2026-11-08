@@ -192,14 +192,14 @@ class _DraggableFloatingPanelState extends State<DraggableFloatingPanel> {
     // ambiguous and horizontal drags would move the panel while scrolling.
     return Material(
       elevation: 8,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(16),
       color: colorScheme.surfaceContainerHigh,
       surfaceTintColor: colorScheme.primaryContainer,
       child: Container(
         width: DraggableFloatingPanel.panelWidth,
         constraints: BoxConstraints(maxHeight: _panelMaxHeight),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: colorScheme.primary.withValues(alpha: 0.3),
             width: 1.5,
@@ -217,8 +217,8 @@ class _DraggableFloatingPanelState extends State<DraggableFloatingPanel> {
                 decoration: BoxDecoration(
                   color: colorScheme.primaryContainer,
                   borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(10),
-                    topRight: Radius.circular(10),
+                    topLeft: Radius.circular(8),
+                    topRight: Radius.circular(8),
                   ),
                 ),
                 padding: const EdgeInsets.symmetric(
@@ -270,7 +270,7 @@ class _DraggableFloatingPanelState extends State<DraggableFloatingPanel> {
                     // Minimize
                     InkWell(
                       onTap: _toggleMinimize,
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(16),
                       child: Padding(
                         padding: const EdgeInsets.all(4),
                         child: Icon(
@@ -283,7 +283,7 @@ class _DraggableFloatingPanelState extends State<DraggableFloatingPanel> {
                     // Close
                     InkWell(
                       onTap: widget.onClose,
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(16),
                       child: Padding(
                         padding: const EdgeInsets.all(4),
                         child: Icon(

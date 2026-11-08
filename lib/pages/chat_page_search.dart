@@ -226,7 +226,7 @@ extension _ChatPageSearchExt on _ChatPageState {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
         decoration: BoxDecoration(
           color: selected ? cs.primaryContainer : Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: selected ? cs.primary : cs.outlineVariant,
             width: selected ? 1.0 : 0.5,
