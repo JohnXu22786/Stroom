@@ -847,8 +847,8 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
                                     );
                                     _customParamValueFieldRevisions[i] =
                                         (_customParamValueFieldRevisions[i] ??
-                                            0) +
-                                        1;
+                                                0) +
+                                            1;
                                     _validateJsonField(i, param);
                                     setState(() {});
                                   },
