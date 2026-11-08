@@ -676,8 +676,7 @@ class ChatStreamManager {
         final errorText = _ref == null
             ? formatChatErrorMessage(e)
             : formatChatErrorMessage(e, locale: _ref?.read(localeProvider));
-        final partial = state.fullReply;
-        if (partial.isEmpty) {
+        if (!state.hasTextContent) {
           state.fullReply = errorText;
           state.hasSyntheticErrorReply = true;
         }
