@@ -149,14 +149,15 @@ Future<List<XFile>> pickGalleryMedia(
     }
     return picker.pickMultiVideo();
   }
-  final files = await FilePicker.pickFiles(
+  final result = await FilePicker.pickFiles(
     type: kind == GalleryMediaKind.image ? FileType.image : FileType.video,
+    allowMultiple: true,
     initialDirectory: kind == GalleryMediaKind.image
         ? SystemPickDirectories.pictures()
         : SystemPickDirectories.videos(),
   );
   final pickedFiles = <XFile>[];
-  for (final file in files) {
+  for (final file in result?.files ?? const <PlatformFile>[]) {
     // 保留原始路径：部分调用方（如 OCR）依赖 file.path 识别格式。
     pickedFiles.add(
       XFile.fromData(
