@@ -5123,6 +5123,11 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String modelParamReserved(String name) {
+    return '不能使用保留的 OCR 参数名：$name';
+  }
+
+  @override
   String get modelParamName => '参数名';
 
   @override
@@ -15382,6 +15387,11 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   @override
   String modelParamDuplicate(String name) {
     return '参数已存在：$name';
+  }
+
+  @override
+  String modelParamReserved(String name) {
+    return '不能使用保留的 OCR 参数名：$name';
   }
 
   @override

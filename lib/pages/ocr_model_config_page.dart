@@ -273,6 +273,23 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
         );
         return;
       }
+      if (const {
+        'model',
+        'messages',
+        'temperature',
+        'top_p',
+        'max_tokens',
+      }.contains(name)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context)!.modelParamReserved(name),
+            ),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
       if (param.type == 'json') {
         try {
           jsonDecode(value);

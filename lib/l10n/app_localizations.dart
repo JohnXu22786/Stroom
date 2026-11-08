@@ -9101,6 +9101,9 @@ abstract class AppLocalizations {
   /// **'Parameter already exists: {name}'**
   String modelParamDuplicate(String name);
 
+  /// No description provided for @modelParamReserved.
+  String modelParamReserved(String name);
+
   /// No description provided for @modelParamName.
   ///
   /// In en, this message translates to:

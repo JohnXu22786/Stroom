@@ -5377,6 +5377,11 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String modelParamReserved(String name) {
+    return 'Reserved OCR parameter name: $name';
+  }
+
+  @override
   String get modelParamName => 'Parameter name';
 
   @override
@@ -16201,6 +16206,11 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   @override
   String modelParamDuplicate(String name) {
     return 'Parameter already exists: $name';
+  }
+
+  @override
+  String modelParamReserved(String name) {
+    return 'Reserved OCR parameter name: $name';
   }
 
   @override
