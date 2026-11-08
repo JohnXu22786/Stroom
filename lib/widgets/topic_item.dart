@@ -43,11 +43,14 @@ class TopicItem extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final brightness = Theme.of(context).brightness;
     final isDark = brightness == Brightness.dark;
-    final statusColor = isFailed
+    final statusBaseColor = isFailed
         ? cs.error
         : isUnread
             ? Color.lerp(cs.primary, Colors.green, 0.55)
             : null;
+    final statusColor = statusBaseColor == null
+        ? null
+        : Color.lerp(statusBaseColor, cs.onSurfaceVariant, 0.4);
 
     final title = topic.title.isEmpty
         ? AppLocalizations.of(context)!.topicItemNew
@@ -95,18 +98,10 @@ class TopicItem extends StatelessWidget {
                           ? statusColor.withValues(alpha: 0.12)
                           : cs.primaryContainer.withValues(alpha: 0.3),
                       borderRadius: BorderRadius.circular(10),
-                      border: statusColor == null || isRunning
-                          ? null
-                          : Border.all(
-                              color: statusColor.withValues(alpha: 0.45),
-                              width: 1,
-                            ),
                     ),
                     child: Center(
                       child: isRunning
-                          ? _PulsingConversationIcon(
-                              color: cs.onSurfaceVariant,
-                            )
+                          ? _PulsingConversationIcon(color: cs.onSurfaceVariant)
                           : Icon(
                               topic.isPinned
                                   ? Icons.push_pin
@@ -285,7 +280,7 @@ class _PulsingConversationIconState extends State<_PulsingConversationIcon>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller = AnimationController(
     vsync: this,
-    duration: const Duration(seconds: 1),
+    duration: const Duration(milliseconds: 1500),
   )..repeat();
 
   @override

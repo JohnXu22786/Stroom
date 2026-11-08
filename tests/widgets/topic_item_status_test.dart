@@ -38,8 +38,24 @@ Widget _app({
 }
 
 void main() {
+  testWidgets('inactive conversation icon tile is borderless', (tester) async {
+    await tester.pumpWidget(_app());
+
+    final iconFinder = find.byIcon(Icons.chat_bubble_outline_rounded);
+    final bubble = tester.widget<Icon>(iconFinder);
+    final cs = Theme.of(tester.element(find.byType(TopicItem))).colorScheme;
+    expect(bubble.color, cs.onSurfaceVariant);
+
+    final tile = tester.widget<Container>(
+      find.ancestor(of: iconFinder, matching: find.byType(Container)).first,
+    );
+    final decoration = tile.decoration! as BoxDecoration;
+    expect(decoration.color, cs.primaryContainer.withValues(alpha: 0.3));
+    expect(decoration.border, isNull);
+  });
+
   testWidgets(
-    'running conversation pulses the inactive icon style each second',
+    'running conversation pulses the inactive icon style every 1.5 seconds',
     (tester) async {
       await tester.pumpWidget(_app(isRunning: true));
 
@@ -57,19 +73,21 @@ void main() {
 
       final firstColor = bubble.color;
 
-      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump(const Duration(milliseconds: 750));
       final middleColor = tester.widget<Icon>(iconFinder).color;
       expect(middleColor, isNot(firstColor));
       expect(middleColor!.a, lessThan(firstColor!.a));
       expect(middleColor.r, firstColor.r);
 
-      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump(const Duration(milliseconds: 750));
       final cycleColor = tester.widget<Icon>(iconFinder).color;
       expect(cycleColor, firstColor);
     },
   );
 
-  testWidgets('failed conversation is marked red', (tester) async {
+  testWidgets('failed conversation uses a softened red status color', (
+    tester,
+  ) async {
     await tester.pumpWidget(_app(isFailed: true));
 
     final bubble = tester.widget<Icon>(
@@ -77,7 +95,34 @@ void main() {
     );
     expect(
       bubble.color,
-      Theme.of(tester.element(find.byType(TopicItem))).colorScheme.error,
+      Color.lerp(
+        Theme.of(tester.element(find.byType(TopicItem))).colorScheme.error,
+        Theme.of(tester.element(find.byType(TopicItem)))
+            .colorScheme
+            .onSurfaceVariant,
+        0.4,
+      ),
+    );
+    final tile = tester.widget<Container>(
+      find
+          .ancestor(
+            of: find.byIcon(Icons.chat_bubble_outline_rounded),
+            matching: find.byType(Container),
+          )
+          .first,
+    );
+    final decoration = tile.decoration! as BoxDecoration;
+    expect(decoration.border, isNull);
+    expect(
+      decoration.color,
+      Color.lerp(
+        Theme.of(tester.element(find.byType(TopicItem))).colorScheme.error,
+        Theme.of(tester.element(find.byType(TopicItem)))
+            .colorScheme
+            .onSurfaceVariant,
+        0.4,
+      )!
+          .withValues(alpha: 0.12),
     );
   });
 
@@ -90,7 +135,20 @@ void main() {
       find.byIcon(Icons.chat_bubble_outline_rounded),
     );
     final cs = Theme.of(tester.element(find.byType(TopicItem))).colorScheme;
-    expect(bubble.color, Color.lerp(cs.primary, Colors.green, 0.55));
+    final statusColor = Color.lerp(cs.primary, Colors.green, 0.55)!;
+    final softenedColor = Color.lerp(statusColor, cs.onSurfaceVariant, 0.4);
+    expect(bubble.color, softenedColor);
+    final tile = tester.widget<Container>(
+      find
+          .ancestor(
+            of: find.byIcon(Icons.chat_bubble_outline_rounded),
+            matching: find.byType(Container),
+          )
+          .first,
+    );
+    final decoration = tile.decoration! as BoxDecoration;
+    expect(decoration.border, isNull);
+    expect(decoration.color, softenedColor!.withValues(alpha: 0.12));
   });
 
   testWidgets('unread green adapts to the dark theme blue', (tester) async {
@@ -100,6 +158,13 @@ void main() {
       find.byIcon(Icons.chat_bubble_outline_rounded),
     );
     final cs = Theme.of(tester.element(find.byType(TopicItem))).colorScheme;
-    expect(bubble.color, Color.lerp(cs.primary, Colors.green, 0.55));
+    expect(
+      bubble.color,
+      Color.lerp(
+        Color.lerp(cs.primary, Colors.green, 0.55)!,
+        cs.onSurfaceVariant,
+        0.4,
+      ),
+    );
   });
 }
