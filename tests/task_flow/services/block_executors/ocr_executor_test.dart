@@ -283,50 +283,54 @@ void main() {
     }
   });
 
-  test('incomplete OCR keeps partial text marked incomplete after restore',
-      () async {
-    final source = await File('${directory.path}/partial.png')
-        .writeAsBytes(_validPng());
-    final dio = Dio()..httpClientAdapter = _IncompleteOcrAdapter();
+  test(
+    'incomplete OCR keeps partial text marked incomplete after restore',
+    () async {
+      final source = await File('${directory.path}/partial.png')
+          .writeAsBytes(_validPng());
+      final dio = Dio()..httpClientAdapter = _IncompleteOcrAdapter();
 
-    try {
-      await expectLater(
-        executeOcrBlock(
-          block: ocrBlock(),
-          def: BlockTypeDefinition.ocr,
-          input: source.path,
-          execId: execId,
-          execNotifier: executions,
-          flowSubTask: subTask,
-          bgNotifier: background,
-          providerEntries: providerForOcr(),
-          ocrDio: dio,
-        ),
-        throwsA(isA<BlockExecutionException>().having(
-          (error) => error.message,
-          'message',
-          contains('不完整结果（finish_reason=length）'),
-        )),
+      try {
+        await expectLater(
+          executeOcrBlock(
+            block: ocrBlock(),
+            def: BlockTypeDefinition.ocr,
+            input: source.path,
+            execId: execId,
+            execNotifier: executions,
+            flowSubTask: subTask,
+            bgNotifier: background,
+            providerEntries: providerForOcr(),
+            ocrDio: dio,
+          ),
+          throwsA(isA<BlockExecutionException>().having(
+            (error) => error.message,
+            'message',
+            contains('不完整结果（finish_reason=length）'),
+          )),
+        );
+      } finally {
+        dio.close(force: true);
+      }
+
+      final failedTask = background.state.single;
+      expect(failedTask.status, TaskStatus.failed);
+      expect(failedTask.result, 'partial OCR text');
+      expect(failedTask.resultIsComplete, isFalse);
+      expect(failedTask.error, contains('不完整结果（finish_reason=length）'));
+      expect(
+        executions.execution(execId)?.subTasks.single.status,
+        TaskStatus.failed,
       );
-    } finally {
-      dio.close(force: true);
-    }
 
-    final failedTask = background.state.single;
-    expect(failedTask.status, TaskStatus.failed);
-    expect(failedTask.result, 'partial OCR text');
-    expect(failedTask.resultIsComplete, isFalse);
-    expect(failedTask.error, contains('不完整结果（finish_reason=length）'));
-    expect(executions.execution(execId)?.subTasks.single.status,
-        TaskStatus.failed);
-
-    await background.pendingPersistence;
-    final restored = BackgroundTaskNotifier();
-    addTearDown(restored.dispose);
-    expect(await restored.restoreFromPersistence(), isTrue);
-    expect(restored.state.single.result, 'partial OCR text');
-    expect(restored.state.single.resultIsComplete, isFalse);
-  });
+      await background.pendingPersistence;
+      final restored = BackgroundTaskNotifier();
+      addTearDown(restored.dispose);
+      expect(await restored.restoreFromPersistence(), isTrue);
+      expect(restored.state.single.result, 'partial OCR text');
+      expect(restored.state.single.resultIsComplete, isFalse);
+    },
+  );
 
   test('OCR rejects oversized WebFileStore input before request dispatch',
       () async {
