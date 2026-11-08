@@ -34,7 +34,14 @@ extension _ChatPageMessagesExt on _ChatPageState {
     final hasText = segments.any(
       (segment) => segment is TextSegment && segment.text.trim().isNotEmpty,
     );
-    if (!hasText && message.content.isNotEmpty) {
+    final contentIsAlreadyAnErrorSegment = segments.any(
+      (segment) =>
+          segment is ErrorSegment &&
+          segment.message.trim() == message.content.trim(),
+    );
+    if (!hasText &&
+        !contentIsAlreadyAnErrorSegment &&
+        message.content.isNotEmpty) {
       segments.add(TextSegment(message.content));
     }
     return (segments: segments, reasoningContents: reasoningContents);

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:file_picker_platform_interface/file_picker_platform_interface.dart';
@@ -30,11 +31,18 @@ class _Documents extends PathProviderPlatform {
 }
 
 class _InputPicker extends FilePickerPlatform {
-  _InputPicker(this.path, {this.pending, this.reportedSize = 6, this.onPick});
+  _InputPicker(
+    this.path, {
+    this.pending,
+    this.reportedSize = 6,
+    this.onPick,
+    this.bytes,
+  });
   final String? path;
   final Completer<List<PlatformFile>>? pending;
   final int reportedSize;
   final Completer<void>? onPick;
+  final Uint8List? bytes;
 
   @override
   Future<List<PlatformFile>> pickFiles({
@@ -56,6 +64,7 @@ class _InputPicker extends FilePickerPlatform {
     return [
       FakePlatformFile(
         name: 'notes.pdf',
+        bytes: bytes,
         reportedLength: reportedSize,
         localPath: path,
       ),
@@ -285,6 +294,7 @@ void main() {
         null,
         reportedSize: maxAttachmentBytes + 1,
         onPick: pickerCalled,
+        bytes: Uint8List(32),
       );
       PathProviderPlatform.instance = _Documents(directory.path);
       addTearDown(() {

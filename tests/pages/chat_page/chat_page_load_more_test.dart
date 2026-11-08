@@ -27,6 +27,7 @@ import 'package:stroom/services/conversation_repository_memory.dart';
 import 'package:stroom/widgets/llm/tool_call_card.dart';
 
 import 'chat_page_test.dart' show createChatTestApp;
+import 'package:stroom/l10n/app_localizations.dart';
 
 /// Load-more indicator key — the widget must not exist in the tree at all
 /// while no pagination load is running (an indeterminate
@@ -389,7 +390,11 @@ void main() {
               return ProviderEntriesNotifier();
             }),
           ],
-          child: const MaterialApp(home: Material(child: ChatPage())),
+          child: const MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: Material(child: ChatPage())),
         ),
       );
       for (var i = 0; i < 30; i++) {
@@ -465,7 +470,11 @@ void main() {
               return ProviderEntriesNotifier();
             }),
           ],
-          child: const MaterialApp(home: Material(child: ChatPage())),
+          child: const MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: Material(child: ChatPage())),
         ),
       );
       for (var i = 0; i < 30; i++) {
@@ -598,7 +607,11 @@ void main() {
               return ProviderEntriesNotifier();
             }),
           ],
-          child: const MaterialApp(home: Material(child: ChatPage())),
+          child: const MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: Material(child: ChatPage())),
         ),
       );
       for (var i = 0; i < 30; i++) {
@@ -677,7 +690,11 @@ void main() {
               return ProviderEntriesNotifier();
             }),
           ],
-          child: const MaterialApp(home: Material(child: ChatPage())),
+          child: const MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: Material(child: ChatPage())),
         ),
       );
       for (var i = 0; i < 30; i++) {
@@ -743,7 +760,11 @@ void main() {
               return ProviderEntriesNotifier();
             }),
           ],
-          child: const MaterialApp(home: Material(child: ChatPage())),
+          child: const MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: Material(child: ChatPage())),
         ),
       );
       for (var i = 0; i < 30; i++) {
@@ -829,7 +850,11 @@ void main() {
               return ProviderEntriesNotifier();
             }),
           ],
-          child: const MaterialApp(home: Material(child: ChatPage())),
+          child: const MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: Material(child: ChatPage())),
         ),
       );
       for (var i = 0; i < 30; i++) {
@@ -904,7 +929,11 @@ void main() {
       await tester.pumpWidget(
         UncontrolledProviderScope(
           container: container,
-          child: const MaterialApp(home: Material(child: ChatPage())),
+          child: const MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: Material(child: ChatPage())),
         ),
       );
       for (var i = 0; i < 30; i++) {
@@ -977,7 +1006,11 @@ void main() {
         await tester.pumpWidget(
           UncontrolledProviderScope(
             container: container,
-            child: const MaterialApp(home: ChatPage()),
+            child: const MaterialApp(
+                locale: const Locale('zh', 'CN'),
+                localizationsDelegates: AppLocalizations.localizationsDelegates,
+                supportedLocales: AppLocalizations.supportedLocales,
+                home: ChatPage()),
           ),
         );
         for (var i = 0; i < 30; i++) {
@@ -1060,7 +1093,11 @@ void main() {
                 return ProviderEntriesNotifier();
               }),
             ],
-            child: const MaterialApp(home: ChatPage()),
+            child: const MaterialApp(
+                locale: const Locale('zh', 'CN'),
+                localizationsDelegates: AppLocalizations.localizationsDelegates,
+                supportedLocales: AppLocalizations.supportedLocales,
+                home: ChatPage()),
           ),
         );
         for (var i = 0; i < 30; i++) {
@@ -1141,7 +1178,11 @@ void main() {
       await tester.pumpWidget(
         UncontrolledProviderScope(
           container: container,
-          child: const MaterialApp(home: Material(child: ChatPage())),
+          child: const MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: Material(child: ChatPage())),
         ),
       );
       for (var i = 0; i < 30; i++) {
@@ -1236,7 +1277,11 @@ void main() {
         await tester.pumpWidget(
           UncontrolledProviderScope(
             container: container,
-            child: const MaterialApp(home: Material(child: ChatPage())),
+            child: const MaterialApp(
+                locale: const Locale('zh', 'CN'),
+                localizationsDelegates: AppLocalizations.localizationsDelegates,
+                supportedLocales: AppLocalizations.supportedLocales,
+                home: Material(child: ChatPage())),
           ),
         );
         for (var i = 0; i < 30; i++) {
@@ -1321,7 +1366,11 @@ void main() {
         await tester.pumpWidget(
           UncontrolledProviderScope(
             container: container,
-            child: const MaterialApp(home: Material(child: ChatPage())),
+            child: const MaterialApp(
+                locale: const Locale('zh', 'CN'),
+                localizationsDelegates: AppLocalizations.localizationsDelegates,
+                supportedLocales: AppLocalizations.supportedLocales,
+                home: Material(child: ChatPage())),
           ),
         );
         for (var i = 0; i < 30; i++) {
@@ -1424,7 +1473,11 @@ void main() {
               return ProviderEntriesNotifier();
             }),
           ],
-          child: const MaterialApp(home: ChatPage()),
+          child: const MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: ChatPage()),
         ),
       );
       for (var i = 0; i < 30; i++) {

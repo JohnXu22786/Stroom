@@ -11,6 +11,7 @@ import 'package:stroom/providers/assistant_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/services/llm_credential_store.dart';
 import 'package:stroom/widgets/llm/assistant_avatar.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 
 ProviderEntriesNotifier? _providerEntriesNotifier;
 bool _providerEntriesLoadFinished = false;
@@ -74,7 +75,11 @@ Widget createTestApp({List<Assistant>? assistants}) {
           return notifier;
         }),
     ],
-    child: const MaterialApp(home: AssistantSelectionPage()),
+    child: const MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: AssistantSelectionPage()),
   );
 }
 
@@ -1236,7 +1241,11 @@ void main() {
               return notifier;
             }),
           ],
-          child: const MaterialApp(home: AssistantSelectionPage()),
+          child: const MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: AssistantSelectionPage()),
         ),
       );
       await tester.pumpAndSettle();
@@ -1280,7 +1289,11 @@ void main() {
               return notifier;
             }),
           ],
-          child: const MaterialApp(home: AssistantSelectionPage()),
+          child: const MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: AssistantSelectionPage()),
         ),
       );
       await tester.pumpAndSettle();
@@ -1350,7 +1363,11 @@ void main() {
               return notifier;
             }),
           ],
-          child: const MaterialApp(home: AssistantSelectionPage()),
+          child: const MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: AssistantSelectionPage()),
         ),
       );
       await tester.pumpAndSettle();
@@ -1405,7 +1422,11 @@ void main() {
               return notifier;
             }),
           ],
-          child: const MaterialApp(home: AssistantSelectionPage()),
+          child: const MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: AssistantSelectionPage()),
         ),
       );
       await tester.pumpAndSettle();
@@ -1460,7 +1481,11 @@ void main() {
               return notifier;
             }),
           ],
-          child: const MaterialApp(home: AssistantSelectionPage()),
+          child: const MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: AssistantSelectionPage()),
         ),
       );
       await tester.pumpAndSettle();
@@ -1542,7 +1567,11 @@ void main() {
               return notifier;
             }),
           ],
-          child: const MaterialApp(home: AssistantSelectionPage()),
+          child: const MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: AssistantSelectionPage()),
         ),
       );
       await tester.pumpAndSettle();
@@ -1586,7 +1615,11 @@ void main() {
               return notifier;
             }),
           ],
-          child: const MaterialApp(home: AssistantSelectionPage()),
+          child: const MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: AssistantSelectionPage()),
         ),
       );
       await tester.pumpAndSettle();

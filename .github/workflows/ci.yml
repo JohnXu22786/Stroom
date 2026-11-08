@@ -54,8 +54,10 @@ jobs:
           cache: true
           pub-cache: true
       - run: flutter pub get
-      - name: Check generated localization formatting
-        run: dart format --language-version=3.0 --set-exit-if-changed lib/l10n/app_localizations.dart
+      - name: Normalize and verify generated localization
+        run: |
+          dart format --language-version=3.0 lib/l10n/app_localizations.dart
+          git diff --exit-code -- lib/l10n/app_localizations.dart
       - name: Check Dart formatting
         # Preserve the repo's Dart 3.0 formatting baseline after raising its SDK minimum.
         run: dart format --language-version=3.0 --set-exit-if-changed .

@@ -7,8 +7,17 @@ import 'package:stroom/pages/chat/chat_types.dart';
 import 'package:stroom/pages/chat/widgets/reasoning_section.dart';
 import 'package:stroom/providers/chat_stream_provider.dart';
 import 'package:stroom/providers/conversation_provider.dart';
+import 'package:visibility_detector/visibility_detector.dart';
 
 void main() {
+  setUp(() {
+    VisibilityDetectorController.instance.updateInterval = Duration.zero;
+  });
+  tearDown(() {
+    VisibilityDetectorController.instance.updateInterval =
+        const Duration(milliseconds: 500);
+  });
+
   group('ReasoningSection (Single section)', () {
     testWidgets('shows reasoning button with label when content exists', (
       tester,

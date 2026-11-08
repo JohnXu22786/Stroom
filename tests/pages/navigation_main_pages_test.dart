@@ -63,7 +63,7 @@ Widget _buildTestApp({Size? screenSize, List<Assistant>? assistants}) {
 /// Helper: simulate the system back button by calling [Navigator.maybePop].
 Future<void> _simulateBackButton(WidgetTester tester) async {
   await _navigatorKey.currentState?.maybePop();
-  await tester.pumpAndSettle();
+  await tester.pump(const Duration(milliseconds: 500));
 }
 
 /// Find a bottom NavigationBar destination by its label. Scoped to the
@@ -465,7 +465,7 @@ void main() {
 
       // Switch back — should return to topic selection, not assistant selection
       await tester.tap(_navTab('对话'));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 500));
       expect(find.text('选择对话'), findsOneWidget);
       expect(find.text('选择助手'), findsNothing);
     });
@@ -545,7 +545,7 @@ void main() {
 
       // Switch back — should still be on the chat page, not assistant selection
       await tester.tap(_navTab('对话'));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 500));
       expect(find.text('新对话'), findsWidgets);
       expect(find.text('选择助手'), findsNothing);
     });

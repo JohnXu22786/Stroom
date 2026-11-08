@@ -312,14 +312,13 @@ void main() {
     await _pumpUntil(tester, () => find.byType(OcrPage).evaluate().isEmpty);
     await _pumpUntil(
       tester,
-      () =>
-          adapter.requests.length == 1 &&
-          background.state.any(
-            (task) =>
-                task.status == TaskStatus.completed ||
-                task.status == TaskStatus.failed,
-          ),
+      () => background.state.any(
+        (task) =>
+            task.status == TaskStatus.completed ||
+            task.status == TaskStatus.failed,
+      ),
     );
+    expect(adapter.requests, hasLength(1));
     final pageTask = background.state.single;
     expect(
       pageTask.status,

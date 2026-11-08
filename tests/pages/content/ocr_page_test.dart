@@ -19,6 +19,7 @@ import 'package:stroom/providers/background_task_provider.dart';
 import 'package:stroom/providers/ocr_instructions_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/services/manifest_database.dart';
+import 'package:stroom/services/ocr_retry_storage.dart';
 import 'package:stroom/services/llm_model_group_provider.dart';
 import 'package:stroom/utils/image_manifest.dart';
 import 'package:stroom/utils/ocr_image_payload.dart';
@@ -212,13 +213,18 @@ Future<void> _storeAppAlbumImage({
   await ImageManifest.addRecord(record);
 }
 
-Map<String, dynamic> _createVersionedRetryData({
+int _retryFixtureId = 0;
+final Set<String> _testRetryCacheReferences = {};
+
+Future<Map<String, dynamic>> _createVersionedRetryData({
   required String configId,
   required String modelId,
   String? instructionContent,
   String saveFolder = '',
-}) =>
-    OcrRetrySnapshot.capture(
+}) async {
+  final cached = await OcrRetryStorage.cacheSnapshot(
+    taskId: 'ocr-page-test-${_retryFixtureId++}',
+    snapshot: OcrRetrySnapshot.capture(
       configId: configId,
       modelId: modelId,
       images: [
@@ -230,7 +236,13 @@ Map<String, dynamic> _createVersionedRetryData({
       ],
       instructionContent: instructionContent,
       saveFolder: saveFolder,
-    ).toMap();
+    ),
+  );
+  _testRetryCacheReferences.addAll(
+    OcrRetryStorage.referencesFromSnapshot(cached),
+  );
+  return cached;
+}
 
 class _UnreadPickerFile extends XFile {
   int reads = 0;
@@ -247,10 +259,18 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUp(() async {
+    _testRetryCacheReferences.clear();
     SharedPreferences.setMockInitialValues({});
     ManifestDatabase.enableTestMode();
     ImageManifest.invalidateCache();
     TextManifest.invalidateCache();
+  });
+
+  tearDown(() async {
+    await OcrRetryStorage.deleteUnreferenced(
+      candidates: Set<String>.of(_testRetryCacheReferences),
+      referenced: const {},
+    );
   });
 
   for (final gallery in [false, true]) {
@@ -430,7 +450,7 @@ void main() {
             ocrInstructions: const [
               OcrInstruction(name: 'Edited prompt', content: 'new prompt'),
             ],
-            retryData: _createVersionedRetryData(
+            retryData: await _createVersionedRetryData(
               configId: 'ocr-config-reordered',
               modelId: 'ocr-model-target',
               instructionContent: 'captured prompt removed from generic list',
@@ -474,7 +494,7 @@ void main() {
           _buildTestApp(
             entries: [availableEntry],
             backgroundTasksNotifier: bgNotifier,
-            retryData: _createVersionedRetryData(
+            retryData: await _createVersionedRetryData(
               configId: 'deleted-config',
               modelId: 'deleted-model',
             ),
@@ -525,7 +545,7 @@ void main() {
         await tester.pumpWidget(
           _buildTestApp(
             entries: [groupEntry],
-            retryData: _createVersionedRetryData(
+            retryData: await _createVersionedRetryData(
               configId: sourceConfigId,
               modelId: localModelId,
             ),
@@ -588,7 +608,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // The selector is always visible regardless of configuration.
-      expect(find.text('识别指令'), findsOneWidget);
+      expect(find.text('指令'), findsOneWidget);
       expect(find.text('默认（仅发送图片）'), findsOneWidget);
     });
 
@@ -607,7 +627,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('识别指令'), findsOneWidget);
+      expect(find.text('指令'), findsOneWidget);
       expect(find.text('默认（仅发送图片）'), findsOneWidget);
 
       // Open the dropdown — both instruction names are listed.
@@ -688,7 +708,7 @@ void main() {
       await tester.tap(find.text('GPT-4o Mini | OpenAI').last);
       await tester.pumpAndSettle();
 
-      expect(find.text('识别指令'), findsOneWidget);
+      expect(find.text('指令'), findsOneWidget);
       expect(find.text('发票提取'), findsOneWidget);
     });
 
@@ -911,10 +931,17 @@ void main() {
                       context,
                       MaterialPageRoute(
                         builder: (_) => OcrPage(
-                          testImages: [_createValidOcrTestImage()],
+                          testImagePayloadPreparer: (bytes) async =>
+                              prepareOcrImagePayloadSync(bytes),
                           retryData: {
                             'type': 'ocr',
-                            'images': <Map<String, dynamic>>[],
+                            'images': [
+                              {
+                                'bytes': base64Encode(_createTestPngBytes()),
+                                'format': 'png',
+                                'name': 'retry.png',
+                              },
+                            ],
                             'modelIndex': 0,
                             'instructionIndex': 1,
                           },
@@ -1235,7 +1262,9 @@ void main() {
       await pickFromSystemGallery();
       expect(calls.single, (maxWidth: 2048, maxHeight: 2048, quality: 90));
 
-      await tester.tap(find.byKey(const Key('ocr_high_detail_switch')));
+      await tester.tap(find.byKey(const Key('ocr_page_settings')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('原图 / 高细节'));
       await tester.pumpAndSettle();
       await pickFromSystemGallery();
       expect(calls.last, (maxWidth: null, maxHeight: null, quality: null));
@@ -1279,7 +1308,7 @@ void main() {
       await tester.pump();
       await validationStarted.future;
 
-      await tester.tap(find.text('清空'));
+      await tester.tap(find.byKey(const Key('ocr_clear_button')));
       await tester.pump();
       finishValidation.complete();
       await tester.pump();
@@ -1668,14 +1697,14 @@ void main() {
       await tester.pumpAndSettle();
 
       // Clear button visible initially
-      expect(find.text('清空'), findsOneWidget);
+      expect(find.byKey(const Key('ocr_clear_button')), findsOneWidget);
 
       // Enter reorder mode via sort button
       await tester.tap(find.byKey(const Key('ocr_sort_btn')));
       await tester.pumpAndSettle();
 
       // Clear button should be hidden during reorder mode
-      expect(find.text('清空'), findsNothing);
+      expect(find.byKey(const Key('ocr_clear_button')), findsNothing);
     });
 
     testWidgets(
@@ -1758,7 +1787,7 @@ void main() {
       await tester.pumpAndSettle();
       await validationStarted.future;
 
-      await tester.tap(find.text('清空'));
+      await tester.tap(find.byKey(const Key('ocr_clear_button')));
       await tester.pump();
       finishValidation.complete();
       await tester.pump();
@@ -2331,7 +2360,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Should show configure prompt instead of hiding the selector
-      expect(find.text('识别模型'), findsOneWidget);
+      expect(find.text('模型'), findsOneWidget);
       expect(find.textContaining('配置'), findsWidgets);
     });
 
@@ -2355,7 +2384,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Should show configure prompt
-      expect(find.text('识别模型'), findsOneWidget);
+      expect(find.text('模型'), findsOneWidget);
       expect(find.textContaining('配置'), findsWidgets);
     });
 
@@ -2366,7 +2395,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Should show configure prompt
-      expect(find.text('识别模型'), findsOneWidget);
+      expect(find.text('模型'), findsOneWidget);
       expect(find.textContaining('配置'), findsWidgets);
     });
   });

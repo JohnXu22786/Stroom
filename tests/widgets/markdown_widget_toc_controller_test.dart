@@ -2,11 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:markdown_widget/config/toc.dart';
 import 'package:markdown_widget/widget/markdown.dart';
+import 'package:visibility_detector/visibility_detector.dart';
 
 void main() {
   testWidgets('MarkdownWidget reconnects when its TOC controller changes', (
     tester,
   ) async {
+    VisibilityDetectorController.instance.updateInterval = Duration.zero;
+    addTearDown(() {
+      VisibilityDetectorController.instance.updateInterval =
+          const Duration(milliseconds: 500);
+    });
     final firstController = TocController();
     final nextController = TocController();
 
@@ -29,5 +35,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.pump(const Duration(seconds: 1));
     expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+    nextController.dispose();
+    firstController.dispose();
   });
 }
