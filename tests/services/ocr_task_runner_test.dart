@@ -619,6 +619,44 @@ void main() {
     await running;
   });
 
+  test('per-image upload label resets after the last upload fails', () async {
+    final failedUploadAdapter = _OutOfOrderAdapter();
+    final failedUploadRunner = OcrTaskRunner(
+      taskId: id,
+      notifier: notifier,
+      config: _config,
+      images: [(Uint8List.fromList([1]), 'png')],
+      executionMode: OcrBatchMode.perImage,
+      perImageConcurrency: 1,
+      title: 'owned',
+      folder: 'captured folder',
+      serviceFactory: (config) => OcrService(
+        config: config,
+        dio: Dio()..httpClientAdapter = failedUploadAdapter,
+      ),
+      writeText: TextManifest.writeText,
+      onSaved: () {},
+    );
+
+    final running = failedUploadRunner.run();
+    await failedUploadAdapter.firstRequest.future.timeout(
+      const Duration(seconds: 2),
+    );
+    failedUploadAdapter.requestOptionsByImageId[1]!.onSendProgress!(5, 10);
+    expect(notifier.state.single.steps[1].label, contains('50%'));
+
+    failedUploadAdapter.complete(
+      1,
+      text: 'upload failed',
+      statusCode: 500,
+    );
+    await running;
+
+    final task = notifier.state.single;
+    expect(task.status, TaskStatus.failed);
+    expect(task.steps[1].label, '上传图片');
+  });
+
   test(
     'service setup failure terminalizes the running page outcome',
     () async {

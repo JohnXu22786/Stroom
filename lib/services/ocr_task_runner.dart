@@ -179,8 +179,7 @@ class OcrTaskRunner {
   }
 
   void _syncPerImageSteps() {
-    if (_perImageRequestStages.isEmpty ||
-        _cancelToken.isCancelled ||
+    if (_cancelToken.isCancelled ||
         !notifier.mounted ||
         !_ownsTaskGeneration) {
       return;
