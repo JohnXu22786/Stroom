@@ -205,6 +205,96 @@ void main() {
   });
 
   group('OcrModelConfigPage custom parameter validation', () {
+    testWidgets('switching to JSON displays its default value', (tester) async {
+      final model = ModelConfig(
+        name: 'OCR模型',
+        modelId: 'qwen-vl-ocr',
+        customParams: [
+          CustomParam(
+            paramName: 'metadata',
+            type: 'number',
+            defaultValue: '{"fallback":true}',
+            options: ['1'],
+          ),
+        ],
+      );
+
+      await _pumpConfigPage(tester, model: model);
+      final typeDropdown = find.byType(DropdownButton<String>);
+      await _scrollTo(tester, typeDropdown);
+      await tester.tap(typeDropdown);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('JSON').last);
+      await tester.pumpAndSettle();
+
+      final valueField = find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && widget.decoration?.labelText == '默认参数值',
+      );
+      expect(
+        tester.widget<TextField>(valueField).controller!.text,
+        '{"fallback":true}',
+      );
+    });
+
+    testWidgets(
+      'edits and reopens the effective option while preserving fallback and options',
+      (tester) async {
+        ModelConfig? saved;
+        final model = ModelConfig(
+          name: 'OCR模型',
+          modelId: 'qwen-vl-ocr',
+          customParams: [
+            CustomParam(
+              paramName: 'scale',
+              type: 'number',
+              defaultValue: '0.5',
+              options: ['1.0', '2.0'],
+            ),
+          ],
+        );
+
+        await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
+        final valueField = find.byWidgetPredicate(
+          (widget) =>
+              widget is TextField && widget.decoration?.labelText == '默认参数值',
+        );
+        await _scrollTo(tester, valueField);
+        expect(tester.widget<TextField>(valueField).controller!.text, '1.0');
+
+        await tester.tap(find.byIcon(Icons.fullscreen));
+        await tester.pumpAndSettle();
+        final editorField = find.descendant(
+          of: find.byType(Dialog),
+          matching: find.byType(TextField),
+        );
+        await tester.enterText(editorField, '1.25');
+        await tester.tap(find.byIcon(Icons.check));
+        await tester.pumpAndSettle();
+        expect(tester.widget<TextField>(valueField).controller!.text, '1.25');
+
+        await tester.enterText(valueField, '1.5');
+        await tester.pump();
+        await tester.tap(find.text('保存'));
+        await tester.pumpAndSettle();
+
+        expect(saved, isNotNull);
+        expect(saved!.customParams.single.defaultValue, '0.5');
+        expect(saved!.customParams.single.options, ['1.5', '2.0']);
+
+        await _pumpConfigPage(tester, model: saved);
+        final reopenedValueField = find.byWidgetPredicate(
+          (widget) =>
+              widget is TextField && widget.decoration?.labelText == '默认参数值',
+        );
+        await _scrollTo(tester, reopenedValueField);
+        expect(
+          tester.widget<TextField>(reopenedValueField).controller!.text,
+          '1.5',
+        );
+      },
+    );
+
     for (final reservedName in [
       'model',
       'messages',

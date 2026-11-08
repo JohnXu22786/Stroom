@@ -1908,6 +1908,38 @@ void main() {
         },
       );
 
+      test(
+        'custom params send the first option when it differs from default value',
+        () async {
+          final service = OcrService(
+            config: OcrConfig(
+              model: 'gpt-4o',
+              apiKey: 'key',
+              host: 'https://api.test.com',
+              customParams: [
+                CustomParam(
+                  paramName: 'scale',
+                  type: 'number',
+                  defaultValue: '0.5',
+                  options: ['1.5', '2.0'],
+                ),
+              ],
+            ),
+            dio: _mockDioWithSuccess({
+              'choices': [
+                {
+                  'message': {'content': 'test'},
+                },
+              ],
+            }),
+          );
+
+          await service.recognize(imageBytes: Uint8List.fromList([1, 2, 3]));
+
+          expect(service.lastRequestBody?['scale'], 1.5);
+        },
+      );
+
       test('string custom params preserve selected value whitespace', () async {
         final service = OcrService(
           config: OcrConfig(

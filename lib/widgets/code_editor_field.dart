@@ -508,167 +508,194 @@ Future<void> showJsonValueEditorDialog(
 
   return showDialog<void>(
     context: context,
-    builder: (ctx) => StatefulBuilder(
-      builder: (ctx, setDlgState) => Dialog(
-        insetPadding: const EdgeInsets.all(8),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            children: [
-              // 标题栏
-              Row(
-                children: [
-                  Icon(
-                    type == 'json' ? Icons.data_object : Icons.edit_note,
-                    size: 20,
-                    color: type == 'json' ? Colors.amber.shade700 : null,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    AppLocalizations.of(ctx)!.codeEditorTitle,
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                  ),
-                  if (type == 'json') ...[
-                    Container(
-                      margin: const EdgeInsets.only(left: 8),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.amber.shade100,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        'JSON',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.amber.shade900,
-                        ),
-                      ),
+    builder: (ctx) => _TextEditingControllerOwner(
+      controller: editingController,
+      child: StatefulBuilder(
+        builder: (ctx, setDlgState) => Dialog(
+          insetPadding: const EdgeInsets.all(8),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                // 标题栏
+                Row(
+                  children: [
+                    Icon(
+                      type == 'json' ? Icons.data_object : Icons.edit_note,
+                      size: 20,
+                      color: type == 'json' ? Colors.amber.shade700 : null,
                     ),
                     const SizedBox(width: 8),
-                    TextButton.icon(
-                      icon: const Icon(Icons.format_align_left, size: 16),
-                      label: Text(AppLocalizations.of(ctx)!.codeEditorFormat),
-                      style: TextButton.styleFrom(
-                        visualDensity: VisualDensity.compact,
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                      ),
-                      onPressed: (liveError == null &&
-                              editingController.text.trim().isNotEmpty)
-                          ? () => setDlgState(formatPretty)
-                          : null,
+                    Text(
+                      AppLocalizations.of(ctx)!.codeEditorTitle,
+                      style:
+                          TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
                     ),
-                  ],
-                  const Spacer(),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () {
-                      editingController.dispose();
-                      Navigator.pop(ctx);
-                    },
-                    tooltip: AppLocalizations.of(ctx)!.codeEditorCancel,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              // 代码编辑区
-              Expanded(
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: const Color(0xfff5f5f5),
-                    border: Border.all(color: Colors.grey.shade300),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: CodeEditorField(
-                    controller: editingController,
-                    hintText: hintText,
-                    autofocus: true,
-                    onChanged: (_) => setDlgState(validateLive),
-                  ),
-                ),
-              ),
-              // 错误信息栏
-              if (liveError != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.red.shade50,
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: Colors.red.shade200),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.error_outline,
-                          size: 16,
-                          color: Colors.red.shade700,
+                    if (type == 'json') ...[
+                      Container(
+                        margin: const EdgeInsets.only(left: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
                         ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            liveError!,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.red.shade800,
-                              fontFamily: 'monospace',
-                            ),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.shade100,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          'JSON',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.amber.shade900,
                           ),
                         ),
-                      ],
+                      ),
+                      const SizedBox(width: 8),
+                      TextButton.icon(
+                        icon: const Icon(Icons.format_align_left, size: 16),
+                        label: Text(AppLocalizations.of(ctx)!.codeEditorFormat),
+                        style: TextButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                        ),
+                        onPressed: (liveError == null &&
+                                editingController.text.trim().isNotEmpty)
+                            ? () => setDlgState(formatPretty)
+                            : null,
+                      ),
+                    ],
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                      },
+                      tooltip: AppLocalizations.of(ctx)!.codeEditorCancel,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                // 代码编辑区
+                Expanded(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: const Color(0xfff5f5f5),
+                      border: Border.all(color: Colors.grey.shade300),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: CodeEditorField(
+                      controller: editingController,
+                      hintText: hintText,
+                      autofocus: true,
+                      onChanged: (_) => setDlgState(validateLive),
                     ),
                   ),
                 ),
-              const SizedBox(height: 8),
-              // 操作按钮
-              Row(
-                children: [
-                  if (liveError != null)
-                    Text(
-                      AppLocalizations.of(ctx)!.codeEditorInvalidJson,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Colors.red.shade400,
+                // 错误信息栏
+                if (liveError != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade50,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: Colors.red.shade200),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.error_outline,
+                            size: 16,
+                            color: Colors.red.shade700,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              liveError!,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.red.shade800,
+                                fontFamily: 'monospace',
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  const Spacer(),
-                  TextButton(
-                    onPressed: () {
-                      editingController.dispose();
-                      Navigator.pop(ctx);
-                    },
-                    child: Text(AppLocalizations.of(ctx)!.codeEditorCancel),
                   ),
-                  const SizedBox(width: 8),
-                  FilledButton.icon(
-                    icon: const Icon(Icons.check, size: 18),
-                    label: Text(AppLocalizations.of(ctx)!.codeEditorConfirm),
-                    onPressed: liveError != null
-                        ? null
-                        : () {
-                            final text = editingController.text;
-                            editingController.dispose();
-                            Navigator.pop(ctx);
-                            onSave(text);
-                          },
-                  ),
-                ],
-              ),
-            ],
+                const SizedBox(height: 8),
+                // 操作按钮
+                Row(
+                  children: [
+                    if (liveError != null)
+                      Text(
+                        AppLocalizations.of(ctx)!.codeEditorInvalidJson,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.red.shade400,
+                        ),
+                      ),
+                    const Spacer(),
+                    TextButton(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                      },
+                      child: Text(AppLocalizations.of(ctx)!.codeEditorCancel),
+                    ),
+                    const SizedBox(width: 8),
+                    FilledButton.icon(
+                      icon: const Icon(Icons.check, size: 18),
+                      label: Text(AppLocalizations.of(ctx)!.codeEditorConfirm),
+                      onPressed: liveError != null
+                          ? null
+                          : () {
+                              final text = editingController.text;
+                              Navigator.pop(ctx);
+                              onSave(text);
+                            },
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
     ),
   );
+}
+
+class _TextEditingControllerOwner extends StatefulWidget {
+  const _TextEditingControllerOwner({
+    required this.controller,
+    required this.child,
+  });
+
+  final TextEditingController controller;
+  final Widget child;
+
+  @override
+  State<_TextEditingControllerOwner> createState() =>
+      _TextEditingControllerOwnerState();
+}
+
+class _TextEditingControllerOwnerState
+    extends State<_TextEditingControllerOwner> {
+  @override
+  void dispose() {
+    widget.controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 /// 参数名嵌套路径预览：`provider.only` 自动分行展示为
