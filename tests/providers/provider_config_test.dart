@@ -832,6 +832,7 @@ void main() {
             ),
           ],
           child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
             localizationsDelegates: AppLocalizations.localizationsDelegates,
             supportedLocales: AppLocalizations.supportedLocales,
             home: ProviderConfigDetailPage(

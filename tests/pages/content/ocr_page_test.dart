@@ -96,6 +96,7 @@ Widget _buildTestApp({
       }),
     ],
     child: MaterialApp(
+      locale: const Locale('zh', 'CN'),
       home: OcrPage(
         testImages: testImages,
         retryData: retryData,
@@ -262,6 +263,7 @@ void main() {
         await tester.pumpWidget(
           ProviderScope(
             child: MaterialApp(
+              locale: const Locale('zh', 'CN'),
               localizationsDelegates: AppLocalizations.localizationsDelegates,
               supportedLocales: AppLocalizations.supportedLocales,
               home: OcrPage(
@@ -790,6 +792,7 @@ void main() {
               }),
             ],
             child: MaterialApp(
+              locale: const Locale('zh', 'CN'),
               home: OcrPage(
                 retryData: {
                   'type': 'ocr',
@@ -838,6 +841,7 @@ void main() {
               }),
             ],
             child: MaterialApp(
+              locale: const Locale('zh', 'CN'),
               home: OcrPage(
                 retryData: {
                   'type': 'ocr',
@@ -896,6 +900,7 @@ void main() {
             backgroundTasksProvider.overrideWith((ref) => bgNotifier),
           ],
           child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
             localizationsDelegates: AppLocalizations.localizationsDelegates,
             supportedLocales: AppLocalizations.supportedLocales,
             home: Builder(

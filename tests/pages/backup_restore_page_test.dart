@@ -13,6 +13,7 @@ Widget createTestApp({
 }) {
   return ProviderScope(
     child: MaterialApp(
+      locale: const Locale('zh', 'CN'),
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       home: BackupRestorePage(clearDataForTest: clearDataForTest),

@@ -27,6 +27,7 @@ void main() {
 
     nextController.jumpToIndex(1);
     await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 1));
     expect(tester.takeException(), isNull);
   });
 }

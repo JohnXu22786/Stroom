@@ -205,12 +205,6 @@ class OpenAIProtocol implements ChatProtocol {
             },
         ],
       };
-      // DeepSeek 兼容：重建时保留推理内容
-      final reasoningContent =
-          msg.reasoningContent ?? msg.reasoningSections?.join('\n');
-      if (reasoningContent != null && reasoningContent.isNotEmpty) {
-        assistantMsg['reasoning_content'] = reasoningContent;
-      }
       result.add(assistantMsg);
       for (final tc in toolCalls) {
         result.add({
@@ -244,6 +238,8 @@ class OpenAIProtocol implements ChatProtocol {
           {
             'id': tc.id,
             'type': 'function',
+            if (tc.thoughtSignature != null)
+              'thoughtSignature': tc.thoughtSignature,
             'function': {'name': tc.name, 'arguments': tc.argumentsJson},
           },
       ],

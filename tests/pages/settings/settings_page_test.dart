@@ -42,6 +42,7 @@ Widget _buildSettingsTestApp() {
       updateProvider.overrideWith((ref) => UpdateNotifier()),
     ],
     child: MaterialApp(
+      locale: const Locale('zh', 'CN'),
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       home: const SettingsPage(),

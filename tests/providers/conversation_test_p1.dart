@@ -402,6 +402,7 @@ void conversationGroup1() {
 
       expect(previous.lastReadMessageId, 'latest-reply');
       expect(container.read(activeConversationIdProvider), 'next');
+      await tester.pump(const Duration(milliseconds: 500));
     });
   });
 }

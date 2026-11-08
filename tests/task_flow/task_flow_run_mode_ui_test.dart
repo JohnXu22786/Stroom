@@ -99,6 +99,7 @@ Future<String> _pumpRunMode(WidgetTester tester, TaskFlowBlock block,
           taskFlowExecutionServiceProvider.overrideWithValue(control),
       ],
       child: MaterialApp(
+        locale: const Locale('zh', 'CN'),
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         home: TaskFlowBuilderPage(

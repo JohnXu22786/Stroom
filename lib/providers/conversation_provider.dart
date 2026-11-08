@@ -17,6 +17,7 @@ import '../services/conversation_record_adapter.dart';
 import '../services/conversation_repository.dart';
 import '../services/conversation_media_storage.dart';
 import 'assistant_provider.dart';
+import 'locale_provider.dart';
 
 part 'conversation_notifier_persistence.dart';
 part 'conversation_notifier_mutations.dart';
@@ -98,16 +99,23 @@ Future<String?> _resolveDefaultAssistantId(SharedPreferences prefs) async {
   }
 
   // No assistants exist yet - create a default one
-  final defaultAssistant = Assistant(
-    name: '默认助手',
-    prompt: '你是一个有帮助的AI助手。请用中文回答用户的问题。',
-    emoji: '🤖',
-  );
+  final defaultAssistant = _newLocalizedDefaultAssistant(prefs);
   await prefs.setString('assistants', jsonEncode([defaultAssistant.toMap()]));
   debugPrint(
     'Created default assistant during migration (${defaultAssistant.id})',
   );
   return defaultAssistant.id;
+}
+
+Assistant _newLocalizedDefaultAssistant(SharedPreferences prefs) {
+  final strings = appLocalizationsForLocale(
+    localeFromCode(prefs.getString(localePreferenceKey)),
+  );
+  return Assistant(
+    name: strings.builtInPromptGeneralName,
+    prompt: strings.assistantDefaultPrompt,
+    emoji: '🤖',
+  );
 }
 
 // ============================================================================
@@ -888,11 +896,7 @@ Future<List<Conversation>?> migrateConversationsFromPrefs(
 
     final assistantsJson = prefs.getString('assistants');
     if (assistantsJson == null || assistantsJson.isEmpty) {
-      final defaultAssistant = Assistant(
-        name: '默认助手',
-        prompt: '你是一个有帮助的AI助手。请用中文回答用户的问题。',
-        emoji: '🤖',
-      );
+      final defaultAssistant = _newLocalizedDefaultAssistant(prefs);
       await prefs.setString(
         'assistants',
         jsonEncode([defaultAssistant.toMap()]),

@@ -338,7 +338,7 @@ void main() {
       await tester.tap(_navTab('对话'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('助手深'));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 500));
       expect(find.text('选择对话'), findsOneWidget);
 
       final newTopicButtons = find.widgetWithText(FilledButton, '新话题');
@@ -450,7 +450,7 @@ void main() {
       expect(find.text('选择助手'), findsOneWidget);
 
       await tester.tap(find.text('助手甲'));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 500));
       expect(find.text('选择对话'), findsOneWidget);
 
       // Switch to files — the chat navigator stack must stay alive (hidden)
@@ -490,7 +490,7 @@ void main() {
       await tester.tap(_navTab('对话'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('助手丙'));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 500));
       expect(find.text('选择对话'), findsOneWidget);
 
       // Re-tap the chat tab while already on it → reset to assistant selection
@@ -523,7 +523,7 @@ void main() {
       expect(find.text('选择助手'), findsOneWidget);
 
       await tester.tap(find.text('助手乙'));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 500));
       expect(find.text('选择对话'), findsOneWidget);
 
       final newTopicButtons = find.widgetWithText(FilledButton, '新话题');

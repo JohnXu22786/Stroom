@@ -551,7 +551,10 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
       if (c.id != conversationId) return c;
       if (inputTokens != null) c.lastInputTokens = inputTokens;
       if (outputTokens != null) c.lastOutputTokens = outputTokens;
-      if (costIncrement > 0) c.totalCost += costIncrement;
+      if (costIncrement != 0) {
+        c.totalCost += costIncrement;
+        if (c.totalCost < 0) c.totalCost = 0;
+      }
       c.updatedAt = DateTime.now();
       return c;
     }).toList();
