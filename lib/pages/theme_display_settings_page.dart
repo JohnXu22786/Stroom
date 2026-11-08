@@ -50,6 +50,7 @@ class _ThemeDisplaySettingsPageState
         centerTitle: true,
       ),
       body: ListView(
+        key: const Key('theme-display-settings-list'),
         padding: const EdgeInsets.all(16),
         children: [
           _buildSectionHeader(context, strings.themeDisplayThemeSection),
@@ -168,10 +169,7 @@ class _ThemeDisplaySettingsPageState
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (selected) ...[
-            const Icon(Icons.check),
-            const SizedBox(width: 8),
-          ],
+          if (selected) ...[const Icon(Icons.check), const SizedBox(width: 8)],
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(

@@ -185,7 +185,17 @@ void main() {
       tester.widget<MaterialApp>(find.byType(MaterialApp)).locale,
       const Locale('zh', 'CN'),
     );
-    await tester.scrollUntilVisible(find.text('浅色模式'), -300);
+    final pageScrollable = find
+        .descendant(
+          of: find.byKey(const Key('theme-display-settings-list')),
+          matching: find.byType(Scrollable),
+        )
+        .first;
+    await tester.scrollUntilVisible(
+      find.text('浅色模式'),
+      -300,
+      scrollable: pageScrollable,
+    );
     await tester.pumpAndSettle();
     expect(find.text('浅色模式'), findsOneWidget);
     expect(find.text('深色模式'), findsOneWidget);
@@ -195,6 +205,7 @@ void main() {
     await tester.scrollUntilVisible(
       find.byKey(const Key('language-search-field')),
       300,
+      scrollable: pageScrollable,
     );
     await tester.pumpAndSettle();
     expect(find.text('语言'), findsOneWidget);
@@ -206,14 +217,18 @@ void main() {
     expect(find.text('zh-cn'), findsOneWidget);
 
     await tester.enterText(
-        find.byKey(const Key('language-search-field')), 'zh-cn');
+      find.byKey(const Key('language-search-field')),
+      'zh-cn',
+    );
     await tester.pumpAndSettle();
     expect(find.text('简体中文（简体中文）'), findsOneWidget);
     expect(find.text('英语（English）'), findsNothing);
     expect(find.text('跟随系统'), findsNWidgets(2));
 
     await tester.enterText(
-        find.byKey(const Key('language-search-field')), 'no-match');
+      find.byKey(const Key('language-search-field')),
+      'no-match',
+    );
     await tester.pumpAndSettle();
     expect(find.text('没有匹配的语言'), findsOneWidget);
   });
