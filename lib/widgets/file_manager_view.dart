@@ -994,7 +994,7 @@ class _FileManagerViewState<T extends FileRecord>
           Container(
             decoration: BoxDecoration(
               color: Colors.amber.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(16),
               border: Border.all(color: Colors.amber.withValues(alpha: 0.2)),
             ),
             child: Column(
@@ -1094,7 +1094,7 @@ class _FileManagerViewState<T extends FileRecord>
         children: [
           Container(
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(16),
               border: Border.all(color: Colors.grey[300]!),
             ),
             child: Column(
@@ -1103,7 +1103,7 @@ class _FileManagerViewState<T extends FileRecord>
                 Expanded(
                   child: ClipRRect(
                     borderRadius: const BorderRadius.vertical(
-                      top: Radius.circular(8),
+                      top: Radius.circular(16),
                     ),
                     child: hasThumbnailBuilder
                         ? _putThumbnailCache(
@@ -1122,7 +1122,7 @@ class _FileManagerViewState<T extends FileRecord>
                   ),
                   decoration: const BoxDecoration(
                     borderRadius: BorderRadius.vertical(
-                      bottom: Radius.circular(8),
+                      bottom: Radius.circular(16),
                     ),
                   ),
                   child: Row(
