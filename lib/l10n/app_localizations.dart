@@ -17670,6 +17670,18 @@ abstract class AppLocalizations {
   /// **'Request outcome is uncertain. Retrying has stopped to avoid duplicate submissions. Select the audio again to create a new task.'**
   String get asrChunkUncertainGuidance;
 
+  /// No description provided for @asrRetryAudioLost.
+  ///
+  /// In en, this message translates to:
+  /// **'The original audio file was lost. Select the audio again to retry: {audioName}'**
+  String asrRetryAudioLost(Object audioName);
+
+  /// No description provided for @asrRetryAudioCorrupt.
+  ///
+  /// In en, this message translates to:
+  /// **'The original audio file is corrupted. Select the audio again to retry: {audioName}'**
+  String asrRetryAudioCorrupt(Object audioName);
+
   /// No description provided for @asrFailureChunkIndex.
   ///
   /// In en, this message translates to:

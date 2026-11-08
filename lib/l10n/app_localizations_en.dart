@@ -10664,6 +10664,16 @@ class AppLocalizationsEn extends AppLocalizations {
       'Request outcome is uncertain. Retrying has stopped to avoid duplicate submissions. Select the audio again to create a new task.';
 
   @override
+  String asrRetryAudioLost(Object audioName) {
+    return 'The original audio file was lost. Select the audio again to retry: $audioName';
+  }
+
+  @override
+  String asrRetryAudioCorrupt(Object audioName) {
+    return 'The original audio file is corrupted. Select the audio again to retry: $audioName';
+  }
+
+  @override
   String asrFailureChunkIndex(Object index) {
     return ', chunk $index';
   }
@@ -21388,6 +21398,16 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   @override
   String get asrChunkUncertainGuidance =>
       'Request outcome is uncertain. Retrying has stopped to avoid duplicate submissions. Select the audio again to create a new task.';
+
+  @override
+  String asrRetryAudioLost(Object audioName) {
+    return 'The original audio file was lost. Select the audio again to retry: $audioName';
+  }
+
+  @override
+  String asrRetryAudioCorrupt(Object audioName) {
+    return 'The original audio file is corrupted. Select the audio again to retry: $audioName';
+  }
 
   @override
   String asrFailureChunkIndex(Object index) {

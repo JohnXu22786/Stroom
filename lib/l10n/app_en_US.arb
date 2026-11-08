@@ -6090,6 +6090,18 @@
     }
   },
   "asrChunkUncertainGuidance": "Request outcome is uncertain. Retrying has stopped to avoid duplicate submissions. Select the audio again to create a new task.",
+  "asrRetryAudioLost": "The original audio file was lost. Select the audio again to retry: {audioName}",
+  "@asrRetryAudioLost": {
+    "placeholders": {
+      "audioName": {}
+    }
+  },
+  "asrRetryAudioCorrupt": "The original audio file is corrupted. Select the audio again to retry: {audioName}",
+  "@asrRetryAudioCorrupt": {
+    "placeholders": {
+      "audioName": {}
+    }
+  },
   "asrFailureChunkIndex": ", chunk {index}",
   "@asrFailureChunkIndex": {
     "placeholders": {

@@ -10105,6 +10105,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get asrChunkUncertainGuidance => '请求结果不确定。为避免重复提交，已停止重试。请重新选择音频后新建任务。';
 
   @override
+  String asrRetryAudioLost(Object audioName) {
+    return '原始音频文件已丢失，请重新选择音频后重试：$audioName';
+  }
+
+  @override
+  String asrRetryAudioCorrupt(Object audioName) {
+    return '原始音频文件已损坏，请重新选择音频后重试：$audioName';
+  }
+
+  @override
   String asrFailureChunkIndex(Object index) {
     return '，分段 $index';
   }
@@ -20270,6 +20280,16 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get asrChunkUncertainGuidance => '请求结果不确定。为避免重复提交，已停止重试。请重新选择音频后新建任务。';
+
+  @override
+  String asrRetryAudioLost(Object audioName) {
+    return '原始音频文件已丢失，请重新选择音频后重试：$audioName';
+  }
+
+  @override
+  String asrRetryAudioCorrupt(Object audioName) {
+    return '原始音频文件已损坏，请重新选择音频后重试：$audioName';
+  }
 
   @override
   String asrFailureChunkIndex(Object index) {

@@ -522,8 +522,11 @@ bool _isBenignEncodedHttpUrlNormalization(
       !_urlContainsEmbeddedAudioPayload(value);
 }
 
-class AsrRetryAudioUnavailableException implements Exception {
+class AsrRetryAudioUnavailableException
+    implements Exception, AsrRetryAudioFailure {
+  @override
   final String audioName;
+  @override
   final bool corrupt;
 
   const AsrRetryAudioUnavailableException(

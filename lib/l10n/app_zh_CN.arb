@@ -6090,6 +6090,18 @@
     }
   },
   "asrChunkUncertainGuidance": "请求结果不确定。为避免重复提交，已停止重试。请重新选择音频后新建任务。",
+  "asrRetryAudioLost": "原始音频文件已丢失，请重新选择音频后重试：{audioName}",
+  "@asrRetryAudioLost": {
+    "placeholders": {
+      "audioName": {}
+    }
+  },
+  "asrRetryAudioCorrupt": "原始音频文件已损坏，请重新选择音频后重试：{audioName}",
+  "@asrRetryAudioCorrupt": {
+    "placeholders": {
+      "audioName": {}
+    }
+  },
   "asrFailureChunkIndex": "，分段 {index}",
   "@asrFailureChunkIndex": {
     "placeholders": {

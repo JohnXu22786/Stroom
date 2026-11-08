@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/widgets.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/services/asr_service.dart';
+import 'package:stroom/services/asr_retry_storage.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/utils/audio_codecs.dart';
 import 'package:stroom/utils/audio_utils.dart';
@@ -237,6 +238,35 @@ Uint8List _buildMonoMsAdpcmWav({
 
 void main() {
   group('ASR localized diagnostics', () {
+    test('unavailable retry audio guidance is localized and preserves name',
+        () {
+      const audioName = 'recording, 東京 (take 2).wav';
+      final english = lookupAppLocalizations(const Locale('en', 'US'));
+      final chinese = lookupAppLocalizations(const Locale('zh', 'CN'));
+
+      for (final corrupt in [false, true]) {
+        final error = AsrRetryAudioUnavailableException(
+          audioName,
+          corrupt: corrupt,
+        );
+        final englishFailure = formatAsrTaskFailure(error, english);
+        final chineseFailure = formatAsrTaskFailure(error, chinese);
+
+        expect(englishFailure, contains(audioName));
+        expect(chineseFailure, contains(audioName));
+        expect(
+          englishFailure,
+          contains(corrupt ? 'corrupted' : 'lost'),
+        );
+        expect(
+          chineseFailure,
+          contains(corrupt ? '已损坏' : '已丢失'),
+        );
+        expect(error.toString(), contains(audioName));
+        expect(error.toString(), contains(corrupt ? '已损坏' : '已丢失'));
+      }
+    });
+
     test('failure framing is localized and preserves dynamic details', () {
       const diagnostic = AsrFailureDiagnostic(
         category: AsrFailureCategory.provider,
