@@ -17954,6 +17954,150 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Request failed: {detail}'**
   String chatRequestFailed(Object detail);
+
+  /// No description provided for @startupTagline.
+  ///
+  /// In en, this message translates to:
+  /// **'Your learning assistant'**
+  String get startupTagline;
+
+  /// No description provided for @startupProgressDataSafety.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking data safety...'**
+  String get startupProgressDataSafety;
+
+  /// No description provided for @startupProgressFormatVersion.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking data format version...'**
+  String get startupProgressFormatVersion;
+
+  /// No description provided for @startupProgressDataFormat.
+  ///
+  /// In en, this message translates to:
+  /// **'Validating data formats...'**
+  String get startupProgressDataFormat;
+
+  /// No description provided for @startupProgressDataIntegrity.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking data integrity...'**
+  String get startupProgressDataIntegrity;
+
+  /// No description provided for @startupProgressResults.
+  ///
+  /// In en, this message translates to:
+  /// **'Processing check results...'**
+  String get startupProgressResults;
+
+  /// No description provided for @startupProgressCompleteWithWarnings.
+  ///
+  /// In en, this message translates to:
+  /// **'Startup complete (note: {warning})'**
+  String startupProgressCompleteWithWarnings(Object warning);
+
+  /// No description provided for @startupProgressCompleteAfterMigration.
+  ///
+  /// In en, this message translates to:
+  /// **'Data checks complete. Preparing to start the app.'**
+  String get startupProgressCompleteAfterMigration;
+
+  /// No description provided for @startupProgressReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing to start the app.'**
+  String get startupProgressReady;
+
+  /// No description provided for @startupWarningErrorCount.
+  ///
+  /// In en, this message translates to:
+  /// **'Found {count} data issue(s):'**
+  String startupWarningErrorCount(Object count);
+
+  /// No description provided for @startupWarningWarningCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} warning(s):'**
+  String startupWarningWarningCount(Object count);
+
+  /// No description provided for @startupIssueProviderEntriesInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Provider entries have an invalid format: expected a JSON array.'**
+  String get startupIssueProviderEntriesInvalid;
+
+  /// No description provided for @startupIssueProviderEntryInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Provider entry {index} is null or has an invalid type.'**
+  String startupIssueProviderEntryInvalid(Object index);
+
+  /// No description provided for @startupIssueProviderIdMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'Provider entry {index} is missing an ID or has an empty ID.'**
+  String startupIssueProviderIdMissing(Object index);
+
+  /// No description provided for @startupIssueProviderTypeMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'Provider entry {index} is missing a type or has an empty type.'**
+  String startupIssueProviderTypeMissing(Object index);
+
+  /// No description provided for @startupIssueProviderNameMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'Provider entry {index} is missing a name or has an empty name.'**
+  String startupIssueProviderNameMissing(Object index);
+
+  /// No description provided for @startupIssueProviderListInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Provider entry {index} field {field} is not a valid list.'**
+  String startupIssueProviderListInvalid(Object index, Object field);
+
+  /// No description provided for @startupIssueProviderNestedItemInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Provider entry {index}, {field} contains an invalid item that may cause a parsing failure.'**
+  String startupIssueProviderNestedItemInvalid(Object index, Object field);
+
+  /// No description provided for @startupIssueConversationsInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Conversations have an invalid format: expected a JSON array.'**
+  String get startupIssueConversationsInvalid;
+
+  /// No description provided for @startupIssueConversationInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Conversation {index} is null or has an invalid type.'**
+  String startupIssueConversationInvalid(Object index);
+
+  /// No description provided for @startupIssueConversationIdMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'Conversation {index} is missing an ID.'**
+  String startupIssueConversationIdMissing(Object index);
+
+  /// No description provided for @startupIssueConversationMessagesMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'Conversation {index} is missing its messages field.'**
+  String startupIssueConversationMessagesMissing(Object index);
+
+  /// No description provided for @startupIssueConversationMessagesInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Conversation {index} messages field is not a valid list.'**
+  String startupIssueConversationMessagesInvalid(Object index);
+
+  /// No description provided for @startupIssueUnknownProviderType.
+  ///
+  /// In en, this message translates to:
+  /// **'Provider entry {index} uses unknown provider type \"{type}\" and may not work correctly.'**
+  String startupIssueUnknownProviderType(Object index, Object type);
 }
 
 class _AppLocalizationsDelegate
