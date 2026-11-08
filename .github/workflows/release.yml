@@ -51,12 +51,17 @@ jobs:
       - name: Validate dispatch inputs
         if: ${{ github.event_name == 'workflow_dispatch' }}
         env:
+          TAG: ${{ env.TAG }}
           PLATFORMS: ${{ inputs.platforms }}
           INCLUDE_RELEASE_NOTES: ${{ inputs.include_release_notes }}
         run: |
           python3 - <<'PY'
           import os
+          import re
 
+          tag = os.environ["TAG"]
+          if not re.fullmatch(r"v[0-9A-Za-z][0-9A-Za-z._+-]*", tag):
+              raise SystemExit("Invalid tag input; use a release tag such as v0.6.0")
           allowed = {"android", "ios", "linux", "macos-arm64", "macos-x64", "web", "windows"}
           selected = os.environ["PLATFORMS"].split(",")
           if os.environ["INCLUDE_RELEASE_NOTES"] not in {"true", "false"}:
@@ -67,9 +72,10 @@ jobs:
               raise SystemExit("Invalid platforms input; use all or a unique comma-separated platform list")
           PY
       - id: extract-version
+        env:
+          TAG: ${{ env.TAG }}
         run: |
-          TAG="${{ env.TAG }}"
-          echo "app_version=$TAG" >> "$GITHUB_OUTPUT"
+          printf 'app_version=%s\n' "$TAG" >> "$GITHUB_OUTPUT"
 
       # 构建信息：发布时间 + 更新内容，写入应用「版本信息」面板。
       # - tag push：从预先创建的 release draft 读取创建时间和自动生成的说明。
@@ -405,8 +411,9 @@ jobs:
       - name: Build unsigned iOS app
         run: flutter build ios --release --no-codesign --dart-define-from-file=build-info.json
       - name: Create unsigned IPA (Payload/Runner.app → zip)
+        env:
+          TAG: ${{ env.TAG }}
         run: |
-          TAG="${{ env.TAG }}"
           mkdir -p build/ios/ipa/Payload
           cp -r build/ios/iphoneos/Runner.app build/ios/ipa/Payload/
           cd build/ios/ipa
