@@ -54,9 +54,8 @@ jobs:
           cache: true
           pub-cache: true
       - run: flutter pub get
-      - name: Format generated localization code
-        # Flutter regenerates localization Dart files with the current SDK formatter.
-        run: dart format --language-version=3.0 lib/l10n/app_localizations.dart
+      - name: Check generated localization formatting
+        run: dart format --language-version=3.0 --set-exit-if-changed lib/l10n/app_localizations.dart
       - name: Check Dart formatting
         # Preserve the repo's Dart 3.0 formatting baseline after raising its SDK minimum.
         run: dart format --language-version=3.0 --set-exit-if-changed .
