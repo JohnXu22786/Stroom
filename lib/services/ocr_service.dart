@@ -755,6 +755,7 @@ class OcrService {
           protocolId: protocolId,
         );
         final routedBody = protocolRequest.body;
+        _ensureRequestWithinSizeBudget(routedBody);
         onSendProgress?.call(
           0,
           utf8.encode(jsonEncode(routedBody)).length,

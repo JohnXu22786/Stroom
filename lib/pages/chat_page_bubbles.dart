@@ -1070,6 +1070,7 @@ extension _ChatPageBubblesExt on _ChatPageState {
             continue;
           }
           if (s.liveTextFragments != null) {
+            final fragmentOccurrenceOffset = occurrenceOffset;
             if (hasSearchMatch &&
                 !(isStreaming &&
                     messageId == _streamingMsgId &&
@@ -1077,19 +1078,57 @@ extension _ChatPageBubblesExt on _ChatPageState {
               final cacheKey = s.chunkIndex == null
                   ? '$messageId:live-segment:$segmentIndex'
                   : '$messageId:live-chunk:${s.chunkIndex}';
-              occurrenceOffset += _streamingSearchOccurrenceCache
+              final liveOccurrences = _streamingSearchOccurrenceCache
                   .putIfAbsent(cacheKey, _StreamingSearchOccurrenceCount.new)
                   .countLiveFragmentsFor(s.liveTextFragments!, lowerQuery);
+              occurrenceOffset += liveOccurrences;
+            }
+            final liveText = s.liveTextFragments!.join();
+            final liveMatches = hasSearchMatch && lowerQuery.isNotEmpty
+                ? RegExp(RegExp.escape(lowerQuery), caseSensitive: false)
+                    .allMatches(liveText)
+                    .toList(growable: false)
+                : const <RegExpMatch>[];
+            final liveSpans = <TextSpan>[];
+            var liveTextOffset = 0;
+            for (var matchIndex = 0;
+                matchIndex < liveMatches.length;
+                matchIndex++) {
+              final match = liveMatches[matchIndex];
+              if (match.start > liveTextOffset) {
+                liveSpans.add(TextSpan(
+                    text: liveText.substring(liveTextOffset, match.start)));
+              }
+              final globalMatchIndex = messageFirstMatchIndex +
+                  fragmentOccurrenceOffset +
+                  matchIndex;
+              final isCurrentMatch = globalMatchIndex == _currentMatchIndex;
+              liveSpans.add(TextSpan(
+                text: liveText.substring(match.start, match.end),
+                style: TextStyle(
+                  backgroundColor:
+                      isCurrentMatch ? Colors.orangeAccent : Colors.yellow,
+                  color: Colors.black87,
+                  fontWeight:
+                      isCurrentMatch ? FontWeight.bold : FontWeight.normal,
+                ),
+              ));
+              liveTextOffset = match.end;
+            }
+            if (liveTextOffset < liveText.length) {
+              liveSpans.add(TextSpan(text: liveText.substring(liveTextOffset)));
             }
             widgets.add(Padding(
               padding: const EdgeInsets.only(bottom: 4),
               child: SelectableText.rich(
                 TextSpan(
-                  children: s.liveTextFragments!
-                      .map((fragment) => TextSpan(text: fragment))
-                      .toList(growable: false),
+                  style: Theme.of(context).textTheme.bodyMedium,
+                  children: liveSpans.isEmpty
+                      ? s.liveTextFragments!
+                          .map((fragment) => TextSpan(text: fragment))
+                          .toList(growable: false)
+                      : liveSpans,
                 ),
-                style: Theme.of(context).textTheme.bodyMedium,
               ),
             ));
             continue;

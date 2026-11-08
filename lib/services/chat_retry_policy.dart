@@ -139,13 +139,23 @@ Future<void> waitForRetryOrCancellation(
 Future<bool> _isRateLimit(Object error) async {
   if (error is! DioException || error.response?.statusCode != 429) return false;
   final responseData = error.response?.data;
-  final responseBody = responseData is ResponseBody
-      ? await _readResponseBody(responseData)
-      : _flattenErrorDetails(responseData);
+  final bufferedResponseBody =
+      error.requestOptions.extra['stroom.chat.bufferedStreamErrorBody'];
+  final responseBody = bufferedResponseBody != null
+      ? _flattenErrorDetails(bufferedResponseBody)
+      : responseData is ResponseBody
+          ? await _readResponseBody(responseData)
+          : _flattenErrorDetails(responseData);
   // Preserve a buffered stream body for the downstream provider error handler;
   // classification must not consume the only copy of the API diagnostics.
   if (responseData is ResponseBody && error.response != null) {
-    error.response!.data = responseBody;
+    error.requestOptions.extra['stroom.chat.bufferedStreamErrorBody'] =
+        responseBody;
+    try {
+      error.response!.data = responseBody;
+    } on TypeError {
+      // Keep the request-options copy when a typed Response rejects String.
+    }
   }
   final details = [
     responseBody,

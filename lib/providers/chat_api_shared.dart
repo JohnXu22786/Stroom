@@ -38,6 +38,8 @@ Map<String, String> get openRouterAppHeaders => {
 /// map, or `null` if the data is not a [ResponseBody].
 ///
 /// Extracted as a top-level function for testability.
+const _bufferedStreamErrorBodyExtraKey = 'stroom.chat.bufferedStreamErrorBody';
+
 Future<Map<String, dynamic>?> parseStreamErrorBody(DioException e) async {
   if (e.response?.data is ResponseBody) {
     try {
@@ -50,7 +52,14 @@ Future<Map<String, dynamic>?> parseStreamErrorBody(DioException e) async {
       final parsedBody = <String, dynamic>{'raw': utf8.decode(allBytes)};
       // Retry classification and downstream diagnostics both need the same
       // response after the one-shot stream has been read.
-      e.response!.data = parsedBody;
+      e.requestOptions.extra[_bufferedStreamErrorBodyExtraKey] = parsedBody;
+      try {
+        e.response!.data = parsedBody;
+      } on TypeError {
+        // A Response<T> can reject this Map at runtime even though Dio exposes
+        // it as Response<dynamic>. The request-options copy remains available
+        // to retry classification in that case.
+      }
       return parsedBody;
     } catch (_) {
       return null;

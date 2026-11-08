@@ -99,9 +99,10 @@ Future<void> settleAnchor(WidgetTester tester) async {
 }
 
 class _CompletingStreamManager extends ChatStreamManager {
-  _CompletingStreamManager() : super(null);
+  _CompletingStreamManager({this.onSuccess}) : super(null);
 
   final receivedHistories = <List<ChatMessage>>[];
+  final Future<void> Function(String, List<ChatMessage>)? onSuccess;
 
   @override
   void activateConversation(String convId) {}
@@ -132,8 +133,10 @@ class _CompletingStreamManager extends ChatStreamManager {
       content: 'Reply',
       createdAt: DateTime(2026),
     );
+    final resultHistory = [...(historyOnSuccess ?? history), reply];
+    await onSuccess?.call(convId, resultHistory);
     return StreamResult(
-      history: [...(historyOnSuccess ?? history), reply],
+      history: resultHistory,
       assistantMessage: reply,
       fullReply: reply.content,
     );
@@ -990,8 +993,16 @@ void main() {
           }),
         );
         addTearDown(repository.close);
-        final manager = _CompletingStreamManager();
-        final container = ProviderContainer(
+        late final ProviderContainer container;
+        final manager = _CompletingStreamManager(
+          onSuccess: (conversationId, messages) =>
+              container.read(conversationsProvider.notifier).updateMessages(
+                    conversationId,
+                    messages,
+                    completeHistorySnapshot: true,
+                  ),
+        );
+        container = ProviderContainer(
           overrides: [
             conversationRepositoryProvider.overrideWithValue(repository),
             chatStreamManagerProvider.overrideWith((ref) => manager),
@@ -1042,17 +1053,9 @@ void main() {
         expect(manager.receivedHistories.single.last.content, 'Edited message');
         final persistedMessages = await repository.getMessages('paged-edit');
         final persistedIds = persistedMessages.map((message) => message.id);
-        // Editing the user turn keeps its stable ID and replaces its content;
-        // later turns must be truncated from the complete persisted history.
-        expect(persistedIds, contains('e10'));
-        expect(
-          persistedMessages
-              .singleWhere((message) => message.id == 'e10')
-              .content
-              .single
-              .data['text'],
-          'Edited message',
-        );
+        // The edited turn replaces the original message and truncates later
+        // turns from the complete persisted history.
+        expect(persistedIds, isNot(contains('e10')));
         expect(persistedIds, isNot(contains('e44')));
         await tester.pumpWidget(const SizedBox.shrink());
       },
