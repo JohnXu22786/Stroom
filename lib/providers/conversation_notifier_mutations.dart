@@ -10,6 +10,29 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
   // Mutations
   // --------------------------------------------------------------------------
 
+  bool _markLatestAssistantMessageRead(Conversation? conversation) {
+    if (conversation == null) return false;
+    for (final message in conversation.messages.reversed) {
+      if (message.role != 'assistant' || message.isStreaming) continue;
+      if (conversation.lastReadMessageId == message.id) return false;
+      conversation.lastReadMessageId = message.id;
+      return true;
+    }
+    return false;
+  }
+
+  Future<void> _markSelectedConversationReadAfterLoad(String id) async {
+    if (_repositoryReady && !_messageLoadedConversationIds.contains(id)) {
+      await _loadMessagesFromRepository(id);
+    }
+    if (!mounted || _ref.read(activeConversationIdProvider) != id) return;
+    final conversation = state.where((item) => item.id == id).firstOrNull;
+    if (_markLatestAssistantMessageRead(conversation)) {
+      state = List<Conversation>.from(state);
+      await _persist();
+    }
+  }
+
   /// Creates a new conversation with an empty title and adds it to the list.
   ///
   /// By default the new conversation becomes the active one (the chat page
@@ -72,6 +95,13 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
       lastUsedModelId: assistant?.defaultModelId,
       lastUsedProviderName: assistant?.defaultProviderName,
     );
+    if (activate) {
+      final previousActiveId = _ref.read(activeConversationIdProvider);
+      final previousActive = previousActiveId == null
+          ? null
+          : state.where((c) => c.id == previousActiveId).firstOrNull;
+      _markLatestAssistantMessageRead(previousActive);
+    }
     state = pinnedFirstStable([conv, ...state]);
     if (activate) {
       _ref.read(activeConversationIdProvider.notifier).state = conv.id;
@@ -180,10 +210,20 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
 
   /// Selects a conversation by [id], setting it as the active one.
   void selectConversation(String id) {
+    final previousId = _ref.read(activeConversationIdProvider);
+    var markedRead = false;
+    for (final conversation in state) {
+      if (conversation.id != id && conversation.id != previousId) continue;
+      markedRead = _markLatestAssistantMessageRead(conversation) || markedRead;
+    }
     _ref.read(activeConversationIdProvider.notifier).state = id;
     if (_repositoryReady && !_messageLoadedConversationIds.contains(id)) {
-      unawaited(_loadMessagesFromRepository(id));
+      unawaited(_markSelectedConversationReadAfterLoad(id));
+    } else {
+      final conversation = state.where((item) => item.id == id).firstOrNull;
+      markedRead = _markLatestAssistantMessageRead(conversation) || markedRead;
     }
+    if (markedRead) unawaited(_persist());
     _persistActiveId();
   }
 
