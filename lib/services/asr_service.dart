@@ -1102,11 +1102,19 @@ class AsrChunkedTranscriptionException implements Exception {
 
 /// Formats app-authored ASR failure framing for user-facing task feedback.
 /// Provider diagnostics, transcripts, and other dynamic details remain intact.
+abstract interface class AsrRetryAudioFailure {
+  String get audioName;
+  bool get corrupt;
+}
+
 String formatAsrTaskFailure(
   Object error,
   AppLocalizations strings,
 ) =>
     switch (error) {
+      AsrRetryAudioFailure exception => exception.corrupt
+          ? strings.asrRetryAudioCorrupt(exception.audioName)
+          : strings.asrRetryAudioLost(exception.audioName),
       AsrFailureDiagnostic diagnostic => diagnostic.localizedString(strings),
       AsrChunkedTranscriptionException exception =>
         exception.localizedString(strings),
