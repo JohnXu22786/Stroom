@@ -5,6 +5,8 @@ import '../../l10n/app_localizations.dart';
 import '../../models/assistant.dart';
 import '../../models/built_in_prompts.dart';
 import '../../providers/assistant_provider.dart';
+import '../../services/assistant_catalog_service.dart';
+import 'assistant_remote_source_dialog.dart';
 
 /// Shows a dialog listing all built-in assistant prompts (the assistant
 /// "market"). Tapping a card opens a detail panel where the user can review
@@ -102,6 +104,18 @@ class _BuiltInPromptSelectorDialogState
                       fontSize: 18,
                       fontWeight: FontWeight.w600,
                       color: cs.onSurface,
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.add_link),
+                    tooltip:
+                        Localizations.localeOf(context).languageCode == 'zh'
+                            ? '接入远程助手'
+                            : 'Connect remote assistants',
+                    onPressed: () => showAssistantRemoteSourceDialog(
+                      context,
+                      ref,
+                      initialUrl: kDefaultAssistantCatalogUrl,
                     ),
                   ),
                   const Spacer(),
