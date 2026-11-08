@@ -10,7 +10,19 @@ part of 'anthropic_chat_provider.dart';
 /// 完整的事件序列。
 @visibleForTesting
 class AnthropicStreamAccumulator {
-  final Map<int, Map<String, dynamic>> toolCalls = {};
+  final Map<int, Map<String, dynamic>> _toolCalls = {};
+  final Map<int, StringBuffer> _toolInputBuffers = {};
+
+  /// Current accumulated tool calls, preserving the string input shape used
+  /// by tests and diagnostics while materializing each argument buffer on read.
+  Map<int, Map<String, dynamic>> get toolCalls => {
+        for (final entry in _toolCalls.entries)
+          entry.key: {
+            ...entry.value,
+            'input': _toolInputBuffers[entry.key]?.toString() ?? '',
+          },
+      };
+
   final List<String> thinkingSignatures = [];
   String? stopReason;
 }
@@ -32,11 +44,12 @@ List<AIStreamEvent> processAnthropicStreamData(
       if (block == null) break;
       final blockType = block['type'];
       if (blockType == 'tool_use') {
-        acc.toolCalls[data['index'] as int? ?? 0] = {
+        final index = data['index'] as int? ?? 0;
+        acc._toolCalls[index] = {
           'id': block['id'] as String? ?? '',
           'name': block['name'] as String? ?? '',
-          'input': '',
         };
+        acc._toolInputBuffers.remove(index);
       } else if (blockType == 'thinking') {
         // thinking 块开始：新签名槽位
         acc.thinkingSignatures.add('');
@@ -70,10 +83,11 @@ List<AIStreamEvent> processAnthropicStreamData(
           final partial = delta['partial_json'] as String?;
           if (partial != null && partial.isNotEmpty) {
             final index = data['index'] as int? ?? 0;
-            final accEntry = acc.toolCalls[index];
+            final accEntry = acc._toolCalls[index];
             if (accEntry != null) {
-              accEntry['input'] =
-                  (accEntry['input'] as String? ?? '') + partial;
+              acc._toolInputBuffers
+                  .putIfAbsent(index, StringBuffer.new)
+                  .write(partial);
             }
           }
       }
@@ -104,9 +118,9 @@ List<AIStreamEvent> processAnthropicStreamData(
 /// 便于直接测试 chatStream 末尾的产出逻辑。
 @visibleForTesting
 AIStreamEvent? buildToolCallEvent(AnthropicStreamAccumulator acc) {
-  if (acc.stopReason != 'tool_use' || acc.toolCalls.isEmpty) return null;
-  final toolCalls = acc.toolCalls.entries.map((e) {
-    final inputJson = (e.value['input'] as String? ?? '').trim();
+  if (acc.stopReason != 'tool_use' || acc._toolCalls.isEmpty) return null;
+  final toolCalls = acc._toolCalls.entries.map((e) {
+    final inputJson = (acc._toolInputBuffers[e.key]?.toString() ?? '').trim();
     Object? input;
     if (inputJson.isNotEmpty) {
       try {
