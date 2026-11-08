@@ -65,12 +65,9 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late FilePickerPlatform originalPicker;
-  late TargetPlatform? originalPlatform;
 
   setUp(() async {
     originalPicker = FilePickerPlatform.instance;
-    originalPlatform = debugDefaultTargetPlatformOverride;
-    debugDefaultTargetPlatformOverride = TargetPlatform.android;
     SharedPreferences.setMockInitialValues({});
     ManifestDatabase.enableTestMode();
     TextManifest.invalidateCache();
@@ -78,7 +75,6 @@ void main() {
 
   tearDown(() {
     FilePickerPlatform.instance = originalPicker;
-    debugDefaultTargetPlatformOverride = originalPlatform;
   });
 
   testWidgets('imports a zero-byte text file', (tester) async {
@@ -123,8 +119,14 @@ void main() {
 
     await tester.tap(find.byKey(const Key('fm_file_popup_empty-export')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('导出到本地'));
-    await tester.pumpAndSettle();
+    final originalPlatform = debugDefaultTargetPlatformOverride;
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      await tester.tap(find.text('导出到本地'));
+      await tester.pumpAndSettle();
+    } finally {
+      debugDefaultTargetPlatformOverride = originalPlatform;
+    }
 
     expect(picker.savedName, 'empty-export.txt');
     expect(picker.savedBytes, isNotNull);
