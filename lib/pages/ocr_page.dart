@@ -2828,6 +2828,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     // Also passes through the model's typeConfig and customParams
     // for built-in OCR parameters and custom parameters.
     final selectedOption = requestModelOptions[requestModelIndex];
+    final strings = AppLocalizations.of(context)!;
     _selectedModelIndex = requestModelIndex;
     _selectedConfigId = selectedOption.configId;
     _selectedModelRecordId = selectedOption.modelRecordId;
@@ -2837,6 +2838,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       host: selectedOption.host,
       apiKey: selectedOption.apiKey,
       model: selectedOption.model.modelId,
+      systemPrompt: strings.ocrDefaultSystemPrompt,
       requestSizeBudgetBytes: requestSizeBudgetBytes,
       typeConfig: Map<String, dynamic>.from(selectedOption.model.typeConfig),
       customParams:
@@ -2865,7 +2867,6 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     final instructions = ref.read(ocrInstructionsProvider);
     final selectedInstructionIndex = _instructionSelectionValue(instructions);
     final retryInstructionSnapshot = _retryInstructionSnapshot;
-    final strings = AppLocalizations.of(context)!;
     final instructionContent = retryInstructionSnapshot ??
         selectedOcrInstructionContent(
           instructions,

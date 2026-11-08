@@ -418,6 +418,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get ocrDefaultImagesOnly => 'Default (send images only)';
 
   @override
+  String get ocrDefaultSystemPrompt =>
+      'Extract all text from the image, preserving its original formatting and layout. Return only the extracted text; do not add any explanation.';
+
+  @override
   String get ocrSavedInstructionSnapshot => 'Saved instruction snapshot';
 
   @override
@@ -11152,6 +11156,10 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get ocrDefaultImagesOnly => 'Default (send images only)';
+
+  @override
+  String get ocrDefaultSystemPrompt =>
+      'Extract all text from the image, preserving its original formatting and layout. Return only the extracted text; do not add any explanation.';
 
   @override
   String get ocrSavedInstructionSnapshot => 'Saved instruction snapshot';

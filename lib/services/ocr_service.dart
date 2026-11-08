@@ -2,7 +2,9 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/widgets.dart' show Locale;
 
+import '../l10n/app_localizations.dart';
 import '../providers/chat_api_provider.dart';
 import '../providers/provider_config.dart';
 import '../models/ocr_batch_execution.dart';
@@ -43,9 +45,11 @@ class OcrConfig {
   /// Returns the configured endpoint with surrounding whitespace removed.
   String get normalizedHost => host.trim();
 
-  /// The default system prompt used to guide OCR extraction.
+  /// The caller-localized system prompt used to guide OCR extraction.
+  /// Legacy callers retain the original Chinese default.
   String get effectiveSystemPrompt =>
-      systemPrompt ?? '请提取图片中的所有文字内容，保持原始格式和排版。只返回提取的文字，不要添加额外说明。';
+      systemPrompt ??
+      lookupAppLocalizations(const Locale('zh', 'CN')).ocrDefaultSystemPrompt;
 
   /// Optional user instruction sent together with the image(s).
   /// Empty when not configured — the request then carries images only.

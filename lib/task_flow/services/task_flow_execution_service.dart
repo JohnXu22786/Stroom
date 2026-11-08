@@ -1422,6 +1422,8 @@ class TaskFlowExecutionService {
               flowSubTask: flowSubTask,
               bgNotifier: bgNotifier,
               providerEntries: providerEntries,
+              localizations:
+                  appLocalizationsForLocale(_ref.read(localeProvider)),
               cancelToken: _activeRequestCancelTokens[execId],
             ),
             def.outputType);

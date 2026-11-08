@@ -389,6 +389,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get ocrDefaultImagesOnly => '默认（仅发送图片）';
 
   @override
+  String get ocrDefaultSystemPrompt =>
+      '请提取图片中的所有文字内容，保持原始格式和排版。只返回提取的文字，不要添加额外说明。';
+
+  @override
   String get ocrSavedInstructionSnapshot => '已保存的指令快照';
 
   @override
@@ -10564,6 +10568,10 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get ocrDefaultImagesOnly => '默认（仅发送图片）';
+
+  @override
+  String get ocrDefaultSystemPrompt =>
+      '请提取图片中的所有文字内容，保持原始格式和排版。只返回提取的文字，不要添加额外说明。';
 
   @override
   String get ocrSavedInstructionSnapshot => '已保存的指令快照';

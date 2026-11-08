@@ -114,6 +114,7 @@
   "ocrTemplateLatexLabel": "LaTeX 模板",
   "ocrTemplateLatexContent": "请按页面的自然阅读顺序转录所有可见文字。保留非公式文字，并将数学公式用 LaTeX 表示；行内公式使用 $...$，独立公式使用 $$...$$。只返回转录结果，不添加说明或推断。",
   "ocrDefaultImagesOnly": "默认（仅发送图片）",
+  "ocrDefaultSystemPrompt": "请提取图片中的所有文字内容，保持原始格式和排版。只返回提取的文字，不要添加额外说明。",
   "ocrSavedInstructionSnapshot": "已保存的指令快照",
   "ocrPageTitle": "文字识别",
   "ocrImageQualitySettings": "图片画质设置",
