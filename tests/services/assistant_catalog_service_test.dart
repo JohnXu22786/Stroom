@@ -9,6 +9,18 @@ import 'package:stroom/services/assistant_catalog_service.dart';
 
 void main() {
   group('AssistantCatalogService', () {
+    test('rejects an oversized streamed body before retaining it', () async {
+      final client = _OversizedChunkedClient();
+      final service = AssistantCatalogService(client: client);
+
+      await expectLater(
+        service.fetchCatalog('https://example.com/catalog.json'),
+        throwsA(isA<FormatException>()),
+      );
+      expect(client.sentChunks, 2);
+      service.close();
+    });
+
     test('fetches a direct Stroom JSON assistant over HTTPS', () async {
       final body = _assistantJson(version: '1.0.0');
       final client = MockClient((request) async {
@@ -152,3 +164,21 @@ String _assistantJson({required String version}) => '''
   "prompt": "Be helpful."
 }
 ''';
+
+class _OversizedChunkedClient extends http.BaseClient {
+  int sentChunks = 0;
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    Stream<List<int>> body() async* {
+      sentChunks++;
+      yield List<int>.filled(600 * 1024, 1);
+      sentChunks++;
+      yield List<int>.filled(600 * 1024, 2);
+      sentChunks++;
+      yield List<int>.filled(600 * 1024, 3);
+    }
+
+    return http.StreamedResponse(body(), 200, request: request);
+  }
+}

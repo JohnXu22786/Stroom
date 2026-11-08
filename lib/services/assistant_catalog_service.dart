@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
@@ -96,28 +97,39 @@ class AssistantCatalogService {
   }
 
   Future<List<int>> _getBytes(Uri uri, {Uri? expectedOrigin}) async {
-    final response = await _client.get(
-      uri,
-      headers: const {
-        'Accept':
-            'application/json, application/yaml, text/markdown, text/plain'
-      },
-    );
+    final request = http.Request('GET', uri)
+      ..headers['Accept'] =
+          'application/json, application/yaml, text/markdown, text/plain';
+    final response = await _client.send(request);
     if (response.statusCode < 200 || response.statusCode >= 300) {
+      await response.stream.listen((_) {}).cancel();
       throw FormatException(
           'Download failed with HTTP ${response.statusCode}.');
     }
-    if (response.bodyBytes.length > _maxCatalogBytes) {
+    if (response.contentLength != null &&
+        response.contentLength! > _maxCatalogBytes) {
+      await response.stream.listen((_) {}).cancel();
       throw const FormatException(
           'Remote assistant files may not exceed 1 MiB.');
     }
     final finalUri = response.request?.url ?? uri;
     if (finalUri.scheme != 'https' ||
         (expectedOrigin != null && !_sameOrigin(expectedOrigin, finalUri))) {
+      await response.stream.listen((_) {}).cancel();
       throw const FormatException(
           'HTTPS redirects must stay on the same origin.');
     }
-    return response.bodyBytes;
+    final bytes = BytesBuilder(copy: false);
+    var length = 0;
+    await for (final chunk in response.stream) {
+      length += chunk.length;
+      if (length > _maxCatalogBytes) {
+        throw const FormatException(
+            'Remote assistant files may not exceed 1 MiB.');
+      }
+      bytes.add(chunk);
+    }
+    return bytes.takeBytes();
   }
 
   static Uri _validateHttpsUri(String value) {
