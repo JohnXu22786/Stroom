@@ -380,7 +380,13 @@ extension _ChatPageBuildersExt on _ChatPageState {
     // keep a second growing full-text provider value.
     final streamingFullReply =
         activeId == null ? '' : ref.read(streamingFullReplyProvider(activeId));
-    if (streamingFullReply.isNotEmpty && message.id == streamingMsgId) {
+    final hasIncrementalLegacyReply = activeId != null &&
+        _legacyFullReplySnapshots.containsKey('$activeId:${message.id}');
+    final segments = _chatSegments[message.id];
+    if (streamingFullReply.isNotEmpty &&
+        !hasIncrementalLegacyReply &&
+        (segments == null || segments.isEmpty) &&
+        message.id == streamingMsgId) {
       // This is the message currently being generated, so the streaming
       // markdown config applies (mermaid blocks show "正在生成..." while
       // the reply is still being produced — only while their fence is
@@ -416,7 +422,6 @@ extension _ChatPageBuildersExt on _ChatPageState {
     // here, so a model that thought and then called tools without any
     // text showed a pile of "思考完成" buttons and hid the tool calls
     // until the first text token converted the message to a text message.
-    final segments = _chatSegments[message.id];
     if (segments != null && segments.isNotEmpty) {
       return Padding(
         padding: const EdgeInsets.all(12),

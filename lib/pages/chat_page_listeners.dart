@@ -80,13 +80,27 @@ extension _ChatPageListenersExt on _ChatPageState {
     // Keep legacy direct provider writes working for older callers. Normal
     // manager updates arrive through textSections below, the single live text
     // representation.
-    ref.listen(streamingFullReplyProvider(convId), (String? prev, String next) {
-      if (!mounted || next.isEmpty || next == prev) return;
+    ref.listen(streamingFullReplyProvider(convId), (_, String next) {
+      if (!mounted || ref.read(activeConversationIdProvider) != convId) return;
       final msgId = _streamingMsgId ?? ref.read(streamingMsgIdProvider(convId));
       if (msgId == null) return;
-      _updateStreamingMessage(msgId, next);
-      _rebuildLiveSegments(msgId);
+      _updateLegacyFullReply(msgId, convId, next);
     });
+    final existingLegacyReply = ref.read(streamingFullReplyProvider(convId));
+    final existingLegacyMsgId =
+        _streamingMsgId ?? ref.read(streamingMsgIdProvider(convId));
+    if (existingLegacyReply.isNotEmpty && existingLegacyMsgId != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || ref.read(activeConversationIdProvider) != convId) {
+          return;
+        }
+        _updateLegacyFullReply(
+          existingLegacyMsgId,
+          convId,
+          ref.read(streamingFullReplyProvider(convId)),
+        );
+      });
+    }
 
     ref.listen(streamingReasoningAppendProvider(convId), (prev, next) {
       if (!mounted || next == null || next.text.isEmpty) return;
@@ -168,6 +182,14 @@ extension _ChatPageListenersExt on _ChatPageState {
       if (msgId == null) return;
       _livePlainTextFragments
           .removeWhere((key, _) => key.startsWith('$msgId:'));
+      if (!ref.read(isStreamingProvider(convId)) &&
+          !next.any((section) => section.isNotEmpty)) {
+        // Stream cleanup publishes [''] after STOP or completion. The live
+        // segments have already been finalized for the visible message, so
+        // rebuilding from the now-cleared tool/reasoning providers would
+        // erase its retained cards and reasoning sections.
+        return;
+      }
       if (!next.any((section) => section.isNotEmpty)) {
         // Empty text chunks are published at tool-round boundaries. Keep the
         // TextStream placeholder so tool-only rounds render through their
@@ -187,6 +209,117 @@ extension _ChatPageListenersExt on _ChatPageState {
       }
       // Other segment changes are refreshed by their reasoning/tool listener.
     });
+  }
+
+  void _updateLegacyFullReply(String msgId, String convId, String next) {
+    final key = '$convId:$msgId';
+    final prior = _legacyFullReplySnapshots[key] ?? '';
+    if (next.isEmpty) {
+      if (prior.isEmpty) return;
+      if (!ref.read(isStreamingProvider(convId))) {
+        // Provider cleanup happens after a stream is finalized. Keep the last
+        // legacy text as canonical content and preserve the tool/reasoning
+        // segments already rendered for a stopped partial reply; rebuilding
+        // here would read the now-cleared providers and drop those segments.
+        final segments = List<MessageSegment>.of(
+          _chatSegments[msgId] ?? const [],
+        );
+        final existingIndex = segments.lastIndexWhere(
+          (segment) => segment is TextSegment && segment.chunkIndex == 0,
+        );
+        final segment = TextSegment(prior, chunkIndex: 0);
+        if (existingIndex >= 0) {
+          segments[existingIndex] = segment;
+        } else {
+          segments.add(segment);
+        }
+        _chatSegments[msgId] = segments;
+        _legacyFullReplySnapshots.remove(key);
+        _legacyFullReplySequences.remove(key);
+        _legacyFullReplyGenerations.remove(key);
+        _refreshStreamingBubble(msgId);
+        return;
+      }
+      _legacyFullReplySnapshots[key] = '';
+      _legacyFullReplySequences[key] =
+          (_legacyFullReplySequences[key] ?? 0) + 2;
+      _legacyFullReplyGenerations[key] =
+          (_legacyFullReplyGenerations[key] ?? 0) + 1;
+      _liveMarkdownSearchPreviews.remove('$msgId:0');
+      _liveMarkdownAppendCounts.remove('$msgId:0');
+      _streamingSearchOccurrenceCache.remove('$msgId:live-chunk:0');
+      _streamingFenceInfoCaches.remove('$msgId:0');
+      _updateLiveMarkdownSegment(
+        msgId,
+        StreamingTextAppend(
+          sequence: _legacyFullReplySequences[key]!,
+          chunkIndex: 0,
+          text: '',
+          hasMarkdownSyntax: true,
+        ),
+        convId,
+      );
+      return;
+    }
+    if (next.length == prior.length && next == prior) return;
+
+    // This compatibility provider carries cumulative snapshots. Growth is an
+    // append by contract; callers that start a replacement must publish the
+    // empty reset first. Avoid scanning the entire previous reply with
+    // startsWith on every token, which makes a long stream quadratic.
+    final isAppend = prior.isEmpty || next.length > prior.length;
+    final sequence = (_legacyFullReplySequences[key] ?? 0) + (isAppend ? 1 : 2);
+    if (prior.isEmpty) {
+      // A legacy full-reply snapshot can be the first visible text update,
+      // while the tool/reasoning provider notifications that preceded it
+      // were missed during stream attachment. Reconcile the live segment
+      // cache once from the current provider state before replacing its text
+      // chunk with the incremental Markdown segment. Later cumulative
+      // snapshots stay on the delta path and avoid rebuilding the reply.
+      _rebuildLiveSegments(msgId);
+      final segments = _chatSegments[msgId];
+      if (segments?.any(
+              (segment) => segment is TextSegment && segment.chunkIndex == 0) ==
+          true) {
+        final previewKey = '$msgId:0';
+        _liveMarkdownSearchPreviews.remove(previewKey);
+        _liveMarkdownAppendCounts.remove(previewKey);
+        _streamingSearchOccurrenceCache.remove('$msgId:live-chunk:0');
+        _streamingFenceInfoCaches.remove(previewKey);
+        _legacyFullReplyGenerations[key] =
+            (_legacyFullReplyGenerations[key] ?? 0) + 1;
+        _chatSegments[msgId] = segments!
+            .where(
+                (segment) => segment is! TextSegment || segment.chunkIndex != 0)
+            .toList();
+      }
+    }
+    _legacyFullReplySnapshots[key] = next;
+    _legacyFullReplySequences[key] = sequence;
+
+    _convertStreamingPlaceholderToTextMessage(msgId);
+    if (!isAppend) {
+      // A non-prefix legacy update is a real reset/replacement. Make the
+      // sequence gap reset the existing Markdown session from this snapshot.
+      final previewKey = '$msgId:0';
+      _liveMarkdownSearchPreviews.remove(previewKey);
+      _liveMarkdownAppendCounts.remove(previewKey);
+      _streamingSearchOccurrenceCache.remove('$msgId:live-chunk:0');
+      _streamingFenceInfoCaches.remove(previewKey);
+      _legacyFullReplyGenerations[key] =
+          (_legacyFullReplyGenerations[key] ?? 0) + 1;
+    }
+    final delta = isAppend ? next.substring(prior.length) : next;
+    _updateLiveMarkdownSegment(
+      msgId,
+      StreamingTextAppend(
+        sequence: sequence,
+        chunkIndex: 0,
+        text: delta,
+        hasMarkdownSyntax: true,
+      ),
+      convId,
+    );
   }
 
   void _updateLiveMarkdownSegment(
@@ -216,82 +349,102 @@ extension _ChatPageListenersExt on _ChatPageState {
         : existingFragments?.join() ?? existingText.text;
     final previewKey = '$msgId:${next.chunkIndex}';
     final priorAppendCount = _liveMarkdownAppendCounts[previewKey] ?? 0;
+    final legacySnapshot = _legacyFullReplySnapshots['$convId:$msgId'];
     final managerAppendCount =
         ref.read(chatStreamManagerProvider).textChunkAppendCountFor(convId);
     final nextAppendCount = priorAppendCount + 1;
-    final appendCount = managerAppendCount > nextAppendCount
-        ? managerAppendCount
-        : nextAppendCount;
+    final appendCount =
+        legacySnapshot == null && managerAppendCount > nextAppendCount
+            ? managerAppendCount
+            : nextAppendCount;
     _liveMarkdownAppendCounts[previewKey] = appendCount;
     if (_isSearching) {
       var preview = _liveMarkdownSearchPreviews[previewKey];
       if (preview == null) {
-        final manager = ref.read(chatStreamManagerProvider);
-        final publishedLength =
-            manager.publishedTextChunkLengthFor(convId, next.chunkIndex);
-        if (publishedLength > _LiveMarkdownSearchPreview._maxLength) {
-          final excerpt = manager.publishedTextChunkExcerptFor(
-            convId,
-            next.chunkIndex,
-            _LiveMarkdownSearchPreview._maxLength,
-          );
-          if (excerpt != null && excerpt.length == 2) {
-            preview = _LiveMarkdownSearchPreview.fromExcerpt(
-              excerpt[0],
-              excerpt[1],
-              sourceLength: publishedLength,
-              initialUpdates: appendCount,
-              lastSequence: next.sequence,
-            );
-          }
-        }
-        if (preview == null) {
-          final chunks = manager.publishedTextChunksFor(convId);
-          final initialText = next.chunkIndex < chunks.length
-              ? chunks[next.chunkIndex]
-              : '$seed${next.text}';
+        if (legacySnapshot != null) {
           preview = _LiveMarkdownSearchPreview(
-            initialText,
-            initialUpdates: appendCount,
-            lastSequence: next.sequence,
-          );
-        }
-        _liveMarkdownSearchPreviews[previewKey] = preview;
-      } else if (preview.lastSequence != null &&
-          next.sequence > preview.lastSequence! + 1) {
-        final manager = ref.read(chatStreamManagerProvider);
-        final publishedLength =
-            manager.publishedTextChunkLengthFor(convId, next.chunkIndex);
-        if (publishedLength > _LiveMarkdownSearchPreview._maxLength) {
-          // Recover oversized previews from a bounded source excerpt rather
-          // than copying the full published chunk during gap recovery.
-          final excerpt = manager.publishedTextChunkExcerptFor(
-            convId,
-            next.chunkIndex,
-            _LiveMarkdownSearchPreview._maxLength,
-          );
-          if (excerpt != null && excerpt.length == 2) {
-            preview.recoverWithExcerpt(
-              excerpt[0],
-              excerpt[1],
-              sourceLength: publishedLength,
-              updateCount: appendCount,
-              sequence: next.sequence,
-            );
-          } else {
-            preview.append(next.text, sequence: next.sequence);
-          }
-        } else {
-          final chunks = manager.publishedTextChunksFor(convId);
-          final publishedText = next.chunkIndex < chunks.length
-              ? chunks[next.chunkIndex]
-              : '${seed}${next.text}';
-          preview = _LiveMarkdownSearchPreview(
-            publishedText,
+            legacySnapshot,
             initialUpdates: appendCount,
             lastSequence: next.sequence,
           );
           _liveMarkdownSearchPreviews[previewKey] = preview;
+        } else {
+          final manager = ref.read(chatStreamManagerProvider);
+          final publishedLength =
+              manager.publishedTextChunkLengthFor(convId, next.chunkIndex);
+          if (publishedLength > _LiveMarkdownSearchPreview._maxLength) {
+            final excerpt = manager.publishedTextChunkExcerptFor(
+              convId,
+              next.chunkIndex,
+              _LiveMarkdownSearchPreview._maxLength,
+            );
+            if (excerpt != null && excerpt.length == 2) {
+              preview = _LiveMarkdownSearchPreview.fromExcerpt(
+                excerpt[0],
+                excerpt[1],
+                sourceLength: publishedLength,
+                initialUpdates: appendCount,
+                lastSequence: next.sequence,
+              );
+            }
+          }
+          if (preview == null) {
+            final chunks = manager.publishedTextChunksFor(convId);
+            final initialText = next.chunkIndex < chunks.length
+                ? chunks[next.chunkIndex]
+                : '$seed${next.text}';
+            preview = _LiveMarkdownSearchPreview(
+              initialText,
+              initialUpdates: appendCount,
+              lastSequence: next.sequence,
+            );
+          }
+          _liveMarkdownSearchPreviews[previewKey] = preview;
+        }
+      } else if (preview.lastSequence != null &&
+          next.sequence > preview.lastSequence! + 1) {
+        if (legacySnapshot != null) {
+          preview = _LiveMarkdownSearchPreview(
+            legacySnapshot,
+            initialUpdates: appendCount,
+            lastSequence: next.sequence,
+          );
+          _liveMarkdownSearchPreviews[previewKey] = preview;
+        } else {
+          final manager = ref.read(chatStreamManagerProvider);
+          final publishedLength =
+              manager.publishedTextChunkLengthFor(convId, next.chunkIndex);
+          if (publishedLength > _LiveMarkdownSearchPreview._maxLength) {
+            // Recover oversized previews from a bounded source excerpt rather
+            // than copying the full published chunk during gap recovery.
+            final excerpt = manager.publishedTextChunkExcerptFor(
+              convId,
+              next.chunkIndex,
+              _LiveMarkdownSearchPreview._maxLength,
+            );
+            if (excerpt != null && excerpt.length == 2) {
+              preview.recoverWithExcerpt(
+                excerpt[0],
+                excerpt[1],
+                sourceLength: publishedLength,
+                updateCount: appendCount,
+                sequence: next.sequence,
+              );
+            } else {
+              preview.append(next.text, sequence: next.sequence);
+            }
+          } else {
+            final chunks = manager.publishedTextChunksFor(convId);
+            final publishedText = next.chunkIndex < chunks.length
+                ? chunks[next.chunkIndex]
+                : '${seed}${next.text}';
+            preview = _LiveMarkdownSearchPreview(
+              publishedText,
+              initialUpdates: appendCount,
+              lastSequence: next.sequence,
+            );
+            _liveMarkdownSearchPreviews[previewKey] = preview;
+          }
         }
       } else {
         preview.append(next.text, sequence: next.sequence);
@@ -365,6 +518,9 @@ extension _ChatPageListenersExt on _ChatPageState {
           setState(() => _isInitialChatLoadPending = false);
         }
         _detachStreamPage(clearIfCompleted: true);
+        _legacyFullReplySnapshots.clear();
+        _legacyFullReplySequences.clear();
+        _legacyFullReplyGenerations.clear();
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted && ref.read(activeConversationIdProvider) == null) {
             _clearConversationView();
@@ -377,6 +533,9 @@ extension _ChatPageListenersExt on _ChatPageState {
         // this page displays another conversation. Reattach below if the
         // destination conversation is still streaming.
         _detachStreamPage(clearIfCompleted: true);
+        _legacyFullReplySnapshots.clear();
+        _legacyFullReplySequences.clear();
+        _legacyFullReplyGenerations.clear();
         // Check streaming state FIRST, then set flags, THEN activate
         // (so listeners fired by activateConversation see correct flags).
         final manager = ref.read(chatStreamManagerProvider);
@@ -575,29 +734,6 @@ extension _ChatPageListenersExt on _ChatPageState {
       customParamValuesProvider,
       (_, __) => _persistCurrentReasoningSettings(),
     );
-  }
-
-  /// Updates the streaming message placeholder in the controller with the
-  /// latest accumulated text. Called by the canonical text-section listener,
-  /// or by the legacy full-reply listener for older direct provider writers.
-  void _updateStreamingMessage(String msgId, String content) {
-    if (!mounted) return;
-    final placeholder = _controller?.messages
-        .where(
-          (m) => m.id == msgId,
-        )
-        .firstOrNull;
-    if (placeholder == null) return;
-    _controller?.updateMessage(
-      placeholder,
-      Message.text(
-        id: msgId,
-        authorId: _aiUser.id,
-        text: content,
-        createdAt: DateTime.now(),
-      ),
-    );
-    _refreshStreamingBubble(msgId);
   }
 
   /// Converts a stream placeholder once, avoiding controller scans on later

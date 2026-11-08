@@ -83,6 +83,9 @@ extension _ChatPageStreamingExt on _ChatPageState {
           .removeWhere((key, _) => key.startsWith('$msgId:'));
       _liveMarkdownAppendCounts
           .removeWhere((key, _) => key.startsWith('$msgId:'));
+      _legacyFullReplySnapshots.remove('$convId:$msgId');
+      _legacyFullReplySequences.remove('$convId:$msgId');
+      _legacyFullReplyGenerations.remove('$convId:$msgId');
       manager.detachStreamPage(
         convId,
         msgId,
@@ -309,6 +312,11 @@ extension _ChatPageStreamingExt on _ChatPageState {
           .removeWhere((key, _) => key.startsWith('$msgId:'));
       _liveMarkdownAppendCounts
           .removeWhere((key, _) => key.startsWith('$msgId:'));
+      if (convId != null) {
+        _legacyFullReplySnapshots.remove('$convId:$msgId');
+        _legacyFullReplySequences.remove('$convId:$msgId');
+        _legacyFullReplyGenerations.remove('$convId:$msgId');
+      }
     }
     // Reload from DB. _loadConversationMessages is now unguarded because
     // _isStreamingActive is false. It clears _chatSegments / _finalizedMessages
@@ -598,6 +606,12 @@ extension _ChatPageStreamingExt on _ChatPageState {
         .removeWhere((key, _) => key.startsWith('${msg.id}:'));
     _liveMarkdownAppendCounts
         .removeWhere((key, _) => key.startsWith('${msg.id}:'));
+    _legacyFullReplySnapshots
+        .removeWhere((key, _) => key.endsWith(':${msg.id}'));
+    _legacyFullReplySequences
+        .removeWhere((key, _) => key.endsWith(':${msg.id}'));
+    _legacyFullReplyGenerations
+        .removeWhere((key, _) => key.endsWith(':${msg.id}'));
     final rebuiltBlocks = legacyToBlocks(
       reasoningSections: msg.reasoningSections ?? [],
       textChunks: msg.textSections ?? [],
@@ -718,6 +732,22 @@ extension _ChatPageStreamingExt on _ChatPageState {
               chunkIndex: segment.chunkIndex,
             );
           }
+        }
+        final legacyKey = '$convId:$stoppedMsgId';
+        final legacySnapshot = _legacyFullReplySnapshots[legacyKey];
+        if (legacySnapshot != null) {
+          final textIndex = segments.lastIndexWhere(
+            (segment) => segment is TextSegment && segment.chunkIndex == 0,
+          );
+          final canonicalSegment = TextSegment(legacySnapshot, chunkIndex: 0);
+          if (textIndex >= 0) {
+            segments[textIndex] = canonicalSegment;
+          } else {
+            segments.add(canonicalSegment);
+          }
+          _legacyFullReplySnapshots.remove(legacyKey);
+          _legacyFullReplySequences.remove(legacyKey);
+          _legacyFullReplyGenerations.remove(legacyKey);
         }
         _chatSegments[stoppedMsgId] = segments;
         _liveMarkdownSearchPreviews
