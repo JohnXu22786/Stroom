@@ -3,6 +3,25 @@ part of 'chat_service.dart';
 extension ChatServiceStreamingExt on ChatService {
   // ── Instance methods ────────────────────────────────────────────
 
+  void _recordInputTranscript(List<ChatMessage> history, String rawTranscript) {
+    final transcript = rawTranscript.trim();
+    if (transcript.isEmpty) return;
+    _lastInputTranscript = transcript;
+    final userIndex =
+        history.lastIndexWhere((message) => message.role == 'user');
+    if (userIndex < 0) return;
+    final userMessage = history[userIndex];
+    final content = userMessage.content.trim();
+    if (content == transcript || content.endsWith(transcript)) return;
+    try {
+      history[userIndex] = userMessage.copyWith(
+        content: content.isEmpty ? transcript : '$content\n$transcript',
+      );
+    } on UnsupportedError {
+      // Immutable history callers can still read [lastInputTranscript].
+    }
+  }
+
   /// Stream a message — converts [history] (which already contains the latest
   /// user message with attachments) into API‑format messages and streams the
   /// reply.
@@ -26,6 +45,8 @@ extension ChatServiceStreamingExt on ChatService {
     cancel();
     _isCancelledByUser = false;
     _reasoningBuffer.clear();
+    _lastInputTranscript = null;
+    _lastMediaAttachments = const [];
 
     _controller = StreamController<String>(
       onCancel: () {
@@ -82,6 +103,12 @@ extension ChatServiceStreamingExt on ChatService {
           isCancelled: () => cancelToken.isCancelled,
         ).listen(
           (event) {
+            if (event.inputTranscript?.isNotEmpty == true) {
+              _recordInputTranscript(history, event.inputTranscript!);
+            }
+            if (event.mediaAttachments?.isNotEmpty == true) {
+              _captureMediaAttachments(event.mediaAttachments!);
+            }
             if (event.isReasoning) {
               _reasoningBuffer.write(event.text);
             } else if (event.usage != null) {
@@ -89,7 +116,9 @@ extension ChatServiceStreamingExt on ChatService {
               // 立即转发给上层累加到对话（每次完整请求数据返回即累加）
               onUsageEvent?.call(event.usage!,
                   recordInput: true, costIncrement: event.usageCostIncrement);
-            } else if (!_controller!.isClosed) {
+            } else if (event.inputTranscript == null &&
+                event.text.isNotEmpty &&
+                !_controller!.isClosed) {
               _controller!.add(event.text);
             }
           },
@@ -293,7 +322,10 @@ extension ChatServiceStreamingExt on ChatService {
                   event.thinkingSignature!.isNotEmpty) {
                 _thinkingSignature = event.thinkingSignature!;
               }
-              if (event.isReasoning) {
+              if (event.inputTranscript?.isNotEmpty == true) {
+                _recordInputTranscript(history, event.inputTranscript!);
+                controller.add(InputTranscriptEvent(event.inputTranscript!));
+              } else if (event.isReasoning) {
                 if (toolDefs.isNotEmpty) {
                   roundReasoningBuffer?.write(event.text);
                 }
