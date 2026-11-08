@@ -124,7 +124,7 @@ void main() {
         },
       );
 
-      test('effectiveSystemPrompt uses default when null', () {
+      test('effectiveSystemPrompt retains legacy Chinese default', () {
         const config = OcrConfig(
           model: 'gpt-4o',
           apiKey: 'key',

@@ -7,6 +7,8 @@ import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 
 import '../../../models/ocr_batch_execution.dart';
+import '../../../l10n/app_localizations.dart';
+import '../../../providers/locale_provider.dart';
 import '../../../providers/background_task_provider.dart';
 import '../../../providers/provider_config.dart';
 import '../../../providers/task_provider_shared.dart';
@@ -41,6 +43,7 @@ Future<String> executeOcrBlock({
   required FlowSubTask flowSubTask,
   required BackgroundTaskNotifier bgNotifier,
   required ProviderEntriesState providerEntries,
+  AppLocalizations? localizations,
   CancelToken? cancelToken,
 
   /// Allows the response to be held and released in cancellation tests.
@@ -141,6 +144,8 @@ Future<String> executeOcrBlock({
     host: config.host,
     apiKey: config.key,
     model: model.modelId,
+    systemPrompt: (localizations ?? appLocalizationsForLocale(null))
+        .ocrDefaultSystemPrompt,
     requestSizeBudgetBytes: requestSizeBudgetBytes,
     typeConfig: model.typeConfig,
     customParams: model.customParams,

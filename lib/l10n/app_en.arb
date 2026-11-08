@@ -114,6 +114,7 @@
   "ocrTemplateLatexLabel": "LaTeX",
   "ocrTemplateLatexContent": "Transcribe all visible text in the page’s natural reading order. Preserve non-formula text and represent mathematical formulas in LaTeX; use $...$ for inline formulas and $$...$$ for display formulas. Return only the transcription; do not add explanations or inferences.",
   "ocrDefaultImagesOnly": "Default (send images only)",
+  "ocrDefaultSystemPrompt": "Extract all text from the image, preserving its original formatting and layout. Return only the extracted text; do not add any explanation.",
   "ocrSavedInstructionSnapshot": "Saved instruction snapshot",
   "ocrPageTitle": "Image Text Recognition",
   "ocrImageQualitySettings": "Image quality settings",

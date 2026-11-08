@@ -784,6 +784,12 @@ abstract class AppLocalizations {
   /// **'Default (send images only)'**
   String get ocrDefaultImagesOnly;
 
+  /// No description provided for @ocrDefaultSystemPrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Extract all text from the image, preserving its original formatting and layout. Return only the extracted text; do not add any explanation.'**
+  String get ocrDefaultSystemPrompt;
+
   /// No description provided for @ocrSavedInstructionSnapshot.
   ///
   /// In en, this message translates to:
