@@ -653,6 +653,11 @@ class ChatStreamManager {
           );
           if (state.cancelledByUser) rethrow;
 
+          // A retry is a new provider request whose contentOrder starts at
+          // zero. Keep its text/media after everything already received in
+          // this assistant reply, including outputs buffered before an error.
+          state.contentOrderOffset = state.nextContentOrder;
+
           if (hasPartialOutput) {
             final continuation = ChatMessage(
               role: 'user',
