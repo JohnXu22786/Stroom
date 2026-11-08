@@ -254,6 +254,7 @@ void main() {
 
   tearDown(() async {
     if (background.mounted) background.dispose();
+    BackgroundTaskNotifier.debugDisablePersistence = false;
     BackgroundTaskNotifier.debugStorageDirectoryOverride = null;
     await taskDirectory.delete(recursive: true);
   });
@@ -261,6 +262,10 @@ void main() {
   testWidgets('page pick, edit, submit, save, open, and task-flow parity', (
     tester,
   ) async {
+    // This test verifies delivery parity, not task persistence. The dedicated
+    // restore/retry test below exercises that path with real async I/O.
+    BackgroundTaskNotifier.debugDisablePersistence = true;
+
     final localizations = lookupAppLocalizations(const Locale('zh', 'CN'));
     sourceImage = (await tester.runAsync(_createEnginePng))!;
     final adapter = _ScriptedOcrAdapter([
@@ -402,7 +407,6 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('Recognized text'), findsOneWidget);
-    await tester.runAsync(() => background.pendingPersistence);
   });
 
   test('failed OCR task restores its image after restart and retries to save',
