@@ -202,6 +202,60 @@ class EvaluateTests(unittest.TestCase):
             self.assertIn("output path conflicts with input file", result.stderr)
             self.assertEqual(manifest_path.read_text(encoding="utf-8"), original_manifest)
 
+    def test_cli_rejects_fixture_image_as_verification_output(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            shutil.copytree(ROOT / "fixtures", root / "fixtures")
+            shutil.copyfile(ROOT / "manifest.json", root / "manifest.json")
+            manifest_path = root / "manifest.json"
+            fixture_entry = json.loads(
+                manifest_path.read_text(encoding="utf-8")
+            )["fixtures"][0]
+            fixture_path = root / fixture_entry["image"]
+            original_fixture = fixture_path.read_bytes()
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "evaluate.py"),
+                    "--manifest",
+                    str(manifest_path),
+                    "--verify-fixtures",
+                    "--output",
+                    str(fixture_path),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn(
+                "output path conflicts with input file fixture image", result.stderr
+            )
+            self.assertEqual(fixture_path.read_bytes(), original_fixture)
+
+            report_path = root / "report.json"
+            report_result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "evaluate.py"),
+                    "--manifest",
+                    str(manifest_path),
+                    "--verify-fixtures",
+                    "--output",
+                    str(report_path),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(report_result.returncode, 0, report_result.stderr)
+            self.assertEqual(
+                json.loads(report_path.read_text(encoding="utf-8"))["status"],
+                "fixtures_verified",
+            )
+
     def test_cli_rejects_output_that_is_the_baseline_file(self):
         with TemporaryDirectory() as directory:
             root = Path(directory)
