@@ -920,6 +920,7 @@ void main() {
     ) async {
       final entry = _createOcrEntry(withModels: true);
       final bgNotifier = BackgroundTaskNotifier();
+      final retryData = await _createLegacyModelIndexRetryData();
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
@@ -954,7 +955,7 @@ void main() {
                         builder: (_) => OcrPage(
                           testImagePayloadPreparer: (bytes) async =>
                               prepareOcrImagePayloadSync(bytes),
-                          retryData: await _createLegacyModelIndexRetryData(),
+                          retryData: retryData,
                         ),
                       ),
                     ),
