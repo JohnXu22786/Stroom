@@ -125,6 +125,10 @@ dependency_overrides:
     path: packages/streaming_markdown/markdown
   markdown_widget:
     path: packages/streaming_markdown/markdown_widget
+  # sqlite3 3.9.0 currently serves a Linux x64 binary whose checksum differs
+  # from the checksum embedded in the package. Pin the last verified release
+  # until the upstream prebuilt asset is corrected.
+  sqlite3: 3.8.0
   # Newer releases use a Swift isolation argument unavailable in the Xcode SDK
   # on the macOS release runners. Keep this range until those runners are updated.
   video_player_avfoundation: ">=2.12.0 <2.12.2"
