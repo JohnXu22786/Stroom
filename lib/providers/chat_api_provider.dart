@@ -379,6 +379,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
         'OpenAICompatibleChatProvider: 流式 POST $_baseUrl - 消息数: ${messages.length}');
 
     final Map<int, Map<String, dynamic>> toolCallAccumulators = {};
+    final Map<int, StringBuffer> toolCallArgumentBuffers = {};
     // 本次请求的 usage（局部收集，per-request 隔离——
     // 共享 provider 实例的 _lastUsage 槽会被并发对话覆盖）
     Map<String, dynamic>? localUsage;
@@ -460,7 +461,8 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
             yield pe;
           }
 
-          _accumulateToolCallDeltas(data, toolCallAccumulators);
+          _accumulateToolCallDeltas(
+              data, toolCallAccumulators, toolCallArgumentBuffers);
         } catch (e) {
           // API 错误 chunk（Exception）必须上抛；仅解析/形状错误
           // （FormatException/TypeError，如代理式多余行）跳过继续。
@@ -495,7 +497,8 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     if (localUsage != null) _lastUsage = localUsage;
 
     // After stream ends, yield tool calls if any were accumulated
-    final toolEvent = _buildToolCallEvent(toolCallAccumulators);
+    final toolEvent =
+        _buildToolCallEvent(toolCallAccumulators, toolCallArgumentBuffers);
     if (toolEvent != null) {
       yield toolEvent;
     }
