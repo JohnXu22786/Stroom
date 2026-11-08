@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
@@ -13,8 +12,8 @@ import 'package:stroom/services/conversation_repository_memory.dart';
 import 'package:stroom/services/llm_account_migration_service.dart';
 import 'package:stroom/services/llm_credential_store.dart';
 import 'package:stroom/services/manifest_database.dart';
-import 'package:stroom/services/storage_service.dart';
 import 'package:stroom/utils/text_manifest.dart';
+import 'package:stroom/utils/web_file_store.dart';
 
 const _settingsAndTextRestoreSelection = BackupSelection(
   chatRecordsAndAttachments: false,
@@ -125,18 +124,18 @@ void main() {
   });
 
   test('backs up and restores OCR retry image cache with task media', () async {
-    final appDir = await AppStorage.directory;
     const cacheRelativePath = 'ocr_retry_cache/backup-roundtrip.bin';
-    final cacheFile = File('$appDir/$cacheRelativePath');
-    await cacheFile.parent.create(recursive: true);
     const cacheContent = 'ocr retry image bytes';
-    await cacheFile.writeAsString(cacheContent);
+    await WebFileStore.write(
+      cacheRelativePath,
+      Uint8List.fromList(utf8.encode(cacheContent)),
+    );
     try {
       final bytes = await BackupService.buildBackupBytesForTest();
       final archive = ZipDecoder().decodeBytes(bytes);
       expect(archive.findFile(cacheRelativePath), isNotNull);
 
-      await cacheFile.delete();
+      await WebFileStore.delete(cacheRelativePath);
       await BackupService.restoreFromBytesForTest(
         bytes,
         selection: const BackupSelection(
@@ -151,9 +150,12 @@ void main() {
           browserCookies: false,
         ),
       );
-      expect(await cacheFile.readAsString(), cacheContent);
+      expect(
+        utf8.decode((await WebFileStore.read(cacheRelativePath))!),
+        cacheContent,
+      );
     } finally {
-      if (await cacheFile.exists()) await cacheFile.delete();
+      await WebFileStore.delete(cacheRelativePath);
     }
   });
 

@@ -2039,11 +2039,6 @@ class BackupService {
             archivePrefix: 'task_flow_temporary',
             sourcePath: p.join(appDir, 'task_flow_temporary'),
           );
-          await _addDirectoryToArchive(
-            archive,
-            archivePrefix: 'ocr_retry_cache',
-            sourcePath: p.join(appDir, 'ocr_retry_cache'),
-          );
         }
         await _addTaskStateFileToArchive(
           archive,
@@ -2063,6 +2058,13 @@ class BackupService {
         addStringToArchive(archive, 'background/tasks.json', '[]');
         addStringToArchive(archive, 'task_flows/flows.json', '[]');
         addStringToArchive(archive, 'task_flows/executions.json', '[]');
+      }
+      if (selection.includeMediaFiles) {
+        await _addDirectoryToArchive(
+          archive,
+          archivePrefix: 'ocr_retry_cache',
+          sourcePath: await _appDataDirectoryPath('ocr_retry_cache'),
+        );
       }
       if (selection.includeMediaFiles && !kIsWeb && !WebFileStore.isTestMode) {
         final catcatchDir = p.join(await AppStorage.directory, 'catcatch');
