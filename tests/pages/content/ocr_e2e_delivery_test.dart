@@ -143,10 +143,24 @@ OcrPage _ocrPage({
       ],
       testImagePayloadPreparer: (bytes) async =>
           prepareOcrImagePayloadSync(bytes),
-      testOcrServiceFactory: (config) => OcrService(
-        config: config,
-        dio: _dioFor(config, adapter),
-      ),
+      testOcrServiceFactory: (config) {
+        // This delivery test exercises the page and task handoff through the
+        // scripted HTTP adapter. Keep the provider routing layer out of this
+        // fixture so it does not require a live gateway runtime.
+        final directConfig = OcrConfig(
+          host: config.host,
+          apiKey: config.apiKey,
+          model: config.model,
+          systemPrompt: config.systemPrompt,
+          typeConfig: config.typeConfig,
+          customParams: config.customParams,
+          requestSizeBudgetBytes: config.requestSizeBudgetBytes,
+        );
+        return OcrService(
+          config: directConfig,
+          dio: _dioFor(directConfig, adapter),
+        );
+      },
     );
 
 Widget _deliveryApp({

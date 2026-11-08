@@ -1040,18 +1040,17 @@ void main() {
         expect(manager.receivedHistories.single.first.id, 'e0');
         expect(manager.receivedHistories.single, hasLength(11));
         expect(manager.receivedHistories.single.last.content, 'Edited message');
+        final persistedMessages = await repository.getMessages('paged-edit');
+        final persistedIds = persistedMessages.map((message) => message.id);
+        // Editing the user turn keeps its stable ID and replaces its content;
+        // later turns must be truncated from the complete persisted history.
+        expect(persistedIds, contains('e10'));
         expect(
-          (await repository.getMessages(
-            'paged-edit',
-          ))
-              .map((message) => message.id),
-          isNot(contains('e10')),
+          persistedMessages.singleWhere((message) => message.id == 'e10').content,
+          'Edited message',
         );
         expect(
-          (await repository.getMessages(
-            'paged-edit',
-          ))
-              .map((message) => message.id),
+          persistedIds,
           isNot(contains('e44')),
         );
         await tester.pumpWidget(const SizedBox.shrink());
