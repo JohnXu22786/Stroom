@@ -323,7 +323,7 @@ Future<String> executeOcrBlock({
             blockTitle: def.label,
           );
         }
-        bgNotifier.setResult(taskId, ocrResult.text);
+        bgNotifier.setResult(taskId, ocrResult.text, isComplete: false);
         final error = 'OCR 返回了不完整结果（finish_reason=${ocrResult.finishReason}）';
         bgNotifier.updateStep(taskId, 0, failed: true, error: error);
         failSubTask(
