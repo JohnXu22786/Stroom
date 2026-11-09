@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../utils/folder_operation_rollback.dart';
 import '../utils/text_manifest.dart';
 
 // ============================================================================
@@ -230,30 +231,44 @@ class TextRecordsNotifier extends StateNotifier<List<TextRecord>> {
     if (existing.any((f) => f == newPath || f.startsWith('$newPath/'))) return;
 
     final records = await TextManifest.loadRecords();
+    final originalFolders = await TextManifest.getAllFolders();
+    await runFolderOperationWithRollback<TextRecord>(
+      originalRecords: List.unmodifiable(records),
+      originalFolders: originalFolders,
+      recordId: (record) => record.id,
+      recordFolder: (record) => record.folder,
+      loadRecords: TextManifest.loadRecords,
+      getFolders: TextManifest.getAllFolders,
+      moveRecord: TextManifest.moveRecord,
+      addFolder: TextManifest.addFolder,
+      removeFolder: TextManifest.removeFolderFromCache,
+      operation: () async {
 
-    for (final r in records) {
-      if (r.folder == oldName) {
-        await TextManifest.moveRecord(r.id, newPath);
-      }
-    }
-
-    final descendants = await _getDescendantFolders(oldName);
-    for (final desc in descendants) {
-      final suffix = desc.substring(oldName.length);
-      final newDescPath = '$newPath$suffix';
       for (final r in records) {
-        if (r.folder == desc) {
-          await TextManifest.moveRecord(r.id, newDescPath);
+        if (r.folder == oldName) {
+          await TextManifest.moveRecord(r.id, newPath);
         }
       }
-      // Empty subfolders (no records) must stay in the folder cache; otherwise the old-path cleanup would drop their paths.
-      await TextManifest.addFolder(newDescPath);
-    }
 
-    await TextManifest.addFolder(newPath);
-    await TextManifest.removeFolderFromCache(oldName);
+      final descendants = await _getDescendantFolders(oldName);
+      for (final desc in descendants) {
+        final suffix = desc.substring(oldName.length);
+        final newDescPath = '$newPath$suffix';
+        for (final r in records) {
+          if (r.folder == desc) {
+            await TextManifest.moveRecord(r.id, newDescPath);
+          }
+        }
+        // Empty subfolders (no records) must stay in the folder cache; otherwise the old-path cleanup would drop their paths.
+        await TextManifest.addFolder(newDescPath);
+      }
 
-    await loadRecords();
+      await TextManifest.addFolder(newPath);
+      await TextManifest.removeFolderFromCache(oldName);
+
+      await loadRecords();
+      },
+    );
   }
 
   /// 移动文件夹（保持层级结构，整体搬入目标文件夹）
@@ -283,43 +298,57 @@ class TextRecordsNotifier extends StateNotifier<List<TextRecord>> {
     if (existing.any((f) => f == newPath || f.startsWith('$newPath/'))) return;
 
     final records = await TextManifest.loadRecords();
+    final originalFolders = await TextManifest.getAllFolders();
+    await runFolderOperationWithRollback<TextRecord>(
+      originalRecords: List.unmodifiable(records),
+      originalFolders: originalFolders,
+      recordId: (record) => record.id,
+      recordFolder: (record) => record.folder,
+      loadRecords: TextManifest.loadRecords,
+      getFolders: TextManifest.getAllFolders,
+      moveRecord: TextManifest.moveRecord,
+      addFolder: TextManifest.addFolder,
+      removeFolder: TextManifest.removeFolderFromCache,
+      operation: () async {
 
-    for (final r in records) {
-      if (r.folder == sourceName) {
-        await TextManifest.moveRecord(r.id, newPath);
-      }
-    }
-
-    final descendants = await _getDescendantFolders(sourceName);
-    for (final desc in descendants) {
-      final suffix = desc.substring(sourceName.length);
-      final newDescPath = '$newPath$suffix';
       for (final r in records) {
-        if (r.folder == desc) {
-          await TextManifest.moveRecord(r.id, newDescPath);
+        if (r.folder == sourceName) {
+          await TextManifest.moveRecord(r.id, newPath);
         }
       }
-      // Empty subfolders (no records) must stay in the folder cache; otherwise the old-path cleanup would drop their paths.
-      await TextManifest.addFolder(newDescPath);
-    }
 
-    await TextManifest.removeFolderFromCache(sourceName);
-    for (final desc in descendants) {
-      await TextManifest.removeFolderFromCache(desc);
-    }
-
-    await TextManifest.addFolder(newPath);
-    if (targetParentClean.isNotEmpty) {
-      await TextManifest.addFolder(targetParentClean);
-      // 空文件夹移动不经过 moveRecord，祖先目录不会被自动跟踪，需逐级补齐
-      var ancestor = TextManifest.getParentFolderPath(targetParentClean);
-      while (ancestor.isNotEmpty) {
-        await TextManifest.addFolder(ancestor);
-        ancestor = TextManifest.getParentFolderPath(ancestor);
+      final descendants = await _getDescendantFolders(sourceName);
+      for (final desc in descendants) {
+        final suffix = desc.substring(sourceName.length);
+        final newDescPath = '$newPath$suffix';
+        for (final r in records) {
+          if (r.folder == desc) {
+            await TextManifest.moveRecord(r.id, newDescPath);
+          }
+        }
+        // Empty subfolders (no records) must stay in the folder cache; otherwise the old-path cleanup would drop their paths.
+        await TextManifest.addFolder(newDescPath);
       }
-    }
 
-    await loadRecords();
+      await TextManifest.removeFolderFromCache(sourceName);
+      for (final desc in descendants) {
+        await TextManifest.removeFolderFromCache(desc);
+      }
+
+      await TextManifest.addFolder(newPath);
+      if (targetParentClean.isNotEmpty) {
+        await TextManifest.addFolder(targetParentClean);
+        // 空文件夹移动不经过 moveRecord，祖先目录不会被自动跟踪，需逐级补齐
+        var ancestor = TextManifest.getParentFolderPath(targetParentClean);
+        while (ancestor.isNotEmpty) {
+          await TextManifest.addFolder(ancestor);
+          ancestor = TextManifest.getParentFolderPath(ancestor);
+        }
+      }
+
+      await loadRecords();
+      },
+    );
   }
 
   /// 复制文件夹（保持层级结构，整体复制到目标文件夹）
