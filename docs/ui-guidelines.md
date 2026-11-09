@@ -117,6 +117,18 @@ These links are orientation points in the current source tree, not a claim that 
 | Browser, downloads, cookies | [`browser_page.dart`](../lib/pages/browser_page.dart), [`browser_cookies_page.dart`](../lib/pages/browser_cookies_page.dart), [`download_manager.dart`](../lib/catcatch/engine/download_manager.dart), [`browser_cookie_service.dart`](../lib/services/browser_cookie_service.dart) | Navigation/toolbar density, download progress, permission and cookie settings. |
 | Mermaid and charts | [`mermaid_chart_page.dart`](../lib/pages/mermaid_chart_page.dart), [`mermaid_render_widget.dart`](../lib/widgets/mermaid_render_widget.dart) | Editor/preview split, code density, render errors, viewport fit and mode selection. |
 
+### Representative captured screens
+
+These contact sheets show selected real screens from the current Flutter Web build; they are examples, not a complete screen inventory. Each panel is an actual Flutter-rendered app screenshot placed beside its caption, with no generated or redrawn UI. Captures used Flutter 3.47.9 / Dart 3.13.7, Microsoft Edge 142, a 430 × 932 viewport, and zh-CN. The isolated browser profile had no restored account data. OCR, ASR, and TTS providers were unconfigured, and no provider request or API call was made. The settings sheet includes light and dark appearance examples; the other examples are light theme.
+
+| Examples | Captured screens |
+|---|---|
+| Home, assistant selection, empty file state, and a local sample text file list. | ![Home, assistant selection, and file browser examples](images/ui-guidelines/core-navigation.png) |
+| Unconfigured OCR, the OCR image-quality popup, unconfigured ASR, and unconfigured TTS. | ![Recognition and speech examples](images/ui-guidelines/recognition-speech.png) |
+| Empty Task Flow, its built-in template sheet, and empty audio-separation and web-download states. The task list is not pictured because the isolated fresh web profile could not restore its task history. | ![Task Flow and media examples](images/ui-guidelines/tasks-media.png) |
+| Settings overview, light and dark appearance, and a new OCR provider editor. The editor is unsaved; no provider request was made. | ![Settings and unsaved provider editor examples](images/ui-guidelines/settings-providers.png) |
+| Local sample text list, its actual file popup menu, blank new-text editor, and first-party Markdown preview. | ![Text files and first-party Markdown preview examples](images/ui-guidelines/files-markdown.png) |
+
 ## 8. Accessibility, localization, and platform behavior
 
 - Label icon buttons and custom controls for screen readers; preserve logical focus order and announce validation, progress, selection, and result changes.
