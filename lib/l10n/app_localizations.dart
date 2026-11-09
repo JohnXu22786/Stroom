@@ -18355,6 +18355,24 @@ abstract class AppLocalizations {
 
   /// Instructions shown below a release render error.
   String get renderErrorRestartMessage;
+
+  String get batchDlgFileName;
+  String get batchDlgFolderName;
+  String get batchDlgFileNameConflict;
+  String get batchDlgFolderNameConflict;
+  String get batchDlgFolderNameSwapConflict;
+  String get batchDlgControlCharacterError;
+  String get batchDlgNameWhitespaceError;
+  String batchDlgNameEmpty(String kind);
+  String batchDlgNameTrailingWhitespace(String kind);
+  String batchDlgNameTooLong(String kind, String count);
+  String batchDlgNameIllegalCharacters(String kind);
+  String batchDlgNameTrailingDot(String kind);
+  String batchDlgNameReserved(String kind);
+  String get batchDlgIntermediateNameTooLong;
+  String batchDlgTemplateMissingDate(String date);
+  String get batchDlgCreatedDate;
+  String get batchDlgModifiedDate;
 }
 
 class _AppLocalizationsDelegate

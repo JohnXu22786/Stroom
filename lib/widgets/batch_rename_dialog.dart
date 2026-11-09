@@ -105,6 +105,84 @@ class _RuleSlot {
 
 enum _PreviewFilter { all, changed, errors, unchanged, excluded }
 
+String _localizedPlannerError(String error, AppLocalizations strings) {
+  switch (error) {
+    case '同一文件夹内存在同名文件':
+      return strings.batchDlgFileNameConflict;
+    case '目标位置已存在同名文件夹':
+      return strings.batchDlgFolderNameConflict;
+    case '文件夹之间存在名称互换，无法应用':
+      return strings.batchDlgFolderNameSwapConflict;
+    case '名称不能包含控制字符':
+      return strings.batchDlgControlCharacterError;
+    case '名称不能以空白开头或结尾，可添加空白清理规则':
+      return strings.batchDlgNameWhitespaceError;
+    case '最多支持 50 条规则':
+      return strings.batchRuleValidationMaxRules;
+    case '编号位数应为 1–12':
+      return strings.batchRuleValidationDigits;
+    case '编号起始值和步长须在 ±999999999 以内':
+      return strings.batchRuleValidationNumberRange;
+    case '替换规则过长':
+      return strings.batchRuleValidationReplacementLength;
+    case '正则表达式无效':
+      return strings.batchRuleValidationRegex;
+    case '删除位置必须从 1 开始':
+      return strings.batchRuleValidationDeleteIndex;
+    case '插入文本过长':
+      return strings.batchRuleValidationInsertLength;
+    case '模板编号设置无效：位数 1–12，起始和步长在 ±999999999 以内':
+      return strings.batchRuleValidationTemplateNumber;
+    case '模板过长':
+      return strings.batchRuleValidationTemplateLength;
+    case '未知模板变量或未闭合的大括号':
+    case '未知模板变量':
+      return strings.batchRuleValidationTemplateVariable;
+    case '中间名称过长，请调整规则':
+      return strings.batchDlgIntermediateNameTooLong;
+    case '该项目没有创建时间，请调整模板':
+      return strings.batchDlgTemplateMissingDate(strings.batchDlgCreatedDate);
+    case '该项目没有修改时间，请调整模板':
+      return strings.batchDlgTemplateMissingDate(strings.batchDlgModifiedDate);
+  }
+
+  final empty = RegExp(r'^(文件名|文件夹名)不能为空$').firstMatch(error);
+  if (empty != null) {
+    return strings.batchDlgNameEmpty(_localizedNameKind(empty[1]!, strings));
+  }
+  final trailingWhitespace = RegExp(r'^(文件名|文件夹名)不能以空白结尾$').firstMatch(error);
+  if (trailingWhitespace != null) {
+    return strings.batchDlgNameTrailingWhitespace(
+      _localizedNameKind(trailingWhitespace[1]!, strings),
+    );
+  }
+  final maxLength = RegExp(r'^(文件名|文件夹名)不能超过(\d+)个字符$').firstMatch(error);
+  if (maxLength != null) {
+    return strings.batchDlgNameTooLong(
+      _localizedNameKind(maxLength[1]!, strings),
+      maxLength[2]!,
+    );
+  }
+  final nameKind = error.startsWith('文件夹名')
+      ? strings.batchDlgFolderName
+      : strings.batchDlgFileName;
+  if (error.startsWith('文件名') || error.startsWith('文件夹名')) {
+    if (error.endsWith('不能包含 Windows 非法字符')) {
+      return strings.batchDlgNameIllegalCharacters(nameKind);
+    }
+    if (error.endsWith('不能以 . 结尾')) {
+      return strings.batchDlgNameTrailingDot(nameKind);
+    }
+    if (error.endsWith('不能使用 Windows 保留名称')) {
+      return strings.batchDlgNameReserved(nameKind);
+    }
+  }
+  return error;
+}
+
+String _localizedNameKind(String source, AppLocalizations strings) =>
+    source == '文件夹名' ? strings.batchDlgFolderName : strings.batchDlgFileName;
+
 class _BatchRenameDialogState extends State<BatchRenameDialog> {
   AppLocalizations get strings => AppLocalizations.of(context)!;
   late BatchRenameConfig _config = widget.initialConfig;
@@ -880,14 +958,15 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
                       style: Theme.of(context).textTheme.labelSmall,
                     ),
                   Text(
-                    r.error ??
-                        (!r.included
+                    r.error == null
+                        ? (!r.included
                             ? strings.batchDlgFilterExcluded
                             : _overrides.containsKey(r.item.key)
                                 ? strings.batchDlgManualNameStatus
                                 : r.isChanged
                                     ? strings.batchDlgPendingRename
-                                    : strings.batchDlgFilterUnchanged),
+                                    : strings.batchDlgFilterUnchanged)
+                        : _localizedPlannerError(r.error!, strings),
                     style: TextStyle(
                       fontSize: 12,
                       color: r.error != null
@@ -931,12 +1010,13 @@ class _BatchRenameDialogState extends State<BatchRenameDialog> {
           r.oldPath,
           r.oldDisplay,
           r.newPath,
-          r.error ??
-              (!r.included
+          r.error == null
+              ? (!r.included
                   ? strings.batchDlgFilterExcluded
                   : r.isChanged
                       ? strings.batchDlgPendingRename
-                      : strings.batchDlgFilterUnchanged),
+                      : strings.batchDlgFilterUnchanged)
+              : _localizedPlannerError(r.error!, strings),
         ].map(cell).join(','),
     ].join('\n');
     try {

@@ -10559,6 +10559,56 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get renderErrorRestartMessage => '请尝试重启应用。';
+  @override
+  String get batchDlgFileName => '文件名';
+
+  @override
+  String get batchDlgFolderName => '文件夹名';
+
+  @override
+  String get batchDlgFileNameConflict => '同一文件夹内存在同名文件';
+
+  @override
+  String get batchDlgFolderNameConflict => '目标位置已存在同名文件夹';
+
+  @override
+  String get batchDlgFolderNameSwapConflict => '文件夹之间不能在同一批次互换名称';
+
+  @override
+  String get batchDlgControlCharacterError => '名称不能包含控制字符';
+
+  @override
+  String get batchDlgNameWhitespaceError => '名称不能以空白开头或结尾，可添加空白清理规则';
+
+  @override
+  String get batchDlgIntermediateNameTooLong => '中间名称过长，请调整规则';
+
+  @override
+  String get batchDlgCreatedDate => '创建时间';
+
+  @override
+  String get batchDlgModifiedDate => '修改时间';
+
+  @override
+  String batchDlgNameEmpty(String kind) => '$kind不能为空';
+
+  @override
+  String batchDlgNameTrailingWhitespace(String kind) => '$kind不能以空白结尾';
+
+  @override
+  String batchDlgNameTooLong(String kind, String count) => '$kind不能超过$count个字符';
+
+  @override
+  String batchDlgNameIllegalCharacters(String kind) => '$kind不能包含 Windows 非法字符';
+
+  @override
+  String batchDlgNameTrailingDot(String kind) => '$kind不能以 . 结尾';
+
+  @override
+  String batchDlgNameReserved(String kind) => '$kind不能使用 Windows 保留名称';
+
+  @override
+  String batchDlgTemplateMissingDate(String date) => '该项目没有$date，请调整模板';
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).
