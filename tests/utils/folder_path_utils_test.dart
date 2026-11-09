@@ -88,6 +88,10 @@ void main() {
       expect(FolderPathUtils.validateFolderName('a/b'), isNotNull);
     });
 
+    test('rejects names whose stored length exceeds the limit', () {
+      expect(FolderPathUtils.validateFolderName(' ${'x' * 100}'), isNotNull);
+    });
+
     test('rejects Windows control characters in every position', () {
       for (var codeUnit = 0; codeUnit <= 0x1f; codeUnit++) {
         final control = String.fromCharCode(codeUnit);
@@ -115,6 +119,10 @@ void main() {
   });
 
   group('FolderPathUtils.validateFileName', () {
+    test('rejects names whose stored length exceeds the limit', () {
+      expect(FolderPathUtils.validateFileName(' ${'x' * 110}'), isNotNull);
+    });
+
     test('rejects trailing whitespace', () {
       expect(FolderPathUtils.validateFileName('report '), isNotNull);
       expect(FolderPathUtils.validateFileName('report'), isNull);
