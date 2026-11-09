@@ -926,7 +926,10 @@ void main() {
       final retryData = <String, dynamic>{
         'type': 'ocr',
         'images': [
-          {'bytes': base64Encode(_createTestPngBytes()), 'format': 'png'},
+          {
+            'bytes': base64Encode(_createValidOcrTestImage().bytes),
+            'format': 'png',
+          },
         ],
         'modelIndex': 0,
         'instructionIndex': 1,
