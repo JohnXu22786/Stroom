@@ -265,7 +265,7 @@ void main() {
           throwsStateError,
         );
 
-        expect(await TextManifest.readFile(newPath), isNull);
+        expect(await TextManifest.readFilePath(newPath), isNull);
         expect(await TextManifest.readFile(oldPath), isNotNull);
         final saved = await TextManifest.loadRecordsUncached();
         expect(saved.single.storageFileName, oldPath);
