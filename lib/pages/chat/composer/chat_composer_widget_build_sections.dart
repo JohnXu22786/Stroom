@@ -46,6 +46,9 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
     // Legacy models without the isEffortParam flag fall back to the first
     // non-toggle param (pre-flag semantics).
     final effortParam = findEffortParam(widget.reasoningParams);
+    final hasUsableReasoningToggle = widget.reasoningParams.any(
+      (param) => param.isReasoningToggle && param.isFilledToggle,
+    );
 
     // Show the selected effort whenever its independent control is enabled.
     // Custom reasoning selections can activate the chip color independently
@@ -121,10 +124,13 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
         )
         .length;
     final hasActiveReasoningCustomParams = activeReasoningCustomParamsCount > 0;
-    final reasoningColor =
-        (reasoningEnabled || hasActiveEffort || hasActiveReasoningCustomParams)
-            ? Colors.purple
-            : Colors.grey;
+    final hasActiveReasoningToggle =
+        reasoningEnabled && hasUsableReasoningToggle;
+    final reasoningColor = (hasActiveReasoningToggle ||
+            hasActiveEffort ||
+            hasActiveReasoningCustomParams)
+        ? Colors.purple
+        : Colors.grey;
     final activeCustomParamsCount =
         activeConfiguredCustomParamsCount + activeReasoningCustomParamsCount;
     final bool hasActiveCustomParams = activeCustomParamsCount > 0;
