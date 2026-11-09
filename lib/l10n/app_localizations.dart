@@ -10835,6 +10835,48 @@ abstract class AppLocalizations {
   /// **'Enable this tool for an assistant in that assistant’s default tool settings.'**
   String get toolBuiltinEnableHelp;
 
+  /// No description provided for @httpToolBraveDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Search the web with the Brave Search API. Requires an API key.'**
+  String get httpToolBraveDescription;
+
+  /// No description provided for @httpToolBochaDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Search the web with the Bocha AI Search API. Requires an API key.'**
+  String get httpToolBochaDescription;
+
+  /// No description provided for @httpToolQueritDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Search the web with Querit Search. Requires an API key.'**
+  String get httpToolQueritDescription;
+
+  /// No description provided for @httpToolSearxngDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Search the web with a SearXNG instance. Requires an instance URL.'**
+  String get httpToolSearxngDescription;
+
+  /// No description provided for @httpToolSearchQueryDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Search terms.'**
+  String get httpToolSearchQueryDescription;
+
+  /// No description provided for @httpToolSearchCountDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Number of results to return.'**
+  String get httpToolSearchCountDescription;
+
+  /// No description provided for @httpToolSearchCountMax20Description.
+  ///
+  /// In en, this message translates to:
+  /// **'Number of results to return (maximum 20).'**
+  String get httpToolSearchCountMax20Description;
+
   /// No description provided for @mcpSseUrlLabel.
   ///
   /// In en, this message translates to:

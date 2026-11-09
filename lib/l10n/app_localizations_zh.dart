@@ -6106,6 +6106,30 @@ class AppLocalizationsZh extends AppLocalizations {
   String get toolBuiltinEnableHelp => '是否在助手中启用，由该助手的默认工具设置管理。';
 
   @override
+  String get httpToolBraveDescription =>
+      '使用 Brave Search API 搜索网络。需要配置 API Key。';
+
+  @override
+  String get httpToolBochaDescription =>
+      '使用博查 AI Search API 搜索网络。需要配置 API Key。';
+
+  @override
+  String get httpToolQueritDescription => '使用 Querit Search 搜索网络。需要配置 API Key。';
+
+  @override
+  String get httpToolSearxngDescription =>
+      '注重隐私保护的自托管元搜索引擎，可聚合多种搜索源。需要配置实例 URL。';
+
+  @override
+  String get httpToolSearchQueryDescription => '搜索关键词。';
+
+  @override
+  String get httpToolSearchCountDescription => '返回结果数量。';
+
+  @override
+  String get httpToolSearchCountMax20Description => '返回结果数量（最大 20）。';
+
+  @override
   String get mcpSseUrlLabel => 'SSE URL';
 
   @override
@@ -16889,6 +16913,30 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get toolBuiltinEnableHelp => '是否在助手中启用，由该助手的默认工具设置管理。';
+
+  @override
+  String get httpToolBraveDescription =>
+      '使用 Brave Search API 搜索网络。需要配置 API Key。';
+
+  @override
+  String get httpToolBochaDescription =>
+      '使用博查 AI Search API 搜索网络。需要配置 API Key。';
+
+  @override
+  String get httpToolQueritDescription => '使用 Querit Search 搜索网络。需要配置 API Key。';
+
+  @override
+  String get httpToolSearxngDescription =>
+      '注重隐私保护的自托管元搜索引擎，可聚合多种搜索源。需要配置实例 URL。';
+
+  @override
+  String get httpToolSearchQueryDescription => '搜索关键词。';
+
+  @override
+  String get httpToolSearchCountDescription => '返回结果数量。';
+
+  @override
+  String get httpToolSearchCountMax20Description => '返回结果数量（最大 20）。';
 
   @override
   String get mcpSseUrlLabel => 'SSE URL';
