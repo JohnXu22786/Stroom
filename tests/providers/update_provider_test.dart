@@ -2093,6 +2093,25 @@ void main() {
       expect(notifier.state.availableVersions![0].version, '0.2.14');
     });
 
+    test('current release with a v-prefixed installed version is not offered',
+        () async {
+      // A build from a v-prefixed tag can report the installed version as
+      // "v0.2.13". The release list uses the normalized "0.2.13" version,
+      // and its published_at can be later than the timestamp baked from the
+      // release draft. The current release must still be excluded.
+      UpdateNotifier.debugAppVersionOverride = 'v0.2.13';
+      UpdateNotifier.debugAppReleaseTimeOverride = '2024-06-15T10:00:00Z';
+      final releases = _githubReleases([
+        ('v0.2.13', false, 'Current version', '2024-06-15T10:05:00Z'),
+      ]);
+      final notifier = UpdateNotifier(dio: _createMockDioForList(releases));
+
+      await notifier.checkForUpdate();
+
+      expect(notifier.state.updateAvailable, false);
+      expect(notifier.state.availableVersions, isNull);
+    });
+
     test(
         'baked time with explicit offset is normalized to UTC+0 before comparing',
         () async {

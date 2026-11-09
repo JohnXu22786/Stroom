@@ -430,7 +430,8 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     }
 
     final releases = response.data as List<dynamic>;
-    final currentVersionStr = debugAppVersionOverride ?? appVersion;
+    final currentVersionStr =
+        (debugAppVersionOverride ?? appVersion).replaceFirst(RegExp(r'^v'), '');
 
     SharedPreferences? prefs;
     String? skippedVersion;
