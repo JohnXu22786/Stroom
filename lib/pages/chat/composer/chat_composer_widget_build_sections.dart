@@ -46,32 +46,24 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
     // Legacy models without the isEffortParam flag fall back to the first
     // non-toggle param (pre-flag semantics).
     final effortParam = findEffortParam(widget.reasoningParams);
+    final hasUsableReasoningToggle = widget.reasoningParams.any(
+      (param) => param.isReasoningToggle && param.isFilledToggle,
+    );
 
-    // Determine reasoning chip label and color based on reasoning state.
-    // When reasoning is enabled AND effort toggle is on AND the effort param
-    // has a non-empty name AND a non-empty value has been selected: show that
-    // value (e.g. "high", "low"). Otherwise: show "推理" (purple when enabled,
-    // grey when disabled). 运行时状态以已选值为准，不检查配置的 enabled 标记。
+    // Show the selected effort whenever its independent control is enabled.
+    // Custom reasoning selections can activate the chip color independently
+    // from the global reasoning switch.
+    final hasActiveEffort =
+        reasoningEffortEnabled && effortParam?.isUsable == true;
     final String reasoningLabel;
-    if (reasoningEnabled &&
-        reasoningEffortEnabled &&
+    if (hasActiveEffort &&
         effortParam != null &&
         effortParam.paramName.trim().isNotEmpty &&
-        // 仅参数名（无选项值、非布尔）的力度参数不可用：即使 map 中
-        // 残留旧值也不显示（面板开关同样不可用，二者保持一致）。
-        effortParam.isUsable &&
         (reasoningParamValues[effortParam.paramName]?.isNotEmpty ?? false)) {
       reasoningLabel = reasoningParamValues[effortParam.paramName]!;
     } else {
       reasoningLabel = AppLocalizations.of(context)!.chatReasoning;
     }
-    // Reasoning chip color: purple only when reasoning is actually usable
-    // (a model with configured reasoning params AND the toggle on).
-    // 无任何可用推理参数（仅参数名/无选项值/非布尔）时与面板一致：
-    // 灰色不可用，开关即使残留开启状态也不显示为可用。
-    final hasReasoningParams = widget.reasoningParams.any((p) => p.isUsable);
-    final reasoningColor =
-        (reasoningEnabled && hasReasoningParams) ? Colors.purple : Colors.grey;
 
     // ═══════════════════════════════════════════════════════════
     // Tool chip: accent color (indigo) when tools enabled, grey when disabled
@@ -121,18 +113,24 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
           isSelectable &&
           selected.isNotEmpty;
     }).length;
-    final activeReasoningCustomParamsCount = reasoningEnabled
-        ? widget.reasoningParams
-            .where(
-              (param) =>
-                  !param.isReasoningToggle &&
-                  !param.isEffortParam &&
-                  param.paramName.trim().isNotEmpty &&
-                  param.isUsable &&
-                  (reasoningParamValues[param.paramName]?.isNotEmpty ?? false),
-            )
-            .length
-        : 0;
+    final activeReasoningCustomParamsCount = widget.reasoningParams
+        .where(
+          (param) =>
+              !param.isReasoningToggle &&
+              !param.isEffortParam &&
+              param.paramName.trim().isNotEmpty &&
+              param.isUsable &&
+              (reasoningParamValues[param.paramName]?.isNotEmpty ?? false),
+        )
+        .length;
+    final hasActiveReasoningCustomParams = activeReasoningCustomParamsCount > 0;
+    final hasActiveReasoningToggle =
+        reasoningEnabled && hasUsableReasoningToggle;
+    final reasoningColor = (hasActiveReasoningToggle ||
+            hasActiveEffort ||
+            hasActiveReasoningCustomParams)
+        ? Colors.purple
+        : Colors.grey;
     final activeCustomParamsCount =
         activeConfiguredCustomParamsCount + activeReasoningCustomParamsCount;
     final bool hasActiveCustomParams = activeCustomParamsCount > 0;

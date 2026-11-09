@@ -386,9 +386,11 @@ void showReasoningPanel({
   // legacy fallback for models saved before the flag existed)
   final ReasoningParam? effortParam = findEffortParam(reasoningParams);
 
-  // 推理开关「可用」：存在任一可用的推理参数（见 [ReasoningParam.isUsable]）。
-  // 仅参数名（无选项值、非布尔）的参数不可用：开关无法产生任何效果，
-  // 与力度区间的灰色关闭状态保持一致。
+  // The global reasoning switch controls the configured reasoning toggle,
+  // so it is available only when that toggle has a complete configuration.
+  final hasReasoningToggle =
+      reasoningParams.any((p) => p.isReasoningToggle && p.isFilledToggle);
+  // Other controls still use their own usable parameter configuration.
   final hasParams = reasoningParams.any((p) => p.isUsable);
   final hasNonToggleParams = reasoningParams.any((p) => !p.isReasoningToggle);
   final hasEffortParam = effortParam != null;
@@ -476,9 +478,9 @@ void showReasoningPanel({
                                   ),
                                 ),
                                 Switch(
-                                  value: localEnabled && hasParams,
+                                  value: localEnabled && hasReasoningToggle,
                                   activeThumbColor: cs.primary,
-                                  onChanged: hasParams
+                                  onChanged: hasReasoningToggle
                                       ? (value) {
                                           setState(() => localEnabled = value);
                                           onReasoningToggle(value);
@@ -489,7 +491,7 @@ void showReasoningPanel({
                             ),
                           ),
                           // Hint when no params configured
-                          if (!hasParams)
+                          if (!hasReasoningToggle && !hasParams)
                             Padding(
                               padding: const EdgeInsets.only(top: 8, left: 4),
                               child: Text(

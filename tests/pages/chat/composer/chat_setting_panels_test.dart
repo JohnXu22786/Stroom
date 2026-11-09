@@ -594,6 +594,12 @@ void main() {
                           paramName: 'reasoning_effort',
                           options: ['low', 'medium', 'high'],
                         ),
+                        ReasoningParam(
+                          paramName: 'thinking.type',
+                          isReasoningToggle: true,
+                          onValue: 'enabled',
+                          offValue: 'disabled',
+                        ),
                       ],
                       onReasoningToggle: (v) => toggleValue = v,
                       onReasoningEffortToggle: (_) {},

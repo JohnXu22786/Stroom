@@ -237,8 +237,8 @@ void main() {
     });
 
     testWidgets(
-        'chip is grey when reasoning is off even with active custom params '
-        '(nothing is sent)', (tester) async {
+        'chip stays active when reasoning is off but custom params are active',
+        (tester) async {
       await pumpComposer(
         tester,
         createComposerTestApp(
@@ -252,8 +252,8 @@ void main() {
         (w) => w is SettingsChip && w.label == '自定义参数',
       );
       final settingsChip = tester.widget<SettingsChip>(chip);
-      expect(settingsChip.color, Colors.grey);
-      expect(settingsChip.badgeCount, isNull);
+      expect(settingsChip.color, const Color(0xFF6366F1));
+      expect(settingsChip.badgeCount, 1);
     });
   });
 }

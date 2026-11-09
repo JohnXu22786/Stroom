@@ -351,15 +351,24 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     );
     final savedEffort = findEffortParam(modelParams);
     final savedOptions = savedEffort?.options ?? const <String>[];
+    final hasSavedSelection = savedEffort != null &&
+        (savedOptions.isNotEmpty || savedEffort.optionOrder.isNotEmpty);
     effort.optionOrder = mergeOptionBlocks(
       providerOptions: providerEffort?.options ?? const [],
       savedOptions: savedOptions,
       savedOrder: savedEffort?.optionOrder ?? const [],
     );
-    effort.options = selectedInBlockOrder(
-      blocks: effort.optionOrder,
-      savedOptions: savedOptions,
-    );
+    effort.options = hasSavedSelection
+        ? selectedInBlockOrder(
+            blocks: effort.optionOrder,
+            savedOptions: savedOptions,
+          )
+        : effort.optionOrder
+            .where(
+              (value) =>
+                  (providerEffort?.options ?? const <String>[]).contains(value),
+            )
+            .toList();
   }
 
   /// 归一化附加参数基线（string/number）：options = 已保存勾选值按块
@@ -386,12 +395,14 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
         );
     final providerOptions = List<String>.of(providerParam?.options ?? const []);
     final savedOptions = List<String>.of(p.options);
+    final hasSavedSelection =
+        savedOptions.isNotEmpty || p.optionOrder.isNotEmpty;
     p.optionOrder = mergeOptionBlocks(
       providerOptions: providerOptions,
       savedOptions: savedOptions,
       savedOrder: p.optionOrder,
     );
-    p.options = savedOptions.isNotEmpty
+    p.options = hasSavedSelection
         ? selectedInBlockOrder(
             blocks: p.optionOrder,
             savedOptions: savedOptions,
@@ -604,8 +615,9 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     // - 块顺序：模型已保存的完整顺序（optionOrder）在前 + 供应商新增值
     //   追加；未保存过顺序时供应商顺序在前 + 模型独有值——勾选状态不改
     //   变显示顺序（修复「选中值自动前置」）；
-    // - 勾选 = 模型已保存的 options；模型未保存过勾选（新建模型或
-    //   编辑但模型无力度参数）时默认全不选，用户显式勾选想显示的值；
+    // - 勾选 = 模型已保存的 options；尚无已保存选择（options 和
+    //   optionOrder 均为空）时默认选中供应商值，之后用户的显式取消状态
+    //   会由非空 optionOrder 保留；
     // - 供应商来源判定用于删除按钮的显隐。
     _providerEffortValues = {...providerEffort?.options ?? []};
     final modelEffortValues = modelEffortParam?.options ?? [];
@@ -614,8 +626,12 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
       savedOptions: modelEffortValues,
       savedOrder: modelEffortParam?.optionOrder ?? const [],
     );
-    _effortSelectedValues =
-        modelEffortParam != null ? modelEffortValues.toSet() : <String>{};
+    final hasSavedEffortSelection = modelEffortParam != null &&
+        (modelEffortValues.isNotEmpty ||
+            modelEffortParam.optionOrder.isNotEmpty);
+    _effortSelectedValues = hasSavedEffortSelection
+        ? modelEffortValues.toSet()
+        : {...?providerEffort?.options};
 
     // 初始快照（reset 还原用）
     _initialParamSnapshots = {for (final p in _reasoningParams) p: p.copy()};
@@ -626,8 +642,9 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     // - 块顺序：模型已保存的完整顺序（optionOrder）在前 + 供应商新增值
     //   追加；未保存过顺序时供应商顺序在前 + 模型独有值（与力度参数
     //   同款，勾选状态不改变显示顺序）；
-    // - 勾选 = 模型已保存的 options；模型未保存过时默认全选供应商值
-    //   （附加参数保持「选项默认有效」语义，与力度参数默认不选不同）；
+    // - 勾选 = 模型已保存的 options；尚无已保存选择（options 和
+    //   optionOrder 均为空）时默认全选供应商值；显式全取消由 optionOrder
+    //   保留；
     // - 供应商来源判定用于删除按钮的显隐。
     final providerByName = {
       for (final p in provider?.reasoningParams ?? [])
@@ -649,8 +666,10 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
         savedOptions: modelOptions,
         savedOrder: p.optionOrder,
       );
+      final hasSavedSelection =
+          modelOptions.isNotEmpty || p.optionOrder.isNotEmpty;
       _additionalSelectedValues[p] =
-          modelOptions.isNotEmpty ? modelOptions.toSet() : {...providerOptions};
+          hasSavedSelection ? modelOptions.toSet() : {...providerOptions};
     }
   }
 
