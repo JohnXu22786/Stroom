@@ -303,7 +303,17 @@ class ChatMessage {
     final body = raw['body'];
     if (body is! Map) return Map<String, dynamic>.from(raw);
     final messages = body['messages'];
-    if (messages is! List) return Map<String, dynamic>.from(raw);
+    if (messages is! List) {
+      final input = body['input'];
+      if (input is! List) return Map<String, dynamic>.from(raw);
+      return <String, dynamic>{
+        ...raw,
+        'body': <String, dynamic>{
+          ...Map<String, dynamic>.from(body),
+          'input': _compactResponsesInput(input),
+        },
+      };
+    }
 
     // Tool loops append protocol messages after the original conversation.
     // The newest user message without tool-result blocks is the current input
@@ -358,6 +368,105 @@ class ChatMessage {
         'messages': compactMessages,
       },
     };
+  }
+
+  /// Responses API requests encode conversation history under `input`, with
+  /// message and tool items using a different shape from chat-completions
+  /// `messages`. Compact that diagnostic copy while retaining the latest user
+  /// input and its readable text.
+  static List<dynamic> _compactResponsesInput(List input) {
+    var currentUserMessage = -1;
+    for (var i = 0; i < input.length; i++) {
+      final item = input[i];
+      if (item is Map &&
+          item['type'] == 'message' &&
+          item['role'] == 'user') {
+        currentUserMessage = i;
+      }
+    }
+    if (currentUserMessage < 0) return input;
+
+    return [
+      for (var i = 0; i < input.length; i++)
+        _compactResponsesInputItem(
+          input[i],
+          isCurrentUserMessage: i == currentUserMessage,
+          isHistorical: i < currentUserMessage,
+        ),
+    ];
+  }
+
+  static dynamic _compactResponsesInputItem(
+    dynamic item, {
+    required bool isCurrentUserMessage,
+    required bool isHistorical,
+  }) {
+    if (item is! Map) return item;
+    if (item['type'] == 'message') {
+      if (isHistorical) {
+        return <dynamic, dynamic>{
+          ...item,
+          if (item['content'] != null)
+            'content': '[previous message content omitted]',
+        };
+      }
+      if (isCurrentUserMessage) {
+        final content = item['content'];
+        if (content is! List) return item;
+        return <dynamic, dynamic>{
+          ...item,
+          'content': [
+            for (final part in content)
+              if (part is Map) _compactResponsesUserPart(part) else part,
+          ],
+        };
+      }
+      if (item['role'] == 'assistant') {
+        return <dynamic, dynamic>{
+          ...item,
+          if (item['content'] != null)
+            'content': '[generated assistant content omitted]',
+        };
+      }
+    }
+    if (item['type'] == 'function_call' && item['arguments'] != null) {
+      return <dynamic, dynamic>{
+        ...item,
+        'arguments': '[generated function arguments omitted]',
+      };
+    }
+    if (item['type'] == 'function_call_output' && item['output'] != null) {
+      return <dynamic, dynamic>{
+        ...item,
+        'output': '[generated function output omitted]',
+      };
+    }
+    return item;
+  }
+
+  static Map _compactResponsesUserPart(Map part) {
+    switch (part['type']) {
+      case 'input_image':
+        final imageUrl = part['image_url'];
+        if (imageUrl is! String || imageUrl.contains('[base64 data:')) {
+          return part;
+        }
+        return <dynamic, dynamic>{
+          ...part,
+          'image_url': DataSanitizer.sanitizeBase64String(imageUrl),
+        };
+      case 'input_file':
+        final fileData = part['file_data'];
+        if (fileData is! String || fileData.contains('[base64 data:')) {
+          return part;
+        }
+        return <dynamic, dynamic>{
+          ...part,
+          'file_data': DataSanitizer.sanitizeBase64String(fileData),
+        };
+      default:
+        return part;
+    }
   }
 
   /// Keep the newest user text and attachment metadata in raw diagnostics while

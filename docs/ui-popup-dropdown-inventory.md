@@ -4,9 +4,9 @@ Generated from every tracked Dart source root in the repository, not only the ma
 
 ## Repository-wide Dart-source coverage
 
-The tracked repository contains 1,266 Dart files across five top-level roots: `lib/` (648 application and built-in-module source files), `tests/` (529 test files), `packages/` (87 files in the tracked `streaming_markdown` package), `integration_test/` (1 test file), and `tool/` (1 utility). `lib/` is the application source root; the built-in Stroom modules, including Anki and CatCatch, are inside it. The repository-wide search includes every tracked source root. The `packages/` results contain no in-scope menu or selection overlay callsite. The one `tool/` file (`tool/asr_evaluate.dart`) and one integration test (`integration_test/app_smoke_test.dart`) also contain none. Test files are counted above but are not treated as application source callsites.
+The tracked repository contains 1,270 Dart files across five top-level roots: `lib/` (648 application and built-in-module source files), `tests/` (533 test files), `packages/` (87 files in the tracked `streaming_markdown` package), `integration_test/` (1 test file), and `tool/` (1 utility). `lib/` is the application source root; the built-in Stroom modules, including Anki and CatCatch, are inside it. The repository-wide search includes every tracked source root. The `packages/` results contain no in-scope menu or selection overlay callsite. The `tool/` file (`tool/asr_evaluate.dart`) and integration test (`integration_test/app_smoke_test.dart`) also contain none. Test files are counted above but are not treated as application source callsites.
 
-The repository-wide search found no relevant popup, dropdown, menu, autocomplete, or menu-like overlay callsites outside `lib/` (including in `packages/`). All 26 `PopupMenuButton`, 1 `showMenu`, 33 legacy dropdown, and 2 `OverlayEntry` instances found in app source are in `lib/`; the two overlays are the LabeledTextField suggestion menu and DragSortArea drag feedback, respectively. No `DropdownMenu`, `MenuAnchor`, `MenuItemButton`, `Autocomplete`, or `RawAutocomplete` callsites were found.
+The repository-wide search found no relevant popup, dropdown, menu, autocomplete, or menu-like overlay callsites outside `lib/` (including in `packages/`). In `lib/`, it found 32 `PopupMenuButton` callsites, 1 `showMenu` callsite, 49 legacy `DropdownButton` / `DropdownButtonFormField` callsites, and 2 `OverlayEntry` callsites. The two overlays are the LabeledTextField suggestion menu and DragSortArea drag feedback, respectively. No `DropdownMenu`, `MenuAnchor`, `MenuItemButton`, `Autocomplete`, or `RawAutocomplete` callsites were found.
 
 ## Shared visual system
 
@@ -16,87 +16,71 @@ The repository-wide search found no relevant popup, dropdown, menu, autocomplete
 
 | Family | Count | Styling applied | Notes |
 |---|---:|---|---|
-| `PopupMenuButton` | 26 | shared `PopupMenuThemeData` | All menu buttons inherit the app theme; destructive groups keep existing dividers. |
+| `PopupMenuButton` | 32 | shared `PopupMenuThemeData` | All menu buttons inherit the app theme; destructive groups keep existing dividers. |
 | `showMenu` | 1 | shared `PopupMenuThemeData` | Mermaid editor mode picker. |
-| `DropdownButton` / `DropdownButtonFormField` | 33 | shared surface/radius token at each callsite | Legacy Flutter widget has no global menu-shape theme property. |
+| `DropdownButton` / `DropdownButtonFormField` | 49 | shared surface/radius token at each callsite | Legacy Flutter widget has no global menu-shape theme property. |
 | `DropdownMenu` / `MenuAnchor` | 0 | shared `DropdownMenuThemeData` is configured | No current callsites. |
 | App-authored suggestion `OverlayEntry` | 1 | shared surface/radius, outline, rounded rows | `LabeledTextField` model/context suggestions. |
 | Other `OverlayEntry` | 1 | not menu styling | `DragSortArea` release animation renders drag feedback; it is not a menu or selection list. |
 
 ### Popup buttons
 
-| Screen / component | Source file | Callsite(s) | Styling / exception |
-|---|---|---:|---|
-| batch rename dialog | `lib/widgets/batch_rename_dialog.dart` | 386 | shared popup theme; destructive separator preserved where applicable |
-| batch rename dialog | `lib/widgets/batch_rename_dialog.dart` | 464 | shared popup theme; destructive separator preserved where applicable |
-| batch rename dialog | `lib/widgets/batch_rename_dialog.dart` | 579 | shared popup theme; destructive separator preserved where applicable |
-| file manager view | `lib/widgets/file_manager_view.dart` | 576 | shared popup theme; destructive separator preserved where applicable |
-| file manager view | `lib/widgets/file_manager_view.dart` | 700 | shared popup theme; destructive separator preserved where applicable |
-| file manager view | `lib/widgets/file_manager_view.dart` | 1003 | shared popup theme; destructive separator preserved where applicable |
-| file manager view | `lib/widgets/file_manager_view.dart` | 1109 | shared popup theme; destructive separator preserved where applicable |
-| file manager view | `lib/widgets/file_manager_view.dart` | 1205 | shared popup theme; destructive separator preserved where applicable |
-| file manager view | `lib/widgets/file_manager_view.dart` | 1466 | shared popup theme; destructive separator preserved where applicable |
-| batch rename rule editor | `lib/widgets/batch_rename_rule_editor.dart` | 329 | shared popup theme; destructive separator preserved where applicable |
-| topic item | `lib/widgets/topic_item.dart` | 162 | shared popup theme; destructive separator preserved where applicable |
-| anki page | `lib/pages/anki_page.dart` | 378 | shared popup theme; destructive separator preserved where applicable |
-| provider config page | `lib/pages/provider_config_page.dart` | 1317 | shared popup theme; destructive separator preserved where applicable |
-| conversations page | `lib/pages/conversations_page.dart` | 460 | shared popup theme; destructive separator preserved where applicable |
-| ocr page | `lib/pages/ocr_page.dart` | 526 | shared popup theme; destructive separator preserved where applicable |
-| ocr page | `lib/pages/ocr_page.dart` | 1153 | shared popup theme; destructive separator preserved where applicable |
-| task list shared | `lib/pages/task_list_shared.dart` | 149 | shared popup theme; destructive separator preserved where applicable |
-| task list shared | `lib/pages/task_list_shared.dart` | 198 | shared popup theme; destructive separator preserved where applicable |
-| task list shared | `lib/pages/task_list_shared.dart` | 238 | shared popup theme; destructive separator preserved where applicable |
-| task list shared | `lib/pages/task_list_shared.dart` | 279 | shared popup theme; destructive separator preserved where applicable |
-| unified task list page | `lib/pages/unified_task_list_page.dart` | 299 | shared popup theme; destructive separator preserved where applicable |
-| flow block card | `lib/task_flow/widgets/flow_block_card.dart` | 361 | shared popup theme; destructive separator preserved where applicable |
-| synthesis task card | `lib/pages/unified_task_list/synthesis_task_card.dart` | 202 | shared popup theme; destructive separator preserved where applicable |
-| synthesis task card | `lib/pages/unified_task_list/synthesis_task_card.dart` | 253 | shared popup theme; destructive separator preserved where applicable |
-| synthesis task card | `lib/pages/unified_task_list/synthesis_task_card.dart` | 299 | shared popup theme; destructive separator preserved where applicable |
-| synthesis task card | `lib/pages/unified_task_list/synthesis_task_card.dart` | 341 | shared popup theme; destructive separator preserved where applicable |
+| Source file | Callsite lines | Count |
+|---|---:|---:|
+| `lib/pages/anki_page.dart` | 396 | 1 |
+| `lib/pages/conversations_page.dart` | 569 | 1 |
+| `lib/pages/llm_account_management_page.dart` | 1440, 1597 | 2 |
+| `lib/pages/ocr_page.dart` | 619, 1299 | 2 |
+| `lib/pages/provider_config_page.dart` | 1537 | 1 |
+| `lib/pages/task_list_shared.dart` | 165, 223, 271, 320 | 4 |
+| `lib/pages/unified_task_list/synthesis_task_card.dart` | 209, 269, 324, 375 | 4 |
+| `lib/pages/unified_task_list_page.dart` | 331 | 1 |
+| `lib/task_flow/widgets/catcatch_policy_menu.dart` | 32 | 1 |
+| `lib/task_flow/widgets/flow_block_card.dart` | 393 | 1 |
+| `lib/widgets/batch_rename_dialog.dart` | 457, 573, 710 | 3 |
+| `lib/widgets/batch_rename_rule_editor.dart` | 518 | 1 |
+| `lib/widgets/file_manager_view.dart` | 578, 725, 1054, 1160, 1259, 1529 | 6 |
+| `lib/widgets/math_canvas_3d.dart` | 4851 | 1 |
+| `lib/widgets/math_keyboard.dart` | 161, 217 | 2 |
+| `lib/widgets/topic_item.dart` | 205 | 1 |
+| **Total PopupMenuButton** |  | **32** |
 
 ### Programmatic popup menus
 
-| Screen / component | Source file | Callsite(s) | Styling / exception |
-|---|---|---:|---|
-| mermaid chart page | `lib/pages/mermaid_chart_page.dart` | 296 | shared popup theme |
+| Source file | Callsite lines | Count |
+|---|---:|---:|
+| `lib/pages/mermaid_chart_page.dart` | 312 | 1 |
+| **Total showMenu** |  | **1** |
 
 ### Dropdown buttons and form fields
 
-| Screen / component | Source file | Callsite(s) | Styling / exception |
-|---|---|---:|---|
-| batch rename dialog | `lib/widgets/batch_rename_dialog.dart` | 562 | shared dropdown surface and 16 dp menu radius |
-| batch rename dialog | `lib/widgets/batch_rename_dialog.dart` | 607 | shared dropdown surface and 16 dp menu radius |
-| file manager view | `lib/widgets/file_manager_view.dart` | 2828 | shared dropdown surface and 16 dp menu radius |
-| provider settings panel tab basic | `lib/pages/provider_settings_panel_tab_basic.dart` | 55 | shared dropdown surface and 16 dp menu radius |
-| provider settings panel tab basic | `lib/pages/provider_settings_panel_tab_basic.dart` | 210 | shared dropdown surface and 16 dp menu radius |
-| provider settings panel tab basic | `lib/pages/provider_settings_panel_tab_basic.dart` | 346 | shared dropdown surface and 16 dp menu radius |
-| provider settings panel tab basic | `lib/pages/provider_settings_panel_tab_basic.dart` | 436 | shared dropdown surface and 16 dp menu radius |
-| simple model config page | `lib/pages/simple_model_config_page.dart` | 246 | shared dropdown surface and 16 dp menu radius |
-| anki page | `lib/pages/anki_page.dart` | 239 | shared dropdown surface and 16 dp menu radius |
-| llm model config page reasoning builders | `lib/pages/llm_model_config_page_reasoning_builders.dart` | 416 | shared dropdown surface and 16 dp menu radius |
-| tts create page | `lib/pages/tts_create_page.dart` | 563 | shared dropdown surface and 16 dp menu radius |
-| tts create page | `lib/pages/tts_create_page.dart` | 1008 | shared dropdown surface and 16 dp menu radius |
-| voice batch add page | `lib/pages/voice_batch_add_page.dart` | 351 | shared dropdown surface and 16 dp menu radius |
-| model config page | `lib/pages/model_config_page.dart` | 1113 | shared dropdown surface and 16 dp menu radius |
-| ocr page | `lib/pages/ocr_page.dart` | 813 | OCR model selector; shared dropdown surface and rounded menu |
-| ocr page | `lib/pages/ocr_page.dart` | 960 | shared dropdown surface and 16 dp menu radius |
-| assistant selection page edit custom param | `lib/pages/assistant_selection_page_edit_custom_param.dart` | 63 | shared dropdown surface and 16 dp menu radius |
-| llm model config page sections | `lib/pages/llm_model_config_page_sections.dart` | 199 | shared dropdown surface and 16 dp menu radius |
-| llm model config page sections | `lib/pages/llm_model_config_page_sections.dart` | 409 | shared dropdown surface and 16 dp menu radius |
-| provider settings panel custom params | `lib/pages/provider_settings_panel_custom_params.dart` | 228 | shared dropdown surface and 16 dp menu radius |
-| asr page | `lib/pages/asr_page.dart` | 670 | shared dropdown surface and 16 dp menu radius |
-| provider settings panel tab asr | `lib/pages/provider_settings_panel_tab_asr.dart` | 48 | shared dropdown surface and 16 dp menu radius |
-| provider settings panel tab asr | `lib/pages/provider_settings_panel_tab_asr.dart` | 132 | shared dropdown surface and 16 dp menu radius |
-| asr model config page | `lib/pages/asr_model_config_page.dart` | 512 | shared dropdown surface and 16 dp menu radius |
-| asr model config page | `lib/pages/asr_model_config_page.dart` | 671 | shared dropdown surface and 16 dp menu radius |
-| asr model config page | `lib/pages/asr_model_config_page.dart` | 771 | shared dropdown surface and 16 dp menu radius |
-| assistant selection page add custom param | `lib/pages/assistant_selection_page_add_custom_param.dart` | 52 | shared dropdown surface and 16 dp menu radius |
-| text storage shared | `lib/pages/text_storage_shared.dart` | 118 | shared dropdown surface and 16 dp menu radius |
-| ocr model config page | `lib/pages/ocr_model_config_page.dart` | 631 | shared dropdown surface and 16 dp menu radius |
-| provider settings panel reasoning | `lib/pages/provider_settings_panel_reasoning.dart` | 635 | shared dropdown surface and 16 dp menu radius |
-| block chain editor | `lib/task_flow/widgets/block_chain_editor.dart` | 213 | shared dropdown surface and 16 dp menu radius |
-| block editor dialog | `lib/task_flow/widgets/block_editor_dialog.dart` | 437 | shared dropdown surface and 16 dp menu radius |
-| block editor dialog | `lib/task_flow/widgets/block_editor_dialog.dart` | 596 | shared dropdown surface and 16 dp menu radius |
+| Source file | Callsite lines | Count |
+|---|---:|---:|
+| `lib/pages/anki_page.dart` | 250 | 1 |
+| `lib/pages/asr_model_config_page.dart` | 535, 705, 819 | 3 |
+| `lib/pages/asr_page.dart` | 693 | 1 |
+| `lib/pages/assistant_selection_page_add_custom_param.dart` | 59 | 1 |
+| `lib/pages/assistant_selection_page_edit_custom_param.dart` | 70 | 1 |
+| `lib/pages/llm_account_management_page.dart` | 2531, 2689, 2739, 3230, 3250, 3271, 3286, 4458, 4581, 4604, 4623, 4721, 4736, 4797, 4852 | 15 |
+| `lib/pages/llm_model_config_page_reasoning_builders.dart` | 431 | 1 |
+| `lib/pages/llm_model_config_page_sections.dart` | 196, 412 | 2 |
+| `lib/pages/model_config_page.dart` | 1183 | 1 |
+| `lib/pages/ocr_model_config_page.dart` | 731 | 1 |
+| `lib/pages/ocr_page.dart` | 951, 1100 | 2 |
+| `lib/pages/provider_settings_panel_custom_params.dart` | 241 | 1 |
+| `lib/pages/provider_settings_panel_reasoning.dart` | 638 | 1 |
+| `lib/pages/provider_settings_panel_tab_asr.dart` | 45, 138 | 2 |
+| `lib/pages/provider_settings_panel_tab_basic.dart` | 56, 205, 344, 443 | 4 |
+| `lib/pages/simple_model_config_page.dart` | 276 | 1 |
+| `lib/pages/text_storage_shared.dart` | 123 | 1 |
+| `lib/pages/tts_create_page.dart` | 574, 1045 | 2 |
+| `lib/pages/voice_batch_add_page.dart` | 354 | 1 |
+| `lib/task_flow/widgets/block_chain_editor.dart` | 231 | 1 |
+| `lib/task_flow/widgets/block_editor_dialog.dart` | 509, 677 | 2 |
+| `lib/widgets/batch_rename_dialog.dart` | 691, 756 | 2 |
+| `lib/widgets/file_manager_view.dart` | 2990 | 1 |
+| `lib/widgets/math_3d_toolbar.dart` | 229 | 1 |
+| **Total DropdownButton / DropdownButtonFormField** |  | **49** |
 
 ## Custom overlay and reviewed exclusions
 
