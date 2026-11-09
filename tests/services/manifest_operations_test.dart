@@ -146,7 +146,8 @@ void main() {
             sidecarName,
             Uint8List.fromList([110, 101, 119, 32, 116, 101, 120, 116]),
           ),
-          createFile: (path) => _FailingReplacementFile(realIO.createFile(path)),
+          createFile: (path) =>
+              _FailingReplacementFile(realIO.createFile(path)),
         ),
         throwsA(isA<FileSystemException>()),
       );
