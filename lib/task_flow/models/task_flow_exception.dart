@@ -9,3 +9,8 @@ class BlockExecutionException implements Exception {
   @override
   String toString() => 'BlockExecutionException: $message';
 }
+
+/// The chat model selected for a new flow launch is no longer available.
+class FlowLaunchModelUnavailableException implements Exception {
+  const FlowLaunchModelUnavailableException();
+}

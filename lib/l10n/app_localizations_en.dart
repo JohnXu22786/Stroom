@@ -2931,6 +2931,62 @@ class AppLocalizationsEn extends AppLocalizations {
   String get catcatchSkipped => 'Skipped (nothing to process)';
 
   @override
+  String catCatchDetailMediaResources(Object count) =>
+      'Found $count media resources';
+
+  @override
+  String catCatchDetailResources(Object count) => 'Found $count resources';
+
+  @override
+  String catCatchDetailBrowserResources(Object count) =>
+      'Browser found $count resources';
+
+  @override
+  String catCatchDetailPlaylistResources(Object total, Object segments) =>
+      'Found $total resources ($segments playlist segments)';
+
+  @override
+  String catCatchDetailChooseResource(Object count) =>
+      '$count resources found. Choose one.';
+
+  @override
+  String get catCatchDetailAutoSelectFirst =>
+      'Automatically selected result 1 and started downloading';
+
+  @override
+  String get catCatchDetailAutoSelectRemaining =>
+      '1 result remains; started downloading automatically';
+
+  @override
+  String catCatchDetailSkipFormat(Object extension) =>
+      'Conversion skipped for .$extension; this format needs no conversion';
+
+  @override
+  String get catCatchDetailSkipNoExtension =>
+      'Conversion skipped; this format needs no conversion';
+
+  @override
+  String catCatchDetailDurationFiltered(
+    Object duration,
+    Object remaining,
+    Object removed,
+  ) =>
+      'After filtering for $duration, $remaining results remain ($removed unmatched resources excluded)';
+
+  @override
+  String catCatchDetailDurationAllMatch(Object count, Object duration) =>
+      'All $count resources match the $duration duration filter';
+
+  @override
+  String catCatchDurationHours(Object count) => '${count}h';
+
+  @override
+  String catCatchDurationMinutes(Object count) => '${count}m';
+
+  @override
+  String catCatchDurationSeconds(Object count) => '${count}s';
+
+  @override
   String get catcatchRetryStep => 'Retry this step';
 
   @override
@@ -14063,6 +14119,62 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get catcatchSkipped => 'Skipped (nothing to process)';
+
+  @override
+  String catCatchDetailMediaResources(Object count) =>
+      'Found $count media resources';
+
+  @override
+  String catCatchDetailResources(Object count) => 'Found $count resources';
+
+  @override
+  String catCatchDetailBrowserResources(Object count) =>
+      'Browser found $count resources';
+
+  @override
+  String catCatchDetailPlaylistResources(Object total, Object segments) =>
+      'Found $total resources ($segments playlist segments)';
+
+  @override
+  String catCatchDetailChooseResource(Object count) =>
+      '$count resources found. Choose one.';
+
+  @override
+  String get catCatchDetailAutoSelectFirst =>
+      'Automatically selected result 1 and started downloading';
+
+  @override
+  String get catCatchDetailAutoSelectRemaining =>
+      '1 result remains; started downloading automatically';
+
+  @override
+  String catCatchDetailSkipFormat(Object extension) =>
+      'Conversion skipped for .$extension; this format needs no conversion';
+
+  @override
+  String get catCatchDetailSkipNoExtension =>
+      'Conversion skipped; this format needs no conversion';
+
+  @override
+  String catCatchDetailDurationFiltered(
+    Object duration,
+    Object remaining,
+    Object removed,
+  ) =>
+      'After filtering for $duration, $remaining results remain ($removed unmatched resources excluded)';
+
+  @override
+  String catCatchDetailDurationAllMatch(Object count, Object duration) =>
+      'All $count resources match the $duration duration filter';
+
+  @override
+  String catCatchDurationHours(Object count) => '${count}h';
+
+  @override
+  String catCatchDurationMinutes(Object count) => '${count}m';
+
+  @override
+  String catCatchDurationSeconds(Object count) => '${count}s';
 
   @override
   String get catcatchRetryStep => 'Retry this step';

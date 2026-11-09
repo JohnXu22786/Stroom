@@ -24,6 +24,7 @@ import '../models/io_type.dart';
 import '../models/task_flow_definition.dart';
 import '../models/task_flow_chain_editor.dart';
 import '../models/task_flow_execution.dart';
+import '../models/task_flow_exception.dart';
 import '../providers/task_flow_provider.dart';
 import '../providers/task_flow_execution_provider.dart';
 import '../services/task_flow_execution_service.dart';
@@ -35,6 +36,12 @@ import '../widgets/block_editor_dialog.dart';
 import '../widgets/flow_block_card.dart';
 import 'task_flow_run_page.dart';
 import '../../l10n/app_localizations.dart';
+
+@visibleForTesting
+String taskFlowLaunchErrorMessage(Object error, AppLocalizations strings) =>
+    error is FlowLaunchModelUnavailableException
+        ? strings.taskFlowUiModelUnavailable
+        : error.toString();
 
 /// Unified page for editing AND launching a task flow.
 ///
@@ -1924,8 +1931,9 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
         return path != null && execNotifier.referencesInputStoragePath(path);
       });
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(error.toString())));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(taskFlowLaunchErrorMessage(
+                error, AppLocalizations.of(context)!))));
       }
       return;
     } finally {
