@@ -117,8 +117,9 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                               ),
                               style: TextStyle(
                                 fontSize: 12,
-                                color:
-                                    Theme.of(context).colorScheme.onSurfaceVariant,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
                               ),
                             ),
                             if (widget.task.status == TaskStatus.running) ...[
@@ -129,8 +130,9 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                                 startedAt: widget.task.createdAt,
                                 style: TextStyle(
                                   fontSize: 12,
-                                  color:
-                                      Theme.of(context).colorScheme.onSurfaceVariant,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant,
                                 ),
                               ),
                             ],
@@ -629,7 +631,10 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                     width: double.infinity,
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.1),
+                      color: Theme.of(context)
+                          .colorScheme
+                          .onSurface
+                          .withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: SelectableText(

@@ -585,7 +585,8 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
                       children: [
                         if (record.folder.isNotEmpty &&
                             record.folder != _currentFolder) ...[
-                          Icon(Icons.folder, size: 12, color: cs.onSurfaceVariant),
+                          Icon(Icons.folder,
+                              size: 12, color: cs.onSurfaceVariant),
                           const SizedBox(width: 3),
                           Flexible(
                             child: Text(
@@ -608,8 +609,8 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
                         ],
                         Text(
                           _formatSize(record.size),
-                          style:
-                              TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                          style: TextStyle(
+                              fontSize: 12, color: cs.onSurfaceVariant),
                         ),
                       ],
                     ),

@@ -629,7 +629,8 @@ Future<void> showJsonValueEditorDialog(
                               liveError!,
                               style: TextStyle(
                                 fontSize: 12,
-                                color: Theme.of(ctx).colorScheme.onErrorContainer,
+                                color:
+                                    Theme.of(ctx).colorScheme.onErrorContainer,
                                 fontFamily: 'monospace',
                               ),
                             ),
