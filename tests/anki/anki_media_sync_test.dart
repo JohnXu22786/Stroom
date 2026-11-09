@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 22427)
-Total output lines: 2689
-
 import 'dart:convert';
 import 'dart:io';
 
@@ -730,7 +727,1238 @@ void main() {
     test(
       'rejects invalid files before later pending media uploads',
       () async {
-        final w…10427 tokens truncated…t.uploadedFiles, 0);
+        final workDir = await Directory.systemTemp.createTemp(
+          'stroom_anki_media_skip_batch_test_',
+        );
+        const identity = 'ankiweb:skip-batch-media';
+        final mediaDir = Directory('${workDir.path}/collection.media');
+        await mediaDir.create();
+        final skippedNames = [
+          for (var index = 0; index < 25; index++)
+            'a${index.toString().padLeft(2, '0')}.bin',
+        ];
+        for (final name in skippedNames) {
+          await File('${mediaDir.path}/$name').writeAsBytes([]);
+        }
+        final uploadBytes = [1, 2, 3];
+        await File('${mediaDir.path}/z-valid.png').writeAsBytes(uploadBytes);
+        await _seedMediaIndex(
+          workDir,
+          identity,
+          files: [
+            for (final name in skippedNames)
+              {
+                'fname': name,
+                'sha1': sha1.convert([4, 5, 6]).toString(),
+                'usn': 0,
+                'sync_required': 1,
+              },
+          ],
+        );
+
+        final fake = _QueueHttpClient();
+        final client = AnkiSyncProtocolClient.ankiWeb(
+          client: fake,
+          hostKey: 'test-host-key',
+        );
+
+        try {
+          await expectLater(
+            AnkiMediaSync.sync(
+              client,
+              syncIdentity: identity,
+              documentsPath: workDir.path,
+            ),
+            throwsA(isA<AnkiSyncException>()),
+          );
+          expect(fake.paths, isEmpty);
+          for (final name in skippedNames) {
+            expect(await File('${mediaDir.path}/$name').exists(), isTrue);
+          }
+          expect(await File('${mediaDir.path}/z-valid.png').exists(), isTrue);
+        } finally {
+          client.close();
+          fake.close();
+          await workDir.delete(recursive: true);
+        }
+      },
+    );
+
+    test(
+      'fails on an indexed empty file without deleting local media',
+      () async {
+        final workDir = await Directory.systemTemp.createTemp(
+          'stroom_anki_media_skip_preserve_test_',
+        );
+        const identity = 'ankiweb:preserve-skipped-media';
+        final mediaDir = Directory('${workDir.path}/collection.media');
+        await mediaDir.create();
+        await File('${mediaDir.path}/empty.bin').writeAsBytes([]);
+        final oversized = await File('${mediaDir.path}/oversized.bin')
+            .open(mode: FileMode.write);
+        await oversized.truncate(100 * 1024 * 1024 + 1);
+        await oversized.close();
+        await _seedMediaIndex(
+          workDir,
+          identity,
+          files: [
+            {
+              'fname': 'empty.bin',
+              'sha1': sha1.convert([4, 5, 6]).toString(),
+              'usn': 0,
+              'sync_required': 0,
+            },
+          ],
+        );
+
+        final fake = _QueueHttpClient()
+          ..responses.addAll([
+            _jsonResponse({
+              'data': {'usn': 0, 'sk': 'test-host-key'},
+              'err': '',
+            }),
+            _jsonResponse({'data': 'OK', 'err': ''}),
+          ]);
+        final client = AnkiSyncProtocolClient.ankiWeb(
+          client: fake,
+          hostKey: 'test-host-key',
+        );
+
+        try {
+          await expectLater(
+            AnkiMediaSync.sync(
+              client,
+              syncIdentity: identity,
+              documentsPath: workDir.path,
+            ),
+            throwsA(isA<AnkiSyncException>()),
+          );
+
+          expect(fake.paths, isEmpty);
+          expect(await File('${mediaDir.path}/empty.bin').exists(), isTrue);
+          expect(await File('${mediaDir.path}/oversized.bin').exists(), isTrue);
+        } finally {
+          client.close();
+          fake.close();
+          await workDir.delete(recursive: true);
+        }
+      },
+    );
+
+    test('fails on new empty or oversized media files', () async {
+      final workDir = await Directory.systemTemp.createTemp(
+        'stroom_anki_media_new_invalid_test_',
+      );
+      const identity = 'ankiweb:new-invalid-media';
+      final mediaDir = Directory('${workDir.path}/collection.media');
+      await mediaDir.create();
+      await File('${mediaDir.path}/empty.bin').writeAsBytes([]);
+      final oversized = await File('${mediaDir.path}/oversized.bin')
+          .open(mode: FileMode.write);
+      await oversized.truncate(100 * 1024 * 1024 + 1);
+      await oversized.close();
+      await _seedMediaIndex(workDir, identity, files: []);
+      final fake = _QueueHttpClient();
+      final client = AnkiSyncProtocolClient.ankiWeb(
+        client: fake,
+        hostKey: 'new-invalid-host-key',
+      );
+
+      try {
+        await expectLater(
+          AnkiMediaSync.sync(
+            client,
+            syncIdentity: identity,
+            documentsPath: workDir.path,
+          ),
+          throwsA(isA<AnkiSyncException>()),
+        );
+
+        expect(fake.paths, isEmpty);
+      } finally {
+        client.close();
+        fake.close();
+        await workDir.delete(recursive: true);
+      }
+    });
+
+    test('keeps invalid pending media uploads pending and fails sync',
+        () async {
+      final workDir = await Directory.systemTemp.createTemp(
+        'stroom_anki_media_pending_invalid_test_',
+      );
+      const identity = 'ankiweb:pending-invalid-media';
+      final mediaDir = Directory('${workDir.path}/collection.media');
+      await mediaDir.create();
+      await File('${mediaDir.path}/empty.bin').writeAsBytes([]);
+      final oversized = await File('${mediaDir.path}/oversized.bin')
+          .open(mode: FileMode.write);
+      await oversized.truncate(100 * 1024 * 1024 + 1);
+      await oversized.close();
+      final emptyHash = sha1.convert([1, 2, 3]).toString();
+      final oversizedHash = sha1.convert([4, 5, 6]).toString();
+      await _seedMediaIndex(
+        workDir,
+        identity,
+        files: [
+          {
+            'fname': 'empty.bin',
+            'sha1': emptyHash,
+            'usn': -1,
+            'sync_required': 1,
+          },
+          {
+            'fname': 'oversized.bin',
+            'sha1': oversizedHash,
+            'usn': -1,
+            'sync_required': 1,
+          },
+        ],
+      );
+      final fake = _QueueHttpClient()
+        ..responseFor = (request, body) async {
+          switch (request.url.path) {
+            case '/msync/begin':
+              return _jsonResponse({
+                'data': {'usn': 0, 'sk': 'pending-invalid-host-key'},
+                'err': '',
+              });
+            case '/msync/mediaSanity':
+              return _jsonResponse({'data': 'OK', 'err': ''});
+            default:
+              return _jsonResponse({'data': null, 'err': ''});
+          }
+        };
+      final client = AnkiSyncProtocolClient.ankiWeb(
+        client: fake,
+        hostKey: 'pending-invalid-host-key',
+      );
+
+      try {
+        await expectLater(
+          AnkiMediaSync.sync(
+            client,
+            syncIdentity: identity,
+            documentsPath: workDir.path,
+          ),
+          throwsA(isA<AnkiSyncException>()),
+        );
+
+        expect(fake.paths, isNot(contains('/msync/uploadChanges')));
+        final indexHash = sha256.convert(utf8.encode(identity)).toString();
+        final index = await sqflite.openDatabase(
+          '${workDir.path}/collection.media.sync.$indexHash.db',
+          version: 1,
+        );
+        final files = await index.query('media_files', orderBy: 'fname');
+        await index.close();
+        expect(files.map((file) => file['sync_required']), [1, 1]);
+      } finally {
+        client.close();
+        fake.close();
+        await workDir.delete(recursive: true);
+      }
+    });
+
+    test(
+      'normalizes unsafe remote filenames before writing and syncing them',
+      () async {
+        final workDir = await Directory.systemTemp.createTemp(
+          'stroom_anki_media_normalized_remote_test_',
+        );
+        final firstContent = [1, 2, 3];
+        final secondContent = [4, 5, 6];
+        final thirdContent = [7, 8, 9];
+        const decomposedFilename = 'cafe\u0301.txt';
+        final contentByRemoteName = <String, List<int>>{
+          'CON': firstContent,
+          'a:b': secondContent,
+          decomposedFilename: thirdContent,
+        };
+        http.Response archiveResponse(String filename) {
+          final content = contentByRemoteName[filename]!;
+          final archive = Archive()
+            ..addFile(ArchiveFile('0', content.length, content));
+          final metadataBytes = utf8.encode(jsonEncode({'0': filename}));
+          archive.addFile(
+            ArchiveFile('_meta', metadataBytes.length, metadataBytes),
+          );
+          return http.Response.bytes(
+            ZipEncoder().encode(archive),
+            HttpStatus.ok,
+          );
+        }
+
+        final fake = _QueueHttpClient()
+          ..responses.addAll([
+            _jsonResponse({
+              'data': {'usn': 3, 'sk': 'test-host-key'},
+              'err': '',
+            }),
+            http.Response.bytes(
+              utf8.encode(
+                jsonEncode({
+                  'data': [
+                    ['CON', 1, sha1.convert(firstContent).toString()],
+                    ['a:b', 2, sha1.convert(secondContent).toString()],
+                    [
+                      decomposedFilename,
+                      3,
+                      sha1.convert(thirdContent).toString(),
+                    ],
+                  ],
+                  'err': '',
+                }),
+              ),
+              HttpStatus.ok,
+            ),
+            _jsonResponse({'data': [], 'err': ''}),
+            _jsonResponse({
+              'data': [3, 6],
+              'err': '',
+            }),
+            _jsonResponse({'data': 'OK', 'err': ''}),
+          ]);
+        fake.responseFor = (request, body) async {
+          if (request.url.path != '/msync/downloadFiles') return null;
+          final fields = _multipartFields(request, body);
+          final payload =
+              jsonDecode(utf8.decode(gzip.decode(fields['data']!))) as Map;
+          final filenames = (payload['files'] as List).cast<String>();
+          return archiveResponse(filenames.single);
+        };
+        final client = AnkiSyncProtocolClient.ankiWeb(
+          client: fake,
+          hostKey: 'test-host-key',
+        );
+
+        try {
+          final result = await AnkiMediaSync.sync(
+            client,
+            syncIdentity: 'ankiweb:normalize-remote-media',
+            documentsPath: workDir.path,
+          );
+          final mediaDir = Directory('${workDir.path}/collection.media');
+
+          expect(result.downloadedFiles, 3);
+          expect(result.uploadedFiles, 3);
+          expect(result.deletedFiles, 0);
+          expect(
+            await File('${mediaDir.path}/CON_').readAsBytes(),
+            firstContent,
+          );
+          expect(
+            await File('${mediaDir.path}/ab').readAsBytes(),
+            secondContent,
+          );
+          expect(
+            await File('${mediaDir.path}/café.txt').readAsBytes(),
+            thirdContent,
+          );
+          expect(await File('${mediaDir.path}/CON').exists(), isFalse);
+          expect(await File('${mediaDir.path}/a:b').exists(), isFalse);
+          expect(
+            await File('${mediaDir.path}/$decomposedFilename').exists(),
+            isFalse,
+          );
+          expect(fake.paths, [
+            '/msync/begin',
+            '/msync/mediaChanges',
+            '/msync/downloadFiles',
+            '/msync/downloadFiles',
+            '/msync/downloadFiles',
+            '/msync/mediaChanges',
+            '/msync/uploadChanges',
+            '/msync/mediaSanity',
+          ]);
+
+          final followupFake = _QueueHttpClient()
+            ..responses.addAll([
+              _jsonResponse({
+                'data': {'usn': 6, 'sk': 'test-host-key'},
+                'err': '',
+              }),
+              _jsonResponse({
+                'data': [3, 9],
+                'err': '',
+              }),
+              _jsonResponse({'data': 'OK', 'err': ''}),
+            ]);
+          final followupClient = AnkiSyncProtocolClient.ankiWeb(
+            client: followupFake,
+            hostKey: 'test-host-key',
+          );
+          try {
+            final followup = await AnkiMediaSync.sync(
+              followupClient,
+              syncIdentity: 'ankiweb:normalize-remote-media',
+              documentsPath: workDir.path,
+            );
+            expect(followup.deletedFiles, 3);
+            expect(followupFake.paths, [
+              '/msync/begin',
+              '/msync/uploadChanges',
+              '/msync/mediaSanity',
+            ]);
+          } finally {
+            followupClient.close();
+            followupFake.close();
+          }
+        } finally {
+          client.close();
+          fake.close();
+          await workDir.delete(recursive: true);
+        }
+      },
+    );
+
+    test(
+      'does not overwrite a conflicting normalized fallback filename',
+      () async {
+        final workDir = await Directory.systemTemp.createTemp(
+          'stroom_anki_media_filename_collision_test_',
+        );
+        const identity = 'ankiweb:normalized-fallback-collision';
+        final mediaDir = Directory('${workDir.path}/collection.media');
+        await mediaDir.create();
+        final normalizedBytes = [1, 2, 3];
+        final conflictingBytes = [7, 8, 9];
+        final incomingBytes = [4, 5, 6];
+        final incomingSha = sha1.convert(incomingBytes).toString();
+        final fallbackFilename = 'ab-$incomingSha';
+        await File('${mediaDir.path}/ab').writeAsBytes(normalizedBytes);
+        final conflictingFallback = File('${mediaDir.path}/$fallbackFilename');
+        await conflictingFallback.writeAsBytes(conflictingBytes);
+        await _seedMediaIndex(
+          workDir,
+          identity,
+          files: [
+            {
+              'fname': 'ab',
+              'sha1': sha1.convert(normalizedBytes).toString(),
+              'usn': 0,
+              'sync_required': 0,
+            },
+            {
+              'fname': fallbackFilename,
+              'sha1': sha1.convert(conflictingBytes).toString(),
+              'usn': 0,
+              'sync_required': 0,
+            },
+          ],
+        );
+        final archive = Archive()
+          ..addFile(ArchiveFile('0', incomingBytes.length, incomingBytes));
+        final metadataBytes = utf8.encode(jsonEncode({'0': 'a:b'}));
+        archive.addFile(
+          ArchiveFile('_meta', metadataBytes.length, metadataBytes),
+        );
+        final fake = _QueueHttpClient()
+          ..responses.addAll([
+            _jsonResponse({
+              'data': {'usn': 1, 'sk': 'test-host-key'},
+              'err': '',
+            }),
+            _jsonResponse({
+              'data': [
+                ['a:b', 1, incomingSha],
+              ],
+              'err': '',
+            }),
+            _jsonResponse({'data': [], 'err': ''}),
+            _jsonResponse({'data': 'OK', 'err': ''}),
+          ]);
+        fake.responseFor = (request, body) async {
+          if (request.url.path == '/msync/downloadFiles') {
+            return http.Response.bytes(
+              ZipEncoder().encode(archive),
+              HttpStatus.ok,
+            );
+          }
+          if (request.url.path == '/msync/uploadChanges') {
+            return _jsonResponse({
+              'data': [1, 2],
+              'err': '',
+            });
+          }
+          return null;
+        };
+        final client = AnkiSyncProtocolClient.ankiWeb(
+          client: fake,
+          hostKey: 'test-host-key',
+        );
+
+        try {
+          final result = await AnkiMediaSync.sync(
+            client,
+            syncIdentity: identity,
+            documentsPath: workDir.path,
+          );
+
+          expect(result.downloadedFiles, 1);
+          expect(await conflictingFallback.readAsBytes(), conflictingBytes);
+          final files = <File>[];
+          await for (final entity in mediaDir.list()) {
+            if (entity is File) files.add(entity);
+          }
+          final incomingFiles = <File>[];
+          for (final file in files) {
+            if (sha1.convert(await file.readAsBytes()).toString() ==
+                incomingSha) {
+              incomingFiles.add(file);
+            }
+          }
+          expect(incomingFiles, hasLength(1));
+          expect(incomingFiles.single.path, isNot(conflictingFallback.path));
+        } finally {
+          client.close();
+          fake.close();
+          await workDir.delete(recursive: true);
+        }
+      },
+    );
+
+    test(
+      'disambiguates media names that collide by case on some filesystems',
+      () async {
+        final workDir = await Directory.systemTemp.createTemp(
+          'stroom_anki_media_case_collision_test_',
+        );
+        const identity = 'ankiweb:case-insensitive-media-collision';
+        const existingName = 'A.png';
+        const remoteName = 'a.png';
+        final existingBytes = [1, 2, 3];
+        final incomingBytes = [4, 5, 6];
+        final mediaDir = Directory('${workDir.path}/collection.media');
+        await mediaDir.create();
+        await File('${mediaDir.path}/$existingName')
+            .writeAsBytes(existingBytes);
+        await _seedMediaIndex(
+          workDir,
+          identity,
+          files: [
+            {
+              'fname': existingName,
+              'sha1': sha1.convert(existingBytes).toString(),
+              'usn': 1,
+              'sync_required': 0,
+            },
+          ],
+        );
+        final incomingHash = sha1.convert(incomingBytes).toString();
+        final archive = Archive()
+          ..addFile(ArchiveFile('0', incomingBytes.length, incomingBytes));
+        final metadataBytes = utf8.encode(jsonEncode({'0': remoteName}));
+        archive.addFile(
+          ArchiveFile('_meta', metadataBytes.length, metadataBytes),
+        );
+        final fake = _QueueHttpClient()
+          ..responses.addAll([
+            _jsonResponse({
+              'data': {'usn': 2, 'sk': 'test-host-key'},
+              'err': '',
+            }),
+            _jsonResponse({
+              'data': [
+                [remoteName, 2, incomingHash],
+              ],
+              'err': '',
+            }),
+            _jsonResponse({'data': [], 'err': ''}),
+            _jsonResponse({'data': 'OK', 'err': ''}),
+          ]);
+        fake.responseFor = (request, body) async {
+          if (request.url.path == '/msync/downloadFiles') {
+            return http.Response.bytes(
+              ZipEncoder().encode(archive),
+              HttpStatus.ok,
+            );
+          }
+          if (request.url.path == '/msync/uploadChanges') {
+            return _jsonResponse({
+              'data': [1, 1],
+              'err': '',
+            });
+          }
+          return null;
+        };
+        final client = AnkiSyncProtocolClient.ankiWeb(
+          client: fake,
+          hostKey: 'test-host-key',
+        );
+
+        try {
+          final result = await AnkiMediaSync.sync(
+            client,
+            syncIdentity: identity,
+            documentsPath: workDir.path,
+          );
+
+          expect(result.downloadedFiles, 1);
+          expect(result.uploadedFiles, 1);
+          expect(
+            await File('${mediaDir.path}/$existingName').readAsBytes(),
+            existingBytes,
+          );
+          expect(
+            await File('${mediaDir.path}/a-$incomingHash.png').readAsBytes(),
+            incomingBytes,
+          );
+        } finally {
+          client.close();
+          fake.close();
+          await workDir.delete(recursive: true);
+        }
+      },
+    );
+
+    test('downloads media changes from Anki tuples and ZIP metadata', () async {
+      final workDir = await Directory.systemTemp.createTemp(
+        'stroom_anki_media_download_test_',
+      );
+      final content = [4, 5, 6];
+      final archive = Archive()
+        ..addFile(ArchiveFile('0', content.length, content))
+        ..addFile(
+          ArchiveFile(
+            '_meta',
+            utf8.encode(jsonEncode({'0': 'back.png'})).length,
+            utf8.encode(jsonEncode({'0': 'back.png'})),
+          ),
+        );
+      final fake = _QueueHttpClient()
+        ..responses.addAll([
+          _jsonResponse({
+            'data': {'usn': 1, 'sk': 'test-host-key'},
+            'err': '',
+          }),
+          _jsonResponse({
+            'data': [
+              ['back.png', 1, sha1.convert(content).toString()],
+            ],
+            'err': '',
+          }),
+          http.Response.bytes(ZipEncoder().encode(archive), HttpStatus.ok),
+          _jsonResponse({'data': [], 'err': ''}),
+          _jsonResponse({'data': 'OK', 'err': ''}),
+        ]);
+      final client = AnkiSyncProtocolClient.ankiWeb(
+        client: fake,
+        hostKey: 'test-host-key',
+      );
+
+      try {
+        final result = await AnkiMediaSync.sync(
+          client,
+          syncIdentity: 'ankiweb:download-test',
+          documentsPath: workDir.path,
+        );
+
+        expect(result.downloadedFiles, 1);
+        expect(
+          await File('${workDir.path}/collection.media/back.png').readAsBytes(),
+          content,
+        );
+        expect(fake.paths, [
+          '/msync/begin',
+          '/msync/mediaChanges',
+          '/msync/downloadFiles',
+          '/msync/mediaChanges',
+          '/msync/mediaSanity',
+        ]);
+      } finally {
+        client.close();
+        fake.close();
+        await workDir.delete(recursive: true);
+      }
+    });
+
+    test(
+      'preserves media files whose names match download temporary suffixes',
+      () async {
+        final workDir = await Directory.systemTemp.createTemp(
+          'stroom_anki_media_temp_name_collision_test_',
+        );
+        const identity = 'ankiweb:media-temp-name-collision';
+        final mediaDir = Directory('${workDir.path}/collection.media');
+        await mediaDir.create();
+        const target = 'foo';
+        const tempName = 'foo.stroom-sync-tmp';
+        const backupName = 'foo.stroom-sync-old';
+        final originalBytes = [1, 2, 3];
+        final tempBytes = [4, 5, 6];
+        final backupBytes = [7, 8, 9];
+        final downloadedBytes = [10, 11, 12];
+        await File('${mediaDir.path}/$target').writeAsBytes(originalBytes);
+        await File('${mediaDir.path}/$tempName').writeAsBytes(tempBytes);
+        await File('${mediaDir.path}/$backupName').writeAsBytes(backupBytes);
+        final downloadedSha = sha1.convert(downloadedBytes).toString();
+        await _seedMediaIndex(
+          workDir,
+          identity,
+          lastSyncUsn: 0,
+          files: [
+            {
+              'fname': target,
+              'sha1': sha1.convert(originalBytes).toString(),
+              'usn': 0,
+              'sync_required': 0,
+            },
+            {
+              'fname': tempName,
+              'sha1': sha1.convert(tempBytes).toString(),
+              'usn': 0,
+              'sync_required': 0,
+            },
+            {
+              'fname': backupName,
+              'sha1': sha1.convert(backupBytes).toString(),
+              'usn': 0,
+              'sync_required': 0,
+            },
+          ],
+        );
+        final archive = Archive()
+          ..addFile(ArchiveFile('0', downloadedBytes.length, downloadedBytes))
+          ..addFile(
+            ArchiveFile(
+              '_meta',
+              utf8.encode(jsonEncode({'0': target})).length,
+              utf8.encode(jsonEncode({'0': target})),
+            ),
+          );
+        final fake = _QueueHttpClient()
+          ..responses.addAll([
+            _jsonResponse({
+              'data': {'usn': 1, 'sk': 'test-host-key'},
+              'err': '',
+            }),
+            _jsonResponse({
+              'data': [
+                [target, 1, downloadedSha],
+              ],
+              'err': '',
+            }),
+            http.Response.bytes(ZipEncoder().encode(archive), HttpStatus.ok),
+            _jsonResponse({'data': [], 'err': ''}),
+            _jsonResponse({'data': 'OK', 'err': ''}),
+          ]);
+        final client = AnkiSyncProtocolClient.ankiWeb(
+          client: fake,
+          hostKey: 'test-host-key',
+        );
+
+        try {
+          final result = await AnkiMediaSync.sync(
+            client,
+            syncIdentity: identity,
+            documentsPath: workDir.path,
+          );
+
+          expect(result.downloadedFiles, 1);
+          expect(
+            await File('${mediaDir.path}/$target').readAsBytes(),
+            downloadedBytes,
+          );
+          expect(
+            await File('${mediaDir.path}/$tempName').readAsBytes(),
+            tempBytes,
+          );
+          expect(
+            await File('${mediaDir.path}/$backupName').readAsBytes(),
+            backupBytes,
+          );
+        } finally {
+          client.close();
+          fake.close();
+          await workDir.delete(recursive: true);
+        }
+      },
+    );
+
+    test(
+      'rewrites note references when a remote filename is normalized',
+      () async {
+        final workDir = await Directory.systemTemp.createTemp(
+          'stroom_anki_media_reference_migration_test_',
+        );
+        final collection = AnkiDatabase(basePath: workDir.path);
+        await collection.open();
+        await collection.col.load();
+        final notetype = collection.col.getModel(
+          collection.col.modelList.first.id,
+        )!;
+        notetype.templates.first
+          ..qfmt = '{{Front}}<img src="a:b">'
+          ..afmt = '<div style="background-image:url(a:b)">{{Back}}</div>';
+        notetype.css = '.card { background-image: url("a:b"); }';
+        await collection.col.save();
+        final note = Note.createNew(
+          notetype_id: collection.col.modelList.first.id,
+          fields: ['<img alt="src=a:b" src="a:b">', '[sound:a:b]'],
+        );
+        await collection.notes.insert(note);
+        await collection.db.update(
+          'notes',
+          {'usn': 0},
+          where: 'id = ?',
+          whereArgs: [note.id],
+        );
+        await collection.close();
+
+        final content = [4, 5, 6];
+        final archive = Archive()
+          ..addFile(ArchiveFile('0', content.length, content));
+        final meta = utf8.encode(jsonEncode({'0': 'a:b'}));
+        archive.addFile(ArchiveFile('_meta', meta.length, meta));
+        final fake = _QueueHttpClient()
+          ..responses.addAll([
+            _jsonResponse({
+              'data': {'usn': 1, 'sk': 'test-host-key'},
+              'err': '',
+            }),
+            _jsonResponse({
+              'data': [
+                ['a:b', 1, sha1.convert(content).toString()],
+              ],
+              'err': '',
+            }),
+            http.Response.bytes(ZipEncoder().encode(archive), HttpStatus.ok),
+            _jsonResponse({'data': [], 'err': ''}),
+            _jsonResponse({
+              'data': [1, 2],
+              'err': '',
+            }),
+            _jsonResponse({'data': 'OK', 'err': ''}),
+          ]);
+        final client = AnkiSyncProtocolClient.ankiWeb(
+          client: fake,
+          hostKey: 'test-host-key',
+        );
+
+        try {
+          final result = await AnkiMediaSync.sync(
+            client,
+            syncIdentity: 'ankiweb:normalize-media-references',
+            documentsPath: workDir.path,
+          );
+
+          final installed = AnkiDatabase(basePath: workDir.path);
+          await installed.open();
+          await installed.col.load();
+          final updated = (await installed.notes.get(note.id))!;
+          final updatedNotetype = installed.col.getModel(note.notetype_id)!;
+          expect(result.downloadedFiles, 1);
+          expect(updated.fields[0], '<img alt="src=a:b" src="ab">');
+          expect(updated.fields[1], '[sound:ab]');
+          expect(updated.usn, -1);
+          expect(updated.sort_field, ' ab ');
+          expect(
+            updatedNotetype.templates.first.qfmt,
+            '{{Front}}<img src="ab">',
+          );
+          expect(
+            updatedNotetype.templates.first.afmt,
+            '<div style="background-image:url(ab)">{{Back}}</div>',
+          );
+          expect(updatedNotetype.css, '.card { background-image: url("ab"); }');
+          expect(updatedNotetype.usn, -1);
+          expect(
+            await File('${workDir.path}/collection.media/ab').readAsBytes(),
+            content,
+          );
+          await installed.close();
+        } finally {
+          await AnkiDatabase.closeOpenedInstance();
+          client.close();
+          fake.close();
+          await workDir.delete(recursive: true);
+        }
+      },
+    );
+
+    test('stages media downloads before requesting the next file', () async {
+      final workDir = await Directory.systemTemp.createTemp(
+        'stroom_anki_media_staging_test_',
+      );
+      final files = <String, List<int>>{
+        'first.png': [1, 2, 3],
+        'second.png': [4, 5, 6],
+      };
+      final changes = [
+        for (var index = 0; index < files.length; index++)
+          [
+            files.keys.elementAt(index),
+            index + 1,
+            sha1.convert(files.values.elementAt(index)).toString(),
+          ],
+      ];
+      http.Response archiveResponse(List<String> names) {
+        final archive = Archive();
+        final metadata = <String, String>{};
+        for (var index = 0; index < names.length; index++) {
+          final name = names[index];
+          final content = files[name]!;
+          final archiveName = index.toString();
+          metadata[archiveName] = name;
+          archive.addFile(ArchiveFile(archiveName, content.length, content));
+        }
+        final metadataBytes = utf8.encode(jsonEncode(metadata));
+        archive.addFile(
+          ArchiveFile('_meta', metadataBytes.length, metadataBytes),
+        );
+        return http.Response.bytes(ZipEncoder().encode(archive), HttpStatus.ok);
+      }
+
+      final mediaDir = Directory('${workDir.path}/collection.media');
+      var downloadRequests = 0;
+      var singleFileRequests = true;
+      var firstFileStagedBeforeNextRequest = false;
+      final fake = _QueueHttpClient()
+        ..responses.addAll([
+          _jsonResponse({
+            'data': {'usn': 2, 'sk': 'test-host-key'},
+            'err': '',
+          }),
+          _jsonResponse({'data': changes, 'err': ''}),
+          _jsonResponse({'data': [], 'err': ''}),
+          _jsonResponse({'data': 'OK', 'err': ''}),
+        ]);
+      fake.responseFor = (request, body) async {
+        if (request.url.path != '/msync/downloadFiles') return null;
+        final fields = _multipartFields(request, body);
+        final payload =
+            jsonDecode(utf8.decode(gzip.decode(fields['data']!))) as Map;
+        final names = (payload['files'] as List).cast<String>();
+        downloadRequests++;
+        if (names.length != 1) singleFileRequests = false;
+        if (downloadRequests == 2) {
+          final stagedFiles = await mediaDir
+              .list(recursive: true)
+              .where((entity) => entity is File)
+              .cast<File>()
+              .toList();
+          for (final stagedFile in stagedFiles) {
+            if (sha1.convert(await stagedFile.readAsBytes()) ==
+                sha1.convert(files['first.png']!)) {
+              firstFileStagedBeforeNextRequest = true;
+              break;
+            }
+          }
+        }
+        return archiveResponse(names);
+      };
+      final client = AnkiSyncProtocolClient.ankiWeb(
+        client: fake,
+        hostKey: 'test-host-key',
+      );
+
+      try {
+        final result = await AnkiMediaSync.sync(
+          client,
+          syncIdentity: 'ankiweb:media-staging-test',
+          documentsPath: workDir.path,
+        );
+
+        expect(result.downloadedFiles, 2);
+        expect(downloadRequests, 2);
+        expect(singleFileRequests, isTrue);
+        expect(firstFileStagedBeforeNextRequest, isTrue);
+        for (final entry in files.entries) {
+          expect(
+            await File('${mediaDir.path}/${entry.key}').readAsBytes(),
+            entry.value,
+          );
+        }
+      } finally {
+        client.close();
+        fake.close();
+        await workDir.delete(recursive: true);
+      }
+    });
+
+    test(
+      'restores earlier files when a later download cannot be installed',
+      () async {
+        final workDir = await Directory.systemTemp.createTemp(
+          'stroom_anki_media_install_rollback_test_',
+        );
+        const identity = 'ankiweb:media-install-rollback';
+        final mediaDir = Directory('${workDir.path}/collection.media');
+        await mediaDir.create();
+        const originalBytes = [1, 2, 3];
+        const replacementBytes = [4, 5, 6];
+        await File('${mediaDir.path}/first.png').writeAsBytes(originalBytes);
+        await Directory('${mediaDir.path}/second.png').create();
+        await _seedMediaIndex(
+          workDir,
+          identity,
+          files: [
+            {
+              'fname': 'first.png',
+              'sha1': sha1.convert(originalBytes).toString(),
+              'usn': 0,
+              'sync_required': 0,
+            },
+          ],
+        );
+        final files = <String, List<int>>{
+          'first.png': replacementBytes,
+          'second.png': [7, 8, 9],
+        };
+        var sentChanges = false;
+        final fake = _QueueHttpClient();
+        fake.responseFor = (request, body) async {
+          switch (request.url.path) {
+            case '/msync/begin':
+              return _jsonResponse({
+                'data': {'usn': 2, 'sk': 'test-host-key'},
+                'err': '',
+              });
+            case '/msync/mediaChanges':
+              if (sentChanges) return _jsonResponse({'data': [], 'err': ''});
+              sentChanges = true;
+              return _jsonResponse({
+                'data': [
+                  [
+                    'first.png',
+                    1,
+                    sha1.convert(files['first.png']!).toString(),
+                  ],
+                  [
+                    'second.png',
+                    2,
+                    sha1.convert(files['second.png']!).toString(),
+                  ],
+                ],
+                'err': '',
+              });
+            case '/msync/downloadFiles':
+              final fields = _multipartFields(request, body);
+              final payload =
+                  jsonDecode(utf8.decode(gzip.decode(fields['data']!))) as Map;
+              final name = (payload['files'] as List).cast<String>().single;
+              final archive = Archive()
+                ..addFile(ArchiveFile('0', files[name]!.length, files[name]!))
+                ..addFile(
+                  ArchiveFile.string('_meta', jsonEncode({'0': name})),
+                );
+              return http.Response.bytes(ZipEncoder().encode(archive), 200);
+            default:
+              return _jsonResponse({'data': 'OK', 'err': ''});
+          }
+        };
+        final client = AnkiSyncProtocolClient.ankiWeb(
+          client: fake,
+          hostKey: 'test-host-key',
+        );
+
+        try {
+          await expectLater(
+            AnkiMediaSync.sync(
+              client,
+              syncIdentity: identity,
+              documentsPath: workDir.path,
+            ),
+            throwsA(
+              isA<AnkiSyncException>().having(
+                (error) => error.failureCode,
+                'failureCode',
+                AnkiSyncFailureCode.localFileFailure,
+              ),
+            ),
+          );
+
+          expect(
+            await File('${mediaDir.path}/first.png').readAsBytes(),
+            originalBytes,
+          );
+          expect(
+              await Directory('${mediaDir.path}/second.png').exists(), isTrue);
+          final indexHash = sha256.convert(utf8.encode(identity)).toString();
+          final index = await sqflite.openDatabase(
+            '${workDir.path}/collection.media.sync.$indexHash.db',
+            version: 1,
+          );
+          final metadata = await index.query('media_meta');
+          final firstFile = await index.query(
+            'media_files',
+            where: 'fname = ?',
+            whereArgs: ['first.png'],
+          );
+          await index.close();
+          expect(metadata.single['last_sync_usn'], 0);
+          expect(
+            firstFile.single['sha1'],
+            sha1.convert(originalBytes).toString(),
+          );
+        } finally {
+          client.close();
+          fake.close();
+          await workDir.delete(recursive: true);
+        }
+      },
+    );
+
+    test(
+      'keeps local bytes when both sides changed the same media file',
+      () async {
+        final workDir = await Directory.systemTemp.createTemp(
+          'stroom_anki_media_change_conflict_',
+        );
+        const identity = 'ankiweb:pending-change-conflict';
+        final mediaDir = Directory('${workDir.path}/collection.media');
+        await mediaDir.create();
+        const localBytes = [1, 2, 3];
+        const previousBytes = [7, 8, 9];
+        const remoteBytes = [4, 5, 6];
+        final localSha = sha1.convert(localBytes).toString();
+        final remoteSha = sha1.convert(remoteBytes).toString();
+        await File('${mediaDir.path}/tracked.png').writeAsBytes(localBytes);
+        await _seedMediaIndex(
+          workDir,
+          identity,
+          files: [
+            {
+              'fname': 'tracked.png',
+              'sha1': sha1.convert(previousBytes).toString(),
+              'usn': 0,
+              'sync_required': 0,
+            },
+          ],
+        );
+        final fake = _QueueHttpClient()
+          ..responses.addAll([
+            _jsonResponse({
+              'data': {'usn': 1, 'sk': 'test-host-key'},
+              'err': '',
+            }),
+            _jsonResponse({
+              'data': [
+                ['tracked.png', 1, remoteSha],
+              ],
+              'err': '',
+            }),
+          ]);
+        final client = AnkiSyncProtocolClient.ankiWeb(
+          client: fake,
+          hostKey: 'test-host-key',
+        );
+
+        try {
+          await expectLater(
+            AnkiMediaSync.sync(
+              client,
+              syncIdentity: identity,
+              documentsPath: workDir.path,
+            ),
+            throwsA(
+              isA<AnkiSyncException>().having(
+                (error) => error.message,
+                'message',
+                contains('tracked.png'),
+              ),
+            ),
+          );
+
+          expect(fake.paths, ['/msync/begin', '/msync/mediaChanges']);
+          expect(
+            await File('${mediaDir.path}/tracked.png').readAsBytes(),
+            localBytes,
+          );
+          final indexHash = sha256.convert(utf8.encode(identity)).toString();
+          final index = await sqflite.openDatabase(
+            '${workDir.path}/collection.media.sync.$indexHash.db',
+            version: 1,
+          );
+          final trackedFile = await index.query(
+            'media_files',
+            where: 'fname = ?',
+            whereArgs: ['tracked.png'],
+          );
+          final metadata = await index.query('media_meta');
+          await index.close();
+          expect(trackedFile.single['sha1'], localSha);
+          expect(trackedFile.single['sync_required'], 1);
+          expect(metadata.single['last_sync_usn'], 0);
+        } finally {
+          client.close();
+          fake.close();
+          await workDir.delete(recursive: true);
+        }
+      },
+    );
+
+    test('downloads a remote change over a pending local deletion', () async {
+      final workDir = await Directory.systemTemp.createTemp(
+        'stroom_anki_media_delete_conflict_',
+      );
+      const identity = 'ankiweb:pending-delete-conflict';
+      final indexHash = sha256.convert(utf8.encode(identity)).toString();
+      final index = await sqflite.openDatabase(
+        '${workDir.path}/collection.media.sync.$indexHash.db',
+        version: 1,
+        onCreate: (db, _) async {
+          await db.execute('''
+            CREATE TABLE media_files (
+              fname TEXT PRIMARY KEY,
+              sha1 TEXT,
+              usn INTEGER NOT NULL DEFAULT -1,
+              sync_required INTEGER NOT NULL DEFAULT 1
+            )
+          ''');
+          await db.execute('''
+            CREATE TABLE media_meta (
+              id INTEGER PRIMARY KEY CHECK (id = 1),
+              last_sync_usn INTEGER NOT NULL DEFAULT 0
+            )
+          ''');
+          await db.insert('media_meta', {'id': 1, 'last_sync_usn': 0});
+          await db.insert('media_files', {
+            'fname': 'remote.png',
+            'sha1': null,
+            'usn': -1,
+            'sync_required': 1,
+          });
+        },
+      );
+      await index.close();
+      final content = [4, 5, 6];
+      final metaBytes = utf8.encode(jsonEncode({'0': 'remote.png'}));
+      final archive = Archive()
+        ..addFile(ArchiveFile('0', content.length, content))
+        ..addFile(ArchiveFile('_meta', metaBytes.length, metaBytes));
+      final remoteSha = sha1.convert(content).toString();
+      final fake = _QueueHttpClient()
+        ..responses.addAll([
+          _jsonResponse({
+            'data': {'usn': 1, 'sk': 'test-host-key'},
+            'err': '',
+          }),
+          _jsonResponse({
+            'data': [
+              ['remote.png', 1, remoteSha],
+            ],
+            'err': '',
+          }),
+          http.Response.bytes(ZipEncoder().encode(archive), HttpStatus.ok),
+          _jsonResponse({'data': [], 'err': ''}),
+          _jsonResponse({'data': 'OK', 'err': ''}),
+        ]);
+      final client = AnkiSyncProtocolClient.ankiWeb(
+        client: fake,
+        hostKey: 'test-host-key',
+      );
+
+      try {
+        final result = await AnkiMediaSync.sync(
+          client,
+          syncIdentity: identity,
+          documentsPath: workDir.path,
+        );
+
+        expect(result.downloadedFiles, 1);
+        expect(result.uploadedFiles, 0);
         expect(
           await File('${workDir.path}/collection.media/remote.png')
               .readAsBytes(),
