@@ -120,7 +120,23 @@ Future<void> downloadSingleSegment({
               message: 'HTTP ${response.statusCode}',
             );
           }
+          if (isRangeRequest) {
+            final contentRange = response.headers.value('content-range');
+            final match = RegExp(
+              r'^bytes\s+(\d+)-(\d+)/(?:\d+|\*)$',
+              caseSensitive: false,
+            ).firstMatch(contentRange?.trim() ?? '');
+            final expectedEnd = rangeStart! + rangeLength! - 1;
+            if (match == null ||
+                int.tryParse(match.group(1)!) != rangeStart ||
+                int.tryParse(match.group(2)!) != expectedEnd) {
+              throw StateError(
+                'Unexpected Content-Range for segment $index: $contentRange',
+              );
+            }
+          }
 
+          var receivedLength = 0;
           try {
             final file = File(partPath);
             final raf = await file.open(mode: FileMode.write);
@@ -134,10 +150,17 @@ Future<void> downloadSingleSegment({
                   }
                 }
                 await raf.writeFrom(chunk);
+                receivedLength += chunk.length;
                 onBytesDelta?.call(chunk.length);
               }
             } finally {
               await raf.close();
+            }
+            if (rangeLength != null && receivedLength != rangeLength) {
+              throw StateError(
+                'Expected $rangeLength bytes for segment $index, '
+                'received $receivedLength',
+              );
             }
           } catch (e) {
             if (retries < DefaultRules.maxRetriesPerSegment) {

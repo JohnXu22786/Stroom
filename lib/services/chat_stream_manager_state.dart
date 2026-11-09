@@ -104,10 +104,6 @@ class _ConversationStreamState {
   String? _publishedTextPreviewTail;
   int _publishedTextPreviewLength = 0;
   int _currentTextAppendCount = 0;
-  final List<StringBuffer> _checkpointTextDeltas = [StringBuffer()];
-  bool _checkpointBasePending = true;
-  final Set<String> _checkpointedHistoryMessageIds = {};
-  final Set<String> _dirtyToolCallIds = {};
   int _toolCallTextStartOffset = 0;
 
   String get fullReply => textChunks.join();
@@ -116,9 +112,6 @@ class _ConversationStreamState {
     _currentTextChunk = StringBuffer(value);
     _resetPublishedTextPreview(value);
     _currentTextAppendCount = 0;
-    _checkpointTextDeltas
-      ..clear()
-      ..add(StringBuffer(value));
     _toolCallTextStartOffset = 0;
     _pendingTextDelta.clear();
     _currentChunkHasMarkdownSyntax = _containsMarkdownSyntax(value);
@@ -164,7 +157,6 @@ class _ConversationStreamState {
   }
 
   final List<String> _reasoningSections = [];
-  final List<StringBuffer> _checkpointReasoningDeltas = [];
   bool _reasoningSectionActive = false;
   List<String> get reasoningSections => [
         ..._reasoningSections,
@@ -179,10 +171,6 @@ class _ConversationStreamState {
     }
     _reasoningBuffer.write(text);
     _pendingReasoningDelta.write(text);
-    while (_checkpointReasoningDeltas.length <= currentReasoningSectionIndex) {
-      _checkpointReasoningDeltas.add(StringBuffer());
-    }
-    _checkpointReasoningDeltas[currentReasoningSectionIndex].write(text);
     _reasoningBufferSnapshot = null;
     _reasoningSectionActive = true;
   }
@@ -428,130 +416,8 @@ class _ConversationStreamState {
     return delta;
   }
 
-  /// Capture only text and reasoning received since the previous durable
-  /// stream checkpoint. The returned offsets let startup replay these deltas
-  /// over the last canonical conversation snapshot without serializing the
-  /// complete response at every timer tick.
-  Map<String, dynamic> streamCheckpointDelta() {
-    final textLengths = [
-      ..._completedTextChunks.map((section) => section.length),
-      _currentTextChunk.length,
-    ];
-    final reasoningLengths = [
-      ..._reasoningSections.map((section) => section.length),
-      if (_reasoningSectionActive) _reasoningBuffer.length,
-    ];
-    final text = <Map<String, dynamic>>[];
-    for (var i = 0; i < _checkpointTextDeltas.length; i++) {
-      final delta = _checkpointTextDeltas[i].toString();
-      if (delta.isEmpty) continue;
-      text.add({
-        'section': i,
-        'offset': textLengths[i] - delta.length,
-        'text': delta,
-      });
-    }
-    final reasoning = <Map<String, dynamic>>[];
-    for (var i = 0; i < _checkpointReasoningDeltas.length; i++) {
-      final delta = _checkpointReasoningDeltas[i].toString();
-      if (delta.isEmpty) continue;
-      reasoning.add({
-        'section': i,
-        'offset': reasoningLengths[i] - delta.length,
-        'text': delta,
-      });
-    }
-    final historyMessages = _checkpointBasePending
-        ? const <Map<String, dynamic>>[]
-        : history
-            .where((message) =>
-                !_checkpointedHistoryMessageIds.contains(message.id))
-            .map((message) => message.toMap())
-            .toList();
-    return {
-      'conversationId': convId,
-      'messageId': streamingMsgId ?? '',
-      'createdAt': DateTime.now().toIso8601String(),
-      'textDeltas': text,
-      'reasoningDeltas': reasoning,
-      'toolCalls': accumulatedToolCalls
-          .where((call) => _dirtyToolCallIds.contains(call.id))
-          .map((call) => call.toMap())
-          .toList(),
-      'toolCallRoundStarts': List<int>.from(toolCallRoundStarts),
-      'baseSnapshotPending': _checkpointBasePending,
-      'baseMessageIds': _checkpointBasePending
-          ? history.map((message) => message.id).toList()
-          : const <String>[],
-      'historyMessages': historyMessages,
-    };
-  }
-
-  /// Drop only the bytes included in a successfully written delta. New stream
-  /// events may have arrived while the journal append was in flight.
-  void markStreamCheckpointPersisted(Map<String, dynamic> checkpoint) {
-    if (checkpoint['baseSnapshotPending'] == true) {
-      _checkpointBasePending = false;
-    }
-    final savedHistory = checkpoint['historyMessages'];
-    final baseMessageIds = checkpoint['baseMessageIds'];
-    if (baseMessageIds is List) {
-      _checkpointedHistoryMessageIds.addAll(
-        baseMessageIds.whereType<String>(),
-      );
-    }
-    for (final raw in savedHistory is List ? savedHistory : const <dynamic>[]) {
-      if (raw is Map && raw['id'] is String) {
-        _checkpointedHistoryMessageIds.add(raw['id'] as String);
-      }
-    }
-    final savedToolCalls = checkpoint['toolCalls'];
-    if (savedToolCalls is List) {
-      for (final raw in savedToolCalls) {
-        if (raw is! Map || raw['id'] is! String) continue;
-        final id = raw['id'] as String;
-        final current =
-            accumulatedToolCalls.where((call) => call.id == id).firstOrNull;
-        if (current != null && jsonEncode(current.toMap()) == jsonEncode(raw)) {
-          _dirtyToolCallIds.remove(id);
-        }
-      }
-    }
-    _consumeCheckpointDeltas(
-      _checkpointTextDeltas,
-      checkpoint['textDeltas'] as List<dynamic>? ?? const [],
-    );
-    _consumeCheckpointDeltas(
-      _checkpointReasoningDeltas,
-      checkpoint['reasoningDeltas'] as List<dynamic>? ?? const [],
-    );
-  }
-
-  void _consumeCheckpointDeltas(
-    List<StringBuffer> pending,
-    List<dynamic> saved,
-  ) {
-    for (final raw in saved) {
-      if (raw is! Map) continue;
-      final index = raw['section'];
-      final savedText = raw['text'];
-      if (index is! int ||
-          index < 0 ||
-          index >= pending.length ||
-          savedText is! String) {
-        continue;
-      }
-      final current = pending[index].toString();
-      if (!current.startsWith(savedText)) continue;
-      pending[index]
-        ..clear()
-        ..write(current.substring(savedText.length));
-    }
-  }
-
   void addAccumulatedToolCall(ToolCallData call) {
     accumulatedToolCalls.add(call);
-    _dirtyToolCallIds.add(call.id);
   }
 
   void updateAccumulatedToolCall(
@@ -561,7 +427,6 @@ class _ConversationStreamState {
     final index = accumulatedToolCalls.indexWhere((call) => call.id == id);
     if (index < 0) return;
     accumulatedToolCalls[index] = update(accumulatedToolCalls[index]);
-    _dirtyToolCallIds.add(id);
   }
 
   bool _serviceStartedTextChunk = false;
@@ -606,7 +471,6 @@ class _ConversationStreamState {
   void appendText(String text) {
     _currentTextChunk.write(text);
     _pendingTextDelta.write(text);
-    _checkpointTextDeltas.last.write(text);
     final syntaxProbe = '$_markdownSyntaxCarry$text';
     final markdownProbe =
         _markdownCarryStartsAtLineStart ? syntaxProbe : '\u0000$syntaxProbe';
@@ -830,7 +694,6 @@ class _ConversationStreamState {
     _publishedTextPreviewTail = null;
     _publishedTextPreviewLength = 0;
     _currentTextAppendCount = 0;
-    _checkpointTextDeltas.add(StringBuffer());
     _pendingTextDelta.clear();
     _currentChunkHasMarkdownSyntax = false;
     _lineStartHasDigits = false;

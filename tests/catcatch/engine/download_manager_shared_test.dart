@@ -44,6 +44,13 @@ void main() {
       final serverDone = server.listen((request) async {
         final range = request.headers.value(HttpHeaders.rangeHeader);
         requestedRanges.add(range);
+        if (range != null) {
+          final match = RegExp(r'^bytes=(\d+)-(\d+)$').firstMatch(range)!;
+          request.response.headers.set(
+            'content-range',
+            'bytes ${match.group(1)}-${match.group(2)}/7',
+          );
+        }
         final bytes = switch (range) {
           'bytes=2-4' => 'cde',
           'bytes=5-6' => 'fg',
@@ -72,4 +79,56 @@ void main() {
       }
     },
   );
+
+  test('rejects a byte-range response for a different range', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final serverDone = server.listen((request) async {
+      request.response.statusCode = HttpStatus.partialContent;
+      request.response.headers.set('content-range', 'bytes 3-5/7');
+      request.response.write('cde');
+      await request.response.close();
+    });
+    final directory = await Directory.systemTemp.createTemp('hls-range-test');
+    final url = 'http://${server.address.address}:${server.port}/shared.ts';
+    try {
+      await expectLater(
+        DownloadManager.downloadSegmentsAndMerge(
+          segmentUrls: [url],
+          segmentRanges: [(start: 2, length: 3)],
+          outputPath: '${directory.path}/merged.ts',
+        ),
+        throwsA(isA<Exception>()),
+      );
+    } finally {
+      await serverDone.cancel();
+      await server.close(force: true);
+      await directory.delete(recursive: true);
+    }
+  });
+
+  test('rejects a truncated byte-range response body', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final serverDone = server.listen((request) async {
+      request.response.statusCode = HttpStatus.partialContent;
+      request.response.headers.set('content-range', 'bytes 2-4/7');
+      request.response.write('cd');
+      await request.response.close();
+    });
+    final directory = await Directory.systemTemp.createTemp('hls-range-test');
+    final url = 'http://${server.address.address}:${server.port}/shared.ts';
+    try {
+      await expectLater(
+        DownloadManager.downloadSegmentsAndMerge(
+          segmentUrls: [url],
+          segmentRanges: [(start: 2, length: 3)],
+          outputPath: '${directory.path}/merged.ts',
+        ),
+        throwsA(isA<Exception>()),
+      );
+    } finally {
+      await serverDone.cancel();
+      await server.close(force: true);
+      await directory.delete(recursive: true);
+    }
+  });
 }
