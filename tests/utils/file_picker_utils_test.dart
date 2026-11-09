@@ -140,6 +140,16 @@ void main() {
     expect(names, isNot(contains('hash123.jpg')));
   });
 
+  test('rejects folder paths that are case-insensitive aliases', () {
+    expect(
+      () => validateUserVisibleExportPaths(
+        files: const [],
+        folders: const ['Report', 'report'],
+      ),
+      throwsStateError,
+    );
+  });
+
   test('rejects export paths that collide after Windows trims trailing spaces',
       () {
     expect(
