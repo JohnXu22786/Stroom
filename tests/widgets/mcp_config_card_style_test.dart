@@ -128,9 +128,8 @@ void main() {
               brightness: Brightness.dark,
             ),
           ),
-          themeMode: brightness == Brightness.dark
-              ? ThemeMode.dark
-              : ThemeMode.light,
+          themeMode:
+              brightness == Brightness.dark ? ThemeMode.dark : ThemeMode.light,
           home: ProviderConfigPage(entryId: entryId),
         ),
       ),
@@ -176,8 +175,8 @@ void main() {
     tester,
   ) async {
     await pumpPage(tester, Brightness.light);
-    final cs = Theme.of(tester.element(find.byType(ProviderConfigPage)))
-        .colorScheme;
+    final cs =
+        Theme.of(tester.element(find.byType(ProviderConfigPage))).colorScheme;
 
     final expectedBg = cs.surfaceContainerLow;
     for (var i = 0; i < 3; i++) {
@@ -185,8 +184,7 @@ void main() {
       expect(
         d.color,
         expectedBg,
-        reason:
-            'vendor and user-added cards must use the same background '
+        reason: 'vendor and user-added cards must use the same background '
             '(matching the LLM provider page) — no primaryContainer tint',
       );
       expect(
@@ -201,8 +199,8 @@ void main() {
     tester,
   ) async {
     await pumpPage(tester, Brightness.dark);
-    final cs = Theme.of(tester.element(find.byType(ProviderConfigPage)))
-        .colorScheme;
+    final cs =
+        Theme.of(tester.element(find.byType(ProviderConfigPage))).colorScheme;
 
     final expectedBg = cs.surfaceContainerHigh;
     for (var i = 0; i < 3; i++) {
@@ -210,8 +208,7 @@ void main() {
       expect(
         d.color,
         expectedBg,
-        reason:
-            'dark mode must use the same adaptive background for every '
+        reason: 'dark mode must use the same adaptive background for every '
             'card, no vendor tint',
       );
       expect(
@@ -324,15 +321,14 @@ void main() {
     await tester.tap(find.text('保存'));
     await tester.pumpAndSettle();
 
-    final updated =
-        ProviderScope.containerOf(
-              tester.element(find.byType(ProviderConfigPage)),
-            )
-            .read(providerEntriesProvider)
-            .entries
-            .single
-            .configs
-            .singleWhere((item) => item.providerName == 'My Files');
+    final updated = ProviderScope.containerOf(
+      tester.element(find.byType(ProviderConfigPage)),
+    )
+        .read(providerEntriesProvider)
+        .entries
+        .single
+        .configs
+        .singleWhere((item) => item.providerName == 'My Files');
     expect(updated.id, configId);
     expect(updated.groupId, builtinMcpServicesGroupId);
     expect(updated.models[0].typeConfig['connectivityTest'], savedTest);
@@ -364,8 +360,8 @@ void main() {
     await tester.pumpAndSettle();
 
     final container = tester.element(switchFinder);
-    final entries = ProviderScope.containerOf(container)
-        .read(providerEntriesProvider);
+    final entries =
+        ProviderScope.containerOf(container).read(providerEntriesProvider);
     final mcpEntry = entries.entries.firstWhere((e) => e.type == 'mcp');
     expect(mcpEntry.enabled, isFalse);
   });
@@ -502,16 +498,15 @@ void main() {
     await tester.tap(find.text('保存'));
     await tester.pumpAndSettle();
 
-    final updatedTypeConfig =
-        ProviderScope.containerOf(
-              tester.element(find.byType(ProviderConfigPage)),
-            )
-            .read(providerEntriesProvider)
-            .entries
-            .single
-            .configs[1]
-            .models[0]
-            .typeConfig;
+    final updatedTypeConfig = ProviderScope.containerOf(
+      tester.element(find.byType(ProviderConfigPage)),
+    )
+        .read(providerEntriesProvider)
+        .entries
+        .single
+        .configs[1]
+        .models[0]
+        .typeConfig;
     expect(updatedTypeConfig['headers'], {
       'X-Subscription-Token': 'replacement-key',
       'X-Custom-Optional': '',
@@ -594,9 +589,8 @@ void main() {
             .widgetList<Text>(find.byType(Text))
             .map((widget) => widget.data ?? '')
             .join('\n');
-        final renderedParameters = tester
-            .widget<SelectableText>(find.byType(SelectableText))
-            .data!;
+        final renderedParameters =
+            tester.widget<SelectableText>(find.byType(SelectableText)).data!;
         final parameters =
             jsonDecode(renderedParameters) as Map<String, dynamic>;
 
