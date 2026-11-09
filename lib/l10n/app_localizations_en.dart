@@ -11058,6 +11058,68 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get renderErrorRestartMessage => 'Please try restarting the app.';
+  @override
+  String get batchDlgFileName => 'File name';
+
+  @override
+  String get batchDlgFolderName => 'Folder name';
+
+  @override
+  String get batchDlgFileNameConflict =>
+      'Another file in this folder has the same name';
+
+  @override
+  String get batchDlgFolderNameConflict =>
+      'A folder with the same name already exists at the target location';
+
+  @override
+  String get batchDlgFolderNameSwapConflict =>
+      'Folder names cannot be exchanged in the same batch';
+
+  @override
+  String get batchDlgControlCharacterError =>
+      'Name cannot contain control characters';
+
+  @override
+  String get batchDlgNameWhitespaceError =>
+      'Name cannot begin or end with whitespace; use the whitespace cleanup rule';
+
+  @override
+  String get batchDlgIntermediateNameTooLong =>
+      'An intermediate name is too long; adjust the rules';
+
+  @override
+  String get batchDlgCreatedDate => 'creation';
+
+  @override
+  String get batchDlgModifiedDate => 'modification';
+
+  @override
+  String batchDlgNameEmpty(String kind) => '$kind cannot be empty';
+
+  @override
+  String batchDlgNameTrailingWhitespace(String kind) =>
+      '$kind cannot end with whitespace';
+
+  @override
+  String batchDlgNameTooLong(String kind, String count) =>
+      '$kind cannot exceed $count characters';
+
+  @override
+  String batchDlgNameIllegalCharacters(String kind) =>
+      '$kind cannot contain Windows-invalid characters';
+
+  @override
+  String batchDlgNameTrailingDot(String kind) =>
+      '$kind cannot end with a period';
+
+  @override
+  String batchDlgNameReserved(String kind) =>
+      '$kind cannot use a reserved Windows name';
+
+  @override
+  String batchDlgTemplateMissingDate(String date) =>
+      'This item has no $date date; adjust the template';
 }
 
 /// The translations for English, as used in the United States (`en_US`).
