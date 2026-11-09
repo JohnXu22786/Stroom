@@ -5935,6 +5935,27 @@ class AppLocalizationsZh extends AppLocalizations {
   String get providerBuiltinBadge => '内置';
 
   @override
+  String get providerBuiltinTtsName => 'TTS供应商';
+
+  @override
+  String get providerBuiltinLlmName => 'LLM供应商';
+
+  @override
+  String get providerBuiltinOcrName => 'OCR供应商';
+
+  @override
+  String get providerBuiltinAsrName => '音频转写供应商';
+
+  @override
+  String get providerBuiltinMcpName => 'MCP供应商';
+
+  @override
+  String get providerBuiltinSearchGroupName => '搜索';
+
+  @override
+  String get providerBuiltinMcpServicesGroupName => '其他 MCP 服务';
+
+  @override
   String get providerConnectivityTest => '连通性测试';
 
   @override
