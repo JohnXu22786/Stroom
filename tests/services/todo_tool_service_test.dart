@@ -246,6 +246,10 @@ void main() {
       expect(englishInvalid, contains('must be an array'));
       expect(englishWrite, contains('"content":"Keep this text"'));
 
+      await TodoToolService.handleTodoWrite(
+        {'todos': []},
+        locale: const Locale('zh', 'CN'),
+      );
       final chineseEmpty = await TodoToolService.handleTodoRead(
         {},
         locale: const Locale('zh', 'CN'),
