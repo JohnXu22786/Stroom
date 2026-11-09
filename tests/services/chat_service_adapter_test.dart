@@ -816,6 +816,7 @@ void main() {
       );
       final result = await HttpToolService.handleBraveSearch(
         {'query': 'test'},
+        locale: const Locale('en', 'US'),
       );
       expect(result, contains('Brave Search API key is not configured'));
     });

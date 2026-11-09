@@ -272,7 +272,11 @@ void main() {
     });
 
     test('formatResults returns "no results" message when empty', () {
-      final formatted = WebSearchService.formatResults([], 'google');
+      final formatted = WebSearchService.formatResults(
+        [],
+        'google',
+        locale: const Locale('en', 'US'),
+      );
       expect(formatted, contains('No relevant search results'));
     });
   });
@@ -282,7 +286,7 @@ void main() {
       final result = await WebSearchService.handleWebSearch({
         'query': '',
         'source': 'google',
-      });
+      }, locale: const Locale('en', 'US'));
       expect(result, contains('cannot be empty'));
     });
 
@@ -290,7 +294,7 @@ void main() {
       final result = await WebSearchService.handleWebSearch({
         'query': 'test',
         'source': 'invalid_source',
-      });
+      }, locale: const Locale('en', 'US'));
       expect(result, contains('Unsupported search engine'));
       expect(result, contains('google'));
       expect(result, contains('bing'));

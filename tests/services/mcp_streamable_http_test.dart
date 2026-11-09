@@ -639,7 +639,11 @@ void main() {
 
       expect(await client.connect(), isTrue);
 
-      final result = await client.callTool('search', {'q': 'x'});
+      final result = await client.callTool(
+        'search',
+        {'q': 'x'},
+        locale: const Locale('en', 'US'),
+      );
       expect(result, contains('Error:'));
       expect(client.isConnected, isFalse,
           reason: 'legacy POST 传输失败应标记断开，下次调用才会重连');
