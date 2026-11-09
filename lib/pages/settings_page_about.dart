@@ -1,5 +1,28 @@
 part of 'settings_page.dart';
 
+String localizeAboutUpdateError(AppLocalizations strings, String error) {
+  final networkPrefix = strings.updateCheckNetworkError('');
+  if (error.startsWith(networkPrefix)) {
+    return strings.aboutUpdateNetworkError(
+      error.substring(networkPrefix.length),
+    );
+  }
+
+  final httpPrefix = strings.updateCheckHttpFailed('');
+  if (error.startsWith(httpPrefix)) {
+    final statusCode = error.substring(httpPrefix.length);
+    if (RegExp(r'^\d+$').hasMatch(statusCode)) {
+      return strings.aboutUpdateHttpError(statusCode);
+    }
+  }
+
+  if (error == strings.updateCheckInvalidResponse) {
+    return strings.aboutUpdateInvalidResponse;
+  }
+
+  return strings.aboutUpdateCheckFailed;
+}
+
 extension _SettingsPageAboutExt on _SettingsPageState {
   // ================================================================
   // 关于
@@ -183,32 +206,14 @@ extension _SettingsPageAboutExt on _SettingsPageState {
     snackBar.close();
 
     if (state.error != null) {
-      _showSnackBar(_localizedUpdateError(state.error!));
+      _showSnackBar(
+        localizeAboutUpdateError(AppLocalizations.of(context)!, state.error!),
+      );
     } else if (state.updateAvailable) {
       _showUpdateDialog();
     } else {
       _showSnackBar(AppLocalizations.of(context)!.aboutUpToDate);
     }
-  }
-
-  String _localizedUpdateError(String error) {
-    final strings = AppLocalizations.of(context)!;
-    const networkPrefix = '网络错误: ';
-    if (error.startsWith(networkPrefix)) {
-      return strings
-          .aboutUpdateNetworkError(error.substring(networkPrefix.length));
-    }
-
-    final httpStatus = RegExp(r'^检查更新失败: HTTP (\d+)$').firstMatch(error);
-    if (httpStatus != null) {
-      return strings.aboutUpdateHttpError(httpStatus.group(1)!);
-    }
-
-    if (error == '检查更新失败: 服务器返回了无法识别的数据') {
-      return strings.aboutUpdateInvalidResponse;
-    }
-
-    return strings.aboutUpdateCheckFailed;
   }
 
   void _showSnackBar(String message) {
