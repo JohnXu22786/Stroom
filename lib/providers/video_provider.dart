@@ -172,30 +172,29 @@ class VideoRecordsNotifier extends StateNotifier<List<VideoRecord>> {
       addFolder: VideoManifest.addFolder,
       removeFolder: VideoManifest.removeFolderFromCache,
       operation: () async {
-
-      for (final r in records) {
-        if (r.folder == oldName) {
-          await VideoManifest.moveRecord(r.id, newPath);
-        }
-      }
-
-      final descendants = await _getDescendantFolders(oldName);
-      for (final desc in descendants) {
-        final suffix = desc.substring(oldName.length);
-        final newDescPath = '$newPath$suffix';
         for (final r in records) {
-          if (r.folder == desc) {
-            await VideoManifest.moveRecord(r.id, newDescPath);
+          if (r.folder == oldName) {
+            await VideoManifest.moveRecord(r.id, newPath);
           }
         }
-        // Empty subfolders (no records) must stay in the folder cache; otherwise the old-path cleanup would drop their paths.
-        await VideoManifest.addFolder(newDescPath);
-      }
 
-      await VideoManifest.addFolder(newPath);
-      await VideoManifest.removeFolderFromCache(oldName);
+        final descendants = await _getDescendantFolders(oldName);
+        for (final desc in descendants) {
+          final suffix = desc.substring(oldName.length);
+          final newDescPath = '$newPath$suffix';
+          for (final r in records) {
+            if (r.folder == desc) {
+              await VideoManifest.moveRecord(r.id, newDescPath);
+            }
+          }
+          // Empty subfolders (no records) must stay in the folder cache; otherwise the old-path cleanup would drop their paths.
+          await VideoManifest.addFolder(newDescPath);
+        }
 
-      await loadRecords();
+        await VideoManifest.addFolder(newPath);
+        await VideoManifest.removeFolderFromCache(oldName);
+
+        await loadRecords();
       },
     );
   }
@@ -237,44 +236,43 @@ class VideoRecordsNotifier extends StateNotifier<List<VideoRecord>> {
       addFolder: VideoManifest.addFolder,
       removeFolder: VideoManifest.removeFolderFromCache,
       operation: () async {
-
-      for (final r in records) {
-        if (r.folder == sourceName) {
-          await VideoManifest.moveRecord(r.id, newPath);
-        }
-      }
-
-      final descendants = await _getDescendantFolders(sourceName);
-      for (final desc in descendants) {
-        final suffix = desc.substring(sourceName.length);
-        final newDescPath = '$newPath$suffix';
         for (final r in records) {
-          if (r.folder == desc) {
-            await VideoManifest.moveRecord(r.id, newDescPath);
+          if (r.folder == sourceName) {
+            await VideoManifest.moveRecord(r.id, newPath);
           }
         }
-        // Empty subfolders (no records) must stay in the folder cache; otherwise the old-path cleanup would drop their paths.
-        await VideoManifest.addFolder(newDescPath);
-      }
 
-      await VideoManifest.removeFolderFromCache(sourceName);
-      for (final desc in descendants) {
-        await VideoManifest.removeFolderFromCache(desc);
-      }
-
-      await VideoManifest.addFolder(newPath);
-      if (targetParentClean.isNotEmpty) {
-        await VideoManifest.addFolder(targetParentClean);
-        // 空文件夹移动/复制不经过 moveRecord/addRecord，
-        // 祖先目录不会被自动跟踪，需逐级补齐
-        var ancestor = VideoManifest.getParentFolderPath(targetParentClean);
-        while (ancestor.isNotEmpty) {
-          await VideoManifest.addFolder(ancestor);
-          ancestor = VideoManifest.getParentFolderPath(ancestor);
+        final descendants = await _getDescendantFolders(sourceName);
+        for (final desc in descendants) {
+          final suffix = desc.substring(sourceName.length);
+          final newDescPath = '$newPath$suffix';
+          for (final r in records) {
+            if (r.folder == desc) {
+              await VideoManifest.moveRecord(r.id, newDescPath);
+            }
+          }
+          // Empty subfolders (no records) must stay in the folder cache; otherwise the old-path cleanup would drop their paths.
+          await VideoManifest.addFolder(newDescPath);
         }
-      }
 
-      await loadRecords();
+        await VideoManifest.removeFolderFromCache(sourceName);
+        for (final desc in descendants) {
+          await VideoManifest.removeFolderFromCache(desc);
+        }
+
+        await VideoManifest.addFolder(newPath);
+        if (targetParentClean.isNotEmpty) {
+          await VideoManifest.addFolder(targetParentClean);
+          // 空文件夹移动/复制不经过 moveRecord/addRecord，
+          // 祖先目录不会被自动跟踪，需逐级补齐
+          var ancestor = VideoManifest.getParentFolderPath(targetParentClean);
+          while (ancestor.isNotEmpty) {
+            await VideoManifest.addFolder(ancestor);
+            ancestor = VideoManifest.getParentFolderPath(ancestor);
+          }
+        }
+
+        await loadRecords();
       },
     );
   }

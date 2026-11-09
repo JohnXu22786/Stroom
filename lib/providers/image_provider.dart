@@ -173,35 +173,34 @@ class ImageRecordsNotifier extends StateNotifier<List<ImageRecord>> {
       addFolder: ImageManifest.addFolder,
       removeFolder: ImageManifest.removeFolderFromCache,
       operation: () async {
-
-      // 更新 oldName 本身的记录
-      for (final r in records) {
-        if (r.folder == oldName) {
-          await ImageManifest.moveRecord(r.id, newPath);
-        }
-      }
-
-      // 更新所有后代文件夹的记录
-      final descendants = await _getDescendantFolders(oldName);
-      for (final desc in descendants) {
-        final suffix = desc.substring(oldName.length);
-        final newDescPath = '$newPath$suffix';
+        // 更新 oldName 本身的记录
         for (final r in records) {
-          if (r.folder == desc) {
-            await ImageManifest.moveRecord(r.id, newDescPath);
+          if (r.folder == oldName) {
+            await ImageManifest.moveRecord(r.id, newPath);
           }
         }
-        // Empty subfolders (no records) must stay in the folder cache; otherwise the old-path cleanup would drop their paths.
-        await ImageManifest.addFolder(newDescPath);
-      }
 
-      // 将新路径加入文件夹缓存
-      await ImageManifest.addFolder(newPath);
+        // 更新所有后代文件夹的记录
+        final descendants = await _getDescendantFolders(oldName);
+        for (final desc in descendants) {
+          final suffix = desc.substring(oldName.length);
+          final newDescPath = '$newPath$suffix';
+          for (final r in records) {
+            if (r.folder == desc) {
+              await ImageManifest.moveRecord(r.id, newDescPath);
+            }
+          }
+          // Empty subfolders (no records) must stay in the folder cache; otherwise the old-path cleanup would drop their paths.
+          await ImageManifest.addFolder(newDescPath);
+        }
 
-      // 移除旧路径的文件夹缓存
-      await ImageManifest.removeFolderFromCache(oldName);
+        // 将新路径加入文件夹缓存
+        await ImageManifest.addFolder(newPath);
 
-      await loadRecords();
+        // 移除旧路径的文件夹缓存
+        await ImageManifest.removeFolderFromCache(oldName);
+
+        await loadRecords();
       },
     );
   }
@@ -243,48 +242,47 @@ class ImageRecordsNotifier extends StateNotifier<List<ImageRecord>> {
       addFolder: ImageManifest.addFolder,
       removeFolder: ImageManifest.removeFolderFromCache,
       operation: () async {
-
-      // 移动 sourceName 本身的记录到 newPath
-      for (final r in records) {
-        if (r.folder == sourceName) {
-          await ImageManifest.moveRecord(r.id, newPath);
-        }
-      }
-
-      // 移动所有后代文件夹的记录
-      final descendants = await _getDescendantFolders(sourceName);
-      for (final desc in descendants) {
-        final suffix = desc.substring(sourceName.length);
-        final newDescPath = '$newPath$suffix';
+        // 移动 sourceName 本身的记录到 newPath
         for (final r in records) {
-          if (r.folder == desc) {
-            await ImageManifest.moveRecord(r.id, newDescPath);
+          if (r.folder == sourceName) {
+            await ImageManifest.moveRecord(r.id, newPath);
           }
         }
-        // Empty subfolders (no records) must stay in the folder cache; otherwise the old-path cleanup would drop their paths.
-        await ImageManifest.addFolder(newDescPath);
-      }
 
-      // 清理旧文件夹缓存（不删除记录）
-      await ImageManifest.removeFolderFromCache(sourceName);
-      for (final desc in descendants) {
-        await ImageManifest.removeFolderFromCache(desc);
-      }
-
-      // 添加新文件夹缓存
-      await ImageManifest.addFolder(newPath);
-      if (targetParentClean.isNotEmpty) {
-        await ImageManifest.addFolder(targetParentClean);
-        // 空文件夹移动/复制不经过 moveRecord/addRecord，
-        // 祖先目录不会被自动跟踪，需逐级补齐
-        var ancestor = ImageManifest.getParentFolderPath(targetParentClean);
-        while (ancestor.isNotEmpty) {
-          await ImageManifest.addFolder(ancestor);
-          ancestor = ImageManifest.getParentFolderPath(ancestor);
+        // 移动所有后代文件夹的记录
+        final descendants = await _getDescendantFolders(sourceName);
+        for (final desc in descendants) {
+          final suffix = desc.substring(sourceName.length);
+          final newDescPath = '$newPath$suffix';
+          for (final r in records) {
+            if (r.folder == desc) {
+              await ImageManifest.moveRecord(r.id, newDescPath);
+            }
+          }
+          // Empty subfolders (no records) must stay in the folder cache; otherwise the old-path cleanup would drop their paths.
+          await ImageManifest.addFolder(newDescPath);
         }
-      }
 
-      await loadRecords();
+        // 清理旧文件夹缓存（不删除记录）
+        await ImageManifest.removeFolderFromCache(sourceName);
+        for (final desc in descendants) {
+          await ImageManifest.removeFolderFromCache(desc);
+        }
+
+        // 添加新文件夹缓存
+        await ImageManifest.addFolder(newPath);
+        if (targetParentClean.isNotEmpty) {
+          await ImageManifest.addFolder(targetParentClean);
+          // 空文件夹移动/复制不经过 moveRecord/addRecord，
+          // 祖先目录不会被自动跟踪，需逐级补齐
+          var ancestor = ImageManifest.getParentFolderPath(targetParentClean);
+          while (ancestor.isNotEmpty) {
+            await ImageManifest.addFolder(ancestor);
+            ancestor = ImageManifest.getParentFolderPath(ancestor);
+          }
+        }
+
+        await loadRecords();
       },
     );
   }

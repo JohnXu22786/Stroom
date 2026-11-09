@@ -23,17 +23,17 @@ Future<void> runFolderOperationWithRollback<T>({
       // Continue restoring records even when reading folder metadata fails.
     }
     final addedRoots = addedFolders.where((folder) {
-        var parent = folder.contains('/')
-            ? folder.substring(0, folder.lastIndexOf('/'))
+      var parent = folder.contains('/')
+          ? folder.substring(0, folder.lastIndexOf('/'))
+          : '';
+      while (parent.isNotEmpty) {
+        if (addedFolders.contains(parent)) return false;
+        parent = parent.contains('/')
+            ? parent.substring(0, parent.lastIndexOf('/'))
             : '';
-        while (parent.isNotEmpty) {
-          if (addedFolders.contains(parent)) return false;
-          parent = parent.contains('/')
-              ? parent.substring(0, parent.lastIndexOf('/'))
-              : '';
-        }
-        return true;
-      });
+      }
+      return true;
+    });
     for (final folder in addedRoots) {
       try {
         await removeFolder(folder);
@@ -49,7 +49,8 @@ Future<void> runFolderOperationWithRollback<T>({
       // manifest fails.
     }
     final currentFoldersById = {
-      for (final record in currentRecords ?? <T>[]) recordId(record): recordFolder(record),
+      for (final record in currentRecords ?? <T>[])
+        recordId(record): recordFolder(record),
     };
     for (final record in originalRecords) {
       if (currentRecords != null &&
