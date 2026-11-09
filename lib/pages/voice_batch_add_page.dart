@@ -314,7 +314,7 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
           color: selected
               ? Theme.of(context).colorScheme.primary
               : Colors.transparent,
-          borderRadius: BorderRadius.circular(6),
+          borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: selected
                 ? Theme.of(context).colorScheme.primary
@@ -439,7 +439,7 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
                   color: Theme.of(context).colorScheme.primaryContainer,
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: BorderRadius.circular(8),
                   border: Border.all(
                     color: Theme.of(context).colorScheme.outline,
                   ),
@@ -485,7 +485,7 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
           color: selected
               ? Theme.of(context).colorScheme.primary
               : Colors.transparent,
-          borderRadius: BorderRadius.circular(6),
+          borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: selected
                 ? Theme.of(context).colorScheme.primary

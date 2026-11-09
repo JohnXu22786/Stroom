@@ -430,7 +430,7 @@ class _InAppNotificationBannerState extends State<InAppNotificationBanner>
                     height: 36,
                     decoration: BoxDecoration(
                       color: accent,
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(8),
                     ),
                     child: Icon(
                       isSuccess ? Icons.check : Icons.close,

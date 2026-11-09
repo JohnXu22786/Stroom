@@ -199,7 +199,7 @@ class _PromptCard extends StatelessWidget {
       elevation: 0,
       color: isDark ? cs.surfaceContainerHigh : cs.surfaceContainerLow,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         side: BorderSide(
           color: cs.outlineVariant.withValues(alpha: 0.5),
           width: 0.5,
@@ -208,7 +208,7 @@ class _PromptCard extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           child: Row(
@@ -219,7 +219,7 @@ class _PromptCard extends StatelessWidget {
                 height: 36,
                 decoration: BoxDecoration(
                   color: cs.primaryContainer.withValues(alpha: 0.4),
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(8),
                 ),
                 child: Center(
                   child: Text(
@@ -331,7 +331,7 @@ class _PromptDetailDialog extends StatelessWidget {
                       height: 48,
                       decoration: BoxDecoration(
                         color: cs.primaryContainer.withValues(alpha: 0.4),
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(8),
                       ),
                       child: Center(
                         child: Text(

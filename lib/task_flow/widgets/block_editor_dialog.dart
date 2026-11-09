@@ -74,7 +74,7 @@ Future<TaskFlowBlock?> showBlockEditorDialog(
     isScrollControlled: true,
     useSafeArea: true,
     shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
     ),
     builder: (ctx) => AnimatedPadding(
       // Lift the sheet above the keyboard so the confirm/cancel row stays
@@ -247,7 +247,7 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                   height: 32,
                   decoration: BoxDecoration(
                     color: def.color.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(9),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(def.icon, size: 18, color: def.color),
                 ),
@@ -1029,7 +1029,7 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
       isScrollControlled: true,
       useSafeArea: true,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (ctx) => DraggableScrollableSheet(
         initialChildSize: 0.65,
@@ -1111,9 +1111,9 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
         color: selected
             ? cs.primary.withValues(alpha: 0.08)
             : cs.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         child: InkWell(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
           onTap: onTap,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),

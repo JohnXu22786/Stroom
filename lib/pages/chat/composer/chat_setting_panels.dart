@@ -45,7 +45,7 @@ void showModelPanel({
   showModalBottomSheet(
     context: context,
     shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
     ),
     builder: (ctx) {
       final cs = Theme.of(ctx).colorScheme;
@@ -78,7 +78,7 @@ void showModelPanel({
                         height: 28,
                         decoration: BoxDecoration(
                           color: Colors.teal.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(6),
+                          borderRadius: BorderRadius.circular(8),
                         ),
                         child: const Icon(Icons.smart_toy_outlined,
                             size: 18, color: Colors.teal),
@@ -128,7 +128,7 @@ void showModelPanel({
                                 elevation: elevation,
                                 color: Colors.transparent,
                                 shadowColor: Colors.black26,
-                                borderRadius: BorderRadius.circular(10),
+                                borderRadius: BorderRadius.circular(8),
                                 child: child,
                               );
                             },
@@ -212,7 +212,7 @@ void showToolsPanel({
   showModalBottomSheet(
     context: context,
     shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
     ),
     builder: (ctx) {
       final cs = Theme.of(ctx).colorScheme;
@@ -245,7 +245,7 @@ void showToolsPanel({
                         height: 28,
                         decoration: BoxDecoration(
                           color: cs.tertiary.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(6),
+                          borderRadius: BorderRadius.circular(8),
                         ),
                         child: Icon(Icons.build_outlined,
                             size: 18, color: cs.tertiary),
@@ -288,7 +288,7 @@ void showToolsPanel({
                             child: Material(
                               color: cs.surfaceContainerHighest
                                   .withValues(alpha: 0.3),
-                              borderRadius: BorderRadius.circular(10),
+                              borderRadius: BorderRadius.circular(8),
                               child: SwitchListTile(
                                 dense: true,
                                 // M3 ListTile 默认 contentPadding 为
@@ -399,7 +399,7 @@ void showReasoningPanel({
   showModalBottomSheet(
     context: context,
     shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
     ),
     builder: (ctx) {
       final cs = Theme.of(ctx).colorScheme;
@@ -432,7 +432,7 @@ void showReasoningPanel({
                         height: 28,
                         decoration: BoxDecoration(
                           color: Colors.purple.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(6),
+                          borderRadius: BorderRadius.circular(8),
                         ),
                         child: const Icon(Icons.psychology_outlined,
                             size: 18, color: Colors.purple),
@@ -459,7 +459,7 @@ void showReasoningPanel({
                             decoration: BoxDecoration(
                               color: cs.surfaceContainerHighest
                                   .withValues(alpha: 0.5),
-                              borderRadius: BorderRadius.circular(12),
+                              borderRadius: BorderRadius.circular(8),
                             ),
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 16, vertical: 4),
@@ -512,7 +512,7 @@ void showReasoningPanel({
                             decoration: BoxDecoration(
                               color: cs.surfaceContainerHighest
                                   .withValues(alpha: 0.5),
-                              borderRadius: BorderRadius.circular(12),
+                              borderRadius: BorderRadius.circular(8),
                             ),
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 16, vertical: 4),
@@ -701,7 +701,7 @@ void showCustomReasoningParamsPanel({
   showModalBottomSheet(
     context: context,
     shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
     ),
     builder: (ctx) {
       final cs = Theme.of(ctx).colorScheme;
@@ -734,7 +734,7 @@ void showCustomReasoningParamsPanel({
                         height: 28,
                         decoration: BoxDecoration(
                           color: Colors.blue.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(6),
+                          borderRadius: BorderRadius.circular(8),
                         ),
                         child: const Icon(Icons.tune,
                             size: 18, color: Colors.blue),
@@ -792,7 +792,7 @@ void showCustomReasoningParamsPanel({
                                   decoration: BoxDecoration(
                                     color: cs.surfaceContainerHighest
                                         .withValues(alpha: 0.5),
-                                    borderRadius: BorderRadius.circular(12),
+                                    borderRadius: BorderRadius.circular(8),
                                   ),
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 16, vertical: 4),

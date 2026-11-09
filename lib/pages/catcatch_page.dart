@@ -383,7 +383,7 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
       child: Card(
         elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
           side: BorderSide(
             color: colorScheme.outlineVariant.withValues(alpha: 0.5),
           ),
@@ -406,7 +406,7 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
                         hintText: _l10n.catCatchUrlHint,
                         prefixIcon: const Icon(Icons.link, size: 20),
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(8),
                         ),
                         filled: true,
                         fillColor: colorScheme.surface,
@@ -451,7 +451,7 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
                         labelText: _l10n.catCatchHour,
                         hintText: '0',
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(8),
                         ),
                         filled: true,
                         fillColor: colorScheme.surface,
@@ -473,7 +473,7 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
                         labelText: _l10n.catCatchMinute,
                         hintText: '0',
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(8),
                         ),
                         filled: true,
                         fillColor: colorScheme.surface,
@@ -495,7 +495,7 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
                         labelText: _l10n.catCatchSecond,
                         hintText: '0',
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(8),
                         ),
                         filled: true,
                         fillColor: colorScheme.surface,
@@ -710,13 +710,13 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
     return Container(
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainerLow.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(
           color: colorScheme.outlineVariant.withValues(alpha: 0.4),
         ),
       ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(8),
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),

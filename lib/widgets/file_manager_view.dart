@@ -871,7 +871,11 @@ class _FileManagerViewState<T extends FileRecord>
     return Card(
       key: const Key('fm_back_item'),
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 3),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.all(Radius.circular(16)),
+      ),
       child: InkWell(
+        borderRadius: BorderRadius.circular(16),
         onTap: () => _setCurrentFolder(parentFolder),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
@@ -990,7 +994,7 @@ class _FileManagerViewState<T extends FileRecord>
           Container(
             decoration: BoxDecoration(
               color: Colors.amber.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(16),
               border: Border.all(color: Colors.amber.withValues(alpha: 0.2)),
             ),
             child: Column(
@@ -1090,7 +1094,7 @@ class _FileManagerViewState<T extends FileRecord>
         children: [
           Container(
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(16),
               border: Border.all(color: Colors.grey[300]!),
             ),
             child: Column(
@@ -1099,7 +1103,7 @@ class _FileManagerViewState<T extends FileRecord>
                 Expanded(
                   child: ClipRRect(
                     borderRadius: const BorderRadius.vertical(
-                      top: Radius.circular(7),
+                      top: Radius.circular(15),
                     ),
                     child: hasThumbnailBuilder
                         ? _putThumbnailCache(
@@ -1118,7 +1122,7 @@ class _FileManagerViewState<T extends FileRecord>
                   ),
                   decoration: const BoxDecoration(
                     borderRadius: BorderRadius.vertical(
-                      bottom: Radius.circular(7),
+                      bottom: Radius.circular(15),
                     ),
                   ),
                   child: Row(
@@ -1185,6 +1189,9 @@ class _FileManagerViewState<T extends FileRecord>
       child: Card(
         key: Key('fm_folder_$folderName'),
         margin: EdgeInsets.zero,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(16)),
+        ),
         child: InkWell(
           onTap: () {
             if (_selectionMode) {
@@ -1198,7 +1205,7 @@ class _FileManagerViewState<T extends FileRecord>
               _enterSelectionMode(folderName);
             }
           },
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(16),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
             child: Row(
@@ -1399,7 +1406,11 @@ class _FileManagerViewState<T extends FileRecord>
     return Card(
       key: Key('fm_file_${file.id}'),
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 3),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.all(Radius.circular(16)),
+      ),
       child: InkWell(
+        borderRadius: BorderRadius.circular(16),
         onTap: () {
           if (_selectionMode) {
             _toggleSelection(file.id);

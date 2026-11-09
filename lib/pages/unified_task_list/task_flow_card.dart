@@ -102,7 +102,7 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         side: BorderSide(
           color: widget.isUnread ? cs.primary : cs.outlineVariant,
           width: widget.isUnread ? 1 : 0.5,
@@ -112,7 +112,10 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
         children: [
           // ── Header (always visible) ──
           InkWell(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: const BorderRadius.vertical(
+              top: Radius.circular(16),
+              bottom: Radius.circular(0),
+            ),
             onTap: () => setState(() => _expanded = !_expanded),
             child: Padding(
               padding: const EdgeInsets.all(12),
@@ -134,7 +137,7 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
                               margin: const EdgeInsets.only(right: 6),
                               decoration: BoxDecoration(
                                 color: cs.primary.withValues(alpha: 0.12),
-                                borderRadius: BorderRadius.circular(3),
+                                borderRadius: BorderRadius.circular(8),
                               ),
                               child: Text(
                                 strings.taskFlowCardTag,
@@ -178,7 +181,7 @@ class _TaskFlowCardState extends ConsumerState<TaskFlowCard> {
                             ),
                             decoration: BoxDecoration(
                               color: Colors.orange.withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(4),
+                              borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
                               strings.taskFlowCardQueued,

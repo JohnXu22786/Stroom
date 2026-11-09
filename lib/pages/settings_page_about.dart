@@ -80,7 +80,7 @@ extension _SettingsPageAboutExt on _SettingsPageState {
                       ),
                       decoration: BoxDecoration(
                         color: Colors.red,
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
                         AppLocalizations.of(context)!.aboutNewVersion,

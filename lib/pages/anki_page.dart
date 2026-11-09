@@ -356,7 +356,7 @@ class _DeckCard extends ConsumerWidget {
                   height: 44,
                   decoration: BoxDecoration(
                       color: cs.primaryContainer,
-                      borderRadius: BorderRadius.circular(12)),
+                      borderRadius: BorderRadius.circular(8)),
                   child: Icon(Icons.auto_stories,
                       color: cs.onPrimaryContainer, size: 22)),
               const SizedBox(width: 12),
@@ -558,7 +558,7 @@ class _AnkiStudyPageState extends ConsumerState<AnkiStudyPage> {
             child: Card(
               elevation: 2,
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20)),
+                  borderRadius: BorderRadius.circular(16)),
               child: Container(
                 width: double.infinity,
                 constraints: const BoxConstraints(minHeight: 300),
@@ -739,7 +739,7 @@ class _RatingBtn extends StatelessWidget {
           backgroundColor: color.withValues(alpha: 0.12),
           foregroundColor: color,
           shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(16),
               side: BorderSide(color: color.withValues(alpha: 0.3))),
         ),
         onPressed: onTap,

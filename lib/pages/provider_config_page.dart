@@ -736,7 +736,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                   ),
                   proxyDecorator: (child, index, animation) => Material(
                     elevation: 2,
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(16),
                     child: child,
                   ),
                   itemBuilder: (context, index) => _buildMcpConfigCard(
@@ -879,7 +879,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                 onReorderItem: _reorderConfigs,
                 proxyDecorator: (child, index, animation) => Material(
                   elevation: 2,
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(16),
                   child: child,
                 ),
                 itemBuilder: (context, index) {
@@ -990,7 +990,7 @@ class _McpSectionHeader extends StatelessWidget {
                     ),
                     decoration: BoxDecoration(
                       color: cs.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius: BorderRadius.circular(16),
                     ),
                     child: Text(
                       '$count',
@@ -1129,10 +1129,10 @@ class _McpConfigCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
         color: backgroundColor,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         child: Material(
           type: MaterialType.transparency,
           child: InkWell(
@@ -1320,7 +1320,7 @@ class _McpGroupHeaderCard extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: isDark ? cs.surfaceContainerHigh : cs.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: cs.outlineVariant.withValues(alpha: 0.5),
           width: 0.5,
@@ -1433,7 +1433,7 @@ class _McpMasterSwitchCard extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: backgroundColor,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: cs.outlineVariant.withValues(alpha: 0.5),
           width: 0.5,
@@ -1441,7 +1441,7 @@ class _McpMasterSwitchCard extends StatelessWidget {
       ),
       // 裁剪到圆角：SwitchListTile 的 ink 涟漪是矩形，不裁剪会画出方角。
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         child: Material(
           type: MaterialType.transparency,
           child: InkWell(

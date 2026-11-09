@@ -697,7 +697,7 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
                 onPressed: _takePhoto,
                 style: ElevatedButton.styleFrom(
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                 ),
                 icon: const Icon(Icons.camera_alt_outlined, size: 20),
@@ -716,7 +716,7 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
                 onPressed: _importFromGallery,
                 style: ElevatedButton.styleFrom(
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                 ),
                 icon: const Icon(Icons.photo_library_outlined, size: 20),

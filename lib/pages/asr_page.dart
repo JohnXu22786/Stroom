@@ -683,7 +683,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                 height: 34,
                 decoration: BoxDecoration(
                   color: cs.surface.withValues(alpha: 0.7),
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(8),
                   border: Border.all(
                     color: cs.outlineVariant.withValues(alpha: 0.3),
                   ),
@@ -778,7 +778,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
             onPressed: sourceControlsDisabled ? null : _showUrlInputDialog,
             style: ElevatedButton.styleFrom(
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(8),
               ),
             ),
             icon: const Icon(Icons.link, size: 20),
@@ -803,7 +803,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                     sourceControlsDisabled ? null : _showAudioSourceSheet,
                 style: ElevatedButton.styleFrom(
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                 ),
                 icon: const Icon(Icons.mic, size: 20),
@@ -823,7 +823,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                     sourceControlsDisabled ? null : _showAudioSourceSheet,
                 style: ElevatedButton.styleFrom(
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                 ),
                 icon: const Icon(Icons.audio_file_outlined, size: 20),
@@ -878,7 +878,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
           Card(
             elevation: 0,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(16),
               side: BorderSide(color: cs.outlineVariant, width: 0.5),
             ),
             child: Padding(
@@ -923,7 +923,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
               elevation: 0,
               margin: const EdgeInsets.symmetric(vertical: 3),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(8),
                 side: BorderSide(color: cs.outlineVariant, width: 0.5),
               ),
               child: Padding(
@@ -1182,11 +1182,11 @@ class _AsrPageState extends ConsumerState<AsrPage> {
     return Container(
       decoration: BoxDecoration(
         color: cs.surfaceContainerLow.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
       ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(8),
         onTap: _pickSaveFolder,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -1344,7 +1344,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (ctx) => Padding(
         padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
@@ -1766,8 +1766,8 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                 decoration: BoxDecoration(
                   color: Colors.red.withValues(alpha: 0.1),
                   borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(4),
-                    topRight: Radius.circular(4),
+                    topLeft: Radius.circular(8),
+                    topRight: Radius.circular(8),
                   ),
                 ),
                 child: Row(
@@ -1855,7 +1855,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
           padding: const EdgeInsets.all(6),
           decoration: BoxDecoration(
             color: isDark ? Colors.black : Colors.grey[300],
-            borderRadius: BorderRadius.circular(4),
+            borderRadius: BorderRadius.circular(8),
           ),
           child: SelectableText(
             encoder.convert(sanitized),

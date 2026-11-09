@@ -284,7 +284,7 @@ extension _HomePageHomeContentExt on _HomePageState {
                 height: 36,
                 decoration: BoxDecoration(
                   color: color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(icon, color: color, size: 20),
               ),
@@ -343,7 +343,7 @@ extension _HomePageHomeContentExt on _HomePageState {
                 height: 40,
                 decoration: BoxDecoration(
                   color: cs.tertiary.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(Icons.account_tree, size: 22, color: cs.tertiary),
               ),
@@ -410,7 +410,7 @@ extension _HomePageHomeContentExt on _HomePageState {
     }) {
       return Expanded(
         child: InkWell(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
           onTap: () {
             Navigator.push(
               context,

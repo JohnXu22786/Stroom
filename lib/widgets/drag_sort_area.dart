@@ -593,7 +593,7 @@ class _DragSortAreaState extends State<DragSortArea> {
       onDraggableCanceled: (velocity, offset) => dragCanceled(),
       feedback: Container(
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(16),
           boxShadow: const [
             BoxShadow(
               color: Colors.black26,
@@ -631,7 +631,7 @@ class _DragSortAreaState extends State<DragSortArea> {
       decoration: BoxDecoration(
         // 与聊天推理面板的 OptionChip 一致：选中 = 主色淡底 + 主色边框
         color: selected ? cs.primaryContainer : Colors.transparent,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: selected ? cs.primary : cs.outlineVariant,
           width: selected ? 1.5 : 1,

@@ -124,7 +124,7 @@ class _ToolCallCardState extends State<ToolCallCard> {
                       ),
                       decoration: BoxDecoration(
                         color: Colors.blueGrey.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(4),
+                        borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
                         AppLocalizations.of(context)!.toolCallCompacted,
@@ -170,7 +170,7 @@ class _ToolCallCardState extends State<ToolCallCard> {
                     padding: const EdgeInsets.all(6),
                     decoration: BoxDecoration(
                       color: isDark ? Colors.grey[900] : Colors.white,
-                      borderRadius: BorderRadius.circular(4),
+                      borderRadius: BorderRadius.circular(8),
                       border: Border.all(
                         color: borderColor.withValues(alpha: 0.5),
                       ),

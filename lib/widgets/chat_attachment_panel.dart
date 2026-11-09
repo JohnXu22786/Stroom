@@ -20,7 +20,7 @@ void showChatAttachmentPanel({
     context: context,
     isScrollControlled: true,
     shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
     ),
     builder: (ctx) {
       final cs = Theme.of(ctx).colorScheme;
@@ -52,7 +52,7 @@ void showChatAttachmentPanel({
                     height: 28,
                     decoration: BoxDecoration(
                       color: cs.primary.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(6),
+                      borderRadius: BorderRadius.circular(8),
                     ),
                     child: Icon(
                       Icons.attach_file_outlined,
@@ -163,7 +163,7 @@ class _FileActionButton extends StatelessWidget {
               height: 44,
               decoration: BoxDecoration(
                 color: color.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(8),
               ),
               child: Icon(icon, size: 24, color: color),
             ),

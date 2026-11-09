@@ -540,7 +540,7 @@ Future<void> showJsonValueEditorDialog(
                         ),
                         decoration: BoxDecoration(
                           color: Colors.amber.shade100,
-                          borderRadius: BorderRadius.circular(4),
+                          borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
                           'JSON',
@@ -605,7 +605,7 @@ Future<void> showJsonValueEditorDialog(
                       ),
                       decoration: BoxDecoration(
                         color: Colors.red.shade50,
-                        borderRadius: BorderRadius.circular(6),
+                        borderRadius: BorderRadius.circular(8),
                         border: Border.all(color: Colors.red.shade200),
                       ),
                       child: Row(
@@ -720,7 +720,7 @@ class ParamNamePathPreview extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
         color: cs.secondaryContainer.withValues(alpha: 0.25),
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(8),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

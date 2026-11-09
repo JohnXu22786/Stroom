@@ -702,7 +702,7 @@ extension _ChatPageUiExt on _ChatPageState {
                       ),
                       decoration: BoxDecoration(
                         color: Colors.amber,
-                        borderRadius: BorderRadius.circular(3),
+                        borderRadius: BorderRadius.circular(8),
                       ),
                       child: const Text(
                         'DEV',

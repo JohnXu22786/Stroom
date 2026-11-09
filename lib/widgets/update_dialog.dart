@@ -93,7 +93,7 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
                     color: cs.tertiaryContainer.withValues(alpha: 0.3),
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(8),
                     border: Border.all(
                       color: cs.tertiaryContainer,
                       width: 0.5,
@@ -316,9 +316,9 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
       items.add(InkWell(
         onTap: () => notifier.selectVersion(realIdx),
         borderRadius: displayIdx == 1
-            ? const BorderRadius.vertical(top: Radius.circular(10))
+            ? const BorderRadius.vertical(top: Radius.circular(8))
             : isLast
-                ? const BorderRadius.vertical(bottom: Radius.circular(10))
+                ? const BorderRadius.vertical(bottom: Radius.circular(8))
                 : null,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -361,7 +361,7 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
                                 horizontal: 4, vertical: 1),
                             decoration: BoxDecoration(
                               color: Colors.orange.withValues(alpha: 0.2),
-                              borderRadius: BorderRadius.circular(4),
+                              borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
                               strings.updatePreviewBadge,
@@ -397,7 +397,7 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
     return Container(
       decoration: BoxDecoration(
         border: Border.all(color: cs.outlineVariant),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(8),
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(
@@ -430,7 +430,7 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: cs.primaryContainer.withValues(alpha: 0.3),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(
           color: cs.primaryContainer,
           width: 0.5,
@@ -453,7 +453,7 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
           ),
           const SizedBox(height: 10),
           ClipRRect(
-            borderRadius: BorderRadius.circular(4),
+            borderRadius: BorderRadius.circular(8),
             child: LinearProgressIndicator(
               value: state.downloadProgress,
               minHeight: 10,
