@@ -43,6 +43,9 @@ class AnkiApkgImporter {
     }
     late final Archive archive;
     try {
+      if (!_hasEndOfCentralDirectory(bytes)) {
+        throw const FormatException('ZIP end record is missing');
+      }
       archive = ZipDecoder().decodeBytes(bytes);
     } catch (_) {
       throw AnkiApkgException.invalidArchive(apkgPath);
@@ -296,6 +299,20 @@ class AnkiApkgImporter {
         }
       }
     }
+  }
+
+  static bool _hasEndOfCentralDirectory(List<int> bytes) {
+    const signature = [0x50, 0x4b, 0x05, 0x06];
+    final start = bytes.length > 65557 ? bytes.length - 65557 : 0;
+    for (var index = bytes.length - signature.length; index >= start; index--) {
+      if (bytes[index] == signature[0] &&
+          bytes[index + 1] == signature[1] &&
+          bytes[index + 2] == signature[2] &&
+          bytes[index + 3] == signature[3]) {
+        return true;
+      }
+    }
+    return false;
   }
 
   static AnkiApkgException _databaseException(
