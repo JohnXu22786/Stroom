@@ -163,6 +163,15 @@ void main() {
     );
   });
 
+  test('export paths reject canonically equivalent Unicode filenames', () {
+    expect(
+      () => validateUserVisibleExportPaths(
+        files: const ['caf\u00e9.txt', 'cafe\u0301.txt'],
+      ),
+      throwsStateError,
+    );
+  });
+
   test('rejects export paths that collide after Windows trims trailing spaces',
       () {
     expect(

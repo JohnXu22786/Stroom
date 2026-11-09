@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/foundation.dart'
     show TargetPlatform, defaultTargetPlatform, kIsWeb;
+import 'package:unorm_dart/unorm_dart.dart' show nfc;
 
 /// Opens a save dialog filtered to [extensions] and writes [bytes] to the
 /// selected location.
@@ -78,7 +79,7 @@ void validateUserVisibleExportPaths({
     return segments.join('/');
   }
 
-  String portablePathKey(String path) => path.toLowerCase();
+  String portablePathKey(String path) => nfc(path).toLowerCase();
 
   final filePaths = <String>{};
   final directoryPaths = <String>{};
