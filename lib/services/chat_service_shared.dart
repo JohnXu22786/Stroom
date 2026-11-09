@@ -55,14 +55,20 @@ String audioFormatFromMimeType(String mimeType) {
 /// Defensive: when a flat param collides with a nested param sharing a
 /// prefix (e.g. `provider` vs `provider.only`), the nested path always wins
 /// in BOTH insertion orders — an existing map is never clobbered by a later
-/// flat assignment, and an existing scalar is replaced by a fresh map so the
-/// nested path can descend. This avoids the old type-cast crash and keeps
-/// the precedence deterministic. Both silent-drop directions are logged.
-void setNestedParam(Map<String, dynamic> map, String path, dynamic value) {
+/// flat assignment unless its caller explicitly identifies a same-name layer
+/// override. An existing scalar is replaced by a fresh map so the nested path
+/// can descend. This avoids the old type-cast crash and keeps the precedence
+/// deterministic. Both silent-drop directions are logged.
+void setNestedParam(
+  Map<String, dynamic> map,
+  String path,
+  dynamic value, {
+  bool replaceExistingMap = false,
+}) {
   final parts = path.split('.');
   if (parts.length == 1) {
     final existing = map[parts[0]];
-    if (existing is Map<String, dynamic>) {
+    if (existing is Map<String, dynamic> && !replaceExistingMap) {
       // 嵌套路径已占位：保留嵌套结构，丢弃扁平值（嵌套优先，两种顺序
       // 一致）。更高层级的扁平覆盖在此被丢弃——记录日志便于排查。
       debugPrint(

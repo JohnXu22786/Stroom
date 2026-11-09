@@ -156,55 +156,15 @@ extension _ChatPageEditingExt on _ChatPageState {
       final retainedHistory =
           persistedHistory.take(persistedMessageIndex).toList();
 
-      // Remove this message and all after from history and controller.
-      try {
-        if (index < _history.length) {
-          final removed = _history.sublist(index);
-          _history.removeRange(index, _history.length);
-          for (final r in removed) {
-            await _removeMessageFromController(r.id);
-            if (!stillOwnsHistory()) return;
-            // NOTE: 这里**不删除**附件文件——编辑态下 composer 直接
-            // 复用原消息的同一批 Attachment 对象（storagePath 相同），
-            // 删除文件会让新消息的附件读取失败（_onMessageSend 随后
-            // 把同一 storagePath 挂到新消息）。与 _deleteMessage 不同，
-            // 编辑路径没有 isReferencedElsewhere 保护。真正的孤儿文件
-            // 清理在 _deleteMessage（带引用检查）中完成。
-          }
-          // 截断点之下、不在 _history 中的孤儿消息（如 Stop 掉的部分
-          // 回复）也要一并移除——否则其工具卡片会残留为幽灵卡片。
-          await _removeOrphanMessagesFromController();
-          if (!stillOwnsHistory()) return;
-          // Safety: keep pagination index within bounds
-          _loadedUpToIndex = _loadedUpToIndex.clamp(0, _history.length);
-          // 历史被截断：使进行中的加载失效（其 0.5 秒最少显示延迟
-          // 结束后不能把旧历史批次插回被编辑过的会话），并同步清除
-          // 其加载标志，避免幽灵指示器与分页卡死。
-          _isLoadingMore = false;
-          _loadMoreGeneration++;
-        }
-      } catch (e) {
-        debugPrint('[ChatPage] _editUserMessageWithText remove failed: $e');
-      }
-      if (!stillOwnsHistory()) return;
-
-      // Force the UI to reflect the truncated history BEFORE any provider
-      // listener fires _loadConversationMessages (which would reload old
-      // messages from the provider before _saveMessages below runs).
-      if (mounted) setState(() {});
-
-      // Now persist the truncated history. This must happen before
-      // _onMessageSend calls _saveEnabledToolsToConversation which
-      // triggers the conversationsProvider listener.
-      await _saveMessages(
-        messagesOverride: retainedHistory,
-        capturedConvId: conversationId,
-        completeHistorySnapshot: true,
+      // Preserve the original transcript while the replacement is in flight.
+      // The model sees the complete persisted prefix, even when older messages
+      // are outside the paginated UI window; a failed or stopped edit keeps the
+      // original tail available in history.
+      await _onMessageSend(
+        newText,
+        newAttachments,
+        historyForRequestPrefix: retainedHistory,
       );
-      if (!stillOwnsHistory()) return;
-
-      // Send with edited text and the combined attachments (original + new)
-      await _onMessageSend(newText, newAttachments);
     } finally {
       _isModifyingHistory = false;
       _scheduleReloadAfterBlockingOperation();
@@ -237,62 +197,17 @@ extension _ChatPageEditingExt on _ChatPageState {
       );
       if (userIndex < 0) return;
       final userMsg = persistedHistory[userIndex];
-      final retryHistory = persistedHistory.take(userIndex + 1).toList();
+      final requestHistory = persistedHistory.take(userIndex + 1).toList();
 
-      // Remove this assistant message and all after from history
-      try {
-        if (index < _history.length) {
-          final removed = _history.sublist(index);
-          _history.removeRange(index, _history.length);
-          for (final r in removed) {
-            await _removeMessageFromController(r.id);
-            if (!stillOwnsHistory()) return;
-          }
-          // 截断点之下、不在 _history 中的孤儿消息（如 Stop 掉的部分
-          // 回复）也要一并移除——否则其工具卡片会残留为幽灵卡片。
-          await _removeOrphanMessagesFromController();
-          if (!stillOwnsHistory()) return;
-          // Safety: keep pagination index within bounds
-          _loadedUpToIndex = _loadedUpToIndex.clamp(0, _history.length);
-          // 历史被截断：使进行中的加载失效（其 0.5 秒最少显示延迟
-          // 结束后不能把旧历史批次插回被编辑过的会话），并同步清除
-          // 其加载标志，避免幽灵指示器与分页卡死。
-          _isLoadingMore = false;
-          _loadMoreGeneration++;
-        }
-      } catch (e) {
-        debugPrint('[ChatPage] _retryAssistantMessage remove failed: $e');
-      }
-      if (!stillOwnsHistory()) return;
-
-      // Force UI rebuild and sync provider before re-streaming
-      if (mounted) setState(() {});
-      await _saveMessages(
-        capturedConvId: conversationId,
-        messagesOverride: retryHistory,
-        completeHistorySnapshot: true,
-      );
-      if (!stillOwnsHistory()) return;
-
-      // Re-generate using the complete persisted context through the
-      // preceding user message. `_history` is only the visible page when the
-      // repository is paged, so it cannot stand in for model context.
-      final completeHistory = conversationId == null
-          ? List<ChatMessage>.from(_history)
-          : await ref
-              .read(conversationsProvider.notifier)
-              .loadFullMessagesForContext(conversationId);
-      if (!stillOwnsHistory()) return;
-      final contextUserIndex = completeHistory.indexWhere(
-        (message) => message.id == userMsg.id,
-      );
-      final historyForRetry = contextUserIndex < 0
-          ? List<ChatMessage>.from(_history.take(index))
-          : completeHistory.take(contextUserIndex + 1).toList();
+      // Keep the prior assistant tail durable while retrying. Only the model
+      // request and successful replacement use the prefix through the user
+      // turn; repository-backed context must not be limited to the visible page.
       await _startStreaming(
         userMsg.content,
         capturedConvId: conversationId,
-        historyOverride: historyForRetry,
+        historyOverride: persistedHistory,
+        requestHistoryOverride: requestHistory,
+        historyOnSuccess: requestHistory,
       );
       await _syncHistoryFromProvider(capturedConvId: conversationId);
     } finally {

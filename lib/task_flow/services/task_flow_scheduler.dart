@@ -35,14 +35,14 @@ class TaskFlowScheduler {
   final int minBudget;
 
   /// Resource weight per block type: CPU/IO-heavy work (downloads,
-  /// conversions) costs 2, network-only work costs 1.
+  /// conversions and image preprocessing) costs 2, network-only work costs 1.
   static int weightFor(BlockType type) {
     switch (type) {
       case BlockType.catcatch:
       case BlockType.audioSeparation:
+      case BlockType.ocr:
         return 2;
       case BlockType.asr:
-      case BlockType.ocr:
       case BlockType.tts:
       case BlockType.chat:
       case BlockType.custom:

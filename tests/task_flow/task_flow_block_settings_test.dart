@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart' show StateNotifier;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 
 import 'package:stroom/models/assistant.dart';
 import 'package:stroom/models/tts_models.dart';
@@ -10,9 +11,12 @@ import 'package:stroom/providers/assistant_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/task_flow/models/block_type_definition.dart';
+import 'package:stroom/task_flow/models/io_type.dart';
 import 'package:stroom/task_flow/models/task_flow_definition.dart';
 import 'package:stroom/task_flow/widgets/block_editor_dialog.dart';
+import 'package:stroom/task_flow/widgets/catcatch_policy_menu.dart';
 import 'package:stroom/task_flow/widgets/flow_block_card.dart';
+import 'package:stroom/task_flow/widgets/io_type_indicator.dart';
 import 'package:stroom/utils/file_manifest.dart';
 import 'package:stroom/utils/text_manifest.dart';
 import 'package:stroom/utils/provider_models.dart';
@@ -31,6 +35,31 @@ class _FakeAssistantsNotifier extends AssistantsNotifier {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets('CatCatch policy menu includes downstream-filtered media output',
+      (tester) async {
+    String? selected;
+    await tester.pumpWidget(MaterialApp(
+      locale: const Locale('zh', 'CN'),
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      home: Scaffold(
+        body: CatCatchPolicyMenu(
+          outputPolicy: true,
+          value: 'followDownstream',
+          onSelected: (value) => selected = value,
+        ),
+      ),
+    ));
+
+    await tester.tap(find.byType(PopupMenuButton<String>));
+    await tester.pumpAndSettle();
+    final unionOption = find.text('视频或音频（按下游筛选）');
+    expect(unionOption, findsNWidgets(2));
+    await tester.tap(unionOption.last);
+    await tester.pumpAndSettle();
+    expect(selected, 'followDownstream');
+  });
 
   Future<void> pumpPanel(
     WidgetTester tester, {
@@ -51,6 +80,9 @@ void main() {
           ),
         ],
         child: MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: Builder(
               builder: (context) => Center(
@@ -72,41 +104,87 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('CatCatch header follows edited audio output both ways',
+  testWidgets('CatCatch output policy PopupMenuButton edits the selected type',
       (tester) async {
     TaskFlowBlock? saved;
     await pumpPanel(
       tester,
       block: TaskFlowBlock(
         typeKey: BlockType.catcatch,
-        params: {'audioOutput': true},
+        params: {
+          'audioOutput': true,
+          'automaticResourceSelection': true,
+        },
       ),
       onSaved: (block) => saved = block,
     );
 
-    final outputSwitch = find.byType(SwitchListTile).at(1);
-    expect(outputSwitch, findsOneWidget);
-    expect(find.text('输入: 文本  →  输出: 音频'), findsOneWidget);
+    final policyButton = find.byKey(const ValueKey('catcatch-output-policy'));
+    expect(policyButton, findsOneWidget);
+    expect(
+      tester.widget<PopupMenuButton<String>>(policyButton).initialValue,
+      'audio',
+    );
+    expect(
+      tester
+          .widget<PopupMenuButton<String>>(
+            find.byKey(const ValueKey('catcatch-resource-selection-policy')),
+          )
+          .initialValue,
+      'automatic',
+    );
+    expect(find.text('输入: 文本 → 输出: 音频'), findsOneWidget);
 
-    await tester.tap(outputSwitch);
+    await tester.tap(policyButton);
     await tester.pumpAndSettle();
-    expect(find.text('输入: 文本  →  输出: 视频'), findsOneWidget);
+    expect(find.text('视频或音频（按下游筛选）'), findsOneWidget);
+    await tester.tap(find.text('视频').last);
+    await tester.pumpAndSettle();
+    expect(find.text('输入: 文本 → 输出: 视频'), findsOneWidget);
 
-    await tester.tap(outputSwitch);
+    await tester.tap(policyButton);
     await tester.pumpAndSettle();
-    expect(find.text('输入: 文本  →  输出: 音频'), findsOneWidget);
-
-    await tester.tap(outputSwitch);
+    await tester.tap(find.text('视频或音频（按下游筛选）').last);
     await tester.pumpAndSettle();
-    expect(find.text('输入: 文本  →  输出: 视频'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('确认'), 150,
-        scrollable: find.byType(Scrollable).last);
+    expect(find.text('输入: 文本 → 输出: 视频或音频（按下游筛选）'), findsOneWidget);
+    final dialogList = find.byWidgetPredicate(
+      (widget) =>
+          widget is Scrollable && widget.axisDirection == AxisDirection.down,
+    );
+    expect(dialogList, findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('确认'),
+      150,
+      scrollable: dialogList,
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.text('确认'));
     await tester.pumpAndSettle();
-    expect(saved?.params['audioOutput'], false);
-    expect(saved?.getDefinition()?.outputType,
-        BlockTypeDefinition.catcatch.outputType);
+    expect(saved?.params['outputPolicy'], 'followDownstream');
+    expect(saved?.possibleOutputTypes, [IOType.video, IOType.audio]);
+    expect(saved?.getDefinition()?.outputType, IOType.video);
+  });
+
+  testWidgets('Follow downstream output indicator shows a media union',
+      (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        locale: Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: Scaffold(
+          body: IOTypeIndicator(
+            type: IOType.video,
+            possibleTypes: [IOType.video, IOType.audio],
+            isInput: false,
+            labelOverride: '视频或音频（按下游筛选）',
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byIcon(Icons.perm_media), findsOneWidget);
+    expect(find.text('输出: 视频或音频（按下游筛选）'), findsOneWidget);
   });
 
   ProviderEntriesState _ttsEntries() {
@@ -508,6 +586,9 @@ void main() {
           ),
         ],
         child: MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: Column(
               children: [
@@ -558,6 +639,9 @@ void main() {
           ),
         ],
         child: MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: Column(
               children: [
@@ -603,6 +687,9 @@ void main() {
           ),
         ],
         child: MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: FlowBlockCard(
               block: TaskFlowBlock(
@@ -670,6 +757,9 @@ void main() {
           ),
         ],
         child: MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: Builder(
               builder: (context) => Center(
@@ -732,6 +822,9 @@ void main() {
           ),
         ],
         child: MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: Builder(
               builder: (context) => Center(
@@ -805,6 +898,9 @@ void main() {
           ),
         ],
         child: MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: Builder(
               builder: (context) => Center(

@@ -2,75 +2,69 @@ name: CI Checks
 
 on:
   pull_request:
-    branches: [main]
-    types: [opened, synchronize, reopened, edited]
+    branches: [main, v0.6]
+    types: [opened, synchronize, reopened]
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Let each pull request CI run finish independently.
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.run_id }}
+  cancel-in-progress: false
 
 jobs:
-  pr-description:
-    name: PR description format
-    if: github.event_name == 'pull_request'
+  # Small JavaScript checks for the integrated components share one Node job.
+  components:
+    name: "Component Integration scripts"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.8
+          cache: true
+          pub-cache: true
+      - run: flutter pub get
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --test tests/widgets/mermaid_render_widget_js_test.cjs
+      - run: node --test tests/catcatch/js_hook_script_test.cjs
+
+  ocr-benchmark:
+    name: "OCR Benchmark Validation"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-          cache: pip
-          cache-dependency-path: tools/ci/requirements.txt
-      - name: Install PR description validator dependencies
-        run: python3 -m pip install --disable-pip-version-check -r tools/ci/requirements.txt
-      - name: Test PR description validator
-        run: python3 -m unittest discover -s tools/ci -p 'test_*.py' -v
-      - name: Validate PR description
-        run: python3 tools/ci/validate_pr_description.py "$GITHUB_EVENT_PATH"
+      - name: Verify OCR benchmark fixtures
+        run: python3 tools/ocr_benchmark/evaluate.py --verify-fixtures
+      - name: Test OCR benchmark evaluator
+        run: python3 -m unittest discover -s tools/ocr_benchmark -p 'test_*.py' -v
 
-  math-editor:
-    name: Math editor bridge
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: tools/math_editor_test/package-lock.json
-      - run: npm ci --prefix tools/math_editor_test
-      - run: npm test --prefix tools/math_editor_test
-
-  mermaid-fit-retry:
-    name: Mermaid fit retry behavior
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - run: node --test tests/widgets/mermaid_render_widget_js_test.cjs
-
-  # ── Format Check ──────────────────────────────────────────────────────────
   format:
-    name: Format Check
+    name: "Format Check"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: 3.44.9
+          flutter-version: 3.47.8
           cache: true
           pub-cache: true
       - run: flutter pub get
+      - name: Normalize and verify generated localization
+        run: |
+          dart format --language-version=3.0 lib/l10n/app_localizations.dart
+          git diff --exit-code -- lib/l10n/app_localizations.dart
       - name: Check Dart formatting
         # Preserve the repo's Dart 3.0 formatting baseline after raising its SDK minimum.
         run: dart format --language-version=3.0 --set-exit-if-changed .
 
-  # ── Static Analysis ───────────────────────────────────────────────────────
-  analyze:
-    name: Static Analysis
+  # Keep the required branch-protection check name for static analysis.
+  quality:
+    name: "Static Analysis"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -78,7 +72,7 @@ jobs:
           fetch-depth: 0
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: 3.44.9
+          flutter-version: 3.47.8
           cache: true
           pub-cache: true
       - run: flutter pub get
@@ -86,18 +80,98 @@ jobs:
         run: flutter analyze --no-fatal-warnings --no-fatal-infos
       - name: Check changed files have tests
         run: |
-          BASE_SHA="${{ github.event.pull_request.base.sha }}"
-          if [ -z "$BASE_SHA" ]; then
+          EVENT_BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          if [ -z "$EVENT_BASE_SHA" ]; then
             echo "Not a PR — skipping diff coverage check."
             exit 0
           fi
           echo "### Changed lib/ files vs tests/ coverage ###"
           echo ""
           UNCOVERED=0
+          # Pull request refs are normally merge commits. Their first parent
+          # is the exact base used to build the ref, even when main advances
+          # after the event payload was created. Use it to exclude upstream
+          # changes; fall back to a merge-base for a plain head checkout or a
+          # feature branch whose own history happens to contain a merge.
+          PR_HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          if SECOND_PARENT_SHA="$(git rev-parse --verify HEAD^2 2>/dev/null)" && [ "$SECOND_PARENT_SHA" = "$PR_HEAD_SHA" ]; then
+            if ! DIFF_BASE_SHA="$(git rev-parse HEAD^1)"; then
+              echo "Unable to determine the merge ref base."
+              exit 1
+            fi
+          elif ! DIFF_BASE_SHA="$(git merge-base "$EVENT_BASE_SHA" HEAD)"; then
+            echo "Unable to determine the merge base against $EVENT_BASE_SHA."
+            exit 1
+          fi
+          if ! CHANGED_LIB_FILES="$(git diff --diff-filter=ACMRT --name-only "$DIFF_BASE_SHA" HEAD -- 'lib/*.dart' 'lib/**/*.dart')"; then
+            echo "Unable to determine changed lib files against $DIFF_BASE_SHA."
+            exit 1
+          fi
           while IFS= read -r file; do
             [ -z "$file" ] && continue
-            test_f="tests/${file#lib/}"
-            test_f="${test_f%.dart}_test.dart"
+            case "$file" in
+              lib/l10n/app_localizations.dart|\
+              lib/l10n/app_localizations_en.dart|\
+              lib/l10n/app_localizations_zh.dart)
+                test_f="tests/services/ocr_task_runner_test.dart"
+                ;;
+              lib/services/ocr_result_saver.dart)
+                test_f="tests/services/ocr_task_runner_test.dart"
+                ;;
+              lib/pages/assistant/assistant_defaults_tab.dart|\
+              lib/pages/assistant/assistant_shared.dart)
+                test_f="tests/pages/assistant_pages_test.dart"
+                ;;
+              lib/pages/notification_settings_page.dart)
+                test_f="tests/pages/settings/settings_page_test.dart"
+                ;;
+              lib/pages/ocr/ocr_instruction_dialog.dart)
+                test_f="tests/pages/content/ocr_page_test.dart"
+                ;;
+              lib/catcatch/engine/js_hook_script.dart)
+                test_f="tests/catcatch/js_hook_script_test.cjs"
+                ;;
+              lib/services/startup_preferences.dart)
+                test_f="tests/startup/startup_check_service_web.dart"
+                ;;
+              lib/services/data_integrity_json_parser_web.dart)
+                test_f="tests/startup/startup_check_service_web.dart"
+                ;;
+              lib/services/sse_client_web_error.dart|\
+              lib/services/sse_client_io.dart)
+                test_f="tests/services/sse_client_web_test.dart"
+                ;;
+              lib/pages/gallery_page.dart|\
+              lib/pages/tts_page.dart|\
+              lib/pages/video_gallery_page.dart|\
+              lib/utils/file_picker_utils.dart)
+                test_f="tests/utils/file_picker_utils_test.dart"
+                ;;
+              lib/pages/voice_editor_page.dart)
+                test_f="tests/task_flow/tts_voice_save_propagation_test.dart"
+                ;;
+              lib/pages/voice_editor_shared.dart)
+                test_f="tests/pages/voice_editor_shared_test.dart"
+                ;;
+              lib/pages/model_config_shared.dart)
+                test_f="tests/pages/settings/provider_config_detail_page_test.dart"
+                ;;
+              lib/pages/provider_config_tool_dialogs.dart)
+                test_f="tests/widgets/mcp_config_card_style_test.dart"
+                ;;
+              lib/widgets/version_info_dialog.dart)
+                test_f="tests/pages/settings/settings_page_test.dart"
+                ;;
+              lib/pages/chat/dialogs/mermaid_preview_web_controls.dart|\
+              lib/pages/chat/dialogs/mermaid_preview_web_controls_stub.dart|\
+              lib/pages/chat/dialogs/mermaid_preview_web_controls_web.dart)
+                test_f="tests/pages/chat/dialogs/mermaid_preview_dialog_zoom_test.dart"
+                ;;
+              *)
+                test_f="tests/${file#lib/}"
+                test_f="${test_f%.dart}_test.dart"
+                ;;
+            esac
             if [ -f "$test_f" ]; then
               echo "  ✅ $file"
             else
@@ -108,20 +182,76 @@ jobs:
               if compgen -G "$dir/*/$base" >/dev/null; then
                 echo "  ✅ $file ($(compgen -G "$dir/*/$base" | head -1))"
               else
-                echo "  ⚠️  $file → missing $test_f"
-                UNCOVERED=1
+                # Older tests were flattened while their source files stayed
+                # in feature directories (for example lib/models/assistant.dart
+                # is covered by tests/assistant_test.dart). Accept that layout
+                # only when the basename identifies exactly one test file;
+                # ambiguous names must be added to the explicit map above.
+                if [[ "$base" == *_test.dart ]]; then
+                  stem="${base%_test.dart}"
+                  mapfile -t flattened < <(
+                    find tests -type f -name "${stem}_test.dart" -print
+                  )
+                else
+                  # Non-Dart tests are accepted only by an explicit source map.
+                  flattened=()
+                fi
+                if [ "${#flattened[@]}" -eq 1 ]; then
+                  echo "  ✅ $file (${flattened[0]})"
+                else
+                  # Grouped or renamed tests may not share the source basename.
+                  # A package import is explicit evidence that the test covers
+                  # this source file, so accept all matching test files.
+                  source_import="package:stroom/${file#lib/}"
+                  mapfile -t imported_tests < <(
+                  grep -RIlF --include='*_test.dart' --include='*_test.cjs' -- "$source_import" tests || true
+                  )
+                  if [ "${#imported_tests[@]}" -gt 0 ]; then
+                    echo "  ✅ $file (imported by ${imported_tests[*]})"
+                  else
+                    # Dart parts are compiled through their parent library and
+                    # therefore have no direct package import in test files.
+                    part_of=$(sed -nE "s/^part of ['\"]([^'\"]+)['\"];$/\1/p" "$file" | head -1)
+                    if [ -n "$part_of" ]; then
+                      source_dir=$(dirname "${file#lib/}")
+                      if [ "$source_dir" = "." ]; then
+                        parent_import="package:stroom/$part_of"
+                      else
+                        parent_import="package:stroom/$source_dir/$part_of"
+                      fi
+                      mapfile -t parent_tests < <(
+                        grep -RIlF --include='*_test.dart' --include='*_test.cjs' -- "$parent_import" tests || true
+                      )
+                    else
+                      parent_tests=()
+                    fi
+                    if [ "${#parent_tests[@]}" -gt 0 ]; then
+                      echo "  ✅ $file (parent library imported by ${parent_tests[*]})"
+                    else
+                      echo "  ⚠️  $file → missing $test_f"
+                      if [ "${#flattened[@]}" -gt 1 ]; then
+                        printf '      Ambiguous basename matches: %s\n' "${flattened[*]}"
+                      fi
+                      UNCOVERED=1
+                    fi
+                  fi
+                fi
               fi
             fi
-          done < <(git diff --name-only "$BASE_SHA" -- 'lib/**/*.dart')
+          done <<< "$CHANGED_LIB_FILES"
           echo ""
           if [ "$UNCOVERED" -eq 0 ]; then
             echo "All changed files have matching tests. (But check that existing tests cover new logic.)"
           else
-            echo "Some changed files lack dedicated test files. Add them or verify coverage via existing tests."
+            echo "Some changed files lack matching tests. Add a test file or update the mapping for the test that covers it."
+            exit 1
           fi
 
-  android-unit:
-    name: Android unit tests
+  # KeepAliveSchedule has no Android dependencies. Test the exact production
+  # Kotlin sources in their standalone JVM build instead of building the full
+  # Flutter Android app and its plugins for four helper tests.
+  app-runtime-jvm:
+    name: "Application Runtime (Kotlin/JVM)"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -129,19 +259,11 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: 3.44.9
-          cache: true
-          pub-cache: true
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.14'
-      - run: flutter pub get
-      - name: Set Flutter SDK path for Gradle
-        run: echo "flutter.sdk=$(dirname "$(dirname "$(command -v flutter)")")" > android/local.properties
-      - name: Run watchdog scheduling regression test
-        run: gradle -p android :app:testDebugUnitTest --tests com.johntsui.stroom.KeepAliveReceiverTest
+      - name: Test standalone scheduling module
+        run: gradle -p android/keep_alive_schedule test
 
   # Native Zed keychain readers are compiled for each desktop OS. Keep these
   # checks in the manual/PR workflow so platform bridges cannot drift unbuilt.
@@ -152,7 +274,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: 3.44.9
+          flutter-version: 3.47.8
           cache: true
           pub-cache: true
       - run: flutter pub get
@@ -170,7 +292,7 @@ jobs:
           sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev libsecret-1-dev libayatana-appindicator3-dev
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: 3.44.9
+          flutter-version: 3.47.8
           cache: true
           pub-cache: true
       - run: flutter pub get
@@ -184,7 +306,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: 3.44.9
+          flutter-version: 3.47.8
           cache: true
           pub-cache: true
       - run: flutter pub get
@@ -196,16 +318,20 @@ jobs:
   startup-web:
     name: Startup Web test
     runs-on: ubuntu-latest
-    needs: [format, analyze]
+    needs: [format, quality]
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: 3.44.9
+          flutter-version: 3.47.8
           cache: true
           pub-cache: true
       - uses: browser-actions/setup-chrome@v1
         id: setup-chrome
+      - name: Install native asset build dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y pkg-config libgtk-3-dev libx11-dev libxi-dev
       - run: flutter pub get
       - name: Expose test fixtures to Flutter Web's test server
         run: ln -s tests test
@@ -216,50 +342,75 @@ jobs:
 
   # ── Test Suite (parallel groups) ──────────────────────────────────────────
   test:
-    name: Tests (${{ matrix.label }})
+    name: "Tests (${{ matrix.label }})"
     runs-on: ubuntu-latest
-    needs: [format, analyze]
     strategy:
       fail-fast: false
       matrix:
         include:
-          - label: Core
-            pattern: tests/*_test.dart
-          - label: Anki
-            pattern: tests/anki
-          - label: Widgets
-            pattern: tests/widgets
-          - label: Pages
-            pattern: tests/pages/*_test.dart tests/pages/unified_task_list
-          - label: Pages-ChatPage
-            pattern: tests/pages/chat_page
-          - label: Pages-Settings
-            pattern: tests/pages/settings
-          - label: Pages-Content
-            pattern: tests/pages/content
-          - label: Pages-Chat
-            pattern: tests/pages/chat
-          - label: Providers
-            pattern: tests/providers
-          - label: Services
-            pattern: tests/services
-          - label: Utils
-            pattern: tests/utils
-          - label: Models
-            pattern: tests/models
-          - label: Startup
-            pattern: tests/startup
-          - label: TaskFlow
-            pattern: tests/task_flow
-          - label: CatCatch
-            pattern: tests/catcatch
+          # Keep functional ownership in the Dart runner and group related
+          # suites here to reduce repeated Flutter setup while isolating UI.
+          - label: External Components
+            suite: component-integrations
+          - label: Built-in Components
+            suite: built-in-components
+          - label: Chat and TaskFlow Core
+            suite: chat-taskflow-core
+          - label: Files and Data
+            suite: files-data
+          - label: Application and Shared
+            suite: application-shared
+          - label: Chat UI
+            suite: chat-ai-ui
+          - label: Other Feature UI
+            suite: feature-ui
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: 3.44.9
+          flutter-version: 3.47.8
           cache: true
           pub-cache: true
+      - name: Install native asset build dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y pkg-config libgtk-3-dev libx11-dev libxi-dev
       - run: flutter pub get
+      - uses: browser-actions/setup-chrome@v1
+        id: setup-chrome
+        if: matrix.suite == 'application-shared' || matrix.suite == 'chat-ai-ui'
+      - name: Expose test fixtures to Flutter Web's test server
+        if: matrix.suite == 'application-shared' || matrix.suite == 'chat-ai-ui'
+        run: ln -s tests test
       - name: Run ${{ matrix.label }} tests
-        run: flutter test ${{ matrix.pattern }}
+        run: python3 tools/ci/run_flutter_test_suite.py "${{ matrix.suite }}"
+      - name: Run Mermaid preview web controls regression
+        if: matrix.suite == 'chat-ai-ui'
+        run: flutter test --reporter expanded --platform chrome --plain-name 'renders clickable HTML controls above the fullscreen web preview' test/pages/chat/dialogs/mermaid_preview_dialog_zoom_test.dart
+        env:
+          CHROME_EXECUTABLE: ${{ steps.setup-chrome.outputs.chrome-path }}
+      - name: Run Mermaid preview loading regressions in Chrome
+        if: matrix.suite == 'chat-ai-ui'
+        run: flutter test --reporter expanded --platform chrome test/pages/chat/dialogs/mermaid_preview_dialog_test.dart
+        env:
+          CHROME_EXECUTABLE: ${{ steps.setup-chrome.outputs.chrome-path }}
+      - name: Run Mermaid WebView stale load-stop regression in Chrome
+        if: matrix.suite == 'chat-ai-ui'
+        run: flutter test --reporter expanded --platform chrome --plain-name 'web source updates keep queued zoom until current load completes' test/widgets/mermaid_render_widget_test.dart
+        env:
+          CHROME_EXECUTABLE: ${{ steps.setup-chrome.outputs.chrome-path }}
+      - name: Run Mermaid queued zoom timestamp regression in Chrome
+        if: matrix.suite == 'chat-ai-ui'
+        run: flutter test --reporter expanded --platform chrome --plain-name 'zoom tapped while loading is applied after WebView readiness' test/widgets/mermaid_render_widget_test.dart
+        env:
+          CHROME_EXECUTABLE: ${{ steps.setup-chrome.outputs.chrome-path }}
+      - name: Run Mermaid inline overlay pointer regression in Chrome
+        if: matrix.suite == 'chat-ai-ui'
+        run: flutter test --reporter expanded --platform chrome --plain-name 'MermaidRenderWidget - web overlay pointer routing' test/widgets/mermaid_render_widget_test.dart
+        env:
+          CHROME_EXECUTABLE: ${{ steps.setup-chrome.outputs.chrome-path }}
+      - name: Run Web startup checks in Chrome
+        if: matrix.suite == 'application-shared'
+        run: flutter test --platform chrome test/startup/startup_check_service_web.dart
+        env:
+          CHROME_EXECUTABLE: ${{ steps.setup-chrome.outputs.chrome-path }}

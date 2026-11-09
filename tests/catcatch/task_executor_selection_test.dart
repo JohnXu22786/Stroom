@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/widgets.dart' show Locale;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/catcatch/engine/task_executor.dart';
 import 'package:stroom/catcatch/models/catcatch_task.dart';
@@ -86,5 +87,47 @@ void main() {
           .completed,
       isTrue,
     );
+  });
+
+  test('missing media fallback follows the requested locale', () async {
+    for (final locale in [
+      const Locale('en', 'US'),
+      const Locale('zh', 'CN'),
+    ]) {
+      final task = CatCatchTask(
+        id: 'selection-error',
+        url: 'https://example.com',
+        expectedDurationSec: 0,
+        createdAt: DateTime(2026),
+        steps: [
+          for (final type in StepType.values)
+            type == StepType.userSelecting
+                ? StepStatus.pending(type)
+                : StepStatus.done(type),
+        ],
+      );
+      CatCatchTask? lastUpdate;
+
+      await TaskExecutor.executeTask(
+        task: task,
+        locale: locale,
+        onUpdate: (updated) => lastUpdate = updated,
+      );
+
+      expect(lastUpdate?.status, TaskStatus.failed);
+      if (locale.languageCode == 'en') {
+        expect(
+          lastUpdate?.error,
+          contains(
+            'No usable media resource was found. Check the URL and make sure the website is reachable.',
+          ),
+        );
+      } else {
+        expect(
+          lastUpdate?.error,
+          contains('未能获取到可用媒体资源，请检查 URL 是否正确以及目标网站是否可访问。'),
+        );
+      }
+    }
   });
 }

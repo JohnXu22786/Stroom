@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import 'io_type.dart';
 
 // ============================================================================
@@ -6,6 +7,8 @@ import 'io_type.dart';
 // ============================================================================
 
 enum BlockType { catcatch, audioSeparation, asr, ocr, tts, chat, custom }
+
+enum CatCatchOutputPolicy { video, audio, followDownstream }
 
 BlockType parseBlockType(String name) {
   return BlockType.values.firstWhere(
@@ -126,6 +129,7 @@ class BlockTypeDefinition {
   final String label;
   final IOType inputType;
   final IOType outputType;
+  final List<IOType>? _possibleOutputTypes;
   final IconData icon;
   final Color color;
   final List<BlockParamDefinition> params;
@@ -135,10 +139,15 @@ class BlockTypeDefinition {
     required this.label,
     required this.inputType,
     required this.outputType,
+    List<IOType>? possibleOutputTypes,
     required this.icon,
     required this.color,
     this.params = const [],
-  });
+  }) : _possibleOutputTypes = possibleOutputTypes;
+
+  /// Concrete output kinds this definition may produce. The list preserves
+  /// unions without assigning them the special semantics of [IOType.any].
+  List<IOType> get possibleOutputTypes => _possibleOutputTypes ?? [outputType];
 
   // ========================================================================
   // Built-in block types
@@ -206,29 +215,28 @@ class BlockTypeDefinition {
     ],
   );
 
-  /// CatCatch: text → media (video is the chain-building default).
+  /// CatCatch: text → video or audio. The chosen policy resolves one output
+  /// kind at run time; the union is not [IOType.any].
   static const catcatch = BlockTypeDefinition(
     typeKey: BlockType.catcatch,
     label: '下载网页资源',
     inputType: IOType.text,
     outputType: IOType.video,
+    possibleOutputTypes: [IOType.video, IOType.audio],
     icon: Icons.language,
     color: Color(0xFF9C27B0),
     params: [
       BlockParamDefinition(
-        key: 'automaticResourceSelection',
-        label: '自动选择资源并确认转换',
-        type: BlockParamType.boolean,
-        defaultValue: false,
-        hintText:
-            '关闭时多个资源需手动选择，特殊格式需确认转换；开启时只选择声明的输出类型：视频优先完整文件，其次播放列表；音频只选音频资源。同类按链接排序，分离轨道需手动选择。',
+        key: 'resourceSelectionPolicy',
+        label: '资源选择方式',
+        defaultValue: 'manual',
+        hintText: '手动模式由你选择；自动模式按既有规则确定选择；自动并询问会在唯一安全资源时自动选择，否则打开资源列表让你确认。',
       ),
       BlockParamDefinition(
-        key: 'audioOutput',
-        label: '输出音频',
-        type: BlockParamType.boolean,
-        defaultValue: false,
-        hintText: '关闭时下载视频并传递视频附件；开启时只选择音频资源，可连接语音识别或助手对话。实际下载类型不匹配时停止任务流。',
+        key: 'outputPolicy',
+        label: '输出类型',
+        defaultValue: 'video',
+        hintText: '视频或音频可显式指定；跟随下游时按下一功能块的输入类型筛选资源。下游接受两种类型或没有下游时，两种类型都会保留。',
       ),
       BlockParamDefinition(
         key: 'videoFolder',
@@ -333,6 +341,9 @@ class BlockTypeDefinition {
       ? chatInputTypes.contains(type)
       : type.isCompatibleWith(inputType);
 
+  bool acceptsAnyOutput(Iterable<IOType> outputTypes) =>
+      outputTypes.any(acceptsInput);
+
   /// Find a block type by its key.
   static BlockTypeDefinition? findBlockType(BlockType typeKey) {
     for (final b in all) {
@@ -344,7 +355,12 @@ class BlockTypeDefinition {
   /// Get block types whose input type is compatible with [outputType].
   /// This is used for showing compatible next blocks in the flow builder.
   static List<BlockTypeDefinition> getCompatibleNextBlocks(IOType outputType) {
-    return all.where((b) => b.acceptsInput(outputType)).toList();
+    return getCompatibleNextBlocksForOutputs([outputType]);
+  }
+
+  static List<BlockTypeDefinition> getCompatibleNextBlocksForOutputs(
+      Iterable<IOType> outputTypes) {
+    return all.where((b) => b.acceptsAnyOutput(outputTypes)).toList();
   }
 
   /// Get block types that can REPLACE a block at a chain position without
@@ -363,10 +379,25 @@ class BlockTypeDefinition {
     IOType? nextInput,
     BlockType? exclude,
   }) {
+    return getReplacementCandidatesForOutputs(
+      prevOutputs: [prevOutput],
+      nextInput: nextInput,
+      exclude: exclude,
+    );
+  }
+
+  static List<BlockTypeDefinition> getReplacementCandidatesForOutputs({
+    required List<IOType> prevOutputs,
+    IOType? nextInput,
+    BlockType? exclude,
+  }) {
     return all.where((b) {
       if (b.typeKey == exclude) return false;
-      if (!b.acceptsInput(prevOutput)) return false;
-      if (nextInput != null && !b.outputType.isCompatibleWith(nextInput)) {
+      if (!prevOutputs.any(b.acceptsInput)) return false;
+      final possibleOutputs = b.possibleOutputTypes;
+      if (nextInput != null &&
+          !possibleOutputs
+              .any((output) => output.isCompatibleWith(nextInput))) {
         return false;
       }
       return true;
@@ -401,6 +432,9 @@ class BlockTypeDefinition {
         'label': label,
         'inputType': inputType.toJson(),
         'outputType': outputType.toJson(),
+        if (_possibleOutputTypes != null)
+          'possibleOutputTypes':
+              _possibleOutputTypes.map((type) => type.toJson()).toList(),
         'params': params.map((p) => p.toMap()).toList(),
       };
 
@@ -414,6 +448,9 @@ class BlockTypeDefinition {
       label: map['label'] as String? ?? typeKey.name,
       inputType: IOType.fromJson(map['inputType'] as String? ?? 'any'),
       outputType: IOType.fromJson(map['outputType'] as String? ?? 'any'),
+      possibleOutputTypes: (map['possibleOutputTypes'] as List?)
+          ?.map((type) => IOType.fromJson(type as String))
+          .toList(),
       icon: Icons.extension,
       color: Colors.grey,
       params: (map['params'] as List?)

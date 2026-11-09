@@ -1,8 +1,13 @@
 import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:stroom/l10n/app_localizations.dart';
+import 'package:stroom/widgets/stroom_menu_style.dart';
+
 import '../providers/provider_config.dart';
 import '../widgets/code_editor_field.dart';
 import 'llm_model_config_shared.dart';
+import 'model_config_shared.dart';
 
 /// ASR 模型配置编辑页面
 /// 包含基本设置和 ASR 专有参数（language、response_format 等）
@@ -206,8 +211,8 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
     final modelId = _modelIdController.text.trim();
     if (modelId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('请输入模型 ID'),
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.modelIdRequired),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -220,8 +225,10 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
       final name = param.paramName.trim();
       if (name.isEmpty || param.defaultValue.trim().isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('自定义参数的参数名和默认值不能为空'),
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context)!.modelCustomParamRequired,
+            ),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -230,7 +237,9 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
       if (!seenNames.add(name)) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('已存在该参数: $name'),
+            content: Text(
+              AppLocalizations.of(context)!.modelParamDuplicate(name),
+            ),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -242,7 +251,10 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
         } catch (_) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('参数 "$name" 的默认值不是合法 JSON：${param.defaultValue}'),
+              content: Text(
+                AppLocalizations.of(context)!
+                    .modelParamJsonInvalid(name, param.defaultValue),
+              ),
               behavior: SnackBarBehavior.floating,
             ),
           );
@@ -308,8 +320,10 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
   @override
   Widget build(BuildContext context) {
     final title = _isEditing
-        ? (widget.model!.name.isNotEmpty ? widget.model!.name : '编辑模型')
-        : '添加模型';
+        ? (widget.model!.name.isNotEmpty
+            ? widget.model!.name
+            : AppLocalizations.of(context)!.modelEditTitle)
+        : AppLocalizations.of(context)!.modelCreateTitle;
     final cs = Theme.of(context).colorScheme;
 
     return PopScope(
@@ -319,17 +333,17 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
         final discard = await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
-            title: const Text('放弃修改？'),
-            content: const Text('当前有未保存的修改，确定要放弃吗？'),
+            title: Text(AppLocalizations.of(context)!.modelDiscardTitle),
+            content: Text(AppLocalizations.of(context)!.modelDiscardBody),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('取消'),
+                child: Text(AppLocalizations.of(context)!.batchDlgCancel),
               ),
               TextButton(
                 onPressed: () => Navigator.pop(ctx, true),
                 style: TextButton.styleFrom(foregroundColor: Colors.red),
-                child: const Text('放弃'),
+                child: Text(AppLocalizations.of(context)!.taskFlowUiDiscard),
               ),
             ],
           ),
@@ -344,7 +358,7 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
           actions: [
             TextButton(
               onPressed: _isSaving ? null : _save,
-              child: const Text('保存'),
+              child: Text(AppLocalizations.of(context)!.mermaidSaveButton),
             ),
           ],
         ),
@@ -355,7 +369,7 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
             // 基本设置
             // ==========================================================
             Text(
-              '基本设置',
+              AppLocalizations.of(context)!.assistantBasicTab,
               style: TextStyle(
                 fontWeight: FontWeight.w700,
                 fontSize: 16,
@@ -365,16 +379,16 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
             const SizedBox(height: 12),
 
             LabeledTextField(
-              label: '模型名称',
+              label: AppLocalizations.of(context)!.modelNameLabel,
               controller: _nameController,
-              hintText: '输入显示名称（可选）',
+              hintText: AppLocalizations.of(context)!.modelNameHint,
             ),
             const SizedBox(height: 16),
 
             LabeledTextField(
-              label: '模型 ID',
+              label: AppLocalizations.of(context)!.modelIdLabel,
               controller: _modelIdController,
-              hintText: '如 whisper-1',
+              hintText: AppLocalizations.of(context)!.asrModelIdExample,
               required: true,
             ),
             const SizedBox(height: 24),
@@ -383,7 +397,7 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
             // ASR 参数设置（带开关）
             // ==========================================================
             Text(
-              'ASR 参数',
+              AppLocalizations.of(context)!.modelAsrParams,
               style: TextStyle(
                 fontWeight: FontWeight.w700,
                 fontSize: 16,
@@ -392,19 +406,19 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
             ),
             const SizedBox(height: 4),
             Text(
-              '开启的参数将作为默认值发送到 API 请求中',
+              AppLocalizations.of(context)!.modelEnabledParamsHelp,
               style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
             ),
             const SizedBox(height: 12),
 
             // Language
             LlmToggleTextField(
-              label: '语言代码 (Language)',
+              label: AppLocalizations.of(context)!.modelAsrLanguageCode,
               controller: _languageController,
               enabled: _enableLanguage,
               onToggle: (v) => setState(() => _enableLanguage = v),
-              hintText: '如 zh, en, ja',
-              description: 'ISO-639-1 语言代码，留空则由模型自动检测',
+              hintText: AppLocalizations.of(context)!.asrLanguageExample,
+              description: AppLocalizations.of(context)!.modelAsrLanguageHelp,
             ),
 
             // Response Format
@@ -412,7 +426,7 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
 
             // Temperature
             LlmToggleSlider(
-              label: '温度 (Temperature)',
+              label: AppLocalizations.of(context)!.modelTemperature,
               value: _temperature,
               min: 0.0,
               max: 1.0,
@@ -420,7 +434,7 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
               enabled: _enableTemperature,
               onChanged: (v) => setState(() => _temperature = v),
               onToggle: (v) => setState(() => _enableTemperature = v),
-              description: '控制输出的随机性，推荐使用较低的数值',
+              description: AppLocalizations.of(context)!.modelTemperatureHelp,
             ),
 
             // Timestamp Granularities
@@ -428,12 +442,12 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
 
             // Prompt
             LlmToggleTextField(
-              label: '提示词 (Prompt)',
+              label: AppLocalizations.of(context)!.asrPromptLabel,
               controller: _promptController,
               enabled: _enablePrompt,
               onToggle: (v) => setState(() => _enablePrompt = v),
-              hintText: '输入上下文提示词（可选）',
-              description: '提供上下文以改进转写准确性，如专业术语列表',
+              hintText: AppLocalizations.of(context)!.modelAsrPromptHint,
+              description: AppLocalizations.of(context)!.modelAsrPromptHelp,
             ),
 
             const SizedBox(height: 24),
@@ -443,14 +457,16 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
             // ==========================================================
             Row(
               children: [
-                const Text(
-                  '自定义参数',
+                Text(
+                  AppLocalizations.of(context)!.chatCustomParameters,
                   style: TextStyle(fontWeight: FontWeight.w600),
                 ),
                 const Spacer(),
                 TextButton.icon(
                   icon: const Icon(Icons.add, size: 18),
-                  label: const Text('添加参数'),
+                  label: Text(
+                    AppLocalizations.of(context)!.assistantAddParameter,
+                  ),
                   onPressed: _addCustomParam,
                 ),
               ],
@@ -458,10 +474,13 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
             const SizedBox(height: 8),
 
             if (_customParams.isEmpty)
-              const Padding(
+              Padding(
                 padding: EdgeInsets.symmetric(vertical: 16),
                 child: Center(
-                  child: Text('暂无自定义参数', style: TextStyle(color: Colors.grey)),
+                  child: Text(
+                    AppLocalizations.of(context)!.assistantNoCustomParameters,
+                    style: TextStyle(color: Colors.grey),
+                  ),
                 ),
               )
             else
@@ -486,10 +505,14 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
                               child: TextFormField(
                                 initialValue: param.paramName,
                                 decoration: InputDecoration(
-                                  labelText: '参数名',
+                                  labelText: AppLocalizations.of(context)!
+                                      .assistantParameterName,
                                   border: const OutlineInputBorder(),
                                   isDense: true,
-                                  errorText: isDuplicate ? '已存在该参数' : null,
+                                  errorText: isDuplicate
+                                      ? AppLocalizations.of(context)!
+                                          .modelParamExists
+                                      : null,
                                   errorStyle: const TextStyle(fontSize: 11),
                                 ),
                                 onChanged: (v) {
@@ -503,12 +526,17 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
                               width: 110,
                               decoration: BoxDecoration(
                                 border: Border.all(color: Colors.grey.shade400),
-                                borderRadius: BorderRadius.circular(4),
+                                borderRadius: BorderRadius.circular(8),
                               ),
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 8),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                              ),
                               child: DropdownButtonHideUnderline(
                                 child: DropdownButton<String>(
+                                  dropdownColor: StroomMenuStyle.surface(
+                                    context,
+                                  ),
+                                  borderRadius: StroomMenuStyle.borderRadius,
                                   value: param.type,
                                   isDense: true,
                                   items: ParamType.values
@@ -516,9 +544,12 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
                                         (t) => DropdownMenuItem(
                                           value: t.value,
                                           child: Text(
-                                            t.label,
-                                            style:
-                                                const TextStyle(fontSize: 13),
+                                            localizedParamTypeLabel(
+                                                AppLocalizations.of(context)!,
+                                                t),
+                                            style: const TextStyle(
+                                              fontSize: 13,
+                                            ),
                                           ),
                                         ),
                                       )
@@ -542,7 +573,8 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
                                 size: 20,
                               ),
                               onPressed: () => _removeCustomParam(i),
-                              tooltip: '删除参数',
+                              tooltip: AppLocalizations.of(context)!
+                                  .modelParamDelete,
                             ),
                           ],
                         ),
@@ -563,8 +595,11 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
                                   CodeSmartInputFormatter(),
                                 ],
                                 decoration: InputDecoration(
-                                  labelText: '默认参数值',
-                                  hintText: param.paramType.defaultValueHint,
+                                  labelText: AppLocalizations.of(context)!
+                                      .modelParamDefaultValue,
+                                  hintText: localizedParamTypeDefaultValueHint(
+                                      AppLocalizations.of(context)!,
+                                      param.paramType),
                                   border: const OutlineInputBorder(),
                                   errorBorder: OutlineInputBorder(
                                     borderSide: BorderSide(
@@ -592,12 +627,15 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
                             const SizedBox(width: 4),
                             IconButton(
                               icon: const Icon(Icons.fullscreen, size: 20),
-                              tooltip: '全屏编辑',
+                              tooltip: AppLocalizations.of(context)!
+                                  .chatFullscreenEdit,
                               onPressed: () {
                                 showJsonValueEditorDialog(
                                   context,
                                   initialValue: param.defaultValue,
-                                  hintText: param.paramType.defaultValueHint,
+                                  hintText: localizedParamTypeDefaultValueHint(
+                                      AppLocalizations.of(context)!,
+                                      param.paramType),
                                   type: param.type,
                                   onSave: (result) {
                                     param.defaultValue = result;
@@ -635,9 +673,11 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
           children: [
             Row(
               children: [
-                const Expanded(
-                  child: Text('响应格式 (Response Format)',
-                      style: TextStyle(fontWeight: FontWeight.w600)),
+                Expanded(
+                  child: Text(
+                    AppLocalizations.of(context)!.modelAsrResponseFormat,
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
                 ),
                 Switch(
                   value: _enableResponseFormat,
@@ -651,44 +691,58 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
                 children: [
                   const SizedBox(height: 4),
                   Text(
-                    '转写结果的返回格式',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: cs.onSurfaceVariant,
-                    ),
+                    AppLocalizations.of(context)!.modelAsrResponseHelp,
+                    style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
                   ),
                   const SizedBox(height: 8),
                   Container(
                     decoration: BoxDecoration(
                       border: Border.all(color: Colors.grey.shade400),
-                      borderRadius: BorderRadius.circular(4),
+                      borderRadius: BorderRadius.circular(8),
                     ),
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     child: DropdownButtonHideUnderline(
                       child: DropdownButton<String>(
+                        dropdownColor: StroomMenuStyle.surface(context),
+                        borderRadius: StroomMenuStyle.borderRadius,
                         value: _responseFormat,
                         isDense: true,
                         isExpanded: true,
-                        items: const [
+                        items: [
                           DropdownMenuItem(
                             value: 'json',
-                            child: Text('json - JSON 格式'),
+                            child: Text(
+                              AppLocalizations.of(context)!
+                                  .asrResponseFormatJson,
+                            ),
                           ),
                           DropdownMenuItem(
                             value: 'text',
-                            child: Text('text - 纯文本'),
+                            child: Text(
+                              AppLocalizations.of(context)!
+                                  .asrResponseFormatText,
+                            ),
                           ),
                           DropdownMenuItem(
                             value: 'srt',
-                            child: Text('srt - SRT 字幕'),
+                            child: Text(
+                              AppLocalizations.of(context)!
+                                  .asrResponseFormatSrt,
+                            ),
                           ),
                           DropdownMenuItem(
                             value: 'vtt',
-                            child: Text('vtt - VTT 字幕'),
+                            child: Text(
+                              AppLocalizations.of(context)!
+                                  .asrResponseFormatVtt,
+                            ),
                           ),
                           DropdownMenuItem(
                             value: 'verbose_json',
-                            child: Text('verbose_json - 详细 JSON（含时间戳）'),
+                            child: Text(
+                              AppLocalizations.of(context)!
+                                  .asrResponseFormatVerbose,
+                            ),
                           ),
                         ],
                         onChanged: (v) {
@@ -703,7 +757,7 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
                     Padding(
                       padding: const EdgeInsets.only(top: 8),
                       child: Text(
-                        '选择 verbose_json 后可以启用下方的时间戳粒度选项',
+                        AppLocalizations.of(context)!.asrVerboseTimestampHelp,
                         style: TextStyle(
                           fontSize: 11,
                           color: cs.onSurfaceVariant,
@@ -732,9 +786,11 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
           children: [
             Row(
               children: [
-                const Expanded(
-                  child: Text('时间戳粒度 (Timestamp Granularities)',
-                      style: TextStyle(fontWeight: FontWeight.w600)),
+                Expanded(
+                  child: Text(
+                    AppLocalizations.of(context)!.modelAsrTimestampGranularity,
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
                 ),
                 Switch(
                   value: _enableTimestampGranularities,
@@ -749,32 +805,35 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
                 children: [
                   const SizedBox(height: 4),
                   Text(
-                    '仅在 response_format 为 verbose_json 时生效',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: cs.onSurfaceVariant,
-                    ),
+                    AppLocalizations.of(context)!.modelAsrVerboseHelp,
+                    style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
                   ),
                   const SizedBox(height: 8),
                   Container(
                     decoration: BoxDecoration(
                       border: Border.all(color: Colors.grey.shade400),
-                      borderRadius: BorderRadius.circular(4),
+                      borderRadius: BorderRadius.circular(8),
                     ),
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     child: DropdownButtonHideUnderline(
                       child: DropdownButton<String>(
+                        dropdownColor: StroomMenuStyle.surface(context),
+                        borderRadius: StroomMenuStyle.borderRadius,
                         value: _timestampGranularities,
                         isDense: true,
                         isExpanded: true,
-                        items: const [
+                        items: [
                           DropdownMenuItem(
                             value: 'segment',
-                            child: Text('segment - 段落级别'),
+                            child: Text(
+                              AppLocalizations.of(context)!.asrTimestampSegment,
+                            ),
                           ),
                           DropdownMenuItem(
                             value: 'word',
-                            child: Text('word - 单词级别'),
+                            child: Text(
+                              AppLocalizations.of(context)!.asrTimestampWord,
+                            ),
                           ),
                         ],
                         onChanged: (v) {
@@ -787,7 +846,7 @@ class _AsrModelConfigPageState extends State<AsrModelConfigPage> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    '注意：单词级时间戳的准确性可能低于段落级',
+                    AppLocalizations.of(context)!.asrWordTimestampHelp,
                     style: TextStyle(
                       fontSize: 11,
                       color: cs.onSurfaceVariant.withValues(alpha: 0.7),

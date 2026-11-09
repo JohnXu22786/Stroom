@@ -1,4 +1,5 @@
 part of 'chat_composer_widget.dart';
+
 // Extension methods on the State class cannot use @protected members
 // (setState / state) without analyzer warnings, but the receiver IS the
 // State/StateNotifier, so runtime behavior is identical to the original
@@ -35,7 +36,8 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('导入失败: $e'),
+            content: Text(AppLocalizations.of(context)!
+                .chatAttachmentImportFailed(e.toString())),
             duration: const Duration(seconds: 2),
           ),
         );
@@ -54,7 +56,8 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('拍照失败: $e'),
+            content: Text(AppLocalizations.of(context)!
+                .chatAttachmentCameraFailed(e.toString())),
             duration: const Duration(seconds: 2),
           ),
         );
@@ -82,10 +85,18 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
     } on UnsupportedError catch (e) {
       // 平台不支持当前设备的媒体选择能力（极少数情况）
       if (mounted) {
-        final platform = kIsWeb ? 'Web浏览器' : '当前设备';
+        final l10n = AppLocalizations.of(context)!;
+        final platform = kIsWeb
+            ? l10n.chatAttachmentWebPlatform
+            : l10n.chatAttachmentCurrentPlatform;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('$platform 不支持设备相册功能: $e'),
+            content: Text(
+              l10n.chatAttachmentGalleryUnsupportedPlatform(
+                platform,
+                e.toString(),
+              ),
+            ),
             duration: const Duration(seconds: 3),
           ),
         );
@@ -93,25 +104,28 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
     } catch (e) {
       if (mounted) {
         final errorMsg = e.toString();
+        final l10n = AppLocalizations.of(context)!;
         // 提供更友好的平台相关错误提示
         String userHint;
         if (errorMsg.contains('permission') ||
             errorMsg.contains('denied') ||
             errorMsg.contains('权限')) {
-          userHint = '请授予相册访问权限后重试';
+          userHint = l10n.chatAttachmentGalleryPermissionHint;
         } else if (errorMsg.contains('cancelled') ||
             errorMsg.contains('cancel')) {
           return; // 用户取消操作，不显示错误
         } else if (kIsWeb &&
             (errorMsg.contains('NotAllowedError') ||
                 errorMsg.contains('not allowed'))) {
-          userHint = '请在浏览器设置中允许此网站访问文件';
+          userHint = l10n.chatAttachmentBrowserPermissionHint;
         } else {
-          userHint = '请检查设备是否支持相册选择功能';
+          userHint = l10n.chatAttachmentGalleryFallbackHint;
         }
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('导入图片失败: $e\n$userHint'),
+            content: Text(
+              l10n.chatAttachmentImageImportFailed(e.toString(), userHint),
+            ),
             duration: const Duration(seconds: 3),
           ),
         );
@@ -127,22 +141,28 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
   /// - 桌面原生: 原生系统文件对话框（定位到系统"文档"目录）
   Future<void> _pickFromFilePicker() async {
     try {
-      final result = await FilePicker.pickFiles(
+      final file = await FilePicker.pickFile(
         type: FileType.any,
-        withData: true,
         initialDirectory: SystemPickDirectories.documents(),
       );
-      if (result == null || result.files.isEmpty) return;
-      final file = result.files.first;
-      final bytes = file.bytes;
-      if (bytes == null || bytes.isEmpty) return;
+      if (file == null) return;
+      final bytes = await file.readAsBytes();
+      if (bytes.isEmpty) return;
       await _addPendingAttachment(file.name, bytes);
     } on UnsupportedError catch (e) {
       if (mounted) {
-        final platform = kIsWeb ? 'Web浏览器' : '当前设备';
+        final l10n = AppLocalizations.of(context)!;
+        final platform = kIsWeb
+            ? l10n.chatAttachmentWebPlatform
+            : l10n.chatAttachmentCurrentPlatform;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('$platform 不支持文件选择功能: $e'),
+            content: Text(
+              l10n.chatAttachmentFileUnsupportedPlatform(
+                platform,
+                e.toString(),
+              ),
+            ),
             duration: const Duration(seconds: 3),
           ),
         );
@@ -150,24 +170,27 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
     } catch (e) {
       if (mounted) {
         final errorMsg = e.toString();
+        final l10n = AppLocalizations.of(context)!;
         String userHint;
         if (errorMsg.contains('permission') ||
             errorMsg.contains('denied') ||
             errorMsg.contains('权限')) {
-          userHint = '请授予文件访问权限后重试';
+          userHint = l10n.chatAttachmentFilePermissionHint;
         } else if (errorMsg.contains('cancelled') ||
             errorMsg.contains('cancel')) {
           return; // 用户取消操作，不显示错误
         } else if (kIsWeb &&
             (errorMsg.contains('NotAllowedError') ||
                 errorMsg.contains('not allowed'))) {
-          userHint = '请在浏览器设置中允许此网站访问文件';
+          userHint = l10n.chatAttachmentBrowserPermissionHint;
         } else {
-          userHint = '请确保设备支持文件选择功能';
+          userHint = l10n.chatAttachmentFileFallbackHint;
         }
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('导入文件失败: $e\n$userHint'),
+            content: Text(
+              l10n.chatAttachmentFileImportFailed(e.toString(), userHint),
+            ),
             duration: const Duration(seconds: 3),
           ),
         );
@@ -222,7 +245,8 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('已导入 $fileName'),
+          content: Text(
+              AppLocalizations.of(context)!.chatAttachmentImported(fileName)),
           behavior: SnackBarBehavior.floating,
           margin: EdgeInsets.only(
             top: 8,
@@ -267,7 +291,10 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
   }
 
   Future<void> _preCompressImage(
-      Attachment att, Uint8List bytes, String? convIdAtStart) async {
+    Attachment att,
+    Uint8List bytes,
+    String? convIdAtStart,
+  ) async {
     try {
       await preCompressImageForPendingAttachment(
         att,
@@ -399,10 +426,8 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
 
     final shouldEdit = await showDialog<bool>(
       context: context,
-      builder: (ctx) => ImagePreviewDialog(
-        imageData: imageBytes,
-        fileName: att.fileName,
-      ),
+      builder: (ctx) =>
+          ImagePreviewDialog(imageData: imageBytes, fileName: att.fileName),
     );
 
     if (shouldEdit != true || !mounted) return;
@@ -496,8 +521,9 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
         // 旧字节的压缩缓存一并清理（hash 已变，旧缓存成为孤儿）。
         // 等旧 hash 在途的预压缩完成后删除，防止它复活旧缓存。
         await _deleteCompressedCacheAfterPreCompress(oldAtt);
-      } else if (widget.editingMessageAttachments
-              ?.any((a) => a.id == oldAtt.id) ??
+      } else if (widget.editingMessageAttachments?.any(
+            (a) => a.id == oldAtt.id,
+          ) ??
           false) {
         // 编辑模式 + 原消息附件被编辑：旧字节缓存同样推迟到确定重发
         // 时清理（可能取消编辑，原消息仍引用旧字节）。
@@ -527,8 +553,9 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
       debugPrint('[ChatComposer] _updatePendingAttachmentAfterEdit error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('保存编辑后的图片失败'),
+          SnackBar(
+            content: Text(AppLocalizations.of(context)!
+                .chatAttachmentEditedImageSaveFailed(e.toString())),
             duration: Duration(seconds: 2),
           ),
         );

@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:extended_image/extended_image.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:stroom/utils/file_manifest.dart';
 import 'package:stroom/utils/file_record.dart';
@@ -66,13 +67,6 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
   final Map<_FileTabType, bool> _tabLoading = {};
   final Map<_FileTabType, String> _currentFolders = {};
 
-  static const _tabLabels = <_FileTabType, String>{
-    _FileTabType.text: '文本',
-    _FileTabType.image: '图片',
-    _FileTabType.video: '视频',
-    _FileTabType.audio: '音频',
-  };
-
   static const _tabIcons = <_FileTabType, IconData>{
     _FileTabType.text: Icons.description_outlined,
     _FileTabType.image: Icons.image_outlined,
@@ -127,22 +121,22 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
 
       switch (type) {
         case _FileTabType.text:
-          final textRecords = await TextManifest.loadRecords();
+          final textRecords = await TextManifest.loadRecordsStrict();
           records = textRecords.cast<FileRecord>();
           folders = await TextManifest.getAllFolders();
           break;
         case _FileTabType.image:
-          final imageRecords = await ImageManifest.loadRecords();
+          final imageRecords = await ImageManifest.loadRecordsStrict();
           records = imageRecords.cast<FileRecord>();
           folders = await ImageManifest.getAllFolders();
           break;
         case _FileTabType.video:
-          final videoRecords = await VideoManifest.loadRecords();
+          final videoRecords = await VideoManifest.loadRecordsStrict();
           records = videoRecords.cast<FileRecord>();
           folders = await VideoManifest.getAllFolders();
           break;
         case _FileTabType.audio:
-          final audioRecords = await FileManifest.loadRecords();
+          final audioRecords = await FileManifest.loadRecordsStrict();
           records = audioRecords.cast<FileRecord>();
           folders = await FileManifest.getAllFolders();
           break;
@@ -159,7 +153,7 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _tabData[type] = _TabData(records: [], allFolders: {});
+        // Keep data absent so the tab renders its load-failure state.
         _tabLoading[type] = false;
       });
     }
@@ -171,6 +165,13 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
 
   bool _isSelected(_FileTabType tabType, String recordId) =>
       _selectedItems.containsKey(_selectionKey(tabType, recordId));
+
+  String _tabLabel(AppLocalizations l10n, _FileTabType type) => switch (type) {
+        _FileTabType.text => l10n.chatFilePickerTabText,
+        _FileTabType.image => l10n.chatFilePickerTabImages,
+        _FileTabType.video => l10n.chatFilePickerTabVideos,
+        _FileTabType.audio => l10n.chatFilePickerTabAudio,
+      };
 
   void _toggleSelection(
       _FileTabType tabType, String recordId, String fileName, Uint8List bytes) {
@@ -210,6 +211,7 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final l10n = AppLocalizations.of(context)!;
     final hasSelection = _selectedItems.isNotEmpty;
 
     return PopScope(
@@ -224,7 +226,7 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
       child: Scaffold(
         backgroundColor: cs.surface,
         appBar: AppBar(
-          title: const Text('选择文件'),
+          title: Text(l10n.chatFilePickerTitle),
           centerTitle: true,
           leading: IconButton(
             icon: const Icon(Icons.close),
@@ -236,8 +238,8 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
                 key: const Key('file_picker_clear_btn'),
                 onPressed: _clearSelection,
                 child: Text(
-                  '清除 (${_selectedItems.length})',
-                  style: const TextStyle(color: Colors.red),
+                  l10n.appMediaClearSelection(_selectedItems.length),
+                  style: TextStyle(color: cs.primary),
                 ),
               ),
           ],
@@ -252,7 +254,7 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
                 return Tab(
                   key: Key('file_picker_tab_${type.name}'),
                   icon: Icon(_tabIcons[type]),
-                  text: _tabLabels[type],
+                  text: _tabLabel(l10n, type),
                 );
               }).toList(),
             ),
@@ -294,7 +296,12 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
                   },
                   icon: const Icon(Icons.check, size: 18),
                   label: Text(
-                      hasSelection ? '确定 (${_selectedItems.length})' : '确定'),
+                    hasSelection
+                        ? l10n.appMediaConfirmSelectionCount(
+                            _selectedItems.length,
+                          )
+                        : l10n.appMediaConfirmSelection,
+                  ),
                 ),
               ),
             ),
@@ -310,6 +317,7 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
 
   Widget _buildTabContent(_FileTabType type) {
     final cs = Theme.of(context).colorScheme;
+    final l10n = AppLocalizations.of(context)!;
     final loading = _tabLoading[type] ?? true;
     final data = _tabData[type];
 
@@ -318,7 +326,7 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
     }
 
     if (data == null) {
-      return const Center(child: Text('加载失败'));
+      return Center(child: Text(l10n.chatFilePickerLoadFailed));
     }
 
     final currentFolder = _currentFolders[type] ?? '';
@@ -382,7 +390,9 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        isRoot ? '暂无文件' : '此文件夹为空',
+                        isRoot
+                            ? l10n.chatFilePickerEmpty
+                            : l10n.appMediaEmptyFolder,
                         style: TextStyle(
                           fontSize: 14,
                           color: cs.onSurfaceVariant,
@@ -416,6 +426,7 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
   // ====================================================================
 
   Widget _buildBackItem(_FileTabType type, String currentFolder) {
+    final cs = Theme.of(context).colorScheme;
     final parentFolder = FolderPathUtils.getParentFolderPath(currentFolder);
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
@@ -425,18 +436,20 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
           child: Row(
             children: [
-              const Icon(Icons.arrow_back, size: 20, color: Colors.blue),
+              Icon(Icons.arrow_back, size: 20, color: cs.primary),
               const SizedBox(width: 12),
               Text(
                 parentFolder.isEmpty
-                    ? '返回根目录'
-                    : '返回: ${FolderPathUtils.getFolderBaseName(parentFolder)}',
-                style: TextStyle(fontSize: 15, color: Colors.blue[700]),
+                    ? AppLocalizations.of(context)!.appMediaRoot
+                    : AppLocalizations.of(context)!.appMediaParentFolder(
+                        FolderPathUtils.getFolderBaseName(parentFolder),
+                      ),
+                style: TextStyle(fontSize: 15, color: cs.primary),
               ),
               const Spacer(),
               Text(
                 FolderPathUtils.getFolderBaseName(currentFolder),
-                style: TextStyle(fontSize: 13, color: Colors.grey[500]),
+                style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
               ),
             ],
           ),
@@ -447,6 +460,7 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
 
   Widget _buildFolderItem(
       _FileTabType type, String folderPath, String currentFolder) {
+    final cs = Theme.of(context).colorScheme;
     final baseName = FolderPathUtils.getFolderBaseName(folderPath);
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
@@ -482,7 +496,7 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              const Icon(Icons.chevron_right, color: Colors.grey),
+              Icon(Icons.chevron_right, color: cs.onSurfaceVariant),
             ],
           ),
         ),
@@ -495,6 +509,7 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
   // ====================================================================
 
   Widget _buildFileItem(_FileTabType type, FileRecord record) {
+    final cs = Theme.of(context).colorScheme;
     final isSelected = _isSelected(type, record.id);
     final isImage = type == _FileTabType.image;
 
@@ -554,13 +569,19 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
                     Row(
                       children: [
                         if (record.folder.isNotEmpty) ...[
-                          Icon(Icons.folder, size: 12, color: Colors.grey[400]),
+                          Icon(
+                            Icons.folder,
+                            size: 12,
+                            color: cs.onSurfaceVariant,
+                          ),
                           const SizedBox(width: 3),
                           Flexible(
                             child: Text(
                               record.folder,
                               style: TextStyle(
-                                  fontSize: 12, color: Colors.grey[400]),
+                                fontSize: 12,
+                                color: cs.onSurfaceVariant,
+                              ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -570,15 +591,17 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
                             width: 3,
                             height: 3,
                             decoration: BoxDecoration(
-                                color: Colors.grey[400]!,
+                                color: cs.onSurfaceVariant,
                                 shape: BoxShape.circle),
                           ),
                           const SizedBox(width: 6),
                         ],
                         Text(
                           formatFileSize(record.size),
-                          style:
-                              TextStyle(fontSize: 12, color: Colors.grey[600]),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: cs.onSurfaceVariant,
+                          ),
                         ),
                       ],
                     ),
@@ -598,10 +621,12 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
     try {
       bytes = await _readFileBytes(type, record);
     } catch (_) {}
-    if (bytes == null || bytes.isEmpty) {
+    if (bytes == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('无法读取文件')),
+          SnackBar(
+            content: Text(AppLocalizations.of(context)!.appMediaUnreadable),
+          ),
         );
       }
       return;
@@ -679,6 +704,7 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
   }
 
   Widget _buildFileIcon(FileRecord record) {
+    final cs = Theme.of(context).colorScheme;
     IconData icon;
     Color color;
 
@@ -694,7 +720,7 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
         color = Colors.green;
       default:
         icon = Icons.insert_drive_file_outlined;
-        color = Colors.grey;
+        color = cs.onSurfaceVariant;
     }
 
     return Center(
@@ -703,8 +729,9 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
   }
 
   Widget _defaultIcon() {
+    final cs = Theme.of(context).colorScheme;
     return Center(
-      child: Icon(Icons.image, color: Colors.grey[400], size: 22),
+      child: Icon(Icons.image, color: cs.onSurfaceVariant, size: 22),
     );
   }
 
@@ -731,7 +758,7 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 6, 12, 2),
             child: Text(
-              '已选择 ${items.length} 个文件',
+              AppLocalizations.of(context)!.appMediaSelectedFiles(items.length),
               style: TextStyle(
                 fontSize: 11,
                 color: cs.onSurfaceVariant,

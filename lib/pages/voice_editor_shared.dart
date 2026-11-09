@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import '../l10n/app_localizations.dart';
 import '../providers/provider_config.dart';
 
 class DuplicateResolveDialog extends StatefulWidget {
@@ -92,8 +94,9 @@ class DuplicateResolveDialogState extends State<DuplicateResolveDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return AlertDialog(
-      title: const Text('发现以下重复音色ID，逐条选择处理方式：'),
+      title: Text(l10n.voiceDuplicateResolution),
       content: SizedBox(
         width: double.maxFinite,
         child: Column(
@@ -128,12 +131,12 @@ class DuplicateResolveDialogState extends State<DuplicateResolveDialog> {
                         ),
                         TextButton(
                           onPressed: () => _handleUpdate(i),
-                          child: const Text('更新'),
+                          child: Text(l10n.update),
                         ),
                         const SizedBox(width: 4),
                         TextButton(
                           onPressed: () => _handleSkip(i),
-                          child: const Text('跳过'),
+                          child: Text(l10n.skip),
                         ),
                       ],
                     ),
@@ -143,18 +146,15 @@ class DuplicateResolveDialogState extends State<DuplicateResolveDialog> {
             ),
             const SizedBox(height: 8),
             Text(
-              '还有 ${_pending.length} 个重复未处理',
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey[600],
-              ),
+              l10n.voiceDuplicatesRemaining(_pending.length),
+              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
             ),
             const SizedBox(height: 8),
             SizedBox(
               width: double.infinity,
               child: OutlinedButton(
                 onPressed: () => widget.onComplete(null),
-                child: const Text('继续编辑'),
+                child: Text(l10n.continueEditing),
               ),
             ),
           ],

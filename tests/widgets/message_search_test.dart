@@ -6,6 +6,7 @@ import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/models/chat_message.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 
 /// Helper: create test conversations with messages for search testing.
 List<Conversation> _createTestConversations() {
@@ -91,7 +92,11 @@ Widget createMessageSearchTestApp({List<Conversation>? conversations}) {
         return ProviderEntriesNotifier();
       }),
     ],
-    child: MaterialApp(home: const MessageSearchPage()),
+    child: MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: const MessageSearchPage()),
   );
 }
 
@@ -295,6 +300,9 @@ void main() {
             }),
           ],
           child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
             home: Builder(
               builder: (context) => ElevatedButton(
                 onPressed: () async {

@@ -5,7 +5,6 @@ extension _ChatPageBuildersExt on _ChatPageState {
   Widget _buildChatWidget({
     required bool isDark,
     required bool isStreaming,
-    required String streamingFullReply,
     required String? streamingMsgId,
     required String? activeId,
     required InMemoryChatController controller,
@@ -14,22 +13,21 @@ extension _ChatPageBuildersExt on _ChatPageState {
       // The metrics notification fires for every scroll frame AND when the
       // content grows (streaming message, mermaid auto-fit, sliver extent
       // estimate corrections) AND when the viewport resizes (keyboard,
-      // composer, window). _followContentGrowth ignores the scrolling
-      // cases and only re-pins when auto-scroll is engaged; the overlay
+      // composer, window). _followContentGrowth re-pins when auto-scroll is
+      // engaged, deferring growth consumed by an active programmatic scroll
+      // animation until it settles; the overlay
       // buttons recompute their visibility from the CURRENT metrics on
       // every notification — a viewport-only change moves the at-bottom
       // relationship without firing a scroll event, and only this
       // notification carries it (an idle ScrollPosition does not notify
       // its controller listeners).
       onNotification: (_) {
-        // Re-pin first: the follow's post-frame jump must run BEFORE the
-        // overlay recompute, otherwise a content growth would read as "not
-        // at the bottom" and flash the button on for a frame until the
-        // follow's jump lands and the overlay hides it again. Both
-        // callbacks are registered in this order and run in that order
-        // post-frame: _followContentGrowth registers its post-frame jump
-        // synchronously here, and the tick's listener (which registers the
-        // overlay's post-frame recompute) runs immediately after.
+        // Re-pin first: when the list is idle, the follow's post-frame jump
+        // runs BEFORE the overlay recompute, otherwise content growth would
+        // read as "not at the bottom" and flash the button until the follow
+        // lands. During a scroll animation the follow defers its jump until
+        // settling; in that case the overlay reads the current metrics and
+        // will be recomputed after the eventual jump as usual.
         _followContentGrowth();
         _overlayMetricsTick.value++;
         return false;
@@ -70,14 +68,10 @@ extension _ChatPageBuildersExt on _ChatPageState {
             // ensures the scroll area auto-adjusts as the
             // composer height changes (e.g. multi-line input).
             composerBuilder: (_) => const SizedBox.shrink(),
-            textMessageBuilder: (
-              context,
-              message,
-              index, {
-              required bool isSentByMe,
-              MessageGroupStatus? groupStatus,
-            }) =>
-                _buildTextMessage(
+            textMessageBuilder: (context, message, index,
+                    {required bool isSentByMe,
+                    MessageGroupStatus? groupStatus}) =>
+                _buildStreamingMessage(
               context,
               message,
               index,
@@ -86,28 +80,84 @@ extension _ChatPageBuildersExt on _ChatPageState {
               isDark: isDark,
               isStreaming: isStreaming,
               activeId: activeId,
+              controller: controller,
             ),
-            textStreamMessageBuilder: (
-              context,
-              message,
-              index, {
-              required bool isSentByMe,
-              MessageGroupStatus? groupStatus,
-            }) =>
-                _buildTextStreamMessage(
+            textStreamMessageBuilder: (context, message, index,
+                    {required bool isSentByMe,
+                    MessageGroupStatus? groupStatus}) =>
+                _buildStreamingMessage(
               context,
               message,
               index,
               isSentByMe: isSentByMe,
               groupStatus: groupStatus,
-              isStreaming: isStreaming,
-              streamingFullReply: streamingFullReply,
-              streamingMsgId: streamingMsgId,
               isDark: isDark,
+              isStreaming: isStreaming,
+              activeId: activeId,
+              controller: controller,
             ),
           ),
         ),
       ),
+    );
+  }
+
+  /// Keeps live updates inside the active message's subtree. ChatAnimatedList
+  /// updates its indexed message data without rebuilding that item.
+  Widget _buildStreamingMessage(
+    BuildContext context,
+    Message initialMessage,
+    int index, {
+    required bool isSentByMe,
+    MessageGroupStatus? groupStatus,
+    required bool isDark,
+    required bool isStreaming,
+    required String? activeId,
+    required InMemoryChatController controller,
+  }) {
+    Widget buildMessage(Message message) {
+      if (message is TextMessage) {
+        return _buildTextMessage(
+          context,
+          message,
+          index,
+          isSentByMe: isSentByMe,
+          groupStatus: groupStatus,
+          isDark: isDark,
+          isStreaming: isStreaming,
+          activeId: activeId,
+        );
+      }
+      if (message is TextStreamMessage) {
+        return _buildTextStreamMessage(
+          context,
+          message,
+          index,
+          isSentByMe: isSentByMe,
+          groupStatus: groupStatus,
+          isStreaming: isStreaming,
+          activeId: activeId,
+          streamingMsgId: _streamingMsgId,
+          isDark: isDark,
+        );
+      }
+      return const SizedBox.shrink();
+    }
+
+    // The provider-backed ID can lag the local ID when the placeholder is
+    // inserted, so use page state to attach the notifier on its first build.
+    if (initialMessage.id != _streamingMsgId) {
+      return buildMessage(initialMessage);
+    }
+    return ValueListenableBuilder<int>(
+      valueListenable: _streamingBubbleRevision,
+      builder: (context, _, __) {
+        final latestMessage = controller.messages
+                .where((message) => message.id == initialMessage.id)
+                .firstOrNull ??
+            initialMessage;
+        return buildMessage(latestMessage);
+      },
     );
   }
 
@@ -119,7 +169,10 @@ extension _ChatPageBuildersExt on _ChatPageState {
   /// default indicator is replaced with a matrix-based stretch
   /// ([TransformStretchOverscroll]) so the mermaid area stretches together
   /// with the rest of the message content.
-  Widget _buildChatAnimatedList(BuildContext context, ChatItem itemBuilder) {
+  Widget _buildChatAnimatedList(
+    BuildContext context,
+    ChatItem itemBuilder,
+  ) {
     final list = ChatAnimatedList(
       itemBuilder: itemBuilder,
       onEndReached: _loadMoreMessages,
@@ -176,14 +229,17 @@ extension _ChatPageBuildersExt on _ChatPageState {
   /// state cannot keep a phantom spinner visible either.
   Widget _buildLoadMoreIndicator() {
     if (!_isLoadingMore) return const SizedBox.shrink();
-    return const Padding(
-      key: ValueKey('chat-load-more-indicator'),
-      padding: EdgeInsets.symmetric(vertical: 12),
-      child: Center(
-        child: SizedBox(
-          width: 20,
-          height: 20,
-          child: CircularProgressIndicator(strokeWidth: 2),
+    return TickerMode(
+      enabled: TickerMode.of(context) && ChatTabVisibility.of(context),
+      child: const Padding(
+        key: ValueKey('chat-load-more-indicator'),
+        padding: EdgeInsets.symmetric(vertical: 12),
+        child: Center(
+          child: SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
         ),
       ),
     );
@@ -201,7 +257,7 @@ extension _ChatPageBuildersExt on _ChatPageState {
         padding: const EdgeInsets.symmetric(vertical: 10),
         child: Center(
           child: Text(
-            '没有更多内容了',
+            AppLocalizations.of(context)!.chatNoMoreHistory,
             style: TextStyle(
               fontSize: 12,
               color: isDark ? Colors.grey[400] : Colors.grey[600],
@@ -228,7 +284,10 @@ extension _ChatPageBuildersExt on _ChatPageState {
     Widget messageBubble;
     if (isAi) {
       final chatMsg = _history.where((m) => m.id == message.id).firstOrNull;
-      if ((chatMsg?.isError == true) || message.text.startsWith('错误:')) {
+      final hasStructuredPartialError = chatMsg?.isError == true &&
+          chatMsg!.blocks?.any((block) => block is ErrorBlock) == true;
+      if (!hasStructuredPartialError &&
+          ((chatMsg?.isError == true) || message.text.startsWith('错误:'))) {
         messageBubble = _buildErrorMessageBubble(
           context: context,
           message: message,
@@ -257,14 +316,21 @@ extension _ChatPageBuildersExt on _ChatPageState {
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-          key: _messageKeys.putIfAbsent(message.id, () => GlobalKey()),
+          key: _messageKeys.putIfAbsent(
+            message.id,
+            () => GlobalKey(),
+          ),
           child: messageBubble,
         ),
         // Timestamp below bubble (user messages only),
         // above action buttons, with theme-adaptive color.
         if (!isAi)
           Padding(
-            padding: const EdgeInsets.only(left: 4, top: 2, bottom: 2),
+            padding: const EdgeInsets.only(
+              left: 4,
+              top: 2,
+              bottom: 2,
+            ),
             child: Text(
               DateFormat('yyyy-MM-dd HH:mm').format(
                 (message.createdAt ?? message.resolvedTime ?? DateTime.now())
@@ -277,7 +343,11 @@ extension _ChatPageBuildersExt on _ChatPageState {
             ),
           ),
         Padding(
-          padding: const EdgeInsets.only(left: 4, top: 2, bottom: 4),
+          padding: const EdgeInsets.only(
+            left: 4,
+            top: 2,
+            bottom: 4,
+          ),
           child: _buildMessageActionButtons(
             context: context,
             message: message,
@@ -297,26 +367,42 @@ extension _ChatPageBuildersExt on _ChatPageState {
     required bool isSentByMe,
     MessageGroupStatus? groupStatus,
     required bool isStreaming,
-    required String streamingFullReply,
+    required String? activeId,
     required String? streamingMsgId,
     required bool isDark,
   }) {
     // If the message has accumulated content (e.g.,
     // after page restoration from background streaming),
     // render it as regular text instead of a spinner.
-    // Uses captured [streamingFullReply] from build()
-    // which is updated reactively via ref.watch.
-    if (streamingFullReply.isNotEmpty && message.id == streamingMsgId) {
+    // Read the latest reply when this message item is rebuilt. The active
+    // bubble's notifier triggers that rebuild without rebuilding the page.
+    // The legacy full-reply provider remains a fallback for old direct
+    // writers. Manager-driven streams render from live segments and do not
+    // keep a second growing full-text provider value.
+    final streamingFullReply =
+        activeId == null ? '' : ref.read(streamingFullReplyProvider(activeId));
+    final hasIncrementalLegacyReply = activeId != null &&
+        _legacyFullReplySnapshots.containsKey('$activeId:${message.id}');
+    final segments = _chatSegments[message.id];
+    if (streamingFullReply.isNotEmpty &&
+        !hasIncrementalLegacyReply &&
+        (segments == null || segments.isEmpty) &&
+        message.id == streamingMsgId) {
       // This is the message currently being generated, so the streaming
       // markdown config applies (mermaid blocks show "正在生成..." while
       // the reply is still being produced — only while their fence is
       // still open; closed blocks render immediately).
+      final streamingFenceInfoCache = _streamingFenceInfoCaches.putIfAbsent(
+        '${message.id}:textstream',
+        StreamingFenceInfoCache.new,
+      );
       final config = buildMessageMarkdownConfig(
         isDark: isDark,
         conversationIsStreaming: isStreaming,
         streamingMsgId: streamingMsgId,
         messageId: message.id,
         streamingText: streamingFullReply,
+        streamingFenceInfoCache: streamingFenceInfoCache,
       );
       return Padding(
         padding: const EdgeInsets.all(12),
@@ -337,7 +423,6 @@ extension _ChatPageBuildersExt on _ChatPageState {
     // here, so a model that thought and then called tools without any
     // text showed a pile of "思考完成" buttons and hid the tool calls
     // until the first text token converted the message to a text message.
-    final segments = _chatSegments[message.id];
     if (segments != null && segments.isNotEmpty) {
       return Padding(
         padding: const EdgeInsets.all(12),
@@ -387,12 +472,17 @@ extension _ChatPageBuildersExt on _ChatPageState {
         ),
       );
     }
-    return const Padding(
-      padding: EdgeInsets.all(12),
-      child: SizedBox(
-        width: 20,
-        height: 20,
-        child: CircularProgressIndicator(strokeWidth: 2),
+    return TickerMode(
+      enabled: TickerMode.of(context) && ChatTabVisibility.of(context),
+      child: const Padding(
+        padding: EdgeInsets.all(12),
+        child: SizedBox(
+          width: 20,
+          height: 20,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+          ),
+        ),
       ),
     );
   }

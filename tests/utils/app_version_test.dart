@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:archive/archive.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/utils/app_version.dart';
 
@@ -20,6 +21,22 @@ void main() {
     });
   });
 
+  group('decodeCompressedReleaseNotes', () {
+    test('decodes zlib-compressed UTF-8 release notes', () {
+      final notes = 'Stroom v0.5.2 更新内容';
+      final compressed = base64Encode(
+        ZLibEncoder().encodeBytes(utf8.encode(notes)),
+      );
+
+      expect(decodeCompressedReleaseNotes(compressed), notes);
+    });
+
+    test('returns empty text for invalid compressed input', () {
+      expect(decodeCompressedReleaseNotes('!!!not-base64!!!'), '');
+      expect(decodeCompressedReleaseNotes(base64Encode([1, 2, 3])), '');
+    });
+  });
+
   group('formatReleaseTime', () {
     test('formats ISO 8601 UTC time as UTC yyyy-MM-dd HH:mm', () {
       final formatted = formatReleaseTime('2026-08-08T09:30:00Z');
@@ -32,7 +49,9 @@ void main() {
     test('normalizes explicit timezone offsets to UTC', () {
       // 带 +08:00 偏移的输入（17:30 东八区 == 09:30 UTC）
       expect(
-          formatReleaseTime('2026-08-08T17:30:00+08:00'), '2026-08-08 09:30');
+        formatReleaseTime('2026-08-08T17:30:00+08:00'),
+        '2026-08-08 09:30',
+      );
     });
 
     test('returns empty string for empty input', () {
@@ -48,7 +67,7 @@ void main() {
   // --dart-define passed) they must fall back to safe empty defaults.
   test('build-info constants fall back to empty defaults without defines', () {
     expect(appReleaseTime, '');
-    expect(appReleaseNotesEncoded, '');
+    expect(appReleaseNotesLegacyEncoded, '');
     expect(appReleaseNotes, '');
     expect(appReleaseTimeFormatted, '');
   });

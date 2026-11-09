@@ -1,8 +1,9 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:flutter_test/flutter_test.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter/widgets.dart' show Locale;
+import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/services/openai_file_service.dart';
 
 // ============================================================================
@@ -157,6 +158,72 @@ Dio _mockDio(_MockAdapter adapter) {
 // ============================================================================
 
 void main() {
+  test('file upload validation errors follow the selected locale', () async {
+    final bytes = Uint8List.fromList([1]);
+    var locale = const Locale('en', 'US');
+
+    Future<void> expectValidationError(String expected) async {
+      await expectLater(
+        OpenAiFileService(
+          config: _testConfig().copyWith(apiKey: ''),
+          localeOverride: () => locale,
+        ).uploadFile(
+          bytes: bytes,
+          filename: 'test.txt',
+          mimeType: 'text/plain',
+          purpose: 'user_data',
+        ),
+        throwsA(isA<Exception>().having(
+          (error) => error.toString(),
+          'message',
+          contains(expected),
+        )),
+      );
+    }
+
+    await expectValidationError(
+      'API key is not configured; file upload is unavailable',
+    );
+    locale = const Locale('zh', 'CN');
+    await expectValidationError('API 密钥未配置，无法上传文件');
+
+    final adapter = _MockAdapter()
+      ..onPost(
+          '/files',
+          (options, bodyBytes) => ResponseBody.fromString(
+                '{}',
+                200,
+                headers: {
+                  Headers.contentTypeHeader: [Headers.jsonContentType]
+                },
+              ));
+    Future<void> expectMissingFileId(String expected) async {
+      await expectLater(
+        OpenAiFileService(
+          config: _testConfig(),
+          dio: _mockDio(adapter),
+          localeOverride: () => locale,
+        ).uploadFile(
+          bytes: bytes,
+          filename: 'test.txt',
+          mimeType: 'text/plain',
+          purpose: 'user_data',
+        ),
+        throwsA(isA<Exception>().having(
+          (error) => error.toString(),
+          'message',
+          contains(expected),
+        )),
+      );
+    }
+
+    locale = const Locale('en', 'US');
+    await expectMissingFileId(
+        'File upload failed: response is missing file id');
+    locale = const Locale('zh', 'CN');
+    await expectMissingFileId('上传失败：响应中缺少 file id');
+  });
+
   group('OpenAiFileUploadConfig', () {
     test('normalizedBaseUrl strips trailing slash from filesUrl', () {
       final config = _testConfig(baseUrl: 'https://api.test.com/');
@@ -305,6 +372,44 @@ void main() {
         ),
         throwsA(predicate(
             (e) => e is Exception && e.toString().contains('HTTP 400'))),
+      );
+    });
+
+    test('Dio error framing follows locale and preserves status and response',
+        () async {
+      var locale = const Locale('en', 'US');
+      final adapter = _MockAdapter();
+      adapter.onPost('/files', (options, bodyBytes) {
+        return ResponseBody.fromString('raw file error', 400);
+      });
+
+      Future<void> expectLocalizedFailure(String expected) async {
+        final service = OpenAiFileService(
+          config: _testConfig(),
+          dio: _mockDio(adapter),
+          localeOverride: () => locale,
+        );
+        await expectLater(
+          service.uploadFile(
+            bytes: Uint8List(100),
+            filename: 'test.txt',
+            mimeType: 'text/plain',
+            purpose: 'user_data',
+          ),
+          throwsA(isA<Exception>().having(
+            (error) => error.toString(),
+            'message',
+            contains(expected),
+          )),
+        );
+      }
+
+      await expectLocalizedFailure(
+        'File upload request failed (HTTP 400): raw file error',
+      );
+      locale = const Locale('zh', 'CN');
+      await expectLocalizedFailure(
+        '文件上传请求失败 (HTTP 400)：raw file error',
       );
     });
   });

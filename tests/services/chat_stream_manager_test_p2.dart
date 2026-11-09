@@ -48,6 +48,59 @@ void chatStreamManagerGroup2() {
   });
 
   group('ChatStreamManager - error handling', () {
+    test('preserves partial body before a trailing error block', () async {
+      final manager = ChatStreamManager();
+      final provider = _MockProvider([
+        [AIStreamEvent('partial answer')],
+      ])
+        ..throwAfterYield = true;
+      manager.adapter.forceService(_makeChatService(provider));
+
+      final result = await manager.startStreaming(
+        text: 'Hi',
+        convId: 'conv-partial-body-error',
+        history: [],
+      );
+
+      final assistant = result.assistantMessage!;
+      final blocks = assistant.blocks!;
+      expect(assistant.content, 'partial answer');
+      expect(assistant.isError, isTrue);
+      expect(blocks.first, isA<TextBlock>());
+      expect((blocks.first as TextBlock).text, 'partial answer');
+      expect(blocks.last, isA<ErrorBlock>());
+      expect((blocks.last as ErrorBlock).message, startsWith('错误:'));
+
+      manager.dispose();
+    });
+
+    test('preserves reasoning before a trailing error block', () async {
+      final manager = ChatStreamManager();
+      final provider = _MockProvider([
+        [AIStreamEvent('partial reasoning', isReasoning: true)],
+      ])
+        ..throwAfterYield = true;
+      manager.adapter.forceService(_makeChatService(provider));
+
+      final result = await manager.startStreaming(
+        text: 'Think',
+        convId: 'conv-partial-reasoning-error',
+        history: [],
+        reasoning: true,
+      );
+
+      final assistant = result.assistantMessage!;
+      final blocks = assistant.blocks!;
+      expect(assistant.content, startsWith('错误:'));
+      expect(assistant.reasoningSections, ['partial reasoning']);
+      expect(blocks.first, isA<ReasoningBlock>());
+      expect((blocks.first as ReasoningBlock).text, 'partial reasoning');
+      expect(blocks.last, isA<ErrorBlock>());
+      expect((blocks.last as ErrorBlock).message, startsWith('错误:'));
+
+      manager.dispose();
+    });
+
     test('provider error is captured in StreamResult', () async {
       final manager = ChatStreamManager();
       final provider = _MockProvider([

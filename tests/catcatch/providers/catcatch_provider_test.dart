@@ -22,6 +22,7 @@ class _TestDocuments extends PathProviderPlatform {
   final String path;
   Completer<void>? firstRequestStarted;
   Completer<void>? releaseFirstRequest;
+  Completer<void>? releaseAllRequests;
   int pathRequests = 0;
 
   @override
@@ -32,6 +33,7 @@ class _TestDocuments extends PathProviderPlatform {
       if (started != null && !started.isCompleted) started.complete();
       await releaseFirstRequest?.future;
     }
+    await releaseAllRequests?.future;
     return path;
   }
 }
@@ -117,6 +119,21 @@ class _CleanupCatCatchNotifier extends CatCatchNotifier {
   final executorStarted = Completer<void>();
   final secondExecutorStarted = Completer<void>();
   int executorStarts = 0;
+  bool holdRetryExecutions = false;
+  bool holdTaskExecutions = false;
+  Object? taskExecutionError;
+  Object? retryExecutionError;
+  final retryCancelTokens = <CancelToken>[];
+  final retryReleases = <Completer<void>>[];
+  final retryCompletions = <Completer<void>>[];
+  final taskCancelTokens = <CancelToken>[];
+  final taskReleases = <Completer<void>>[];
+  final taskCompletions = <Completer<void>>[];
+  CatCatchTask? lastExecutedTask;
+  CatCatchTask? lastRetriedTask;
+  void Function(CatCatchTask)? lastTaskUpdate;
+  void Function(CatCatchTask)? lastRetryTaskUpdate;
+  final uncancelledTaskCompletions = <String>[];
 
   void setTasksForTest(List<CatCatchTask> tasks) => state = tasks;
 
@@ -129,11 +146,29 @@ class _CleanupCatCatchNotifier extends CatCatchNotifier {
     required CancelToken cancelToken,
   }) async {
     executorStarts++;
+    lastExecutedTask = task;
+    lastTaskUpdate = onUpdate;
     onUpdate(task.copyWith(status: TaskStatus.running));
     if (!executorStarted.isCompleted) executorStarted.complete();
     if (executorStarts == 2 && !secondExecutorStarted.isCompleted) {
       secondExecutorStarted.complete();
     }
+    if (holdTaskExecutions) {
+      taskCancelTokens.add(cancelToken);
+      final release = Completer<void>();
+      final completion = Completer<void>();
+      taskReleases.add(release);
+      taskCompletions.add(completion);
+      try {
+        await release.future;
+        if (!cancelToken.isCancelled) {
+          uncancelledTaskCompletions.add(task.id);
+        }
+      } finally {
+        if (!completion.isCompleted) completion.complete();
+      }
+    }
+    if (taskExecutionError != null) throw taskExecutionError!;
     return null;
   }
 
@@ -145,19 +180,50 @@ class _CleanupCatCatchNotifier extends CatCatchNotifier {
     required CancelToken cancelToken,
   }) async {
     executorStarts++;
+    lastRetriedTask = task;
+    lastRetryTaskUpdate = onUpdate;
     onUpdate(task.copyWith(status: TaskStatus.running));
     if (!executorStarted.isCompleted) executorStarted.complete();
     if (executorStarts == 2 && !secondExecutorStarted.isCompleted) {
       secondExecutorStarted.complete();
     }
+    if (holdRetryExecutions) {
+      retryCancelTokens.add(cancelToken);
+      final release = Completer<void>();
+      final completion = Completer<void>();
+      retryReleases.add(release);
+      retryCompletions.add(completion);
+      try {
+        await release.future;
+      } finally {
+        if (!completion.isCompleted) completion.complete();
+      }
+    }
+    if (retryExecutionError != null) throw retryExecutionError!;
     return null;
   }
 }
 
+class _FailingSerializationTask extends CatCatchTask {
+  _FailingSerializationTask()
+      : super(
+          id: 'failing-serialization',
+          url: 'https://example.com/video.mp4',
+          expectedDurationSec: 30,
+          status: TaskStatus.completed,
+          createdAt: DateTime(2025, 1, 1),
+        );
+
+  @override
+  Map<String, dynamic> toMap() => throw StateError('test persistence failure');
+}
+
 Future<CatCatchTask?> _waitForPersistedTaskForTest(
   Directory directory,
-  String taskId,
-) async {
+  String taskId, {
+  TaskStatus expectedStatus = TaskStatus.failed,
+  int? expectedProgress,
+}) async {
   final file = File('${directory.path}/catcatch/tasks.json');
   final timeout = Stopwatch()..start();
   while (timeout.elapsed < const Duration(seconds: 5)) {
@@ -168,9 +234,37 @@ Future<CatCatchTask?> _waitForPersistedTaskForTest(
         ),
       );
       for (final task in tasks) {
-        if (task.id == taskId && task.status == TaskStatus.failed) {
+        if (task.id == taskId &&
+            task.status == expectedStatus &&
+            (expectedProgress == null || task.progress == expectedProgress)) {
           return task;
         }
+      }
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+  }
+  return null;
+}
+
+Future<CatCatchTask?> _waitForPersistedLatestTaskForTest(
+  Directory directory,
+  String taskId, {
+  required int expectedProgress,
+}) async {
+  final file = File('${directory.path}/catcatch/tasks.json');
+  final timeout = Stopwatch()..start();
+  while (timeout.elapsed < const Duration(seconds: 5)) {
+    if (await file.exists()) {
+      final tasks = (jsonDecode(await file.readAsString()) as List)
+          .map(
+            (task) => CatCatchTask.fromMap(
+              Map<String, dynamic>.from(task as Map),
+            ),
+          )
+          .where((task) => task.id == taskId)
+          .toList();
+      if (tasks.length > 1 && tasks.last.progress == expectedProgress) {
+        return tasks.last;
       }
     }
     await Future<void>.delayed(const Duration(milliseconds: 10));
@@ -190,6 +284,7 @@ void main() {
     late _CleanupCatCatchNotifier notifier;
     late SharedPreferences preferences;
     late TargetPlatform? originalTargetPlatform;
+    late bool containerDisposed;
 
     setUp(() async {
       SharedPreferences.setMockInitialValues({});
@@ -209,12 +304,13 @@ void main() {
           return notifier;
         }),
       ]);
+      containerDisposed = false;
       container.read(catcatchTasksProvider);
       preferences = await SharedPreferences.getInstance();
     });
 
     tearDown(() async {
-      container.dispose();
+      if (!containerDisposed) container.dispose();
       PathProviderPlatform.instance = originalPathProvider;
       debugDefaultTargetPlatformOverride = originalTargetPlatform;
       AppStorage.resetCache();
@@ -228,6 +324,164 @@ void main() {
           status: TaskStatus.paused,
           createdAt: DateTime(2025, 1, 1),
         );
+
+    test('batch media children inherit the latest selected parent snapshot',
+        () async {
+      const firstMedia = MediaResource(
+        url: 'https://example.com/first.mp4',
+        name: 'first',
+        ext: 'mp4',
+      );
+      const secondMedia = MediaResource(
+        url: 'https://example.com/second.mp4',
+        name: 'second',
+        ext: 'mp4',
+      );
+      final stale = task('batch-parent').copyWith(
+        url: 'https://example.com/stale',
+        title: 'stale',
+        expectedDurationSec: 10,
+        metadata: {'source': 'stale', 'mergeAudioUrl': 'stale-audio'},
+      );
+      final latest = task('batch-parent').copyWith(
+        url: 'https://example.com/latest',
+        title: 'latest',
+        expectedDurationSec: 120,
+        steps: [StepStatus.running(StepType.userSelecting)],
+        metadata: {'source': 'latest', 'referer': 'https://example.com/page'},
+      );
+      notifier.setTasksForTest([stale, latest]);
+      notifier.holdRetryExecutions = true;
+
+      try {
+        notifier.batchSelectMedia(
+          'batch-parent',
+          [firstMedia, secondMedia],
+          mergeAudioUrl: 'https://example.com/requested-audio.m4a',
+        );
+        final child = notifier.tasksForTest.singleWhere(
+          (current) => current.id != 'batch-parent',
+        );
+        await notifier.secondExecutorStarted.future.timeout(
+          const Duration(seconds: 2),
+        );
+        expect(child.url, latest.url);
+        expect(child.expectedDurationSec, latest.expectedDurationSec);
+        expect(child.title, 'latest - second.mp4');
+        expect(child.selectedMedia, secondMedia);
+        expect(child.metadata, {
+          ...latest.metadata,
+          'mergeAudioUrl': 'https://example.com/requested-audio.m4a',
+          'mergeMode': 'audio_video',
+        });
+        expect(notifier.tasksForTest.first, same(stale));
+        expect(notifier.tasksForTest[1].selectedMedia, firstMedia);
+        expect(notifier.lastRetriedTask!.id, child.id);
+        expect(notifier.lastRetriedTask!.metadata, child.metadata);
+      } finally {
+        for (final release in notifier.retryReleases) {
+          if (!release.isCompleted) release.complete();
+        }
+        await Future.wait(notifier.retryCompletions.map((c) => c.future));
+        await notifier.removeTasksPersisted(
+          notifier.tasksForTest.map((current) => current.id).toList(),
+        );
+      }
+    });
+
+    for (final action in ['confirm', 'select', 'skip', 'retry', 'retryStep']) {
+      test('duplicate continuation uses newest snapshot: $action', () async {
+        const id = 'interactive-duplicate';
+        const media = MediaResource(
+          url: 'https://example.com/new.mp4',
+          name: 'new',
+          ext: 'mp4',
+        );
+        final older = task(id).copyWith(
+          url: 'https://example.com/old',
+          status: TaskStatus.completed,
+          metadata: const {'snapshot': 'old'},
+        );
+        final newest = task(id).copyWith(
+          url: 'https://example.com/new',
+          status: TaskStatus.failed,
+          steps: StepType.values.map(StepStatus.pending).toList(),
+          selectedMedia: media,
+          downloadedFilePath: '/new/download.mp4',
+          metadata: const {'snapshot': 'new', 'pendingConfirm': 'waiting'},
+        );
+        notifier.holdTaskExecutions = true;
+        notifier.holdRetryExecutions = true;
+        notifier.setTasksForTest([older, newest]);
+        try {
+          switch (action) {
+            case 'confirm':
+              notifier.confirmAndContinue(id);
+            case 'select':
+              notifier.selectMedia(id, media);
+            case 'skip':
+              notifier.skipConversion(id);
+            case 'retry':
+              notifier.retryTask(id);
+            case 'retryStep':
+              notifier.retryStep(id, StepType.converting);
+          }
+          await notifier.executorStarted.future
+              .timeout(const Duration(seconds: 2));
+          final executed = action == 'retry'
+              ? notifier.lastExecutedTask!
+              : notifier.lastRetriedTask!;
+          expect(executed.url, newest.url);
+          expect(executed.metadata['snapshot'], 'new');
+          if (action != 'retry') {
+            expect(executed.selectedMedia, media);
+            expect(executed.downloadedFilePath, newest.downloadedFilePath);
+          } else {
+            expect(executed.downloadedFilePath, isNull);
+          }
+          expect(notifier.tasksForTest.first, same(older));
+          final update = executed.copyWith(progress: 63);
+          if (action == 'retry') {
+            notifier.lastTaskUpdate!(update);
+          } else {
+            notifier.lastRetryTaskUpdate!(update);
+          }
+          expect(notifier.tasksForTest.last.progress, 63);
+          expect(notifier.tasksForTest.first, same(older));
+        } finally {
+          for (final release in [
+            ...notifier.taskReleases,
+            ...notifier.retryReleases
+          ]) {
+            if (!release.isCompleted) release.complete();
+          }
+          await Future.wait([
+            ...notifier.taskCompletions,
+            ...notifier.retryCompletions,
+          ].map((item) => item.future));
+          await notifier.removeTasksPersisted([id]);
+        }
+      });
+    }
+
+    for (final retryWholeTask in [true, false]) {
+      test('duplicate retry ignores stale eligibility: $retryWholeTask',
+          () async {
+        const id = 'ineligible-duplicate';
+        final older = task(id).copyWith(status: TaskStatus.failed);
+        final newest = task(id).copyWith(status: TaskStatus.completed);
+        notifier.setTasksForTest([older, newest]);
+        if (retryWholeTask) {
+          notifier.retryTask(id);
+        } else {
+          notifier.retryStep(id, StepType.downloading);
+        }
+        // Eligibility is synchronous: rejected retries leave both rows intact.
+        expect(notifier.tasksForTest, [same(older), same(newest)]);
+        await notifier.waitForTaskSnapshotWritesForTesting();
+        expect(notifier.executorStarts, 0);
+      });
+    }
 
     test('new tasks await temporary service startup before execution',
         () async {
@@ -296,6 +550,7 @@ void main() {
       await preferences.setBool('background_service_enabled', false);
       servicePlatform.startResult = false;
       servicePlatform.runningAfterStart = true;
+      servicePlatform.stopRequested = Completer<void>();
       final failed = Completer<CatCatchTask>();
       final subscription = container.listen<List<CatCatchTask>>(
         catcatchTasksProvider,
@@ -337,6 +592,12 @@ void main() {
               'persisted status',
               TaskStatus.failed,
             ));
+        await servicePlatform.stopRequested!.future.timeout(
+          const Duration(seconds: 2),
+        );
+        expect(servicePlatform.running, isFalse);
+        expect(servicePlatform.stopCalls, 1);
+        expect(preferences.getBool('background_service_enabled'), isFalse);
 
         final retryFailed = Completer<CatCatchTask>();
         final retrySubscription = container.listen<List<CatCatchTask>>(
@@ -360,7 +621,7 @@ void main() {
         expect(servicePlatform.startCalls, 2);
         expect(notifier.executorStarts, 0);
         expect(preferences.getBool('background_service_enabled'), isFalse);
-        expect(servicePlatform.stopCalls, 0);
+        expect(servicePlatform.stopCalls, 1);
       } finally {
         subscription.close();
         await notifier.removeTasksPersisted(['failed-new-task']);
@@ -437,12 +698,113 @@ void main() {
       }
     });
 
-    test('startup failure does not stop service for a queued idle write',
+    test('startup failure preserves a user-enabled service', () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      await preferences.setBool('background_service_enabled', true);
+      servicePlatform.startResult = false;
+      servicePlatform.runningAfterStart = true;
+
+      try {
+        notifier.addTask(
+          'invalid://failed-with-enabled-service',
+          30,
+          taskId: 'failed-with-enabled-service',
+        );
+        final persisted = await _waitForPersistedTaskForTest(
+          directory,
+          'failed-with-enabled-service',
+        );
+        expect(persisted?.status, TaskStatus.failed);
+        expect(await notifier.removeTasksPersisted(['absent-task']), isTrue);
+
+        expect(notifier.executorStarts, 0);
+        expect(servicePlatform.startCalls, 1);
+        expect(servicePlatform.running, isTrue);
+        expect(servicePlatform.stopCalls, 0);
+        expect(preferences.getBool('background_service_enabled'), isTrue);
+      } finally {
+        await notifier.removeTasksPersisted(['failed-with-enabled-service']);
+      }
+    });
+
+    test('startup failure waits until a task snapshot saves before cleanup',
         () async {
       debugDefaultTargetPlatformOverride = TargetPlatform.android;
       await preferences.setBool('background_service_enabled', false);
       servicePlatform.startResult = false;
       servicePlatform.runningAfterStart = true;
+      final catcatchDirectory = Directory('${directory.path}/catcatch');
+      if (await catcatchDirectory.exists()) {
+        await catcatchDirectory.delete(recursive: true);
+      }
+      await File(catcatchDirectory.path).writeAsString('not a directory');
+
+      final originalDebugPrint = debugPrint;
+      final failedWrites = Completer<void>();
+      final laterFailedWrite = Completer<void>();
+      var persistenceFailures = 0;
+      debugPrint = (message, {wrapWidth}) {
+        if (message?.startsWith(
+              '[CatCatchNotifier] Failed to persist tasks:',
+            ) ==
+            true) {
+          persistenceFailures++;
+          if (persistenceFailures == 2 && !failedWrites.isCompleted) {
+            failedWrites.complete();
+          }
+          if (persistenceFailures == 3 && !laterFailedWrite.isCompleted) {
+            laterFailedWrite.complete();
+          }
+        }
+        originalDebugPrint(message, wrapWidth: wrapWidth);
+      };
+
+      final failed = Completer<CatCatchTask>();
+      final subscription = container.listen<List<CatCatchTask>>(
+        catcatchTasksProvider,
+        (_, tasks) {
+          for (final current in tasks) {
+            if (current.id == 'failed-unsaved-task' &&
+                current.status == TaskStatus.failed &&
+                !failed.isCompleted) {
+              failed.complete(current);
+            }
+          }
+        },
+      );
+
+      try {
+        notifier.addTask(
+          'invalid://failed-unsaved-task',
+          30,
+          taskId: 'failed-unsaved-task',
+        );
+        final failure = await failed.future.timeout(
+          const Duration(seconds: 2),
+        );
+        expect(failure.error, contains('后台服务启动失败'));
+        await failedWrites.future.timeout(const Duration(seconds: 2));
+        notifier.removeTask('absent-task');
+        await laterFailedWrite.future.timeout(const Duration(seconds: 2));
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+
+        expect(notifier.executorStarts, 0);
+        expect(servicePlatform.running, isTrue);
+        expect(servicePlatform.stopCalls, 0);
+        expect(preferences.getBool('background_service_enabled'), isFalse);
+      } finally {
+        debugPrint = originalDebugPrint;
+        subscription.close();
+      }
+    });
+
+    test('startup failure cleans up after a queued idle write is persisted',
+        () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      await preferences.setBool('background_service_enabled', false);
+      servicePlatform.startResult = false;
+      servicePlatform.runningAfterStart = true;
+      servicePlatform.stopRequested = Completer<void>();
       documents.firstRequestStarted = Completer<void>();
       documents.releaseFirstRequest = Completer<void>();
       final failed = Completer<CatCatchTask>();
@@ -481,8 +843,11 @@ void main() {
           'failed-after-idle-write',
         );
         expect(persisted?.status, TaskStatus.failed);
-        expect(servicePlatform.running, isTrue);
-        expect(servicePlatform.stopCalls, 0);
+        await servicePlatform.stopRequested!.future.timeout(
+          const Duration(seconds: 2),
+        );
+        expect(servicePlatform.running, isFalse);
+        expect(servicePlatform.stopCalls, 1);
         expect(preferences.getBool('background_service_enabled'), isFalse);
       } finally {
         if (!documents.releaseFirstRequest!.isCompleted) {
@@ -493,14 +858,240 @@ void main() {
       }
     });
 
-    test('startup failure invalidates a queued removal cleanup', () async {
+    test(
+        'startup failure cleanup survives a queued snapshot failure after the failed state was saved',
+        () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      await preferences.setBool('background_service_enabled', false);
+      servicePlatform.startResult = false;
+      servicePlatform.runningAfterStart = true;
+      servicePlatform.stopRequested = Completer<void>();
+      documents.firstRequestStarted = Completer<void>();
+      documents.releaseFirstRequest = Completer<void>();
+      notifier.setTasksForTest([
+        task('other-task').copyWith(status: TaskStatus.running),
+      ]);
+
+      final originalDebugPrint = debugPrint;
+      final laterWriteFailed = Completer<void>();
+      debugPrint = (message, {wrapWidth}) {
+        if (message?.startsWith(
+                  '[CatCatchNotifier] Failed to persist tasks:',
+                ) ==
+                true &&
+            !laterWriteFailed.isCompleted) {
+          laterWriteFailed.complete();
+        }
+        originalDebugPrint(message, wrapWidth: wrapWidth);
+      };
+
+      final failed = Completer<CatCatchTask>();
+      final subscription = container.listen<List<CatCatchTask>>(
+        catcatchTasksProvider,
+        (_, tasks) {
+          for (final current in tasks) {
+            if (current.id == 'failed-with-queued-write-error' &&
+                current.status == TaskStatus.failed &&
+                !failed.isCompleted) {
+              failed.complete(current);
+            }
+          }
+        },
+      );
+
+      try {
+        notifier.addTask(
+          'invalid://failed-with-queued-write-error',
+          30,
+          taskId: 'failed-with-queued-write-error',
+        );
+        await documents.firstRequestStarted!.future.timeout(
+          const Duration(seconds: 2),
+        );
+        final failure = await failed.future.timeout(
+          const Duration(seconds: 2),
+        );
+        expect(failure.error, contains('后台服务启动失败'));
+        expect(servicePlatform.running, isTrue);
+        expect(servicePlatform.stopCalls, 0);
+
+        notifier.setTasksForTest([
+          for (final current in notifier.tasksForTest)
+            if (current.id == 'other-task')
+              current.copyWith(status: TaskStatus.completed)
+            else
+              current,
+          _FailingSerializationTask(),
+        ]);
+        notifier.removeTask('absent-task');
+
+        documents.releaseFirstRequest!.complete();
+        await laterWriteFailed.future.timeout(const Duration(seconds: 2));
+        final persisted = await _waitForPersistedTaskForTest(
+          directory,
+          'failed-with-queued-write-error',
+        );
+        expect(persisted?.status, TaskStatus.failed);
+        await servicePlatform.stopRequested!.future.timeout(
+          const Duration(seconds: 2),
+        );
+
+        expect(servicePlatform.running, isFalse);
+        expect(servicePlatform.stopCalls, 1);
+        expect(preferences.getBool('background_service_enabled'), isFalse);
+      } finally {
+        debugPrint = originalDebugPrint;
+        if (!documents.releaseFirstRequest!.isCompleted) {
+          documents.releaseFirstRequest!.complete();
+        }
+        subscription.close();
+      }
+    });
+
+    test(
+        'startup failure cleanup survives provider disposal during persistence',
+        () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      await preferences.setBool('background_service_enabled', false);
+      servicePlatform.startResult = false;
+      servicePlatform.runningAfterStart = true;
+      servicePlatform.stopRequested = Completer<void>();
+      documents.firstRequestStarted = Completer<void>();
+      documents.releaseFirstRequest = Completer<void>();
+      final failed = Completer<CatCatchTask>();
+      final subscription = container.listen<List<CatCatchTask>>(
+        catcatchTasksProvider,
+        (_, tasks) {
+          for (final current in tasks) {
+            if (current.id == 'failed-before-provider-disposal' &&
+                current.status == TaskStatus.failed &&
+                !failed.isCompleted) {
+              failed.complete(current);
+            }
+          }
+        },
+      );
+
+      try {
+        notifier.addTask(
+          'invalid://failed-before-provider-disposal',
+          30,
+          taskId: 'failed-before-provider-disposal',
+        );
+        await documents.firstRequestStarted!.future.timeout(
+          const Duration(seconds: 2),
+        );
+        final failure = await failed.future.timeout(
+          const Duration(seconds: 2),
+        );
+        expect(failure.error, contains('后台服务启动失败'));
+        expect(servicePlatform.running, isTrue);
+        expect(servicePlatform.stopCalls, 0);
+
+        container.dispose();
+        containerDisposed = true;
+        documents.releaseFirstRequest!.complete();
+        final persisted = await _waitForPersistedTaskForTest(
+          directory,
+          'failed-before-provider-disposal',
+        );
+        expect(persisted?.status, TaskStatus.failed);
+        await servicePlatform.stopRequested!.future.timeout(
+          const Duration(seconds: 2),
+        );
+
+        expect(servicePlatform.running, isFalse);
+        expect(servicePlatform.stopCalls, 1);
+        expect(preferences.getBool('background_service_enabled'), isFalse);
+      } finally {
+        if (!documents.releaseFirstRequest!.isCompleted) {
+          documents.releaseFirstRequest!.complete();
+        }
+        subscription.close();
+      }
+    });
+
+    test('startup failure removal cleanup survives provider disposal',
+        () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      await preferences.setBool('background_service_enabled', false);
+      servicePlatform.startResult = false;
+      servicePlatform.runningAfterStart = true;
+      servicePlatform.stopRequested = Completer<void>();
+      documents.firstRequestStarted = Completer<void>();
+      documents.releaseFirstRequest = Completer<void>();
+      notifier.setTasksForTest([
+        task('other-task').copyWith(status: TaskStatus.running),
+      ]);
+      final failed = Completer<CatCatchTask>();
+      final subscription = container.listen<List<CatCatchTask>>(
+        catcatchTasksProvider,
+        (_, tasks) {
+          for (final current in tasks) {
+            if (current.id == 'failed-before-removal-disposal' &&
+                current.status == TaskStatus.failed &&
+                !failed.isCompleted) {
+              failed.complete(current);
+            }
+          }
+        },
+      );
+      Future<bool>? pendingRemoval;
+
+      try {
+        notifier.addTask(
+          'invalid://failed-before-removal-disposal',
+          30,
+          taskId: 'failed-before-removal-disposal',
+        );
+        await documents.firstRequestStarted!.future.timeout(
+          const Duration(seconds: 2),
+        );
+        final failure = await failed.future.timeout(
+          const Duration(seconds: 2),
+        );
+        expect(failure.error, contains('后台服务启动失败'));
+
+        pendingRemoval = notifier.removeTasksPersisted([
+          'other-task',
+          'failed-before-removal-disposal',
+        ]);
+        container.dispose();
+        containerDisposed = true;
+        documents.releaseFirstRequest!.complete();
+        expect(await pendingRemoval, isTrue);
+
+        final persisted =
+            await File('${directory.path}/catcatch/tasks.json').readAsString();
+        expect(jsonDecode(persisted), isEmpty);
+        await servicePlatform.stopRequested!.future.timeout(
+          const Duration(seconds: 2),
+        );
+
+        expect(servicePlatform.running, isFalse);
+        expect(servicePlatform.stopCalls, 1);
+        expect(preferences.getBool('background_service_enabled'), isFalse);
+      } finally {
+        if (!documents.releaseFirstRequest!.isCompleted) {
+          documents.releaseFirstRequest!.complete();
+        }
+        subscription.close();
+        if (pendingRemoval != null) await pendingRemoval;
+      }
+    });
+
+    test('startup failure cleanup waits while another task is running',
+        () async {
       debugDefaultTargetPlatformOverride = TargetPlatform.android;
       await preferences.setBool('background_service_enabled', false);
       servicePlatform.startResult = false;
       servicePlatform.runningAfterStart = true;
       documents.firstRequestStarted = Completer<void>();
       documents.releaseFirstRequest = Completer<void>();
-      notifier.setTasksForTest([task('queued-removal')]);
+      notifier.setTasksForTest([
+        task('queued-removal'),
+        task('still-running').copyWith(status: TaskStatus.running),
+      ]);
       final failed = Completer<CatCatchTask>();
       final subscription = container.listen<List<CatCatchTask>>(
         catcatchTasksProvider,
@@ -539,16 +1130,24 @@ void main() {
           'failed-during-removal',
         );
         expect(persisted?.status, TaskStatus.failed);
+        expect(await notifier.removeTasksPersisted(['absent-task']), isTrue);
         expect(servicePlatform.running, isTrue);
         expect(servicePlatform.stopCalls, 0);
         expect(preferences.getBool('background_service_enabled'), isFalse);
+
+        expect(await notifier.removeTasksPersisted(['still-running']), isTrue);
+        expect(servicePlatform.running, isFalse);
+        expect(servicePlatform.stopCalls, 1);
       } finally {
         if (!documents.releaseFirstRequest!.isCompleted) {
           documents.releaseFirstRequest!.complete();
         }
         subscription.close();
         if (pendingRemoval != null) await pendingRemoval;
-        await notifier.removeTasksPersisted(['failed-during-removal']);
+        await notifier.removeTasksPersisted([
+          'still-running',
+          'failed-during-removal',
+        ]);
       }
     });
 
@@ -696,6 +1295,72 @@ void main() {
       expect(preferences.getBool('background_service_enabled'), isFalse);
     });
 
+    test('pausing the last task stops temporary service after startup',
+        () async {
+      await preferences.setBool('background_service_enabled', false);
+      servicePlatform.startEntered = Completer<void>();
+      servicePlatform.releaseStart = Completer<void>();
+      servicePlatform.stopRequested = Completer<void>();
+
+      try {
+        notifier.addTask(
+          'invalid://paused-during-startup',
+          30,
+          taskId: 'paused-during-startup',
+        );
+        await servicePlatform.startEntered!.future.timeout(
+          const Duration(seconds: 2),
+        );
+
+        notifier.pauseTask('paused-during-startup');
+        servicePlatform.releaseStart!.complete();
+
+        await servicePlatform.stopRequested!.future.timeout(
+          const Duration(seconds: 2),
+        );
+        final persisted = await _waitForPersistedTaskForTest(
+          directory,
+          'paused-during-startup',
+          expectedStatus: TaskStatus.paused,
+        );
+
+        expect(persisted?.status, TaskStatus.paused);
+        expect(notifier.executorStarts, 0);
+        expect(servicePlatform.stopCalls, 1);
+        expect(servicePlatform.running, isFalse);
+        expect(preferences.getBool('background_service_enabled'), isFalse);
+      } finally {
+        if (!servicePlatform.releaseStart!.isCompleted) {
+          servicePlatform.releaseStart!.complete();
+        }
+        await notifier.removeTasksPersisted(['paused-during-startup']);
+      }
+    });
+
+    test('pausing preserves a user-enabled background service', () async {
+      await preferences.setBool('background_service_enabled', true);
+      expect(await startBackgroundService(), isTrue);
+      notifier.setTasksForTest([
+        task('paused-persistent-service').copyWith(status: TaskStatus.running),
+      ]);
+
+      try {
+        notifier.pauseTask('paused-persistent-service');
+        final persisted = await _waitForPersistedTaskForTest(
+          directory,
+          'paused-persistent-service',
+          expectedStatus: TaskStatus.paused,
+        );
+
+        expect(persisted?.status, TaskStatus.paused);
+        expect(servicePlatform.stopCalls, 0);
+        expect(servicePlatform.running, isTrue);
+        expect(preferences.getBool('background_service_enabled'), isTrue);
+      } finally {
+        await notifier.removeTasksPersisted(['paused-persistent-service']);
+      }
+    });
+
     test('cleanup queued during confirm-and-continue startup keeps service',
         () async {
       await preferences.setBool('background_service_enabled', false);
@@ -775,6 +1440,1148 @@ void main() {
       expect(preferences.getBool('background_service_enabled'), isFalse);
     });
 
+    test('repeated confirm cancels superseded execution before pause',
+        () async {
+      const taskId = 'repeat-confirm-pause';
+      notifier.holdRetryExecutions = true;
+      notifier.setTasksForTest([task(taskId)]);
+
+      try {
+        notifier.confirmAndContinue(taskId);
+        await notifier.executorStarted.future.timeout(
+          const Duration(seconds: 2),
+        );
+        notifier.confirmAndContinue(taskId);
+        await notifier.secondExecutorStarted.future.timeout(
+          const Duration(seconds: 2),
+        );
+
+        final firstRun = notifier.retryCancelTokens[0];
+        final currentRun = notifier.retryCancelTokens[1];
+        expect(firstRun.isCancelled, isTrue);
+        expect(currentRun.isCancelled, isFalse);
+
+        notifier.pauseTask(taskId);
+
+        expect(firstRun.isCancelled, isTrue);
+        expect(currentRun.isCancelled, isTrue);
+      } finally {
+        for (final release in notifier.retryReleases) {
+          if (!release.isCompleted) release.complete();
+        }
+        await notifier.removeTasksPersisted([taskId]);
+      }
+    });
+
+    for (final restoreFailed in [false, true]) {
+      test(
+        'failed persisted removal retains execution through ${restoreFailed ? 'restore retry' : 'active restore'}',
+        () async {
+          const taskId = 'retained-after-failed-removal';
+          const removedId = 'explicitly-removed-before-failure';
+          notifier.holdTaskExecutions = true;
+          notifier.addTask('invalid://retained', 30, taskId: taskId);
+          await notifier.executorStarted.future;
+          await notifier.waitForTaskSnapshotWritesForTesting();
+          final running = notifier.tasksForTest.single;
+          final token = notifier.taskCancelTokens.single;
+          final tasksFile = File('${directory.path}/catcatch/tasks.json');
+          final stored = jsonEncode([running.toMap(), task(removedId).toMap()]);
+          await tasksFile.writeAsString(restoreFailed ? '[invalid]' : stored);
+
+          Future<void>? restore;
+          if (restoreFailed) {
+            await notifier.restoreUnfinishedTasks();
+          } else {
+            AppStorage.resetCache();
+            documents.pathRequests = 0;
+            documents.firstRequestStarted = Completer<void>();
+            documents.releaseFirstRequest = Completer<void>();
+            restore = notifier.restoreUnfinishedTasks();
+            await documents.firstRequestStarted!.future.timeout(
+              const Duration(seconds: 2),
+            );
+          }
+
+          try {
+            // A prior explicit removal must remain effective even when the
+            // failed persisted removal also requests its already absent ID.
+            notifier.removeTask(removedId);
+            await notifier.waitForTaskSnapshotWritesForTesting();
+            expect(
+              await notifier.removeTasksPersisted([taskId, removedId]),
+              isFalse,
+            );
+            expect(notifier.tasksForTest.single.runtimeIdentity,
+                same(running.runtimeIdentity));
+            expect(token.isCancelled, isFalse);
+
+            if (restoreFailed) {
+              await tasksFile.writeAsString(stored);
+              await notifier.restoreUnfinishedTasks();
+            } else {
+              documents.releaseFirstRequest!.complete();
+              await restore;
+            }
+            await notifier.waitForTaskSnapshotWritesForTesting();
+            expect(notifier.tasksForTest.single.runtimeIdentity,
+                same(running.runtimeIdentity));
+            expect(notifier.tasksForTest.single.status, TaskStatus.running);
+            expect(token.isCancelled, isFalse);
+
+            notifier.lastTaskUpdate!(running.copyWith(progress: 73));
+            await notifier.waitForTaskSnapshotWritesForTesting();
+            await notifier.restoreUnfinishedTasks();
+            await notifier.waitForTaskSnapshotWritesForTesting();
+            expect(notifier.tasksForTest.single.progress, 73);
+            final persisted =
+                jsonDecode(await tasksFile.readAsString()) as List;
+            expect(persisted, hasLength(1));
+            expect((persisted.single as Map)['id'], taskId);
+            expect((persisted.single as Map)['progress'], 73);
+            expect(token.isCancelled, isFalse);
+
+            expect(await notifier.removeTasksPersisted([taskId]), isTrue);
+            expect(token.isCancelled, isTrue);
+            expect(notifier.tasksForTest, isEmpty);
+            expect(jsonDecode(await tasksFile.readAsString()), isEmpty);
+          } finally {
+            final release = documents.releaseFirstRequest;
+            if (release != null && !release.isCompleted) release.complete();
+            if (restore != null) await restore;
+            for (final release in notifier.taskReleases) {
+              if (!release.isCompleted) release.complete();
+            }
+            await Future.wait(
+                notifier.taskCompletions.map((item) => item.future));
+          }
+        },
+      );
+    }
+
+    test('pausing a duplicate updates the active row and stops the service',
+        () async {
+      const taskId = 'pause-active-duplicate';
+      await preferences.setBool('background_service_enabled', false);
+      servicePlatform.running = true;
+      servicePlatform.stopRequested = Completer<void>();
+      notifier.holdTaskExecutions = true;
+      notifier.setTasksForTest([task(taskId)]);
+
+      try {
+        notifier.addTask('invalid://pause-duplicate', 30, taskId: taskId);
+        await notifier.executorStarted.future.timeout(
+          const Duration(seconds: 2),
+        );
+
+        expect(notifier.tasksForTest.last.status, TaskStatus.running);
+        final activeToken = notifier.taskCancelTokens.single;
+        notifier.pauseTask(taskId);
+
+        expect(activeToken.isCancelled, isTrue);
+        expect(notifier.tasksForTest.last.status, TaskStatus.paused);
+        await servicePlatform.stopRequested!.future.timeout(
+          const Duration(seconds: 2),
+        );
+        await notifier.waitForTaskSnapshotWritesForTesting();
+
+        final persisted = (jsonDecode(
+          await File('${directory.path}/catcatch/tasks.json').readAsString(),
+        ) as List)
+            .map((record) => CatCatchTask.fromMap(
+                  Map<String, dynamic>.from(record as Map),
+                ))
+            .where((current) => current.id == taskId)
+            .toList();
+        expect(persisted, hasLength(2));
+        expect(persisted.last.status, TaskStatus.paused);
+        expect(servicePlatform.stopCalls, 1);
+      } finally {
+        for (final release in notifier.taskReleases) {
+          if (!release.isCompleted) release.complete();
+        }
+        await Future.wait(notifier.taskCompletions.map((item) => item.future));
+        await notifier.removeTasksPersisted([taskId]);
+      }
+    });
+
+    for (final resumed in [false, true]) {
+      test(
+        '${resumed ? 'resumed' : 'normal'} startup failure fails the newest duplicate',
+        () async {
+          const taskId = 'startup-failed-active-duplicate';
+          debugDefaultTargetPlatformOverride = TargetPlatform.android;
+          await preferences.setBool('background_service_enabled', false);
+          servicePlatform.startResult = false;
+          servicePlatform.runningAfterStart = true;
+          servicePlatform.startEntered = Completer<void>();
+          servicePlatform.releaseStart = Completer<void>();
+          servicePlatform.stopRequested = Completer<void>();
+          final older = task(taskId).copyWith(title: 'Older paused row');
+          notifier.setTasksForTest([
+            older,
+            if (resumed) task(taskId).copyWith(title: 'Newest paused row'),
+          ]);
+          final failed = Completer<void>();
+          final subscription = container.listen<List<CatCatchTask>>(
+            catcatchTasksProvider,
+            (_, tasks) {
+              if (tasks.last.status == TaskStatus.failed &&
+                  !failed.isCompleted) {
+                failed.complete();
+              }
+            },
+          );
+
+          try {
+            if (resumed) {
+              notifier.resumeTask(taskId);
+            } else {
+              notifier.addTask('invalid://startup-failure', 30, taskId: taskId);
+            }
+            await servicePlatform.startEntered!.future.timeout(
+              const Duration(seconds: 2),
+            );
+            expect(notifier.tasksForTest.last.status, TaskStatus.running);
+            servicePlatform.releaseStart!.complete();
+            await failed.future.timeout(const Duration(seconds: 2));
+            await notifier.waitForTaskSnapshotWritesForTesting();
+
+            expect(notifier.tasksForTest.first, same(older));
+            expect(notifier.tasksForTest.last.error, contains('后台服务启动失败'));
+            expect(notifier.executorStarts, 0);
+            final persisted = (jsonDecode(
+              await File(
+                '${directory.path}/catcatch/tasks.json',
+              ).readAsString(),
+            ) as List)
+                .map(
+                  (record) => CatCatchTask.fromMap(
+                    Map<String, dynamic>.from(record as Map),
+                  ),
+                )
+                .toList();
+            expect(persisted, hasLength(2));
+            expect(persisted.first.status, TaskStatus.paused);
+            expect(persisted.last.status, TaskStatus.failed);
+            expect(persisted.last.error, contains('后台服务启动失败'));
+            await servicePlatform.stopRequested!.future.timeout(
+              const Duration(seconds: 2),
+            );
+            expect(servicePlatform.stopCalls, 1);
+            expect(preferences.getBool('background_service_enabled'), isFalse);
+          } finally {
+            subscription.close();
+            if (!servicePlatform.releaseStart!.isCompleted) {
+              servicePlatform.releaseStart!.complete();
+            }
+            await notifier.removeTasksPersisted([taskId]);
+          }
+        },
+      );
+    }
+
+    test('normal execution failure marks the active duplicate row failed',
+        () async {
+      const taskId = 'normal-failed-active-duplicate';
+      const failureMessage = 'Bad state: normal execution failed';
+      notifier.holdTaskExecutions = true;
+      notifier.taskExecutionError = StateError('normal execution failed');
+      notifier.setTasksForTest([task(taskId)]);
+      final activeRowFailed = Completer<void>();
+      final subscription = container.listen<List<CatCatchTask>>(
+        catcatchTasksProvider,
+        (_, tasks) {
+          if (tasks.length > 1 &&
+              tasks.last.id == taskId &&
+              tasks.last.status == TaskStatus.failed &&
+              tasks.last.error == failureMessage &&
+              !activeRowFailed.isCompleted) {
+            activeRowFailed.complete();
+          }
+        },
+      );
+
+      try {
+        notifier.addTask('invalid://normal-failure', 30, taskId: taskId);
+        await notifier.executorStarted.future.timeout(
+          const Duration(seconds: 2),
+        );
+        expect(notifier.tasksForTest.last.status, TaskStatus.running);
+
+        notifier.taskReleases.single.complete();
+        await activeRowFailed.future.timeout(const Duration(seconds: 2));
+        await notifier.waitForTaskSnapshotWritesForTesting();
+
+        final persisted = (jsonDecode(
+          await File('${directory.path}/catcatch/tasks.json').readAsString(),
+        ) as List)
+            .map((record) => CatCatchTask.fromMap(
+                  Map<String, dynamic>.from(record as Map),
+                ))
+            .where((current) => current.id == taskId)
+            .toList();
+        expect(persisted.last.status, TaskStatus.failed);
+        expect(persisted.last.error, failureMessage);
+      } finally {
+        subscription.close();
+        for (final release in notifier.taskReleases) {
+          if (!release.isCompleted) release.complete();
+        }
+        await Future.wait(notifier.taskCompletions.map((item) => item.future));
+        await notifier.removeTasksPersisted([taskId]);
+      }
+    });
+
+    test('retry execution failure marks the active duplicate row failed',
+        () async {
+      const taskId = 'retry-failed-active-duplicate';
+      const failureMessage = 'Bad state: retry execution failed';
+      notifier.holdRetryExecutions = true;
+      notifier.retryExecutionError = StateError('retry execution failed');
+      notifier.setTasksForTest([
+        task(taskId).copyWith(
+          status: TaskStatus.failed,
+          error: 'older failure',
+        ),
+        task(taskId).copyWith(
+          status: TaskStatus.failed,
+          error: 'latest failure',
+        ),
+      ]);
+      final activeRowFailed = Completer<void>();
+      final subscription = container.listen<List<CatCatchTask>>(
+        catcatchTasksProvider,
+        (_, tasks) {
+          if (tasks.last.id == taskId &&
+              tasks.last.status == TaskStatus.failed &&
+              tasks.last.error == failureMessage &&
+              !activeRowFailed.isCompleted) {
+            activeRowFailed.complete();
+          }
+        },
+      );
+
+      try {
+        notifier.retryStep(taskId, StepType.fetching);
+        await notifier.executorStarted.future.timeout(
+          const Duration(seconds: 2),
+        );
+        expect(notifier.tasksForTest.last.status, TaskStatus.running);
+
+        notifier.retryReleases.single.complete();
+        await activeRowFailed.future.timeout(const Duration(seconds: 2));
+        await notifier.waitForTaskSnapshotWritesForTesting();
+
+        final persisted = (jsonDecode(
+          await File('${directory.path}/catcatch/tasks.json').readAsString(),
+        ) as List)
+            .map((record) => CatCatchTask.fromMap(
+                  Map<String, dynamic>.from(record as Map),
+                ))
+            .where((current) => current.id == taskId)
+            .toList();
+        expect(persisted.last.status, TaskStatus.failed);
+        expect(persisted.last.error, failureMessage);
+      } finally {
+        subscription.close();
+        for (final release in notifier.retryReleases) {
+          if (!release.isCompleted) release.complete();
+        }
+        await Future.wait(notifier.retryCompletions.map((item) => item.future));
+        await notifier.removeTasksPersisted([taskId]);
+      }
+    });
+
+    test(
+      'runtime updates from reused addTask ID survive fresh-provider restore',
+      () async {
+        const taskId = 'reused-add-task-progress';
+        const replacementMedia = MediaResource(
+          url: 'https://example.com/replacement.m3u8',
+          name: 'replacement',
+          ext: 'm3u8',
+          isPlaylist: true,
+        );
+        final distinctBefore = task('progress-before');
+        final older = task(taskId).copyWith(
+          url: 'https://example.com/older.mp4',
+          metadata: const {'replacement': 'older'},
+        );
+        final distinctAfter = task('progress-after');
+        notifier.holdTaskExecutions = true;
+        notifier.setTasksForTest([distinctBefore, older, distinctAfter]);
+
+        try {
+          notifier.addTask(
+            'https://example.com/replacement-page',
+            90,
+            taskId: taskId,
+          );
+          await notifier.executorStarted.future.timeout(
+            const Duration(seconds: 2),
+          );
+
+          expect(notifier.tasksForTest.map((current) => current.id).toList(), [
+            'progress-before',
+            taskId,
+            'progress-after',
+            taskId,
+          ]);
+          final replacementExecution = notifier.lastExecutedTask!;
+          final runtimeUpdate = replacementExecution.copyWith(
+            status: TaskStatus.running,
+            steps: [
+              StepStatus.done(StepType.fetching),
+              StepStatus.progressing(StepType.downloading, 73),
+            ],
+            detectedMedia: const [replacementMedia],
+            selectedMedia: replacementMedia,
+            progress: 73,
+            downloadedFilePath: '/tmp/replacement.partial.mp4',
+            metadata: const {'replacement': 'newest'},
+            downloadedBytes: 1234,
+          );
+          notifier.lastTaskUpdate!(runtimeUpdate);
+
+          final persisted = await _waitForPersistedTaskForTest(
+            directory,
+            taskId,
+            expectedStatus: TaskStatus.running,
+            expectedProgress: runtimeUpdate.progress,
+          );
+          expect(persisted, isNotNull);
+          final persistedRecords = (jsonDecode(
+            await File(
+              '${directory.path}/catcatch/tasks.json',
+            ).readAsString(),
+          ) as List)
+              .map(
+                (record) => CatCatchTask.fromMap(
+                  Map<String, dynamic>.from(record as Map),
+                ),
+              )
+              .toList();
+          expect(persistedRecords.map((current) => current.id).toList(), [
+            'progress-before',
+            taskId,
+            'progress-after',
+            taskId,
+          ]);
+
+          for (final release in notifier.taskReleases) {
+            if (!release.isCompleted) release.complete();
+          }
+          await Future.wait(
+            notifier.taskCompletions.map((item) => item.future),
+          ).timeout(const Duration(seconds: 2));
+
+          // A fresh container models process restart and forces restore to pick
+          // the last persisted record for the duplicate task ID.
+          container.dispose();
+          containerDisposed = true;
+          container = ProviderContainer(
+            overrides: [
+              catcatchTasksProvider.overrideWith((ref) {
+                notifier = _CleanupCatCatchNotifier(ref);
+                return notifier;
+              }),
+            ],
+          );
+          containerDisposed = false;
+          container.read(catcatchTasksProvider);
+          await notifier.restoreUnfinishedTasks();
+
+          expect(notifier.tasksForTest.map((current) => current.id).toList(), [
+            'progress-before',
+            taskId,
+            'progress-after',
+          ]);
+          final restored = notifier.tasksForTest.singleWhere(
+            (current) => current.id == taskId,
+          );
+          expect(restored.url, runtimeUpdate.url);
+          expect(
+            restored.expectedDurationSec,
+            runtimeUpdate.expectedDurationSec,
+          );
+          expect(restored.progress, runtimeUpdate.progress);
+          expect(restored.downloadedFilePath, runtimeUpdate.downloadedFilePath);
+          expect(restored.detectedMedia.single.url, replacementMedia.url);
+          expect(restored.selectedMedia?.url, replacementMedia.url);
+          expect(restored.downloadedBytes, runtimeUpdate.downloadedBytes);
+          expect(restored.metadata, runtimeUpdate.metadata);
+          expect(restored.title, runtimeUpdate.title);
+          expect(restored.status, TaskStatus.paused);
+          expect(restored.error, '应用重启，已暂停');
+          expect(restored.steps.map((step) => step.progress).toList(), [
+            100,
+            73,
+          ]);
+        } finally {
+          for (final release in notifier.taskReleases) {
+            if (!release.isCompleted) release.complete();
+          }
+          await Future.wait(
+            notifier.taskCompletions.map((item) => item.future),
+          );
+          await notifier.removeTasksPersisted([
+            taskId,
+            'progress-before',
+            'progress-after',
+          ]);
+        }
+      },
+    );
+
+    for (final olderStatus in [TaskStatus.paused, TaskStatus.running]) {
+      test('resume follows the active duplicate after $olderStatus', () async {
+        const taskId = 'resume-active-duplicate';
+        final older = task(taskId).copyWith(status: olderStatus);
+        final active = task(taskId).copyWith(
+          url: 'https://example.com/active.mp4',
+          title: 'Active duplicate',
+          expectedDurationSec: 60,
+          steps: StepType.values.map(StepStatus.pending).toList(),
+        );
+        notifier.holdRetryExecutions = true;
+        notifier.setTasksForTest([older, active]);
+
+        try {
+          notifier.resumeTask(taskId);
+          expect(notifier.tasksForTest.last.status, TaskStatus.running);
+          await notifier.executorStarted.future.timeout(
+            const Duration(seconds: 2),
+          );
+          expect(notifier.lastRetriedTask!.url, active.url);
+          expect(notifier.lastRetriedTask!.title, active.title);
+          expect(notifier.lastRetriedTask!.expectedDurationSec, 60);
+          expect(notifier.tasksForTest.first, same(older));
+
+          final firstToken = notifier.retryCancelTokens.single;
+          notifier.pauseTask(taskId);
+          expect(firstToken.isCancelled, isTrue);
+          expect(notifier.tasksForTest.last.status, TaskStatus.paused);
+
+          notifier.resumeTask(taskId);
+          expect(notifier.tasksForTest.last.status, TaskStatus.running);
+          await notifier.secondExecutorStarted.future.timeout(
+            const Duration(seconds: 2),
+          );
+          expect(notifier.executorStarts, 2);
+          expect(notifier.retryCancelTokens.last.isCancelled, isFalse);
+          expect(notifier.tasksForTest.first, same(older));
+        } finally {
+          for (final release in notifier.retryReleases) {
+            if (!release.isCompleted) release.complete();
+          }
+          await Future.wait(
+              notifier.retryCompletions.map((item) => item.future));
+          await notifier.removeTasksPersisted([taskId]);
+        }
+      });
+    }
+
+    test(
+      'resuming duplicate IDs preserves the newest runtime snapshot',
+      () async {
+        const taskId = 'resume-newest-runtime-snapshot';
+        const staleMedia = MediaResource(
+          url: 'https://example.com/older.m3u8',
+          name: 'older',
+          ext: 'm3u8',
+          isPlaylist: true,
+        );
+        const newestMedia = MediaResource(
+          url: 'https://example.com/newest.m3u8',
+          name: 'newest',
+          ext: 'm3u8',
+          isPlaylist: true,
+        );
+        final older = task(taskId).copyWith(
+          steps: StepType.values.map(StepStatus.pending).toList(),
+          detectedMedia: const [staleMedia],
+          selectedMedia: staleMedia,
+          progress: 8,
+          downloadedFilePath: '/tmp/older.partial.mp4',
+          downloadedBytes: 80,
+        );
+        final newest = task(taskId).copyWith(
+          steps: [
+            StepStatus.done(StepType.fetching, detail: 'newest fetched page'),
+            ...StepType.values.skip(1).map(StepStatus.pending),
+          ],
+          detectedMedia: const [newestMedia],
+          selectedMedia: newestMedia,
+          progress: 47,
+          downloadedFilePath: '/tmp/newest.partial.mp4',
+          downloadedBytes: 4700,
+        );
+        notifier.holdRetryExecutions = true;
+        notifier.setTasksForTest([older, newest]);
+        final executionNotifier = notifier;
+
+        try {
+          executionNotifier.resumeTask(taskId);
+          await executionNotifier.executorStarted.future.timeout(
+            const Duration(seconds: 2),
+          );
+
+          final persisted = await _waitForPersistedLatestTaskForTest(
+            directory,
+            taskId,
+            expectedProgress: newest.progress,
+          );
+          expect(persisted, isNotNull);
+          expect(persisted!.progress, newest.progress);
+          expect(persisted.steps.first.completed, isTrue);
+          expect(persisted.steps.first.detail, 'newest fetched page');
+          expect(
+            persisted.detectedMedia.map((media) => media.url).toList(),
+            [newestMedia.url],
+          );
+          expect(persisted.selectedMedia?.url, newestMedia.url);
+          expect(persisted.downloadedFilePath, newest.downloadedFilePath);
+          expect(persisted.downloadedBytes, newest.downloadedBytes);
+        } finally {
+          for (final release in executionNotifier.retryReleases) {
+            if (!release.isCompleted) release.complete();
+          }
+          await Future.wait(
+            executionNotifier.retryCompletions.map((item) => item.future),
+          );
+          await notifier.removeTasksPersisted([taskId]);
+        }
+      },
+    );
+
+    test(
+      'resume runtime updates persist to the newest duplicate task row',
+      () async {
+        const taskId = 'resumed-duplicate-task';
+        const staleMedia = MediaResource(
+          url: 'https://example.com/stale.m3u8',
+          name: 'stale',
+          ext: 'm3u8',
+          isPlaylist: true,
+        );
+        const resumedMedia = MediaResource(
+          url: 'https://example.com/resumed.m3u8',
+          name: 'resumed',
+          ext: 'm3u8',
+          isPlaylist: true,
+        );
+        final pendingSteps = StepType.values.map(StepStatus.pending).toList();
+        final older = task(taskId).copyWith(
+          url: 'https://example.com/older.mp4',
+          expectedDurationSec: 30,
+          steps: pendingSteps,
+          progress: 8,
+          metadata: const {
+            'stale-setting': 'older',
+            'runtime-key': 'before',
+          },
+        );
+        final newer = task(taskId).copyWith(
+          url: 'https://example.com/newer.mp4',
+          expectedDurationSec: 90,
+          title: 'Newest stale task',
+          createdAt: DateTime(2025, 1, 2),
+          steps: pendingSteps,
+          detectedMedia: const [staleMedia],
+          selectedMedia: staleMedia,
+          progress: 12,
+          downloadedFilePath: '/tmp/stale.partial.mp4',
+          metadata: const {
+            'stale-setting': 'older',
+            'runtime-key': 'before',
+          },
+          downloadedBytes: 345,
+        );
+        notifier.holdRetryExecutions = true;
+        notifier.setTasksForTest([older, newer]);
+        final executionNotifier = notifier;
+
+        try {
+          executionNotifier.resumeTask(taskId);
+          await executionNotifier.executorStarted.future.timeout(
+            const Duration(seconds: 2),
+          );
+
+          // A concurrent edit must survive updates from the resumed snapshot.
+          executionNotifier.setTasksForTest([
+            executionNotifier.tasksForTest.first,
+            executionNotifier.tasksForTest.last.copyWith(metadata: const {
+              'stale-setting': 'newer',
+              'runtime-key': 'current',
+              'newest-only': 'preserved',
+            }),
+          ]);
+
+          final runtimeUpdate = executionNotifier.lastRetriedTask!.copyWith(
+            status: TaskStatus.running,
+            steps: [
+              StepStatus.done(StepType.fetching),
+              StepStatus.progressing(StepType.downloading, 73),
+            ],
+            detectedMedia: const [resumedMedia],
+            selectedMedia: resumedMedia,
+            progress: 73,
+            downloadedFilePath: '/tmp/resumed.partial.mp4',
+            metadata: const {
+              'stale-setting': 'older',
+              'runtime-key': 'after',
+            },
+            downloadedBytes: 1234,
+          );
+          executionNotifier.lastRetryTaskUpdate!(runtimeUpdate);
+
+          final persisted = await _waitForPersistedLatestTaskForTest(
+            directory,
+            taskId,
+            expectedProgress: runtimeUpdate.progress,
+          );
+          expect(persisted, isNotNull);
+          expect(persisted!.detectedMedia.single.url, resumedMedia.url);
+          expect(persisted.selectedMedia?.url, resumedMedia.url);
+          expect(
+              persisted.downloadedFilePath, runtimeUpdate.downloadedFilePath);
+          expect(persisted.downloadedBytes, runtimeUpdate.downloadedBytes);
+          expect(persisted.url, newer.url);
+          expect(persisted.expectedDurationSec, newer.expectedDurationSec);
+          expect(persisted.title, newer.title);
+          expect(persisted.createdAt, newer.createdAt);
+          expect(persisted.metadata, {
+            'stale-setting': 'newer',
+            'runtime-key': 'after',
+            'newest-only': 'preserved',
+          });
+
+          final persistedRecords = (jsonDecode(
+            await File('${directory.path}/catcatch/tasks.json').readAsString(),
+          ) as List)
+              .map(
+                (record) => CatCatchTask.fromMap(
+                  Map<String, dynamic>.from(record as Map),
+                ),
+              )
+              .toList();
+          expect(persistedRecords.map((current) => current.id).toList(), [
+            taskId,
+            taskId,
+          ]);
+          expect(persistedRecords.last.progress, runtimeUpdate.progress);
+
+          for (final release in executionNotifier.retryReleases) {
+            if (!release.isCompleted) release.complete();
+          }
+          await Future.wait(
+            executionNotifier.retryCompletions.map((item) => item.future),
+          ).timeout(const Duration(seconds: 2));
+
+          // A fresh provider models process restart and restores only the last
+          // persisted record for this duplicate task ID.
+          container.dispose();
+          containerDisposed = true;
+          container = ProviderContainer(
+            overrides: [
+              catcatchTasksProvider.overrideWith((ref) {
+                notifier = _CleanupCatCatchNotifier(ref);
+                return notifier;
+              }),
+            ],
+          );
+          containerDisposed = false;
+          container.read(catcatchTasksProvider);
+          await notifier.restoreUnfinishedTasks();
+
+          expect(notifier.tasksForTest, hasLength(1));
+          final restored = notifier.tasksForTest.single;
+          expect(restored.progress, runtimeUpdate.progress);
+          expect(restored.downloadedFilePath, runtimeUpdate.downloadedFilePath);
+          expect(restored.detectedMedia.single.url, resumedMedia.url);
+          expect(restored.selectedMedia?.url, resumedMedia.url);
+          expect(restored.downloadedBytes, runtimeUpdate.downloadedBytes);
+          expect(restored.url, newer.url);
+          expect(restored.expectedDurationSec, newer.expectedDurationSec);
+          expect(restored.title, newer.title);
+          expect(restored.createdAt, newer.createdAt);
+          expect(restored.metadata, persisted.metadata);
+          expect(restored.status, TaskStatus.paused);
+        } finally {
+          for (final release in executionNotifier.retryReleases) {
+            if (!release.isCompleted) release.complete();
+          }
+          await Future.wait(
+            executionNotifier.retryCompletions.map((item) => item.future),
+          );
+          await notifier.removeTasksPersisted([taskId]);
+        }
+      },
+    );
+
+    test('resumed runtime title updates replace the unchanged newest title',
+        () async {
+      const taskId = 'resumed-duplicate-title-task';
+      final pendingSteps = StepType.values.map(StepStatus.pending).toList();
+      final older = task(taskId).copyWith(
+        title: 'Shared task title',
+        steps: pendingSteps,
+      );
+      final newer = task(taskId).copyWith(
+        title: 'Shared task title',
+        steps: pendingSteps,
+      );
+      notifier.holdRetryExecutions = true;
+      notifier.setTasksForTest([older, newer]);
+      final executionNotifier = notifier;
+
+      try {
+        executionNotifier.resumeTask(taskId);
+        await executionNotifier.executorStarted.future.timeout(
+          const Duration(seconds: 2),
+        );
+
+        final runtimeUpdate = executionNotifier.lastRetriedTask!.copyWith(
+          title: 'Fetched page title',
+          status: TaskStatus.running,
+          steps: [
+            StepStatus.done(StepType.fetching),
+            StepStatus.progressing(StepType.downloading, 73),
+          ],
+          progress: 73,
+        );
+        executionNotifier.lastRetryTaskUpdate!(runtimeUpdate);
+
+        final persisted = await _waitForPersistedLatestTaskForTest(
+          directory,
+          taskId,
+          expectedProgress: runtimeUpdate.progress,
+        );
+        expect(persisted, isNotNull);
+        expect(persisted!.title, 'Fetched page title');
+      } finally {
+        for (final release in executionNotifier.retryReleases) {
+          if (!release.isCompleted) release.complete();
+        }
+        await Future.wait(
+          executionNotifier.retryCompletions.map((item) => item.future),
+        );
+        await notifier.removeTasksPersisted([taskId]);
+      }
+    });
+
+    test('restore keeps the newest persisted record for duplicate task IDs',
+        () async {
+      const taskId = 'restored-duplicate-task';
+      final older = task(taskId).copyWith(
+        url: 'https://example.com/older.mp4',
+        metadata: const {'replacement': 'older'},
+      );
+      const replacementMedia = MediaResource(
+        url: 'https://example.com/replacement.m3u8',
+        name: 'replacement',
+        ext: 'm3u8',
+        isPlaylist: true,
+      );
+      final replacement = task(taskId).copyWith(
+        url: 'https://example.com/replacement-page',
+        title: 'Replacement task',
+        expectedDurationSec: 90,
+        status: TaskStatus.running,
+        steps: [
+          StepStatus.done(StepType.fetching),
+          StepStatus.progressing(StepType.downloading, 47),
+        ],
+        detectedMedia: const [replacementMedia],
+        selectedMedia: replacementMedia,
+        progress: 47,
+        downloadedFilePath: '/tmp/replacement.partial.mp4',
+        metadata: const {'replacement': 'newest'},
+        downloadedBytes: 1234,
+      );
+      final distinctBefore = task('distinct-before');
+      final distinctAfter = task('distinct-after');
+      final tasksDirectory = Directory('${directory.path}/catcatch');
+      await tasksDirectory.create(recursive: true);
+      await File('${tasksDirectory.path}/tasks.json').writeAsString(
+        jsonEncode([
+          older.toMap(),
+          distinctBefore.toMap(),
+          replacement.toMap(),
+          distinctAfter.toMap(),
+        ]),
+      );
+
+      // A fresh container has no in-memory tasks, like a process restart.
+      container.dispose();
+      containerDisposed = true;
+      container = ProviderContainer(overrides: [
+        catcatchTasksProvider.overrideWith((ref) {
+          notifier = _CleanupCatCatchNotifier(ref);
+          return notifier;
+        }),
+      ]);
+      containerDisposed = false;
+      container.read(catcatchTasksProvider);
+
+      await notifier.restoreUnfinishedTasks();
+
+      expect(
+        notifier.tasksForTest.map((current) => current.id).toList(),
+        [taskId, 'distinct-before', 'distinct-after'],
+      );
+      final restored = notifier.tasksForTest.singleWhere(
+        (current) => current.id == taskId,
+      );
+      expect(restored.url, replacement.url);
+      expect(restored.title, replacement.title);
+      expect(restored.expectedDurationSec, replacement.expectedDurationSec);
+      expect(restored.status, TaskStatus.paused);
+      expect(restored.error, '应用重启，已暂停');
+      expect(restored.steps.map((step) => step.progress).toList(), [100, 47]);
+      expect(restored.detectedMedia.single.url, replacementMedia.url);
+      expect(restored.selectedMedia?.url, replacementMedia.url);
+      expect(restored.progress, replacement.progress);
+      expect(restored.downloadedFilePath, replacement.downloadedFilePath);
+      expect(restored.metadata, replacement.metadata);
+      expect(restored.downloadedBytes, replacement.downloadedBytes);
+    });
+
+    test('persisted removal cancels a selected row restarted during its write',
+        () async {
+      const taskId = 'restart-during-persisted-removal';
+      notifier.holdTaskExecutions = true;
+      notifier.holdRetryExecutions = true;
+      Future<bool>? removal;
+      try {
+        notifier.addTask('invalid://original', 30, taskId: taskId);
+        await notifier.executorStarted.future.timeout(
+          const Duration(seconds: 2),
+        );
+        await notifier.waitForTaskSnapshotWritesForTesting();
+        documents.releaseAllRequests = Completer<void>();
+        AppStorage.resetCache();
+        removal = notifier.removeTasksPersisted([taskId]);
+        notifier.pauseTask(taskId);
+        notifier.resumeTask(taskId);
+        await notifier.secondExecutorStarted.future.timeout(
+          const Duration(seconds: 2),
+        );
+        final restartedToken = notifier.taskCancelTokens.last;
+        expect(restartedToken.isCancelled, isFalse);
+
+        documents.releaseAllRequests!.complete();
+        expect(await removal, isTrue);
+        expect(restartedToken.isCancelled, isTrue);
+        expect(notifier.tasksForTest, isEmpty);
+      } finally {
+        if (documents.releaseAllRequests?.isCompleted == false) {
+          documents.releaseAllRequests!.complete();
+        }
+        if (removal != null) await removal;
+        for (final release in [
+          ...notifier.taskReleases,
+          ...notifier.retryReleases,
+        ]) {
+          if (!release.isCompleted) release.complete();
+        }
+        await notifier.waitForTaskSnapshotWritesForTesting();
+      }
+    });
+
+    test('failed persisted removal retains its selected row and execution',
+        () async {
+      const taskId = 'failed-persisted-removal-owner';
+      notifier.holdTaskExecutions = true;
+      try {
+        notifier.addTask('invalid://original', 30, taskId: taskId);
+        await notifier.executorStarted.future.timeout(
+          const Duration(seconds: 2),
+        );
+        await notifier.waitForTaskSnapshotWritesForTesting();
+        final original = notifier.tasksForTest.single;
+        notifier.setTasksForTest([original, _FailingSerializationTask()]);
+
+        expect(await notifier.removeTasksPersisted([taskId]), isFalse);
+        expect(notifier.tasksForTest.first, same(original));
+        expect(notifier.taskCancelTokens.single.isCancelled, isFalse);
+      } finally {
+        for (final release in notifier.taskReleases) {
+          if (!release.isCompleted) release.complete();
+        }
+        notifier.setTasksForTest([]);
+        await notifier.removeTasksPersisted([taskId]);
+      }
+    });
+
+    for (final disposeDuringWrite in [false, true]) {
+      test(
+          'persisted removal still removes an updated original row '
+          '(dispose: $disposeDuringWrite)', () async {
+        const taskId = 'update-during-persisted-removal';
+        notifier.holdTaskExecutions = true;
+        notifier.addTask('invalid://original', 30, taskId: taskId);
+        await notifier.executorStarted.future.timeout(
+          const Duration(seconds: 2),
+        );
+        await notifier.waitForTaskSnapshotWritesForTesting();
+        documents.releaseAllRequests = Completer<void>();
+        AppStorage.resetCache();
+        final removal = notifier.removeTasksPersisted([taskId]);
+        notifier.lastTaskUpdate!(notifier.lastExecutedTask!.copyWith(
+          progress: 42,
+        ));
+        if (disposeDuringWrite) {
+          container.dispose();
+          containerDisposed = true;
+        }
+        documents.releaseAllRequests!.complete();
+        expect(await removal, isTrue);
+        expect(
+          notifier.taskCancelTokens.single.isCancelled,
+          !disposeDuringWrite,
+        );
+        notifier.taskReleases.single.complete();
+        await notifier.taskCompletions.single.future;
+        await notifier.waitForTaskSnapshotWritesForTesting();
+        if (!disposeDuringWrite) expect(notifier.tasksForTest, isEmpty);
+        final persisted = await File(
+          '${directory.path}/catcatch/tasks.json',
+        ).readAsString();
+        expect(jsonDecode(persisted), isEmpty);
+      });
+    }
+
+    for (final disposeDuringWrite in [false, true]) {
+      test(
+          'persisted removal preserves a replacement during its write '
+          '(dispose: $disposeDuringWrite)', () async {
+        const taskId = 'replace-during-persisted-removal';
+        notifier.holdTaskExecutions = true;
+        notifier.setTasksForTest([task(taskId)]);
+        documents.firstRequestStarted = Completer<void>();
+        documents.releaseFirstRequest = Completer<void>();
+        Future<bool>? removal;
+
+        try {
+          removal = notifier.removeTasksPersisted([taskId]);
+          await documents.firstRequestStarted!.future.timeout(
+            const Duration(seconds: 2),
+          );
+          notifier.addTask('invalid://replacement', 45, taskId: taskId);
+          await notifier.executorStarted.future.timeout(
+            const Duration(seconds: 2),
+          );
+          final replacementToken = notifier.taskCancelTokens.single;
+          if (disposeDuringWrite) {
+            container.dispose();
+            containerDisposed = true;
+          }
+          documents.releaseFirstRequest!.complete();
+          expect(await removal, isTrue);
+          await notifier.waitForTaskSnapshotWritesForTesting();
+
+          if (!disposeDuringWrite) {
+            expect(notifier.tasksForTest.single.url, 'invalid://replacement');
+            expect(replacementToken.isCancelled, isFalse);
+            notifier.taskReleases.single.complete();
+            await notifier.taskCompletions.single.future;
+            expect(notifier.uncancelledTaskCompletions, [taskId]);
+            await notifier.waitForTaskSnapshotWritesForTesting();
+          }
+          final persisted = jsonDecode(await File(
+            '${directory.path}/catcatch/tasks.json',
+          ).readAsString()) as List;
+          expect(persisted, hasLength(1));
+          expect((persisted.single as Map)['url'], 'invalid://replacement');
+        } finally {
+          if (!documents.releaseFirstRequest!.isCompleted) {
+            documents.releaseFirstRequest!.complete();
+          }
+          if (removal != null) await removal;
+          for (final release in notifier.taskReleases) {
+            if (!release.isCompleted) release.complete();
+          }
+          await notifier.waitForTaskSnapshotWritesForTesting();
+        }
+      });
+    }
+
+    test('reused addTask ID cancels superseded execution before removal',
+        () async {
+      const taskId = 'duplicate-add-task-remove';
+      notifier.holdTaskExecutions = true;
+
+      try {
+        notifier.addTask('invalid://first-task', 30, taskId: taskId);
+        await notifier.executorStarted.future.timeout(
+          const Duration(seconds: 2),
+        );
+
+        notifier.addTask('invalid://second-task', 30, taskId: taskId);
+        await notifier.secondExecutorStarted.future.timeout(
+          const Duration(seconds: 2),
+        );
+
+        final supersededRun = notifier.taskCancelTokens[0];
+        final currentRun = notifier.taskCancelTokens[1];
+        final supersededRunCancelledBeforeRemoval = supersededRun.isCancelled;
+
+        expect(await notifier.removeTasksPersisted([taskId]), isTrue);
+        for (final release in notifier.taskReleases) {
+          if (!release.isCompleted) release.complete();
+        }
+        await Future.wait(notifier.taskCompletions.map((item) => item.future))
+            .timeout(const Duration(seconds: 2));
+
+        expect(supersededRunCancelledBeforeRemoval, isTrue);
+        expect(supersededRun.isCancelled, isTrue);
+        expect(currentRun.isCancelled, isTrue);
+        expect(notifier.tasksForTest, isEmpty);
+        expect(notifier.uncancelledTaskCompletions, isEmpty);
+      } finally {
+        for (final release in notifier.taskReleases) {
+          if (!release.isCompleted) release.complete();
+        }
+        await notifier.removeTasksPersisted([taskId]);
+      }
+    });
+
+    test('removing a repeated task cancels all overlapping executions',
+        () async {
+      const taskId = 'repeat-confirm-remove';
+      notifier.holdRetryExecutions = true;
+      notifier.setTasksForTest([task(taskId)]);
+
+      try {
+        notifier.confirmAndContinue(taskId);
+        await notifier.executorStarted.future.timeout(
+          const Duration(seconds: 2),
+        );
+        notifier.confirmAndContinue(taskId);
+        await notifier.secondExecutorStarted.future.timeout(
+          const Duration(seconds: 2),
+        );
+
+        final firstRun = notifier.retryCancelTokens[0];
+        final currentRun = notifier.retryCancelTokens[1];
+        expect(firstRun.isCancelled, isTrue);
+        expect(currentRun.isCancelled, isFalse);
+
+        notifier.removeTask(taskId);
+
+        expect(firstRun.isCancelled, isTrue);
+        expect(currentRun.isCancelled, isTrue);
+        expect(notifier.tasksForTest, isEmpty);
+      } finally {
+        for (final release in notifier.retryReleases) {
+          if (!release.isCompleted) release.complete();
+        }
+        await notifier.removeTasksPersisted([taskId]);
+      }
+    });
+
     test('rejected user start preference write does not start service',
         () async {
       await preferences.setBool('background_service_enabled', false);
@@ -812,7 +2619,7 @@ void main() {
       });
       try {
         await preferences.reload();
-        expect(await stopBackgroundService(), isTrue);
+        expect(await stopBackgroundService(), isFalse);
         await preferences.reload();
         expect(preferences.getBool('background_service_enabled'), isTrue);
         expect(servicePlatform.running, isFalse);
@@ -874,6 +2681,168 @@ void main() {
       expect(await start, isTrue);
       expect(servicePlatform.running, isTrue);
       expect(preferences.getBool('background_service_enabled'), isTrue);
+    });
+
+    test(
+      'removal cleans every duplicate while preserving remaining owners',
+      () async {
+        const firstMedia = MediaResource(
+          url: 'https://example.com/first.mp4',
+          name: 'first',
+          ext: 'mp4',
+        );
+        const secondMedia = MediaResource(
+          url: 'https://example.com/second.mp4',
+          name: 'second',
+          ext: 'mp4',
+        );
+        final downloadDir = Directory('${directory.path}/catcatch/downloads')
+          ..createSync(recursive: true);
+        final firstArtifact = File('${downloadDir.path}/first.mp4.catcatch_tmp')
+          ..writeAsStringSync('first partial');
+        final secondArtifact = File(
+          '${downloadDir.path}/second.mp4.catcatch_tmp',
+        )..writeAsStringSync('second partial');
+        final firstPartial = File('${directory.path}/first.partial')
+          ..writeAsStringSync('first recorded partial');
+        final secondPartial = File('${directory.path}/second.partial')
+          ..writeAsStringSync('second recorded partial');
+        final sharedArtifact = File('${downloadDir.path}/second.mp4')
+          ..writeAsStringSync('remaining owner');
+        notifier.setTasksForTest([
+          task('duplicate').copyWith(
+            selectedMedia: firstMedia,
+            downloadedFilePath: firstPartial.path,
+          ),
+          task('duplicate').copyWith(
+            selectedMedia: secondMedia,
+            downloadedFilePath: secondPartial.path,
+          ),
+          task('remaining').copyWith(downloadedFilePath: sharedArtifact.path),
+        ]);
+
+        notifier.removeTask('duplicate');
+        expect(notifier.tasksForTest.map((task) => task.id), ['remaining']);
+        await notifier.waitForTaskSnapshotWritesForTesting();
+        final removedArtifacts = [
+          firstArtifact,
+          secondArtifact,
+          firstPartial,
+          secondPartial,
+        ];
+        // Wait for the unawaited cleanup through its observable filesystem result.
+        await Future<void>(() async {
+          while (removedArtifacts.any((file) => file.existsSync())) {
+            await Future<void>.delayed(const Duration(milliseconds: 10));
+          }
+        }).timeout(const Duration(seconds: 2));
+        expect(sharedArtifact.readAsStringSync(), 'remaining owner');
+      },
+    );
+
+    test('removal cleanup rechecks owners selected during its async gap',
+        () async {
+      const media = MediaResource(
+        url: 'https://example.com/video.mp4',
+        name: 'video',
+        ext: 'mp4',
+      );
+      final downloadDir = Directory('${directory.path}/catcatch/downloads')
+        ..createSync(recursive: true);
+      final tempDownload = File(
+        '${downloadDir.path}/video.mp4.catcatch_tmp',
+      )..writeAsStringSync('partial download');
+      final unsharedDownload = File('${directory.path}/unshared-download.tmp')
+        ..writeAsStringSync('removed task artifact');
+      final progressFile = File(
+        '${directory.path}/catcatch/.progress/removed_dl_progress.json',
+      )..createSync(recursive: true);
+
+      documents.firstRequestStarted = Completer<void>();
+      documents.releaseAllRequests = Completer<void>();
+      notifier.setTasksForTest([
+        task('removed').copyWith(
+          selectedMedia: media,
+          downloadedFilePath: unsharedDownload.path,
+        ),
+        task('remaining').copyWith(
+          steps: [StepStatus.running(StepType.userSelecting)],
+        ),
+      ]);
+
+      try {
+        notifier.removeTask('removed');
+        await documents.firstRequestStarted!.future.timeout(
+          const Duration(seconds: 2),
+        );
+
+        notifier.selectMedia('remaining', media);
+        await notifier.executorStarted.future.timeout(
+          const Duration(seconds: 2),
+        );
+        expect(
+          notifier.tasksForTest
+              .singleWhere((current) => current.id == 'remaining')
+              .selectedMedia,
+          media,
+        );
+
+        documents.releaseAllRequests!.complete();
+        await notifier.waitForTaskSnapshotWritesForTesting();
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+
+        expect(await tempDownload.exists(), isTrue);
+        expect(await unsharedDownload.exists(), isFalse);
+        expect(await progressFile.exists(), isFalse);
+      } finally {
+        if (!documents.releaseAllRequests!.isCompleted) {
+          documents.releaseAllRequests!.complete();
+        }
+      }
+    });
+
+    test('removal cleanup rechecks owners selected after its snapshot',
+        () async {
+      const media = MediaResource(
+        url: 'https://example.com/video.mp4',
+        name: 'video',
+        ext: 'mp4',
+      );
+      final downloadDir = Directory('${directory.path}/catcatch/downloads')
+        ..createSync(recursive: true);
+      final tempDownload = File(
+        '${downloadDir.path}/video.mp4.catcatch_tmp',
+      )..writeAsStringSync('partial download');
+      final unsharedDownload = File('${directory.path}/unshared-download.tmp')
+        ..writeAsStringSync('removed task artifact');
+      final progressFile = File(
+        '${directory.path}/catcatch/.progress/removed_dl_progress.json',
+      )..createSync(recursive: true);
+      final remaining = task('remaining').copyWith(
+        steps: [StepStatus.running(StepType.userSelecting)],
+      );
+      notifier.setTasksForTest([remaining]);
+
+      final cleanup = CatCatchNotifier.cleanupTaskFiles(
+        task('removed').copyWith(
+          selectedMedia: media,
+          downloadedFilePath: unsharedDownload.path,
+        ),
+        appDirPath: directory.path,
+        remainingTasks: notifier.tasksForTest,
+        remainingTasksProvider: () => notifier.tasksForTest,
+      );
+      // The owner list starts with an unselected task. Select its media after
+      // cleanup starts but before its first async deletion resumes.
+      notifier.selectMedia('remaining', media);
+      await notifier.executorStarted.future.timeout(
+        const Duration(seconds: 2),
+      );
+      await cleanup;
+
+      expect(await tempDownload.exists(), isTrue);
+      expect(await unsharedDownload.exists(), isFalse);
+      expect(await progressFile.exists(), isFalse);
     });
 
     test('a user start reconciles a timed-out stop before reporting active',

@@ -7,6 +7,7 @@ import 'package:stroom/pages/conversations_page.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/services/conversation_repository.dart';
 import 'package:stroom/services/conversation_repository_memory.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 
 class _FailingSearchRepository extends MemoryConversationRepository {
   @override
@@ -37,7 +38,11 @@ void main() {
         overrides: [
           conversationRepositoryProvider.overrideWithValue(repository)
         ],
-        child: const MaterialApp(home: ConversationsPage()),
+        child: const MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: ConversationsPage()),
       ),
     );
     await tester.pumpAndSettle();

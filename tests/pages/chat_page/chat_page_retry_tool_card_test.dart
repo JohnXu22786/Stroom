@@ -19,6 +19,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/models/assistant.dart';
@@ -63,6 +65,8 @@ class _LiveStreamManager extends ChatStreamManager {
     required String text,
     required String convId,
     required List<ChatMessage> history,
+    List<ChatMessage>? requestHistoryOverride,
+    List<ChatMessage>? historyOnSuccess,
     List<ToolDefinition> tools = const [],
     bool reasoning = false,
     String reasoningEffort = 'medium',
@@ -70,6 +74,7 @@ class _LiveStreamManager extends ChatStreamManager {
     String? selectedAccountId,
     String? streamingMsgId,
     Assistant? assistant,
+    Map<String, String>? customParamValues,
     ProviderEntriesState? entriesStateOverride,
   }) async {
     lastStreamingMsgId = streamingMsgId;
@@ -127,6 +132,8 @@ class _ImmediateStreamManager extends ChatStreamManager {
     required String text,
     required String convId,
     required List<ChatMessage> history,
+    List<ChatMessage>? requestHistoryOverride,
+    List<ChatMessage>? historyOnSuccess,
     List<ToolDefinition> tools = const [],
     bool reasoning = false,
     String reasoningEffort = 'medium',
@@ -134,6 +141,7 @@ class _ImmediateStreamManager extends ChatStreamManager {
     String? selectedAccountId,
     String? streamingMsgId,
     Assistant? assistant,
+    Map<String, String>? customParamValues,
     ProviderEntriesState? entriesStateOverride,
   }) async {
     final assistantMsg = ChatMessage(
@@ -153,7 +161,7 @@ class _ImmediateStreamManager extends ChatStreamManager {
       ],
       toolCallRoundStarts: const [0],
     );
-    final newHistory = [...history, assistantMsg];
+    final newHistory = [...(historyOnSuccess ?? history), assistantMsg];
     await ref!
         .read(conversationsProvider.notifier)
         .updateMessages(convId, newHistory);
@@ -231,7 +239,16 @@ Widget _buildTestApp(_ImmediateStreamManager manager) {
       activeConversationIdProvider.overrideWith((ref) => 'test-conv'),
       providerEntriesProvider.overrideWith((ref) => ProviderEntriesNotifier()),
     ],
-    child: const MaterialApp(home: ChatPage()),
+    child: const MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: ChatPage()),
   );
 }
 
@@ -377,7 +394,16 @@ void main() {
         providerEntriesProvider
             .overrideWith((ref) => ProviderEntriesNotifier()),
       ],
-      child: const MaterialApp(home: ChatPage()),
+      child: const MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: ChatPage()),
     ));
     await _pumpLoaded(tester);
 
@@ -603,7 +629,16 @@ void main() {
         providerEntriesProvider
             .overrideWith((ref) => ProviderEntriesNotifier()),
       ],
-      child: const MaterialApp(home: ChatPage()),
+      child: const MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: ChatPage()),
     ));
     await _pumpLoaded(tester);
 
@@ -671,7 +706,16 @@ void main() {
         providerEntriesProvider
             .overrideWith((ref) => ProviderEntriesNotifier()),
       ],
-      child: const MaterialApp(home: ChatPage()),
+      child: const MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: ChatPage()),
     ));
     await _pumpLoaded(tester);
 
@@ -855,7 +899,16 @@ void main() {
         providerEntriesProvider
             .overrideWith((ref) => ProviderEntriesNotifier()),
       ],
-      child: const MaterialApp(home: ChatPage()),
+      child: const MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: ChatPage()),
     ));
     await _pumpLoaded(tester);
     expect(find.text('web_search'), findsOneWidget, reason: '前置：a1 的折叠工具卡片应可见');
@@ -1015,7 +1068,16 @@ void main() {
         providerEntriesProvider
             .overrideWith((ref) => ProviderEntriesNotifier()),
       ],
-      child: const MaterialApp(home: ChatPage()),
+      child: const MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: ChatPage()),
     ));
     await _pumpLoaded(tester);
 

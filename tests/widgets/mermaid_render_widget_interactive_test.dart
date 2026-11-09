@@ -3,9 +3,10 @@ import 'dart:convert';
 // The platform interface lives under the package's src/ (not exported
 // publicly); extending it is the supported way to fake the save dialog.
 // ignore_for_file: implementation_imports
-import 'package:file_picker/src/platform/file_picker_platform_interface.dart';
+import 'package:file_picker_platform_interface/file_picker_platform_interface.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/widgets/folder_picker_dialog.dart';
 import 'package:stroom/widgets/mermaid_render_widget.dart';
 
@@ -36,6 +37,9 @@ void main() {
       );
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: widget,
           ),
@@ -65,6 +69,9 @@ void main() {
       );
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: widget,
           ),
@@ -103,6 +110,9 @@ void main() {
       );
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: widget,
           ),
@@ -128,6 +138,9 @@ void main() {
       );
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: widget,
           ),
@@ -147,6 +160,9 @@ void main() {
       );
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: widget,
           ),
@@ -172,6 +188,9 @@ void main() {
       );
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: widget,
           ),
@@ -211,6 +230,9 @@ void main() {
       );
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: widget,
           ),
@@ -232,6 +254,9 @@ void main() {
       );
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: widget,
           ),
@@ -252,6 +277,9 @@ void main() {
       );
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: widget,
           ),
@@ -259,7 +287,7 @@ void main() {
       );
 
       // Empty code shows placeholder, not the code view
-      expect(find.text('No Mermaid code to render'), findsOneWidget);
+      expect(find.text('没有可渲染的 Mermaid 代码'), findsOneWidget);
       // Save button should NOT be present
       expect(find.byIcon(Icons.save), findsNothing);
     });
@@ -281,6 +309,9 @@ void main() {
       );
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: widget,
           ),
@@ -309,6 +340,9 @@ void main() {
       );
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: widget,
           ),
@@ -363,9 +397,14 @@ void main() {
       expect(html, contains('e.preventDefault()'));
     });
 
-    test('setZoom clamps zoom level between 0.1 and 10', () {
+    test('setZoom preserves a sub-floor fit and retains the manual floor', () {
       final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
-      expect(html, contains('Math.max(0.1, Math.min(10, level))'));
+      expect(
+        html,
+        contains(
+            'var minZoom = oldZoom < 0.1 && level <= oldZoom ? oldZoom : 0.1;'),
+      );
+      expect(html, contains('Math.max(minZoom, Math.min(10, level))'));
     });
 
     test('setZoom reports new zoom level via onTransformChanged handler', () {
@@ -456,13 +495,16 @@ void main() {
       const widget = MermaidRenderWidget(mermaidCode: '   \n  \t  ');
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: widget,
           ),
         ),
       );
 
-      expect(find.text('No Mermaid code to render'), findsOneWidget);
+      expect(find.text('没有可渲染的 Mermaid 代码'), findsOneWidget);
     });
   });
 

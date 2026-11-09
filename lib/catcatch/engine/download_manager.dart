@@ -207,8 +207,10 @@ class DownloadManager {
   /// 返回输出文件路径。
   static Future<String> downloadSegmentsAndMerge({
     required List<String> segmentUrls,
+    List<({int start, int length})?>? segmentRanges,
     required String outputPath,
     Map<String, String>? headers,
+    Map<String, String> Function(String url)? headersForUrl,
     int concurrency = 3,
     void Function(int completed, int total, int progress)? onProgress,
 
@@ -220,6 +222,9 @@ class DownloadManager {
   }) async {
     if (segmentUrls.isEmpty) {
       throw ArgumentError('segmentUrls must not be empty');
+    }
+    if (segmentRanges != null && segmentRanges.length != segmentUrls.length) {
+      throw ArgumentError('segmentRanges must match segmentUrls length');
     }
 
     final dir = Directory(p.dirname(outputPath));
@@ -238,8 +243,9 @@ class DownloadManager {
     }
 
     // 恢复进度
+    final hasByteRanges = segmentRanges?.any((range) => range != null) ?? false;
     int completedCount = 0;
-    if (taskId.isNotEmpty) {
+    if (taskId.isNotEmpty && !hasByteRanges) {
       final saved = await loadSegmentProgress(taskId);
       if (saved != null) {
         completedCount = saved['completed'] as int? ?? 0;
@@ -285,9 +291,11 @@ class DownloadManager {
       futures.add(downloadSingleSegment(
         index: i,
         url: segmentUrls[i],
+        rangeStart: segmentRanges?[i]?.start,
+        rangeLength: segmentRanges?[i]?.length,
         tempDir: tempDirPath,
         partFiles: partFiles,
-        headers: headers,
+        headers: headersForUrl?.call(segmentUrls[i]) ?? headers,
         semaphore: semaphore,
         cancelToken: cancelToken,
         errors: errors,

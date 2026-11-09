@@ -59,6 +59,8 @@ Future<void> deleteSegmentProgress(String taskId) async {
 Future<void> downloadSingleSegment({
   required int index,
   required String url,
+  int? rangeStart,
+  int? rangeLength,
   required String tempDir,
   required List<String?> partFiles,
   Map<String, String>? headers,
@@ -73,6 +75,11 @@ Future<void> downloadSingleSegment({
   void Function(int delta)? onBytesDelta,
   String taskId = '',
 }) async {
+  if ((rangeStart == null) != (rangeLength == null) ||
+      (rangeStart != null && rangeStart < 0) ||
+      (rangeLength != null && rangeLength <= 0)) {
+    throw ArgumentError('Invalid segment byte range');
+  }
   await semaphore.acquire();
   try {
     final partPath = p.join(tempDir, 'part_$index');
@@ -87,6 +94,10 @@ Future<void> downloadSingleSegment({
           final mergedHeaders =
               Map<String, String>.from(DefaultRules.defaultHeaders);
           if (headers != null) mergedHeaders.addAll(headers);
+          if (rangeStart != null && rangeLength != null) {
+            mergedHeaders[HttpHeaders.rangeHeader] =
+                'bytes=$rangeStart-${rangeStart + rangeLength - 1}';
+          }
 
           final response = await dio.get(
             url,
@@ -98,14 +109,34 @@ Future<void> downloadSingleSegment({
             cancelToken: cancelToken,
           );
 
-          if (response.statusCode != 200 && response.statusCode != 206) {
+          final isRangeRequest = rangeStart != null;
+          if ((isRangeRequest && response.statusCode != 206) ||
+              (!isRangeRequest &&
+                  response.statusCode != 200 &&
+                  response.statusCode != 206)) {
             throw DioException(
               requestOptions: response.requestOptions,
               response: response,
               message: 'HTTP ${response.statusCode}',
             );
           }
+          if (isRangeRequest) {
+            final contentRange = response.headers.value('content-range');
+            final match = RegExp(
+              r'^bytes\s+(\d+)-(\d+)/(?:\d+|\*)$',
+              caseSensitive: false,
+            ).firstMatch(contentRange?.trim() ?? '');
+            final expectedEnd = rangeStart! + rangeLength! - 1;
+            if (match == null ||
+                int.tryParse(match.group(1)!) != rangeStart ||
+                int.tryParse(match.group(2)!) != expectedEnd) {
+              throw StateError(
+                'Unexpected Content-Range for segment $index: $contentRange',
+              );
+            }
+          }
 
+          var receivedLength = 0;
           try {
             final file = File(partPath);
             final raf = await file.open(mode: FileMode.write);
@@ -119,10 +150,17 @@ Future<void> downloadSingleSegment({
                   }
                 }
                 await raf.writeFrom(chunk);
+                receivedLength += chunk.length;
                 onBytesDelta?.call(chunk.length);
               }
             } finally {
               await raf.close();
+            }
+            if (rangeLength != null && receivedLength != rangeLength) {
+              throw StateError(
+                'Expected $rangeLength bytes for segment $index, '
+                'received $receivedLength',
+              );
             }
           } catch (e) {
             if (retries < DefaultRules.maxRetriesPerSegment) {

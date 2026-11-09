@@ -9,11 +9,13 @@ import 'package:dynamic_color/dynamic_color.dart';
 import 'dart:async';
 import 'dart:io' show exit, Platform;
 
+import 'l10n/app_localizations.dart';
 import 'pages/home_page.dart';
 import 'pages/chat_page.dart';
 import 'pages/files_page.dart';
 import 'pages/settings_page.dart';
 import 'providers/theme_provider.dart';
+import 'providers/locale_provider.dart';
 import 'providers/update_provider.dart';
 import 'providers/notification_provider.dart';
 import 'providers/background_task_provider.dart';
@@ -26,6 +28,7 @@ import 'services/snapshot_service.dart';
 import 'widgets/update_dialog.dart';
 import 'widgets/quit_confirmation_dialog.dart';
 import 'widgets/tap_outside_unfocus.dart';
+import 'widgets/stroom_menu_style.dart';
 
 /// 启动后任务（更新检查 + 备份检查）的进程级去重标记。
 ///
@@ -75,6 +78,7 @@ class _ApplicationState extends ConsumerState<Application>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    unawaited(ref.read(localeProvider.notifier).load());
 
     // 桌面端：把「退出确认」注入托盘服务（关闭窗口/完全退出时使用），
     // 并在首帧后启用「关闭窗口 → 最小化到托盘」行为。
@@ -370,15 +374,117 @@ class _ApplicationState extends ConsumerState<Application>
   @override
   Widget build(BuildContext context) {
     final themeMode = ref.watch(themeProvider);
+    final locale = ref.watch(localeProvider);
+    NotificationService().updateLocaleOverride(locale);
+    DesktopAppService.instance.updateLocaleOverride(locale);
 
     return DynamicColorBuilder(
-      builder: (ColorScheme? lightDynamic, ColorScheme? darkDynamic) {
+      builder: (lightDynamic, darkDynamic) {
         ColorScheme lightColorScheme;
         ColorScheme darkColorScheme;
 
         if (lightDynamic != null && darkDynamic != null) {
-          lightColorScheme = lightDynamic;
-          darkColorScheme = darkDynamic;
+          // dynamic_color 2.x builds schemes using material_ui. Copy the
+          // matching Material 3 roles into Flutter's framework ColorScheme so
+          // the existing Flutter Material widget tree keeps its theme types.
+          lightColorScheme = ColorScheme(
+            brightness: Brightness.light,
+            primary: lightDynamic.primary,
+            onPrimary: lightDynamic.onPrimary,
+            primaryContainer: lightDynamic.primaryContainer,
+            onPrimaryContainer: lightDynamic.onPrimaryContainer,
+            primaryFixed: lightDynamic.primaryFixed,
+            primaryFixedDim: lightDynamic.primaryFixedDim,
+            onPrimaryFixed: lightDynamic.onPrimaryFixed,
+            onPrimaryFixedVariant: lightDynamic.onPrimaryFixedVariant,
+            secondary: lightDynamic.secondary,
+            onSecondary: lightDynamic.onSecondary,
+            secondaryContainer: lightDynamic.secondaryContainer,
+            onSecondaryContainer: lightDynamic.onSecondaryContainer,
+            secondaryFixed: lightDynamic.secondaryFixed,
+            secondaryFixedDim: lightDynamic.secondaryFixedDim,
+            onSecondaryFixed: lightDynamic.onSecondaryFixed,
+            onSecondaryFixedVariant: lightDynamic.onSecondaryFixedVariant,
+            tertiary: lightDynamic.tertiary,
+            onTertiary: lightDynamic.onTertiary,
+            tertiaryContainer: lightDynamic.tertiaryContainer,
+            onTertiaryContainer: lightDynamic.onTertiaryContainer,
+            tertiaryFixed: lightDynamic.tertiaryFixed,
+            tertiaryFixedDim: lightDynamic.tertiaryFixedDim,
+            onTertiaryFixed: lightDynamic.onTertiaryFixed,
+            onTertiaryFixedVariant: lightDynamic.onTertiaryFixedVariant,
+            error: lightDynamic.error,
+            onError: lightDynamic.onError,
+            errorContainer: lightDynamic.errorContainer,
+            onErrorContainer: lightDynamic.onErrorContainer,
+            surface: lightDynamic.surface,
+            onSurface: lightDynamic.onSurface,
+            surfaceDim: lightDynamic.surfaceDim,
+            surfaceBright: lightDynamic.surfaceBright,
+            surfaceContainerLowest: lightDynamic.surfaceContainerLowest,
+            surfaceContainerLow: lightDynamic.surfaceContainerLow,
+            surfaceContainer: lightDynamic.surfaceContainer,
+            surfaceContainerHigh: lightDynamic.surfaceContainerHigh,
+            surfaceContainerHighest: lightDynamic.surfaceContainerHighest,
+            onSurfaceVariant: lightDynamic.onSurfaceVariant,
+            outline: lightDynamic.outline,
+            outlineVariant: lightDynamic.outlineVariant,
+            shadow: lightDynamic.shadow,
+            scrim: lightDynamic.scrim,
+            inverseSurface: lightDynamic.inverseSurface,
+            onInverseSurface: lightDynamic.onInverseSurface,
+            inversePrimary: lightDynamic.inversePrimary,
+            surfaceTint: lightDynamic.surfaceTint,
+          );
+          darkColorScheme = ColorScheme(
+            brightness: Brightness.dark,
+            primary: darkDynamic.primary,
+            onPrimary: darkDynamic.onPrimary,
+            primaryContainer: darkDynamic.primaryContainer,
+            onPrimaryContainer: darkDynamic.onPrimaryContainer,
+            primaryFixed: darkDynamic.primaryFixed,
+            primaryFixedDim: darkDynamic.primaryFixedDim,
+            onPrimaryFixed: darkDynamic.onPrimaryFixed,
+            onPrimaryFixedVariant: darkDynamic.onPrimaryFixedVariant,
+            secondary: darkDynamic.secondary,
+            onSecondary: darkDynamic.onSecondary,
+            secondaryContainer: darkDynamic.secondaryContainer,
+            onSecondaryContainer: darkDynamic.onSecondaryContainer,
+            secondaryFixed: darkDynamic.secondaryFixed,
+            secondaryFixedDim: darkDynamic.secondaryFixedDim,
+            onSecondaryFixed: darkDynamic.onSecondaryFixed,
+            onSecondaryFixedVariant: darkDynamic.onSecondaryFixedVariant,
+            tertiary: darkDynamic.tertiary,
+            onTertiary: darkDynamic.onTertiary,
+            tertiaryContainer: darkDynamic.tertiaryContainer,
+            onTertiaryContainer: darkDynamic.onTertiaryContainer,
+            tertiaryFixed: darkDynamic.tertiaryFixed,
+            tertiaryFixedDim: darkDynamic.tertiaryFixedDim,
+            onTertiaryFixed: darkDynamic.onTertiaryFixed,
+            onTertiaryFixedVariant: darkDynamic.onTertiaryFixedVariant,
+            error: darkDynamic.error,
+            onError: darkDynamic.onError,
+            errorContainer: darkDynamic.errorContainer,
+            onErrorContainer: darkDynamic.onErrorContainer,
+            surface: darkDynamic.surface,
+            onSurface: darkDynamic.onSurface,
+            surfaceDim: darkDynamic.surfaceDim,
+            surfaceBright: darkDynamic.surfaceBright,
+            surfaceContainerLowest: darkDynamic.surfaceContainerLowest,
+            surfaceContainerLow: darkDynamic.surfaceContainerLow,
+            surfaceContainer: darkDynamic.surfaceContainer,
+            surfaceContainerHigh: darkDynamic.surfaceContainerHigh,
+            surfaceContainerHighest: darkDynamic.surfaceContainerHighest,
+            onSurfaceVariant: darkDynamic.onSurfaceVariant,
+            outline: darkDynamic.outline,
+            outlineVariant: darkDynamic.outlineVariant,
+            shadow: darkDynamic.shadow,
+            scrim: darkDynamic.scrim,
+            inverseSurface: darkDynamic.inverseSurface,
+            onInverseSurface: darkDynamic.onInverseSurface,
+            inversePrimary: darkDynamic.inversePrimary,
+            surfaceTint: darkDynamic.surfaceTint,
+          );
         } else {
           // Fallback color schemes if dynamic color is not available
           lightColorScheme = ColorScheme.fromSeed(seedColor: Colors.blue);
@@ -406,6 +512,11 @@ class _ApplicationState extends ConsumerState<Application>
                 theme: ThemeData(
                   useMaterial3: true,
                   colorScheme: colorScheme,
+                  cardTheme: const CardThemeData(elevation: 0),
+                  popupMenuTheme: StroomMenuStyle.popupMenu(colorScheme),
+                  dropdownMenuTheme: DropdownMenuThemeData(
+                    menuStyle: StroomMenuStyle.dropdownMenu(colorScheme),
+                  ),
                   pageTransitionsTheme: PageTransitionsTheme(
                     builders: {
                       TargetPlatform.android: CupertinoPageTransitionsBuilder(),
@@ -416,6 +527,11 @@ class _ApplicationState extends ConsumerState<Application>
                 darkTheme: ThemeData(
                   useMaterial3: true,
                   colorScheme: darkColorScheme,
+                  cardTheme: const CardThemeData(elevation: 0),
+                  popupMenuTheme: StroomMenuStyle.popupMenu(darkColorScheme),
+                  dropdownMenuTheme: DropdownMenuThemeData(
+                    menuStyle: StroomMenuStyle.dropdownMenu(darkColorScheme),
+                  ),
                   pageTransitionsTheme: PageTransitionsTheme(
                     builders: {
                       TargetPlatform.android: CupertinoPageTransitionsBuilder(),
@@ -425,15 +541,15 @@ class _ApplicationState extends ConsumerState<Application>
                 ),
                 themeMode: themeMode,
                 localizationsDelegates: const [
+                  AppLocalizations.delegate,
                   GlobalMaterialLocalizations.delegate,
                   GlobalWidgetsLocalizations.delegate,
                   GlobalCupertinoLocalizations.delegate,
                 ],
-                supportedLocales: const [
-                  Locale('zh', 'CN'),
-                  Locale('en', 'US'),
-                ],
-                locale: const Locale('zh', 'CN'),
+                supportedLocales: supportedAppLocales,
+                locale: locale,
+                localeResolutionCallback: (deviceLocale, _) =>
+                    resolveSystemLocale(deviceLocale ?? const Locale('en')),
                 home: const HomePage(),
                 routes: {
                   '/home': (context) => const HomePage(),
@@ -491,6 +607,7 @@ class _InAppBannerOverlay extends ConsumerWidget {
       child: InAppNotificationBanner(
         key: ValueKey(payload.taskId),
         payload: payload,
+        locale: ref.watch(localeProvider),
         isDark: isDark,
         onDismiss: () {
           ref.read(inAppNotificationProvider.notifier).state = null;

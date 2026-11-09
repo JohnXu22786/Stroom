@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/models/stroom_conversation.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/conversations_page.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/services/conversation_repository.dart';
@@ -74,7 +75,12 @@ Widget createSearchTestApp() {
       }),
       activeConversationIdProvider.overrideWith((ref) => 'conv-1'),
     ],
-    child: const MaterialApp(home: ConversationsPage()),
+    child: MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      locale: const Locale('zh', 'CN'),
+      home: ConversationsPage(),
+    ),
   );
 }
 
@@ -106,7 +112,12 @@ void main() {
       await tester.pumpWidget(
         UncontrolledProviderScope(
           container: container,
-          child: const MaterialApp(home: ConversationsPage()),
+          child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            locale: const Locale('zh', 'CN'),
+            home: ConversationsPage(),
+          ),
         ),
       );
       await tester.tap(find.byIcon(Icons.search));

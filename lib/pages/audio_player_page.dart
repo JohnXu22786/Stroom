@@ -10,6 +10,7 @@ import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:file_picker/file_picker.dart';
 
+import '../l10n/app_localizations.dart';
 import '../providers/provider_config.dart';
 import '../providers/tts_state_provider.dart';
 import '../utils/file_manifest.dart';
@@ -28,17 +29,15 @@ class AudioPlayerPage extends ConsumerStatefulWidget {
   final String filePath;
   final String? displayName;
 
-  const AudioPlayerPage({
-    super.key,
-    required this.filePath,
-    this.displayName,
-  });
+  const AudioPlayerPage({super.key, required this.filePath, this.displayName});
 
   @override
   ConsumerState<AudioPlayerPage> createState() => _AudioPlayerPageState();
 }
 
 class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
+  AppLocalizations get _l10n => AppLocalizations.of(context)!;
+
   AudioPlayerAdapter? _player;
   bool _isInitialized = false;
   bool _hasError = false;
@@ -147,7 +146,7 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (ctx) => Padding(
         padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
@@ -165,19 +164,18 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
               ),
               const SizedBox(height: 24),
               Text(
-                '选择源文本来源',
-                style: Theme.of(context)
-                    .textTheme
-                    .titleLarge
-                    ?.copyWith(fontWeight: FontWeight.bold),
+                _l10n.audioPlayerSourceTextSource,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 24),
               Column(
                 children: [
                   ChoiceCard(
                     icon: Icons.description_outlined,
-                    title: '从应用内文本选择',
-                    subtitle: '从应用内已保存的文本文件中选择',
+                    title: _l10n.audioPlayerChooseInAppText,
+                    subtitle: _l10n.audioPlayerChooseSavedTextSubtitle,
                     color: Colors.green,
                     onTap: () {
                       Navigator.pop(ctx);
@@ -187,8 +185,8 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
                   const SizedBox(height: 8),
                   ChoiceCard(
                     icon: Icons.upload_file,
-                    title: '从系统文本文件选择',
-                    subtitle: '从设备文件中选择文本文件',
+                    title: _l10n.audioPlayerChooseSystemText,
+                    subtitle: _l10n.audioPlayerChooseDeviceTextSubtitle,
                     color: Colors.blue,
                     onTap: () {
                       Navigator.pop(ctx);
@@ -210,9 +208,9 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
       final result = await showMediaPickerDialog<TextRecord>(
         context,
         MediaPickerConfig<TextRecord>(
-          title: '选择应用内文本',
+          title: _l10n.audioPlayerSelectInAppText,
           emptyIcon: Icons.description_outlined,
-          emptyText: '暂无文本文件',
+          emptyText: _l10n.audioPlayerNoTextFiles,
           fileIcon: Icons.description,
           fileIconColor: Colors.orange,
           multiSelect: false,
@@ -223,7 +221,7 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
           subtitleBuilder: (record) => Row(
             children: [
               Text(
-                '${record.textLength}字',
+                _l10n.audioPlayerCharacterCount(record.textLength),
                 style: TextStyle(
                   fontSize: 12,
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -247,9 +245,10 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
       await _applySourceTextContent(result.first.value);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('选择文本失败: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(
+            content: Text(_l10n.audioPlayerSelectTextFailure(e.toString()))));
       }
     }
   }
@@ -257,22 +256,20 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
   /// 从设备文件系统中选择源文本文件
   Future<void> _pickSourceTextFromSystem() async {
     try {
-      final result = await FilePicker.pickFiles(
+      final file = await FilePicker.pickFile(
         type: FileType.custom,
         allowedExtensions: ['txt'],
-        allowMultiple: false,
-        withData: true,
         initialDirectory: SystemPickDirectories.documents(),
       );
-      if (result == null || result.files.isEmpty) return;
+      if (file == null) return;
 
-      final file = result.files.first;
-      final bytes = file.bytes;
-      if (bytes == null || bytes.isEmpty) {
+      final bytes = await file.readAsBytes();
+      if (bytes.isEmpty) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('无法读取文本文件')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(
+              SnackBar(content: Text(_l10n.audioPlayerCannotReadTextFile)));
         }
         return;
       }
@@ -280,9 +277,10 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
       await _applySourceTextContent(bytes);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('上传源文本失败: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(
+            content: Text(_l10n.audioPlayerUploadTextFailure(e.toString()))));
       }
     }
   }
@@ -291,9 +289,10 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
   Future<void> _applySourceTextContent(Uint8List bytes) async {
     if (bytes.isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('文本内容为空')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(
+            SnackBar(content: Text(_l10n.audioPlayerTextContentEmpty)));
       }
       return;
     }
@@ -307,9 +306,10 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
 
     if (textContent.isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('文本内容为空')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(
+            SnackBar(content: Text(_l10n.audioPlayerTextContentEmpty)));
       }
       return;
     }
@@ -318,9 +318,10 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
       await _saveSourceText(textContent);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('保存源文本失败: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(
+            content: Text(_l10n.audioPlayerSaveTextFailure(e.toString()))));
       }
       return;
     }
@@ -333,7 +334,9 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
     });
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(wasEmpty ? '源文本已上传' : '源文本已更新'),
+        content: Text(wasEmpty
+            ? _l10n.audioPlayerSourceTextUploaded
+            : _l10n.audioPlayerSourceTextUpdated),
         duration: const Duration(seconds: 2),
       ),
     );
@@ -431,7 +434,7 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
       // Native: read into memory, validate/convert format, play from temp
       final data = await FileManifest.readFile(widget.filePath);
       if (data == null || data.isEmpty) {
-        throw Exception('无法找到音频文件: ${widget.filePath}');
+        throw Exception(_l10n.audioPlayerFileNotFound(widget.filePath));
       }
       final fixed = ensureValidAudioFormat(
         data,
@@ -448,7 +451,7 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
       // Web: 读取文件并创建 Blob URL
       final data = await FileManifest.readFile(widget.filePath);
       if (data == null || data.isEmpty) {
-        throw Exception('无法加载音频数据');
+        throw Exception(_l10n.audioPlayerUnableToLoadAudio);
       }
       debugPrint('_loadAudio: ${widget.filePath} → ${data.length} 字节');
 
@@ -502,7 +505,7 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
     final ttsEntry =
         entriesState.entries.where((e) => e.name == 'TTS供应商').firstOrNull;
     if (ttsEntry == null) {
-      _showSnackBar('请先配置TTS供应商');
+      _showSnackBar(_l10n.audioPlayerConfigureTtsProvider);
       return;
     }
 
@@ -517,7 +520,7 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
     }
 
     if (streamingModels.isEmpty) {
-      _showSnackBar('没有支持流式播放的模型');
+      _showSnackBar(_l10n.audioPlayerNoStreamingModels);
       return;
     }
 
@@ -541,7 +544,7 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('选择流式播放模型'),
+        title: Text(_l10n.audioPlayerSelectStreamingModel),
         content: SizedBox(
           width: double.maxFinite,
           child: ListView.builder(
@@ -551,9 +554,11 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
               final opt = models[index];
               return ListTile(
                 title: Text(opt.model.name),
-                subtitle: Text(opt.configItem.providerName.isNotEmpty
-                    ? opt.configItem.providerName
-                    : '供应商'),
+                subtitle: Text(
+                  opt.configItem.providerName.isNotEmpty
+                      ? opt.configItem.providerName
+                      : _l10n.audioPlayerProviderFallback,
+                ),
                 onTap: () {
                   Navigator.pop(context);
                   _startStreamingPlayback(text, opt);
@@ -565,7 +570,7 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
+            child: Text(_l10n.cancel),
           ),
         ],
       ),
@@ -579,7 +584,7 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
           providerConfig: opt.configItem,
           modelConfig: opt.model,
         );
-    _showSnackBar('开始流式播放: ${opt.model.name}');
+    _showSnackBar(_l10n.audioPlayerStartStreaming(opt.model.name));
   }
 
   void _showSnackBar(String message) {
@@ -595,10 +600,7 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          fileName,
-          overflow: TextOverflow.ellipsis,
-        ),
+        title: Text(fileName, overflow: TextOverflow.ellipsis),
         centerTitle: true,
       ),
       body: _buildBody(),
@@ -629,7 +631,7 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
     }
 
     if (!_isInitialized || _textLoading) {
-      return buildAudioLoadingView();
+      return buildAudioLoadingView(context);
     }
 
     final hasSelection = _selectedText.isNotEmpty;
@@ -648,8 +650,8 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
                   children: [
                     Row(
                       children: [
-                        const Text(
-                          '源文本',
+                        Text(
+                          _l10n.audioPlayerSourceText,
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
@@ -661,7 +663,7 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Text(
-                                '（无源文本）',
+                                _l10n.audioPlayerNoSourceText,
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: Colors.grey[400],
@@ -673,13 +675,15 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
                                 borderRadius: BorderRadius.circular(8),
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 4),
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: Theme.of(context)
                                         .colorScheme
                                         .primary
                                         .withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(6),
+                                    borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
@@ -687,19 +691,19 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
                                       Icon(
                                         Icons.upload_file,
                                         size: 14,
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .primary,
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.primary,
                                       ),
                                       const SizedBox(width: 4),
                                       Text(
-                                        '上传源文本',
+                                        _l10n.audioPlayerUploadSourceText,
                                         style: TextStyle(
                                           fontSize: 12,
                                           fontWeight: FontWeight.w500,
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .primary,
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.primary,
                                         ),
                                       ),
                                     ],
@@ -717,13 +721,15 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
                                 borderRadius: BorderRadius.circular(8),
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 4),
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: Theme.of(context)
                                         .colorScheme
                                         .primary
                                         .withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(6),
+                                    borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
@@ -731,19 +737,19 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
                                       Icon(
                                         Icons.edit,
                                         size: 14,
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .primary,
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.primary,
                                       ),
                                       const SizedBox(width: 4),
                                       Text(
-                                        '修改源文本',
+                                        _l10n.audioPlayerEditSourceText,
                                         style: TextStyle(
                                           fontSize: 12,
                                           fontWeight: FontWeight.w500,
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .primary,
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.primary,
                                         ),
                                       ),
                                     ],
@@ -754,7 +760,9 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
                               Text(
                                 '${_fontSize.toInt()}',
                                 style: TextStyle(
-                                    fontSize: 12, color: Colors.grey[600]),
+                                  fontSize: 12,
+                                  color: Colors.grey[600],
+                                ),
                               ),
                               const SizedBox(width: 6),
                               InkWell(
@@ -805,7 +813,7 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
                             )
                           : Center(
                               child: Text(
-                                '未找到伴生文本文件',
+                                _l10n.audioPlayerCompanionTextMissing,
                                 style: TextStyle(color: Colors.grey[400]),
                               ),
                             ),
@@ -824,9 +832,9 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
             right: _playerMargin + 8,
             bottom: _textBottomPadding + 4,
             child: Card(
-              elevation: 6,
+              elevation: 4,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(16),
               ),
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -835,13 +843,13 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
                   children: [
                     AudioPlayerToolbarButton(
                       icon: Icons.play_arrow,
-                      label: '播放选中',
+                      label: _l10n.audioPlayerPlaySelection,
                       onPressed: _onPlaySelectedText,
                     ),
                     const SizedBox(width: 4),
                     AudioPlayerToolbarButton(
                       icon: Icons.auto_awesome,
-                      label: '生成选中',
+                      label: _l10n.audioPlayerGenerateSelection,
                       onPressed: _onGenerateSelectedText,
                     ),
                   ],
@@ -908,16 +916,21 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
                 color: theme.colorScheme.primary.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Icon(Icons.audio_file,
-                  size: 18, color: theme.colorScheme.primary),
+              child: Icon(
+                Icons.audio_file,
+                size: 18,
+                color: theme.colorScheme.primary,
+              ),
             ),
             const SizedBox(width: 12),
             // 文件名
             Expanded(
               child: Text(
                 widget.displayName ?? path.basename(widget.filePath),
-                style:
-                    const TextStyle(fontWeight: FontWeight.w500, fontSize: 14),
+                style: const TextStyle(
+                  fontWeight: FontWeight.w500,
+                  fontSize: 14,
+                ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -938,8 +951,11 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
             // 展开箭头
             Padding(
               padding: const EdgeInsets.only(right: 4),
-              child: Icon(Icons.keyboard_arrow_up,
-                  size: 28, color: Colors.grey[500]),
+              child: Icon(
+                Icons.keyboard_arrow_up,
+                size: 28,
+                color: Colors.grey[500],
+              ),
             ),
           ],
         ),
@@ -959,14 +975,19 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
           Row(
             children: [
               const SizedBox(width: 16),
-              Icon(Icons.audio_file,
-                  size: 18, color: theme.colorScheme.primary),
+              Icon(
+                Icons.audio_file,
+                size: 18,
+                color: theme.colorScheme.primary,
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   widget.displayName ?? path.basename(widget.filePath),
                   style: const TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.w600),
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -988,10 +1009,14 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(_formatDuration(_position),
-                    style: const TextStyle(fontSize: 12)),
-                Text(_formatDuration(_duration),
-                    style: const TextStyle(fontSize: 12)),
+                Text(
+                  _formatDuration(_position),
+                  style: const TextStyle(fontSize: 12),
+                ),
+                Text(
+                  _formatDuration(_duration),
+                  style: const TextStyle(fontSize: 12),
+                ),
               ],
             ),
           ),
@@ -1003,11 +1028,13 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
               GestureDetector(
                 onTap: _showSpeedPopup,
                 child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.grey[200],
-                    borderRadius: BorderRadius.circular(6),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
                     '${_playbackSpeed.toStringAsFixed(1)}x',
@@ -1034,7 +1061,9 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
           ),
           const SizedBox(height: 4),
           Text(
-            _player?.playing == true ? '正在播放...' : '已暂停',
+            _player?.playing == true
+                ? _l10n.audioPlayerPlaying
+                : _l10n.audioPlayerPaused,
             style: TextStyle(
               color: _player?.playing == true ? Colors.green : Colors.grey,
               fontSize: 12,
@@ -1053,7 +1082,7 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          title: const Text('播放速度'),
+          title: Text(_l10n.audioPlayerPlaybackSpeed),
           content: SizedBox(
             width: 260,
             height: 80,
@@ -1062,7 +1091,9 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
                 Text(
                   '${temp.toStringAsFixed(1)}x',
                   style: const TextStyle(
-                      fontSize: 22, fontWeight: FontWeight.bold),
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 Expanded(
                   child: Slider(
@@ -1085,7 +1116,7 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('关闭'),
+              child: Text(_l10n.audioPlayerClose),
             ),
           ],
         ),

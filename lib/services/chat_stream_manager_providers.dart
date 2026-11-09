@@ -13,17 +13,18 @@ extension _ChatStreamManagerProvidersExt on ChatStreamManager {
   void _pushStateToProviders(_ConversationStreamState s) {
     _setProvider(isStreamingProvider(s.convId), true);
     _setProvider(streamingMsgIdProvider(s.convId), s.streamingMsgId);
-    _setProvider(streamingFullReplyProvider(s.convId), s.fullReply);
     _setProvider(
         streamingHasFirstTokenProvider(s.convId), s.hasReceivedFirstToken);
     _setProvider(streamingReasoningProvider(s.convId), s.reasoningBuffer);
     _setProvider(streamingReasoningSectionsProvider(s.convId),
         List<String>.from(s.reasoningSections));
+    _setProvider(streamingReasoningAppendProvider(s.convId), null);
     // roundStarts is set BEFORE toolCalls: the toolCalls listener rebuilds
     // live segments synchronously (Riverpod fires listeners on state change)
     // and must read the fresh round boundary.
     _setProvider(streamingTextSectionsProvider(s.convId),
         List<String>.from(s.textChunks));
+    _setProvider(streamingTextAppendProvider(s.convId), null);
     _setProvider(streamingToolCallRoundStartsProvider(s.convId),
         List<int>.from(s.toolCallRoundStarts));
     _setProvider(streamingToolCallsProvider(s.convId),
@@ -42,9 +43,11 @@ extension _ChatStreamManagerProvidersExt on ChatStreamManager {
     _setProvider(streamingFullReplyProvider(convId), '');
     _setProvider(streamingHasFirstTokenProvider(convId), false);
     _setProvider(streamingReasoningProvider(convId), '');
+    _setProvider(streamingReasoningAppendProvider(convId), null);
     _setProvider(streamingReasoningSectionsProvider(convId), []);
     _setProvider(streamingToolCallsProvider(convId), []);
     _setProvider(streamingTextSectionsProvider(convId), ['']);
+    _setProvider(streamingTextAppendProvider(convId), null);
     _setProvider(streamingToolCallRoundStartsProvider(convId), []);
   }
 

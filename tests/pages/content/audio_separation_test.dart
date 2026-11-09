@@ -1,10 +1,13 @@
 // Merged from:
 //   tests/pages/audio_separation_page_test.dart
 //   tests/pages/audio_separation_task_list_test.dart
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/audio_separation_page.dart';
 import 'package:stroom/pages/audio_separation_shared.dart';
 import 'package:stroom/providers/background_task_provider.dart';
@@ -17,11 +20,10 @@ import 'package:stroom/pages/unified_task_list_page.dart';
 Widget _buildTestApp() {
   return const ProviderScope(
     child: MaterialApp(
+      locale: const Locale('zh', 'CN'),
+      supportedLocales: AppLocalizations.supportedLocales,
       home: AudioSeparationPage(),
-      localizationsDelegates: [
-        DefaultMaterialLocalizations.delegate,
-        DefaultWidgetsLocalizations.delegate,
-      ],
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
     ),
   );
 }
@@ -57,6 +59,44 @@ void main() {
     ManifestDatabase.enableTestMode();
     FileManifest.invalidateCache();
     VideoManifest.invalidateCache();
+  });
+
+  group('Audio separation task failure localization', () {
+    for (final testCase in [
+      (
+        locale: const Locale('en', 'US'),
+        expectedPrefix: 'Audio extraction failed: ',
+      ),
+      (
+        locale: const Locale('zh', 'CN'),
+        expectedPrefix: '音频提取失败: ',
+      ),
+    ]) {
+      test(
+        '${testCase.locale} localizes only the static failure prefix',
+        () async {
+          final strings = await AppLocalizations.delegate.load(testCase.locale);
+          final notifier = BackgroundTaskNotifier();
+          const dynamicError = 'Bad state: provider says “keep this detail”';
+
+          await runAudioSeparationForTesting(
+            videos: [
+              SelectedVideo(bytes: Uint8List.fromList([1]), name: 'clip.mp4'),
+            ],
+            bgNotifier: notifier,
+            saveFolder: '',
+            errorPrefix: strings.audioSeparationTaskFailurePrefix,
+            workerExtract: (_) async => throw StateError(
+              'provider says “keep this detail”',
+            ),
+          );
+
+          final task = notifier.state.single;
+          expect(task.status, TaskStatus.failed);
+          expect(task.error, testCase.expectedPrefix + dynamicError);
+        },
+      );
+    }
   });
 
   // ─────────────────────────────────────────────────────────────────────
@@ -364,6 +404,9 @@ void main() {
       await tester.pumpWidget(
         const ProviderScope(
           child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
             home: Builder(
               builder: _buildPageLauncher,
             ),
@@ -720,7 +763,11 @@ void main() {
               return n;
             }),
           ],
-          child: const MaterialApp(home: UnifiedTaskListPage()),
+          child: const MaterialApp(
+              locale: Locale('zh', 'CN'),
+              supportedLocales: AppLocalizations.supportedLocales,
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              home: UnifiedTaskListPage()),
         ),
       );
       await tester.pump();

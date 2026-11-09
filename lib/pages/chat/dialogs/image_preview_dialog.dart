@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:extended_image/extended_image.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
@@ -167,13 +168,14 @@ class _BrokenImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
+    return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(Icons.broken_image, size: 48, color: Colors.white54),
           SizedBox(height: 8),
-          Text('无法加载图片', style: TextStyle(color: Colors.white54)),
+          Text(AppLocalizations.of(context)!.chatImageLoadFailed,
+              style: TextStyle(color: Colors.white54)),
         ],
       ),
     );

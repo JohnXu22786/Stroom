@@ -5,6 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../l10n/app_localizations.dart';
+import 'locale_provider.dart';
+
 import '../utils/file_manifest.dart';
 import 'provider_config.dart';
 import 'tts_provider.dart' as tts_provider_base;
@@ -22,7 +25,10 @@ final ttsProviderProvider = Provider<tts_provider_base.BaseTTSProvider?>((ref) {
   if (ttsEntry == null || ttsEntry.configs.isEmpty) return null;
   final config = ttsEntry.configs.first;
   if (config.host.isEmpty || config.key.isEmpty) return null;
-  return tts_provider_base.createProviderFromConfig(config);
+  return tts_provider_base.createProviderFromConfig(
+    config,
+    locale: ref.read(localeProvider),
+  );
 });
 
 /// 合成配置提供器（支持持久化）
@@ -428,7 +434,10 @@ class TTSStateNotifier extends StateNotifier<TTSState> {
       return null;
     }
 
-    final provider = tts_provider_base.createProviderFromConfig(providerConfig);
+    final provider = tts_provider_base.createProviderFromConfig(
+      providerConfig,
+      locale: ref.read(localeProvider),
+    );
     final synthConfig = ref.read(synthesisConfigProvider);
 
     try {
@@ -501,10 +510,11 @@ class TTSStateNotifier extends StateNotifier<TTSState> {
 
       return audioFile;
     } catch (e) {
-      state = state.copyWith(
-        isSynthesizing: false,
-        error: '合成失败: $e',
-      );
+      final error = e is tts_provider_base.SynthesisException
+          ? e.message
+          : appLocalizationsForLocale(ref.read(localeProvider))
+              .ttsErrorSynthesisFailed('$e');
+      state = state.copyWith(isSynthesizing: false, error: error);
       return null;
     }
   }
@@ -524,7 +534,10 @@ class TTSStateNotifier extends StateNotifier<TTSState> {
       return;
     }
 
-    final provider = tts_provider_base.createProviderFromConfig(providerConfig);
+    final provider = tts_provider_base.createProviderFromConfig(
+      providerConfig,
+      locale: ref.read(localeProvider),
+    );
     final synthConfig = ref.read(synthesisConfigProvider);
 
     try {
@@ -561,10 +574,11 @@ class TTSStateNotifier extends StateNotifier<TTSState> {
 
       state = state.copyWith(isStreaming: false);
     } catch (e) {
-      state = state.copyWith(
-        isStreaming: false,
-        error: '流式合成失败: $e',
-      );
+      final error = e is tts_provider_base.SynthesisException
+          ? e.message
+          : appLocalizationsForLocale(ref.read(localeProvider))
+              .ttsErrorStreamingSynthesisFailed('$e');
+      state = state.copyWith(isStreaming: false, error: error);
     }
   }
 

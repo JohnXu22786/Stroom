@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
 
@@ -33,9 +34,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
 
   Future<void> _initPlayer() async {
     try {
-      final controller = VideoPlayerController.file(
-        File(widget.filePath),
-      );
+      final controller = VideoPlayerController.file(File(widget.filePath));
       _videoPlayerController = controller;
       await controller.initialize();
 
@@ -82,17 +81,22 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
       appBar: AppBar(
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
-        title: Text(widget.displayName,
-            style: const TextStyle(color: Colors.white)),
+        title: Text(
+          widget.displayName,
+          style: const TextStyle(color: Colors.white),
+        ),
       ),
       body: Center(
         child: _hasError
-            ? const Column(
+            ? Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(Icons.error_outline, size: 48, color: Colors.white38),
                   SizedBox(height: 16),
-                  Text('视频加载失败', style: TextStyle(color: Colors.white70)),
+                  Text(
+                    AppLocalizations.of(context)!.galleryVideoLoadFailed,
+                    style: TextStyle(color: Colors.white70),
+                  ),
                 ],
               )
             : _initialized && _chewieController != null

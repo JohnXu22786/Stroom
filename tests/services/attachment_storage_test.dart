@@ -40,6 +40,36 @@ void main() {
     }
   });
 
+  group('AttachmentStorage 保存路径唯一性', () {
+    test('同一毫秒保存相同内容仍生成独立路径', () async {
+      final bytes = Uint8List.fromList([1, 2, 3, 4]);
+      AttachmentStorage.nowForTesting =
+          () => DateTime.fromMillisecondsSinceEpoch(123456789);
+      try {
+        final normalPaths = await Future.wait(List.generate(
+          8,
+          (_) => AttachmentStorage.saveFile('photo.png', bytes),
+        ));
+        final editedPaths = await Future.wait(List.generate(
+          8,
+          (_) => AttachmentStorage.saveEditedFile('photo.png', bytes),
+        ));
+
+        expect(normalPaths.toSet(), hasLength(normalPaths.length));
+        expect(editedPaths.toSet(), hasLength(editedPaths.length));
+
+        await AttachmentStorage.deleteFile(normalPaths.first);
+        expect(await AttachmentStorage.readFile(normalPaths.last), bytes,
+            reason: '删除一个普通附件不能删除另一个相同内容附件');
+        await AttachmentStorage.deleteFile(editedPaths.first);
+        expect(await AttachmentStorage.readFile(editedPaths.last), bytes,
+            reason: '删除一个编辑后附件不能删除另一个相同内容附件');
+      } finally {
+        AttachmentStorage.resetNowForTesting();
+      }
+    });
+  });
+
   group('AttachmentStorage 编辑后附件存储', () {
     test('saveEditedFile 返回 temp_edited/ 前缀路径，readFile 可读回（显示修复）', () async {
       // 回归：编辑后的图片之前被存到系统临时目录，但 storagePath 是
@@ -219,6 +249,69 @@ void main() {
       final convADir = Directory(
           p.join(tmpRoot.path, 'attachments', 'temp_compressed', 'conv-a'));
       expect(await convADir.exists(), isFalse, reason: '对话目录整体删除');
+    });
+
+    test('路径遍历 conversationId 不能保存、读取或删除缓存根目录外文件', () async {
+      final outsideDir = Directory(p.join(tmpRoot.path, 'outside'));
+      await outsideDir.create(recursive: true);
+      final outsideFile = File(p.join(outsideDir.path, 'hash.jpg'));
+      final originalBytes = Uint8List.fromList([0xFF, 0xD8, 0xFF, 0xE0]);
+      await outsideFile.writeAsBytes(originalBytes);
+
+      final savedPath = await AttachmentStorage.saveCompressedImage(
+        conversationId: '../../outside',
+        hash: 'hash',
+        bytes: Uint8List.fromList([0xFF, 0xD8, 0xFF, 0xE1]),
+        mimeType: 'image/jpeg',
+      );
+      final read = await AttachmentStorage.readCompressedImage(
+          conversationId: '../../outside', hash: 'hash');
+      final deleted = await AttachmentStorage.deleteCompressedImage(
+          conversationId: '../../outside', hash: 'hash');
+
+      expect(savedPath, isNull);
+      expect(read, isNull);
+      expect(deleted, isFalse);
+      expect(await outsideFile.readAsBytes(), originalBytes,
+          reason: '缓存操作不能覆盖或删除缓存根目录外的文件');
+    });
+
+    test('路径遍历 hash 不能保存、读取或删除对话缓存目录外文件', () async {
+      final outsideDir = Directory(p.join(tmpRoot.path, 'attachments'));
+      await outsideDir.create(recursive: true);
+      final outsideFile = File(p.join(outsideDir.path, 'outside.jpg'));
+      final originalBytes = Uint8List.fromList([0xFF, 0xD8, 0xFF, 0xE0]);
+      await outsideFile.writeAsBytes(originalBytes);
+      const traversalHash = '../../outside';
+
+      final savedPath = await AttachmentStorage.saveCompressedImage(
+        conversationId: 'conv-1',
+        hash: traversalHash,
+        bytes: Uint8List.fromList([0xFF, 0xD8, 0xFF, 0xE1]),
+        mimeType: 'image/jpeg',
+      );
+      final read = await AttachmentStorage.readCompressedImage(
+          conversationId: 'conv-1', hash: traversalHash);
+      final deleted = await AttachmentStorage.deleteCompressedImage(
+          conversationId: 'conv-1', hash: traversalHash);
+
+      expect(savedPath, isNull);
+      expect(read, isNull);
+      expect(deleted, isFalse);
+      expect(await outsideFile.readAsBytes(), originalBytes,
+          reason: 'hash 不能覆盖或删除对话缓存目录外的文件');
+    });
+
+    test('路径遍历 conversationId 不能递归删除缓存根目录外目录', () async {
+      final outsideDir = Directory(p.join(tmpRoot.path, 'outside'));
+      await outsideDir.create(recursive: true);
+      final marker = File(p.join(outsideDir.path, 'keep.txt'));
+      await marker.writeAsString('keep');
+
+      await AttachmentStorage.deleteConversationCompressedImages(
+          '../../outside');
+
+      expect(await marker.exists(), isTrue, reason: '删除对话缓存不能递归删除缓存根目录外目录');
     });
 
     test('conversationId / hash 缺失时保存与删除均为 no-op', () async {

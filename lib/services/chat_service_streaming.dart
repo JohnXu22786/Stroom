@@ -7,9 +7,8 @@ extension ChatServiceStreamingExt on ChatService {
     final transcript = rawTranscript.trim();
     if (transcript.isEmpty) return;
     _lastInputTranscript = transcript;
-    final userIndex = history.lastIndexWhere(
-      (message) => message.role == 'user',
-    );
+    final userIndex =
+        history.lastIndexWhere((message) => message.role == 'user');
     if (userIndex < 0) return;
     final userMessage = history[userIndex];
     final content = userMessage.content.trim();
@@ -39,16 +38,15 @@ extension ChatServiceStreamingExt on ChatService {
     bool reasoning = false,
     String reasoningEffort = 'medium',
     Map<String, String> reasoningParamValues = const {},
+    Map<String, String>? customParamValues,
   }) {
     AppLogService.info(
-      'ChatService',
-      'sendStream 开始: ${userMessage.length} 字符',
-    );
+        'ChatService', 'sendStream 开始: ${userMessage.length} 字符');
     cancel();
     _isCancelledByUser = false;
-    _reasoningBuffer = '';
-    _lastMediaAttachments = const [];
+    _reasoningBuffer.clear();
     _lastInputTranscript = null;
+    _lastMediaAttachments = const [];
 
     _controller = StreamController<String>(
       onCancel: () {
@@ -65,6 +63,7 @@ extension ChatServiceStreamingExt on ChatService {
       reasoning: reasoning,
       reasoningEffort: reasoningEffort,
       reasoningParamValues: reasoningParamValues,
+      customParamValues: customParamValues,
     );
 
     Future.microtask(() async {
@@ -74,9 +73,8 @@ extension ChatServiceStreamingExt on ChatService {
           history: history,
           assistantPrompt: _assistantPrompt,
           contextSummary: _contextSummary,
-          toolOutputMaxChars: ChatService.getEffectiveToolOutputMaxChars(
-            _assistantSettings,
-          ),
+          toolOutputMaxChars:
+              ChatService.getEffectiveToolOutputMaxChars(_assistantSettings),
         );
         final apiMessages = req.messages;
         _lastRequestBody = {
@@ -88,19 +86,22 @@ extension ChatServiceStreamingExt on ChatService {
           ...extraParams,
         };
         _cancelToken = CancelToken();
-        _streamSubscription = _provider!
-            .chatStream(
-          apiMessages,
-          model: _modelConfig!.modelId,
-          reasoning: reasoning,
-          reasoningEffort: reasoningEffort,
-          maxTokens: _effectiveMaxTokens, // null when toggle is OFF
-          temperature: _effectiveTemperature, // null when toggle is OFF
-          system: req.system,
-          extraParams: extraParams,
-          cancelToken: _cancelToken,
-        )
-            .listen(
+        final cancelToken = _cancelToken!;
+        _streamSubscription = retryRateLimitedStream<AIStreamEvent>(
+          () => _provider!.chatStream(
+            apiMessages,
+            model: _modelConfig!.modelId,
+            reasoning: reasoning,
+            reasoningEffort: reasoningEffort,
+            maxTokens: _effectiveMaxTokens, // null when toggle is OFF
+            temperature: _effectiveTemperature, // null when toggle is OFF
+            system: req.system,
+            extraParams: extraParams,
+            cancelToken: cancelToken,
+          ),
+          cancellation: cancelToken.whenCancel.then<void>((_) {}),
+          isCancelled: () => cancelToken.isCancelled,
+        ).listen(
           (event) {
             if (event.inputTranscript?.isNotEmpty == true) {
               _recordInputTranscript(history, event.inputTranscript!);
@@ -109,11 +110,12 @@ extension ChatServiceStreamingExt on ChatService {
               _captureMediaAttachments(event.mediaAttachments!);
             }
             if (event.isReasoning) {
-              _reasoningBuffer += event.text;
+              _reasoningBuffer.write(event.text);
             } else if (event.usage != null) {
               // usage 计量事件（provider 流末尾产出，per-request 隔离）
               // 立即转发给上层累加到对话（每次完整请求数据返回即累加）
-              onUsageEvent?.call(event.usage!, recordInput: true);
+              onUsageEvent?.call(event.usage!,
+                  recordInput: true, costIncrement: event.usageCostIncrement);
             } else if (event.inputTranscript == null &&
                 event.text.isNotEmpty &&
                 !_controller!.isClosed) {
@@ -160,29 +162,42 @@ extension ChatServiceStreamingExt on ChatService {
   Stream<ChatEvent> sendStreamWithTools(
     String userMessage, {
     required List<ChatMessage> history,
+    RequestContentCache? contentCache,
     bool reasoning = false,
     String reasoningEffort = 'medium',
     Map<String, String> reasoningParamValues = const {},
+    Map<String, String>? customParamValues,
     List<ToolDefinition> tools = const [],
+    void Function()? onToolCallIntent,
+    void Function(String text)? onTextDelta,
+    void Function(Map<String, dynamic> body)? onRequestBody,
+    String? Function()? takeCompletedToolCallRound,
+    String? Function()? takeCompletedToolCallReasoning,
   }) {
     AppLogService.info(
-      'ChatService',
-      'sendStreamWithTools 开始: ${userMessage.length} 字符',
-    );
+        'ChatService', 'sendStreamWithTools 开始: ${userMessage.length} 字符');
     _isCancelledByUser = false;
-    _reasoningBuffer = '';
-    _contentBuffer = '';
+    _reasoningBuffer.clear();
+    _contentBuffer.clear();
     _lastReasoningLength = 0;
     _thinkingSignature = '';
-    _lastMediaAttachments = const [];
 
-    final controller = StreamController<ChatEvent>(
+    Completer<void>? pendingRoundBoundary;
+    late final StreamController<ChatEvent> controller;
+    controller = StreamController<ChatEvent>(
       onCancel: () {
+        if (pendingRoundBoundary != null &&
+            !pendingRoundBoundary!.isCompleted) {
+          pendingRoundBoundary!.complete();
+        }
         _cancelToken?.cancel();
         _cancelToken = null;
         _streamSubscription?.cancel();
         _streamSubscription = null;
-        _chatEventController = null;
+        if (identical(_chatEventController, controller)) {
+          _chatEventController = null;
+          _releaseResponseBuffers();
+        }
       },
     );
     _chatEventController = controller;
@@ -191,21 +206,27 @@ extension ChatServiceStreamingExt on ChatService {
       reasoning: reasoning,
       reasoningEffort: reasoningEffort,
       reasoningParamValues: reasoningParamValues,
+      customParamValues: customParamValues,
     );
     final toolDefs = _protocol.toolDefsToJson(tools);
 
     Future.microtask(() async {
       try {
         if (_isCancelledByUser) return;
-        final toolOutputMaxChars = ChatService.getEffectiveToolOutputMaxChars(
-          _assistantSettings,
-        );
-        final req = await _protocol.buildRequest(
-          history: history,
-          assistantPrompt: _assistantPrompt,
-          contextSummary: _contextSummary,
-          toolOutputMaxChars: toolOutputMaxChars,
-        );
+        final toolOutputMaxChars =
+            ChatService.getEffectiveToolOutputMaxChars(_assistantSettings);
+        late final ProtocolRequest req;
+        try {
+          req = await _protocol.buildRequest(
+            history: history,
+            assistantPrompt: _assistantPrompt,
+            contextSummary: _contextSummary,
+            toolOutputMaxChars: toolOutputMaxChars,
+            contentCache: contentCache,
+          );
+        } finally {
+          contentCache?.clear();
+        }
         var messages = req.messages;
         _lastRequestBody = {
           'model': _modelConfig?.modelId,
@@ -216,6 +237,7 @@ extension ChatServiceStreamingExt on ChatService {
           if (toolDefs.isNotEmpty) 'tools': toolDefs,
           ...extraParams,
         };
+        onRequestBody?.call(_lastRequestBody!);
         int loopProtection = 0;
         // ── 工具循环上限 ──
         // maxToolCalls = 单条用户消息内模型 API 请求（步骤）的最大次数。
@@ -229,9 +251,8 @@ extension ChatServiceStreamingExt on ChatService {
         // getEffectiveMaxToolRounds 统一回退默认值（此前 <= 0 会让
         // while 恒假——不发任何请求、空流无错误、消息不落库，用户
         // 完全无反馈）。
-        final effectiveMaxRounds = ChatService.getEffectiveMaxToolRounds(
-          _assistantSettings,
-        );
+        final effectiveMaxRounds =
+            ChatService.getEffectiveMaxToolRounds(_assistantSettings);
         final maxRounds =
             effectiveMaxRounds ?? ChatService.kMaxToolRoundsHardLimit;
 
@@ -240,6 +261,13 @@ extension ChatServiceStreamingExt on ChatService {
         // 后才置 true——循环从 while 条件检查处退出时若该标记为 true，
         // 说明是达到上限被强制停止，而非模型停用工具/出错/取消。
         var lastRoundHadToolCalls = false;
+        // The conversation manager already owns the canonical reasoning
+        // stream. Only keep a service-side copy for callers that do not
+        // provide its round handoff callback.
+        final roundReasoningBuffer =
+            onTextDelta == null || takeCompletedToolCallReasoning == null
+                ? StringBuffer()
+                : null;
         while (!_isCancelledByUser && loopProtection < maxRounds) {
           loopProtection++;
           lastRoundHadToolCalls = false;
@@ -247,32 +275,37 @@ extension ChatServiceStreamingExt on ChatService {
           _streamSubscription?.cancel();
           _cancelToken?.cancel();
           _cancelToken = CancelToken();
+          final cancelToken = _cancelToken!;
 
           final completer = Completer<void>();
           // 登记当前轮 completer：cancel() 时完成它使循环退出
           // （真实 provider 取消订阅后 onDone/onError 不送达）。
           _roundCompleter = completer;
           final toolCallRefs = <Map<String, dynamic>>[];
+          String? roundContentForToolChain;
+          String? roundReasoningForToolChain;
           // 本轮流错误标记：onError 后立即停止轮处理，不再执行
           // 本轮的剩余工具或发起下一轮请求（错误已上抛给 manager，
           // 继续执行工具只会产生用户看不到的副作用）。
           Object? roundStreamError;
           // 上限内的每一轮工具都保持可用（与 AI SDK stepCountIs 语义一致：
           // 所有 step 均携带 tools，达限即停，无额外"收尾轮"）。
-          _streamSubscription = _provider!
-              .chatStream(
-            messages,
-            model: _modelConfig!.modelId,
-            reasoning: reasoning,
-            reasoningEffort: reasoningEffort,
-            maxTokens: _effectiveMaxTokens, // null when toggle is OFF
-            temperature: _effectiveTemperature, // null when toggle is OFF
-            tools: toolDefs.isEmpty ? null : toolDefs,
-            system: req.system,
-            extraParams: extraParams,
-            cancelToken: _cancelToken,
-          )
-              .listen(
+          _streamSubscription = retryRateLimitedStream<AIStreamEvent>(
+            () => _provider!.chatStream(
+              messages,
+              model: _modelConfig!.modelId,
+              reasoning: reasoning,
+              reasoningEffort: reasoningEffort,
+              maxTokens: _effectiveMaxTokens, // null when toggle is OFF
+              temperature: _effectiveTemperature, // null when toggle is OFF
+              tools: toolDefs.isEmpty ? null : toolDefs,
+              system: req.system,
+              extraParams: extraParams,
+              cancelToken: cancelToken,
+            ),
+            cancellation: cancelToken.whenCancel.then<void>((_) {}),
+            isCancelled: () => cancelToken.isCancelled,
+          ).listen(
             (event) {
               // usage 计量是 API 计费事实（per-request 隔离），必须
               // 先于取消守卫处理：用户停止后仍要把已计量请求的
@@ -280,7 +313,8 @@ extension ChatServiceStreamingExt on ChatService {
               if (event.usage != null) {
                 // usage 计量事件（provider 流末尾产出，per-request 隔离）
                 // 立即转发给上层累加到对话（每次完整请求数据返回即累加）
-                onUsageEvent?.call(event.usage!, recordInput: true);
+                onUsageEvent?.call(event.usage!,
+                    recordInput: true, costIncrement: event.usageCostIncrement);
               }
               if (_isCancelledByUser) return;
               // Anthropic extended thinking 签名（协议续接用，静默透传）
@@ -288,32 +322,40 @@ extension ChatServiceStreamingExt on ChatService {
                   event.thinkingSignature!.isNotEmpty) {
                 _thinkingSignature = event.thinkingSignature!;
               }
-              if (event.inputTranscript?.isNotEmpty == true) {
-                controller.add(
-                  InputTranscriptEvent(event.inputTranscript!),
-                );
-              } else if (event.mediaAttachments?.isNotEmpty == true) {
+              if (event.mediaAttachments?.isNotEmpty == true) {
                 _captureMediaAttachments(event.mediaAttachments!);
-                controller.add(
-                  MediaAttachmentsEvent(
-                    event.mediaAttachments!,
-                    contentOrder: event.contentOrder,
-                  ),
-                );
+                controller.add(MediaAttachmentsEvent(
+                  event.mediaAttachments!,
+                  contentOrder: event.contentOrder,
+                ));
+              }
+              if (event.inputTranscript?.isNotEmpty == true) {
+                _recordInputTranscript(history, event.inputTranscript!);
+                controller.add(InputTranscriptEvent(event.inputTranscript!));
               } else if (event.isReasoning) {
-                _reasoningBuffer += event.text;
+                if (toolDefs.isNotEmpty) {
+                  roundReasoningBuffer?.write(event.text);
+                }
+                if (takeCompletedToolCallReasoning == null) {
+                  _reasoningBuffer.write(event.text);
+                }
                 // Emit reasoning text as ReasoningEvent so the UI
                 // can stream it in real-time to the reasoning panel.
                 controller.add(ReasoningEvent(event.text));
               } else if (event.isToolCallEvent) {
                 toolCallRefs.addAll(event.toolCalls!);
+                if (event.toolCalls!.isNotEmpty) onToolCallIntent?.call();
               } else if (event.text.isNotEmpty) {
-                // Accumulate visible content for tool call chain
-                // preservation per DeepSeek spec.
-                _contentBuffer += event.text;
-                controller.add(
-                  TextEvent(event.text, contentOrder: event.contentOrder),
-                );
+                // The stream manager owns the canonical visible reply. Reuse
+                // its per-conversation accumulation for tool-chain messages
+                // instead of retaining a second copy in this service.
+                if (onTextDelta == null) _contentBuffer.write(event.text);
+                onTextDelta?.call(event.text);
+                controller.add(TextEvent(
+                  event.text,
+                  contentOrder: event.contentOrder,
+                  alreadyAccumulated: onTextDelta != null,
+                ));
               }
             },
             onDone: () {
@@ -350,22 +392,41 @@ extension ChatServiceStreamingExt on ChatService {
           // （manager 已通过 addError 收到错误并走错误路径）。
           if (roundStreamError != null) break;
 
-          // No tool calls → done
-          if (toolCallRefs.isEmpty) break;
+          // No tool calls → done. Visible text is already retained by the
+          // stream manager, so the service no longer needs its duplicate.
+          if (toolCallRefs.isEmpty) {
+            _contentBuffer.clear();
+            break;
+          }
 
           // Emit ReasoningSectionEndEvent before starting the next round.
           // This allows the UI to split multi-step reasoning chains into
           // separate panels.
-          controller.add(const ReasoningSectionEndEvent());
+          if (onTextDelta != null) {
+            final delivered = Completer<void>();
+            pendingRoundBoundary = delivered;
+            controller.add(ReasoningSectionEndEvent(
+              onDelivered: delivered.complete,
+            ));
+            await delivered.future;
+            pendingRoundBoundary = null;
+            roundContentForToolChain = takeCompletedToolCallRound?.call();
+            roundReasoningForToolChain = takeCompletedToolCallReasoning?.call();
+            if (_isCancelledByUser || controller.isClosed) break;
+          } else {
+            controller.add(const ReasoningSectionEndEvent());
+          }
 
           // Capture the current round's reasoning content (what was added
           // since the last round). Per the DeepSeek Tool Calls guide,
           // messages.append(message) preserves the complete assistant message
           // (including reasoning_content) when sending subsequent requests
           // in the same tool call chain.
-          final roundReasoning = _reasoningBuffer.substring(
-            _lastReasoningLength,
-          );
+          final roundReasoning = onTextDelta != null
+              ? roundReasoningForToolChain ??
+                  roundReasoningBuffer?.toString() ??
+                  ''
+              : roundReasoningBuffer?.toString() ?? '';
 
           // Collect all tool calls and results first, then build the chain
           // messages via the protocol (format-specific). The neutral
@@ -394,9 +455,7 @@ extension ChatServiceStreamingExt on ChatService {
               parsedArgs = Map<String, dynamic>.from(jsonDecode(rawArgs));
             } catch (e) {
               AppLogService.warning(
-                'ChatService',
-                '解析工具调用参数失败: $name, 参数: $rawArgs: $e',
-              );
+                  'ChatService', '解析工具调用参数失败: $name, 参数: $rawArgs: $e');
             }
 
             final toolCallData = ToolCallData(
@@ -420,15 +479,10 @@ extension ChatServiceStreamingExt on ChatService {
             final executed = await Future.wait(pendingResults);
             for (var i = 0; i < neutralCalls.length; i++) {
               if (_isCancelledByUser || controller.isClosed) break;
-              controller.add(
-                ToolCallCompleteEvent(neutralCalls[i].id, executed[i]),
-              );
-              results.add(
-                ToolCallResult(
-                  toolCallId: neutralCalls[i].id,
-                  result: executed[i],
-                ),
-              );
+              controller
+                  .add(ToolCallCompleteEvent(neutralCalls[i].id, executed[i]));
+              results.add(ToolCallResult(
+                  toolCallId: neutralCalls[i].id, result: executed[i]));
             }
           }
 
@@ -447,23 +501,20 @@ extension ChatServiceStreamingExt on ChatService {
           // protocol: OpenAI 为单条 assistant(tool_calls) + N 条 tool 消息；
           // Anthropic 为 assistant(thinking/text/tool_use 块) + 单条
           // user(tool_result 块)。历史保持中立，格式切换安全。
-          messages.addAll(
-            _protocol.buildAssistantChainMessage(
-              content: _contentBuffer,
-              toolCalls: neutralCalls,
-              roundReasoning: roundReasoning,
-              thinkingSignature: _thinkingSignature,
-            ),
-          );
-          messages.addAll(
-            _protocol.buildToolResultMessages(
-              results,
-              toolOutputMaxChars: toolOutputMaxChars,
-            ),
-          );
+          messages.addAll(_protocol.buildAssistantChainMessage(
+            content: onTextDelta == null
+                ? _contentBuffer.toString()
+                : roundContentForToolChain ?? '',
+            toolCalls: neutralCalls,
+            roundReasoning: roundReasoning,
+            thinkingSignature: _thinkingSignature,
+          ));
+          messages.addAll(_protocol.buildToolResultMessages(results,
+              toolOutputMaxChars: toolOutputMaxChars));
 
           // Reset per-round buffers for the next iteration
-          _contentBuffer = '';
+          _contentBuffer.clear();
+          roundReasoningBuffer?.clear();
           _lastReasoningLength = _reasoningBuffer.length;
           _thinkingSignature = '';
           // 本轮完整执行且未提前退出（工具已执行、消息已追加）。
@@ -491,6 +542,10 @@ extension ChatServiceStreamingExt on ChatService {
         if (!controller.isClosed) {
           await controller.close();
         }
+        if (identical(_chatEventController, controller)) {
+          _chatEventController = null;
+          _releaseResponseBuffers();
+        }
         _cleanUp();
       }
     });
@@ -498,7 +553,15 @@ extension ChatServiceStreamingExt on ChatService {
     return controller.stream;
   }
 
-  String get reasoningContent => _reasoningBuffer;
+  void _releaseResponseBuffers() {
+    _contentBuffer.clear();
+    // Preserve the completed reasoning for direct callers until the next
+    // request starts, matching the public `reasoningContent` getter contract.
+    _lastReasoningLength = 0;
+    _thinkingSignature = '';
+  }
+
+  String get reasoningContent => _reasoningBuffer.toString();
 
   /// Executes a single tool for the parallel tool-call batch.
   ///
@@ -552,6 +615,7 @@ extension ChatServiceStreamingExt on ChatService {
       _chatEventController!.close();
     }
     _chatEventController = null;
+    _releaseResponseBuffers();
     _cleanUp();
   }
 

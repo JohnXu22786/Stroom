@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 
+import '../../../l10n/app_localizations.dart';
 import '../../../providers/background_task_provider.dart';
 import '../../../providers/provider_config.dart';
 import '../../../providers/task_provider_shared.dart';
@@ -56,6 +57,7 @@ Future<String> executeAsrBlock({
   required BackgroundTaskNotifier bgNotifier,
   required ProviderEntriesState providerEntries,
   CancelToken? cancelToken,
+  AppLocalizations? localizations,
 
   /// Allows the response to be held and released in cancellation tests.
   Future<String> Function(Uint8List, String)? requestAsr,
@@ -255,6 +257,9 @@ Future<String> executeAsrBlock({
     return result;
   } catch (e) {
     if (e is BlockExecutionException) rethrow;
+    final failure = localizations == null
+        ? e.toString()
+        : formatAsrTaskFailure(e, localizations);
     if (e is AsrChunkedTranscriptionException && e.partialText.isNotEmpty) {
       bgNotifier.setResult(taskId, e.partialText, isComplete: false);
     }
@@ -264,10 +269,12 @@ Future<String> executeAsrBlock({
       execNotifier,
       execId,
       flowSubTask.id,
-      '识别失败: $e',
+      localizations == null
+          ? '识别失败: $failure'
+          : localizations.asrRecognitionFailed(failure),
     );
     throw BlockExecutionException(
-      e.toString(),
+      failure,
       blockType: def.typeKey.name,
       blockTitle: def.label,
     );

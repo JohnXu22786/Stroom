@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart'
@@ -150,21 +149,22 @@ Future<List<XFile>> pickGalleryMedia(
     }
     return picker.pickMultiVideo();
   }
-  final result = await FilePicker.pickFiles(
+  final files = await FilePicker.pickFiles(
     type: kind == GalleryMediaKind.image ? FileType.image : FileType.video,
-    allowMultiple: true,
-    withData: true,
     initialDirectory: kind == GalleryMediaKind.image
         ? SystemPickDirectories.pictures()
         : SystemPickDirectories.videos(),
   );
-  return [
-    for (final file in result?.files ?? [])
-      // 保留原始路径：部分调用方（如 OCR）依赖 file.path 识别格式
+  final pickedFiles = <XFile>[];
+  for (final file in files) {
+    // 保留原始路径：部分调用方（如 OCR）依赖 file.path 识别格式。
+    pickedFiles.add(
       XFile.fromData(
-        file.bytes ?? Uint8List(0),
+        await file.readAsBytes(),
         name: file.name,
         path: file.path,
       ),
-  ];
+    );
+  }
+  return pickedFiles;
 }

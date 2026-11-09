@@ -11,6 +11,7 @@ import 'package:stroom/providers/assistant_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/services/llm_credential_store.dart';
 import 'package:stroom/widgets/llm/assistant_avatar.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 
 ProviderEntriesNotifier? _providerEntriesNotifier;
 bool _providerEntriesLoadFinished = false;
@@ -74,7 +75,11 @@ Widget createTestApp({List<Assistant>? assistants}) {
           return notifier;
         }),
     ],
-    child: const MaterialApp(home: AssistantSelectionPage()),
+    child: const MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: AssistantSelectionPage()),
   );
 }
 
@@ -592,7 +597,9 @@ void main() {
       await tester.pumpAndSettle();
 
       // Should show the first built-in prompt's name
-      final firstPrompt = builtInPrompts.first;
+      final firstPrompt = localizedBuiltInPrompts(
+        lookupAppLocalizations(const Locale('zh', 'CN')),
+      ).first;
       expect(find.text(firstPrompt.name), findsOneWidget);
     });
 
@@ -628,7 +635,9 @@ void main() {
 
       // The prompt code must NOT be visible on the card; only the
       // description is shown by default
-      final firstPrompt = builtInPrompts.first;
+      final firstPrompt = localizedBuiltInPrompts(
+        lookupAppLocalizations(const Locale('zh', 'CN')),
+      ).first;
       expect(find.text(firstPrompt.prompt), findsNothing);
       expect(find.text(firstPrompt.description), findsOneWidget);
 
@@ -662,7 +671,9 @@ void main() {
       await tester.pumpAndSettle();
 
       // Tap the first card — this must NOT import directly
-      final firstPrompt = builtInPrompts.first;
+      final firstPrompt = localizedBuiltInPrompts(
+        lookupAppLocalizations(const Locale('zh', 'CN')),
+      ).first;
       await tester.tap(find.text(firstPrompt.name).first);
       await tester.pumpAndSettle();
 
@@ -703,7 +714,9 @@ void main() {
         await tester.pumpAndSettle();
 
         // Open the detail panel of the first prompt
-        final firstPrompt = builtInPrompts.first;
+        final firstPrompt = localizedBuiltInPrompts(
+          lookupAppLocalizations(const Locale('zh', 'CN')),
+        ).first;
         await tester.tap(find.text(firstPrompt.name).first);
         await tester.pumpAndSettle();
 
@@ -731,7 +744,9 @@ void main() {
       await tester.pumpAndSettle();
 
       // Tap the 添加 button on the first card (not the card itself)
-      final firstPrompt = builtInPrompts.first;
+      final firstPrompt = localizedBuiltInPrompts(
+        lookupAppLocalizations(const Locale('zh', 'CN')),
+      ).first;
       await tester.tap(find.widgetWithText(FilledButton, '添加').first);
       await tester.pumpAndSettle();
 
@@ -754,7 +769,9 @@ void main() {
       // Open the market dialog and the detail panel of the first prompt
       await tester.tap(find.byIcon(Icons.storefront));
       await tester.pumpAndSettle();
-      final firstPrompt = builtInPrompts.first;
+      final firstPrompt = localizedBuiltInPrompts(
+        lookupAppLocalizations(const Locale('zh', 'CN')),
+      ).first;
       await tester.tap(find.text(firstPrompt.name).first);
       await tester.pumpAndSettle();
 
@@ -891,12 +908,12 @@ void main() {
 
       // Should see model parameters
       expect(find.text('温度 (Temperature)'), findsOneWidget);
-      expect(find.text('流式输出 (Stream Output)'), findsOneWidget);
+      expect(find.text('流式输出'), findsOneWidget);
       expect(find.text('Top P'), findsOneWidget);
-      expect(find.text('最大Token数 (Max Tokens)'), findsOneWidget);
-      expect(find.text('频率惩罚 (Frequency Penalty)'), findsOneWidget);
-      expect(find.text('存在惩罚 (Presence Penalty)'), findsOneWidget);
-      expect(find.text('随机种子 (Seed)'), findsOneWidget);
+      expect(find.text('最大 Token 数'), findsOneWidget);
+      expect(find.text('频率惩罚'), findsOneWidget);
+      expect(find.text('存在惩罚'), findsOneWidget);
+      expect(find.text('随机种子'), findsOneWidget);
       expect(find.text('联网搜索'), findsOneWidget);
       expect(find.text('自定义参数'), findsOneWidget);
     });
@@ -1035,7 +1052,7 @@ void main() {
       // 默认开启：开关 on，副标题显示当前上限（字符数，非 token）
       expect(find.text('工具结果截断'), findsOneWidget);
       expect(find.text('启用截断'), findsOneWidget);
-      expect(find.text('超长结果截断至 5000 字符'), findsOneWidget);
+      expect(find.text('超长结果将截断至 5000 个字符'), findsOneWidget);
       final tile = tester.widget<SwitchListTile>(
         find.widgetWithText(SwitchListTile, '启用截断'),
       );
@@ -1073,7 +1090,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // 关闭后：副标题变为"不截断"，长度输入框隐藏
-      expect(find.text('不截断，完整发送（仍受 50KB 存储上限约束）'), findsOneWidget);
+      expect(find.text('完整发送（仍受 50 KB 存储上限约束）'), findsOneWidget);
       expect(
         find.byWidgetPredicate(
           (w) => w is TextField && w.decoration?.labelText == '最大字符数',
@@ -1117,7 +1134,7 @@ void main() {
       await tester.enterText(lengthField, '8000');
       await tester.pumpAndSettle();
       // 副标题即时反映新上限
-      expect(find.text('超长结果截断至 8000 字符'), findsOneWidget);
+      expect(find.text('超长结果将截断至 8000 个字符'), findsOneWidget);
 
       await tester.tap(find.text('保存'));
       await tester.pumpAndSettle();
@@ -1156,12 +1173,12 @@ void main() {
       await tester.enterText(lengthField, '5000000');
       await tester.pumpAndSettle();
       expect(
-        find.text('有效范围：100~100000 字符'),
+        find.text('有效范围：100–100000 个字符'),
         findsOneWidget,
         reason: '越界输入必须就地提示有效范围',
       );
       // 副标题仍显示生效值（未写入 vars）
-      expect(find.text('超长结果截断至 5000 字符'), findsOneWidget);
+      expect(find.text('超长结果将截断至 5000 个字符'), findsOneWidget);
 
       await tester.tap(find.text('保存'));
       await tester.pumpAndSettle();
@@ -1236,7 +1253,11 @@ void main() {
               return notifier;
             }),
           ],
-          child: const MaterialApp(home: AssistantSelectionPage()),
+          child: const MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: AssistantSelectionPage()),
         ),
       );
       await tester.pumpAndSettle();
@@ -1249,7 +1270,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // 配置过空集合 → 开关全部关闭，说明文字用"已配置"措辞
-      expect(find.textContaining('未启用的工具'), findsOneWidget);
+      expect(find.text('已关闭的工具不会在新话题中自动启用。'), findsOneWidget);
       for (final toolName in ['web_search', 'todowrite', 'brave_web_search']) {
         final tile = tester.widget<SwitchListTile>(
           find.widgetWithText(SwitchListTile, toolName),
@@ -1280,7 +1301,11 @@ void main() {
               return notifier;
             }),
           ],
-          child: const MaterialApp(home: AssistantSelectionPage()),
+          child: const MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: AssistantSelectionPage()),
         ),
       );
       await tester.pumpAndSettle();
@@ -1350,7 +1375,11 @@ void main() {
               return notifier;
             }),
           ],
-          child: const MaterialApp(home: AssistantSelectionPage()),
+          child: const MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: AssistantSelectionPage()),
         ),
       );
       await tester.pumpAndSettle();
@@ -1405,7 +1434,11 @@ void main() {
               return notifier;
             }),
           ],
-          child: const MaterialApp(home: AssistantSelectionPage()),
+          child: const MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: AssistantSelectionPage()),
         ),
       );
       await tester.pumpAndSettle();
@@ -1460,7 +1493,11 @@ void main() {
               return notifier;
             }),
           ],
-          child: const MaterialApp(home: AssistantSelectionPage()),
+          child: const MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: AssistantSelectionPage()),
         ),
       );
       await tester.pumpAndSettle();
@@ -1542,7 +1579,11 @@ void main() {
               return notifier;
             }),
           ],
-          child: const MaterialApp(home: AssistantSelectionPage()),
+          child: const MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: AssistantSelectionPage()),
         ),
       );
       await tester.pumpAndSettle();
@@ -1586,7 +1627,11 @@ void main() {
               return notifier;
             }),
           ],
-          child: const MaterialApp(home: AssistantSelectionPage()),
+          child: const MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: AssistantSelectionPage()),
         ),
       );
       await tester.pumpAndSettle();
@@ -1637,7 +1682,7 @@ void main() {
 
       // Should show confirmation dialog
       expect(find.text('删除助手'), findsOneWidget);
-      expect(find.text('确定要删除助手「助手删除」吗？此操作无法撤销。'), findsOneWidget);
+      expect(find.text('确定要删除助手“助手删除”吗？此操作无法撤销。'), findsOneWidget);
       // Should have cancel and delete buttons
       expect(find.text('取消'), findsOneWidget);
       expect(find.text('删除'), findsOneWidget);
@@ -1671,7 +1716,7 @@ void main() {
       // Assistant should be removed
       expect(find.text('要删除的助手'), findsNothing);
       // Should show empty state
-      expect(find.text('暂无助手，请先创建'), findsOneWidget);
+      expect(find.text('暂无助手，请先创建。'), findsOneWidget);
     });
 
     testWidgets('cancelling delete keeps assistant in grid', (tester) async {
@@ -1741,14 +1786,14 @@ void main() {
       await tester.pumpAndSettle();
 
       // Info box is in Tab 2 (参数设置), so it should NOT be visible on Tab 1
-      expect(find.text('助手的参数开关打开时覆盖模型参数；关闭时使用模型参数。'), findsNothing);
+      expect(find.text('启用时助手参数会覆盖模型参数；关闭时使用模型参数。'), findsNothing);
 
       // Switch to 参数设置 tab
       await tester.tap(find.text('参数设置'));
       await tester.pumpAndSettle();
 
       // The info box text should now be visible
-      expect(find.text('助手的参数开关打开时覆盖模型参数；关闭时使用模型参数。'), findsOneWidget);
+      expect(find.text('启用时助手参数会覆盖模型参数；关闭时使用模型参数。'), findsOneWidget);
 
       // The info icon should be visible
       expect(find.byIcon(Icons.info_outline), findsOneWidget);

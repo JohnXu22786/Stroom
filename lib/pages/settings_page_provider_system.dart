@@ -48,25 +48,25 @@ extension _SettingsPageSystemAssistantExt on _SettingsPageState {
   Widget _buildSystemAssistantSettings() {
     final settings = ref.watch(systemAssistantSettingsProvider);
     final llmModels = availableLlmModels(ref.watch(providerEntriesProvider));
+    final strings = AppLocalizations.of(context)!;
     return Card(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Padding(
+            Padding(
               padding: EdgeInsets.symmetric(vertical: 8),
               child: Text(
-                '自动任务（标题生成 / 上下文压缩）独立配置使用的模型与提示词，'
-                '默认跟随对话页当前模型并使用内置提示词',
+                strings.systemAssistantSettingsIntro,
                 style: TextStyle(fontSize: 12, color: Colors.grey),
               ),
             ),
             _buildSystemAssistantTile(
               icon: Icons.title,
               iconColor: Colors.teal,
-              title: '标题生成助手',
-              subtitle: '自动生成对话标题',
+              title: strings.systemAssistantTitleName,
+              subtitle: strings.systemAssistantTitleDescription,
               task: settings.title,
               llmModels: llmModels,
               defaultAssistantId: kBuiltInTitleAssistantId,
@@ -78,8 +78,8 @@ extension _SettingsPageSystemAssistantExt on _SettingsPageState {
             _buildSystemAssistantTile(
               icon: Icons.compress,
               iconColor: Colors.indigo,
-              title: '上下文压缩助手',
-              subtitle: '对话过长时压缩为锚定摘要',
+              title: strings.systemAssistantCompactionName,
+              subtitle: strings.systemAssistantCompactionDescription,
               task: settings.compaction,
               llmModels: llmModels,
               defaultAssistantId: kBuiltInCompactionAssistantId,
@@ -140,7 +140,7 @@ extension _SettingsPageSystemAssistantExt on _SettingsPageState {
     if (task.modelDisplayName != null && task.modelDisplayName!.isNotEmpty) {
       return task.modelDisplayName!;
     }
-    return '跟随对话页当前模型';
+    return AppLocalizations.of(context)!.systemAssistantFollowCurrentModel;
   }
 
   Future<void> _showSystemAssistantPanel({
@@ -156,7 +156,7 @@ extension _SettingsPageSystemAssistantExt on _SettingsPageState {
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (ctx) => _SystemAssistantConfigPanel(
         title: title,
@@ -208,7 +208,7 @@ class _SystemAssistantConfigPanelState
     extends ConsumerState<_SystemAssistantConfigPanel> {
   late SystemAssistantTaskConfig _draft;
   late bool _isCustomPrompt;
-  late final String _defaultPrompt;
+  late String _defaultPrompt;
   late final TextEditingController _promptController;
   List<AvailableModel> _models = const [];
   List<String> _modelNames = const [];
@@ -237,6 +237,19 @@ class _SystemAssistantConfigPanelState
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final wasShowingDefault =
+        !_isCustomPrompt && _promptController.text == _defaultPrompt;
+    _defaultPrompt = localizedBuiltInSystemAssistantById(
+          widget.defaultAssistantId,
+          AppLocalizations.of(context)!,
+        )?.prompt ??
+        '';
+    if (wasShowingDefault) _promptController.text = _defaultPrompt;
+  }
+
+  @override
   void dispose() {
     _promptController.dispose();
     super.dispose();
@@ -256,17 +269,18 @@ class _SystemAssistantConfigPanelState
         _draft.modelDisplayName!.isNotEmpty) {
       return _draft.modelDisplayName!;
     }
-    return '跟随对话页当前模型';
+    return AppLocalizations.of(context)!.systemAssistantFollowCurrentModel;
   }
 
   Future<void> _pickModel() async {
     final selected = await showModalBottomSheet<String>(
       context: context,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (ctx) {
         final cs = Theme.of(ctx).colorScheme;
+        final strings = AppLocalizations.of(ctx)!;
         final currentDisplay = _selectedModelDisplay;
         return SafeArea(
           child: ListView(
@@ -276,7 +290,7 @@ class _SystemAssistantConfigPanelState
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
                 child: Text(
-                  '选择模型',
+                  strings.systemAssistantChooseModel,
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
@@ -288,7 +302,7 @@ class _SystemAssistantConfigPanelState
               // 也始终提供（可清除已保存的失效引用）。
               ListTile(
                 dense: true,
-                title: const Text('跟随对话页当前模型'),
+                title: Text(strings.systemAssistantFollowCurrentModel),
                 trailing: !_draft.hasModel
                     ? Icon(Icons.check, size: 18, color: cs.primary)
                     : null,
@@ -333,19 +347,19 @@ class _SystemAssistantConfigPanelState
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('重置为默认提示词'),
+        title: Text(AppLocalizations.of(ctx)!.systemAssistantResetPromptTitle),
         content: Text(
-          '将「${widget.title}」的提示词恢复为内置默认，'
-          '当前自定义内容将被丢弃。',
+          AppLocalizations.of(ctx)!
+              .systemAssistantResetPromptBody(widget.title),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('取消'),
+            child: Text(AppLocalizations.of(ctx)!.systemAssistantCancel),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('重置'),
+            child: Text(AppLocalizations.of(ctx)!.systemAssistantReset),
           ),
         ],
       ),
@@ -368,6 +382,7 @@ class _SystemAssistantConfigPanelState
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final strings = AppLocalizations.of(context)!;
     return SafeArea(
       child: Padding(
         padding: EdgeInsets.only(
@@ -387,7 +402,7 @@ class _SystemAssistantConfigPanelState
                 height: 4,
                 margin: const EdgeInsets.only(bottom: 16),
                 decoration: BoxDecoration(
-                  color: Colors.grey[350],
+                  color: Theme.of(context).colorScheme.outlineVariant,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -400,7 +415,7 @@ class _SystemAssistantConfigPanelState
                   height: 28,
                   decoration: BoxDecoration(
                     color: widget.iconColor.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(6),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(widget.icon, size: 18, color: widget.iconColor),
                 ),
@@ -432,7 +447,7 @@ class _SystemAssistantConfigPanelState
             const SizedBox(height: 16),
             // 使用的模型
             Text(
-              '使用的模型',
+              strings.systemAssistantModelHeading,
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
@@ -442,7 +457,7 @@ class _SystemAssistantConfigPanelState
             const SizedBox(height: 4),
             Material(
               color: cs.surfaceContainerHighest.withValues(alpha: 0.3),
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(8),
               child: ListTile(
                 dense: true,
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16),
@@ -461,7 +476,7 @@ class _SystemAssistantConfigPanelState
             const SizedBox(height: 16),
             // 提示词
             Text(
-              '提示词',
+              strings.systemAssistantPromptHeading,
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
@@ -477,7 +492,7 @@ class _SystemAssistantConfigPanelState
               decoration: InputDecoration(
                 border: const OutlineInputBorder(),
                 isDense: true,
-                hintText: '修改后将作为自定义提示词生效',
+                hintText: strings.systemAssistantCustomPromptHint,
                 hintStyle: TextStyle(
                   fontSize: 13,
                   color: cs.onSurfaceVariant.withValues(alpha: 0.6),
@@ -499,7 +514,9 @@ class _SystemAssistantConfigPanelState
               children: [
                 Expanded(
                   child: Text(
-                    _isCustomPrompt ? '当前使用自定义提示词' : '当前使用默认提示词',
+                    _isCustomPrompt
+                        ? strings.systemAssistantUsingCustomPrompt
+                        : strings.systemAssistantUsingDefaultPrompt,
                     style: TextStyle(
                       fontSize: 12,
                       color: cs.onSurfaceVariant,
@@ -509,7 +526,7 @@ class _SystemAssistantConfigPanelState
                 TextButton.icon(
                   onPressed: _isCustomPrompt ? _resetPromptToDefault : null,
                   icon: const Icon(Icons.restart_alt, size: 18),
-                  label: const Text('重置为默认提示词'),
+                  label: Text(strings.systemAssistantResetButton),
                 ),
               ],
             ),
@@ -519,12 +536,12 @@ class _SystemAssistantConfigPanelState
               children: [
                 TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: const Text('取消'),
+                  child: Text(strings.systemAssistantCancel),
                 ),
                 const SizedBox(width: 8),
                 FilledButton(
                   onPressed: _save,
-                  child: const Text('保存'),
+                  child: Text(strings.systemAssistantSave),
                 ),
               ],
             ),

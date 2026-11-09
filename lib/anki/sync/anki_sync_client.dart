@@ -1,96 +1,21 @@
-import 'dart:convert';
-import 'dart:math';
-import 'package:http/http.dart' as http;
+import 'anki_sync_protocol_client.dart';
 
-/// HTTP client for AnkiWeb sync authentication.
-///
-/// Matches Anki's Rust HttpSyncClient + sync_login() exactly:
-/// 1. POST to /sync/hostKey with JSON {"u": email, "p": password}
-/// 2. X-Sync-Header with empty sync_key (first login)
-/// 3. Response: JSON {"key": "hkey_value"}
+export 'anki_sync_protocol_client.dart' show AnkiSyncException;
+
+/// Compatibility entry point for callers that only need AnkiWeb login.
+/// New sync code should use [AnkiSyncProtocolClient] directly so its v10
+/// multipart session can also be used for the subsequent status request.
 class AnkiSyncClient {
-  static const String _baseUrl = 'https://sync.ankiweb.net/sync';
-
-  /// Authenticate with AnkiWeb.
-  ///
-  /// Returns the session key (hkey) on success, or throws on failure.
-  static Future<String> login(String email, String password) async {
-    final uri = Uri.parse('$_baseUrl/hostKey');
-    final body = jsonEncode({'u': email, 'p': password});
-    final header = jsonEncode({
-      'sync_version': 1,
-      'sync_key': '',
-      'session_key': _randomSessionId(),
-    });
-
-    final resp = await http.post(
-      uri,
-      body: body,
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Sync-Header': header,
-      },
-    );
-
-    if (resp.statusCode != 200) {
-      final errorText = resp.body.isNotEmpty ? resp.body : '无响应体';
-      throw AnkiSyncException('登录失败 (${resp.statusCode}): $errorText');
-    }
-
+  static Future<String> login(
+    String email,
+    String password, {
+    AnkiSyncProtocolClient Function()? clientFactory,
+  }) async {
+    final client = (clientFactory ?? AnkiSyncProtocolClient.ankiWeb)();
     try {
-      final json = jsonDecode(resp.body) as Map<String, dynamic>;
-      final key = json['key'] as String?;
-      if (key != null && key.isNotEmpty) return key;
-    } catch (_) {}
-
-    throw AnkiSyncException('登录失败: 无法解析服务器响应 "${resp.body.trim()}"');
-  }
-
-  /// Exchange session key for a hostKey.
-  /// [key] is the sync hkey to exchange.
-  static Future<String> hostKey(String key) async {
-    final uri = Uri.parse('$_baseUrl/hostKey');
-    final header = jsonEncode({
-      'sync_version': 1,
-      'sync_key': key,
-      'session_key': _randomSessionId(),
-    });
-
-    final resp = await http.post(
-      uri,
-      body: jsonEncode({'u': key}),
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Sync-Header': header,
-      },
-    );
-
-    if (resp.statusCode != 200) {
-      throw AnkiSyncException(
-          'hostKey 请求失败 (${resp.statusCode}): ${resp.body}');
+      return await client.login(email, password);
+    } finally {
+      client.close();
     }
-
-    try {
-      final json = jsonDecode(resp.body) as Map<String, dynamic>;
-      final hk = json['key'] as String?;
-      if (hk != null && hk.isNotEmpty) return hk;
-    } catch (_) {}
-
-    throw AnkiSyncException('hostKey 获取失败: ${resp.body.trim()}');
   }
-
-  /// Generate a random session ID matching Anki Rust's approach:
-  /// 15 random bytes, base64-encoded → 20 characters.
-  static String _randomSessionId() {
-    final rng = Random.secure();
-    final bytes = List<int>.generate(15, (_) => rng.nextInt(256));
-    return base64Url.encode(bytes);
-  }
-}
-
-class AnkiSyncException implements Exception {
-  final String message;
-  AnkiSyncException(this.message);
-  @override
-  String toString() => message;
 }

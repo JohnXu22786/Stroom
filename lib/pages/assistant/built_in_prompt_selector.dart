@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../l10n/app_localizations.dart';
 import '../../models/assistant.dart';
 import '../../models/built_in_prompts.dart';
 import '../../providers/assistant_provider.dart';
+import '../../services/assistant_catalog_service.dart';
+import 'assistant_remote_source_dialog.dart';
 
 /// Shows a dialog listing all built-in assistant prompts (the assistant
 /// "market"). Tapping a card opens a detail panel where the user can review
@@ -77,6 +80,8 @@ class _BuiltInPromptSelectorDialogState
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final strings = AppLocalizations.of(context)!;
+    final prompts = localizedBuiltInPrompts(strings);
 
     return Dialog(
       insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
@@ -94,17 +99,29 @@ class _BuiltInPromptSelectorDialogState
                   Icon(Icons.storefront, size: 22, color: cs.primary),
                   const SizedBox(width: 10),
                   Text(
-                    '助手市场',
+                    strings.builtInPromptMarketTitle,
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w600,
                       color: cs.onSurface,
                     ),
                   ),
+                  IconButton(
+                    icon: const Icon(Icons.add_link),
+                    tooltip:
+                        Localizations.localeOf(context).languageCode == 'zh'
+                            ? '接入远程助手'
+                            : 'Connect remote assistants',
+                    onPressed: () => showAssistantRemoteSourceDialog(
+                      context,
+                      ref,
+                      initialUrl: kDefaultAssistantCatalogUrl,
+                    ),
+                  ),
                   const Spacer(),
                   IconButton(
                     icon: const Icon(Icons.close),
-                    tooltip: '关闭',
+                    tooltip: strings.builtInPromptClose,
                     onPressed: () => Navigator.of(context).pop(),
                   ),
                 ],
@@ -117,9 +134,9 @@ class _BuiltInPromptSelectorDialogState
               child: ListView.builder(
                 shrinkWrap: true,
                 padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-                itemCount: builtInPrompts.length,
+                itemCount: prompts.length,
                 itemBuilder: (context, index) {
-                  final prompt = builtInPrompts[index];
+                  final prompt = prompts[index];
                   final isAdding = _addingIndices.contains(index);
 
                   return _PromptCard(
@@ -139,7 +156,7 @@ class _BuiltInPromptSelectorDialogState
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
               child: Text(
-                '选择后将添加为普通助手，之后可自由编辑',
+                strings.builtInPromptImportHint,
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 12,
@@ -175,13 +192,14 @@ class _PromptCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final strings = AppLocalizations.of(context)!;
 
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 4),
       elevation: 0,
       color: isDark ? cs.surfaceContainerHigh : cs.surfaceContainerLow,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         side: BorderSide(
           color: cs.outlineVariant.withValues(alpha: 0.5),
           width: 0.5,
@@ -190,7 +208,7 @@ class _PromptCard extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           child: Row(
@@ -201,11 +219,13 @@ class _PromptCard extends StatelessWidget {
                 height: 36,
                 decoration: BoxDecoration(
                   color: cs.primaryContainer.withValues(alpha: 0.4),
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(8),
                 ),
                 child: Center(
-                  child:
-                      Text(prompt.emoji, style: const TextStyle(fontSize: 20)),
+                  child: Text(
+                    prompt.emoji,
+                    style: const TextStyle(fontSize: 20),
+                  ),
                 ),
               ),
               const SizedBox(width: 10),
@@ -242,7 +262,7 @@ class _PromptCard extends StatelessWidget {
               // Info: view the full prompt
               IconButton(
                 icon: const Icon(Icons.info_outline),
-                tooltip: '查看提示词',
+                tooltip: strings.builtInPromptView,
                 onPressed: onInfo,
               ),
               const SizedBox(width: 4),
@@ -260,7 +280,7 @@ class _PromptCard extends StatelessWidget {
                 FilledButton.tonalIcon(
                   onPressed: onAdd,
                   icon: const Icon(Icons.add, size: 18),
-                  label: const Text('添加'),
+                  label: Text(strings.builtInPromptAdd),
                   style: FilledButton.styleFrom(
                     // Compact so the card keeps room for the description
                     // on narrow screens.
@@ -288,6 +308,7 @@ class _PromptDetailDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final strings = AppLocalizations.of(context)!;
 
     return Dialog(
       // Match the market dialog's insets so the stacked dialogs line up.
@@ -310,11 +331,13 @@ class _PromptDetailDialog extends StatelessWidget {
                       height: 48,
                       decoration: BoxDecoration(
                         color: cs.primaryContainer.withValues(alpha: 0.4),
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(8),
                       ),
                       child: Center(
-                        child: Text(prompt.emoji,
-                            style: const TextStyle(fontSize: 26)),
+                        child: Text(
+                          prompt.emoji,
+                          style: const TextStyle(fontSize: 26),
+                        ),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -330,7 +353,7 @@ class _PromptDetailDialog extends StatelessWidget {
                     ),
                     IconButton(
                       icon: const Icon(Icons.close),
-                      tooltip: '关闭',
+                      tooltip: strings.builtInPromptClose,
                       onPressed: () => Navigator.of(context).pop(),
                     ),
                   ],
@@ -340,7 +363,7 @@ class _PromptDetailDialog extends StatelessWidget {
                 if (prompt.description.isNotEmpty) ...[
                   const SizedBox(height: 12),
                   Text(
-                    '描述',
+                    strings.builtInPromptDescriptionHeading,
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
@@ -359,7 +382,7 @@ class _PromptDetailDialog extends StatelessWidget {
                 ],
                 const SizedBox(height: 12),
                 Text(
-                  '系统提示词',
+                  strings.builtInPromptSystemPromptHeading,
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
@@ -373,7 +396,7 @@ class _PromptDetailDialog extends StatelessWidget {
                   child: FilledButton.icon(
                     onPressed: onAdd,
                     icon: const Icon(Icons.add),
-                    label: const Text('添加助手'),
+                    label: Text(strings.builtInPromptAddAssistant),
                   ),
                 ),
               ],
@@ -404,18 +427,12 @@ class _PromptTextContainer extends StatelessWidget {
       decoration: BoxDecoration(
         color: isDark ? cs.surfaceContainerHighest : cs.surfaceContainerHigh,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: cs.outlineVariant.withValues(alpha: 0.3),
-        ),
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.3)),
       ),
       child: SingleChildScrollView(
         child: Text(
           prompt.prompt,
-          style: TextStyle(
-            fontSize: 12.5,
-            height: 1.5,
-            color: cs.onSurface,
-          ),
+          style: TextStyle(fontSize: 12.5, height: 1.5, color: cs.onSurface),
         ),
       ),
     );
@@ -430,6 +447,7 @@ class _PromptViewerDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final strings = AppLocalizations.of(context)!;
     return AlertDialog(
       title: Row(
         children: [
@@ -437,7 +455,7 @@ class _PromptViewerDialog extends StatelessWidget {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              '提示词 · ${prompt.name}',
+              strings.builtInPromptViewerTitle(prompt.name),
               style: const TextStyle(fontSize: 16),
               overflow: TextOverflow.ellipsis,
             ),
@@ -451,7 +469,7 @@ class _PromptViewerDialog extends StatelessWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('关闭'),
+          child: Text(strings.builtInPromptClose),
         ),
       ],
     );

@@ -139,8 +139,10 @@ Uint8List encodeAdpcm(Int16List pcmSamples, AdpcmConfig config) {
   int sampleIdx = 0;
 
   for (int block = 0; block < numBlocks; block++) {
-    final blockSamples =
-        pcmSamples.sublist(sampleIdx, sampleIdx + config.blockSize);
+    final blockSamples = pcmSamples.sublist(
+      sampleIdx,
+      sampleIdx + config.blockSize,
+    );
 
     for (int ch = 0; ch < config.channels; ch++) {
       // Block header: 2-byte predictor + 1-byte step index + 1 reserved
@@ -217,6 +219,37 @@ Uint8List encodeAdpcm(Int16List pcmSamples, AdpcmConfig config) {
   }
 
   return out.toBytes();
+}
+
+/// Web-compatible ADPCM encoder that yields after bounded block batches.
+Future<Uint8List> encodeAdpcmWithEventLoopYield(
+  Int16List pcmSamples,
+  AdpcmConfig config, {
+  void Function()? onYield,
+  void Function()? checkCancelled,
+  int yieldEveryBlocks = 32,
+}) async {
+  if (yieldEveryBlocks <= 0) {
+    throw ArgumentError.value(yieldEveryBlocks, 'yieldEveryBlocks');
+  }
+  checkCancelled?.call();
+  final output = BytesBuilder(copy: false);
+  final blockCount = pcmSamples.length ~/ config.blockSize;
+  for (var firstBlock = 0;
+      firstBlock < blockCount;
+      firstBlock += yieldEveryBlocks) {
+    checkCancelled?.call();
+    final lastBlock = (firstBlock + yieldEveryBlocks).clamp(0, blockCount);
+    final firstSample = firstBlock * config.blockSize;
+    final lastSample = lastBlock * config.blockSize;
+    output.add(
+      encodeAdpcm(pcmSamples.sublist(firstSample, lastSample), config),
+    );
+    onYield?.call();
+    await Future<void>.delayed(Duration.zero);
+    checkCancelled?.call();
+  }
+  return output.takeBytes();
 }
 
 /// Wrap raw IMA ADPCM nibbles (as produced by [encodeAdpcm]) in a WAV
@@ -313,13 +346,56 @@ Uint8List encodeFlac(Int16List pcmSamples, {int sampleRate = 16000}) {
     final blockLen = (_flacBlockSize < totalSamples - frameOffset)
         ? _flacBlockSize
         : totalSamples - frameOffset;
-    final blockSamples =
-        pcmSamples.sublist(frameOffset, frameOffset + blockLen);
+    final blockSamples = pcmSamples.sublist(
+      frameOffset,
+      frameOffset + blockLen,
+    );
     _writeFlacFrame(out, blockSamples, f, blockLen, sampleRate);
     frameOffset += blockLen;
   }
 
   return out.toBytes();
+}
+
+/// Web-compatible FLAC encoder that yields after bounded frame batches.
+Future<Uint8List> encodeFlacWithEventLoopYield(
+  Int16List pcmSamples, {
+  int sampleRate = 16000,
+  void Function()? onYield,
+  void Function()? checkCancelled,
+  int yieldEveryFrames = 4,
+}) async {
+  if (yieldEveryFrames <= 0) {
+    throw ArgumentError.value(yieldEveryFrames, 'yieldEveryFrames');
+  }
+  checkCancelled?.call();
+  final totalSamples = pcmSamples.length;
+  final frameCount = (totalSamples + _flacBlockSize - 1) ~/ _flacBlockSize;
+  final output = BytesOutput();
+  output.writeString('fLaC');
+  _writeStreamInfo(output, totalSamples, sampleRate);
+  var frameOffset = 0;
+  for (var firstFrame = 0;
+      firstFrame < frameCount;
+      firstFrame += yieldEveryFrames) {
+    checkCancelled?.call();
+    final lastFrame = (firstFrame + yieldEveryFrames).clamp(0, frameCount);
+    for (var frame = firstFrame; frame < lastFrame; frame++) {
+      final blockLength = (_flacBlockSize < totalSamples - frameOffset)
+          ? _flacBlockSize
+          : totalSamples - frameOffset;
+      final samples = pcmSamples.sublist(
+        frameOffset,
+        frameOffset + blockLength,
+      );
+      _writeFlacFrame(output, samples, frame, blockLength, sampleRate);
+      frameOffset += blockLength;
+    }
+    onYield?.call();
+    await Future<void>.delayed(Duration.zero);
+    checkCancelled?.call();
+  }
+  return output.toBytes();
 }
 
 // ---- STREAMINFO block ----
@@ -372,7 +448,12 @@ void _writeStreamInfo(BytesOutput out, int totalSamples, int sampleRate) {
 // ---- FLAC Frame ----
 
 void _writeFlacFrame(
-    BytesOutput out, Int16List samples, int frameIdx, int blockLen, int sr) {
+  BytesOutput out,
+  Int16List samples,
+  int frameIdx,
+  int blockLen,
+  int sr,
+) {
   final headerBits = _BitWriter();
   final bodyBits = _BitWriter();
 
@@ -620,10 +701,7 @@ int _sampleRateCode(int sr) {
 List<int> _encodeUtf8(int value) {
   if (value < 0x80) return [value];
   if (value < 0x800) {
-    return [
-      0xC0 | (value >> 6),
-      0x80 | (value & 0x3F),
-    ];
+    return [0xC0 | (value >> 6), 0x80 | (value & 0x3F)];
   }
   if (value < 0x10000) {
     return [
@@ -1459,8 +1537,11 @@ enum AudioCodec {
 /// For FLAC: returns complete standalone FLAC file.
 /// For MP3: returns complete MP3 file with frame headers.
 /// For Opus: returns Opus packet data with header.
-Uint8List compressPcm(Int16List pcmSamples, AudioCodec codec,
-    {int sampleRate = 16000}) {
+Uint8List compressPcm(
+  Int16List pcmSamples,
+  AudioCodec codec, {
+  int sampleRate = 16000,
+}) {
   switch (codec) {
     case AudioCodec.none:
       // Return as S16LE bytes

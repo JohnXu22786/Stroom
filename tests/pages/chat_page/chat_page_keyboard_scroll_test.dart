@@ -35,6 +35,7 @@ import 'package:stroom/pages/chat_page.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/services/conversation_repository_memory.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 
 /// Test messages alternating user/assistant roles.
 List<ChatMessage> _testMessages(int count) {
@@ -106,6 +107,9 @@ Future<ProviderContainer> pumpChat(
       UncontrolledProviderScope(
         container: container,
         child: MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           theme: platform == null
               ? null
               : ThemeData(platform: platform, useMaterial3: true),
@@ -829,7 +833,11 @@ void main() {
         _wrapTabVisibility(
           UncontrolledProviderScope(
             container: container,
-            child: const MaterialApp(home: Scaffold(body: ChatPage())),
+            child: const MaterialApp(
+                locale: const Locale('zh', 'CN'),
+                localizationsDelegates: AppLocalizations.localizationsDelegates,
+                supportedLocales: AppLocalizations.supportedLocales,
+                home: Scaffold(body: ChatPage())),
           ),
           visible: false,
         ),
@@ -849,7 +857,11 @@ void main() {
         _wrapTabVisibility(
           UncontrolledProviderScope(
             container: container,
-            child: const MaterialApp(home: Scaffold(body: ChatPage())),
+            child: const MaterialApp(
+                locale: const Locale('zh', 'CN'),
+                localizationsDelegates: AppLocalizations.localizationsDelegates,
+                supportedLocales: AppLocalizations.supportedLocales,
+                home: Scaffold(body: ChatPage())),
           ),
           visible: true,
         ),

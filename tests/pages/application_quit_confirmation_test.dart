@@ -13,6 +13,42 @@ import 'package:stroom/providers/background_task_provider.dart';
 import 'package:stroom/providers/update_provider.dart';
 import 'package:stroom/providers/theme_provider.dart';
 import 'package:stroom/services/desktop_app_service.dart';
+import 'package:tray_manager/legacy.dart' show Menu, TrayListener;
+
+class _NoopDesktopTrayAdapter implements DesktopTrayAdapter {
+  _NoopDesktopTrayAdapter({this.failSetIcon = false});
+
+  final bool failSetIcon;
+
+  @override
+  Future<void> setIcon(String iconPath) async {
+    if (failSetIcon) throw StateError('tray-unavailable');
+  }
+
+  @override
+  Future<void> setToolTip(String toolTip) async {}
+
+  @override
+  Future<void> setContextMenu(Menu menu) async {}
+
+  @override
+  Future<void> popUpContextMenu() async {}
+
+  @override
+  Future<void> destroy() async {}
+
+  @override
+  void addListener(TrayListener listener) {}
+
+  @override
+  void removeListener(TrayListener listener) {}
+}
+
+void _resetDesktopAppServiceForTest() {
+  final service = DesktopAppService.instance;
+  service.resetForTesting();
+  service.setTrayAdapterForTesting(_NoopDesktopTrayAdapter());
+}
 
 /// Mock [Dio] that resolves every request with the given response
 /// (same version as the app → no update dialog during startup).
@@ -34,16 +70,19 @@ Dio _createMockDio() {
 }
 
 /// Pumps the full [Application] (like the real app root) with the
-/// window_manager / tray_manager channels mocked and the platform forced
-/// to Windows. Returns the recorded channel calls and the exit codes.
+/// window_manager channel mocked and tray behavior supplied by a fake.
+/// Returns the recorded channel calls and the exit codes.
 Future<({List<MethodCall> windowCalls, List<int> exitCodes})> _pumpApplication(
   WidgetTester tester, {
   required bool closeMinimizes,
   BackgroundTaskNotifier? taskNotifier,
+  bool failTraySetup = false,
+  bool failRollbackClear = false,
 }) async {
   SharedPreferences.setMockInitialValues({
     'data_format_version': 2, // skip migration
     'desktop_close_minimize': closeMinimizes,
+    'app_locale_override': 'zh_CN',
   });
 
   final windowCalls = <MethodCall>[];
@@ -52,15 +91,16 @@ Future<({List<MethodCall> windowCalls, List<int> exitCodes})> _pumpApplication(
     const MethodChannel('window_manager'),
     (MethodCall call) async {
       windowCalls.add(call);
+      if (failRollbackClear &&
+          call.method == 'setPreventClose' &&
+          (call.arguments as Map)['isPreventClose'] == false) {
+        throw PlatformException(code: 'rollback-failed');
+      }
       return true;
     },
   );
-  // The tray channel must also succeed so the close listener stays
-  // registered (tray registration failure rolls the interception back).
-  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-      .setMockMethodCallHandler(
-    const MethodChannel('tray_manager'),
-    (MethodCall call) async => true,
+  DesktopAppService.instance.setTrayAdapterForTesting(
+    _NoopDesktopTrayAdapter(failSetIcon: failTraySetup),
   );
 
   // Record the process exit instead of actually exiting.
@@ -109,7 +149,7 @@ void main() {
   setUp(() {
     // Restore the real exit function and reset the singleton between tests.
     DesktopAppService.exitApp = exit;
-    DesktopAppService.instance.resetForTesting();
+    _resetDesktopAppServiceForTest();
     // 启动后任务标记是进程级的（错误边界重试不重复执行），
     // 每个测试用例需要复位以获得完整的启动后流程。
     resetPostStartupTasksFlag();
@@ -131,7 +171,7 @@ void main() {
         expect(ctx.exitCodes, isEmpty);
       } finally {
         debugDefaultTargetPlatformOverride = null;
-        DesktopAppService.instance.resetForTesting();
+        _resetDesktopAppServiceForTest();
       }
     });
 
@@ -149,7 +189,7 @@ void main() {
         expect(ctx.exitCodes, [0]);
       } finally {
         debugDefaultTargetPlatformOverride = null;
-        DesktopAppService.instance.resetForTesting();
+        _resetDesktopAppServiceForTest();
       }
     });
 
@@ -174,7 +214,7 @@ void main() {
         expect(ctx.exitCodes, isEmpty);
       } finally {
         debugDefaultTargetPlatformOverride = null;
-        DesktopAppService.instance.resetForTesting();
+        _resetDesktopAppServiceForTest();
       }
     });
 
@@ -197,7 +237,7 @@ void main() {
         expect(ctx.exitCodes, [0]);
       } finally {
         debugDefaultTargetPlatformOverride = null;
-        DesktopAppService.instance.resetForTesting();
+        _resetDesktopAppServiceForTest();
       }
     });
 
@@ -226,7 +266,49 @@ void main() {
         expect(ctx.exitCodes, [0]);
       } finally {
         debugDefaultTargetPlatformOverride = null;
-        DesktopAppService.instance.resetForTesting();
+        _resetDesktopAppServiceForTest();
+      }
+    });
+
+    testWidgets(
+        'tray rollback close cancellation keeps a running task and app alive',
+        (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      try {
+        final notifier = BackgroundTaskNotifier();
+        notifier.addTask(type: BackgroundTaskType.ocr, title: '运行中任务');
+        final ctx = await _pumpApplication(
+          tester,
+          closeMinimizes: false,
+          taskNotifier: notifier,
+          failTraySetup: true,
+          failRollbackClear: true,
+        );
+
+        await _emitWindowClose(tester);
+
+        expect(find.text('退出应用？'), findsOneWidget);
+        expect(find.textContaining('1 个任务正在运行'), findsOneWidget);
+        await tester.tap(find.text('取消'));
+        await tester.pumpAndSettle();
+        expect(ctx.windowCalls.where((c) => c.method == 'destroy'), isEmpty);
+        expect(ctx.exitCodes, isEmpty);
+
+        // A later close can still confirm that cancellation left the active
+        // task running, then explicitly approve the fallback exit.
+        await _emitWindowClose(tester);
+        expect(find.text('退出应用？'), findsOneWidget);
+        expect(find.textContaining('1 个任务正在运行'), findsOneWidget);
+        await tester.tap(find.text('退出'));
+        await tester.pumpAndSettle();
+        expect(
+          ctx.windowCalls.where((c) => c.method == 'destroy'),
+          hasLength(1),
+        );
+        expect(ctx.exitCodes, [0]);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+        _resetDesktopAppServiceForTest();
       }
     });
   });

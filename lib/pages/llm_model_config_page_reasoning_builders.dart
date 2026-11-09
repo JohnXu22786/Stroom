@@ -1,4 +1,5 @@
 part of 'llm_model_config_page.dart';
+
 // Extension methods on the State class cannot use @protected members
 // (setState / state) without authorization warnings, but the receiver IS
 // the State/StateNotifier, so runtime behavior is identical to the
@@ -35,12 +36,12 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
     final value = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('添加推理力度值'),
+        title: Text(AppLocalizations.of(context)!.reasoningAddEffortValue),
         content: TextField(
           controller: controller,
           autofocus: true,
-          decoration: const InputDecoration(
-            hintText: '如 max、ultra、deep',
+          decoration: InputDecoration(
+            hintText: AppLocalizations.of(context)!.reasoningEffortExample,
             border: OutlineInputBorder(),
             isDense: true,
           ),
@@ -48,12 +49,12 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('取消'),
+            child: Text(AppLocalizations.of(context)!.batchDlgCancel),
           ),
           TextButton(
             onPressed: () =>
                 Navigator.pop(dialogContext, controller.text.trim()),
-            child: const Text('确定'),
+            child: Text(AppLocalizations.of(context)!.batchDlgConfirm),
           ),
         ],
       ),
@@ -76,7 +77,10 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
         child: Center(
           child: TextButton.icon(
             icon: const Icon(Icons.add, size: 16),
-            label: const Text('添加推理开关', style: TextStyle(fontSize: 13)),
+            label: Text(
+              AppLocalizations.of(context)!.reasoningAddToggle,
+              style: TextStyle(fontSize: 13),
+            ),
             onPressed: () {
               setState(() {
                 _reasoningParams.insert(
@@ -110,7 +114,7 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text(
-                    '推理开关',
+                    AppLocalizations.of(context)!.reasoningToggle,
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
@@ -125,13 +129,16 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                 IconButton(
                   icon: const Icon(Icons.refresh, size: 20),
                   visualDensity: VisualDensity.compact,
-                  tooltip: '还原此参数',
+                  tooltip:
+                      AppLocalizations.of(context)!.reasoningResetParameter,
                   onPressed: () => _resetReasoningParam(toggle),
                 ),
                 // 推理开关是固定结构（不允许删除）：用启用开关替代删除
                 // 按钮，控制该参数的 enabled 状态。
                 Tooltip(
-                  message: toggle.enabled ? '停用推理开关' : '启用推理开关',
+                  message: toggle.enabled
+                      ? AppLocalizations.of(context)!.reasoningDisableToggle
+                      : AppLocalizations.of(context)!.reasoningEnableToggle,
                   child: Switch(
                     value: toggle.enabled,
                     onChanged: (v) => setState(() => toggle.enabled = v),
@@ -143,11 +150,15 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
             TextFormField(
               initialValue: toggle.paramName,
               decoration: InputDecoration(
-                labelText: '参数名（${_paramSourceLabel(toggle)}）',
-                hintText: '如 thinking.type、reasoning',
+                labelText: AppLocalizations.of(context)!
+                    .reasoningParameterNameSource(_paramSourceLabel(toggle)),
+                hintText: AppLocalizations.of(context)!.reasoningNameExample,
                 border: const OutlineInputBorder(),
                 isDense: true,
-                errorText: isToggleDuplicate ? '已存在该参数' : null,
+                errorText: isToggleDuplicate
+                    ? AppLocalizations.of(context)!
+                        .modelParamDuplicate(toggle.paramName.trim())
+                    : null,
                 errorStyle: const TextStyle(fontSize: 11),
               ),
               onChanged: (v) {
@@ -160,7 +171,7 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
             // 提供开/关切换（请求按开关状态发送 'true'/'false'）。
             if (toggle.type == 'boolean')
               Text(
-                '布尔类型无需配置参数值，聊天面板提供开/关切换。',
+                AppLocalizations.of(context)!.reasoningBooleanHelp,
                 style: TextStyle(
                   fontSize: 12,
                   color: cs.onSurfaceVariant.withValues(alpha: 0.7),
@@ -173,8 +184,10 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                     child: TextFormField(
                       initialValue: toggle.onValue ?? '',
                       decoration: InputDecoration(
-                        labelText: '开启时值',
-                        hintText: '如 enabled、true',
+                        labelText:
+                            AppLocalizations.of(context)!.reasoningOnValue,
+                        hintText:
+                            AppLocalizations.of(context)!.reasoningOnExample,
                         border: const OutlineInputBorder(),
                         isDense: true,
                       ),
@@ -189,8 +202,10 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                     child: TextFormField(
                       initialValue: toggle.offValue ?? '',
                       decoration: InputDecoration(
-                        labelText: '关闭时值',
-                        hintText: '如 disabled、false',
+                        labelText:
+                            AppLocalizations.of(context)!.reasoningOffValue,
+                        hintText:
+                            AppLocalizations.of(context)!.reasoningOffExample,
                         border: const OutlineInputBorder(),
                         isDense: true,
                       ),
@@ -204,8 +219,10 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
               ),
               const SizedBox(height: 8),
               Text(
-                '推理开关打开时发送「${toggle.onValue ?? ''}」，'
-                '关闭时发送「${toggle.offValue ?? ''}」',
+                AppLocalizations.of(context)!.reasoningToggleValuesHelp(
+                  toggle.onValue ?? '',
+                  toggle.offValue ?? '',
+                ),
                 style: TextStyle(
                   fontSize: 11,
                   color: cs.onSurfaceVariant.withValues(alpha: 0.7),
@@ -220,13 +237,12 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
 
   /// Builds the reasoning effort section. If an effort param exists, shows
   /// the effort card with selectable/draggable option blocks. Otherwise,
-  /// shows the "添加推理力度" button, disabled when no toggle exists.
+  /// shows the "添加推理力度" button.
   Widget _buildReasoningEffortSection(ColorScheme cs) {
     final effort = _effortReasoningParam;
     if (effort != null) {
       return _buildReasoningEffortCard(effort, cs);
     }
-    final hasToggle = _toggleReasoningParam != null;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Center(
@@ -234,16 +250,16 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
           icon: Icon(
             Icons.add,
             size: 16,
-            color: hasToggle ? null : Colors.grey,
+            color: null,
           ),
           label: Text(
-            '添加推理力度',
+            AppLocalizations.of(context)!.reasoningAddEffort,
             style: TextStyle(
               fontSize: 13,
-              color: hasToggle ? null : Colors.grey,
+              color: null,
             ),
           ),
-          onPressed: hasToggle ? _addEffortReasoningParam : null,
+          onPressed: _addEffortReasoningParam,
         ),
       ),
     );
@@ -258,7 +274,6 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
   /// never deletable: a Switch (bound to [ReasoningParam.enabled]) takes
   /// the place of the delete button.
   Widget _buildReasoningEffortCard(ReasoningParam effort, ColorScheme cs) {
-    final toggleComplete = _isToggleComplete;
     final isDuplicate = _isReasoningParamNameDuplicate(effort);
 
     return Card(
@@ -274,7 +289,7 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text(
-                    '推理力度',
+                    AppLocalizations.of(context)!.chatReasoningEffort,
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
@@ -288,13 +303,16 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                 IconButton(
                   icon: const Icon(Icons.refresh, size: 20),
                   visualDensity: VisualDensity.compact,
-                  tooltip: '还原此参数',
+                  tooltip:
+                      AppLocalizations.of(context)!.reasoningResetParameter,
                   onPressed: () => _resetReasoningParam(effort),
                 ),
                 // 推理力度参数有且只有一个（不允许删除）：用启用开关
                 // 替代删除按钮，控制该参数的 enabled 状态。
                 Tooltip(
-                  message: effort.enabled ? '停用推理力度' : '启用推理力度',
+                  message: effort.enabled
+                      ? AppLocalizations.of(context)!.reasoningDisableEffort
+                      : AppLocalizations.of(context)!.reasoningEnableEffort,
                   child: Switch(
                     value: effort.enabled,
                     onChanged: (v) => setState(() => effort.enabled = v),
@@ -305,13 +323,17 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
             const SizedBox(height: 8),
             TextFormField(
               initialValue: effort.paramName,
-              readOnly: !toggleComplete,
+              readOnly: false,
               decoration: InputDecoration(
-                labelText: '参数名（${_paramSourceLabel(effort)}）',
-                hintText: toggleComplete ? '如 reasoning_effort' : '请先填写推理开关',
+                labelText: AppLocalizations.of(context)!
+                    .reasoningParameterNameSource(_paramSourceLabel(effort)),
+                hintText: AppLocalizations.of(context)!.reasoningNameExample,
                 border: const OutlineInputBorder(),
                 isDense: true,
-                errorText: isDuplicate ? '已存在该参数' : null,
+                errorText: isDuplicate
+                    ? AppLocalizations.of(context)!
+                        .modelParamDuplicate(effort.paramName.trim())
+                    : null,
                 errorStyle: const TextStyle(fontSize: 11),
               ),
               onChanged: (v) {
@@ -326,7 +348,7 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
             // boolean → 无参数值（只有参数名）。
             if (effort.type == 'boolean')
               Text(
-                '布尔类型无需配置参数值，聊天面板提供开/关切换。',
+                AppLocalizations.of(context)!.reasoningBooleanHelp,
                 style: TextStyle(
                   fontSize: 12,
                   color: cs.onSurfaceVariant.withValues(alpha: 0.7),
@@ -336,16 +358,18 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
               TextFormField(
                 initialValue:
                     effort.options.isNotEmpty ? effort.options.first : '',
-                readOnly: !toggleComplete,
+                readOnly: false,
                 maxLines: 5,
                 decoration: InputDecoration(
-                  labelText: 'JSON 值',
-                  hintText: '如 {"thinking": {"budget": 1024}}',
+                  labelText: AppLocalizations.of(context)!.reasoningJsonValue,
+                  hintText: AppLocalizations.of(context)!
+                      .reasoningJsonExample('{"thinking": {"budget": 1024}}'),
                   border: const OutlineInputBorder(),
                   alignLabelWithHint: true,
                   errorText: _jsonValueError(
-                          effort.options.isNotEmpty ? effort.options.first : '')
-                      ? 'JSON 格式不正确'
+                    effort.options.isNotEmpty ? effort.options.first : '',
+                  )
+                      ? AppLocalizations.of(context)!.codeEditorInvalidFormat
                       : null,
                   errorStyle: const TextStyle(fontSize: 11),
                 ),
@@ -360,8 +384,7 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
               )
             else ...[
               Text(
-                '点击块选中/取消（选中的值将显示在聊天推理面板），'
-                '长按块拖拽排序。供应商的值不可删除，取消勾选即可隐藏。',
+                AppLocalizations.of(context)!.reasoningSelectedChipHelp,
                 style: TextStyle(
                   fontSize: 12,
                   color: cs.onSurfaceVariant.withValues(alpha: 0.7),
@@ -382,21 +405,13 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
               const SizedBox(height: 4),
               TextButton.icon(
                 icon: Icon(Icons.add, size: 16),
-                label: Text('添加值', style: TextStyle(fontSize: 13)),
-                onPressed: toggleComplete ? _addEffortBlockWithDialog : null,
+                label: Text(
+                  AppLocalizations.of(context)!.reasoningAddValue,
+                  style: TextStyle(fontSize: 13),
+                ),
+                onPressed: _addEffortBlockWithDialog,
               ),
             ],
-            if (!toggleComplete)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(
-                  '请先完整填写推理开关后再配置推理力度',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: cs.onSurfaceVariant.withValues(alpha: 0.7),
-                  ),
-                ),
-              ),
           ],
         ),
       ),
@@ -409,11 +424,13 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
       width: 100,
       decoration: BoxDecoration(
         border: Border.all(color: Colors.grey.shade400),
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.circular(8),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 4),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
+          dropdownColor: StroomMenuStyle.surface(context),
+          borderRadius: StroomMenuStyle.borderRadius,
           value: ParamType.values.any((t) => t.value == param.type)
               ? param.type
               : 'string',
@@ -422,7 +439,9 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
               .map(
                 (t) => DropdownMenuItem(
                   value: t.value,
-                  child: Text(t.label, style: const TextStyle(fontSize: 12)),
+                  child: Text(
+                      localizedParamTypeLabel(AppLocalizations.of(context)!, t),
+                      style: const TextStyle(fontSize: 12)),
                 ),
               )
               .toList(),
@@ -462,11 +481,19 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                   child: TextFormField(
                     initialValue: param.paramName,
                     decoration: InputDecoration(
-                      labelText: '参数名（${_paramSourceLabel(param)}）',
+                      labelText: AppLocalizations.of(
+                        context,
+                      )!
+                          .reasoningParameterNameSource(
+                              _paramSourceLabel(param)),
                       border: const OutlineInputBorder(),
                       isDense: true,
-                      hintText: '如 thinking.type 或 budget_tokens',
-                      errorText: isDuplicate ? '已存在该参数' : null,
+                      hintText:
+                          AppLocalizations.of(context)!.reasoningNameExample,
+                      errorText: isDuplicate
+                          ? AppLocalizations.of(context)!
+                              .modelParamDuplicate(param.paramName.trim())
+                          : null,
                       errorStyle: const TextStyle(fontSize: 11),
                     ),
                     onChanged: (v) {
@@ -482,13 +509,9 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                 // 排序）；模型自己添加的参数保留删除按钮。
                 if (!_isReasoningParamInherited(param))
                   IconButton(
-                    icon: const Icon(
-                      Icons.delete,
-                      color: Colors.red,
-                      size: 20,
-                    ),
+                    icon: const Icon(Icons.delete, color: Colors.red, size: 20),
                     onPressed: () => _removeReasoningParam(actualIndex),
-                    tooltip: '删除参数',
+                    tooltip: AppLocalizations.of(context)!.modelParamDelete,
                   ),
               ],
             ),
@@ -498,7 +521,7 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
             // boolean → 无参数值（只有参数名）。
             if (param.type == 'boolean')
               Text(
-                '布尔类型无需配置参数值。',
+                AppLocalizations.of(context)!.llmBooleanValueHelp,
                 style: TextStyle(
                   fontSize: 12,
                   color: cs.onSurfaceVariant.withValues(alpha: 0.7),
@@ -510,13 +533,15 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
                     param.options.isNotEmpty ? param.options.first : '',
                 maxLines: 5,
                 decoration: InputDecoration(
-                  labelText: 'JSON 值',
-                  hintText: '如 {"thinking": {"budget": 1024}}',
+                  labelText: AppLocalizations.of(context)!.reasoningJsonValue,
+                  hintText: AppLocalizations.of(context)!
+                      .reasoningJsonExample('{"thinking": {"budget": 1024}}'),
                   border: const OutlineInputBorder(),
                   alignLabelWithHint: true,
                   errorText: _jsonValueError(
-                          param.options.isNotEmpty ? param.options.first : '')
-                      ? 'JSON 格式不正确'
+                    param.options.isNotEmpty ? param.options.first : '',
+                  )
+                      ? AppLocalizations.of(context)!.codeEditorInvalidFormat
                       : null,
                   errorStyle: const TextStyle(fontSize: 11),
                 ),
@@ -531,8 +556,7 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
               )
             else ...[
               Text(
-                '点击块选中/取消（选中的值将显示在聊天推理面板），'
-                '长按块拖拽排序。供应商的值不可删除，取消勾选即可隐藏。',
+                AppLocalizations.of(context)!.reasoningSelectedChipHelp,
                 style: TextStyle(
                   fontSize: 12,
                   color: cs.onSurfaceVariant.withValues(alpha: 0.7),
@@ -556,7 +580,10 @@ extension _ReasoningBuildersExt on _LlmModelConfigPageState {
               const SizedBox(height: 4),
               TextButton.icon(
                 icon: Icon(Icons.add, size: 16),
-                label: const Text('添加值', style: TextStyle(fontSize: 13)),
+                label: Text(
+                  AppLocalizations.of(context)!.reasoningAddValue,
+                  style: TextStyle(fontSize: 13),
+                ),
                 onPressed: () => _addAdditionalBlockWithDialog(param),
               ),
             ],

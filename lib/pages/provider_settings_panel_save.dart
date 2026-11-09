@@ -8,9 +8,23 @@ extension _ProviderSettingsPanelSaveExt on _ProviderSettingsPanelState {
 
     if (name.isEmpty || host.isEmpty || key.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('供应商名称、API 地址 和 Key 均为必填项'),
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.providerRequiredFields),
           behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return false;
+    }
+
+    if (_isOcrType &&
+        _ocrRequestSizeBudgetController.text.trim().isNotEmpty &&
+        ocrRequestSizeBudgetBytesFromMib(
+              _ocrRequestSizeBudgetController.text,
+            ) ==
+            null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.providerJsonSizePositive),
         ),
       );
       return false;
@@ -22,12 +36,17 @@ extension _ProviderSettingsPanelSaveExt on _ProviderSettingsPanelState {
       final pn = param.paramName.trim();
       // boolean 类型无参数值（聊天/请求默认发送 true），只需参数名
       final hasValue = param.type == 'boolean' ||
-          param.options.any((o) => o.trim().isNotEmpty) ||
-          param.defaultValue.trim().isNotEmpty;
+          (param.type == 'json'
+              ? param.defaultValue.trim().isNotEmpty
+              : param.options.isNotEmpty
+                  ? param.options.first.trim().isNotEmpty
+                  : param.defaultValue.trim().isNotEmpty);
       if (pn.isEmpty || !hasValue) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('自定义参数的参数名和值不能为空'),
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context)!.providerCustomParamRequired,
+            ),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -37,7 +56,9 @@ extension _ProviderSettingsPanelSaveExt on _ProviderSettingsPanelState {
       if (!isValidParamName(pn)) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('参数名格式不正确（点号分段不能为空）: $pn'),
+            content: Text(
+              AppLocalizations.of(context)!.providerParamNameInvalid(pn),
+            ),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -46,7 +67,9 @@ extension _ProviderSettingsPanelSaveExt on _ProviderSettingsPanelState {
       if (!seenNames.add(pn)) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('已存在该参数: $pn'),
+            content: Text(
+              AppLocalizations.of(context)!.providerParamAlreadyExists(pn),
+            ),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -59,30 +82,62 @@ extension _ProviderSettingsPanelSaveExt on _ProviderSettingsPanelState {
         } catch (_) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('参数 "$pn" 的默认值不是合法 JSON：${param.defaultValue}'),
+              content: Text(
+                AppLocalizations.of(context)!
+                    .providerParamInvalidJson(pn, param.defaultValue),
+              ),
               behavior: SnackBarBehavior.floating,
             ),
           );
           return false;
         }
       }
+      if (param.type == 'number') {
+        final values =
+            param.options.isNotEmpty ? param.options : [param.defaultValue];
+        for (final value in values) {
+          if (value.trim().isEmpty) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  AppLocalizations.of(context)!
+                      .providerParamOptionsRequired(pn),
+                ),
+              ),
+            );
+            return false;
+          }
+          final number = double.tryParse(value);
+          if (number == null || !number.isFinite) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  AppLocalizations.of(context)!
+                      .providerParamInvalidNumber(pn, value),
+                ),
+              ),
+            );
+            return false;
+          }
+        }
+      }
     }
 
     // Validate reasoning params
-    final toggleParam = _toggleReasoningParam;
-    final hasNonToggleParams = _reasoningParams.any(
-      (p) => !p.isReasoningToggle && p.paramName.trim().isNotEmpty,
-    );
-
-    if (hasNonToggleParams &&
-        (toggleParam == null || !toggleParam.isFilledToggle)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('推理开关必须先填写完整，其他推理参数才能生效'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return false;
+    for (final param in _reasoningParams) {
+      if (param.isReasoningToggle || param.isEffortParam) continue;
+      if (param.type == 'boolean') continue;
+      if (param.paramName.trim().isNotEmpty && param.options.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context)!.modelReasoningOptionsRequired,
+            ),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return false;
+      }
     }
 
     for (final param in _reasoningParams) {
@@ -90,7 +145,9 @@ extension _ProviderSettingsPanelSaveExt on _ProviderSettingsPanelState {
       if (error != null) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('推理参数错误：$error'),
+            content: Text(
+              AppLocalizations.of(context)!.providerReasoningError(error),
+            ),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -105,7 +162,9 @@ extension _ProviderSettingsPanelSaveExt on _ProviderSettingsPanelState {
       if (!seenNames.add(pn)) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('推理参数与自定义参数存在重名: $pn'),
+            content: Text(
+              AppLocalizations.of(context)!.providerParamNameConflict(pn),
+            ),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -118,8 +177,8 @@ extension _ProviderSettingsPanelSaveExt on _ProviderSettingsPanelState {
     final maxTokensStr = _maxTokensController.text.trim();
     if (_enableMaxTokens && maxTokensStr.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('已启用最大输出 Token 数但未填写数值'),
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.providerMaxTokensMissing),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -129,8 +188,10 @@ extension _ProviderSettingsPanelSaveExt on _ProviderSettingsPanelState {
       final maxTokens = int.tryParse(maxTokensStr);
       if (maxTokens == null || maxTokens <= 0) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('最大输出 Token 数必须为正整数'),
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context)!.providerMaxTokensPositive,
+            ),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -143,8 +204,8 @@ extension _ProviderSettingsPanelSaveExt on _ProviderSettingsPanelState {
     if (seedStr.isNotEmpty) {
       if (int.tryParse(seedStr) == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('随机种子必须为整数'),
+          SnackBar(
+            content: Text(AppLocalizations.of(context)!.providerSeedInteger),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -198,10 +259,21 @@ extension _ProviderSettingsPanelSaveExt on _ProviderSettingsPanelState {
       typeConfig['fallbackMethod'] = _fallbackMethod;
     }
 
+    if (_isOcrType) {
+      final requestSizeBudget = _ocrRequestSizeBudgetController.text.trim();
+      if (requestSizeBudget.isEmpty) {
+        typeConfig.remove('requestSizeBudgetBytes');
+      } else {
+        typeConfig['requestSizeBudgetBytes'] =
+            ocrRequestSizeBudgetBytesFromMib(requestSizeBudget);
+      }
+    }
+
     // 保存前规范化：boolean 类型无参数值（清空 options，与模型页一致）
     for (final p in _customParams) {
-      if (p.type == 'boolean' && p.options.isNotEmpty) {
+      if (p.type == 'boolean') {
         p.options.clear();
+        p.defaultValue = '';
       }
     }
     for (final p in _reasoningParams) {
@@ -226,7 +298,9 @@ extension _ProviderSettingsPanelSaveExt on _ProviderSettingsPanelState {
       key: _keyController.text.trim(),
       models: widget.config.models.map((m) => m.copy()).toList(),
       typeConfig: typeConfig,
-      customParams: _customParams.map((p) => p.copy()).toList(),
+      customParams: _customParams
+          .map((p) => p.copy()..paramName = p.paramName.trim())
+          .toList(),
       reasoningParams: _reasoningParams.map((p) => p.copy()).toList(),
       endpointType: legacyEndpointTypeForApiProtocol(_apiProtocol),
       apiProtocol: _apiProtocol,

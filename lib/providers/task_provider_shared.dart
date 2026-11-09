@@ -67,6 +67,7 @@ class SynthesisTask {
     String? originalRequest,
     String? originalResponse,
     String? downloadedFilePath,
+    Map<String, String>? customParams,
     bool clearDownloadedFilePath = false,
     String? folder,
   }) {
@@ -86,7 +87,7 @@ class SynthesisTask {
       text: text,
       providerConfig: providerConfig ?? this.providerConfig,
       modelConfig: modelConfig ?? this.modelConfig,
-      customParams: customParams,
+      customParams: customParams ?? this.customParams,
       trimPreset: trimPreset,
       originalRequest: originalRequest ?? this.originalRequest,
       originalResponse: originalResponse ?? this.originalResponse,

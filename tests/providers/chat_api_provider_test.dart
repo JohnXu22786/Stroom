@@ -2,8 +2,47 @@
 // Merged from:
 //   - chat_api_provider_auth_header_test.dart
 //   - chat_api_provider_tool_calls_test.dart
+import 'dart:typed_data';
+
+import 'package:dio/dio.dart';
+import 'package:flutter/widgets.dart' show Locale;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/providers/chat_api_provider.dart';
+import 'package:stroom/providers/locale_provider.dart';
+
+class _ResponseAdapter implements HttpClientAdapter {
+  final String body;
+  final int statusCode;
+
+  _ResponseAdapter(this.body, this.statusCode);
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<dynamic>? cancelFuture,
+  ) async {
+    return ResponseBody.fromString(
+      body,
+      statusCode,
+      headers: {
+        Headers.contentTypeHeader: [Headers.jsonContentType]
+      },
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+Dio _dioReturning(String body, {int statusCode = 200}) =>
+    Dio()..httpClientAdapter = _ResponseAdapter(body, statusCode);
+
+Matcher _throwsContaining(String expected) => throwsA(isA<Exception>().having(
+      (error) => error.toString(),
+      'message',
+      contains(expected),
+    ));
 
 void main() {
   group('OpenAI Responses direct provider', () {
@@ -106,6 +145,45 @@ void main() {
       ]);
     });
 
+    test('preserves PDF file parts when converting to Responses input', () {
+      final provider = OpenAICompatibleChatProvider(
+        baseUrl: 'https://api.example.com/v1/responses',
+        apiKey: 'test-key',
+        apiProtocol: 'openai.responses',
+      );
+
+      final body = provider.buildBody([
+        {
+          'role': 'user',
+          'content': [
+            {'type': 'text', 'text': 'Summarize this document.'},
+            {
+              'type': 'file',
+              'file': {
+                'filename': 'report.pdf',
+                'file_data': 'data:application/pdf;base64,cGRm',
+              },
+            },
+          ],
+        },
+      ]);
+
+      expect(body['input'], [
+        {
+          'type': 'message',
+          'role': 'user',
+          'content': [
+            {'type': 'input_text', 'text': 'Summarize this document.'},
+            {
+              'type': 'input_file',
+              'filename': 'report.pdf',
+              'file_data': 'data:application/pdf;base64,cGRm',
+            },
+          ],
+        },
+      ]);
+    });
+
     test('decodes Responses stream text, function calls, and usage', () {
       final provider = OpenAICompatibleChatProvider(
         baseUrl: 'https://api.example.com/v1/responses',
@@ -160,6 +238,85 @@ void main() {
       expect(usage, {'inputTokens': 2, 'outputTokens': 3});
     });
   });
+  test('HTTP error framing localizes and preserves status and response text',
+      () {
+    var locale = const Locale('en', 'US');
+    final provider = OpenAICompatibleChatProvider(
+      baseUrl: 'https://api.example.com',
+      apiKey: 'test',
+      localeOverride: () => locale,
+    );
+    final error = DioException(
+      requestOptions: RequestOptions(path: '/chat'),
+      response: Response(
+        requestOptions: RequestOptions(path: '/chat'),
+        statusCode: 429,
+        data: 'raw provider body',
+      ),
+    );
+
+    expect(
+      provider.handleChatDioErrorForTesting(error).toString(),
+      'Exception: API request failed (HTTP 429): raw provider body',
+    );
+    expect(provider.lastResponseStatusCode, 429);
+
+    locale = const Locale('zh', 'CN');
+    expect(
+      provider.handleChatDioErrorForTesting(error).toString(),
+      'Exception: API 请求失败 (HTTP 429)：raw provider body',
+    );
+    expect(provider.lastResponseStatusCode, 429);
+  });
+
+  test('chat setup and malformed response errors follow the selected locale',
+      () async {
+    var locale = const Locale('en', 'US');
+    await expectLater(
+      OpenAICompatibleChatProvider(
+        baseUrl: 'https://api.example.com/chat',
+        apiKey: '',
+        localeOverride: () => locale,
+      ).chat([]),
+      _throwsContaining('API key is not configured'),
+    );
+
+    Future<void> expectMalformedResponse(String body, String expected) async {
+      await expectLater(
+        OpenAICompatibleChatProvider(
+          baseUrl: 'https://api.example.com/chat',
+          apiKey: 'test',
+          dio: _dioReturning(body),
+          localeOverride: () => locale,
+        ).chat([]),
+        _throwsContaining(expected),
+      );
+    }
+
+    await expectMalformedResponse(
+      '{}',
+      'Request failed: Exception: API response has no choices',
+    );
+    await expectMalformedResponse(
+      '{"choices":[{"message":{}}]}',
+      'Request failed: Exception: API response content is empty',
+    );
+
+    locale = const Locale('zh', 'CN');
+    await expectLater(
+      OpenAICompatibleChatProvider(
+        baseUrl: 'https://api.example.com/chat',
+        apiKey: '',
+        localeOverride: () => locale,
+      ).chat([]),
+      _throwsContaining('API 密钥未配置'),
+    );
+    await expectMalformedResponse(
+      '{}',
+      '请求失败：Exception: API 返回的 choices 列表为空',
+    );
+  });
+
   group('OpenAICompatibleChatProvider - Authorization header correctness', () {
     const testApiKey = 'sk-test-full-api-key-12345678';
     const expectedAuth = 'Bearer sk-test-full-api-key-12345678';
@@ -360,6 +517,30 @@ void main() {
   });
 
   group('throwIfApiError (stream error chunk)', () {
+    test('error frame follows locale and preserves the provider detail', () {
+      var locale = const Locale('en', 'US');
+      final error = {
+        'error': {'message': 'raw provider detail'}
+      };
+
+      expect(
+        () => OpenAICompatibleChatProvider.throwIfApiError(
+          error,
+          localizations: () => appLocalizationsForLocale(locale),
+        ),
+        _throwsContaining('API stream error: raw provider detail'),
+      );
+
+      locale = const Locale('zh', 'CN');
+      expect(
+        () => OpenAICompatibleChatProvider.throwIfApiError(
+          error,
+          localizations: () => appLocalizationsForLocale(locale),
+        ),
+        _throwsContaining('API 流式错误：raw provider detail'),
+      );
+    });
+
     test('error map 抛出异常', () {
       expect(
         () => OpenAICompatibleChatProvider.throwIfApiError({

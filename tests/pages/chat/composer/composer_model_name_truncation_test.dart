@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/chat/composer/composer_shared.dart';
 
 void main() {
@@ -156,23 +157,31 @@ void main() {
       expect(find.textContaining('Very-Long-Model-Name-T...'), findsOneWidget);
     });
 
-    testWidgets('shows fallback "模型" when displayName is empty',
-        (tester) async {
-      await tester.pumpWidget(MaterialApp(
-        home: Scaffold(
-          body: SizedBox(
-            width: 400,
-            child: ModelNameChip(
-              displayName: '',
-              color: Colors.teal,
-              onTap: () {},
+    for (final (locale, expectedLabel) in [
+      (const Locale('en'), 'Model'),
+      (const Locale('zh', 'CN'), '模型'),
+    ]) {
+      testWidgets('shows localized fallback "$expectedLabel" for $locale',
+          (tester) async {
+        await tester.pumpWidget(MaterialApp(
+          locale: locale,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            body: SizedBox(
+              width: 400,
+              child: ModelNameChip(
+                displayName: '',
+                color: Colors.teal,
+                onTap: () {},
+              ),
             ),
           ),
-        ),
-      ));
+        ));
 
-      expect(find.text('模型'), findsOneWidget);
-    });
+        expect(find.text(expectedLabel), findsOneWidget);
+      });
+    }
 
     testWidgets('tap fires callback', (tester) async {
       var tapped = false;

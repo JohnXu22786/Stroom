@@ -1,4 +1,4 @@
-﻿// Tests for the edit data-loss warning on ChatPage:
+// Tests for the edit data-loss warning on ChatPage:
 // editing a user message deletes every message below it once sent, so
 // entering edit mode shows a warning ("重新编辑发送后下面所有的消息将丢失")
 // immediately — no keyboard/fallback wait — in the composer, centered in
@@ -7,6 +7,8 @@
 // out before the edit capsule fades back in.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/models/chat_message.dart';
@@ -60,7 +62,16 @@ Widget createChatTestAppWithMessages(List<ChatMessage> messages) {
         return ProviderEntriesNotifier();
       }),
     ],
-    child: const MaterialApp(home: ChatPage()),
+    child: const MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: ChatPage()),
   );
 }
 

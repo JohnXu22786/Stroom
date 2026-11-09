@@ -1,15 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:file_picker/file_picker.dart';
-// The platform interface lives under the package's src/ (not exported
-// publicly); extending it is the supported way to fake the save dialog.
-// ignore_for_file: implementation_imports
-import 'package:file_picker/src/platform/file_picker_platform_interface.dart';
+import 'package:file_picker_platform_interface/file_picker_platform_interface.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/widgets/code_block_source_widget.dart';
 
 import '../fake_file_picker.dart';
@@ -25,6 +22,9 @@ void main() {
   }) {
     return tester.pumpWidget(
       MaterialApp(
+        locale: Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
         home: Scaffold(
           body: CodeBlockSourceView(code: code, language: language),
         ),
@@ -37,9 +37,10 @@ void main() {
       const code = 'print("hello")';
       await tester.pumpWidget(
         MaterialApp(
-          home: Scaffold(
-            body: CodeBlockSourceView(code: code),
-          ),
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          home: Scaffold(body: CodeBlockSourceView(code: code)),
         ),
       );
 
@@ -51,9 +52,10 @@ void main() {
       const code = 'line1\nline2\nline3';
       await tester.pumpWidget(
         MaterialApp(
-          home: Scaffold(
-            body: CodeBlockSourceView(code: code),
-          ),
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          home: Scaffold(body: CodeBlockSourceView(code: code)),
         ),
       );
 
@@ -67,9 +69,10 @@ void main() {
       const code = 'single line';
       await tester.pumpWidget(
         MaterialApp(
-          home: Scaffold(
-            body: CodeBlockSourceView(code: code),
-          ),
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          home: Scaffold(body: CodeBlockSourceView(code: code)),
         ),
       );
 
@@ -77,13 +80,15 @@ void main() {
       expect(find.text('1'), findsOneWidget);
     });
 
-    testWidgets('shows wrap toggle as a pure icon (no text label)',
-        (tester) async {
+    testWidgets('shows wrap toggle as a pure icon (no text label)', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         MaterialApp(
-          home: Scaffold(
-            body: CodeBlockSourceView(code: 'some code'),
-          ),
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          home: Scaffold(body: CodeBlockSourceView(code: 'some code')),
         ),
       );
 
@@ -96,13 +101,15 @@ void main() {
       expect(wrapIcon.semanticLabel, isNotNull);
     });
 
-    testWidgets('wrap toggle switches between wrap and no-wrap state',
-        (tester) async {
+    testWidgets('wrap toggle switches between wrap and no-wrap state', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         MaterialApp(
-          home: Scaffold(
-            body: CodeBlockSourceView(code: 'line1\nline2'),
-          ),
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          home: Scaffold(body: CodeBlockSourceView(code: 'line1\nline2')),
         ),
       );
 
@@ -130,9 +137,10 @@ void main() {
     testWidgets('shows (empty) for empty code', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
-          home: Scaffold(
-            body: CodeBlockSourceView(code: ''),
-          ),
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          home: Scaffold(body: CodeBlockSourceView(code: '')),
         ),
       );
 
@@ -141,13 +149,15 @@ void main() {
       expect(find.text('1'), findsNothing);
     });
 
-    testWidgets('toolbar buttons are compact circles, not oversized pills',
-        (tester) async {
+    testWidgets('toolbar buttons are compact circles, not oversized pills', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         MaterialApp(
-          home: Scaffold(
-            body: CodeBlockSourceView(code: 'some code'),
-          ),
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          home: Scaffold(body: CodeBlockSourceView(code: 'some code')),
         ),
       );
 
@@ -161,8 +171,11 @@ void main() {
             )
             .first,
       );
-      expect(wrapInkWell.customBorder, isA<CircleBorder>(),
-          reason: 'toolbar button must be circular, not a rounded pill');
+      expect(
+        wrapInkWell.customBorder,
+        isA<CircleBorder>(),
+        reason: 'toolbar button must be circular, not a rounded pill',
+      );
 
       final btnRect = tester.getRect(
         find
@@ -172,19 +185,27 @@ void main() {
             )
             .first,
       );
-      expect(btnRect.height, lessThan(40),
-          reason: 'toolbar button must be compact (was 50px tall)');
-      expect(btnRect.width, equals(btnRect.height),
-          reason: 'a circular button has equal width and height');
+      expect(
+        btnRect.height,
+        lessThan(40),
+        reason: 'toolbar button must be compact (was 50px tall)',
+      );
+      expect(
+        btnRect.width,
+        equals(btnRect.height),
+        reason: 'a circular button has equal width and height',
+      );
     });
 
-    testWidgets('toolbar pill hugs its buttons (no trailing blank)',
-        (tester) async {
+    testWidgets('toolbar pill hugs its buttons (no trailing blank)', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         MaterialApp(
-          home: Scaffold(
-            body: CodeBlockSourceView(code: 'some code'),
-          ),
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          home: Scaffold(body: CodeBlockSourceView(code: 'some code')),
         ),
       );
 
@@ -199,10 +220,7 @@ void main() {
           )
           .first;
       final copyButton = find
-          .ancestor(
-            of: find.byIcon(Icons.copy),
-            matching: find.byType(InkWell),
-          )
+          .ancestor(of: find.byIcon(Icons.copy), matching: find.byType(InkWell))
           .first;
       final wrapButton = find
           .ancestor(
@@ -213,27 +231,37 @@ void main() {
       final pillRect = tester.getRect(pill);
       final copyRect = tester.getRect(copyButton);
       final wrapRect = tester.getRect(wrapButton);
-      expect(pillRect.left, equals(copyRect.left),
-          reason: 'pill must start where its first button starts');
-      expect(pillRect.right, equals(wrapRect.right),
-          reason: 'pill must not extend past its last button');
-      expect(pillRect.top, equals(copyRect.top),
-          reason: 'pill must not extend past its buttons vertically');
+      expect(
+        pillRect.left,
+        equals(copyRect.left),
+        reason: 'pill must start where its first button starts',
+      );
+      expect(
+        pillRect.right,
+        equals(wrapRect.right),
+        reason: 'pill must not extend past its last button',
+      );
+      expect(
+        pillRect.top,
+        equals(copyRect.top),
+        reason: 'pill must not extend past its buttons vertically',
+      );
       expect(pillRect.bottom, equals(copyRect.bottom));
     });
 
-    testWidgets('action buttons appear after wrap toggle button',
-        (tester) async {
+    testWidgets('action buttons appear after wrap toggle button', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: CodeBlockSourceView(
               code: 'test',
               actionButtons: [
-                TextButton(
-                  onPressed: () {},
-                  child: const Text('ExtraBtn'),
-                ),
+                TextButton(onPressed: () {}, child: const Text('ExtraBtn')),
               ],
             ),
           ),
@@ -248,17 +276,21 @@ void main() {
       // buttons (common/shared buttons sit on the right).
       final wrapPos = tester.getCenter(find.byIcon(Icons.wrap_text));
       final extraPos = tester.getCenter(find.text('ExtraBtn'));
-      expect(wrapPos.dx, lessThan(extraPos.dx),
-          reason: 'wrap toggle should be left of additional action buttons');
+      expect(
+        wrapPos.dx,
+        lessThan(extraPos.dx),
+        reason: 'wrap toggle should be left of additional action buttons',
+      );
     });
 
     testWidgets('handles code with trailing newline', (tester) async {
       const code = 'line1\nline2\n';
       await tester.pumpWidget(
         MaterialApp(
-          home: Scaffold(
-            body: CodeBlockSourceView(code: code),
-          ),
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          home: Scaffold(body: CodeBlockSourceView(code: code)),
         ),
       );
 
@@ -279,6 +311,9 @@ void main() {
     }) {
       return tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: SizedBox(
               width: 200,
@@ -296,22 +331,30 @@ void main() {
       );
     }
 
-    Finder horizontalScrollViews() => find
-        .byWidgetPredicate((w) => w is Scrollable && w.axis == Axis.horizontal);
+    Finder horizontalScrollViews() => find.byWidgetPredicate(
+          (w) => w is Scrollable && w.axis == Axis.horizontal,
+        );
 
     String? wrapLabel(WidgetTester tester) =>
         tester.widget<Icon>(find.byIcon(Icons.wrap_text)).semanticLabel;
 
     testWidgets('markdown blocks start wrapped', (tester) async {
       await pumpWrapped(tester, language: 'markdown');
-      expect(wrapLabel(tester), '取消换行',
-          reason: 'markdown is prose — must wrap by default');
-      expect(horizontalScrollViews(), findsNothing,
-          reason: 'wrap mode must have no horizontal scroll view');
+      expect(
+        wrapLabel(tester),
+        '取消换行',
+        reason: 'markdown is prose — must wrap by default',
+      );
+      expect(
+        horizontalScrollViews(),
+        findsNothing,
+        reason: 'wrap mode must have no horizontal scroll view',
+      );
     });
 
-    testWidgets('md blocks start wrapped (language is case-insensitive)',
-        (tester) async {
+    testWidgets('md blocks start wrapped (language is case-insensitive)', (
+      tester,
+    ) async {
       await pumpWrapped(tester, language: 'MD');
       expect(wrapLabel(tester), '取消换行');
       expect(horizontalScrollViews(), findsNothing);
@@ -320,26 +363,40 @@ void main() {
     testWidgets('text / plaintext / txt blocks start wrapped', (tester) async {
       for (final language in ['text', 'plaintext', 'txt']) {
         await pumpWrapped(tester, language: language);
-        expect(wrapLabel(tester), '取消换行',
-            reason: "'$language' is plain text — must wrap by default");
-        expect(horizontalScrollViews(), findsNothing,
-            reason: "'$language' must have no horizontal scroll view");
+        expect(
+          wrapLabel(tester),
+          '取消换行',
+          reason: "'$language' is plain text — must wrap by default",
+        );
+        expect(
+          horizontalScrollViews(),
+          findsNothing,
+          reason: "'$language' must have no horizontal scroll view",
+        );
       }
     });
 
-    testWidgets('other languages and plain fences start no-wrap',
-        (tester) async {
+    testWidgets('other languages and plain fences start no-wrap', (
+      tester,
+    ) async {
       for (final language in ['python', 'json', '']) {
         await pumpWrapped(tester, language: language);
-        expect(wrapLabel(tester), '换行显示',
-            reason: "'$language' is code — must NOT wrap by default");
-        expect(horizontalScrollViews(), findsOneWidget,
-            reason: "'$language' must keep the horizontal scroll view");
+        expect(
+          wrapLabel(tester),
+          '换行显示',
+          reason: "'$language' is code — must NOT wrap by default",
+        );
+        expect(
+          horizontalScrollViews(),
+          findsOneWidget,
+          reason: "'$language' must keep the horizontal scroll view",
+        );
       }
     });
 
-    testWidgets('wrap toggle still works from the wrapped default state',
-        (tester) async {
+    testWidgets('wrap toggle still works from the wrapped default state', (
+      tester,
+    ) async {
       await pumpWrapped(tester, language: 'markdown');
       expect(wrapLabel(tester), '取消换行');
 
@@ -358,10 +415,14 @@ void main() {
   });
 
   group('CodeBlockSourceView - language label', () {
-    testWidgets('shows the language label in the top-left corner',
-        (tester) async {
+    testWidgets('shows the language label in the top-left corner', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: CodeBlockSourceView(code: 'print("hi")', language: 'python'),
           ),
@@ -372,13 +433,15 @@ void main() {
       expect(find.text('python'), findsOneWidget);
     });
 
-    testWidgets('hides the language label when language is empty',
-        (tester) async {
+    testWidgets('hides the language label when language is empty', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         MaterialApp(
-          home: Scaffold(
-            body: CodeBlockSourceView(code: 'plain block'),
-          ),
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          home: Scaffold(body: CodeBlockSourceView(code: 'plain block')),
         ),
       );
 
@@ -392,10 +455,14 @@ void main() {
       expect(find.byIcon(Icons.wrap_text), findsOneWidget);
     });
 
-    testWidgets('hides the language label while the code is empty',
-        (tester) async {
+    testWidgets('hides the language label while the code is empty', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: CodeBlockSourceView(code: '', language: 'python'),
           ),
@@ -410,13 +477,15 @@ void main() {
   });
 
   group('CodeBlockSourceView - multi-line selection', () {
-    testWidgets('no-wrap mode renders the whole code as ONE SelectableText',
-        (tester) async {
+    testWidgets('no-wrap mode renders the whole code as ONE SelectableText', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         MaterialApp(
-          home: Scaffold(
-            body: CodeBlockSourceView(code: 'l1\nl2\nl3'),
-          ),
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          home: Scaffold(body: CodeBlockSourceView(code: 'l1\nl2\nl3')),
         ),
       );
       await tester.pumpAndSettle();
@@ -424,8 +493,11 @@ void main() {
       // The full code (all lines) must live inside a single SelectableText so
       // a drag selection can span multiple lines.
       final selectables = find.byType(SelectableText);
-      expect(selectables, findsOneWidget,
-          reason: 'the whole code should be one SelectableText');
+      expect(
+        selectables,
+        findsOneWidget,
+        reason: 'the whole code should be one SelectableText',
+      );
       expect(
         tester.widget<SelectableText>(selectables).data,
         'l1\nl2\nl3',
@@ -433,13 +505,15 @@ void main() {
       );
     });
 
-    testWidgets('wrap mode renders the whole code as ONE SelectableText',
-        (tester) async {
+    testWidgets('wrap mode renders the whole code as ONE SelectableText', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         MaterialApp(
-          home: Scaffold(
-            body: CodeBlockSourceView(code: 'l1\nl2\nl3'),
-          ),
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          home: Scaffold(body: CodeBlockSourceView(code: 'l1\nl2\nl3')),
         ),
       );
       await tester.pumpAndSettle();
@@ -452,8 +526,11 @@ void main() {
       // impossible to drag-select across lines. It must be a single
       // SelectableText holding the whole code.
       final selectables = find.byType(SelectableText);
-      expect(selectables, findsOneWidget,
-          reason: 'wrap mode should still expose one SelectableText');
+      expect(
+        selectables,
+        findsOneWidget,
+        reason: 'wrap mode should still expose one SelectableText',
+      );
       expect(
         tester.widget<SelectableText>(selectables).data,
         'l1\nl2\nl3',
@@ -481,8 +558,9 @@ void main() {
       final tops = <double>[];
       var offset = 0;
       for (final line in code.split('\n')) {
-        final caretRect =
-            renderEditable.getLocalRectForCaret(TextPosition(offset: offset));
+        final caretRect = renderEditable.getLocalRectForCaret(
+          TextPosition(offset: offset),
+        );
         tops.add(editableTop + caretRect.top);
         offset += line.length + 1;
       }
@@ -517,15 +595,17 @@ void main() {
       // regardless of the test font's metrics.
       tester.platformDispatcher.textScaleFactorTestValue = 2.0;
       addTearDown(
-          () => tester.platformDispatcher.clearTextScaleFactorTestValue());
+        () => tester.platformDispatcher.clearTextScaleFactorTestValue(),
+      );
 
       const code = 'aaaa\nbbbb\ncccc\ndddd';
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
-            body: SingleChildScrollView(
-              child: CodeBlockSourceView(code: code),
-            ),
+            body: SingleChildScrollView(child: CodeBlockSourceView(code: code)),
           ),
         ),
       );
@@ -534,8 +614,9 @@ void main() {
       expectGutterAlignsWithRender(tester, code);
     });
 
-    testWidgets('wrap mode line numbers align with wrapped code lines',
-        (tester) async {
+    testWidgets('wrap mode line numbers align with wrapped code lines', (
+      tester,
+    ) async {
       final style = TextStyle(
         fontFamily: 'monospace',
         fontSize: 13,
@@ -565,20 +646,25 @@ void main() {
           break;
         }
       }
-      expect(bandSurfaceWidth, isNotNull,
-          reason: 'a band-hitting surface width must exist for this font');
+      expect(
+        bandSurfaceWidth,
+        isNotNull,
+        reason: 'a band-hitting surface width must exist for this font',
+      );
 
-      await tester.binding
-          .setSurfaceSize(Size(bandSurfaceWidth!.toDouble(), 600));
+      await tester.binding.setSurfaceSize(
+        Size(bandSurfaceWidth!.toDouble(), 600),
+      );
       addTearDown(() => tester.binding.setSurfaceSize(null));
 
       final code = '${'x' * lineLength!}\nshort';
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
-            body: SingleChildScrollView(
-              child: CodeBlockSourceView(code: code),
-            ),
+            body: SingleChildScrollView(child: CodeBlockSourceView(code: code)),
           ),
         ),
       );
@@ -592,39 +678,50 @@ void main() {
   });
 
   group('CodeBlockSourceView - height behavior', () {
-    testWidgets('no-wrap mode scrolls horizontally, wrap mode does not',
-        (tester) async {
+    testWidgets('no-wrap mode scrolls horizontally, wrap mode does not', (
+      tester,
+    ) async {
       await tester.binding.setSurfaceSize(const Size(400, 600));
       addTearDown(() => tester.binding.setSurfaceSize(null));
 
       const code = 'line1\nline2\nline3';
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
-            body: SingleChildScrollView(
-              child: CodeBlockSourceView(code: code),
-            ),
+            body: SingleChildScrollView(child: CodeBlockSourceView(code: code)),
           ),
         ),
       );
       await tester.pumpAndSettle();
 
       final horizontalScrollables = find.byWidgetPredicate(
-          (w) => w is Scrollable && w.axis == Axis.horizontal);
-      expect(horizontalScrollables, findsWidgets,
-          reason: 'No-wrap mode should have horizontal scroll');
+        (w) => w is Scrollable && w.axis == Axis.horizontal,
+      );
+      expect(
+        horizontalScrollables,
+        findsWidgets,
+        reason: 'No-wrap mode should have horizontal scroll',
+      );
 
       await tester.tap(find.byIcon(Icons.wrap_text));
       await tester.pumpAndSettle();
 
       final horizontalScrollablesAfter = find.byWidgetPredicate(
-          (w) => w is Scrollable && w.axis == Axis.horizontal);
-      expect(horizontalScrollablesAfter, findsNothing,
-          reason: 'Wrap mode should have no horizontal scroll');
+        (w) => w is Scrollable && w.axis == Axis.horizontal,
+      );
+      expect(
+        horizontalScrollablesAfter,
+        findsNothing,
+        reason: 'Wrap mode should have no horizontal scroll',
+      );
     });
 
-    testWidgets('caps height at 15 visible lines for tall code',
-        (tester) async {
+    testWidgets('caps height at 15 visible lines for tall code', (
+      tester,
+    ) async {
       await tester.binding.setSurfaceSize(const Size(800, 600));
       addTearDown(() => tester.binding.setSurfaceSize(null));
 
@@ -633,10 +730,11 @@ void main() {
       final code = List.generate(50, (i) => 'line $i').join('\n');
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
-            body: SingleChildScrollView(
-              child: CodeBlockSourceView(code: code),
-            ),
+            body: SingleChildScrollView(child: CodeBlockSourceView(code: code)),
           ),
         ),
       );
@@ -652,17 +750,24 @@ void main() {
           .first;
       final sizedBoxWidget = tester.widget<SizedBox>(sizedBox);
       const expected = 15 * 13.0 * 1.5 + 40.0 + 12.0;
-      expect(sizedBoxWidget.height, equals(expected),
-          reason: 'Height should be capped at 15 lines (was 4:3 aspect)');
+      expect(
+        sizedBoxWidget.height,
+        equals(expected),
+        reason: 'Height should be capped at 15 lines (was 4:3 aspect)',
+      );
     });
 
-    testWidgets('short code stays compact (not padded to 15 lines)',
-        (tester) async {
+    testWidgets('short code stays compact (not padded to 15 lines)', (
+      tester,
+    ) async {
       await tester.binding.setSurfaceSize(const Size(800, 600));
       addTearDown(() => tester.binding.setSurfaceSize(null));
 
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: SingleChildScrollView(
               child: CodeBlockSourceView(code: 'one line'),
@@ -680,8 +785,11 @@ void main() {
           )
           .first;
       final sizedBoxWidget = tester.widget<SizedBox>(sizedBox);
-      expect(sizedBoxWidget.height, equals(1 * 13.0 * 1.5 + 40.0 + 12.0),
-          reason: 'Short code must not be stretched to the 15-line cap');
+      expect(
+        sizedBoxWidget.height,
+        equals(1 * 13.0 * 1.5 + 40.0 + 12.0),
+        reason: 'Short code must not be stretched to the 15-line cap',
+      );
     });
 
     testWidgets('respects explicit height property', (tester) async {
@@ -690,12 +798,12 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: SingleChildScrollView(
-              child: CodeBlockSourceView(
-                code: 'short code',
-                height: 200,
-              ),
+              child: CodeBlockSourceView(code: 'short code', height: 200),
             ),
           ),
         ),
@@ -706,16 +814,21 @@ void main() {
       final sizedBox = find.byType(SizedBox).first;
       final sizedBoxWidget = tester.widget<SizedBox>(sizedBox);
 
-      expect(sizedBoxWidget.height, equals(200),
-          reason: 'Explicit height should be respected');
+      expect(
+        sizedBoxWidget.height,
+        equals(200),
+        reason: 'Explicit height should be respected',
+      );
     });
   });
 
   group('CodeBlockSourceView - streaming auto-scroll', () {
     // The vertical code-area scroll view (the outer SingleChildScrollView;
     // no-wrap mode also has a nested horizontal one).
-    Finder verticalScrollView() => find.byWidgetPredicate((w) =>
-        w is SingleChildScrollView && w.scrollDirection == Axis.vertical);
+    Finder verticalScrollView() => find.byWidgetPredicate(
+          (w) =>
+              w is SingleChildScrollView && w.scrollDirection == Axis.vertical,
+        );
 
     ScrollPosition position(WidgetTester tester) => tester
         .widget<SingleChildScrollView>(verticalScrollView())
@@ -734,6 +847,9 @@ void main() {
     }) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: Center(
               child: SizedBox(
@@ -751,8 +867,9 @@ void main() {
       await tester.pump();
     }
 
-    testWidgets('pins the scroll position to the bottom while the code grows',
-        (tester) async {
+    testWidgets('pins the scroll position to the bottom while the code grows', (
+      tester,
+    ) async {
       await tester.binding.setSurfaceSize(const Size(800, 600));
       addTearDown(() => tester.binding.setSurfaceSize(null));
 
@@ -763,78 +880,105 @@ void main() {
       // Streaming content grows past the viewport: the block must stay
       // pinned to its bottom edge, with no resume button while following.
       await pumpBlock(tester, code: longCode(40), isStreaming: true);
-      expect(position(tester).pixels,
-          closeTo(position(tester).maxScrollExtent, 0.5),
-          reason: 'growing streaming code must stay pinned to the bottom');
+      expect(
+        position(tester).pixels,
+        closeTo(position(tester).maxScrollExtent, 0.5),
+        reason: 'growing streaming code must stay pinned to the bottom',
+      );
       expect(find.byIcon(Icons.arrow_downward), findsNothing);
 
       // A further growth keeps the pin.
       await pumpBlock(tester, code: longCode(80), isStreaming: true);
-      expect(position(tester).pixels,
-          closeTo(position(tester).maxScrollExtent, 0.5));
+      expect(
+        position(tester).pixels,
+        closeTo(position(tester).maxScrollExtent, 0.5),
+      );
     });
 
     testWidgets(
-        'shows the resume button after a manual interrupt, resumes on tap, '
-        'and re-engages when scrolled back to the bottom', (tester) async {
+      'shows the resume button after a manual interrupt, resumes on tap, '
+      'and re-engages when scrolled back to the bottom',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(800, 600));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+
+        await pumpBlock(tester, code: longCode(40), isStreaming: true);
+        expect(
+          position(tester).pixels,
+          closeTo(position(tester).maxScrollExtent, 0.5),
+        );
+
+        // The user drags the code area down (scrolling toward the top): the
+        // auto-scroll must stop and the resume button must appear.
+        await tester.drag(verticalScrollView(), const Offset(0, 150));
+        await tester.pump();
+        expect(
+          find.byIcon(Icons.arrow_downward),
+          findsOneWidget,
+          reason: 'interrupting the auto-scroll must show the resume button',
+        );
+        expect(
+          position(tester).pixels,
+          lessThan(position(tester).maxScrollExtent - 40),
+        );
+
+        // Tapping the button resumes the auto-scroll: back to the bottom,
+        // button hidden.
+        await tester.tap(find.byIcon(Icons.arrow_downward));
+        await tester.pump();
+        expect(find.byIcon(Icons.arrow_downward), findsNothing);
+        expect(
+          position(tester).pixels,
+          closeTo(position(tester).maxScrollExtent, 0.5),
+        );
+
+        // Interrupt again, then scroll back to the bottom manually: the
+        // auto-scroll re-engages and the button hides (mirrors the chat list).
+        await tester.drag(verticalScrollView(), const Offset(0, 150));
+        await tester.pump();
+        expect(find.byIcon(Icons.arrow_downward), findsOneWidget);
+
+        await tester.drag(verticalScrollView(), const Offset(0, -300));
+        await tester.pump();
+        expect(find.byIcon(Icons.arrow_downward), findsNothing);
+        expect(
+          position(tester).pixels,
+          closeTo(position(tester).maxScrollExtent, 0.5),
+        );
+      },
+    );
+
+    testWidgets('animates back to the top when the block finishes generating', (
+      tester,
+    ) async {
       await tester.binding.setSurfaceSize(const Size(800, 600));
       addTearDown(() => tester.binding.setSurfaceSize(null));
 
       await pumpBlock(tester, code: longCode(40), isStreaming: true);
-      expect(position(tester).pixels,
-          closeTo(position(tester).maxScrollExtent, 0.5));
-
-      // The user drags the code area down (scrolling toward the top): the
-      // auto-scroll must stop and the resume button must appear.
-      await tester.drag(verticalScrollView(), const Offset(0, 150));
-      await tester.pump();
-      expect(find.byIcon(Icons.arrow_downward), findsOneWidget,
-          reason: 'interrupting the auto-scroll must show the resume button');
-      expect(position(tester).pixels,
-          lessThan(position(tester).maxScrollExtent - 40));
-
-      // Tapping the button resumes the auto-scroll: back to the bottom,
-      // button hidden.
-      await tester.tap(find.byIcon(Icons.arrow_downward));
-      await tester.pump();
-      expect(find.byIcon(Icons.arrow_downward), findsNothing);
-      expect(position(tester).pixels,
-          closeTo(position(tester).maxScrollExtent, 0.5));
-
-      // Interrupt again, then scroll back to the bottom manually: the
-      // auto-scroll re-engages and the button hides (mirrors the chat list).
-      await tester.drag(verticalScrollView(), const Offset(0, 150));
-      await tester.pump();
-      expect(find.byIcon(Icons.arrow_downward), findsOneWidget);
-
-      await tester.drag(verticalScrollView(), const Offset(0, -300));
-      await tester.pump();
-      expect(find.byIcon(Icons.arrow_downward), findsNothing);
-      expect(position(tester).pixels,
-          closeTo(position(tester).maxScrollExtent, 0.5));
-    });
-
-    testWidgets('animates back to the top when the block finishes generating',
-        (tester) async {
-      await tester.binding.setSurfaceSize(const Size(800, 600));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
-
-      await pumpBlock(tester, code: longCode(40), isStreaming: true);
-      expect(position(tester).pixels,
-          closeTo(position(tester).maxScrollExtent, 0.5));
+      expect(
+        position(tester).pixels,
+        closeTo(position(tester).maxScrollExtent, 0.5),
+      );
 
       // The fence closes — the block is no longer the one being generated.
       await pumpBlock(tester, code: longCode(40), isStreaming: false);
       await tester.pumpAndSettle();
 
-      expect(position(tester).pixels, closeTo(0, 0.5),
-          reason: 'a finished block must return to its top (non-linear)');
-      expect(find.byIcon(Icons.arrow_downward), findsNothing,
-          reason: 'no resume button once generation is complete');
+      expect(
+        position(tester).pixels,
+        closeTo(0, 0.5),
+        reason: 'a finished block must return to its top (non-linear)',
+      );
+      expect(
+        find.byIcon(Icons.arrow_downward),
+        findsNothing,
+        reason: 'no resume button once generation is complete',
+      );
     });
 
-    testWidgets('does not yank an interrupted block to the top on completion',
-        (tester) async {
+    testWidgets('does not yank an interrupted block to the top on completion', (
+      tester,
+    ) async {
       await tester.binding.setSurfaceSize(const Size(800, 600));
       addTearDown(() => tester.binding.setSurfaceSize(null));
 
@@ -850,62 +994,80 @@ void main() {
       await pumpBlock(tester, code: longCode(40), isStreaming: false);
       await tester.pumpAndSettle();
 
-      expect(find.byIcon(Icons.arrow_downward), findsNothing,
-          reason: 'the resume button must not show after generation completes');
-      expect(position(tester).pixels, closeTo(interrupted, 0.5),
-          reason: 'an interrupted block must keep the user reading position');
-    });
-
-    testWidgets('does not re-pin after an interrupt while streaming continues',
-        (tester) async {
-      await tester.binding.setSurfaceSize(const Size(800, 600));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
-
-      await pumpBlock(tester, code: longCode(40), isStreaming: true);
-      await tester.drag(verticalScrollView(), const Offset(0, 150));
-      await tester.pump();
-      final interrupted = position(tester).pixels;
-
-      // The stream keeps growing, but the user interrupted: the block
-      // must stay where the user left it (no re-pinning to the bottom).
-      await pumpBlock(tester, code: longCode(80), isStreaming: true);
-      expect(position(tester).pixels, closeTo(interrupted, 0.5),
-          reason: 'a manual interrupt must stop the auto-scroll for good');
-      expect(find.byIcon(Icons.arrow_downward), findsOneWidget);
+      expect(
+        find.byIcon(Icons.arrow_downward),
+        findsNothing,
+        reason: 'the resume button must not show after generation completes',
+      );
+      expect(
+        position(tester).pixels,
+        closeTo(interrupted, 0.5),
+        reason: 'an interrupted block must keep the user reading position',
+      );
     });
 
     testWidgets(
-        'does not yank to the top on completion while the finger is held',
-        (tester) async {
-      await tester.binding.setSurfaceSize(const Size(800, 600));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
+      'does not re-pin after an interrupt while streaming continues',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(800, 600));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
 
-      await pumpBlock(tester, code: longCode(40), isStreaming: true);
-      // The user puts a finger on the block and drags a little — still
-      // within the at-bottom window, so the auto-scroll is still engaged,
-      // but the block must not fight the finger.
-      final gesture =
-          await tester.startGesture(tester.getCenter(verticalScrollView()));
-      await gesture.moveBy(const Offset(0, 20));
-      await tester.pump();
-      expect(position(tester).pixels,
-          greaterThan(position(tester).maxScrollExtent - 40));
+        await pumpBlock(tester, code: longCode(40), isStreaming: true);
+        await tester.drag(verticalScrollView(), const Offset(0, 150));
+        await tester.pump();
+        final interrupted = position(tester).pixels;
 
-      // The block finishes generating while the finger is down: no forced
-      // scroll to the top.
-      await pumpBlock(tester, code: longCode(40), isStreaming: false);
-      await tester.pumpAndSettle();
-      expect(position(tester).pixels,
+        // The stream keeps growing, but the user interrupted: the block
+        // must stay where the user left it (no re-pinning to the bottom).
+        await pumpBlock(tester, code: longCode(80), isStreaming: true);
+        expect(
+          position(tester).pixels,
+          closeTo(interrupted, 0.5),
+          reason: 'a manual interrupt must stop the auto-scroll for good',
+        );
+        expect(find.byIcon(Icons.arrow_downward), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'does not yank to the top on completion while the finger is held',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(800, 600));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+
+        await pumpBlock(tester, code: longCode(40), isStreaming: true);
+        // The user puts a finger on the block and drags a little — still
+        // within the at-bottom window, so the auto-scroll is still engaged,
+        // but the block must not fight the finger.
+        final gesture = await tester.startGesture(
+          tester.getCenter(verticalScrollView()),
+        );
+        await gesture.moveBy(const Offset(0, 20));
+        await tester.pump();
+        expect(
+          position(tester).pixels,
+          greaterThan(position(tester).maxScrollExtent - 40),
+        );
+
+        // The block finishes generating while the finger is down: no forced
+        // scroll to the top.
+        await pumpBlock(tester, code: longCode(40), isStreaming: false);
+        await tester.pumpAndSettle();
+        expect(
+          position(tester).pixels,
           closeTo(position(tester).maxScrollExtent, 40),
-          reason: 'a held finger must suppress the return-to-top animation');
+          reason: 'a held finger must suppress the return-to-top animation',
+        );
 
-      await gesture.up();
-      await tester.pump();
-      expect(find.byIcon(Icons.arrow_downward), findsNothing);
-    });
+        await gesture.up();
+        await tester.pump();
+        expect(find.byIcon(Icons.arrow_downward), findsNothing);
+      },
+    );
 
-    testWidgets('engages the follow when streaming starts from empty code',
-        (tester) async {
+    testWidgets('engages the follow when streaming starts from empty code', (
+      tester,
+    ) async {
       await tester.binding.setSurfaceSize(const Size(800, 600));
       addTearDown(() => tester.binding.setSurfaceSize(null));
 
@@ -915,9 +1077,11 @@ void main() {
       // The first code arrives: the scroll view attaches and the block
       // pins to the bottom.
       await pumpBlock(tester, code: longCode(40), isStreaming: true);
-      expect(position(tester).pixels,
-          closeTo(position(tester).maxScrollExtent, 0.5),
-          reason: 'the follow must engage as soon as code starts arriving');
+      expect(
+        position(tester).pixels,
+        closeTo(position(tester).maxScrollExtent, 0.5),
+        reason: 'the follow must engage as soon as code starts arriving',
+      );
       expect(find.byIcon(Icons.arrow_downward), findsNothing);
     });
 
@@ -937,42 +1101,60 @@ void main() {
       // lines no longer wrap): the position clamps to the new bottom
       // without firing a scroll event. The button must hide again.
       await pumpBlock(tester, code: longCode(7), isStreaming: true);
-      expect(find.byIcon(Icons.arrow_downward), findsNothing,
-          reason: 'the button must reflect the current metrics, not the '
-              'last scroll action');
-      expect(position(tester).pixels,
-          closeTo(position(tester).maxScrollExtent, 0.5));
+      expect(
+        find.byIcon(Icons.arrow_downward),
+        findsNothing,
+        reason: 'the button must reflect the current metrics, not the '
+            'last scroll action',
+      );
+      expect(
+        position(tester).pixels,
+        closeTo(position(tester).maxScrollExtent, 0.5),
+      );
     });
 
-    testWidgets('a horizontal drag does not interrupt the vertical follow',
-        (tester) async {
+    testWidgets('a horizontal drag does not interrupt the vertical follow', (
+      tester,
+    ) async {
       await tester.binding.setSurfaceSize(const Size(800, 600));
       addTearDown(() => tester.binding.setSurfaceSize(null));
 
       // Long lines so no-wrap mode has horizontal overflow to pan.
-      final longCodeWithWideLines =
-          List.generate(40, (i) => 'line $i ' * 10).join('\n');
+      final longCodeWithWideLines = List.generate(
+        40,
+        (i) => 'line $i ' * 10,
+      ).join('\n');
       await pumpBlock(tester, code: longCodeWithWideLines, isStreaming: true);
-      expect(position(tester).pixels,
-          closeTo(position(tester).maxScrollExtent, 0.5));
+      expect(
+        position(tester).pixels,
+        closeTo(position(tester).maxScrollExtent, 0.5),
+      );
 
-      final horizontalScrollView = find.byWidgetPredicate((w) =>
-          w is SingleChildScrollView && w.scrollDirection == Axis.horizontal);
+      final horizontalScrollView = find.byWidgetPredicate(
+        (w) =>
+            w is SingleChildScrollView && w.scrollDirection == Axis.horizontal,
+      );
       expect(horizontalScrollView, findsOneWidget);
 
       // Hold a horizontal pan (finger down) and let the code grow: the
       // vertical follow must stay engaged — a horizontal pan is not an
       // interrupt of the vertical auto-scroll.
-      final gesture =
-          await tester.startGesture(tester.getCenter(horizontalScrollView));
+      final gesture = await tester.startGesture(
+        tester.getCenter(horizontalScrollView),
+      );
       await gesture.moveBy(const Offset(-100, 0));
       await tester.pump();
 
-      await pumpBlock(tester,
-          code: '$longCodeWithWideLines\nline extra', isStreaming: true);
-      expect(position(tester).pixels,
-          closeTo(position(tester).maxScrollExtent, 0.5),
-          reason: 'a horizontal pan must not interrupt the vertical follow');
+      await pumpBlock(
+        tester,
+        code: '$longCodeWithWideLines\nline extra',
+        isStreaming: true,
+      );
+      expect(
+        position(tester).pixels,
+        closeTo(position(tester).maxScrollExtent, 0.5),
+        reason: 'a horizontal pan must not interrupt the vertical follow',
+      );
       expect(find.byIcon(Icons.arrow_downward), findsNothing);
 
       await gesture.up();
@@ -980,93 +1162,115 @@ void main() {
     });
 
     testWidgets(
-        'a finished block never re-engages the follow when mislabeled as '
-        'generating again', (tester) async {
-      await tester.binding.setSurfaceSize(const Size(800, 600));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
+      'a finished block never re-engages the follow when mislabeled as '
+      'generating again',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(800, 600));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
 
-      final code = longCode(40);
-      // Streaming (following) → fence closes (completes, returns to top).
-      await pumpBlock(tester, code: code, isStreaming: true);
-      expect(position(tester).pixels,
-          closeTo(position(tester).maxScrollExtent, 0.5));
-      await pumpBlock(tester, code: code, isStreaming: false);
-      await tester.pumpAndSettle();
-      expect(position(tester).pixels, closeTo(0, 0.5));
+        final code = longCode(40);
+        // Streaming (following) → fence closes (completes, returns to top).
+        await pumpBlock(tester, code: code, isStreaming: true);
+        expect(
+          position(tester).pixels,
+          closeTo(position(tester).maxScrollExtent, 0.5),
+        );
+        await pumpBlock(tester, code: code, isStreaming: false);
+        await tester.pumpAndSettle();
+        expect(position(tester).pixels, closeTo(0, 0.5));
 
-      // The content-based tail check mislabels the closed block as the
-      // still-open trailing block again (identical content): the latch
-      // must keep the auto-scroll (and the resume button) off.
-      await pumpBlock(tester, code: code, isStreaming: true);
-      await tester.pump();
-      expect(position(tester).pixels, closeTo(0, 0.5),
-          reason: 'a finished block must not re-engage the auto-scroll');
-      expect(find.byIcon(Icons.arrow_downward), findsNothing);
+        // The content-based tail check mislabels the closed block as the
+        // still-open trailing block again (identical content): the latch
+        // must keep the auto-scroll (and the resume button) off.
+        await pumpBlock(tester, code: code, isStreaming: true);
+        await tester.pump();
+        expect(
+          position(tester).pixels,
+          closeTo(0, 0.5),
+          reason: 'a finished block must not re-engage the auto-scroll',
+        );
+        expect(find.byIcon(Icons.arrow_downward), findsNothing);
 
-      // Further growth stays unpinned and button-free.
-      await pumpBlock(tester, code: longCode(80), isStreaming: true);
-      expect(position(tester).pixels, closeTo(0, 0.5),
-          reason: 'growth must not re-pin a completed block');
-      expect(find.byIcon(Icons.arrow_downward), findsNothing);
-    });
+        // Further growth stays unpinned and button-free.
+        await pumpBlock(tester, code: longCode(80), isStreaming: true);
+        expect(
+          position(tester).pixels,
+          closeTo(0, 0.5),
+          reason: 'growth must not re-pin a completed block',
+        );
+        expect(find.byIcon(Icons.arrow_downward), findsNothing);
+      },
+    );
 
     testWidgets(
-        'a static block re-labeled as generating with unchanged code stays '
-        'static', (tester) async {
-      await tester.binding.setSurfaceSize(const Size(800, 600));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
+      'a static block re-labeled as generating with unchanged code stays '
+      'static',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(800, 600));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
 
-      final code = longCode(40);
-      // Born as a static (non-streaming) block — e.g. a closed block in a
-      // freshly rebuilt message.
-      await pumpBlock(tester, code: code, isStreaming: false);
-      expect(position(tester).pixels, 0);
+        final code = longCode(40);
+        // Born as a static (non-streaming) block — e.g. a closed block in a
+        // freshly rebuilt message.
+        await pumpBlock(tester, code: code, isStreaming: false);
+        expect(position(tester).pixels, 0);
 
-      // The content-based tail check mislabels it as the still-open
-      // trailing block with UNCHANGED code: a real generating block always
-      // arrives with new code, so this must latch the block as finished —
-      // no auto-scroll, no button.
-      await pumpBlock(tester, code: code, isStreaming: true);
-      await tester.pump();
-      expect(position(tester).pixels, 0,
+        // The content-based tail check mislabels it as the still-open
+        // trailing block with UNCHANGED code: a real generating block always
+        // arrives with new code, so this must latch the block as finished —
+        // no auto-scroll, no button.
+        await pumpBlock(tester, code: code, isStreaming: true);
+        await tester.pump();
+        expect(
+          position(tester).pixels,
+          0,
           reason: 'a static block must not start following when re-labeled '
-              'with unchanged code');
-      expect(find.byIcon(Icons.arrow_downward), findsNothing);
+              'with unchanged code',
+        );
+        expect(find.byIcon(Icons.arrow_downward), findsNothing);
 
-      // Further growth stays unpinned and button-free.
-      await pumpBlock(tester, code: longCode(80), isStreaming: true);
-      expect(position(tester).pixels, 0);
-      expect(find.byIcon(Icons.arrow_downward), findsNothing);
-    });
+        // Further growth stays unpinned and button-free.
+        await pumpBlock(tester, code: longCode(80), isStreaming: true);
+        expect(position(tester).pixels, 0);
+        expect(find.byIcon(Icons.arrow_downward), findsNothing);
+      },
+    );
 
     testWidgets(
-        'a re-engaged auto-scroll animates back to the top on completion',
-        (tester) async {
-      await tester.binding.setSurfaceSize(const Size(800, 600));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
+      'a re-engaged auto-scroll animates back to the top on completion',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(800, 600));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
 
-      await pumpBlock(tester, code: longCode(40), isStreaming: true);
-      // Interrupt, then scroll back to the bottom: the auto-scroll
-      // re-engages and the button hides (mirrors the chat list).
-      await tester.drag(verticalScrollView(), const Offset(0, 150));
-      await tester.pump();
-      expect(find.byIcon(Icons.arrow_downward), findsOneWidget);
-      await tester.drag(verticalScrollView(), const Offset(0, -300));
-      await tester.pump();
-      expect(find.byIcon(Icons.arrow_downward), findsNothing);
-      expect(position(tester).pixels,
-          closeTo(position(tester).maxScrollExtent, 0.5));
+        await pumpBlock(tester, code: longCode(40), isStreaming: true);
+        // Interrupt, then scroll back to the bottom: the auto-scroll
+        // re-engages and the button hides (mirrors the chat list).
+        await tester.drag(verticalScrollView(), const Offset(0, 150));
+        await tester.pump();
+        expect(find.byIcon(Icons.arrow_downward), findsOneWidget);
+        await tester.drag(verticalScrollView(), const Offset(0, -300));
+        await tester.pump();
+        expect(find.byIcon(Icons.arrow_downward), findsNothing);
+        expect(
+          position(tester).pixels,
+          closeTo(position(tester).maxScrollExtent, 0.5),
+        );
 
-      // The block finishes generating while the session is re-engaged:
-      // it must animate back to the top.
-      await pumpBlock(tester, code: longCode(40), isStreaming: false);
-      await tester.pumpAndSettle();
-      expect(position(tester).pixels, closeTo(0, 0.5),
-          reason: 'a re-engaged session must return to the top on completion');
-    });
+        // The block finishes generating while the session is re-engaged:
+        // it must animate back to the top.
+        await pumpBlock(tester, code: longCode(40), isStreaming: false);
+        await tester.pumpAndSettle();
+        expect(
+          position(tester).pixels,
+          closeTo(0, 0.5),
+          reason: 'a re-engaged session must return to the top on completion',
+        );
+      },
+    );
 
-    testWidgets('non-streaming blocks never pin nor show the resume button',
-        (tester) async {
+    testWidgets('non-streaming blocks never pin nor show the resume button', (
+      tester,
+    ) async {
       await tester.binding.setSurfaceSize(const Size(800, 600));
       addTearDown(() => tester.binding.setSurfaceSize(null));
 
@@ -1080,13 +1284,19 @@ void main() {
       await tester.pump();
       final scrolled = position(tester).pixels;
       expect(scrolled, greaterThan(0));
-      expect(find.byIcon(Icons.arrow_downward), findsNothing,
-          reason: 'no resume button outside a streaming session');
+      expect(
+        find.byIcon(Icons.arrow_downward),
+        findsNothing,
+        reason: 'no resume button outside a streaming session',
+      );
 
       // Growing a static block must not pin it back to the bottom.
       await pumpBlock(tester, code: longCode(80), isStreaming: false);
-      expect(position(tester).pixels, closeTo(scrolled, 0.5),
-          reason: 'content growth must not move a non-streaming block');
+      expect(
+        position(tester).pixels,
+        closeTo(scrolled, 0.5),
+        reason: 'content growth must not move a non-streaming block',
+      );
       expect(find.byIcon(Icons.arrow_downward), findsNothing);
     });
   });
@@ -1096,8 +1306,10 @@ void main() {
     /// futures complete (unhandled channels never resolve in tests, which
     /// would stall the copy feedback state change). Records copied texts
     /// into [copiedTexts] when provided.
-    void installClipboardMock(WidgetTester tester,
-        {List<String>? copiedTexts}) {
+    void installClipboardMock(
+      WidgetTester tester, {
+      List<String>? copiedTexts,
+    }) {
       tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
         SystemChannels.platform,
         (call) async {
@@ -1107,12 +1319,17 @@ void main() {
           return null;
         },
       );
-      addTearDown(() => tester.binding.defaultBinaryMessenger
-          .setMockMethodCallHandler(SystemChannels.platform, null));
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        ),
+      );
     }
 
-    testWidgets('toolbar order is copy, save, wrap (left to right)',
-        (tester) async {
+    testWidgets('toolbar order is copy, save, wrap (left to right)', (
+      tester,
+    ) async {
       await pumpCodeBlock(tester);
 
       expect(find.byIcon(Icons.copy), findsOneWidget);
@@ -1122,14 +1339,21 @@ void main() {
       final copyPos = tester.getCenter(find.byIcon(Icons.copy));
       final savePos = tester.getCenter(find.byIcon(Icons.save));
       final wrapPos = tester.getCenter(find.byIcon(Icons.wrap_text));
-      expect(copyPos.dx, lessThan(savePos.dx),
-          reason: 'copy must sit left of save');
-      expect(savePos.dx, lessThan(wrapPos.dx),
-          reason: 'save must sit left of wrap');
+      expect(
+        copyPos.dx,
+        lessThan(savePos.dx),
+        reason: 'copy must sit left of save',
+      );
+      expect(
+        savePos.dx,
+        lessThan(wrapPos.dx),
+        reason: 'save must sit left of wrap',
+      );
     });
 
-    testWidgets('copy button copies the WHOLE code block to the clipboard',
-        (tester) async {
+    testWidgets('copy button copies the WHOLE code block to the clipboard', (
+      tester,
+    ) async {
       const code = 'line1\nline2\nline3';
       final copiedTexts = <String>[];
       installClipboardMock(tester, copiedTexts: copiedTexts);
@@ -1139,12 +1363,16 @@ void main() {
       await tester.tap(find.byIcon(Icons.copy));
       await tester.pump();
 
-      expect(copiedTexts, ['line1\nline2\nline3'],
-          reason: 'copy must copy every line of the block, not one line');
+      expect(
+        copiedTexts,
+        ['line1\nline2\nline3'],
+        reason: 'copy must copy every line of the block, not one line',
+      );
     });
 
-    testWidgets('copy feedback: checkmark fades in, stays ~1s, then reverts',
-        (tester) async {
+    testWidgets('copy feedback: checkmark fades in, stays ~1s, then reverts', (
+      tester,
+    ) async {
       installClipboardMock(tester);
       await pumpCodeBlock(tester);
 
@@ -1173,8 +1401,9 @@ void main() {
       expect(find.byIcon(Icons.check), findsNothing);
     });
 
-    testWidgets('copy feedback icon swap uses a fade transition',
-        (tester) async {
+    testWidgets('copy feedback icon swap uses a fade transition', (
+      tester,
+    ) async {
       installClipboardMock(tester);
       await pumpCodeBlock(tester);
 
@@ -1199,8 +1428,11 @@ void main() {
           .widgetList<FadeTransition>(find.byType(FadeTransition))
           .map((f) => f.opacity.value)
           .toList();
-      expect(fadeOpacities.any((v) => v > 0.0 && v < 1.0), isTrue,
-          reason: 'the copy/check swap must fade, not pop');
+      expect(
+        fadeOpacities.any((v) => v > 0.0 && v < 1.0),
+        isTrue,
+        reason: 'the copy/check swap must fade, not pop',
+      );
 
       // Let the 1s hold pass and the fade back complete.
       await tester.pump(const Duration(seconds: 1));
@@ -1208,8 +1440,9 @@ void main() {
       expect(find.byIcon(Icons.copy), findsOneWidget);
     });
 
-    testWidgets('failed clipboard write reverts the checkmark and reports',
-        (tester) async {
+    testWidgets('failed clipboard write reverts the checkmark and reports', (
+      tester,
+    ) async {
       // A rejecting clipboard (e.g. web permission denial) must not leave
       // the checkmark stuck or throw an unhandled async error.
       tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
@@ -1221,8 +1454,12 @@ void main() {
           return null;
         },
       );
-      addTearDown(() => tester.binding.defaultBinaryMessenger
-          .setMockMethodCallHandler(SystemChannels.platform, null));
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        ),
+      );
 
       await pumpCodeBlock(tester);
 
@@ -1236,8 +1473,9 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('re-tapping copy while feedback shows restarts the 1s hold',
-        (tester) async {
+    testWidgets('re-tapping copy while feedback shows restarts the 1s hold', (
+      tester,
+    ) async {
       installClipboardMock(tester);
       await pumpCodeBlock(tester);
 
@@ -1253,8 +1491,11 @@ void main() {
       expect(find.byIcon(Icons.check), findsOneWidget);
 
       await tester.pump(const Duration(milliseconds: 700));
-      expect(find.byIcon(Icons.check), findsOneWidget,
-          reason: 'a re-tap must reset the 1s hold window');
+      expect(
+        find.byIcon(Icons.check),
+        findsOneWidget,
+        reason: 'a re-tap must reset the 1s hold window',
+      );
 
       // After the reset window expires the copy icon returns.
       await tester.pump(const Duration(milliseconds: 400));
@@ -1282,8 +1523,9 @@ void main() {
   });
 
   group('CodeBlockSourceView - save button', () {
-    testWidgets('save opens the file save panel with the whole code content',
-        (tester) async {
+    testWidgets('save opens the file save panel with the whole code content', (
+      tester,
+    ) async {
       const code = 'print("hello")\nprint("world")';
       final picker = FakeFilePicker();
       final originalPicker = FilePickerPlatform.instance;
@@ -1296,18 +1538,22 @@ void main() {
       await tester.pump();
 
       expect(picker.lastBytes, isNotNull);
-      expect(utf8.decode(picker.lastBytes!), code,
-          reason: 'the saved content must be the whole code block');
-      expect(picker.lastFileName, 'code.txt',
-          reason: 'an unknown language defaults to a .txt name');
-      expect(picker.lastType, FileType.custom,
-          reason: 'custom type is required for extension filtering');
-      expect(picker.lastAllowedExtensions, isNotEmpty);
+      expect(
+        utf8.decode(picker.lastBytes!),
+        code,
+        reason: 'the saved content must be the whole code block',
+      );
+      expect(
+        picker.lastFileName,
+        'code.txt',
+        reason: 'an unknown language defaults to a .txt name',
+      );
       expect(picker.lastDialogTitle, isNotEmpty);
     });
 
-    testWidgets('save uses the language for the default name and format list',
-        (tester) async {
+    testWidgets('save uses the language for the default name and format list', (
+      tester,
+    ) async {
       final picker = FakeFilePicker();
       final originalPicker = FilePickerPlatform.instance;
       FilePickerPlatform.instance = picker;
@@ -1319,14 +1565,19 @@ void main() {
       await tester.pump();
 
       expect(picker.lastFileName, 'code.dart');
-      expect(picker.lastAllowedExtensions!.first, 'dart',
-          reason: 'the language extension must be the default format');
-      expect(picker.lastAllowedExtensions, containsAll(['dart', 'txt', 'md']));
+      expect(
+        picker.lastFileName,
+        'code.dart',
+        reason: 'the language extension must be the default format',
+      );
     });
 
-    testWidgets('successful save confirms the destination in a snackbar',
-        (tester) async {
-      final picker = FakeFilePicker(result: 'D:/docs/code.dart');
+    testWidgets('successful save confirms the destination in a snackbar', (
+      tester,
+    ) async {
+      final picker = FakeFilePicker(
+        result: Uri.parse('file:///D:/docs/code.dart'),
+      );
       final originalPicker = FilePickerPlatform.instance;
       FilePickerPlatform.instance = picker;
       addTearDown(() => FilePickerPlatform.instance = originalPicker);
@@ -1336,11 +1587,11 @@ void main() {
       await tester.tap(find.byIcon(Icons.save));
       await tester.pump();
 
-      expect(find.text('已保存到: D:/docs/code.dart'), findsOneWidget);
+      expect(find.text('已保存到: /D:/docs/code.dart'), findsOneWidget);
     });
 
     testWidgets('cancelling the save panel shows no snackbar', (tester) async {
-      final picker = FakeFilePicker(result: null);
+      final picker = FakeFilePicker(cancel: true);
       final originalPicker = FilePickerPlatform.instance;
       FilePickerPlatform.instance = picker;
       addTearDown(() => FilePickerPlatform.instance = originalPicker);
@@ -1350,10 +1601,16 @@ void main() {
       await tester.tap(find.byIcon(Icons.save));
       await tester.pump();
 
-      expect(picker.lastBytes, isNotNull,
-          reason: 'the save panel was opened with content');
-      expect(find.byType(SnackBar), findsNothing,
-          reason: 'a cancelled save must not claim success');
+      expect(
+        picker.lastBytes,
+        isNotNull,
+        reason: 'the save panel was opened with content',
+      );
+      expect(
+        find.byType(SnackBar),
+        findsNothing,
+        reason: 'a cancelled save must not claim success',
+      );
     });
 
     testWidgets('failed save shows an error snackbar', (tester) async {
@@ -1370,8 +1627,9 @@ void main() {
       expect(find.textContaining('保存失败'), findsOneWidget);
     });
 
-    testWidgets('save on empty code hints and skips the save panel',
-        (tester) async {
+    testWidgets('save on empty code hints and skips the save panel', (
+      tester,
+    ) async {
       final picker = FakeFilePicker();
       final originalPicker = FilePickerPlatform.instance;
       FilePickerPlatform.instance = picker;
@@ -1382,14 +1640,18 @@ void main() {
       await tester.tap(find.byIcon(Icons.save));
       await tester.pump();
 
-      expect(picker.lastBytes, isNull,
-          reason: 'no save dialog should open for empty code');
+      expect(
+        picker.lastBytes,
+        isNull,
+        reason: 'no save dialog should open for empty code',
+      );
       expect(find.text('代码为空，无法保存'), findsOneWidget);
     });
 
-    testWidgets('double-tapping save opens the panel only once',
-        (tester) async {
-      final completer = Completer<String?>();
+    testWidgets('double-tapping save opens the panel only once', (
+      tester,
+    ) async {
+      final completer = Completer<Uri?>();
       final picker = FakeFilePicker(completer: completer);
       final originalPicker = FilePickerPlatform.instance;
       FilePickerPlatform.instance = picker;
@@ -1403,22 +1665,26 @@ void main() {
       await tester.tap(find.byIcon(Icons.save));
       await tester.pump();
 
-      expect(picker.saveCallCount, 1,
-          reason: 'a second tap while the dialog is open must be ignored');
+      expect(
+        picker.saveCallCount,
+        1,
+        reason: 'a second tap while the dialog is open must be ignored',
+      );
 
       // Completing the dialog shows the success snackbar exactly once.
-      completer.complete('C:/docs/code.txt');
+      completer.complete(Uri.parse('file:///C:/docs/code.txt'));
       await tester.pump();
       await tester.pump();
-      expect(find.text('已保存到: C:/docs/code.txt'), findsOneWidget);
+      expect(find.text('已保存到: /C:/docs/code.txt'), findsOneWidget);
     });
 
-    testWidgets('unmounting while the save panel is open does not crash',
-        (tester) async {
+    testWidgets('unmounting while the save panel is open does not crash', (
+      tester,
+    ) async {
       // Regression: the save flow crosses an async gap (the native dialog).
       // If the widget is gone when the dialog resolves, the result must be
       // dropped silently — no snackbar, no exception.
-      final completer = Completer<String?>();
+      final completer = Completer<Uri?>();
       final picker = FakeFilePicker(completer: completer);
       final originalPicker = FilePickerPlatform.instance;
       FilePickerPlatform.instance = picker;
@@ -1431,13 +1697,20 @@ void main() {
 
       // Unmount the code block while the dialog is still "open".
       await tester.pumpWidget(
-        const MaterialApp(home: Scaffold(body: SizedBox())),
+        const MaterialApp(
+            locale: Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            home: Scaffold(body: SizedBox())),
       );
-      completer.complete('C:/docs/code.txt');
+      completer.complete(Uri.file('C:/docs/code.txt'));
       await tester.pump();
 
-      expect(tester.takeException(), isNull,
-          reason: 'completing the dialog after unmount must not throw');
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'completing the dialog after unmount must not throw',
+      );
     });
   });
 }

@@ -11,6 +11,7 @@ import 'package:stroom/services/llm_chat_runtime.dart';
 import 'package:stroom/services/llm_connector_service.dart';
 import 'package:stroom/services/llm_credential_store.dart';
 import 'package:stroom/services/llm_routing_service.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 
 void main() {
   test('syncs a rotated secure credential reference to the legacy config',
@@ -130,7 +131,11 @@ void main() {
               return notifier;
             }),
           ],
-          child: MaterialApp(home: ProviderConfigPage(entryId: entry.id)),
+          child: MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: ProviderConfigPage(entryId: entry.id)),
         ),
       );
       await tester.pumpAndSettle();
@@ -173,7 +178,11 @@ void main() {
               return notifier;
             }),
           ],
-          child: MaterialApp(home: ProviderConfigPage(entryId: entry.id)),
+          child: MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: ProviderConfigPage(entryId: entry.id)),
         ),
       );
       await tester.pumpAndSettle();

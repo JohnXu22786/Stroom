@@ -7,9 +7,11 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart'
     show debugPrint, kIsWeb, visibleForTesting;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show PlatformException;
 import 'package:archive/archive.dart' hide ZLibDecoder;
 import 'package:crypto/crypto.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:file_selector/file_selector.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
@@ -17,15 +19,18 @@ import 'package:uuid/uuid.dart';
 import '../models/stroom_conversation.dart';
 import 'backup_location_manager.dart';
 import 'backup_service_shared.dart';
+import '../l10n/app_localizations.dart';
 import 'browser_cookie_service.dart';
 import 'browser_profile_service.dart';
 import 'data_migration_service.dart';
 import 'conversation_migration_service.dart';
 import 'conversation_repository.dart';
+import '../utils/file_picker_utils.dart';
 import 'manifest_database.dart';
 import 'startup_preferences.dart';
 import 'storage_service.dart';
 import '../anki/database/anki_database.dart';
+import '../anki/sync/anki_media_sync.dart';
 import '../utils/app_version.dart';
 import '../utils/atomic_file.dart';
 import '../utils/credential_field_sanitizer.dart';
@@ -41,6 +46,7 @@ import '../providers/background_task_provider.dart' show BackgroundTask;
 import '../providers/task_provider_shared.dart' show SynthesisTask;
 import '../task_flow/models/task_flow_definition.dart' show TaskFlowDefinition;
 import '../task_flow/models/task_flow_execution.dart' show TaskFlowExecution;
+import '../task_flow/models/flow_payload.dart' show FlowPayload;
 
 /// Exception thrown when a backup operation is cancelled.
 class BackupCancelledException implements Exception {
@@ -640,6 +646,20 @@ class BackupService {
             useStreaming: useStreaming,
           );
         }
+        await _addDirectoryPlanFiles(
+          diskFiles,
+          memoryFiles,
+          archivePrefix: 'task_flow_temporary',
+          sourcePath: p.join(appDir, 'task_flow_temporary'),
+          useStreaming: useStreaming,
+        );
+        await _addDirectoryPlanFiles(
+          diskFiles,
+          memoryFiles,
+          archivePrefix: 'ocr_retry_cache',
+          sourcePath: p.join(appDir, 'ocr_retry_cache'),
+          useStreaming: useStreaming,
+        );
       }
       await _addTaskStatePlanFile(
         diskFiles,
@@ -1134,6 +1154,8 @@ class BackupService {
         return [
           'task_state/',
           'task_flow_attachments/',
+          'task_flow_temporary/',
+          'ocr_retry_cache/',
           'catcatch/completed/',
           for (final directory in _catCatchRuntimeSubdirectories)
             'catcatch/$directory/',
@@ -1609,10 +1631,15 @@ class BackupService {
       if (restoring && value.startsWith(_portableAppDataPathPrefix)) {
         final relative = value.substring(_portableAppDataPathPrefix.length);
         if (!_isSafeRelativeArchivePath(relative)) return value;
+        if (kIsWeb || WebFileStore.isTestMode) return relative;
         return p.joinAll([appDir, ...relative.split('/')]);
       }
       if (!restoring) {
         if (value.startsWith('attachments/')) {
+          return '$_portableAppDataPathPrefix$value';
+        }
+        if (value.startsWith('task_flow_temporary/') &&
+            _isSafeRelativeArchivePath(value)) {
           return '$_portableAppDataPathPrefix$value';
         }
         if (value.startsWith('temp_edited/')) {
@@ -1656,8 +1683,9 @@ class BackupService {
     BackupSelection selection, {
     required Set<String> taskFilesToRestore,
   }) async {
-    if (!selection.tasks || kIsWeb || WebFileStore.isTestMode) return;
-    final appDir = await AppStorage.directory;
+    if (!selection.tasks) return;
+    final isWebStore = kIsWeb || WebFileStore.isTestMode;
+    final appDir = isWebStore ? '' : await AppStorage.directory;
     for (final relativePath in const [
       'synthesis/tasks.json',
       'catcatch/tasks.json',
@@ -1666,16 +1694,31 @@ class BackupService {
       'task_flows/executions.json',
     ]) {
       if (!taskFilesToRestore.contains(relativePath)) continue;
-      final file = File(p.joinAll([appDir, ...relativePath.split('/')]));
-      if (!await file.exists()) continue;
       try {
-        final decoded = jsonDecode(await file.readAsString());
+        final file = isWebStore
+            ? null
+            : File(p.joinAll([appDir, ...relativePath.split('/')]));
+        final data = isWebStore
+            ? await WebFileStore.read(relativePath)
+            : file != null && await file.exists()
+                ? await file.readAsBytes()
+                : null;
+        if (data == null) continue;
+        final decoded = jsonDecode(utf8.decode(data));
         final restored = _mapPortableTaskPaths(
           decoded,
           appDir: appDir,
           restoring: true,
         );
-        await AtomicFile.writeString(file, jsonEncode(restored));
+        final restoredJson = jsonEncode(restored);
+        if (isWebStore) {
+          await WebFileStore.write(
+            relativePath,
+            Uint8List.fromList(utf8.encode(restoredJson)),
+          );
+        } else {
+          await AtomicFile.writeString(file!, restoredJson);
+        }
       } catch (e) {
         throw Exception('恢复任务文件路径失败：$relativePath ($e)');
       }
@@ -1990,6 +2033,16 @@ class BackupService {
             archive,
             archivePrefix: 'catcatch/completed',
             sourcePath: p.join(appDir, 'catcatch', 'completed'),
+          );
+          await _addDirectoryToArchive(
+            archive,
+            archivePrefix: 'task_flow_temporary',
+            sourcePath: p.join(appDir, 'task_flow_temporary'),
+          );
+          await _addDirectoryToArchive(
+            archive,
+            archivePrefix: 'ocr_retry_cache',
+            sourcePath: p.join(appDir, 'ocr_retry_cache'),
           );
         }
         await _addTaskStateFileToArchive(
@@ -3736,13 +3789,64 @@ class BackupService {
         .toSet();
     var allPresent = true;
 
-    void inspect(Object? value) {
+    bool hasPortableTemporaryFlowResult(
+      Object? value, {
+      required String executionId,
+      required String expectedBlockId,
+    }) {
+      if (value is! Map) return false;
+      final reference = value['fileReference'];
+      final artifact = value['temporaryArtifact'];
+      final artifactExecutionId =
+          artifact is Map ? artifact['executionId'] : null;
+      final artifactBlockId = artifact is Map ? artifact['blockId'] : null;
+      if (reference is! String ||
+          artifact is! Map ||
+          executionId.isEmpty ||
+          artifactExecutionId is! String ||
+          artifactExecutionId.isEmpty ||
+          artifactExecutionId != executionId ||
+          artifactBlockId is! String ||
+          artifactBlockId.isEmpty ||
+          artifactBlockId != expectedBlockId ||
+          artifact['reference'] != reference ||
+          !reference.startsWith(_portableAppDataPathPrefix)) {
+        return false;
+      }
+      final relative = reference.substring(_portableAppDataPathPrefix.length);
+      if (!_isSafeRelativeArchivePath(relative)) return false;
+      final pathSegments = relative.split('/');
+      return pathSegments.length == 4 &&
+          pathSegments[0] == 'task_flow_temporary' &&
+          pathSegments[1] ==
+              sha256.convert(utf8.encode(artifactExecutionId)).toString() &&
+          pathSegments[2] ==
+              sha256.convert(utf8.encode(artifactBlockId)).toString() &&
+          pathSegments[3].isNotEmpty;
+    }
+
+    bool hasPersistableFlowPayload(Object? value) {
+      if (value is! Map) return false;
+      try {
+        FlowPayload.fromMap(Map<String, dynamic>.from(value));
+        return true;
+      } catch (_) {
+        return false;
+      }
+    }
+
+    void inspect(Object? value, {bool skipResult = false}) {
       if (value is String && value.startsWith(_portableAppDataPathPrefix)) {
         final relative = value.substring(_portableAppDataPathPrefix.length);
         final isTaskAttachment = relative.startsWith('attachments/');
         final isCatCatchFile = relative.startsWith('catcatch/') &&
             _isCatCatchMediaPath(relative.substring('catcatch/'.length));
-        if (!isTaskAttachment && !isCatCatchFile) return;
+        final isTemporaryFlowArtifact = relative.startsWith(
+          'task_flow_temporary/',
+        );
+        if (!isTaskAttachment && !isCatCatchFile && !isTemporaryFlowArtifact) {
+          return;
+        }
         final packagedPath = isTaskAttachment
             ? 'task_flow_attachments/'
                 '${relative.substring('attachments/'.length)}'
@@ -3752,8 +3856,74 @@ class BackupService {
           allPresent = false;
         }
       } else if (value is Map) {
-        for (final child in value.values) {
-          inspect(child);
+        final skipOwnResult = skipResult;
+        final rawSteps = value['subTasks'];
+        if (rawSteps is Iterable) {
+          final steps = rawSteps.toList();
+          for (var index = 0; index < steps.length; index++) {
+            final step = steps[index];
+            final successor =
+                index + 1 < steps.length ? steps[index + 1] : null;
+            final executionId = value['id'];
+            final cleanupStatus =
+                step is Map ? step['artifactCleanupStatus'] : null;
+            final result = step is Map ? step['result'] : null;
+            final snapshot = value['snapshot'];
+            final snapshotFlow = snapshot is Map ? snapshot['flow'] : null;
+            final snapshotBlocks =
+                snapshotFlow is Map ? snapshotFlow['blocks'] : null;
+            final snapshotBlock =
+                snapshotBlocks is List && index < snapshotBlocks.length
+                    ? snapshotBlocks[index]
+                    : null;
+            final expectedBlockId =
+                snapshotBlock is Map && snapshotBlock['id'] is String
+                    ? snapshotBlock['id'] as String
+                    : '';
+            final hasTemporaryArtifact =
+                result is Map && result.containsKey('temporaryArtifact');
+            final hasValidTemporaryArtifact = hasPortableTemporaryFlowResult(
+              result,
+              executionId: executionId is String ? executionId : '',
+              expectedBlockId: expectedBlockId,
+            );
+            final hasSuccessfulSuccessor = successor is Map &&
+                successor['outcome'] == 'succeeded' &&
+                hasPersistableFlowPayload(successor['result']);
+            // Validate ownership even when the archive contains the referenced
+            // path. A portable file alone cannot prove that this execution
+            // owns it or that cleanup/resume may safely skip it.
+            if ((hasTemporaryArtifact ||
+                    cleanupStatus == 'pending' ||
+                    cleanupStatus == 'cleaned') &&
+                !hasValidTemporaryArtifact) {
+              allPresent = false;
+            }
+            final hasCleanupCheckpoint =
+                hasValidTemporaryArtifact && hasSuccessfulSuccessor;
+            if ((cleanupStatus == 'pending' || cleanupStatus == 'cleaned') &&
+                !hasCleanupCheckpoint) {
+              allPresent = false;
+            }
+            final cleanupCanSkip =
+                (cleanupStatus == 'pending' || cleanupStatus == 'cleaned') &&
+                    hasCleanupCheckpoint;
+            // Deletion is idempotent and resume reconciles a pending cleanup
+            // after its successor result was durably saved. A crash after the
+            // file delete but before persisting `cleaned` can leave this ref
+            // pointing at a file that is already gone.
+            inspect(step, skipResult: cleanupCanSkip);
+          }
+        }
+        for (final entry in value.entries) {
+          // A cleaned flow result keeps its historical reference so execution
+          // resume can skip that step. Its owned file is intentionally gone
+          // and therefore is not a required backup entry.
+          if ((skipOwnResult && entry.key == 'result') ||
+              (rawSteps is Iterable && entry.key == 'subTasks')) {
+            continue;
+          }
+          inspect(entry.value);
         }
       } else if (value is Iterable) {
         for (final child in value) {
@@ -5524,6 +5694,7 @@ class BackupService {
     if (key == 'collection.anki2') {
       if (!selection.ankiData) return false;
       await AnkiDatabase.closeOpenedInstance();
+      await _invalidateAnkiSyncMetadataMigrationMarker();
       await writeEntry('', key);
       return true;
     }
@@ -5568,6 +5739,9 @@ class BackupService {
       //（备份归档内的路径为 anki/collection.anki2）。
       // 先关闭可能打开的数据库连接（Windows 上文件被占用时无法写入）。
       await AnkiDatabase.closeOpenedInstance();
+      if (relativePath == 'collection.anki2') {
+        await _invalidateAnkiSyncMetadataMigrationMarker();
+      }
       await writeEntry('', relativePath);
       return true;
     }
@@ -5606,6 +5780,11 @@ class BackupService {
   // ================================================================
   // 文件清理辅助
   // ================================================================
+
+  static Future<void> _invalidateAnkiSyncMetadataMigrationMarker() async {
+    if (kIsWeb || WebFileStore.isTestMode) return;
+    await AnkiDatabase.invalidateLegacySyncMetadataMigrationMarker();
+  }
 
   /// 删除指定目录中的一个文件。
   ///
@@ -6047,6 +6226,9 @@ class BackupService {
 
   /// 导出备份：弹出保存文件对话框，创建 zip。
   ///
+  /// Returns `true` only after the backup was saved; cancellation or failure
+  /// returns `false`.
+  ///
   /// [onProgress] 可选回调，报告备份构建进度（0.0 ~ 1.0）。
   /// [selection] 控制哪些数据类别包含在备份中。默认全量。
   ///
@@ -6057,11 +6239,12 @@ class BackupService {
   ///   TransactionTooLargeException），iOS/桌面 dart:io 直接复制。
   /// - 桌面：先让用户选择保存位置（`saveFile` 不传 bytes 只返回路径），
   ///   再流式写入该路径。
-  static Future<void> exportBackup(
+  static Future<bool> exportBackup(
     BuildContext context, {
     void Function(double progress)? onProgress,
     BackupSelection selection = BackupSelection.all,
   }) async {
+    final l10n = AppLocalizations.of(context)!;
     await AppLogService.info('BackupService', 'exportBackup: start');
     try {
       final defaultName = await _nextBackupFileName();
@@ -6073,10 +6256,12 @@ class BackupService {
           onProgress: onProgress,
           selection: selection,
         );
-        savedLocation = await FilePicker.saveFile(
+        final savedUri = await saveFileWithType(
+          extensions: ['zip'],
           fileName: defaultName,
           bytes: bytes,
         );
+        savedLocation = savedUri?.toString();
       } else if (Platform.isAndroid || Platform.isIOS) {
         // Android/iOS：流式构建到系统临时文件，再写入备份位置
         final tempPath = p.join(Directory.systemTemp.path, defaultName);
@@ -6095,21 +6280,28 @@ class BackupService {
             await File(tempPath).delete();
           } catch (_) {}
         }
-        final displayPath = await BackupLocationManager.getDisplayPath();
+        var displayPath = await BackupLocationManager.getDisplayPath();
+        if (displayPath ==
+            BackupLocationManager.noBackupDirectorySelectedMessage) {
+          displayPath = l10n.backupServiceNoBackupFolderSelected;
+        }
         savedLocation =
             displayPath.isEmpty ? defaultName : '$displayPath/$defaultName';
       } else {
-        // 桌面：先选保存位置（不传 bytes → 只返回路径，不写文件），
-        // 再流式写入 —— 峰值内存不随备份体积增长。
-        final outputPath = await FilePicker.saveFile(
-          fileName: defaultName,
+        // 桌面：先选择保存位置，再流式写入，避免把整个备份留在内存中。
+        final saveLocation = await getSaveLocation(
+          acceptedTypeGroups: [
+            XTypeGroup(extensions: ['zip']),
+          ],
+          suggestedName: defaultName,
           initialDirectory: SystemPickDirectories.documents(),
         );
-        if (outputPath == null) {
+        if (saveLocation == null) {
           // 用户取消保存
           await AppLogService.info('BackupService', 'exportBackup: 用户取消');
-          return;
+          return false;
         }
+        final outputPath = saveLocation.path;
         var destinationPath = outputPath;
         if (await File(destinationPath).exists()) {
           final uniqueName = await _nextBackupFileName(
@@ -6136,19 +6328,37 @@ class BackupService {
         savedLocation = destinationPath;
       }
 
-      if (savedLocation != null && context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('备份已保存到: $savedLocation')));
+      if (savedLocation == null) return false;
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(l10n.backupServiceExportSavedTo(savedLocation)),
+          ),
+        );
       }
       await AppLogService.info('BackupService', 'exportBackup: success');
+      return true;
     } catch (e) {
       await AppLogService.error('BackupService', 'exportBackup: 失败', e);
       if (context.mounted) {
+        final errorText = e.toString();
+        final noBackupFolderError =
+            BackupLocationManager.noBackupDirectoryWriteErrorMessage;
+        final isMissingBackupFolderError = (e is Exception &&
+                errorText == 'Exception: $noBackupFolderError') ||
+            (e is PlatformException &&
+                e.message == 'Exception: $noBackupFolderError');
+        final errorDetail = isMissingBackupFolderError
+            ? l10n.backupServiceNoBackupFolderSelected
+            : errorText;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('备份失败: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text(l10n.backupServiceExportFailed(errorDetail)),
+            backgroundColor: Colors.red,
+          ),
         );
       }
+      return false;
     }
   }
 
@@ -6162,33 +6372,56 @@ class BackupService {
     BackupSelection selection = BackupSelection.all,
     void Function(List<String> skippedCategories)? onSkippedCategories,
   }) async {
+    final l10n = AppLocalizations.of(context)!;
     await AppLogService.info('BackupService', 'importBackup: start');
     try {
-      final result = await FilePicker.pickFiles(
+      final file = await FilePicker.pickFile(
         type: FileType.custom,
         allowedExtensions: ['zip'],
         initialDirectory: SystemPickDirectories.documents(),
       );
-      if (result == null || result.files.isEmpty) return false;
+      if (file == null) return false;
 
-      final file = result.files.first;
-      final bytes = file.bytes;
       final List<String> skippedCategories;
 
-      if (bytes != null) {
-        skippedCategories = await _restoreFromBytes(
-          bytes,
-          selection: selection,
-          skipMissingCategories: true,
-        );
-      } else if (file.path != null) {
+      if (file.path != null) {
         skippedCategories = await _restoreFromZipFile(
           file.path!,
           selection: selection,
           skipMissingCategories: true,
         );
+      } else if (kIsWeb) {
+        final bytes = await file.readAsBytes();
+        skippedCategories = await _restoreFromBytes(
+          bytes,
+          selection: selection,
+          skipMissingCategories: true,
+        );
       } else {
-        return false;
+        final tempPath = p.join(
+          Directory.systemTemp.path,
+          'stroom-import-${DateTime.now().microsecondsSinceEpoch}.zip',
+        );
+        try {
+          final sink = File(tempPath).openWrite();
+          try {
+            await for (final chunk in file.readAsByteStream()) {
+              sink.add(chunk);
+            }
+            await sink.flush();
+          } finally {
+            await sink.close();
+          }
+          skippedCategories = await _restoreFromZipFile(
+            tempPath,
+            selection: selection,
+            skipMissingCategories: true,
+          );
+        } finally {
+          try {
+            await File(tempPath).delete();
+          } catch (_) {}
+        }
       }
 
       onSkippedCategories?.call(skippedCategories);
@@ -6200,7 +6433,10 @@ class BackupService {
       await AppLogService.error('BackupService', 'importBackup: 失败', e);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('恢复失败: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text(l10n.backupServiceRestoreFailed(e.toString())),
+            backgroundColor: Colors.red,
+          ),
         );
       }
       // 重新抛出：让调用方区分"恢复失败"与"用户取消"
@@ -6981,13 +7217,25 @@ class BackupService {
     // 同时清理历史恢复写入的 anki/collection.anki2 残留文件。
     if (selection.ankiData) {
       await AnkiDatabase.closeOpenedInstance();
+      await _invalidateAnkiSyncMetadataMigrationMarker();
       if (!await _deleteFile('', 'collection.anki2')) deleteFailed = true;
       if (!await _deleteFile('anki', 'collection.anki2')) deleteFailed = true;
       if (selection.includeMediaFiles &&
           (completeFileInventories == null ||
-              completeFileInventories.contains(DataParts.anki)) &&
-          !await _deleteDirectory('collection.media')) {
-        deleteFailed = true;
+              completeFileInventories.contains(DataParts.anki))) {
+        final mediaDirectoryDeleted =
+            await _deleteDirectory('collection.media');
+        if (!mediaDirectoryDeleted) deleteFailed = true;
+        if (mediaDirectoryDeleted && !kIsWeb && !WebFileStore.isTestMode) {
+          try {
+            await AnkiMediaSync.clearSyncIndexes(
+              documentsPath: await AppStorage.directory,
+            );
+          } catch (e) {
+            debugPrint('删除 Anki 媒体同步索引失败: $e');
+            deleteFailed = true;
+          }
+        }
       }
     }
 
@@ -7534,6 +7782,8 @@ const List<String> _restoreKnownDirs = [
   'anki',
   'task_state',
   'task_flow_attachments',
+  'task_flow_temporary',
+  'ocr_retry_cache',
 ];
 
 /// 根据 selection 决定哪些目录需要恢复。
@@ -7560,6 +7810,8 @@ bool _shouldRestoreDir(String dir, BackupSelection selection) {
     case 'task_state':
       return selection.tasks;
     case 'task_flow_attachments':
+    case 'task_flow_temporary':
+    case 'ocr_retry_cache':
       return selection.tasks && selection.includeMediaFiles;
     case 'attachments':
       return selection.chatRecordsAndAttachments && selection.includeMediaFiles;

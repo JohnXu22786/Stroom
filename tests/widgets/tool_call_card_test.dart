@@ -5,6 +5,7 @@
 //   - error: tool name rendered in red
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/models/tool_call.dart' show ToolCallData, ToolCallStatus;
 import 'package:stroom/services/context_manager.dart'
     show kCompactedToolResultPlaceholder;
@@ -26,6 +27,9 @@ ToolCallData _tc({
     );
 
 Widget _wrap(ToolCallData data) => MaterialApp(
+      locale: const Locale('zh', 'CN'),
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
       home: Scaffold(
         body: ToolCallCard(data: data),
       ),
@@ -157,17 +161,21 @@ void main() {
         _wrap(_tc(name: 'web_search', status: ToolCallStatus.error)),
       );
 
-      // Collapsed: name visible in red, details hidden.
+      final errorColor =
+          Theme.of(tester.element(find.byType(ToolCallCard))).colorScheme.error;
+
+      // Collapsed: name uses the theme error color, details hidden.
       final collapsedName = tester.widget<Text>(find.text('web_search'));
-      expect(collapsedName.style?.color, Colors.red,
+      expect(collapsedName.style?.color, errorColor,
           reason: '失败的调用收起后工具名称应为红色');
       expect(find.text('query: 天气'), findsNothing);
 
-      // Expand: name stays red.
+      // Expand: name keeps the theme error color.
       await tester.tap(find.byType(ToolCallCard));
       await tester.pump();
       final expandedName = tester.widget<Text>(find.text('web_search'));
-      expect(expandedName.style?.color, Colors.red, reason: '失败调用展开后工具名称仍应为红色');
+      expect(expandedName.style?.color, errorColor,
+          reason: '失败调用展开后工具名称仍应为主题错误色');
 
       // Tap again → collapsed (same as completed 卡片).
       await tester.tap(find.byType(ToolCallCard));
@@ -187,6 +195,9 @@ void main() {
     testWidgets('compactedAt 非空时收起态显示"已压缩"徽标，展开显示占位符', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: ToolCallCard(
               data: ToolCallData(
@@ -305,6 +316,9 @@ void main() {
       // Align 提供松约束，width: double.infinity 才能让卡片撑满。
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: Align(
               alignment: Alignment.topLeft,
@@ -334,6 +348,9 @@ void main() {
       const longName = 'mcp__notion__search_pages_tool';
       await tester.pumpWidget(
         MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(
             body: Align(
               alignment: Alignment.topLeft,

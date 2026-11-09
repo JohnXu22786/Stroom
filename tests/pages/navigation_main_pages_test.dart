@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/models/assistant.dart';
 import 'package:stroom/pages/home_page.dart';
 import 'package:stroom/providers/assistant_provider.dart';
@@ -36,6 +37,7 @@ Widget _buildTestApp({Size? screenSize, List<Assistant>? assistants}) {
         }),
     ],
     child: MaterialApp(
+      locale: const Locale('zh', 'CN'),
       home: Navigator(
         key: _navigatorKey,
         onGenerateRoute: (settings) {
@@ -45,10 +47,8 @@ Widget _buildTestApp({Size? screenSize, List<Assistant>? assistants}) {
           );
         },
       ),
-      localizationsDelegates: const [
-        DefaultMaterialLocalizations.delegate,
-        DefaultWidgetsLocalizations.delegate,
-      ],
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
     ),
   );
   if (screenSize != null) {
@@ -63,7 +63,7 @@ Widget _buildTestApp({Size? screenSize, List<Assistant>? assistants}) {
 /// Helper: simulate the system back button by calling [Navigator.maybePop].
 Future<void> _simulateBackButton(WidgetTester tester) async {
   await _navigatorKey.currentState?.maybePop();
-  await tester.pumpAndSettle();
+  await tester.pump(const Duration(milliseconds: 500));
 }
 
 /// Find a bottom NavigationBar destination by its label. Scoped to the
@@ -338,7 +338,7 @@ void main() {
       await tester.tap(_navTab('对话'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('助手深'));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 500));
       expect(find.text('选择对话'), findsOneWidget);
 
       final newTopicButtons = find.widgetWithText(FilledButton, '新话题');
@@ -450,7 +450,7 @@ void main() {
       expect(find.text('选择助手'), findsOneWidget);
 
       await tester.tap(find.text('助手甲'));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 500));
       expect(find.text('选择对话'), findsOneWidget);
 
       // Switch to files — the chat navigator stack must stay alive (hidden)
@@ -465,7 +465,7 @@ void main() {
 
       // Switch back — should return to topic selection, not assistant selection
       await tester.tap(_navTab('对话'));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 500));
       expect(find.text('选择对话'), findsOneWidget);
       expect(find.text('选择助手'), findsNothing);
     });
@@ -490,7 +490,7 @@ void main() {
       await tester.tap(_navTab('对话'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('助手丙'));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 500));
       expect(find.text('选择对话'), findsOneWidget);
 
       // Re-tap the chat tab while already on it → reset to assistant selection
@@ -523,7 +523,7 @@ void main() {
       expect(find.text('选择助手'), findsOneWidget);
 
       await tester.tap(find.text('助手乙'));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 500));
       expect(find.text('选择对话'), findsOneWidget);
 
       final newTopicButtons = find.widgetWithText(FilledButton, '新话题');
@@ -545,7 +545,7 @@ void main() {
 
       // Switch back — should still be on the chat page, not assistant selection
       await tester.tap(_navTab('对话'));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 500));
       expect(find.text('新对话'), findsWidgets);
       expect(find.text('选择助手'), findsNothing);
     });
@@ -627,12 +627,12 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('files_page')), findsOneWidget);
 
-      // Tap "设置" in the rail to go to the Settings page. Its "主题" section
+      // Tap "设置" in the rail to go to the Settings page. Its "常规设置" section
       // header proves the Settings page actually opened (the "设置" label
       // itself would match the rail even if navigation never happened).
       await tester.tap(find.text('设置'));
       await tester.pumpAndSettle();
-      expect(find.text('主题'), findsOneWidget);
+      expect(find.text('常规设置'), findsOneWidget);
     });
 
     testWidgets(

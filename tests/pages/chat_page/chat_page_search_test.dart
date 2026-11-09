@@ -7,6 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_chat_ui/flutter_chat_ui.dart' hide ChatMessage;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
@@ -15,7 +17,8 @@ import 'package:stroom/pages/chat_page.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 
-Widget _buildApp({String? initialSearchQuery}) {
+Widget _buildApp(
+    {String? initialSearchQuery, Locale locale = const Locale('zh', 'CN')}) {
   SharedPreferences.setMockInitialValues({});
   return ProviderScope(
     overrides: [
@@ -28,6 +31,14 @@ Widget _buildApp({String? initialSearchQuery}) {
       }),
     ],
     child: MaterialApp(
+      locale: locale,
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       home: Scaffold(
         body: ChatPage(initialSearchQuery: initialSearchQuery),
       ),
@@ -39,8 +50,11 @@ Future<void> _pumpChat(
   WidgetTester tester, {
   required List<ChatMessage> messages,
   String? initialSearchQuery,
+  Locale locale = const Locale('zh', 'CN'),
 }) async {
-  await tester.pumpWidget(_buildApp(initialSearchQuery: initialSearchQuery));
+  await tester.pumpWidget(
+    _buildApp(initialSearchQuery: initialSearchQuery, locale: locale),
+  );
   await tester.pump();
 
   final ctx = tester.element(find.byType(ChatPage));
@@ -100,6 +114,20 @@ void main() {
   });
 
   group('ChatPage search keeps markdown and highlights matches', () {
+    testWidgets('search controls use the selected locale', (tester) async {
+      await _pumpChat(
+        tester,
+        messages: _messages(),
+        initialSearchQuery: 'term',
+        locale: const Locale('en', 'US'),
+      );
+
+      expect(find.text('Search this conversation...'), findsOneWidget);
+      expect(find.text('Current conversation'), findsOneWidget);
+      expect(find.text('All conversations'), findsOneWidget);
+      expect(find.text('搜索当前对话...'), findsNothing);
+    });
+
     testWidgets('search does not flatten markdown into plain text',
         (tester) async {
       await _pumpChat(tester,
@@ -195,12 +223,8 @@ void main() {
       expect(scrolledToMatch, isTrue,
           reason: 'navigation must scroll until the matched message is built');
 
-      // Let the observer finish its final alignment (it scrolls iteratively
-      // and then animates to the target position) before measuring.
-      for (var i = 0; i < 40; i++) {
-        await tester.pump(const Duration(milliseconds: 16));
-      }
-
+      // Measure while the lazily built target is in view. Further pumps can
+      // let the scroll animation continue past the target and unmount it.
       final bubbleRect = tester.getRect(matchInChat);
       final pageSize = tester.getSize(find.byType(ChatPage));
       expect(bubbleRect.top, lessThan(pageSize.height),

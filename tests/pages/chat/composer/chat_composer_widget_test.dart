@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
+import 'package:stroom/widgets/chat_attachment_panel.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/pages/chat/composer/chat_composer_widget.dart';
@@ -11,7 +14,10 @@ import 'package:stroom/providers/provider_config.dart';
 
 /// Helper that creates a MaterialApp wrapped in ProviderScope with
 /// all providers needed to render ChatPage.
-Widget createChatTestApp({String? activeConversationId}) {
+Widget createChatTestApp({
+  String? activeConversationId,
+  Locale locale = const Locale('zh', 'CN'),
+}) {
   SharedPreferences.setMockInitialValues({});
   return ProviderScope(
     overrides: [
@@ -25,11 +31,67 @@ Widget createChatTestApp({String? activeConversationId}) {
         return ProviderEntriesNotifier();
       }),
     ],
-    child: MaterialApp(home: const ChatPage()),
+    child: MaterialApp(
+        locale: locale,
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: const ChatPage()),
   );
 }
 
 void main() {
+  test('edited-image failure localization preserves exception detail', () {
+    const details = 'disk write detail';
+    final english = lookupAppLocalizations(const Locale('en', 'US'));
+    final chinese = lookupAppLocalizations(const Locale('zh', 'CN'));
+
+    expect(
+      english.chatAttachmentCameraFailed(details),
+      contains(details),
+    );
+    expect(
+      chinese.chatAttachmentCameraFailed(details),
+      contains(details),
+    );
+    expect(
+      english.chatAttachmentEditedImageSaveFailed(details),
+      contains(details),
+    );
+    expect(
+      chinese.chatAttachmentEditedImageSaveFailed(details),
+      contains(details),
+    );
+  });
+
+  testWidgets('chat attachment panel uses localized labels', (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      locale: const Locale('en', 'US'),
+      home: Builder(
+        builder: (context) => TextButton(
+          onPressed: () => showChatAttachmentPanel(
+            context: context,
+            onPickFromCamera: () {},
+            onPickFromGallery: () {},
+            onPickFromFilePicker: () {},
+            onPickFromAppFiles: () {},
+          ),
+          child: const Text('Open attachments'),
+        ),
+      ),
+    ));
+    await tester.tap(find.text('Open attachments'));
+    await tester.pumpAndSettle();
+    expect(find.text('Attach file'), findsOneWidget);
+    expect(find.text('Take photo'), findsOneWidget);
+  });
+
   // ═══════════════════════════════════════════════════════════
   // ChatComposer Settings Row Tests
   // ═══════════════════════════════════════════════════════════
@@ -95,6 +157,14 @@ void main() {
         UncontrolledProviderScope(
           container: container,
           child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
             home: Scaffold(
               body: ChatComposerWidget(
                 onSend: (text, attachments) {},
@@ -166,7 +236,16 @@ void main() {
               (ref) => ProviderEntriesNotifier(),
             ),
           ],
-          child: const MaterialApp(home: ChatPage()),
+          child: const MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              supportedLocales: AppLocalizations.supportedLocales,
+              localizationsDelegates: const [
+                AppLocalizations.delegate,
+                GlobalMaterialLocalizations.delegate,
+                GlobalWidgetsLocalizations.delegate,
+                GlobalCupertinoLocalizations.delegate,
+              ],
+              home: ChatPage()),
         ),
       );
       await tester.pump();
@@ -204,7 +283,16 @@ void main() {
               (ref) => ProviderEntriesNotifier(),
             ),
           ],
-          child: const MaterialApp(home: ChatPage()),
+          child: const MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              supportedLocales: AppLocalizations.supportedLocales,
+              localizationsDelegates: const [
+                AppLocalizations.delegate,
+                GlobalMaterialLocalizations.delegate,
+                GlobalWidgetsLocalizations.delegate,
+                GlobalCupertinoLocalizations.delegate,
+              ],
+              home: ChatPage()),
         ),
       );
       await tester.pump();
@@ -252,7 +340,16 @@ void main() {
                 (ref) => ProviderEntriesNotifier(),
               ),
             ],
-            child: const MaterialApp(home: ChatPage()),
+            child: const MaterialApp(
+                locale: const Locale('zh', 'CN'),
+                supportedLocales: AppLocalizations.supportedLocales,
+                localizationsDelegates: const [
+                  AppLocalizations.delegate,
+                  GlobalMaterialLocalizations.delegate,
+                  GlobalWidgetsLocalizations.delegate,
+                  GlobalCupertinoLocalizations.delegate,
+                ],
+                home: ChatPage()),
           ),
         );
         await tester.pump();

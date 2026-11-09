@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:stroom/pages/chat/chat_types.dart';
 import 'package:stroom/pages/chat/widgets/reasoning_section.dart';
 import 'package:stroom/providers/chat_stream_provider.dart';
@@ -42,6 +44,14 @@ Future<ProviderContainer> _openPanel(
   await tester.pumpWidget(
     ProviderScope(
       child: MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
         home: Scaffold(
           body: Center(
             child: ReasoningSection(

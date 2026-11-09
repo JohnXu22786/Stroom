@@ -3,6 +3,24 @@ import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/models/tool_call.dart';
 
 void main() {
+  test('canonical section saves retain unknown message blocks', () {
+    final message = ChatMessage.fromMap({
+      'id': 'future-block',
+      'role': 'assistant',
+      'content': 'visible text',
+      'textSections': ['visible text'],
+      'createdAt': DateTime.utc(2025).toIso8601String(),
+      'attachments': <dynamic>[],
+      'blocks': [
+        {'type': 'future_widget', 'payload': 'preserve me'},
+      ],
+    });
+
+    expect(message.toMap()['blocks'], [
+      {'type': 'future_widget', 'payload': 'preserve me'},
+    ]);
+  });
+
   test('copyWith role change clears the retained legacy role', () {
     final message = ChatMessage.fromMap({
       'id': 'legacy-tool-role',

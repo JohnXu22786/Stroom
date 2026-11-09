@@ -1,18 +1,30 @@
 import 'dart:async';
 import 'package:dio/dio.dart';
+import 'package:flutter/widgets.dart' show Locale;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/models/ai_stream_event.dart';
 import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/models/tool_call.dart';
+import 'package:stroom/models/message_block.dart';
 import 'package:stroom/providers/chat_api_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
+import 'package:stroom/providers/locale_provider.dart';
+import 'package:stroom/services/chat_retry_policy.dart'
+    show TransportRetryPolicy;
 import 'package:stroom/services/chat_service.dart';
 import 'package:stroom/services/chat_stream_manager.dart';
+import 'package:stroom/providers/chat_manager_provider.dart';
 part 'chat_stream_manager_test_p1.dart';
 part 'chat_stream_manager_test_p2.dart';
 part 'chat_stream_manager_test_p3.dart';
 part 'chat_stream_manager_test_p4.dart';
+
+class _EnglishLocaleController extends LocaleSelectionController {
+  @override
+  Locale? build() => const Locale('en', 'US');
+}
 
 // ============================================================================
 // Mock provider that yields controlled events for testing
@@ -24,8 +36,21 @@ class _MockProvider extends BaseChatProvider {
 
   /// When non-null, the provider waits for this completer before yielding.
   final Completer<void>? waitForYield;
+  final Completer<void>? firstCallStarted;
+  final Completer<void>? secondCallStarted;
+  final Completer<void>? secondCallGate;
+  bool throwAfterYield = false;
+  Object? errorAfterYield;
+  final Map<int, Object> errorsAfterCall = {};
+  final List<List<Map<String, dynamic>>> capturedMessages = [];
 
-  _MockProvider(this._rounds, {this.waitForYield});
+  _MockProvider(
+    this._rounds, {
+    this.waitForYield,
+    this.firstCallStarted,
+    this.secondCallStarted,
+    this.secondCallGate,
+  });
 
   int get callCount => _callCount;
 
@@ -52,11 +77,24 @@ class _MockProvider extends BaseChatProvider {
       throw Exception('Simulated provider error');
     }
     _callCount++;
+    if (_callCount == 1 && firstCallStarted != null) {
+      firstCallStarted!.complete();
+    }
+    if (_callCount == 2) {
+      if (secondCallStarted != null) secondCallStarted!.complete();
+      if (secondCallGate != null) await secondCallGate!.future;
+    }
+    capturedMessages.add(messages);
     if (_callCount <= _rounds.length) {
       if (waitForYield != null) await waitForYield!.future;
       for (final event in _rounds[_callCount - 1]) {
         yield event;
       }
+      if (errorsAfterCall[_callCount] != null) {
+        throw errorsAfterCall[_callCount]!;
+      }
+      if (errorAfterYield != null) throw errorAfterYield!;
+      if (throwAfterYield) throw Exception('Simulated provider interruption');
     } else {
       if (waitForYield != null) await waitForYield!.future;
       yield AIStreamEvent('Final response');

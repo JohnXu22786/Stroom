@@ -47,39 +47,47 @@ class MessageAttachmentPreview extends StatelessWidget {
   Widget build(BuildContext context) {
     final isImage = attachment.fileType == 'image';
     final cs = Theme.of(context).colorScheme;
-    final thumbnailSize = 80.0;
-
     return GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: Container(
-        width: 100,
         margin: const EdgeInsets.only(right: 8),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             // Thumbnail / icon area
-            Container(
-              width: thumbnailSize,
-              height: thumbnailSize,
-              decoration: BoxDecoration(
-                color: cs.surfaceContainerHigh,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: cs.outlineVariant,
-                  width: 0.5,
-                ),
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                minWidth: 48,
+                minHeight: 48,
+                maxWidth: isImage ? 160 : 80,
+                maxHeight: isImage ? 88 : 80,
               ),
-              clipBehavior: Clip.antiAlias,
-              child: isImage
-                  ? _ImageThumbnail(
-                      storagePath: attachment.storagePath,
-                      fileIcon: _fileIcon(),
-                    )
-                  : Icon(
-                      _fileIcon(),
-                      size: 36,
-                      color: cs.onSurfaceVariant,
-                    ),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: cs.surfaceContainerHigh,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: cs.outlineVariant,
+                    width: 0.5,
+                  ),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: isImage
+                    ? _ImageThumbnail(
+                        storagePath: attachment.storagePath,
+                        fileIcon: _fileIcon(),
+                      )
+                    : SizedBox(
+                        width: 80,
+                        height: 80,
+                        child: Icon(
+                          _fileIcon(),
+                          size: 36,
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
+              ),
             ),
             const SizedBox(height: 4),
             // File name
@@ -147,9 +155,7 @@ class _ImageThumbnailState extends State<_ImageThumbnail> {
             snap.data != null) {
           return ExtendedImage.memory(
             snap.data!,
-            fit: BoxFit.cover,
-            width: 80,
-            height: 80,
+            fit: BoxFit.contain,
             loadStateChanged: (state) {
               if (state.extendedImageLoadState == LoadState.failed) {
                 return Icon(
@@ -162,10 +168,10 @@ class _ImageThumbnailState extends State<_ImageThumbnail> {
             },
           );
         }
-        return Icon(
-          widget.fileIcon,
-          size: 36,
-          color: cs.onSurfaceVariant,
+        return const SizedBox(
+          width: 48,
+          height: 48,
+          child: Icon(Icons.image_outlined, size: 36),
         );
       },
     );

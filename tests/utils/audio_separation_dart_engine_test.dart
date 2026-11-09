@@ -3,7 +3,7 @@ import 'dart:math' show pi, sin;
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:stroom/utils/audio_separation.dart'
+import 'package:stroom/utils/audio_separation_native.dart'
     show AudioSeparationEngine, extractAudioSync;
 import 'package:stroom/utils/audio_utils.dart';
 
@@ -30,6 +30,9 @@ int _readUint32BE(Uint8List data, int offset) {
       (data[offset + 2] << 8) |
       data[offset + 3];
 }
+
+int _readUint64BE(Uint8List data, int offset) =>
+    _readUint32BE(data, offset) * 0x100000000 + _readUint32BE(data, offset + 4);
 
 Uint8List _buildBox(String type, List<int> body) {
   final bytes = BytesBuilder();
@@ -277,8 +280,21 @@ void main() {
   });
 
   group('audio_utils - detectAudioFormat', () {
-    test('detects WAV from RIFF header', () {
-      final data = Uint8List.fromList([0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0]);
+    test('detects WAV from RIFF/WAVE signature', () {
+      final data = Uint8List.fromList([
+        0x52,
+        0x49,
+        0x46,
+        0x46,
+        0,
+        0,
+        0,
+        0,
+        0x57,
+        0x41,
+        0x56,
+        0x45,
+      ]);
       expect(detectAudioFormat(data), equals('wav'));
     });
 
@@ -371,6 +387,7 @@ void main() {
       String codec = 'raw ',
       int sampleRate = 44100,
       int bitsPerSample = 16,
+      bool useCo64 = false,
     }) {
       final bytesPerSample = (bitsPerSample + 7) ~/ 8;
       final audioDataLen = pcmFrames * bytesPerSample;
@@ -405,15 +422,13 @@ void main() {
 
       // ----- Offset tracking -----
       // ftyp = 24 bytes (0-23): [8 header + 4+4+4+4 content]
-      // moov = 309 bytes (24-332):
-      //   8 (moov header) + trak[8 (header) + 92 (tkhd) + 201 (mdia)]
-      // mdat starts at 24 + 309 = 333
-      // audio data starts at 333 + 8 = 341
+      // moov is 309 bytes with stco or 313 bytes with co64.
       const ftypSize = 24;
-      const moovSize = 309;
-      const trakSize = 301;
-      const mdiaSize = 201;
-      const audioDataOffset = ftypSize + moovSize + 8; // = 341
+      final offsetTableExtraSize = useCo64 ? 4 : 0;
+      final moovSize = 309 + offsetTableExtraSize;
+      final trakSize = 301 + offsetTableExtraSize;
+      final mdiaSize = 201 + offsetTableExtraSize;
+      final audioDataOffset = ftypSize + moovSize + 8;
 
       // Write moov box
       bytes.add(_buildBoxHeader(moovSize, 'moov'));
@@ -461,11 +476,11 @@ void main() {
       bytes.addByte(0); // null name
 
       // minf
-      const minfSize = 160;
+      final minfSize = 160 + offsetTableExtraSize;
       bytes.add(_buildBoxHeader(minfSize, 'minf'));
 
       // stbl
-      const stblSize = 152;
+      final stblSize = 152 + offsetTableExtraSize;
       bytes.add(_buildBoxHeader(stblSize, 'stbl'));
 
       // stsd
@@ -504,12 +519,14 @@ void main() {
       bytes.add(_u32be(bytesPerSample)); // constant bytes per sample
       bytes.add(_u32be(pcmFrames)); // sample_count
 
-      // stco
-      bytes.add(_buildBoxHeader(20, 'stco'));
+      // stco / co64
+      final offsetTableType = useCo64 ? 'co64' : 'stco';
+      bytes.add(_buildBoxHeader(useCo64 ? 24 : 20, offsetTableType));
       bytes.add(_u32be(0)); // version=0, flags=0
       bytes.add(_u32be(1)); // entry_count = 1
-      bytes.add(
-          _u32be(audioDataOffset)); // chunk_offset (absolute file position!)
+      bytes.add(useCo64
+          ? _u64be(audioDataOffset)
+          : _u32be(audioDataOffset)); // absolute file position
 
       // ----- mdat box -----
       bytes.add(_buildBoxHeader(8 + audioData.length, 'mdat'));
@@ -610,6 +627,7 @@ void main() {
       List<Uint8List>? sourceFrames,
       int? editListMediaTime,
       int? editListSegmentDuration,
+      List<(int, int)>? editListEntries,
       int editListMediaRateInteger = 1,
       int editListMediaRateFraction = 0,
     }) {
@@ -623,8 +641,25 @@ void main() {
           'An edit list needs both a media time and duration.',
         );
       }
+      if (editListEntries != null && editListMediaTime != null) {
+        throw ArgumentError('Specify either edit-list form, not both.');
+      }
+      final edits = editListEntries ??
+          (editListMediaTime == null
+              ? null
+              : [(editListSegmentDuration!, editListMediaTime)]);
       final mediaDuration = audioFrames.length * samplesPerFrame;
-      final movieDuration = editListSegmentDuration ?? mediaDuration;
+      final movieDuration = edits == null
+          ? mediaDuration
+          : edits.fold<int>(0, (duration, edit) => duration + edit.$1);
+      final hasWideMovieDuration = movieDuration > 0xFFFFFFFF;
+      final hasWideEditList = edits?.any((edit) {
+            final (segmentDuration, mediaTime) = edit;
+            return segmentDuration > 0xFFFFFFFF ||
+                mediaTime < -0x80000000 ||
+                mediaTime > 0x7FFFFFFF;
+          }) ??
+          false;
 
       Uint8List descriptor(int tag, List<int> body) {
         var remaining = body.length;
@@ -800,11 +835,14 @@ void main() {
             ..._i32be(value),
         ];
         final mvhd = _buildBox('mvhd', [
-          0, 0, 0, 0, // version + flags
-          ..._u32be(0), // creation time
-          ..._u32be(0), // modification time
+          hasWideMovieDuration ? 1 : 0, 0, 0, 0, // version + flags
+          if (hasWideMovieDuration) ..._u64be(0) else ..._u32be(0),
+          if (hasWideMovieDuration) ..._u64be(0) else ..._u32be(0),
           ..._u32be(sampleRate), // movie timescale
-          ..._u32be(movieDuration),
+          if (hasWideMovieDuration)
+            ..._u64be(movieDuration)
+          else
+            ..._u32be(movieDuration),
           ..._u32be(0x00010000), // rate
           ..._u16be(0x0100), // volume
           ..._u16be(0), // reserved
@@ -815,12 +853,15 @@ void main() {
           ..._u32be(2), // next track ID
         ]);
         final tkhd = _buildBox('tkhd', [
-          0, 0, 0, 7, // version + flags
-          ..._u32be(0), // creation time
-          ..._u32be(0), // modification time
+          hasWideMovieDuration ? 1 : 0, 0, 0, 7, // version + flags
+          if (hasWideMovieDuration) ..._u64be(0) else ..._u32be(0),
+          if (hasWideMovieDuration) ..._u64be(0) else ..._u32be(0),
           ..._u32be(1), // track ID
           ..._u32be(0), // reserved
-          ..._u32be(movieDuration),
+          if (hasWideMovieDuration)
+            ..._u64be(movieDuration)
+          else
+            ..._u32be(movieDuration),
           ..._u64be(0), // reserved
           ..._u16be(0), // layer
           ..._u16be(0), // alternate group
@@ -830,17 +871,25 @@ void main() {
           ..._u32be(0), // width
           ..._u32be(0), // height
         ]);
-        final edts = editListMediaTime == null
+        final edts = edits == null
             ? <int>[]
             : _buildBox(
                 'edts',
                 _buildBox('elst', [
-                  0, 0, 0, 0, // version + flags
-                  ..._u32be(1), // entry count
-                  ..._u32be(editListSegmentDuration!),
-                  ..._i32be(editListMediaTime),
-                  ..._u16be(editListMediaRateInteger),
-                  ..._u16be(editListMediaRateFraction),
+                  hasWideEditList ? 1 : 0, 0, 0, 0, // version + flags
+                  ..._u32be(edits.length), // entry count
+                  for (final (segmentDuration, mediaTime) in edits) ...[
+                    if (hasWideEditList)
+                      ..._u64be(segmentDuration)
+                    else
+                      ..._u32be(segmentDuration),
+                    if (hasWideEditList)
+                      ..._u64be(mediaTime)
+                    else
+                      ..._i32be(mediaTime),
+                    ..._u16be(editListMediaRateInteger),
+                    ..._u16be(editListMediaRateFraction),
+                  ],
                 ]),
               );
         final trak = _buildBox('trak', [...tkhd, ...edts, ...mdia]);
@@ -868,6 +917,32 @@ void main() {
         ..add(moov)
         ..add(mdat);
       return result.toBytes();
+    }
+
+    Uint8List buildVariableStszWithCount(int sampleCount) {
+      final valid = buildMinimalMp4WithAacAudio(
+        asc: Uint8List.fromList([0x12, 0x10]),
+        sampleRate: 44100,
+      );
+      final stszStart = _findFourCc(valid, 'stsz') - 4;
+      final stszSize = _readUint32BE(valid, stszStart);
+      final stcoStart = _findFourCc(valid, 'stco') - 4;
+      final stcoSize = _readUint32BE(valid, stcoStart);
+      expect(stszStart + stszSize, stcoStart);
+
+      final reordered = Uint8List.fromList([
+        ...valid.sublist(0, stszStart),
+        ...valid.sublist(stcoStart, stcoStart + stcoSize),
+        ...valid.sublist(stszStart, stszStart + stszSize),
+        ...valid.sublist(stcoStart + stcoSize),
+      ]);
+      final stszTypeOffset = _findFourCc(reordered, 'stsz');
+      reordered.setRange(
+        stszTypeOffset + 12,
+        stszTypeOffset + 16,
+        _u32be(sampleCount),
+      );
+      return reordered;
     }
 
     Uint8List audioDataFromMp4(Uint8List data) {
@@ -980,6 +1055,103 @@ void main() {
       expect(audioDataFromMp4(result), sourceFrames[1]);
     });
 
+    test('preserves empty AAC edit durations around media edits', () async {
+      final sourceFrames = [
+        Uint8List.fromList([0x11, 0x22, 0x33]),
+        Uint8List.fromList([0x44, 0x55, 0x66]), // excluded by the edit list
+        Uint8List.fromList([0x77, 0x88, 0x99]),
+      ];
+      final mp4Bytes = buildMinimalMp4WithAacAudio(
+        asc: Uint8List.fromList([0x12, 0x10]),
+        sampleRate: 44100,
+        sourceFrames: sourceFrames,
+        editListEntries: [
+          (512, -1), // leading silence
+          (1024, 0),
+          (512, -1), // intervening silence
+          (1024, 2048),
+        ],
+      );
+
+      final result = await engine.extractAudio(
+        videoBytes: mp4Bytes,
+        videoFormat: 'mp4',
+      );
+
+      final elstTypeOffset = _findFourCc(result, 'elst');
+      expect(elstTypeOffset, greaterThanOrEqualTo(0));
+      expect(_readUint32BE(result, elstTypeOffset + 8), 4);
+      expect(_readUint32BE(result, elstTypeOffset + 12), 512);
+      expect(_readUint32BE(result, elstTypeOffset + 16), 0xFFFFFFFF);
+      expect(_readUint32BE(result, elstTypeOffset + 24), 1024);
+      expect(_readUint32BE(result, elstTypeOffset + 28), 0);
+      expect(_readUint32BE(result, elstTypeOffset + 36), 512);
+      expect(_readUint32BE(result, elstTypeOffset + 40), 0xFFFFFFFF);
+      expect(_readUint32BE(result, elstTypeOffset + 48), 1024);
+      expect(_readUint32BE(result, elstTypeOffset + 52), 1024);
+      final mvhdTypeOffset = _findFourCc(result, 'mvhd');
+      expect(_readUint32BE(result, mvhdTypeOffset + 20), 3072);
+      final tkhdTypeOffset = _findFourCc(result, 'tkhd');
+      expect(_readUint32BE(result, tkhdTypeOffset + 24), 3072);
+      final mdhdTypeOffset = _findFourCc(result, 'mdhd');
+      expect(_readUint32BE(result, mdhdTypeOffset + 20), 2048);
+      expect(
+        audioDataFromMp4(result),
+        Uint8List.fromList([...sourceFrames[0], ...sourceFrames[2]]),
+      );
+    });
+
+    test('preserves long empty AAC edit durations', () async {
+      const emptyDuration = 0x100000000;
+      final sourceFrame = Uint8List.fromList([0x11, 0x22, 0x33]);
+      final mp4Bytes = buildMinimalMp4WithAacAudio(
+        asc: Uint8List.fromList([0x12, 0x10]),
+        sampleRate: 44100,
+        sourceFrames: [sourceFrame],
+        editListEntries: [
+          (emptyDuration, -1),
+          (1024, 0),
+        ],
+      );
+
+      final result = await engine.extractAudio(
+        videoBytes: mp4Bytes,
+        videoFormat: 'mp4',
+      );
+
+      final elstTypeOffset = _findFourCc(result, 'elst');
+      expect(_readUint32BE(result, elstTypeOffset + 4), 0x01000000);
+      expect(_readUint64BE(result, elstTypeOffset + 12), emptyDuration);
+      expect(_readUint32BE(result, elstTypeOffset + 20), 0xFFFFFFFF);
+      expect(_readUint32BE(result, elstTypeOffset + 24), 0xFFFFFFFF);
+      expect(_readUint64BE(result, elstTypeOffset + 32), 1024);
+      expect(_readUint64BE(result, elstTypeOffset + 40), 0);
+
+      final expectedMovieDuration = emptyDuration + 1024;
+      final mvhdTypeOffset = _findFourCc(result, 'mvhd');
+      expect(_readUint32BE(result, mvhdTypeOffset + 4), 0x01000000);
+      expect(_readUint64BE(result, mvhdTypeOffset + 28), expectedMovieDuration);
+      final tkhdTypeOffset = _findFourCc(result, 'tkhd');
+      expect(_readUint32BE(result, tkhdTypeOffset - 4), 104);
+      expect(_readUint32BE(result, tkhdTypeOffset + 4), 0x01000007);
+      expect(_readUint64BE(result, tkhdTypeOffset + 32), expectedMovieDuration);
+      final mdhdTypeOffset = _findFourCc(result, 'mdhd');
+      expect(_readUint32BE(result, mdhdTypeOffset + 4), 0);
+      expect(_readUint32BE(result, mdhdTypeOffset + 20), 1024);
+
+      final moovStart = _readUint32BE(result, 0);
+      final moovSize = _readUint32BE(result, moovStart);
+      final declaredMdatStart = moovStart + moovSize;
+      final actualMdatStart = _findFourCc(result, 'mdat') - 4;
+      expect(declaredMdatStart, actualMdatStart);
+      final stcoTypeOffset = _findFourCc(result, 'stco');
+      expect(
+        _readUint32BE(result, stcoTypeOffset + 12),
+        actualMdatStart + 8,
+      );
+      expect(audioDataFromMp4(result), sourceFrame);
+    });
+
     test(
       'preserves every AAC frame when the source has no edit list',
       () async {
@@ -1005,6 +1177,59 @@ void main() {
         );
       },
     );
+
+    test('rejects a constant-size sample count beyond file capacity', () async {
+      final malformed = Uint8List.fromList(
+        buildMinimalMp4WithPcmAudio(pcmFrames: 2),
+      );
+      final stszTypeOffset = _findFourCc(malformed, 'stsz');
+      malformed.setRange(
+        stszTypeOffset + 12,
+        stszTypeOffset + 16,
+        _u32be(1000),
+      );
+
+      await expectLater(
+        engine.extractAudio(videoBytes: malformed, videoFormat: 'mp4'),
+        throwsA(isA<Exception>()),
+      );
+    });
+
+    test('rejects stco and co64 sample chunks outside mdat payload', () async {
+      for (final useCo64 in [false, true]) {
+        final malformed = Uint8List.fromList(
+          buildMinimalMp4WithPcmAudio(pcmFrames: 2, useCo64: useCo64),
+        );
+        final offsetTableType = useCo64 ? 'co64' : 'stco';
+        final offsetTableTypeOffset = _findFourCc(malformed, offsetTableType);
+        malformed.setRange(
+          offsetTableTypeOffset + 12,
+          offsetTableTypeOffset + (useCo64 ? 20 : 16),
+          useCo64 ? _u64be(8) : _u32be(8), // ftyp payload, still in the file
+        );
+
+        await expectLater(
+          engine.extractAudio(videoBytes: malformed, videoFormat: 'mp4'),
+          throwsA(
+            isA<Exception>().having(
+              (error) => error.toString(),
+              'message',
+              'Exception: No audio data extracted',
+            ),
+          ),
+        );
+      }
+    });
+
+    test('rejects a variable-size sample count beyond its stsz entries',
+        () async {
+      final malformed = buildVariableStszWithCount(1000);
+
+      await expectLater(
+        engine.extractAudio(videoBytes: malformed, videoFormat: 'mp4'),
+        throwsA(isA<Exception>()),
+      );
+    });
 
     test(
       'rejects a truncated trailing moov with oversized stbl without hanging',
@@ -1038,6 +1263,32 @@ void main() {
         expect(result, equals('Exception: No audio track found in video'));
       },
     );
+
+    test('rejects a zero-sized unknown stbl child without hanging', () async {
+      final malformed = buildMinimalMp4WithPcmAudio(pcmFrames: 2);
+      final stblHeader = _findFourCc(malformed, 'stbl') - 4;
+      final childHeader = stblHeader + 8;
+      malformed.setRange(childHeader, childHeader + 4, _u32be(0));
+      malformed.setRange(childHeader + 4, childHeader + 8, _fourCc('free'));
+
+      final response = ReceivePort();
+      final isolate = await Isolate.spawn(_extractAudioInIsolateForTesting, [
+        response.sendPort,
+        malformed,
+      ]);
+      final Object? result;
+      try {
+        result = await response.first.timeout(
+          const Duration(seconds: 5),
+          onTimeout: () => 'timed-out',
+        );
+      } finally {
+        isolate.kill(priority: Isolate.immediate);
+        response.close();
+      }
+
+      expect(result, equals('Exception: No audio track found in video'));
+    });
 
     test('preserves HE-AAC/SBR config and output frame timing', () async {
       // Cover AOT 5 and the backward-compatible AOT 2 + sync-extension form.
@@ -1252,6 +1503,25 @@ void main() {
         engine.extractAudio(videoBytes: mp4Bytes, videoFormat: 'mp4'),
         throwsA(isA<Exception>()),
       );
+    });
+
+    test('rejects non-AAC AudioSpecificConfig under MPEG-4 audio OTI',
+        () async {
+      // AOT 8 is CELP and AOT 22 is ER-BSAC, neither is AAC.
+      for (final asc in [
+        Uint8List.fromList([0x42, 0x10]),
+        Uint8List.fromList([0xB2, 0x10]),
+      ]) {
+        final mp4Bytes = buildMinimalMp4WithAacAudio(
+          asc: asc,
+          sampleRate: 44100,
+        );
+
+        await expectLater(
+          engine.extractAudio(videoBytes: mp4Bytes, videoFormat: 'mp4'),
+          throwsA(isA<Exception>()),
+        );
+      }
     });
 
     test('validates mp4a tracks against their decoder object type', () async {

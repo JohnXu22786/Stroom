@@ -1,6 +1,25 @@
 part of 'chat_stream_manager_test.dart';
 
 void chatStreamManagerGroup3() {
+  test('StreamResult.hasContent counts attachments with empty fullReply', () {
+    final result = StreamResult(
+      history: const [],
+      fullReply: '',
+      attachments: [
+        Attachment(
+          fileName: 'image.png',
+          mimeType: 'image/png',
+          fileType: 'image',
+          hash: 'image-hash',
+          storagePath: 'attachments/image.png',
+          fileSize: 1,
+        ),
+      ],
+    );
+
+    expect(result.hasContent, isTrue);
+  });
+
   group('ChatStreamManager - reasoning + toolCalls propagation', () {
     test('generated media attachments are saved on the assistant message',
         () async {

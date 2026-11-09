@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
+import '../l10n/app_localizations.dart';
 import '../utils/audio_separation.dart';
 import '../utils/audio_utils.dart' show detectAudioFormat, normalizeAudioFormat;
 import '../providers/background_task_provider.dart';
@@ -83,6 +84,7 @@ Future<void> _runAudioSeparation({
   required List<SelectedVideo> videos,
   required BackgroundTaskNotifier bgNotifier,
   required String saveFolder,
+  required String errorPrefix,
   Future<({Uint8List audioBytes, String hash, String format})> Function(
           SelectedVideo video)?
       workerExtract,
@@ -141,7 +143,7 @@ Future<void> _runAudioSeparation({
       } catch (e) {
         if (!isTaskLive()) continue;
         throttler.updateStep(taskId, activeStepIndex, failed: true);
-        throttler.failTask(taskId, error: '音频提取失败: $e');
+        throttler.failTask(taskId, error: '$errorPrefix$e');
       }
     }
   } finally {
@@ -157,6 +159,7 @@ Future<void> runAudioSeparationForTesting({
   required List<SelectedVideo> videos,
   required BackgroundTaskNotifier bgNotifier,
   required String saveFolder,
+  required String errorPrefix,
   required Future<({Uint8List audioBytes, String hash, String format})>
           Function(SelectedVideo video)
       workerExtract,
@@ -165,6 +168,7 @@ Future<void> runAudioSeparationForTesting({
       videos: videos,
       bgNotifier: bgNotifier,
       saveFolder: saveFolder,
+      errorPrefix: errorPrefix,
       workerExtract: workerExtract,
     );
 
@@ -369,6 +373,8 @@ Future<void> _deleteUnreferencedAudioFile(AudioRecord record) async {
 }
 
 class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
+  AppLocalizations get _l10n => AppLocalizations.of(context)!;
+
   // 音频分离引擎
   final AudioSeparationEngine _engine = AudioSeparationEngine();
 
@@ -444,14 +450,14 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('视频音频分离'),
+        title: Text(_l10n.audioSeparationTitle),
         centerTitle: true,
         actions: [
           if (_selectedVideos.isNotEmpty && !_isProcessing)
             TextButton.icon(
               onPressed: _clearAll,
               icon: const Icon(Icons.clear_all, size: 18),
-              label: const Text('清空'),
+              label: Text(_l10n.clear),
             ),
         ],
       ),
@@ -492,12 +498,12 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
                 onPressed: _isProcessing ? null : _showVideoSourcePanel,
                 style: ElevatedButton.styleFrom(
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                 ),
                 icon: const Icon(Icons.video_file_outlined, size: 20),
-                label: const Text(
-                  '选择视频来源',
+                label: Text(
+                  _l10n.audioSeparationChooseVideoSource,
                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
                 ),
               ),
@@ -514,7 +520,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (ctx) => Padding(
         padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
@@ -532,7 +538,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
               ),
               const SizedBox(height: 24),
               Text(
-                '选择视频来源',
+                _l10n.audioSeparationChooseVideoSource,
                 style: Theme.of(
                   context,
                 ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
@@ -542,8 +548,8 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
                 children: [
                   ChoiceCard(
                     icon: Icons.video_library,
-                    title: '从应用相册选择',
-                    subtitle: '从应用内已保存的视频中选择',
+                    title: _l10n.audioSeparationChooseAppAlbum,
+                    subtitle: _l10n.audioSeparationChooseSavedVideoSubtitle,
                     color: Colors.green,
                     onTap: () {
                       Navigator.pop(ctx);
@@ -553,8 +559,8 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
                   const SizedBox(height: 8),
                   ChoiceCard(
                     icon: Icons.file_present,
-                    title: '从系统相册选择',
-                    subtitle: '从设备存储中选择视频文件',
+                    title: _l10n.audioSeparationChooseSystemAlbum,
+                    subtitle: _l10n.audioSeparationChooseDeviceVideoSubtitle,
                     color: Colors.blue,
                     onTap: () {
                       Navigator.pop(ctx);
@@ -598,7 +604,9 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('选择视频失败: $e')));
+        ).showSnackBar(SnackBar(
+            content:
+                Text(_l10n.audioSeparationChooseVideoFailure(e.toString()))));
       }
     }
   }
@@ -626,7 +634,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  '未检测到音频分离引擎',
+                  _l10n.audioSeparationEngineMissing,
                   style: TextStyle(fontSize: 12, color: Colors.orange[800]),
                 ),
               ),
@@ -636,7 +644,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
           Padding(
             padding: const EdgeInsets.only(left: 26),
             child: Text(
-              '请重启应用或检查应用资源完整性。',
+              _l10n.audioSeparationEngineMissingHelp,
               style: TextStyle(fontSize: 11, color: Colors.orange[600]),
             ),
           ),
@@ -665,7 +673,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
           ),
           const SizedBox(height: 16),
           Text(
-            '暂未选择视频文件',
+            _l10n.audioSeparationNoVideoSelected,
             style: TextStyle(
               fontSize: 16,
               color: cs.onSurfaceVariant.withValues(alpha: 0.6),
@@ -673,7 +681,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
           ),
           const SizedBox(height: 8),
           Text(
-            '支持 mp4、mov、m4v、3gp 格式',
+            _l10n.audioSeparationSupportedFormatsHint,
             style: TextStyle(
               fontSize: 13,
               color: cs.onSurfaceVariant.withValues(alpha: 0.4),
@@ -695,7 +703,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
           elevation: 0,
           margin: const EdgeInsets.only(bottom: 8),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(16),
             side: BorderSide(color: cs.outlineVariant, width: 0.5),
           ),
           child: Padding(
@@ -800,11 +808,13 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              '音频已成功提取并保存到录音库',
+              _l10n.audioSeparationSuccess,
               style: TextStyle(color: cs.onPrimaryContainer, fontSize: 13),
             ),
           ),
-          TextButton(onPressed: _goToAudioLibrary, child: const Text('查看')),
+          TextButton(
+              onPressed: _goToAudioLibrary,
+              child: Text(_l10n.audioSeparationView)),
           IconButton(
             icon: Icon(Icons.close, color: cs.onPrimaryContainer, size: 18),
             onPressed: () => setState(() => _success = false),
@@ -843,7 +853,8 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      '已选 ${_selectedVideos.length} 个视频',
+                      _l10n.audioSeparationSelectedVideoCount(
+                          _selectedVideos.length),
                       style: TextStyle(
                         fontSize: 12,
                         color: cs.onSurfaceVariant,
@@ -871,7 +882,9 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
                       )
                     : const Icon(Icons.audio_file, size: 20),
                 label: Text(
-                  _isProcessing ? '提取中...' : '提取音频',
+                  _isProcessing
+                      ? _l10n.audioSeparationExtracting
+                      : _l10n.audioSeparationExtractAudio,
                   style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
@@ -893,11 +906,11 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
     return Container(
       decoration: BoxDecoration(
         color: cs.surfaceContainerLow.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
       ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(8),
         onTap: _pickSaveFolder,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -906,12 +919,12 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
               Icon(Icons.folder_outlined, size: 16, color: cs.primary),
               const SizedBox(width: 8),
               Text(
-                '保存至',
+                _l10n.audioSeparationSaveTo,
                 style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
               ),
               const SizedBox(width: 4),
               Text(
-                _saveFolder.isEmpty ? '根目录' : _saveFolder,
+                _saveFolder.isEmpty ? _l10n.rootFolder : _saveFolder,
                 style: TextStyle(
                   fontSize: 12,
                   color: cs.primary,
@@ -934,7 +947,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
       context,
       currentFolder: _saveFolder,
       availableFolders: folders,
-      title: '选择保存文件夹',
+      title: _l10n.audioSeparationChooseSaveFolder,
       onCreateFolder: (name) async {
         await FileManifest.addFolder(name);
         return null;
@@ -977,7 +990,8 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
         if (mounted) {
           ScaffoldMessenger.of(
             context,
-          ).showSnackBar(const SnackBar(content: Text('无法读取视频文件')));
+          ).showSnackBar(SnackBar(
+              content: Text(_l10n.audioSeparationCannotReadVideoFile)));
         }
         return;
       }
@@ -992,7 +1006,9 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('选择视频文件失败: $e')));
+        ).showSnackBar(SnackBar(
+            content: Text(
+                _l10n.audioSeparationChooseVideoFileFailure(e.toString()))));
       }
     }
   }
@@ -1024,14 +1040,14 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
     final unsupportedFormats = _selectedVideos
         .where((video) => !_engine.canHandleVideoFormat(video.format))
         .map((video) => video.format.trim().isEmpty
-            ? '未知'
+            ? _l10n.audioSeparationUnknownFormat
             : video.format.trim().toUpperCase())
         .toSet();
     if (unsupportedFormats.isNotEmpty) {
       setState(() {
         _hasError = true;
-        _errorMessage =
-            '暂不支持 ${unsupportedFormats.join('、')} 格式，仅支持 MP4、MOV、M4V、3GP。';
+        _errorMessage = _l10n
+            .audioSeparationUnsupportedFormats(unsupportedFormats.join(', '));
       });
       return;
     }
@@ -1039,7 +1055,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
     if (!_engineAvailable) {
       setState(() {
         _hasError = true;
-        _errorMessage = '音频分离引擎不可用。';
+        _errorMessage = _l10n.audioSeparationEngineUnavailable;
       });
       return;
     }
@@ -1056,6 +1072,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
     final videosToProcess = List<SelectedVideo>.from(_selectedVideos);
     final bgNotifier = ref.read(backgroundTasksProvider.notifier);
     final saveFolder = _saveFolder;
+    final errorPrefix = _l10n.audioSeparationTaskFailurePrefix;
     final route = ModalRoute.of(context);
 
     // Pop IMMEDIATELY — schedule the route transition now.
@@ -1077,6 +1094,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
       videos: videosToProcess,
       bgNotifier: bgNotifier,
       saveFolder: saveFolder,
+      errorPrefix: errorPrefix,
     ));
   }
 

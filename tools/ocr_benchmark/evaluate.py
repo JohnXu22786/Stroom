@@ -1,0 +1,2592 @@
+#!/usr/bin/env python3
+"""Evaluate OCR predictions against the checked-in synthetic fixture manifest."""
+
+from __future__ import annotations
+
+import argparse
+import binascii
+import hashlib
+import json
+import math
+import re
+import struct
+import sys
+import unicodedata
+import zlib
+from pathlib import Path
+from typing import Any
+from urllib.parse import unquote
+
+
+REQUIRED_CATEGORIES = {
+    "chinese",
+    "english",
+    "dense_small_text",
+    "rotated",
+    "multi_column",
+    "table",
+    "formula",
+    "blank",
+    "low_contrast",
+}
+PNG_PRE_IDAT_CHUNKS = {
+    b"bKGD",
+    b"cHRM",
+    b"gAMA",
+    b"hIST",
+    b"pHYs",
+    b"sBIT",
+    b"sPLT",
+    b"sRGB",
+    b"tRNS",
+}
+OUTPUT_FORMATS = {"plain_text", "markdown", "table", "latex"}
+LITERAL_LATEX_DOLLAR = "\ue000"
+LATEX_GREEK_COMMANDS = {
+    "Gamma": "Γ",
+    "Delta": "Δ",
+    "Theta": "Θ",
+    "Lambda": "Λ",
+    "Xi": "Ξ",
+    "Pi": "Π",
+    "Sigma": "Σ",
+    "Upsilon": "Υ",
+    "Phi": "Φ",
+    "Psi": "Ψ",
+    "Omega": "Ω",
+    "alpha": "α",
+    "beta": "β",
+    "chi": "χ",
+    "delta": "δ",
+    "epsilon": "ε",
+    "eta": "η",
+    "gamma": "γ",
+    "iota": "ι",
+    "kappa": "κ",
+    "lambda": "λ",
+    "mu": "μ",
+    "nu": "ν",
+    "omega": "ω",
+    "omicron": "ο",
+    "phi": "φ",
+    "psi": "ψ",
+    "rho": "ρ",
+    "sigma": "σ",
+    "tau": "τ",
+    "theta": "θ",
+    "upsilon": "υ",
+    "varepsilon": "ϵ",
+    "varkappa": "ϰ",
+    "varphi": "ϕ",
+    "varpi": "ϖ",
+    "varrho": "ϱ",
+    "varsigma": "ς",
+    "vartheta": "ϑ",
+    "xi": "ξ",
+    "zeta": "ζ",
+}
+SECRET_SETTING_KEYS = {
+    "apikey",
+    "key",
+    "sessionkey",
+    "signingkey",
+    "passwd",
+    "passphrase",
+    "passcode",
+    "bearer",
+    "accesstoken",
+    "refreshtoken",
+    "token",
+    "authorization",
+    "secret",
+    "password",
+    "credential",
+    "credentials",
+}
+SUPERSCRIPT_DIGITS = str.maketrans(
+    {
+        "⁰": "0",
+        "¹": "1",
+        "²": "2",
+        "³": "3",
+        "⁴": "4",
+        "⁵": "5",
+        "⁶": "6",
+        "⁷": "7",
+        "⁸": "8",
+        "⁹": "9",
+    }
+)
+SUPERSCRIPT_DIGIT_SEQUENCE = re.compile(r"[⁰¹²³⁴⁵⁶⁷⁸⁹]+")
+OPAQUE_CREDENTIAL_PATTERNS = (
+    re.compile(r"\bsk-(?:proj-|ant-|live-|test-)?[A-Za-z0-9_-]{20,}\b", re.I),
+    re.compile(r"\bsk_(?:proj|ant|live|test)_[A-Za-z0-9_-]{20,}\b", re.I),
+    re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})\b"),
+    re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{15,}\b"),
+    re.compile(r"\bAIza[0-9A-Za-z_-]{35}\b"),
+    re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
+    re.compile(
+        r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b"
+    ),
+)
+PREDICTION_FIELDS = {
+    "fixture_id",
+    "text",
+    "elapsed_ms",
+    "returned_tokens",
+}
+COMPARISON_METRICS = {
+    "character_error_rate": ("value", "lower"),
+    "page_omission_rate": ("value", "lower"),
+    "reading_order_score": ("value", "higher"),
+    "table_fidelity": ("value", "higher"),
+    "formula_fidelity": ("value", "higher"),
+    "elapsed_time_ms": ("total_ms", "lower"),
+    "returned_tokens": ("total", "lower"),
+}
+
+
+class EvaluationError(ValueError):
+    """Raised when a fixture or prediction file is malformed."""
+
+
+def normalize_text(value: str) -> str:
+    """Normalize to NFC, LF line endings, and collapsed Unicode whitespace."""
+    line_normalized = value.replace("\r\n", "\n").replace("\r", "\n")
+    return " ".join(unicodedata.normalize("NFC", line_normalized).split())
+
+
+def _validate_unicode_scalar_text(value: str, fixture_id: str, field: str) -> None:
+    try:
+        value.encode("utf-8")
+    except UnicodeEncodeError as error:
+        raise EvaluationError(
+            f"{fixture_id}: {field} must contain valid Unicode scalar values"
+        ) from error
+
+
+def levenshtein_distance(left: str, right: str) -> int:
+    """Return code-point Levenshtein distance using two working rows."""
+    if len(left) < len(right):
+        left, right = right, left
+    previous = list(range(len(right) + 1))
+    for left_index, left_character in enumerate(left, start=1):
+        current = [left_index]
+        for right_index, right_character in enumerate(right, start=1):
+            current.append(
+                min(
+                    current[-1] + 1,
+                    previous[right_index] + 1,
+                    previous[right_index - 1]
+                    + (left_character != right_character),
+                )
+            )
+        previous = current
+    return previous[-1]
+
+
+def _validated_fixtures(manifest: dict[str, Any]) -> list[dict[str, Any]]:
+    fixtures = manifest.get("fixtures")
+    if not isinstance(fixtures, list) or not fixtures:
+        raise EvaluationError("manifest.fixtures must be a non-empty list")
+
+    seen: set[str] = set()
+    for fixture in fixtures:
+        if not isinstance(fixture, dict):
+            raise EvaluationError("each fixture must be an object")
+        fixture_id = fixture.get("id")
+        if not isinstance(fixture_id, str) or not fixture_id.strip():
+            raise EvaluationError("each fixture needs a non-empty string id")
+        if fixture_id in seen:
+            raise EvaluationError(f"duplicate fixture id: {fixture_id}")
+        seen.add(fixture_id)
+        if not isinstance(fixture.get("gold_text"), str):
+            raise EvaluationError(f"{fixture_id}: gold_text must be a string")
+        _validate_unicode_scalar_text(fixture["gold_text"], fixture_id, "gold_text")
+        categories = fixture.get("categories")
+        if (
+            not isinstance(categories, list)
+            or not categories
+            or any(not isinstance(category, str) for category in categories)
+        ):
+            raise EvaluationError(f"{fixture_id}: categories must be strings")
+        for field in ("table_text", "formula_text"):
+            if field in fixture and not isinstance(fixture[field], str):
+                raise EvaluationError(f"{fixture_id}: {field} must be a string")
+            if field in fixture:
+                _validate_unicode_scalar_text(fixture[field], fixture_id, field)
+            if field in fixture and not normalize_text(fixture[field]):
+                raise EvaluationError(f"{fixture_id}: {field} must not be empty")
+        reading_order = fixture.get("reading_order", [])
+        if not isinstance(reading_order, list) or any(
+            not isinstance(anchor, str)
+            for anchor in reading_order
+        ):
+            raise EvaluationError(
+                f"{fixture_id}: reading_order must contain non-empty strings"
+            )
+        for index, anchor in enumerate(reading_order):
+            _validate_unicode_scalar_text(
+                anchor, fixture_id, f"reading_order[{index}]"
+            )
+        if any(not normalize_text(anchor) for anchor in reading_order):
+            raise EvaluationError(
+                f"{fixture_id}: reading_order must contain non-empty strings"
+            )
+        normalized_anchors = [normalize_text(anchor) for anchor in reading_order]
+        if len(set(normalized_anchors)) != len(normalized_anchors):
+            raise EvaluationError(f"{fixture_id}: reading_order anchors must be unique")
+        normalized_gold = normalize_text(fixture["gold_text"])
+        if not normalized_gold and "blank" not in categories:
+            raise EvaluationError(f"{fixture_id}: gold_text must not be empty")
+        if normalized_gold and "blank" in categories:
+            raise EvaluationError(
+                f"{fixture_id}: blank fixture needs empty gold_text"
+            )
+        if any(anchor not in normalized_gold for anchor in normalized_anchors):
+            raise EvaluationError(
+                f"{fixture_id}: every reading_order anchor must occur in gold_text"
+            )
+        for field in ("table_text", "formula_text"):
+            if field in fixture and normalize_text(fixture[field]) not in normalized_gold:
+                raise EvaluationError(
+                    f"{fixture_id}: {field} must occur in gold_text"
+                )
+    return fixtures
+
+
+def _is_credential_like_setting_name(key: str) -> bool:
+    normalized_key = re.sub(r"[^a-z]", "", key.lower())
+    word_boundaries = re.sub(r"(?<=[A-Z])(?=[A-Z][a-z])", " ", key)
+    word_boundaries = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", word_boundaries)
+    key_parts = re.findall(r"[A-Za-z0-9]+", word_boundaries)
+    lower_key_parts = [part.lower() for part in key_parts]
+    return (
+        normalized_key in SECRET_SETTING_KEYS
+        or (
+            normalized_key.endswith("s")
+            and normalized_key[:-1] in SECRET_SETTING_KEYS
+        )
+        or (
+            len(key_parts) > 1
+            and re.fullmatch(r"key\d*", key_parts[-1], re.IGNORECASE) is not None
+        )
+        or (
+            any(part in {"token", "tokens"} for part in lower_key_parts)
+            and any(
+                part
+                in {
+                    "api",
+                    "access",
+                    "auth",
+                    "bearer",
+                    "client",
+                    "oauth",
+                    "refresh",
+                    "service",
+                    "session",
+                    "value",
+                    "secret",
+                    "credential",
+                    "credentials",
+                    "password",
+                    "response",
+                    "responses",
+                }
+                for part in lower_key_parts
+            )
+        )
+        or normalized_key.startswith("auth")
+        or "auth" in lower_key_parts
+        or normalized_key.endswith("token")
+        or any(
+            marker in normalized_key
+            for marker in (
+                "apikey",
+                "accesskey",
+                "authorization",
+                "cookie",
+                "credential",
+                "password",
+                "privatekey",
+                "secret",
+            )
+        )
+    )
+
+
+def _contains_credential_like_value(value: str) -> bool:
+    decoded_value = value
+    while True:
+        next_value = unquote(decoded_value)
+        if next_value == decoded_value:
+            break
+        decoded_value = next_value
+    if any(pattern.search(decoded_value) for pattern in OPAQUE_CREDENTIAL_PATTERNS):
+        return True
+    if re.search(r"(?i)\b(?:bearer|basic)\s+\S+", decoded_value):
+        return True
+    if re.search(r"(?i)://[^/:@\s]+:[^/@\s]+@", decoded_value):
+        return True
+    assignment_pattern = re.compile(
+        r"(?i)(?:^|[?&#\s,;])([^?&#=:\s][^?&#=]*?)\s*(?:=|:(?!//))\s*([^\s&#,;]+)"
+    )
+    return any(
+        _is_credential_like_setting_name(match.group(1).strip())
+        for match in assignment_pattern.finditer(decoded_value)
+    )
+
+
+def _validate_safe_settings(value: Any, path: str = "settings") -> None:
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if not isinstance(key, str):
+                raise EvaluationError(f"{path} keys must be strings")
+            if _is_credential_like_setting_name(key):
+                raise EvaluationError(
+                    f"{path} contains a credential-like field name"
+                )
+            _validate_safe_settings(child, f"{path}.{key}")
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            _validate_safe_settings(child, f"{path}[{index}]")
+    elif isinstance(value, str) and _contains_credential_like_value(value):
+        raise EvaluationError(f"{path} contains a credential-like value")
+    elif value is not None and not isinstance(value, (str, int, float, bool)):
+        raise EvaluationError(f"{path} contains a non-JSON value")
+    elif isinstance(value, float) and not math.isfinite(value):
+        raise EvaluationError(f"{path} contains a non-finite number")
+
+
+def _validated_run_and_predictions(
+    input_data: dict[str, Any], fixtures: list[dict[str, Any]]
+) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
+    run = input_data.get("run")
+    if not isinstance(run, dict):
+        raise EvaluationError("prediction input needs a run object")
+    if set(run) - {"model_id", "settings", "output_format"}:
+        raise EvaluationError(
+            "run may contain only model_id, settings, and output_format"
+        )
+    model_id = run.get("model_id")
+    settings = run.get("settings")
+    if not isinstance(model_id, str) or not model_id.strip():
+        raise EvaluationError("run.model_id must identify the evaluated model")
+    if _contains_credential_like_value(model_id):
+        raise EvaluationError("run.model_id contains a credential-like value")
+    if not isinstance(settings, dict):
+        raise EvaluationError("run.settings must contain the non-secret settings")
+    _validate_safe_settings(settings)
+    output_format = run.get("output_format", "plain_text")
+    if not isinstance(output_format, str) or output_format not in OUTPUT_FORMATS:
+        raise EvaluationError(
+            f"run.output_format must be one of {sorted(OUTPUT_FORMATS)}"
+        )
+
+    raw_predictions = input_data.get("predictions")
+    if not isinstance(raw_predictions, list):
+        raise EvaluationError("predictions must be a list")
+    fixture_ids = {fixture["id"] for fixture in fixtures}
+    by_id: dict[str, dict[str, Any]] = {}
+    for prediction in raw_predictions:
+        if not isinstance(prediction, dict):
+            raise EvaluationError("each prediction must be an object")
+        unknown = set(prediction) - PREDICTION_FIELDS
+        if unknown:
+            raise EvaluationError(
+                f"prediction contains unsupported fields: {sorted(unknown)}"
+            )
+        fixture_id = prediction.get("fixture_id")
+        if not isinstance(fixture_id, str) or fixture_id not in fixture_ids:
+            raise EvaluationError(f"unknown fixture_id: {fixture_id!r}")
+        if fixture_id in by_id:
+            raise EvaluationError(f"duplicate prediction for fixture: {fixture_id}")
+
+        text = prediction.get("text")
+        if text is not None and not isinstance(text, str):
+            raise EvaluationError(f"{fixture_id}: text must be a string or null")
+        if text is not None:
+            try:
+                text.encode("utf-8")
+            except UnicodeEncodeError as error:
+                raise EvaluationError(
+                    f"{fixture_id}: text must contain valid Unicode scalar values"
+                ) from error
+        elapsed_ms = prediction.get("elapsed_ms")
+        if elapsed_ms is not None:
+            if isinstance(elapsed_ms, bool) or not isinstance(
+                elapsed_ms, (int, float)
+            ):
+                raise EvaluationError(
+                    f"{fixture_id}: elapsed_ms must be a finite non-negative number"
+                )
+            try:
+                is_finite_elapsed = math.isfinite(elapsed_ms)
+            except OverflowError:
+                is_finite_elapsed = False
+            if not is_finite_elapsed or elapsed_ms < 0:
+                raise EvaluationError(
+                    f"{fixture_id}: elapsed_ms must be a finite non-negative number"
+                )
+        returned_tokens = prediction.get("returned_tokens")
+        if returned_tokens is not None and (
+            isinstance(returned_tokens, bool)
+            or not isinstance(returned_tokens, int)
+            or returned_tokens < 0
+        ):
+            raise EvaluationError(
+                f"{fixture_id}: returned_tokens must be a non-negative integer"
+            )
+        by_id[fixture_id] = {
+            "text": text,
+            "elapsed_ms": elapsed_ms,
+            "returned_tokens": returned_tokens,
+        }
+    return {
+        "model_id": model_id.strip(),
+        "settings": settings,
+        "output_format": output_format,
+    }, by_id
+
+
+def _split_pipe_cells(value: str) -> list[str]:
+    """Split table delimiters while keeping escaped pipes in their cells."""
+    cells = []
+    current = []
+    index = 0
+    while index < len(value):
+        if value[index] == "\\":
+            run_end = index
+            while run_end < len(value) and value[run_end] == "\\":
+                run_end += 1
+            slash_count = run_end - index
+            if run_end < len(value) and value[run_end] == "|":
+                current.extend("\\" * (slash_count // 2))
+                if slash_count % 2:
+                    current.append("|")
+                else:
+                    cells.append("".join(current))
+                    current = []
+                index = run_end + 1
+            else:
+                current.extend("\\" * slash_count)
+                index = run_end
+            continue
+        if value[index] == "|":
+            cells.append("".join(current))
+            current = []
+        else:
+            current.append(value[index])
+        index += 1
+    cells.append("".join(current))
+    return cells
+
+
+def _has_unescaped_trailing_pipe(value: str) -> bool:
+    if not value.endswith("|"):
+        return False
+    preceding_backslashes = 0
+    index = len(value) - 2
+    while index >= 0 and value[index] == "\\":
+        preceding_backslashes += 1
+        index -= 1
+    return preceding_backslashes % 2 == 0
+
+
+def _table_rows(
+    value: str,
+    expected_column_count: int | None = None,
+    *,
+    allow_tsv: bool = False,
+    matching_rows: set[tuple[str, ...]] | None = None,
+    known_prose_rows: set[tuple[str, ...]] | None = None,
+    allow_unframed_shape_without_context: bool = False,
+    allow_compact_pipe_row_without_context: bool = False,
+    allow_markdown_separator_rows: bool = False,
+    prefer_markdown_separator_rows: bool = False,
+) -> list[tuple[str, ...]]:
+    def parse_rows(
+        column_count: int | None,
+        *,
+        infer_optional_trailing_pipe: bool = False,
+        require_table_row_shape: bool = False,
+    ) -> list[tuple[str, ...]]:
+        lines = value.splitlines()
+
+        def has_prose_label(line: str) -> bool:
+            stripped = line.strip()
+            if stripped.startswith("|") or _has_unescaped_trailing_pipe(stripped):
+                return False
+            cells = tuple(
+                normalize_text(cell) for cell in _split_pipe_cells(stripped)
+            )
+            if cells in (matching_rows or set()):
+                return False
+            first_cell = _split_pipe_cells(stripped)[0].strip()
+            if re.match(r"[A-Za-z][A-Za-z0-9+.-]*://", first_cell):
+                return False
+            label_match = re.match(
+                r"(?P<label>[\w()./-]+(?:\s+[\w()./-]+)*)[:：]\s*(?:\S|$)",
+                first_cell,
+            )
+            return label_match is not None and any(
+                character.isalpha() for character in label_match.group("label")
+            )
+
+        def is_unframed_pipe_row(line: str) -> bool:
+            stripped = line.strip()
+            if (
+                "|" not in stripped
+                or stripped.startswith("|")
+                or _has_unescaped_trailing_pipe(stripped)
+                or has_prose_label(stripped)
+            ):
+                return False
+            cells = tuple(
+                normalize_text(cell) for cell in _split_pipe_cells(stripped)
+            )
+            if column_count is not None and len(cells) != column_count:
+                return False
+            return bool(re.search(r"\s\|\s", stripped)) or cells in (
+                matching_rows or set()
+            )
+
+        def is_table_context_row(line: str) -> bool:
+            stripped = line.strip()
+            if "|" not in stripped or has_prose_label(stripped):
+                return False
+            has_leading_pipe = stripped.startswith("|")
+            has_trailing_pipe = _has_unescaped_trailing_pipe(stripped)
+            raw_cells = _split_pipe_cells(stripped)
+            if has_leading_pipe:
+                raw_cells = raw_cells[1:]
+            if has_trailing_pipe:
+                raw_cells = raw_cells[:-1]
+            cells = tuple(normalize_text(cell) for cell in raw_cells)
+            if column_count is not None and len(cells) != column_count:
+                return False
+            is_separator = bool(cells) and all(
+                re.fullmatch(r":?-{3,}:?", cell) for cell in cells
+            )
+            return is_separator or (
+                len(cells) == column_count
+                and (
+                    (has_leading_pipe and has_trailing_pipe)
+                    or bool(re.search(r"\s\|\s", stripped))
+                    or cells in (matching_rows or set())
+                )
+            )
+
+        def has_pipe_table_context(line_index: int) -> bool:
+            return any(
+                0 <= neighbor_index < len(lines)
+                and (
+                    is_unframed_pipe_row(lines[neighbor_index])
+                    or is_table_context_row(lines[neighbor_index])
+                )
+                for neighbor_index in (line_index - 1, line_index + 1)
+            )
+
+        def has_table_context_on_both_sides(line_index: int) -> bool:
+            return (
+                line_index > 0
+                and line_index + 1 < len(lines)
+                and is_table_context_row(lines[line_index - 1])
+                and is_table_context_row(lines[line_index + 1])
+            )
+
+        def is_trailing_labeled_table_row(line_index: int) -> bool:
+            stripped = lines[line_index].strip()
+            if (
+                line_index != len(lines) - 1
+                or line_index == 0
+                or not has_prose_label(stripped)
+                or stripped.startswith("|")
+                or _has_unescaped_trailing_pipe(stripped)
+                or "|" not in stripped
+            ):
+                return False
+            cells = tuple(
+                normalize_text(cell) for cell in _split_pipe_cells(stripped)
+            )
+            previous = lines[line_index - 1].strip()
+            if (
+                cells in (known_prose_rows or set())
+                or (column_count is not None and len(cells) != column_count)
+                or len(cells) < 2
+                or not is_table_context_row(previous)
+            ):
+                return False
+            previous_cells = tuple(
+                normalize_text(cell) for cell in _split_pipe_cells(previous)
+            )
+            if previous.startswith("|"):
+                previous_cells = previous_cells[1:]
+            if _has_unescaped_trailing_pipe(previous):
+                previous_cells = previous_cells[:-1]
+            return len(previous_cells) == len(cells)
+
+        def is_one_sided_pipe_formula(line: str) -> bool:
+            stripped = line.strip()
+            return (
+                stripped.startswith("|")
+                and not _has_unescaped_trailing_pipe(stripped)
+                and re.match(
+                    r"^\|\s*[^|]+\|\s*(?:<=|>=|!=|=|<|>|≤|≥|≠|≈|"
+                    r"[+\-−*/×÷^])",
+                    stripped,
+                )
+                is not None
+            )
+
+        rows = []
+        for line_index, line in enumerate(lines):
+            if "|" not in line:
+                if allow_tsv and "\t" in line:
+                    cells = tuple(normalize_text(cell) for cell in line.split("\t"))
+                    if column_count is None or (
+                        len(cells) == column_count
+                        and cells in (matching_rows or set())
+                    ):
+                        # Annotated rows disambiguate TSV from tab-delimited prose.
+                        rows.append(cells)
+                continue
+            stripped = line.strip()
+            has_table_row_shape = (
+                stripped.startswith("|")
+                or _has_unescaped_trailing_pipe(stripped)
+                or re.search(r"\s\|\s", stripped)
+            )
+            has_context_on_both_sides = has_table_context_on_both_sides(line_index)
+            is_prose_label = (
+                has_prose_label(stripped)
+                and not has_context_on_both_sides
+                and not is_trailing_labeled_table_row(line_index)
+            )
+            raw_cells = _split_pipe_cells(stripped)
+            has_leading_pipe = stripped.startswith("|")
+            has_trailing_pipe = _has_unescaped_trailing_pipe(stripped)
+            if has_leading_pipe:
+                raw_cells = raw_cells[1:]
+            if has_trailing_pipe and (
+                has_leading_pipe
+                or infer_optional_trailing_pipe
+                or (
+                    column_count is not None
+                    and len(raw_cells) - 1 == column_count
+                )
+            ):
+                raw_cells = raw_cells[:-1]
+            cells = [normalize_text(cell) for cell in raw_cells]
+            if cells and all(re.fullmatch(r":?-{3,}:?", cell) for cell in cells):
+                if (
+                    allow_markdown_separator_rows
+                    and _is_markdown_separator_row_at(
+                        lines,
+                        line_index,
+                        column_count,
+                        matching_rows=matching_rows,
+                        prefer_markdown_separator=prefer_markdown_separator_rows,
+                    )
+                ):
+                    continue
+            normalized_cells = tuple(cells)
+            if (
+                not has_leading_pipe
+                and not has_trailing_pipe
+                and normalized_cells in (known_prose_rows or set())
+                and normalized_cells not in (matching_rows or set())
+            ):
+                continue
+            is_compact_pipe_row = (
+                allow_compact_pipe_row_without_context
+                and not has_leading_pipe
+                and not has_trailing_pipe
+                and "|" in stripped
+                and not re.search(r"\s\|\s", stripped)
+                and len(normalized_cells) == column_count
+            )
+            has_table_context = has_pipe_table_context(line_index) or (
+                has_context_on_both_sides
+            )
+            has_one_sided_pipe_table_context = (
+                has_context_on_both_sides
+            ) or any(
+                0 <= neighbor_index < len(lines)
+                and _is_table_separator_row(
+                    lines[neighbor_index], len(normalized_cells)
+                )
+                for neighbor_index in (line_index - 1, line_index + 1)
+            )
+            if (
+                require_table_row_shape
+                and not has_table_row_shape
+                and normalized_cells not in (matching_rows or set())
+                and not has_table_context
+                and not is_compact_pipe_row
+            ):
+                continue
+            if (
+                require_table_row_shape
+                and is_prose_label
+                and not (has_leading_pipe or has_trailing_pipe)
+                and normalized_cells not in (matching_rows or set())
+            ):
+                continue
+            if (
+                require_table_row_shape
+                and not (has_leading_pipe or has_trailing_pipe)
+                and normalized_cells not in (matching_rows or set())
+                and not has_table_context
+                and not (
+                    allow_unframed_shape_without_context
+                    and has_table_row_shape
+                )
+                and not is_compact_pipe_row
+            ):
+                continue
+            if (
+                require_table_row_shape
+                and has_leading_pipe != has_trailing_pipe
+                and normalized_cells not in (matching_rows or set())
+                and (
+                    is_one_sided_pipe_formula(stripped)
+                    or not (
+                        has_one_sided_pipe_table_context or has_table_context
+                    )
+                )
+            ):
+                continue
+            rows.append(normalized_cells)
+        return rows
+
+    if expected_column_count is not None:
+        return parse_rows(
+            expected_column_count, require_table_row_shape=True
+        )
+
+    rows = parse_rows(None, infer_optional_trailing_pipe=True)
+    if not rows:
+        return rows
+    column_count = max(len(row) for row in rows)
+    return parse_rows(column_count)
+
+
+def _is_markdown_separator_row_at(
+    lines: list[str],
+    line_index: int,
+    column_count: int | None,
+    *,
+    matching_rows: set[tuple[str, ...]] | None = None,
+    prefer_markdown_separator: bool = False,
+) -> bool:
+    if (
+        column_count is None
+        or line_index == 0
+        or not _is_table_separator_row(lines[line_index], column_count)
+    ):
+        return False
+    separator = lines[line_index].strip()
+    separator_cells = _split_pipe_cells(separator)
+    if separator.startswith("|"):
+        separator_cells = separator_cells[1:]
+    if _has_unescaped_trailing_pipe(separator):
+        separator_cells = separator_cells[:-1]
+    if (
+        not prefer_markdown_separator
+        and tuple(normalize_text(cell) for cell in separator_cells)
+        in (matching_rows or set())
+    ):
+        return False
+    if not _table_rows(
+        lines[line_index - 1], column_count, matching_rows=matching_rows
+    ):
+        return False
+    if _is_table_separator_row(lines[line_index - 1], column_count):
+        return False
+
+    for previous_index in range(line_index - 1, -1, -1):
+        if not lines[previous_index].strip():
+            break
+        if _is_table_separator_row(lines[previous_index], column_count):
+            return False
+        if not _table_rows(
+            lines[previous_index], column_count, matching_rows=matching_rows
+        ):
+            break
+    return True
+
+
+def _table_separator_column_count(value: str) -> int | None:
+    stripped = value.strip()
+    if "|" not in stripped:
+        return None
+    raw_cells = _split_pipe_cells(stripped)
+    if stripped.startswith("|"):
+        raw_cells = raw_cells[1:]
+    if _has_unescaped_trailing_pipe(stripped):
+        raw_cells = raw_cells[:-1]
+    cells = [normalize_text(cell) for cell in raw_cells]
+    if not cells or not all(re.fullmatch(r":?-{3,}:?", cell) for cell in cells):
+        return None
+    return len(cells)
+
+
+def _is_table_separator_row(value: str, expected_column_count: int) -> bool:
+    return _table_separator_column_count(value) == expected_column_count
+
+
+def _table_matches(
+    expected: str,
+    actual: str,
+    output_format: str,
+    formula_text: str | None = None,
+    gold_text: str | None = None,
+) -> bool:
+    allow_tsv = output_format == "plain_text"
+    expected_rows = _table_rows(expected, allow_tsv=allow_tsv)
+    if formula_text:
+        canonical_formula = _canonical_formula(formula_text, output_format)
+        strip_markdown_markup = output_format in {"markdown", "table"}
+
+        def matches_formula_row(value: str) -> bool:
+            return canonical_formula == _canonical_formula(
+                value,
+                output_format,
+                strip_markdown_markup=strip_markdown_markup,
+                formula_text=formula_text,
+            )
+
+        def is_formula_line(value: str) -> bool:
+            stripped = value.strip()
+            if matches_formula_row(stripped):
+                return True
+            if stripped.startswith("|") and _has_unescaped_trailing_pipe(stripped):
+                parsed_row = _table_rows(stripped, 1)
+                return len(parsed_row) == 1 and matches_formula_row(
+                    parsed_row[0][0]
+                )
+            return False
+
+    if not expected_rows:
+        candidates = [actual]
+        if formula_text:
+            table_lines = actual.splitlines()
+            for line_index, line in enumerate(table_lines):
+                if is_formula_line(line):
+                    candidates.append(
+                        "\n".join(
+                            table_lines[:line_index] + table_lines[line_index + 1 :]
+                        )
+                    )
+                    break
+        normalized_expected = normalize_text(expected)
+        expected_row = (normalized_expected,)
+        for candidate in candidates:
+            if normalized_expected == normalize_text(candidate):
+                return True
+
+            candidate_rows = []
+            for line in candidate.splitlines():
+                if not line.strip():
+                    continue
+                rows = _table_rows(
+                    line,
+                    1,
+                    matching_rows={expected_row},
+                    allow_markdown_separator_rows=True,
+                    prefer_markdown_separator_rows=(
+                        output_format in {"markdown", "table"}
+                    ),
+                )
+                if rows:
+                    candidate_rows.extend(rows)
+                elif output_format in {"markdown", "table"} and (
+                    _is_table_separator_row(line, 1)
+                ):
+                    continue
+                else:
+                    break
+            else:
+                if candidate_rows == [expected_row]:
+                    return True
+        return False
+    expected_column_count = max(len(row) for row in expected_rows)
+    known_prose_rows = set()
+    if gold_text is not None:
+        for line in gold_text.splitlines():
+            stripped = line.strip()
+            raw_cells = _split_pipe_cells(stripped)
+            if stripped.startswith("|"):
+                raw_cells = raw_cells[1:]
+            if _has_unescaped_trailing_pipe(stripped):
+                raw_cells = raw_cells[:-1]
+            if len(raw_cells) > 1:
+                prose_row = tuple(normalize_text(cell) for cell in raw_cells)
+                if prose_row not in expected_rows:
+                    known_prose_rows.add(prose_row)
+    if formula_text:
+        table_lines = actual.splitlines()
+        for line_index, line in enumerate(table_lines):
+            if is_formula_line(line):
+                candidate_lines = table_lines[:line_index] + table_lines[
+                    line_index + 1 :
+                ]
+                candidate_rows = _table_rows(
+                    "\n".join(candidate_lines),
+                    expected_column_count,
+                    allow_tsv=allow_tsv,
+                    matching_rows=set(expected_rows),
+                    known_prose_rows=known_prose_rows,
+                    allow_markdown_separator_rows=True,
+                    prefer_markdown_separator_rows=(
+                        output_format in {"markdown", "table"}
+                    ),
+                )
+                if candidate_rows == expected_rows:
+                    table_lines = candidate_lines
+                    break
+        actual = "\n".join(table_lines)
+    actual_rows = _table_rows(
+        actual,
+        expected_column_count,
+        allow_tsv=allow_tsv,
+        matching_rows=set(expected_rows),
+        known_prose_rows=known_prose_rows,
+        allow_markdown_separator_rows=True,
+        prefer_markdown_separator_rows=(
+            output_format in {"markdown", "table"}
+        ),
+    )
+    return actual_rows == expected_rows
+
+
+def _unmatched_latex_math_delimiters(value: str) -> list[tuple[int, int]]:
+    closing_for = {"(": ")", "[": "]"}
+    stack = []
+    unmatched = []
+    for match in re.finditer(r"\\(\(|\)|\[|\])", value):
+        preceding_backslashes = len(value[: match.start()]) - len(
+            value[: match.start()].rstrip("\\")
+        )
+        if preceding_backslashes % 2:
+            continue
+        delimiter = match.group(1)
+        if delimiter in closing_for:
+            stack.append((closing_for[delimiter], match.start(), match.end()))
+        elif stack and stack[-1][0] == delimiter:
+            stack.pop()
+        else:
+            unmatched.append((match.start(), match.end()))
+    unmatched.extend((start, end) for _, start, end in stack)
+    return unmatched
+
+
+def _strip_latex_markup(value: str) -> str:
+    def compact_math(match: re.Match[str]) -> str:
+        return re.sub(r"\s+", "", match.group(1))
+
+    commands = {
+        "int": "∫",
+        "pi": "π",
+        "cdot": "·",
+        "times": "×",
+    }
+    text = re.sub(
+        r"\\(int|pi|cdot|times)(?![A-Za-z])\s*",
+        lambda match: commands[match.group(1)],
+        value,
+    )
+    text = re.sub(
+        r"\\([A-Za-z]+)",
+        lambda match: LATEX_GREEK_COMMANDS.get(match.group(1), match.group(0)),
+        text,
+    )
+    text = text.replace(r"\$", LITERAL_LATEX_DOLLAR)
+    text = re.sub(r"\\\((.+?)\\\)", compact_math, text, flags=re.DOTALL)
+    text = re.sub(r"\\\[(.+?)\\\]", compact_math, text, flags=re.DOTALL)
+    text = re.sub(
+        r"(?<!\$)\$\$(.+?)\$\$(?!\$)", compact_math, text, flags=re.DOTALL
+    )
+    text = re.sub(
+        r"(?<!\\)(?<!\$)\$(?!\$)([^$]+)\$(?!\$)(?=$|[^\w$]|[\u3400-\u9fff])",
+        compact_math,
+        text,
+    )
+    text = re.sub(r"\\([#$%&_{}])", r"\1", text)
+    text = re.sub(r"\\(?:,|;|:|!|quad|qquad)\s*", " ", text)
+    text = re.sub(r"\\(?:left|right)(?![A-Za-z])\s*", "", text)
+    text = re.sub(
+        r"\\(?:mathit|mathrm|operatorname|text)\s*\{([^{}]*)\}",
+        r"\1",
+        text,
+    )
+    fraction_command = re.compile(r"\\(?:dfrac|tfrac|frac)(?![A-Za-z])\s*")
+    root_command = re.compile(r"\\sqrt\s*(?:\[(\d+)\])?\s*")
+    indexed_root_symbols = {"3": "∛", "4": "∜"}
+
+    def has_binary_operator(operand: str) -> bool:
+        return re.search(r"\S\s*[-−+*/·×=<>≤≥]\s*\S", operand) is not None
+
+    def is_fully_parenthesized(operand: str) -> bool:
+        if not operand.startswith("(") or not operand.endswith(")"):
+            return False
+
+        depth = 0
+        index = 0
+        while index < len(operand):
+            if operand[index] == "\\":
+                index += 2
+                continue
+            if operand[index] == "(":
+                depth += 1
+            elif operand[index] == ")":
+                depth -= 1
+                if depth < 0:
+                    return False
+                if depth == 0:
+                    return index == len(operand) - 1
+            index += 1
+        return False
+
+    def fraction_text(numerator: str, denominator: str) -> str:
+        def group_if_compound(operand: str) -> str:
+            operand = operand.strip()
+            if has_binary_operator(operand) and not is_fully_parenthesized(
+                operand
+            ):
+                return f"({operand})"
+            return operand
+
+        numerator = group_if_compound(numerator)
+        denominator = group_if_compound(denominator)
+        return f"{numerator}/{denominator}"
+
+    def braced_group(value: str, opening_index: int) -> tuple[str, int] | None:
+        if opening_index >= len(value) or value[opening_index] != "{":
+            return None
+        depth = 1
+        index = opening_index + 1
+        while index < len(value):
+            if value[index] == "\\":
+                index += 2
+                continue
+            if value[index] == "{":
+                depth += 1
+            elif value[index] == "}":
+                depth -= 1
+                if depth == 0:
+                    return value[opening_index + 1 : index], index + 1
+            index += 1
+        return None
+
+    def root_operand(value: str, start_index: int) -> tuple[str, int] | None:
+        group = braced_group(value, start_index)
+        if group is not None:
+            return group
+        if start_index >= len(value) or value[start_index] in "{}":
+            return None
+
+        fraction_match = fraction_command.match(value, start_index)
+        if fraction_match is not None:
+            numerator_group = braced_group(value, fraction_match.end())
+            if numerator_group is not None:
+                next_index = numerator_group[1]
+                while next_index < len(value) and value[next_index].isspace():
+                    next_index += 1
+                denominator_group = braced_group(value, next_index)
+                if denominator_group is not None:
+                    end_index = denominator_group[1]
+                    return value[start_index:end_index], end_index
+
+        end_index = start_index + 1
+        if value[start_index] == "\\":
+            if end_index >= len(value):
+                return None
+            if value[end_index].isalpha():
+                while end_index < len(value) and value[end_index].isalpha():
+                    end_index += 1
+            else:
+                end_index += 1
+        return value[start_index:end_index], end_index
+
+    def replace_fractions(value: str) -> str:
+        output = []
+        index = 0
+        while index < len(value):
+            match = fraction_command.match(value, index)
+            if match is None:
+                output.append(value[index])
+                index += 1
+                continue
+            numerator_group = braced_group(value, match.end())
+            if numerator_group is None:
+                output.append(value[index])
+                index += 1
+                continue
+            numerator, next_index = numerator_group
+            while next_index < len(value) and value[next_index].isspace():
+                next_index += 1
+            denominator_group = braced_group(value, next_index)
+            if denominator_group is None:
+                output.append(value[index])
+                index += 1
+                continue
+            denominator, end_index = denominator_group
+            output.append(
+                fraction_text(
+                    replace_fractions(numerator),
+                    replace_fractions(denominator),
+                )
+            )
+            index = end_index
+        return "".join(output)
+
+    def replace_roots(value: str) -> str:
+        output = []
+        index = 0
+        while index < len(value):
+            match = root_command.match(value, index)
+            if match is None:
+                output.append(value[index])
+                index += 1
+                continue
+
+            root_symbol = (
+                "√"
+                if match.group(1) is None
+                else indexed_root_symbols.get(match.group(1))
+            )
+            operand_group = root_operand(value, match.end())
+            if root_symbol is None or operand_group is None:
+                output.append(value[index : match.end()])
+                index = match.end()
+                continue
+
+            operand, end_index = operand_group
+            operand = replace_roots(replace_fractions(operand)).strip()
+            if has_binary_operator(operand) and not is_fully_parenthesized(
+                operand
+            ):
+                operand = f"({operand})"
+            output.append(f"{root_symbol}{operand}")
+            index = end_index
+        return "".join(output)
+
+    while True:
+        previous = text
+        text = replace_roots(text)
+        text = replace_fractions(text)
+        if text == previous:
+            break
+
+    def normalize_index(match: re.Match[str]) -> str:
+        operator, operand = match.groups()
+        if has_binary_operator(operand) and not (
+            operand.startswith("(") and operand.endswith(")")
+        ):
+            operand = f"({operand})"
+        return f"{operator}{operand}"
+
+    return re.sub(r"([_^])\{([^{}]+)\}", normalize_index, text)
+
+
+def _normalize_superscript_digits(value: str) -> str:
+    return SUPERSCRIPT_DIGIT_SEQUENCE.sub(
+        lambda match: "^" + match.group().translate(SUPERSCRIPT_DIGITS), value
+    )
+
+
+def _strip_markdown_inline_formatting(
+    value: str, formula_text: str | None = None
+) -> str:
+    value = re.sub(r"`(.+?)`", r"\1", value)
+
+    def delimiter_is_escaped(position: int) -> bool:
+        backslash_count = 0
+        position -= 1
+        while position >= 0 and value[position] == "\\":
+            backslash_count += 1
+            position -= 1
+        return backslash_count % 2 == 1
+
+    def strip_emphasis(match: re.Match[str]) -> str:
+        marker, content = match.groups()
+        if delimiter_is_escaped(match.start()) or delimiter_is_escaped(
+            match.end() - len(marker)
+        ):
+            return match.group()
+        if marker != "*" or formula_text is None:
+            return content
+
+        formula_parts = re.split(r"(?<!\\)\*", formula_text)
+        if len(formula_parts) < 3:
+            return content
+
+        compact_content = "".join(content.split())
+        before = value[: match.start()].rstrip()
+        after = value[match.end() :].lstrip()
+        for part_index in range(1, len(formula_parts) - 1):
+            if "".join(formula_parts[part_index].split()) != compact_content:
+                continue
+            previous_operand = "".join(formula_parts[part_index - 1].split())
+            next_operand = "".join(formula_parts[part_index + 1].split())
+            if (
+                previous_operand
+                and next_operand
+                and before.endswith(previous_operand[-1])
+                and after.startswith(next_operand[0])
+            ):
+                return match.group()
+        return content
+
+    value = re.sub(
+        r"(\*\*|~~|\*)(?=\S)(.+?)(?<=\S)\1", strip_emphasis, value
+    )
+
+    def strip_underscore_emphasis(match: re.Match[str]) -> str:
+        marker, content = match.groups()
+        if delimiter_is_escaped(match.start()) or delimiter_is_escaped(
+            match.end() - len(marker)
+        ):
+            return match.group()
+        return content
+
+    return re.sub(
+        r"(?<!\w)(__|_)(?!\s)(.+?)(?<!\s)\1(?!\w)",
+        strip_underscore_emphasis,
+        value,
+    )
+
+
+def _strip_markdown_list_marker(value: str) -> str:
+    return re.sub(r"^\s*(?:[-+*]|\d+[.)])\s+", "", value)
+
+
+def _strip_markdown_blockquote_marker(value: str) -> str:
+    return re.sub(r"^\s*>+\s?", "", value)
+
+
+def _compact_annotated_formula(
+    value: str, formula_text: str, output_format: str
+) -> str:
+    normalized_formula = _plain_text_for_cer(formula_text, output_format)
+    compact_formula = "".join(normalized_formula.split())
+    if not compact_formula:
+        return value
+
+    positions = [
+        index for index, character in enumerate(value) if not character.isspace()
+    ]
+    compact_value = "".join(value[index] for index in positions)
+    if compact_value.count(compact_formula) != 1:
+        return value
+
+    start = compact_value.index(compact_formula)
+    first_character = positions[start]
+    last_character = positions[start + len(compact_formula) - 1]
+    prefix = re.sub(
+        r"(?<=[\u3400-\u9fff])\s+$", "", value[:first_character]
+    )
+    suffix = re.sub(
+        r"^\s+(?=[\u3400-\u9fff])", "", value[last_character + 1 :]
+    )
+    return prefix + compact_formula + suffix
+
+
+def _plain_text_for_cer(
+    value: str,
+    output_format: str,
+    table_text: str | None = None,
+    formula_text: str | None = None,
+    *,
+    gold_text: str | None = None,
+    strip_markdown_markup: bool = False,
+) -> str:
+    text = value
+    if output_format == "plain_text" and table_text:
+        annotated_table_rows = set(_table_rows(table_text))
+        if annotated_table_rows:
+            expected_column_count = max(map(len, annotated_table_rows))
+            known_prose_rows = set()
+            for line in (gold_text or "").splitlines():
+                parsed_rows = _table_rows(
+                    line,
+                    expected_column_count,
+                    matching_rows=annotated_table_rows,
+                    allow_unframed_shape_without_context=True,
+                    allow_compact_pipe_row_without_context=True,
+                )
+                if parsed_rows and parsed_rows[0] not in annotated_table_rows:
+                    known_prose_rows.add(parsed_rows[0])
+            lines = []
+            source_lines = (
+                text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+            )
+            parsed_rows_by_index = {}
+            table_row_indices = set()
+            separator_row_indices = {
+                index
+                for index in range(len(source_lines))
+                if _is_markdown_separator_row_at(
+                    source_lines,
+                    index,
+                    expected_column_count,
+                    matching_rows=annotated_table_rows,
+                )
+            }
+            structural_table_context_indices = {
+                neighbor
+                for index in separator_row_indices
+                for neighbor in (index - 1, index + 1)
+                if 0 <= neighbor < len(source_lines)
+            }
+            for index, line in enumerate(source_lines):
+                if index in separator_row_indices:
+                    continue
+                parsed_rows = _table_rows(
+                    line,
+                    expected_column_count,
+                    matching_rows=annotated_table_rows,
+                    allow_unframed_shape_without_context=True,
+                    allow_compact_pipe_row_without_context=True,
+                )
+                normalized_row = next(
+                    (
+                        row
+                        for row in parsed_rows
+                        if len(row) == expected_column_count
+                    ),
+                    None,
+                )
+                if normalized_row is not None:
+                    parsed_rows_by_index[index] = normalized_row
+                    if (
+                        normalized_row in annotated_table_rows
+                        or (
+                            normalized_row not in known_prose_rows
+                            and index in structural_table_context_indices
+                        )
+                    ):
+                        table_row_indices.add(index)
+            while True:
+                additional_table_rows = {
+                    index
+                    for index, row in parsed_rows_by_index.items()
+                    if index not in table_row_indices
+                    and row not in known_prose_rows
+                    and any(
+                        neighbor in table_row_indices
+                        for neighbor in (index - 1, index + 1)
+                    )
+                }
+                if not additional_table_rows:
+                    break
+                table_row_indices.update(additional_table_rows)
+            for index, line in enumerate(source_lines):
+                if index in separator_row_indices:
+                    continue
+                if index in table_row_indices:
+                    line = " ".join(parsed_rows_by_index[index])
+                lines.append(line)
+            text = "\n".join(lines)
+    if output_format in {"markdown", "table"}:
+        source_lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+        annotated_table_rows = set(_table_rows(table_text or ""))
+        annotated_table_row_indices = set()
+        for index, line in enumerate(source_lines):
+            parsed_rows = _table_rows(line)
+            if parsed_rows and parsed_rows[0] in annotated_table_rows:
+                annotated_table_row_indices.add(index)
+        separator_rows = {}
+        for index, line in enumerate(source_lines):
+            column_count = _table_separator_column_count(line)
+            if column_count is not None and _is_markdown_separator_row_at(
+                source_lines,
+                index,
+                column_count,
+                matching_rows=annotated_table_rows,
+                prefer_markdown_separator=strip_markdown_markup,
+            ):
+                separator_rows[index] = column_count
+        table_rows = set()
+        for separator, column_count in separator_rows.items():
+            if separator > 0:
+                preceding_rows = _table_rows(
+                    source_lines[separator - 1],
+                    column_count,
+                    matching_rows=annotated_table_rows,
+                )
+            else:
+                preceding_rows = []
+            if any(len(row) == column_count for row in preceding_rows):
+                table_rows.add(separator - 1)
+            row = separator + 1
+            while (
+                row < len(source_lines)
+                and source_lines[row].strip()
+            ):
+                parsed_rows = _table_rows(
+                    source_lines[row],
+                    column_count,
+                    matching_rows=annotated_table_rows,
+                    allow_compact_pipe_row_without_context=True,
+                )
+                if not any(
+                    len(parsed_row) == column_count
+                    for parsed_row in parsed_rows
+                ):
+                    break
+                table_rows.add(row)
+                row += 1
+        lines = []
+        for index, line in enumerate(source_lines):
+            if index in separator_rows:
+                continue
+            if strip_markdown_markup:
+                line = re.sub(r"^\s{0,3}#{1,6}\s+", "", line)
+                line = _strip_markdown_blockquote_marker(line)
+                line = _strip_markdown_list_marker(line)
+                line = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", line)
+                line = _strip_markdown_inline_formatting(line, formula_text)
+            if index in table_rows or index in annotated_table_row_indices:
+                expected_column_count = (
+                    max(map(len, annotated_table_rows))
+                    if annotated_table_rows
+                    else None
+                )
+                parsed_rows = _table_rows(
+                    line,
+                    expected_column_count,
+                    matching_rows=annotated_table_rows,
+                    allow_compact_pipe_row_without_context=True,
+                )
+                if parsed_rows:
+                    line = " ".join(parsed_rows[0])
+            lines.append(line)
+        text = "\n".join(lines)
+    if output_format in {"markdown", "table", "latex"}:
+        text = _strip_latex_markup(text).replace(LITERAL_LATEX_DOLLAR, "$")
+    text = _normalize_superscript_digits(text)
+    text = normalize_text(text)
+    if formula_text:
+        text = _compact_annotated_formula(text, formula_text, output_format)
+    return text
+
+
+def _normalized_formula_text(
+    value: str,
+    output_format: str,
+    *,
+    strip_markdown_markup: bool = False,
+    formula_text: str | None = None,
+) -> str:
+    text = value
+    if output_format in {"markdown", "table"} and strip_markdown_markup:
+        normalized_lines = (
+            text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+        )
+        text = "\n".join(
+            _strip_markdown_list_marker(_strip_markdown_blockquote_marker(line))
+            for line in normalized_lines
+        )
+        text = _strip_markdown_inline_formatting(text, formula_text)
+    text = normalize_text(text)
+    if output_format in {"markdown", "table", "latex"}:
+        text = _strip_latex_markup(text)
+
+    return _normalize_superscript_digits(text)
+
+
+def _canonical_formula(
+    value: str,
+    output_format: str,
+    *,
+    strip_markdown_markup: bool = False,
+    formula_text: str | None = None,
+) -> str:
+    text = _normalized_formula_text(
+        value,
+        output_format,
+        strip_markdown_markup=strip_markdown_markup,
+        formula_text=formula_text,
+    )
+    return re.sub(r"\s+", "", text)
+
+
+def _formula_span_matches(
+    expected: str,
+    actual: str,
+    output_format: str,
+    unmatched_math_delimiters: list[tuple[int, int]],
+) -> bool:
+    if not expected:
+        return False
+    pattern_parts = []
+    for character in expected:
+        if character in {"$", LITERAL_LATEX_DOLLAR}:
+            pattern_parts.append(r"(?:\$|\ue000)")
+        else:
+            pattern_parts.append(re.escape(character))
+    pattern = re.compile(r"\s*".join(pattern_parts))
+    left_operators = set("+-−*/·×÷^_=<>≤≥∫∮∑∏∂∇√∞")
+    right_operators = left_operators
+    math_word_operators = {
+        "add",
+        "and",
+        "divided",
+        "minus",
+        "mod",
+        "modulo",
+        "multiplied",
+        "or",
+        "over",
+        "plus",
+        "subtract",
+        "times",
+    }
+    written_number_words = {
+        "zero",
+        "one",
+        "two",
+        "three",
+        "four",
+        "five",
+        "six",
+        "seven",
+        "eight",
+        "nine",
+        "ten",
+        "eleven",
+        "twelve",
+        "thirteen",
+        "fourteen",
+        "fifteen",
+        "sixteen",
+        "seventeen",
+        "eighteen",
+        "nineteen",
+        "twenty",
+        "thirty",
+        "forty",
+        "fifty",
+        "sixty",
+        "seventy",
+        "eighty",
+        "ninety",
+        "hundred",
+        "thousand",
+        "million",
+        "billion",
+        "trillion",
+    }
+    math_functions = {
+        "arccos",
+        "arcsin",
+        "arctan",
+        "cos",
+        "cosh",
+        "coprod",
+        "cot",
+        "csc",
+        "exp",
+        "inf",
+        "infty",
+        "int",
+        "iint",
+        "iiint",
+        "lim",
+        "ln",
+        "log",
+        "max",
+        "min",
+        "nabla",
+        "oint",
+        "oiint",
+        "partial",
+        "prod",
+        "sec",
+        "sin",
+        "sinh",
+        "sqrt",
+        "sum",
+        "sup",
+        "tan",
+        "tanh",
+    }
+    greek_symbols = set(LATEX_GREEK_COMMANDS) | {"pi"}
+    latex_math_formatting_commands = {
+        "boldsymbol",
+        "mathbb",
+        "mathbf",
+        "mathcal",
+        "mathfrak",
+        "mathit",
+        "mathrm",
+        "mathsf",
+        "mathtt",
+        "operatorname",
+        "text",
+    }
+
+    def is_cjk_text_character(character: str) -> bool:
+        return "\u3400" <= character <= "\u9fff"
+
+    def is_formula_term(token: str) -> bool:
+        latex_command = re.match(r"\\([A-Za-z]+)", token)
+        function_name = latex_command.group(1) if latex_command else token
+        return (
+            any(character.isdigit() for character in token)
+            or any(character in left_operators for character in token)
+            or (
+                len(token) == 1
+                and token.isalpha()
+                and not is_cjk_text_character(token)
+            )
+            or function_name in math_functions
+            or function_name in greek_symbols
+            or function_name in latex_math_formatting_commands
+        )
+
+    def has_adjacent_formula_term(value: str, *, from_right: bool) -> bool:
+        tokens = value.split()
+        if not tokens:
+            return False
+        if not from_right:
+            function_call = re.search(
+                r"(\\?[A-Za-z][A-Za-z0-9]*)\s*\($", value
+            )
+            if function_call and is_formula_term(function_call.group(1)):
+                return True
+        token = tokens[0] if from_right else tokens[-1]
+        if not from_right and (
+            re.fullmatch(r"\d+[.)]", token)
+            or re.fullmatch(r"第\d+[\u3400-\u9fff]+", token)
+        ):
+            return False
+        has_trailing_punctuation = unicodedata.category(token[-1]).startswith("P")
+        token_without_punctuation = (
+            token[:-1] if has_trailing_punctuation else token
+        )
+        if token_without_punctuation.casefold() in math_word_operators:
+            if len(tokens) == 1:
+                return True
+            adjacent_token = tokens[1] if from_right else tokens[-2]
+            if token_without_punctuation.casefold() not in {"and", "or"}:
+                return True
+            if (
+                from_right
+                and adjacent_token.casefold() == "a"
+                and len(tokens) > 2
+                and not is_formula_term(tokens[2].rstrip(".,;:!?"))
+            ):
+                return False
+            return (
+                is_formula_term(adjacent_token)
+                or adjacent_token.rstrip(".,;:!?").casefold()
+                in written_number_words
+            )
+        if (
+            not from_right
+            and len(tokens) > 1
+            and token.endswith((":", "："))
+            and not is_formula_term(tokens[-2])
+            and re.fullmatch(
+                r"[A-Za-z][A-Za-z0-9]*-\d+[A-Za-z0-9]*",
+                token_without_punctuation,
+            )
+        ):
+            return False
+        if not from_right and re.fullmatch(
+            r"(?i)(?:appendix|chapter|equation|figure|page|part|problem|question|"
+            r"section|table)-\d+[a-z]?",
+            token_without_punctuation,
+        ):
+            return False
+        date_token = token_without_punctuation.strip("()[]{}")
+        is_numeric_date = (
+            re.fullmatch(
+                r"(?:\d{4}[-/.]\d{1,2}[-/.]\d{1,2}|"
+                r"\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4})",
+                date_token,
+            )
+            is not None
+        )
+        is_date_in_prose = is_numeric_date and (
+            len(tokens) == 1
+            or (
+                from_right
+                and not is_formula_term(tokens[1])
+            )
+            or (
+                not from_right
+                and not is_formula_term(tokens[-2])
+            )
+        )
+        if (
+            not from_right
+            and (
+                is_date_in_prose
+                or (
+                    len(tokens) > 1
+                    and not is_formula_term(tokens[-2])
+                    and token_without_punctuation.isdigit()
+                )
+            )
+        ):
+            return False
+        if (
+            from_right
+            and len(tokens) > 1
+            and re.fullmatch(r"\d+(?:[.,]\d+)?", token_without_punctuation)
+            and not is_formula_term(tokens[1])
+        ):
+            return False
+        if from_right and is_date_in_prose:
+            return False
+        if not is_formula_term(token):
+            return False
+        if not from_right and len(token) == 1 and token.isalpha() and len(tokens) > 1:
+            return is_formula_term(tokens[-2])
+        return True
+
+    for match in pattern.finditer(actual):
+        before = actual[: match.start()]
+        after = actual[match.end() :]
+        if output_format in {"markdown", "table", "latex"}:
+            trimmed_before = before.rstrip()
+            trimmed_after = after.lstrip()
+            if trimmed_before.endswith("$") or trimmed_after.startswith("$"):
+                continue
+            after_start = len(actual) - len(trimmed_after)
+            if any(
+                end == len(trimmed_before) or start == after_start
+                for start, end in unmatched_math_delimiters
+            ):
+                continue
+        if before:
+            previous = before[-1]
+            if (
+                not previous.isspace()
+                and (previous.isalnum() or previous in "^_")
+                and not is_cjk_text_character(previous)
+            ):
+                continue
+            previous_non_space = before.rstrip()[-1:]
+            if previous_non_space in left_operators:
+                continue
+            if has_adjacent_formula_term(before.rstrip(), from_right=False):
+                continue
+        if after:
+            if re.match(r"[.,]\d", after):
+                continue
+            following = after[0]
+            if (
+                not following.isspace()
+                and (following.isalnum() or following in "^_")
+                and not is_cjk_text_character(following)
+            ):
+                continue
+            next_non_space = after.lstrip()[:1]
+            if next_non_space in right_operators:
+                continue
+            if has_adjacent_formula_term(after.lstrip(), from_right=True):
+                continue
+        return True
+    return False
+
+
+def _exact_snippet_metric(
+    fixtures: list[dict[str, Any]],
+    predictions_by_id: dict[str, dict[str, Any]],
+    field: str,
+    output_format: str,
+) -> dict[str, Any]:
+    eligible = [fixture for fixture in fixtures if field in fixture]
+    correct = 0
+    pending = 0
+    for fixture in eligible:
+        prediction = predictions_by_id.get(fixture["id"])
+        text = None if prediction is None else prediction["text"]
+        if text is None:
+            pending += 1
+            continue
+        if field == "table_text":
+            matches = _table_matches(
+                fixture[field],
+                text,
+                output_format,
+                formula_text=fixture.get("formula_text"),
+                gold_text=fixture.get("gold_text"),
+            )
+        else:
+            expected = _canonical_formula(fixture[field], output_format)
+            actual = _normalized_formula_text(
+                text,
+                output_format,
+                strip_markdown_markup=True,
+                formula_text=fixture[field],
+            )
+            unmatched_math_delimiters = (
+                _unmatched_latex_math_delimiters(actual)
+                if output_format in {"markdown", "table", "latex"}
+                else []
+            )
+            matches = _formula_span_matches(
+                expected,
+                actual,
+                output_format,
+                unmatched_math_delimiters,
+            )
+        if matches:
+            correct += 1
+
+    if not eligible:
+        value = None
+        status = "not_applicable"
+    elif pending:
+        value = None
+        status = "pending"
+    else:
+        value = correct / len(eligible)
+        status = "complete"
+    return {
+        "value": value,
+        "correct": correct,
+        "eligible": len(eligible),
+        "pending": pending,
+        "status": status,
+    }
+
+
+def _reading_order_metric(
+    fixtures: list[dict[str, Any]],
+    predictions_by_id: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    eligible = [
+        fixture
+        for fixture in fixtures
+        if len(fixture.get("reading_order", [])) >= 2
+    ]
+    expected_pairs = 0
+    correct_pairs = 0
+    pending_pages = 0
+    for fixture in eligible:
+        anchors = [normalize_text(anchor) for anchor in fixture["reading_order"]]
+        expected_pairs += len(anchors) * (len(anchors) - 1) // 2
+        prediction = predictions_by_id.get(fixture["id"])
+        text = None if prediction is None else prediction["text"]
+        if text is None:
+            pending_pages += 1
+            continue
+        normalized_prediction = normalize_text(text)
+        # Choose one canonical occurrence per anchor so every pair is evaluated
+        # from the same assignment, even when the prediction repeats anchors.
+        positions = [
+            normalized_prediction.find(anchor)
+            for anchor in anchors
+        ]
+        for left_index, left_position in enumerate(positions):
+            for right_position in positions[left_index + 1 :]:
+                if left_position >= 0 and right_position >= 0:
+                    if left_position < right_position:
+                        correct_pairs += 1
+
+    if not eligible:
+        value = None
+        status = "not_applicable"
+    elif pending_pages:
+        value = None
+        status = "pending"
+    else:
+        value = correct_pairs / expected_pairs
+        status = "complete"
+    return {
+        "value": value,
+        "correct_pairs": correct_pairs,
+        "expected_pairs": expected_pairs,
+        "eligible_pages": len(eligible),
+        "pending_pages": pending_pages,
+        "status": status,
+    }
+
+
+def _usage_metric(
+    fixtures: list[dict[str, Any]],
+    predictions_by_id: dict[str, dict[str, Any]],
+    field: str,
+    total_name: str,
+    mean_name: str,
+) -> dict[str, Any]:
+    values = []
+    for fixture in fixtures:
+        prediction = predictions_by_id.get(fixture["id"])
+        value = None if prediction is None else prediction[field]
+        if value is not None:
+            values.append(value)
+    pending = len(fixtures) - len(values)
+    if pending:
+        total = None
+        mean = None
+        status = "pending"
+    else:
+        try:
+            total = sum(values)
+            mean = total / len(values)
+            aggregate_is_finite = math.isfinite(total) and math.isfinite(mean)
+        except OverflowError:
+            aggregate_is_finite = False
+        if not aggregate_is_finite:
+            raise EvaluationError(f"{field} aggregate must remain finite")
+        status = "complete"
+    return {
+        total_name: total,
+        mean_name: mean,
+        "measured_pages": len(values),
+        "pending_pages": pending,
+        "status": status,
+    }
+
+
+def evaluate_predictions(
+    manifest: dict[str, Any], input_data: dict[str, Any]
+) -> dict[str, Any]:
+    fixtures = _validated_fixtures(manifest)
+    run, predictions_by_id = _validated_run_and_predictions(input_data, fixtures)
+
+    edit_distance = 0
+    reference_characters = 0
+    omitted_pages = 0
+    for fixture in fixtures:
+        expected_value = fixture["gold_text"]
+        prediction = predictions_by_id.get(fixture["id"])
+        actual_value = None if prediction is None else prediction["text"]
+        actual = (
+            _plain_text_for_cer(
+                actual_value,
+                run["output_format"],
+                fixture.get("table_text"),
+                fixture.get("formula_text"),
+                    gold_text=expected_value,
+                strip_markdown_markup=True,
+            )
+            if actual_value is not None
+            else ""
+        )
+        expected = _plain_text_for_cer(
+            expected_value,
+            run["output_format"],
+            fixture.get("table_text"),
+            fixture.get("formula_text"),
+            gold_text=expected_value,
+        )
+        edit_distance += levenshtein_distance(expected, actual)
+        reference_characters += len(expected)
+        if prediction is None or actual_value is None or (not actual and expected):
+            omitted_pages += 1
+
+    character_error_rate = {
+        "value": (
+            edit_distance / reference_characters if reference_characters else None
+        ),
+        "edit_distance": edit_distance,
+        "reference_characters": reference_characters,
+        "status": "complete" if reference_characters else "not_applicable",
+    }
+    metrics = {
+        "character_error_rate": character_error_rate,
+        "page_omission_rate": {
+            "value": omitted_pages / len(fixtures),
+            "omitted_pages": omitted_pages,
+            "total_pages": len(fixtures),
+            "status": "complete",
+        },
+        "reading_order_score": _reading_order_metric(
+            fixtures, predictions_by_id
+        ),
+        "table_fidelity": _exact_snippet_metric(
+            fixtures, predictions_by_id, "table_text", run["output_format"]
+        ),
+        "formula_fidelity": _exact_snippet_metric(
+            fixtures, predictions_by_id, "formula_text", run["output_format"]
+        ),
+        "elapsed_time_ms": _usage_metric(
+            fixtures,
+            predictions_by_id,
+            "elapsed_ms",
+            "total_ms",
+            "mean_ms",
+        ),
+        "returned_tokens": _usage_metric(
+            fixtures,
+            predictions_by_id,
+            "returned_tokens",
+            "total",
+            "mean",
+        ),
+    }
+    has_pending = any(
+        metric.get("status") == "pending" for metric in metrics.values()
+    )
+    return {
+        "schema_version": 1,
+        "type": "ocr_prediction_evaluation",
+        "status": "pending" if has_pending else "complete",
+        "fixture_count": len(fixtures),
+        "run": run,
+        "metrics": metrics,
+    }
+
+
+def compare_reports(
+    baseline: dict[str, Any], candidate: dict[str, Any]
+) -> dict[str, Any]:
+    comparison: dict[str, Any] = {}
+    for metric_name, (field, direction) in COMPARISON_METRICS.items():
+        baseline_metric = baseline["metrics"][metric_name]
+        candidate_metric = candidate["metrics"][metric_name]
+        baseline_value = baseline_metric.get(field)
+        candidate_value = candidate_metric.get(field)
+        if baseline_value is None or candidate_value is None:
+            if (
+                baseline_metric.get("status") == "not_applicable"
+                and candidate_metric.get("status") == "not_applicable"
+            ):
+                status = "not_applicable"
+            else:
+                status = "pending"
+            comparison[metric_name] = {
+                "baseline": baseline_value,
+                "candidate": candidate_value,
+                "delta": None,
+                "status": status,
+            }
+            continue
+
+        delta = candidate_value - baseline_value
+        if delta == 0:
+            status = "unchanged"
+        elif (direction == "lower" and delta > 0) or (
+            direction == "higher" and delta < 0
+        ):
+            status = "regression"
+        else:
+            status = "improved"
+        comparison[metric_name] = {
+            "baseline": baseline_value,
+            "candidate": candidate_value,
+            "delta": delta,
+            "status": status,
+        }
+    return comparison
+
+
+def _valid_png_keyword(value: bytes) -> bool:
+    return (
+        1 <= len(value) <= 79
+        and value[0] != 32
+        and value[-1] != 32
+        and b"  " not in value
+        and all(32 <= byte <= 126 or 161 <= byte <= 255 for byte in value)
+    )
+
+
+def _validate_png(image_bytes: bytes, fixture_id: str) -> None:
+    def invalid() -> EvaluationError:
+        return EvaluationError(f"{fixture_id}: PNG is malformed or truncated")
+
+    if image_bytes[:8] != b"\x89PNG\r\n\x1a\n":
+        raise EvaluationError(f"{fixture_id}: fixture is not a PNG")
+
+    offset = 8
+    width = height = color_type = bit_depth = interlace = None
+    palette_seen = False
+    palette_entries = 0
+    ancillary_chunks_seen: set[bytes] = set()
+    suggested_palette_names: set[bytes] = set()
+    image_data_seen = False
+    image_data_ended = False
+    decompressor = zlib.decompressobj()
+    passes: list[tuple[int, int]] = []
+    pass_index = 0
+    pass_rows_remaining = 0
+    scanline_length = 0
+    scanline_position = 0
+    pass_width_pixels = 0
+    scanline_filter = 0
+    scanline_buffer = bytearray()
+    previous_row = b""
+
+    def set_pass(index: int) -> None:
+        nonlocal pass_index, pass_rows_remaining, scanline_length
+        nonlocal pass_width_pixels, previous_row
+        pass_index = index
+        while pass_index < len(passes):
+            pass_width, pass_height = passes[pass_index]
+            if pass_width and pass_height:
+                pass_width_pixels = pass_width
+                scanline_length = (pass_width * bits_per_pixel + 7) // 8 + 1
+                pass_rows_remaining = pass_height
+                previous_row = b""
+                return
+            pass_index += 1
+        pass_rows_remaining = 0
+        scanline_length = 0
+
+    def consume_pixels(decoded: bytes) -> None:
+        nonlocal scanline_position, pass_rows_remaining, scanline_filter
+        nonlocal previous_row
+        for value in decoded:
+            if pass_rows_remaining == 0:
+                raise invalid()
+            if scanline_position == 0:
+                if value > 4:
+                    raise invalid()
+                scanline_filter = value
+                scanline_buffer.clear()
+            elif color_type == 3:
+                scanline_buffer.append(value)
+            scanline_position += 1
+            if scanline_position == scanline_length:
+                if color_type == 3:
+                    reconstructed = bytearray(len(scanline_buffer))
+                    for index, byte in enumerate(scanline_buffer):
+                        left = reconstructed[index - 1] if index else 0
+                        above = previous_row[index] if index < len(previous_row) else 0
+                        upper_left = previous_row[index - 1] if index else 0
+                        if scanline_filter == 1:
+                            predictor = left
+                        elif scanline_filter == 2:
+                            predictor = above
+                        elif scanline_filter == 3:
+                            predictor = (left + above) // 2
+                        elif scanline_filter == 4:
+                            estimate = left + above - upper_left
+                            left_distance = abs(estimate - left)
+                            above_distance = abs(estimate - above)
+                            upper_left_distance = abs(estimate - upper_left)
+                            if left_distance <= above_distance and left_distance <= upper_left_distance:
+                                predictor = left
+                            elif above_distance <= upper_left_distance:
+                                predictor = above
+                            else:
+                                predictor = upper_left
+                        else:
+                            predictor = 0
+                        reconstructed[index] = (byte + predictor) & 0xFF
+                    sample_mask = (1 << bit_depth) - 1
+                    for pixel_index in range(pass_width_pixels):
+                        bit_offset = pixel_index * bit_depth
+                        shift = 8 - bit_depth - bit_offset % 8
+                        if (reconstructed[bit_offset // 8] >> shift) & sample_mask >= palette_entries:
+                            raise invalid()
+                    previous_row = reconstructed
+                scanline_position = 0
+                pass_rows_remaining -= 1
+                if pass_rows_remaining == 0:
+                    set_pass(pass_index + 1)
+
+    bits_per_pixel = 0
+    while offset < len(image_bytes):
+        if offset + 12 > len(image_bytes):
+            raise invalid()
+        chunk_length = struct.unpack_from(">I", image_bytes, offset)[0]
+        chunk_type = image_bytes[offset + 4 : offset + 8]
+        if (
+            any(
+                not (65 <= byte <= 90 or 97 <= byte <= 122)
+                for byte in chunk_type
+            )
+            or chunk_type[2] & 0x20
+        ):
+            raise invalid()
+        data_start = offset + 8
+        if chunk_length > 0x7FFFFFFF:
+            raise invalid()
+        data_end = data_start + chunk_length
+        chunk_end = data_end + 4
+        if data_end < data_start or chunk_end > len(image_bytes):
+            raise invalid()
+        chunk_data = image_bytes[data_start:data_end]
+        expected_crc = struct.unpack_from(">I", image_bytes, data_end)[0]
+        actual_crc = binascii.crc32(chunk_data, binascii.crc32(chunk_type)) & 0xFFFFFFFF
+        if actual_crc != expected_crc:
+            raise invalid()
+
+        if width is None:
+            if chunk_type != b"IHDR" or chunk_length != 13:
+                raise invalid()
+            width, height, bit_depth, color_type, compression, filtering, interlace = (
+                struct.unpack(">IIBBBBB", chunk_data)
+            )
+            valid_bit_depths = {
+                0: {1, 2, 4, 8, 16},
+                2: {8, 16},
+                3: {1, 2, 4, 8},
+                4: {8, 16},
+                6: {8, 16},
+            }
+            if (
+                width < 1
+                or height < 1
+                or width > 0x7FFFFFFF
+                or height > 0x7FFFFFFF
+                or bit_depth not in valid_bit_depths.get(color_type, set())
+                or compression != 0
+                or filtering != 0
+                or interlace not in (0, 1)
+            ):
+                raise invalid()
+            channels = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}[color_type]
+            bits_per_pixel = channels * bit_depth
+            if interlace == 0:
+                passes = [(width, height)]
+            else:
+                passes = [
+                    (
+                        max(0, (width - x_start + x_step - 1) // x_step),
+                        max(0, (height - y_start + y_step - 1) // y_step),
+                    )
+                    for x_start, y_start, x_step, y_step in (
+                        (0, 0, 8, 8),
+                        (4, 0, 8, 8),
+                        (0, 4, 4, 8),
+                        (2, 0, 4, 4),
+                        (0, 2, 2, 4),
+                        (1, 0, 2, 2),
+                        (0, 1, 1, 2),
+                    )
+                ]
+            set_pass(0)
+        elif chunk_type == b"IHDR":
+            raise invalid()
+
+        if chunk_type == b"PLTE":
+            if (
+                image_data_seen
+                or palette_seen
+                or color_type in (0, 4)
+                or ancillary_chunks_seen.intersection(
+                    {b"bKGD", b"tRNS"}
+                )
+            ):
+                raise invalid()
+            if chunk_length == 0 or chunk_length > 768 or chunk_length % 3:
+                raise invalid()
+            if color_type == 3 and chunk_length // 3 > 2**bit_depth:
+                raise invalid()
+            palette_seen = True
+            palette_entries = chunk_length // 3
+        elif chunk_type in PNG_PRE_IDAT_CHUNKS:
+            if image_data_seen or (
+                chunk_type in ancillary_chunks_seen and chunk_type != b"sPLT"
+            ):
+                raise invalid()
+            if chunk_type != b"sPLT":
+                ancillary_chunks_seen.add(chunk_type)
+            if chunk_type in (b"cHRM", b"gAMA", b"sRGB") and palette_seen:
+                raise invalid()
+            if chunk_type == b"cHRM":
+                if chunk_length != 32 or any(
+                    value > 100000
+                    for (value,) in struct.iter_unpack(">I", chunk_data)
+                ):
+                    raise invalid()
+            if chunk_type == b"gAMA" and (
+                chunk_length != 4 or struct.unpack(">I", chunk_data)[0] == 0
+            ):
+                raise invalid()
+            if chunk_type == b"pHYs" and (
+                chunk_length != 9 or chunk_data[8] not in (0, 1)
+            ):
+                raise invalid()
+            if chunk_type == b"sRGB" and (
+                chunk_length != 1 or chunk_data[0] > 3
+            ):
+                raise invalid()
+            if chunk_type == b"sBIT":
+                expected_length = {0: 1, 2: 3, 3: 3, 4: 2, 6: 4}[color_type]
+                maximum = 8 if color_type == 3 else bit_depth
+                if (
+                    palette_seen
+                    or chunk_length != expected_length
+                    or any(not 1 <= value <= maximum for value in chunk_data)
+                ):
+                    raise invalid()
+            if chunk_type == b"sPLT":
+                name_end = chunk_data.find(b"\x00", 0, 80)
+                if (
+                    name_end < 1
+                    or name_end + 1 >= chunk_length
+                    or not _valid_png_keyword(chunk_data[:name_end])
+                ):
+                    raise invalid()
+                palette_name = chunk_data[:name_end]
+                sample_depth = chunk_data[name_end + 1]
+                entry_size = 6 if sample_depth == 8 else 10 if sample_depth == 16 else 0
+                if (
+                    entry_size == 0
+                    or len(chunk_data) - name_end - 2 < entry_size
+                    or (len(chunk_data) - name_end - 2) % entry_size
+                    or palette_name in suggested_palette_names
+                ):
+                    raise invalid()
+                suggested_palette_names.add(palette_name)
+            if chunk_type == b"tRNS":
+                expected_length = {0: 2, 2: 6}.get(color_type)
+                if color_type == 3:
+                    if not palette_seen or not 1 <= chunk_length <= palette_entries:
+                        raise invalid()
+                elif expected_length is None or chunk_length != expected_length:
+                    raise invalid()
+                if color_type in (0, 2):
+                    maximum_sample = (1 << bit_depth) - 1
+                    if any(
+                        sample > maximum_sample
+                        for (sample,) in struct.iter_unpack(">H", chunk_data)
+                    ):
+                        raise invalid()
+            if chunk_type == b"hIST" and (
+                not palette_seen or chunk_length != palette_entries * 2
+            ):
+                raise invalid()
+            if chunk_type == b"bKGD":
+                expected_length = 1 if color_type == 3 else 2 if color_type in (0, 4) else 6
+                if chunk_length != expected_length:
+                    raise invalid()
+                if color_type == 3 and (
+                    not palette_seen or chunk_data[0] >= palette_entries
+                ):
+                    raise invalid()
+                if color_type != 3:
+                    maximum_sample = (1 << bit_depth) - 1
+                    if any(
+                        sample > maximum_sample
+                        for (sample,) in struct.iter_unpack(">H", chunk_data)
+                    ):
+                        raise invalid()
+        elif chunk_type == b"IDAT":
+            if image_data_ended or (color_type == 3 and not palette_seen):
+                raise invalid()
+            image_data_seen = True
+            compressed = chunk_data
+            while compressed:
+                try:
+                    decoded = decompressor.decompress(compressed, 65536)
+                except zlib.error as error:
+                    raise invalid() from error
+                consume_pixels(decoded)
+                compressed = decompressor.unconsumed_tail
+                if decompressor.unused_data or (decompressor.eof and compressed):
+                    raise invalid()
+        elif chunk_type == b"IEND":
+            if chunk_length != 0 or not image_data_seen or chunk_end != len(image_bytes):
+                raise invalid()
+            if decompressor.unconsumed_tail or decompressor.unused_data:
+                raise invalid()
+            try:
+                consume_pixels(decompressor.flush())
+            except zlib.error as error:
+                raise invalid() from error
+            if not decompressor.eof or scanline_position or pass_rows_remaining:
+                raise invalid()
+            return
+        elif chunk_type == b"tIME":
+            if chunk_type in ancillary_chunks_seen or chunk_length != 7:
+                raise invalid()
+            ancillary_chunks_seen.add(chunk_type)
+            _, month, day, hour, minute, second = struct.unpack(">HBBBBB", chunk_data)
+            if (
+                not 1 <= month <= 12
+                or not 1 <= day <= 31
+                or hour > 23
+                or minute > 59
+                or second > 60
+            ):
+                raise invalid()
+        elif chunk_type != b"IHDR":
+            if image_data_seen:
+                image_data_ended = True
+            if chunk_type[0] & 0x20:
+                if chunk_type not in PNG_PRE_IDAT_CHUNKS and chunk_type != b"tIME":
+                    raise EvaluationError(
+                        f"{fixture_id}: unsupported PNG ancillary chunk {chunk_type.decode('ascii')}"
+                    )
+            elif chunk_type not in (b"PLTE",):
+                raise invalid()
+        if chunk_type != b"IDAT" and image_data_seen:
+            image_data_ended = True
+        offset = chunk_end
+
+    raise invalid()
+
+
+def verify_fixtures(
+    manifest_path: Path, output_path: Path | None = None
+) -> dict[str, Any]:
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise EvaluationError(f"cannot read fixture manifest: {error}") from error
+    if not isinstance(manifest, dict):
+        raise EvaluationError("fixture manifest must be an object")
+    fixtures = _validated_fixtures(manifest)
+    if len(fixtures) < 20:
+        raise EvaluationError(
+            f"expected at least 20 fixtures, found {len(fixtures)}"
+        )
+    categories = {
+        category for fixture in fixtures for category in fixture["categories"]
+    }
+    missing_categories = REQUIRED_CATEGORIES - categories
+    if missing_categories:
+        raise EvaluationError(
+            f"fixture categories are missing: {sorted(missing_categories)}"
+        )
+
+    root = manifest_path.resolve().parent
+    for fixture in fixtures:
+        fixture_id = fixture["id"]
+        image = fixture.get("image")
+        digest = fixture.get("sha256")
+        if not isinstance(image, str) or not isinstance(digest, str):
+            raise EvaluationError(f"{fixture_id}: image and sha256 are required")
+        image_path = (root / image).resolve()
+        if not image_path.is_relative_to(root):
+            raise EvaluationError(f"{fixture_id}: image path escapes fixture root")
+        _reject_output_input_collision(
+            output_path, [("fixture image", image_path)]
+        )
+        try:
+            image_bytes = image_path.read_bytes()
+        except OSError as error:
+            raise EvaluationError(f"{fixture_id}: cannot read {image}: {error}") from error
+        _validate_png(image_bytes, fixture_id)
+        actual_digest = hashlib.sha256(image_bytes).hexdigest()
+        if actual_digest != digest:
+            raise EvaluationError(f"{fixture_id}: PNG SHA-256 does not match")
+        if "blank" in fixture["categories"] and normalize_text(
+            fixture["gold_text"]
+        ):
+            raise EvaluationError(f"{fixture_id}: blank fixture needs empty gold_text")
+        if "table" in fixture["categories"] and "table_text" not in fixture:
+            raise EvaluationError(f"{fixture_id}: table fixture needs table_text")
+        if "formula" in fixture["categories"] and "formula_text" not in fixture:
+            raise EvaluationError(f"{fixture_id}: formula fixture needs formula_text")
+
+    return {
+        "fixture_count": len(fixtures),
+        "categories": sorted(categories),
+        "images_verified": len(fixtures),
+    }
+
+
+def _read_json(path: Path) -> dict[str, Any]:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise EvaluationError(f"cannot read {path}: {error}") from error
+    if not isinstance(value, dict):
+        raise EvaluationError(f"{path} must contain a JSON object")
+    return value
+
+
+def _reject_output_input_collision(
+    output_path: Path | None,
+    input_paths: list[tuple[str, Path]],
+) -> None:
+    if output_path is None:
+        return
+
+    try:
+        resolved_output = output_path.resolve()
+        for option, input_path in input_paths:
+            if resolved_output == input_path.resolve() or (
+                output_path.exists()
+                and input_path.exists()
+                and output_path.samefile(input_path)
+            ):
+                raise EvaluationError(
+                    f"--output path conflicts with input file {option}: {input_path}"
+                )
+    except (OSError, RuntimeError) as error:
+        raise EvaluationError(f"cannot resolve output or input path: {error}") from error
+
+
+def main(argv: list[str] | None = None) -> int:
+    default_manifest = Path(__file__).with_name("manifest.json")
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--manifest", type=Path, default=default_manifest)
+    parser.add_argument("--predictions", type=Path)
+    parser.add_argument("--baseline", type=Path)
+    parser.add_argument("--output", type=Path)
+    parser.add_argument(
+        "--verify-fixtures",
+        action="store_true",
+        help="validate fixture count, coverage, PNGs, and recorded hashes",
+    )
+    args = parser.parse_args(argv)
+
+    try:
+        if args.verify_fixtures:
+            if args.predictions or args.baseline:
+                parser.error("--verify-fixtures cannot be combined with prediction files")
+            _reject_output_input_collision(
+                args.output, [("--manifest", args.manifest)]
+            )
+            result = {
+                "status": "fixtures_verified",
+                **verify_fixtures(args.manifest, args.output),
+            }
+        else:
+            if args.predictions is None:
+                parser.error("--predictions is required unless --verify-fixtures is used")
+            input_paths = [("--manifest", args.manifest), ("--predictions", args.predictions)]
+            if args.baseline is not None:
+                input_paths.append(("--baseline", args.baseline))
+            _reject_output_input_collision(args.output, input_paths)
+            manifest = _read_json(args.manifest)
+            candidate = evaluate_predictions(
+                manifest, _read_json(args.predictions)
+            )
+            if args.baseline is None:
+                result = candidate
+            else:
+                baseline = evaluate_predictions(
+                    manifest, _read_json(args.baseline)
+                )
+                comparison = compare_reports(baseline, candidate)
+                result = {
+                    "type": "ocr_prediction_comparison",
+                    "status": (
+                        "pending"
+                        if baseline["status"] == "pending"
+                        or candidate["status"] == "pending"
+                        else "complete"
+                    ),
+                    "baseline": baseline,
+                    "candidate": candidate,
+                    "comparison": comparison,
+                }
+        output = json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False)
+        try:
+            output.encode("utf-8")
+        except UnicodeEncodeError as error:
+            raise EvaluationError(
+                "report contains invalid Unicode scalar values"
+            ) from error
+        if args.output:
+            try:
+                args.output.write_text(output + "\n", encoding="utf-8")
+            except OSError as error:
+                raise EvaluationError(f"cannot write {args.output}: {error}") from error
+        else:
+            print(output)
+        return 0
+    except EvaluationError as error:
+        print(f"evaluation error: {error}", file=sys.stderr)
+        return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

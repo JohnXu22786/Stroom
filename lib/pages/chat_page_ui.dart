@@ -1,4 +1,5 @@
 part of 'chat_page.dart';
+
 // Extension methods on the State class cannot use @protected members
 // (setState / state) without analyzer warnings, but the receiver IS the
 // State/StateNotifier, so runtime behavior is identical to the original
@@ -44,21 +45,31 @@ extension _ChatPageUiExt on _ChatPageState {
     if (notification is ScrollStartNotification) {
       if (notification.dragDetails != null) {
         _userIsDragging = true;
+        // A drag takes control away from a content-growth follow that was
+        // waiting for a programmatic animation to settle.
+        _pendingContentGrowthFollow = false;
       } else {
         _userIsDragging = false;
       }
     } else if (notification is ScrollEndNotification) {
       _userIsDragging = false;
-    } else if (notification is UserScrollNotification &&
-        notification.direction == ScrollDirection.forward &&
-        notification.metrics.pixels <= 4.0 &&
-        !_hasMoreMessages &&
-        !_isLoadingMore) {
-      // 用户在顶部继续向下拖动（滚向顶部方向，像素不再变化时
-      // _onChatScroll 收不到回调）且没有更早的历史消息：
-      // 提示"没有更多内容了"。metrics 判定防止在列表中部滚动时
-      // 过早置位（提示会瞬间把内容下推 ~40px）。
-      _markNoMoreMessagesReached();
+    } else if (notification is UserScrollNotification) {
+      if (notification.direction != ScrollDirection.idle) {
+        // Wheel and other user scrolls do not carry dragDetails on the
+        // ScrollStartNotification. They still take control from a pending
+        // follow, which was retained across a programmatic animation.
+        _pendingContentGrowthFollow = false;
+      }
+      if (notification.direction == ScrollDirection.forward &&
+          notification.metrics.pixels <= 4.0 &&
+          !_hasMoreMessages &&
+          !_isLoadingMore) {
+        // 用户在顶部继续向下拖动（滚向顶部方向，像素不再变化时
+        // _onChatScroll 收不到回调）且没有更早的历史消息：
+        // 提示"没有更多内容了"。metrics 判定防止在列表中部滚动时
+        // 过早置位（提示会瞬间把内容下推 ~40px）。
+        _markNoMoreMessagesReached();
+      }
     }
     return false;
   }
@@ -105,11 +116,10 @@ extension _ChatPageUiExt on _ChatPageState {
   ///
   /// The cases are told apart by the CONTENT extent (maxScrollExtent +
   /// viewportDimension — the list's total content height): cases 1 and 2
-  /// strictly grow it, case 3 leaves it unchanged. Scrolling states are
-  /// additionally ignored — a drag or ballistic animation means the user
-  /// (or the chat library's own insert-follow / keyboard scrolls, which
-  /// target the bottom themselves) is steering the list; a short landing
-  /// from those self-corrects on the next content growth.
+  /// strictly grow it, case 3 leaves it unchanged. User drags and
+  /// keyboard-session scrolls are ignored because they steer the list
+  /// themselves. A non-user animation can consume the growth notification;
+  /// that case retains a pending follow and retries after the activity ends.
   ///
   /// (The keyboard-dismiss restore used to run an animation guarded by a
   /// "restoring" flag here; the per-frame keyboard pinning that introduced
@@ -121,8 +131,8 @@ extension _ChatPageUiExt on _ChatPageState {
   /// landing on a shorter list, an estimate correction down) re-arms the
   /// gate instead of permanently suppressing the follow — while the strict
   /// growth comparison keeps pixels-only and viewport-only notifications
-  /// inert. Updating before the state checks also means a growth consumed
-  /// by a bail cannot re-fire on a later pixels-only notification.
+  /// inert. Since a later pixels-only notification cannot rediscover growth
+  /// consumed during an animation, that case uses the pending retry above.
   ///
   /// The jump runs in a post-frame callback so it targets the final
   /// post-layout extent and coalesces to at most one jump per frame. Within
@@ -143,15 +153,38 @@ extension _ChatPageUiExt on _ChatPageState {
     final previous = _lastFollowContentExtent;
     _lastFollowContentExtent = contentExtent;
     if (previous != null && contentExtent <= previous) return;
-    if (!_autoScrollEnabled) return;
-    if (_userIsDragging) return;
-    if (pos.isScrollingNotifier.value) return;
+    if (!_autoScrollEnabled || _userIsDragging) {
+      _pendingContentGrowthFollow = false;
+      return;
+    }
+    _pendingContentGrowthFollow = true;
+    _scheduleContentGrowthFollowRetry();
+  }
+
+  /// Retries a consumed content-growth follow once the current non-user
+  /// scroll activity settles. While scrolling, each metrics notification
+  /// updates [_lastFollowContentExtent], so relying on another extent
+  /// increase would lose the original follow request.
+  void _scheduleContentGrowthFollowRetry() {
+    if (!mounted || _contentGrowthFollowRetryScheduled) return;
+    _contentGrowthFollowRetryScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_autoScrollEnabled || _userIsDragging) return;
-      if (_pendingInitialScrollAdjustment) return;
-      if (!_chatScrollController.hasClients) return;
+      _contentGrowthFollowRetryScheduled = false;
+      if (!mounted || !_pendingContentGrowthFollow) return;
+      if (_pendingInitialScrollAdjustment ||
+          _keyboardFollowUpPending ||
+          !_autoScrollEnabled ||
+          _userIsDragging ||
+          !_chatScrollController.hasClients) {
+        _pendingContentGrowthFollow = false;
+        return;
+      }
       final pos = _chatScrollController.position;
-      if (pos.isScrollingNotifier.value) return;
+      if (pos.isScrollingNotifier.value) {
+        _scheduleContentGrowthFollowRetry();
+        return;
+      }
+      _pendingContentGrowthFollow = false;
       final target = pos.maxScrollExtent;
       if ((pos.pixels - target).abs() < 1) return;
       _chatScrollController.jumpTo(target);
@@ -201,6 +234,15 @@ extension _ChatPageUiExt on _ChatPageState {
         });
       }
     } else {
+      // Content growth can move the old animation target outside the
+      // at-bottom window before the deferred follow runs. Keep the auto
+      // scroll intent captured by that growth until the non-user activity
+      // settles; drag and wheel notifications clear the pending request.
+      if (_pendingContentGrowthFollow &&
+          _chatScrollController.position.isScrollingNotifier.value &&
+          !_userIsDragging) {
+        return;
+      }
       // Scrolled up — disable auto-scroll.
       if (_autoScrollEnabled) {
         setState(() => _autoScrollEnabled = false);
@@ -531,8 +573,11 @@ extension _ChatPageUiExt on _ChatPageState {
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      '上下文已压缩，旧对话已总结'
-                      '${_showCompactionSummary ? '（点击收起）' : '（点击查看摘要）'}',
+                      (_showCompactionSummary
+                          ? AppLocalizations.of(context)!
+                              .chatCompactionCollapsed
+                          : AppLocalizations.of(context)!
+                              .chatCompactionExpanded),
                       style: TextStyle(
                         fontSize: 12,
                         color: cs.onTertiaryContainer,
@@ -593,31 +638,44 @@ extension _ChatPageUiExt on _ChatPageState {
     final titleWidget = conversation == null
         ? titleText
         : Tooltip(
-            message: '编辑对话标题',
+            message: AppLocalizations.of(context)!.chatEditConversationTitle,
             child: GestureDetector(
               onTap: () => _showRenameConversationDialog(conversation),
               child: titleText,
             ),
           );
-    return Container(
-      height: 48,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        border: Border(
-          bottom: BorderSide(
-            color: Theme.of(context).colorScheme.outlineVariant,
-            width: 0.5,
+    return AnimatedBuilder(
+      animation: _chatScrollController,
+      builder: (context, child) {
+        final scrollProgress = _chatScrollController.hasClients
+            ? (_chatScrollController.offset / 160).clamp(0.0, 1.0).toDouble()
+            : 0.0;
+        return Container(
+          height: 48,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: Color.lerp(
+              cs.surface,
+              cs.surfaceContainerHigh,
+              scrollProgress,
+            ),
+            border: Border(
+              bottom: BorderSide(
+                color: cs.outlineVariant,
+                width: 0.5,
+              ),
+            ),
           ),
-        ),
-      ),
+          child: child,
+        );
+      },
       child: Row(
         children: [
           // Back button when inside nested navigator and not first route
           if (Navigator.of(context).canPop())
             IconButton(
               icon: const Icon(Icons.arrow_back),
-              tooltip: 'Back',
+              tooltip: AppLocalizations.of(context)!.actionBack,
               onPressed: () {
                 // Allow navigation back at any time, even during
                 // streaming. The stream continues in the background,
@@ -644,7 +702,7 @@ extension _ChatPageUiExt on _ChatPageState {
                       ),
                       decoration: BoxDecoration(
                         color: Colors.amber,
-                        borderRadius: BorderRadius.circular(3),
+                        borderRadius: BorderRadius.circular(8),
                       ),
                       child: const Text(
                         'DEV',
@@ -669,7 +727,9 @@ extension _ChatPageUiExt on _ChatPageState {
                   : Icons.chat_bubble_outline,
               color: isTemporary ? cs.primary : null,
             ),
-            tooltip: isTemporary ? '关闭临时对话' : '临时对话',
+            tooltip: isTemporary
+                ? AppLocalizations.of(context)!.conversationCloseTemporary
+                : AppLocalizations.of(context)!.conversationTemporary,
             onPressed: conversation == null
                 ? null
                 : () {
@@ -685,7 +745,7 @@ extension _ChatPageUiExt on _ChatPageState {
               color:
                   _isSearching ? Theme.of(context).colorScheme.primary : null,
             ),
-            tooltip: '搜索消息',
+            tooltip: AppLocalizations.of(context)!.chatSearchMessages,
             onPressed: () => _isSearching
                 ? _closeSearch()
                 : setState(() => _isSearching = true),
@@ -700,12 +760,12 @@ extension _ChatPageUiExt on _ChatPageState {
     showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('重命名对话'),
+        title: Text(AppLocalizations.of(context)!.conversationRename),
         content: TextField(
           controller: controller,
           autofocus: true,
-          decoration: const InputDecoration(
-            hintText: '输入新名称',
+          decoration: InputDecoration(
+            hintText: AppLocalizations.of(context)!.conversationRenameHint,
             border: OutlineInputBorder(),
           ),
           onSubmitted: (_) =>
@@ -714,12 +774,12 @@ extension _ChatPageUiExt on _ChatPageState {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('取消'),
+            child: Text(AppLocalizations.of(context)!.actionCancel),
           ),
           TextButton(
             onPressed: () =>
                 _saveConversationTitle(dialogContext, conversation, controller),
-            child: const Text('确定'),
+            child: Text(AppLocalizations.of(context)!.actionConfirm),
           ),
         ],
       ),
@@ -758,7 +818,7 @@ extension _ChatPageUiExt on _ChatPageState {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              '⚠️ 未配置聊天API — 前往设置',
+              AppLocalizations.of(context)!.chatApiMissingSettings,
               style: TextStyle(
                 fontSize: 12,
                 color: Theme.of(context).colorScheme.onErrorContainer,
@@ -773,7 +833,7 @@ extension _ChatPageUiExt on _ChatPageState {
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
             child: Text(
-              '设置',
+              AppLocalizations.of(context)!.appSettings,
               style: TextStyle(
                 fontSize: 12,
                 color: Theme.of(context).colorScheme.error,
@@ -803,9 +863,25 @@ extension _ChatPageUiExt on _ChatPageState {
       showRawData: isAi && hasRawData,
       showJsonInspection: isAi && hasRawData && _developerMode,
       onCopy: () {
-        Clipboard.setData(ClipboardData(text: message.text));
+        final liveConvId = ref.read(activeConversationIdProvider);
+        final manager = ref.read(chatStreamManagerProvider);
+        final isCurrentStream =
+            liveConvId != null && _streamingMsgId == message.id;
+        final copyText = !isCurrentStream
+            ? message.text
+            : manager.isStreamingFor(liveConvId!)
+                ? manager.fullReplyFor(liveConvId!)
+                : _chatSegments[message.id]
+                        ?.whereType<TextSegment>()
+                        .map((segment) => segment.text)
+                        .join() ??
+                    message.text;
+        Clipboard.setData(ClipboardData(text: copyText));
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('已复制'), duration: Duration(seconds: 1)),
+          SnackBar(
+            content: Text(AppLocalizations.of(context)!.chatCopied),
+            duration: const Duration(seconds: 1),
+          ),
         );
       },
       onRetryOrEdit: () => isAi
@@ -839,8 +915,8 @@ extension _ChatPageUiExt on _ChatPageState {
       );
       if (plan == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('没有可保存的文本内容'),
+          SnackBar(
+            content: Text(AppLocalizations.of(context)!.chatNoSavableText),
             duration: Duration(seconds: 2),
           ),
         );
@@ -874,22 +950,26 @@ extension _ChatPageUiExt on _ChatPageState {
     return showDialog<MessageSaveOption>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('保存消息为 Markdown'),
+        title: Text(AppLocalizations.of(context)!.chatSaveMarkdownTitle),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text('该回复包含多步工具调用，选择要保存的内容：', style: TextStyle(fontSize: 13)),
+            Text(
+              AppLocalizations.of(context)!.chatSaveToolCallChoice,
+              style: const TextStyle(fontSize: 13),
+            ),
             const SizedBox(height: 12),
             FilledButton.icon(
               icon: const Icon(Icons.article_outlined, size: 18),
-              label: const Text('保存完整消息'),
+              label:
+                  Text(AppLocalizations.of(context)!.chatSaveCompleteMessage),
               onPressed: () => Navigator.of(ctx).pop(MessageSaveOption.full),
             ),
             const SizedBox(height: 8),
             FilledButton.tonalIcon(
               icon: const Icon(Icons.last_page, size: 18),
-              label: const Text('保存最后的消息'),
+              label: Text(AppLocalizations.of(context)!.chatSaveLastMessage),
               onPressed: () => Navigator.of(ctx).pop(MessageSaveOption.last),
             ),
           ],
@@ -897,7 +977,7 @@ extension _ChatPageUiExt on _ChatPageState {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('取消'),
+            child: Text(AppLocalizations.of(context)!.actionCancel),
           ),
         ],
       ),
@@ -921,18 +1001,19 @@ extension _ChatPageUiExt on _ChatPageState {
   Future<void> _saveMarkdownToDevice(String markdown) async {
     try {
       final bytes = Uint8List.fromList(utf8.encode(markdown));
-      final outputPath = await FilePicker.saveFile(
-        dialogTitle: '保存消息为 Markdown',
+      final outputUri = await saveFileWithType(
+        dialogTitle: AppLocalizations.of(context)!.chatSaveMarkdownTitle,
         fileName: '${_defaultMarkdownFileName()}.md',
-        type: FileType.custom,
-        allowedExtensions: ['md'],
+        extensions: ['md'],
         bytes: bytes,
         initialDirectory: SystemPickDirectories.documents(),
       );
-      if (outputPath != null && mounted) {
+      if (outputUri != null && mounted) {
+        final outputPath = filePickerLocationLabel(outputUri);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('已保存到: $outputPath'),
+            content:
+                Text(AppLocalizations.of(context)!.chatSavedToPath(outputPath)),
             duration: const Duration(seconds: 3),
           ),
         );
@@ -941,7 +1022,8 @@ extension _ChatPageUiExt on _ChatPageState {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('保存失败: $e'),
+            content: Text(
+                AppLocalizations.of(context)!.chatSaveFailed(e.toString())),
             duration: const Duration(seconds: 3),
           ),
         );
@@ -965,10 +1047,10 @@ extension _ChatPageUiExt on _ChatPageState {
       final selectedFolder = await FolderPickerDialog.show(
         context,
         availableFolders: folders,
-        title: '保存到应用文件',
-        hintText: '选择或创建文件夹保存 .md 文件',
+        title: AppLocalizations.of(context)!.chatSaveToAppFiles,
+        hintText: AppLocalizations.of(context)!.chatSaveFolderHint,
         fileNameController: _saveMarkdownFileNameController,
-        fileNameHintText: '输入文件名（自动添加 .md 后缀）',
+        fileNameHintText: AppLocalizations.of(context)!.chatSaveFilenameHint,
         onCreateFolder: (name) async {
           await TextManifest.addFolder(name);
           return null;
@@ -986,7 +1068,9 @@ extension _ChatPageUiExt on _ChatPageState {
       if (fileName.isEmpty) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('文件名不能为空')));
+        ).showSnackBar(SnackBar(
+          content: Text(AppLocalizations.of(context)!.chatFilenameRequired),
+        ));
         return;
       }
 
@@ -1007,8 +1091,7 @@ extension _ChatPageUiExt on _ChatPageState {
 
       final bytes = Uint8List.fromList(utf8.encode(markdown));
       final hash = computeTextHash(bytes);
-      await TextManifest.writeFile('$hash.txt', bytes);
-      await TextManifest.addRecord(
+      await TextManifest.saveTextRecord(
         TextRecord(
           name: finalName,
           hash: hash,
@@ -1018,6 +1101,7 @@ extension _ChatPageUiExt on _ChatPageState {
           folder: selectedFolder,
           textLength: markdown.length,
         ),
+        markdown,
       );
       await recordsNotifier.loadRecords();
       await foldersNotifier.loadFolders();
@@ -1029,7 +1113,8 @@ extension _ChatPageUiExt on _ChatPageState {
             : '$selectedFolder/$finalName.md';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('已保存到应用文件: $folderPath'),
+            content: Text(
+                AppLocalizations.of(context)!.chatSavedToAppFiles(folderPath)),
             duration: const Duration(seconds: 3),
           ),
         );
@@ -1038,7 +1123,8 @@ extension _ChatPageUiExt on _ChatPageState {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('保存失败: $e'),
+            content: Text(
+                AppLocalizations.of(context)!.chatSaveFailed(e.toString())),
             duration: const Duration(seconds: 3),
           ),
         );

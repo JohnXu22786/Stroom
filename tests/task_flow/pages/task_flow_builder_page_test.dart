@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/task_flow/models/block_type_definition.dart';
 import 'package:stroom/task_flow/models/io_type.dart';
 import 'package:stroom/task_flow/models/task_flow_definition.dart';
@@ -21,7 +22,11 @@ class _Flows extends TaskFlowNotifier {
 Future<void> _open(WidgetTester tester, _Flows flows, String flowId) async {
   await tester.pumpWidget(ProviderScope(
     overrides: [taskFlowListProvider.overrideWith((_) => flows)],
-    child: MaterialApp(home: TaskFlowBuilderPage(flowId: flowId)),
+    child: MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: TaskFlowBuilderPage(flowId: flowId)),
   ));
   await tester.pumpAndSettle();
 }
@@ -61,7 +66,7 @@ void main() {
     expect(cards.map((card) => card.block.id), ['download', 'recognition']);
     expect(cards.last.block.params['modelRef'],
         {'configId': 'provider', 'modelId': 'kept-model'});
-    expect(find.textContaining('「语音识别」需要音频'), findsOneWidget);
+    expect(find.textContaining('需要音频'), findsOneWidget);
     await tester.tap(find.text('保存'));
     await tester.pumpAndSettle();
     expect(flows.writes, initialWrites);
@@ -73,7 +78,7 @@ void main() {
     expect(restored.map((card) => card.block.id),
         ['download', 'audio', 'recognition']);
     expect(restored.elementAt(1).block.params['saveFolder'], 'kept-folder');
-    expect(find.textContaining('「语音识别」需要音频'), findsNothing);
+    expect(find.textContaining('需要音频'), findsNothing);
   });
 
   testWidgets('parameter edits and initial input changes can both be undone',
@@ -168,7 +173,11 @@ void main() {
         ]);
     await tester.pumpWidget(ProviderScope(
       overrides: [taskFlowListProvider.overrideWith((_) => flows)],
-      child: MaterialApp(home: TaskFlowBuilderPage(initialDraft: draft)),
+      child: MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          home: TaskFlowBuilderPage(initialDraft: draft)),
     ));
     await tester.pumpAndSettle();
     expect(find.widgetWithText(TextField, 'Template draft'), findsOneWidget);

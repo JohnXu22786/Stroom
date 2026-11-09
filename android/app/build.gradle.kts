@@ -26,6 +26,12 @@ android {
     compileSdk = 36
     ndkVersion = "28.2.13676358"
 
+    // Compile these platform-independent sources into the app. Their standalone
+    // Kotlin/JVM build runs the same source and tests without Android plugins.
+    sourceSets {
+        getByName("main").java.srcDir("../keep_alive_schedule/src/main/kotlin")
+    }
+
     compileOptions {
         isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
@@ -85,7 +91,6 @@ android {
 }
 
 dependencies {
-    testImplementation("junit:junit:4.13.2")
     implementation("org.jetbrains.kotlin:kotlin-stdlib:2.1.0")
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
     // SAF (Storage Access Framework) 支持

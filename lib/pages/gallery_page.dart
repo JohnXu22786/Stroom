@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -13,6 +14,7 @@ import 'package:extended_image/extended_image.dart';
 import '../providers/image_provider.dart';
 import '../utils/image_manifest.dart';
 import '../utils/image_thumbnail_loader.dart';
+import '../utils/file_picker_utils.dart';
 import '../utils/manifest_bridge.dart';
 import '../utils/folder_path_utils.dart';
 import '../utils/sort_config.dart';
@@ -109,7 +111,10 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('不支持预览 .${file.format} 格式'),
+              content: Text(
+                AppLocalizations.of(context)!
+                    .galleryUnsupportedPreview(file.format),
+              ),
               duration: const Duration(seconds: 2),
             ),
           );
@@ -122,8 +127,10 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
       // Get all images in the current folder for gallery browsing
       final records = ref.read(imageRecordsProvider);
       final folderImages = records
-          .where((r) =>
-              r.folder == file.folder && _supportedFormats.contains(r.format))
+          .where(
+            (r) =>
+                r.folder == file.folder && _supportedFormats.contains(r.format),
+          )
           .toList();
       final initialIndex = folderImages.indexWhere((r) => r.id == file.id);
 
@@ -163,13 +170,11 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
       const format = 'jpg';
       final fileName = '$hash.$format';
       await ImageManifest.writeFile(fileName, bytes);
-      final thumbnailBytes =
-          await ImageThumbnailLoader.generateThumbnail(bytes);
+      final thumbnailBytes = await ImageThumbnailLoader.generateThumbnail(
+        bytes,
+      );
       if (thumbnailBytes != null) {
-        await ImageManifest.writeFile(
-          imageThumbFileName(hash),
-          thumbnailBytes,
-        );
+        await ImageManifest.writeFile(imageThumbFileName(hash), thumbnailBytes);
       }
       final now = DateTime.now();
       final timestamp =
@@ -189,7 +194,9 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('拍照失败: $e'),
+            content: Text(
+              AppLocalizations.of(context)!.galleryCameraFailed(e.toString()),
+            ),
             duration: const Duration(seconds: 2),
           ),
         );
@@ -200,7 +207,10 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
     await ref.read(imageFolderListProvider.notifier).loadFolders();
     if (mounted && success) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('照片已保存'), duration: Duration(seconds: 2)),
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.galleryPhotoSaved),
+          duration: const Duration(seconds: 2),
+        ),
       );
     }
   }
@@ -258,9 +268,14 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
         final format = ext.isNotEmpty ? ext : 'jpg';
         if (!_supportedFormats.contains(format)) {
           if (mounted) {
-            ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(SnackBar(content: Text('跳过不支持格式: $format')));
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  AppLocalizations.of(context)!
+                      .galleryUnsupportedImportFormat(format),
+                ),
+              ),
+            );
           }
           continue;
         }
@@ -307,7 +322,9 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
       if (mounted && count > 0) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('已导入 $count 张图片'),
+            content: Text(
+              AppLocalizations.of(context)!.galleryImportImagesCount(count),
+            ),
             duration: const Duration(seconds: 2),
           ),
         );
@@ -323,7 +340,9 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('导入失败: $e'),
+            content: Text(
+              AppLocalizations.of(context)!.galleryImportFailed(e.toString()),
+            ),
             duration: const Duration(seconds: 3),
           ),
         );
@@ -332,6 +351,7 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
   }
 
   Future<void> _exportFile(String id) async {
+    final strings = AppLocalizations.of(context)!;
     try {
       final records = ref.read(imageRecordsProvider);
       final file = records.firstWhere((r) => r.id == id);
@@ -339,26 +359,26 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
       final data = await ImageManifest.readFile(file.storagePath);
       if (data == null || data.isEmpty) {
         if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('文件数据读取失败')));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(strings.galleryFileReadFailed)),
+          );
         }
         return;
       }
 
       final exportName = '${file.name}.${file.format}';
-      final outputPath = await FilePicker.saveFile(
-        dialogTitle: '导出图片',
+      final outputUri = await saveFileWithType(
+        dialogTitle: strings.galleryExportImageTitle,
         fileName: exportName,
-        type: FileType.custom,
-        allowedExtensions: [file.format],
+        extensions: [file.format],
         bytes: data,
         initialDirectory: SystemPickDirectories.pictures(),
       );
-      if (outputPath != null && mounted) {
+      if (outputUri != null && mounted) {
+        final outputPath = filePickerLocationLabel(outputUri);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('已导出到: $outputPath'),
+            content: Text(strings.galleryExportedTo(outputPath)),
             duration: const Duration(seconds: 3),
           ),
         );
@@ -367,7 +387,7 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('导出失败: $e'),
+            content: Text(strings.galleryExportFailed(e.toString())),
             duration: const Duration(seconds: 3),
           ),
         );
@@ -376,19 +396,21 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
   }
 
   /// 批量导出文件。返回用户最终使用的导出目录
-  /// （用户取消目录选择或导出失败时返回 null；Web 端返回 ''）。
+  /// （用户取消目录选择或导出失败时返回 null；归档导出返回 ''）。
   Future<String?> _exportFiles(List<String> ids, String targetDirectory) async {
+    final strings = AppLocalizations.of(context)!;
     try {
-      // If no directory specified, let user pick a directory
+      // Native mobile uses the system save dialog for one visible-path ZIP.
+      final useArchive = kIsWeb || SystemPickDirectories.isNativeMobile;
       String? outputDir;
-      if (kIsWeb) {
-        // Web: no directory picker, save files one by one
-        outputDir = ''; // placeholder, not used on web
+      if (useArchive) {
+        // Archive exports do not need an output directory.
+        outputDir = '';
       } else {
         outputDir = targetDirectory.isNotEmpty ? targetDirectory : null;
         if (outputDir == null) {
           outputDir = await FilePicker.getDirectoryPath(
-            dialogTitle: '选择导出目录',
+            dialogTitle: strings.galleryChooseExportDirectory,
             initialDirectory: SystemPickDirectories.pictures(),
           );
           if (outputDir == null) return null;
@@ -399,42 +421,58 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
 
       final records = ref.read(imageRecordsProvider);
       var exportedCount = 0;
+      final archiveFiles = <String, Uint8List>{};
+      final exportPaths = <String>{};
+      final selectedFiles = ids
+          .map((id) => records.firstWhere((record) => record.id == id))
+          .toList();
+      validateUserVisibleExportPaths(
+        files: selectedFiles.map(
+          (file) => p.posix.join(file.folder, '${file.name}.${file.format}'),
+        ),
+      );
 
-      for (final id in ids) {
-        final file = records.firstWhere((r) => r.id == id);
+      for (final file in selectedFiles) {
         final data = await ImageManifest.readFile(file.storagePath);
-        if (data == null || data.isEmpty) continue;
+        if (data == null) continue;
 
         final exportName = '${file.name}.${file.format}';
+        final relativePath = p.posix.join(file.folder, exportName);
+        if (!exportPaths.add(relativePath)) {
+          throw StateError('导出路径重复: $relativePath');
+        }
 
-        if (kIsWeb) {
-          // On web, we save individually; cancelled saves don't count
-          final saved = await FilePicker.saveFile(
-            dialogTitle: '导出图片',
-            fileName: exportName,
-            type: FileType.custom,
-            allowedExtensions: [file.format],
-            bytes: data,
-            initialDirectory: SystemPickDirectories.pictures(),
-          );
-          // 用户取消保存时不计数
-          if (saved == null) continue;
+        if (useArchive) {
+          archiveFiles[relativePath] = data;
         } else {
-          // Native: write directly to the selected directory
-          final outputPath = p.join(outputDir, exportName);
+          final fileDir = p.join(outputDir, file.folder);
+          await Directory(fileDir).create(recursive: true);
+          final outputPath = p.join(fileDir, exportName);
           await File(outputPath).writeAsBytes(data);
         }
         exportedCount++;
       }
 
+      if (useArchive && exportedCount > 0) {
+        final saved = await saveFileWithType(
+          dialogTitle: strings.galleryExportImageTitle,
+          fileName: strings.galleryExportImageArchiveFileName,
+          extensions: const ['zip'],
+          bytes: encodeUserVisibleExportArchive(files: archiveFiles),
+          initialDirectory: SystemPickDirectories.pictures(),
+          mimeType: 'application/zip',
+        );
+        if (saved == null) return null;
+      }
+
       // Web 端全部保存被取消时返回 null（与原生端取消目录选择一致，
       // 保持选择模式不退出）
-      if (kIsWeb && exportedCount == 0) return null;
+      if (useArchive && exportedCount == 0) return null;
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('已导出 $exportedCount 个文件'),
+            content: Text(strings.galleryExportedFilesCount(exportedCount)),
             duration: const Duration(seconds: 2),
           ),
         );
@@ -444,7 +482,7 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('导出失败: $e'),
+            content: Text(strings.galleryExportFailed(e.toString())),
             duration: const Duration(seconds: 3),
           ),
         );
@@ -454,42 +492,44 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
   }
 
   /// 批量导出文件夹（保留完整文件夹层级，含子文件夹内容）。
-  /// 返回用户最终使用的导出目录（用户取消或失败时返回 null；Web 端返回 ''）。
+  /// 返回用户最终使用的导出目录（用户取消或失败时返回 null；归档导出返回 ''）。
   Future<String?> _exportFolders(
     List<String> names,
     String targetDirectory,
   ) async {
+    final strings = AppLocalizations.of(context)!;
     // For each folder, export all files within preserving folder structure
     try {
-      if (kIsWeb) {
-        if (!mounted) return null;
-        final action = await showDialog<String>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('文件夹导出'),
-            content: const Text(
-              '浏览器暂不支持选择导出目录，你可以逐个导出文件夹内的文件，或使用 App 以获得完整体验。',
+      if (kIsWeb || SystemPickDirectories.isNativeMobile) {
+        if (kIsWeb) {
+          if (!mounted) return null;
+          final action = await showDialog<String>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: Text(strings.galleryFolderExportTitle),
+              content: Text(strings.galleryWebFolderExportInfo),
+              actions: [
+                TextButton(
+                  key: const Key('fm_web_export_cancel_btn'),
+                  onPressed: () => Navigator.pop(ctx),
+                  child: Text(strings.actionCancel),
+                ),
+                ElevatedButton(
+                  key: const Key('fm_web_export_individual_btn'),
+                  onPressed: () => Navigator.pop(ctx, 'exportFiles'),
+                  child: Text(strings.galleryDownloadZip),
+                ),
+              ],
             ),
-            actions: [
-              TextButton(
-                key: const Key('fm_web_export_cancel_btn'),
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('取消'),
-              ),
-              ElevatedButton(
-                key: const Key('fm_web_export_individual_btn'),
-                onPressed: () => Navigator.pop(ctx, 'exportFiles'),
-                child: const Text('逐个导出文件'),
-              ),
-            ],
-          ),
-        );
+          );
 
-        if (action != 'exportFiles' || !mounted) return null;
+          if (action != 'exportFiles' || !mounted) return null;
+        }
 
-        // Export all files in the folders one by one via save-file dialog
         final records = ref.read(imageRecordsProvider);
         var exportedCount = 0;
+        final archiveFiles = <String, Uint8List>{};
+        final exportPaths = <String>{};
         for (final folderName in names) {
           final folderFiles = records
               .where(
@@ -500,28 +540,42 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
               .toList();
           for (final file in folderFiles) {
             final data = await ImageManifest.readFile(file.storagePath);
-            if (data == null || data.isEmpty) continue;
+            if (data == null) continue;
             final exportName = '${file.name}.${file.format}';
-            // 用户取消保存时不计数
-            final saved = await FilePicker.saveFile(
-              dialogTitle: '导出图片',
-              fileName: exportName,
-              type: FileType.custom,
-              allowedExtensions: [file.format],
-              bytes: data,
-              initialDirectory: SystemPickDirectories.pictures(),
-            );
-            if (saved == null) continue;
+            final relativePath = p.posix.join(file.folder, exportName);
+            if (!exportPaths.add(relativePath)) {
+              throw StateError('导出路径重复: $relativePath');
+            }
+            archiveFiles[relativePath] = data;
             exportedCount++;
           }
         }
+        exportedCount = archiveFiles.length;
         // 全部保存被取消时返回 null（保持选择模式不退出），
         // 且不显示「已导出 0 个文件」提示
-        if (exportedCount == 0) return null;
+        final saved = await saveFileWithType(
+          dialogTitle: strings.galleryExportImageFolderTitle,
+          fileName: strings.galleryExportImageFolderArchiveFileName,
+          extensions: const ['zip'],
+          bytes: encodeUserVisibleExportArchive(
+            files: archiveFiles,
+            folders: {
+              ...names,
+              ...ref.read(imageFolderListProvider).where(
+                    (folder) => names.any(
+                      (name) => folder == name || folder.startsWith('$name/'),
+                    ),
+                  ),
+            },
+          ),
+          initialDirectory: SystemPickDirectories.pictures(),
+          mimeType: 'application/zip',
+        );
+        if (saved == null) return null;
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('已导出 $exportedCount 个文件'),
+              content: Text(strings.galleryExportedFilesCount(exportedCount)),
               duration: const Duration(seconds: 2),
             ),
           );
@@ -532,7 +586,7 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
       String? outputDir = targetDirectory.isNotEmpty ? targetDirectory : null;
       if (outputDir == null) {
         outputDir = await FilePicker.getDirectoryPath(
-          dialogTitle: '选择导出目录',
+          dialogTitle: strings.galleryChooseExportDirectory,
           initialDirectory: SystemPickDirectories.pictures(),
         );
         if (outputDir == null) return null;
@@ -542,33 +596,54 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
 
       final records = ref.read(imageRecordsProvider);
       var exportedCount = 0;
+      final exportPaths = <String>{};
 
-      for (final folderName in names) {
-        // 包含所有后代文件夹中的文件，完整保留层级
-        final folderFiles = records
-            .where(
-              (r) =>
-                  r.folder == folderName || r.folder.startsWith('$folderName/'),
-            )
-            .toList();
+      final selectedFolders = <String>{
+        ...names,
+        ...ref.read(imageFolderListProvider).where(
+              (folder) => names.any(
+                (name) => folder == name || folder.startsWith('$name/'),
+              ),
+            ),
+      };
+      final folderFiles = records
+          .where(
+            (record) => names.any(
+              (name) =>
+                  record.folder == name || record.folder.startsWith('$name/'),
+            ),
+          )
+          .toList();
+      validateUserVisibleExportPaths(
+        files: folderFiles.map(
+          (file) => p.posix.join(file.folder, '${file.name}.${file.format}'),
+        ),
+        folders: selectedFolders,
+      );
+      for (final folderName in selectedFolders) {
+        await Directory(p.join(outputDir, folderName)).create(recursive: true);
+      }
 
-        for (final file in folderFiles) {
-          final data = await ImageManifest.readFile(file.storagePath);
-          if (data == null || data.isEmpty) continue;
+      for (final file in folderFiles) {
+        final data = await ImageManifest.readFile(file.storagePath);
+        if (data == null) continue;
 
-          final exportName = '${file.name}.${file.format}';
-          final fileDir = p.join(outputDir, file.folder);
-          await Directory(fileDir).create(recursive: true);
-          final outputPath = p.join(fileDir, exportName);
-          await File(outputPath).writeAsBytes(data);
-          exportedCount++;
+        final exportName = '${file.name}.${file.format}';
+        final relativePath = p.posix.join(file.folder, exportName);
+        if (!exportPaths.add(relativePath)) {
+          throw StateError('导出路径重复: $relativePath');
         }
+        final fileDir = p.join(outputDir, file.folder);
+        await Directory(fileDir).create(recursive: true);
+        final outputPath = p.join(fileDir, exportName);
+        await File(outputPath).writeAsBytes(data);
+        exportedCount++;
       }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('已导出 $exportedCount 个文件'),
+            content: Text(strings.galleryExportedFilesCount(exportedCount)),
             duration: const Duration(seconds: 2),
           ),
         );
@@ -578,7 +653,7 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('导出失败: $e'),
+            content: Text(strings.galleryExportFailed(e.toString())),
             duration: const Duration(seconds: 3),
           ),
         );
@@ -622,12 +697,12 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
                 onPressed: _takePhoto,
                 style: ElevatedButton.styleFrom(
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                 ),
                 icon: const Icon(Icons.camera_alt_outlined, size: 20),
-                label: const Text(
-                  '拍照',
+                label: Text(
+                  AppLocalizations.of(context)!.galleryTakePhoto,
                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
                 ),
               ),
@@ -641,12 +716,12 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
                 onPressed: _importFromGallery,
                 style: ElevatedButton.styleFrom(
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                 ),
                 icon: const Icon(Icons.photo_library_outlined, size: 20),
-                label: const Text(
-                  '导入',
+                label: Text(
+                  AppLocalizations.of(context)!.galleryImport,
                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
                 ),
               ),
@@ -712,7 +787,7 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
 
     // FileManagerConfig
     final config = FileManagerConfig<ImageRecord>(
-      title: '相册',
+      title: AppLocalizations.of(context)!.galleryImagePageTitle,
       topActionBar: topActionBar,
       showThumbnailToggle: true,
       fileIconBuilder: (_) => const Icon(Icons.image, color: Colors.blueGrey),
@@ -726,11 +801,11 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
         ref.read(filesPageCurrentFolderProvider.notifier).state = f;
       },
       extraPopupMenuItems: (file) => [
-        const PopupMenuItem(
+        PopupMenuItem(
           value: 'export',
           child: ListTile(
             leading: Icon(Icons.file_download, size: 20),
-            title: Text('导出到本地'),
+            title: Text(AppLocalizations.of(context)!.galleryExportToLocal),
             dense: true,
             contentPadding: EdgeInsets.zero,
           ),
@@ -741,8 +816,9 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
     final navigateToParentSignal = ref.watch(
       filesPageNavigateToParentSignalProvider,
     );
-    final tabResetSignal =
-        ref.watch(fileTabFolderResetSignalProvider(widget.tabIndex));
+    final tabResetSignal = ref.watch(
+      fileTabFolderResetSignalProvider(widget.tabIndex),
+    );
 
     return FileManagerView<ImageRecord>(
       tabResetSignal: tabResetSignal,
@@ -793,7 +869,9 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('复制失败: $e'),
+                content: Text(
+                  AppLocalizations.of(context)!.galleryCopyFailed(e.toString()),
+                ),
                 duration: const Duration(seconds: 2),
               ),
             );

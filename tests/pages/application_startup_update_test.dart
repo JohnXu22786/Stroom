@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/application.dart';
+import 'package:stroom/providers/locale_provider.dart';
 import 'package:stroom/providers/update_provider.dart';
 import 'package:stroom/providers/theme_provider.dart';
 
@@ -108,7 +109,10 @@ Future<void> _pumpThroughStartup(WidgetTester tester,
     {required Dio dio,
     int dataFormatVersion = 2,
     Map<String, Object>? extraPrefs}) async {
-  final prefs = <String, Object>{'data_format_version': dataFormatVersion};
+  final prefs = <String, Object>{
+    'data_format_version': dataFormatVersion,
+    localePreferenceKey: 'zh_CN',
+  };
   if (extraPrefs != null) {
     prefs.addAll(extraPrefs);
   }

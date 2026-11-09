@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 
 enum MessageSaveDestination { appFiles, device }
 
@@ -8,25 +9,25 @@ Future<MessageSaveDestination?> showMessageSaveDestinationDialog(
   return showDialog<MessageSaveDestination>(
     context: context,
     builder: (ctx) => AlertDialog(
-      title: const Text('保存消息'),
+      title: Text(AppLocalizations.of(context)!.chatSaveMessage),
       icon: const Icon(Icons.save_outlined),
-      semanticLabel: '选择消息保存位置',
+      semanticLabel: AppLocalizations.of(context)!.chatChooseSaveLocation,
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text('选择保存位置：'),
+          Text(AppLocalizations.of(context)!.chatChooseSaveLocationLabel),
           const SizedBox(height: 12),
           FilledButton.icon(
             icon: const Icon(Icons.folder_outlined, size: 18),
-            label: const Text('保存到应用文件'),
+            label: Text(AppLocalizations.of(context)!.chatSaveAppFile),
             onPressed: () =>
                 Navigator.of(ctx).pop(MessageSaveDestination.appFiles),
           ),
           const SizedBox(height: 8),
           FilledButton.tonalIcon(
             icon: const Icon(Icons.download_outlined, size: 18),
-            label: const Text('保存到设备'),
+            label: Text(AppLocalizations.of(context)!.chatSaveDevice),
             onPressed: () =>
                 Navigator.of(ctx).pop(MessageSaveDestination.device),
           ),
@@ -35,7 +36,7 @@ Future<MessageSaveDestination?> showMessageSaveDestinationDialog(
       actions: [
         TextButton(
           onPressed: () => Navigator.of(ctx).pop(),
-          child: const Text('取消'),
+          child: Text(AppLocalizations.of(context)!.actionCancel),
         ),
       ],
     ),

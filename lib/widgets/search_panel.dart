@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/app_localizations.dart';
 import '../providers/conversation_provider.dart';
 import '../utils/conversation_utils.dart';
 
@@ -31,7 +32,9 @@ class _SearchPanelState extends State<SearchPanel> {
     final sorted = pinnedFirstStable(widget.conversations);
 
     return sorted.where((c) {
-      final displayTitle = c.title.isEmpty ? '新对话' : c.title;
+      final displayTitle = c.title.isEmpty
+          ? AppLocalizations.of(context)!.searchPanelNewConversation
+          : c.title;
       if (!_searchByContent) {
         return displayTitle.toLowerCase().contains(query);
       } else {
@@ -81,7 +84,7 @@ class _SearchPanelState extends State<SearchPanel> {
                     Icon(Icons.search, size: 20, color: cs.onSurface),
                     const SizedBox(width: 8),
                     Text(
-                      '搜索对话',
+                      AppLocalizations.of(context)!.searchPanelTitle,
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w600,
@@ -103,14 +106,15 @@ class _SearchPanelState extends State<SearchPanel> {
                   controller: _searchController,
                   autofocus: true,
                   decoration: InputDecoration(
-                    hintText: '输入关键词...',
+                    hintText: AppLocalizations.of(context)!.searchPanelHint,
                     prefixIcon: const Icon(Icons.search),
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(8),
                     ),
                     filled: true,
-                    fillColor:
-                        cs.surfaceContainerHighest.withValues(alpha: 0.3),
+                    fillColor: cs.surfaceContainerHighest.withValues(
+                      alpha: 0.3,
+                    ),
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: 16,
                       vertical: 12,
@@ -125,7 +129,9 @@ class _SearchPanelState extends State<SearchPanel> {
                 child: Row(
                   children: [
                     FilterChip(
-                      label: const Text('搜标题'),
+                      label: Text(
+                        AppLocalizations.of(context)!.searchPanelByTitle,
+                      ),
                       selected: !_searchByContent,
                       onSelected: (_) =>
                           setState(() => _searchByContent = false),
@@ -134,7 +140,9 @@ class _SearchPanelState extends State<SearchPanel> {
                     ),
                     const SizedBox(width: 8),
                     FilterChip(
-                      label: const Text('搜内容'),
+                      label: Text(
+                        AppLocalizations.of(context)!.searchPanelByContent,
+                      ),
                       selected: _searchByContent,
                       onSelected: (_) =>
                           setState(() => _searchByContent = true),
@@ -144,7 +152,8 @@ class _SearchPanelState extends State<SearchPanel> {
                     const Spacer(),
                     if (_query.isNotEmpty)
                       Text(
-                        '${filtered.length} 个结果',
+                        AppLocalizations.of(context)!
+                            .searchPanelResults(filtered.length),
                         style: TextStyle(
                           fontSize: 13,
                           color: cs.onSurfaceVariant,
@@ -160,13 +169,18 @@ class _SearchPanelState extends State<SearchPanel> {
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.search_off,
-                                size: 40,
-                                color:
-                                    cs.onSurfaceVariant.withValues(alpha: 0.4)),
+                            Icon(
+                              Icons.search_off,
+                              size: 40,
+                              color: cs.onSurfaceVariant.withValues(alpha: 0.4),
+                            ),
                             const SizedBox(height: 12),
                             Text(
-                              _query.isEmpty ? '输入关键词开始搜索' : '没有找到匹配的对话',
+                              _query.isEmpty
+                                  ? AppLocalizations.of(context)!
+                                      .searchPanelPrompt
+                                  : AppLocalizations.of(context)!
+                                      .searchPanelNoResults,
                               style: TextStyle(color: cs.onSurfaceVariant),
                             ),
                           ],
@@ -175,7 +189,9 @@ class _SearchPanelState extends State<SearchPanel> {
                     : ListView.builder(
                         controller: scrollController,
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 4),
+                          horizontal: 12,
+                          vertical: 4,
+                        ),
                         itemCount: filtered.length,
                         itemBuilder: (context, index) {
                           final conv = filtered[index];
@@ -192,7 +208,9 @@ class _SearchPanelState extends State<SearchPanel> {
 
   Widget _buildSearchResultCard(Conversation conv, ColorScheme cs) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final title = conv.title.isEmpty ? '新对话' : conv.title;
+    final title = conv.title.isEmpty
+        ? AppLocalizations.of(context)!.searchPanelNewConversation
+        : conv.title;
     final matchCount = countMessageMatches(conv, _query);
 
     return Card(
@@ -200,14 +218,14 @@ class _SearchPanelState extends State<SearchPanel> {
       margin: const EdgeInsets.only(bottom: 8),
       color: isDark ? cs.surfaceContainerHigh : cs.surfaceContainerLow,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         side: BorderSide(
           color: cs.outlineVariant.withValues(alpha: 0.5),
           width: 0.5,
         ),
       ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         onTap: () => widget.onConversationSelected(conv),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -218,7 +236,7 @@ class _SearchPanelState extends State<SearchPanel> {
                 height: 40,
                 decoration: BoxDecoration(
                   color: cs.primaryContainer.withValues(alpha: 0.3),
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(
                   conv.isPinned
@@ -238,8 +256,11 @@ class _SearchPanelState extends State<SearchPanel> {
                         if (conv.isPinned)
                           Padding(
                             padding: const EdgeInsets.only(right: 4),
-                            child: Icon(Icons.push_pin,
-                                size: 12, color: cs.primary),
+                            child: Icon(
+                              Icons.push_pin,
+                              size: 12,
+                              color: cs.primary,
+                            ),
                           ),
                         Expanded(
                           child: Text(
@@ -269,8 +290,11 @@ class _SearchPanelState extends State<SearchPanel> {
                         ),
                         if (conv.messages.isNotEmpty) ...[
                           const SizedBox(width: 8),
-                          Icon(Icons.message_outlined,
-                              size: 12, color: cs.onSurfaceVariant),
+                          Icon(
+                            Icons.message_outlined,
+                            size: 12,
+                            color: cs.onSurfaceVariant,
+                          ),
                           const SizedBox(width: 2),
                           Text(
                             '${conv.messages.length}',

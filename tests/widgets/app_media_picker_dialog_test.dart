@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/widgets/app_media_picker_dialog.dart';
 
 // ============================================================================
@@ -30,11 +31,10 @@ class _TestRecord {
 
 Widget _buildTestApp(Widget trigger) {
   return MaterialApp(
+    locale: const Locale('zh', 'CN'),
+    supportedLocales: AppLocalizations.supportedLocales,
     home: Scaffold(body: trigger),
-    localizationsDelegates: const [
-      DefaultMaterialLocalizations.delegate,
-      DefaultWidgetsLocalizations.delegate,
-    ],
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
   );
 }
 

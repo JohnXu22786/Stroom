@@ -263,7 +263,11 @@ extension _ChatPagePersistenceExt on _ChatPageState {
     }
   }
 
-  Future<void> _onMessageSend(String text, List<Attachment> attachments) async {
+  Future<void> _onMessageSend(
+    String text,
+    List<Attachment> attachments, {
+    List<ChatMessage>? historyForRequestPrefix,
+  }) async {
     // Guard: only block sending if THIS conversation is streaming,
     // not if another conversation happens to be streaming elsewhere.
     String? convId = ref.read(activeConversationIdProvider);
@@ -354,6 +358,12 @@ extension _ChatPagePersistenceExt on _ChatPageState {
       historyForStream.addAll(
         _history.where((message) => !contextIds.contains(message.id)),
       );
+      final requestHistory = historyForRequestPrefix == null
+          ? null
+          : <ChatMessage>[
+              ...historyForRequestPrefix,
+              historyForStream.last,
+            ];
       final saveFuture = _saveMessages(
         capturedConvId: convId,
         resetTemporaryCountdown: true,
@@ -364,6 +374,8 @@ extension _ChatPagePersistenceExt on _ChatPageState {
         text,
         capturedConvId: convId,
         historyOverride: historyForStream,
+        requestHistoryOverride: requestHistory,
+        historyOnSuccess: requestHistory ?? historyForStream,
       );
       await saveFuture;
 

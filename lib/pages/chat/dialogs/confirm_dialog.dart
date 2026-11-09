@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 
 /// Shows a confirmation dialog for editing a user message or retrying an AI message.
 Future<void> showRetryEditConfirmDialog({
@@ -12,23 +13,23 @@ Future<void> showRetryEditConfirmDialog({
     return showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('编辑消息'),
+        title: Text(AppLocalizations.of(context)!.chatConfirmEditTitle),
         content: Text(
           newerMessagesExist
-              ? '确定要编辑这条消息吗？此操作将删除此消息及之后的所有消息。'
-              : '确定要重新发送这条消息吗？',
+              ? AppLocalizations.of(context)!.chatConfirmEditDeleteFollowing
+              : AppLocalizations.of(context)!.chatConfirmResend,
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
+            child: Text(AppLocalizations.of(context)!.actionCancel),
           ),
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
               onEdit();
             },
-            child: const Text('确定'),
+            child: Text(AppLocalizations.of(context)!.actionConfirm),
           ),
         ],
       ),
@@ -37,21 +38,23 @@ Future<void> showRetryEditConfirmDialog({
     return showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('重试'),
+        title: Text(AppLocalizations.of(context)!.chatConfirmRetryTitle),
         content: Text(
-          newerMessagesExist ? '确定要重试这条回复吗？此操作将删除此消息及之后的所有消息。' : '确定要重新生成回复吗？',
+          newerMessagesExist
+              ? AppLocalizations.of(context)!.chatConfirmRetryDeleteFollowing
+              : AppLocalizations.of(context)!.chatConfirmRegenerate,
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
+            child: Text(AppLocalizations.of(context)!.actionCancel),
           ),
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
               onRetry();
             },
-            child: const Text('确定'),
+            child: Text(AppLocalizations.of(context)!.actionConfirm),
           ),
         ],
       ),
@@ -67,12 +70,12 @@ Future<void> showDeleteConfirmDialog({
   return showDialog(
     context: context,
     builder: (ctx) => AlertDialog(
-      title: const Text('删除消息'),
-      content: const Text('确定要删除这条消息吗？此操作无法撤销。'),
+      title: Text(AppLocalizations.of(context)!.chatDeleteMessageTitle),
+      content: Text(AppLocalizations.of(context)!.chatDeleteMessageConfirm),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(ctx),
-          child: const Text('取消'),
+          child: Text(AppLocalizations.of(context)!.actionCancel),
         ),
         TextButton(
           onPressed: () {
@@ -82,7 +85,7 @@ Future<void> showDeleteConfirmDialog({
           style: TextButton.styleFrom(
             foregroundColor: Theme.of(context).colorScheme.error,
           ),
-          child: const Text('删除'),
+          child: Text(AppLocalizations.of(context)!.actionDelete),
         ),
       ],
     ),

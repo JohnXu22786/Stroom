@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:stroom/widgets/stroom_menu_style.dart';
+
+import '../l10n/app_localizations.dart';
 import '../providers/provider_config.dart';
 import 'voice_batch_add_shared.dart';
 
@@ -131,12 +134,7 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
             ? LineStatus.duplicate
             : LineStatus.newVoice;
         seenIds.add(id);
-        parsed.add(ParsedLine(
-          index: i,
-          name: id,
-          id: id,
-          status: status,
-        ));
+        parsed.add(ParsedLine(index: i, name: id, id: id, status: status));
       } else if (fields.length >= 2) {
         // 两列或更多列：取用户选择的起始列开始的两个字段
         final start = (_detectedColumns > 2) ? _selectedColumnStart : 0;
@@ -144,13 +142,14 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
         final second = (start + 1 < fields.length) ? fields[start + 1] : '';
 
         if (second.isEmpty || first.isEmpty) {
-          parsed.add(ParsedLine(
-            index: i,
-            name: '',
-            id: '',
-            status: LineStatus.formatError,
-            errorMsg: '所选列数据不足',
-          ));
+          parsed.add(
+            ParsedLine(
+              index: i,
+              name: '',
+              id: '',
+              status: LineStatus.formatError,
+            ),
+          );
           continue;
         }
 
@@ -161,12 +160,7 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
             ? LineStatus.duplicate
             : LineStatus.newVoice;
         seenIds.add(id);
-        parsed.add(ParsedLine(
-          index: i,
-          name: name,
-          id: id,
-          status: status,
-        ));
+        parsed.add(ParsedLine(index: i, name: name, id: id, status: status));
       }
     }
 
@@ -222,9 +216,10 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('批量添加音色'),
+        title: Text(l10n.voiceBatchTitle),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.pop(context),
@@ -233,10 +228,8 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
           TextButton(
             onPressed: _canConfirm ? _onConfirm : null,
             child: Text(
-              '确认添加',
-              style: TextStyle(
-                color: _canConfirm ? null : Colors.grey,
-              ),
+              l10n.voiceBatchConfirm,
+              style: TextStyle(color: _canConfirm ? null : Colors.grey),
             ),
           ),
         ],
@@ -294,6 +287,16 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
     }
   }
 
+  String _separatorLabel(String value, AppLocalizations l10n) =>
+      switch (value) {
+        'Tab' => l10n.voiceTabSeparator,
+        '逗号 (,)' => l10n.voiceCommaSeparator,
+        '分号 (;)' => l10n.voiceSemicolonSeparator,
+        '竖线 (|)' => l10n.voicePipeSeparator,
+        '自定义...' => l10n.voiceCustomSeparator,
+        _ => value,
+      };
+
   // --------------------------------------------------------------------------
   // 辅助：顺序选择按钮
   // --------------------------------------------------------------------------
@@ -311,7 +314,7 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
           color: selected
               ? Theme.of(context).colorScheme.primary
               : Colors.transparent,
-          borderRadius: BorderRadius.circular(6),
+          borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: selected
                 ? Theme.of(context).colorScheme.primary
@@ -336,6 +339,7 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
   // --------------------------------------------------------------------------
 
   Widget _buildParseSettingsCard() {
+    final l10n = AppLocalizations.of(context)!;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -345,16 +349,20 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
             // 分隔符选择行
             Row(
               children: [
-                const Text('分隔符：'),
+                Text(l10n.voiceBatchSeparator),
                 const SizedBox(width: 8),
                 DropdownButton<String>(
+                  dropdownColor: StroomMenuStyle.surface(context),
+                  borderRadius: StroomMenuStyle.borderRadius,
                   value: _selectedSeparator,
                   isDense: true,
                   items: _separatorOptions
-                      .map((opt) => DropdownMenuItem(
-                            value: opt,
-                            child: Text(opt),
-                          ))
+                      .map(
+                        (opt) => DropdownMenuItem(
+                          value: opt,
+                          child: Text(_separatorLabel(opt, l10n)),
+                        ),
+                      )
                       .toList(),
                   onChanged: (val) {
                     if (val != null) {
@@ -369,12 +377,14 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
             if (_selectedSeparator == '自定义...') ...[
               const SizedBox(height: 8),
               TextField(
-                decoration: const InputDecoration(
-                  hintText: '请输入自定义分隔符',
+                decoration: InputDecoration(
+                  hintText: l10n.voiceBatchCustomSeparatorHint,
                   border: OutlineInputBorder(),
                   isDense: true,
-                  contentPadding:
-                      EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
                 ),
                 onChanged: (val) {
                   _customSeparator = val;
@@ -384,13 +394,13 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
             ],
             const SizedBox(height: 16),
             // 名称/ID 顺序
-            const Text('字段顺序：'),
+            Text(l10n.voiceBatchFieldOrder),
             const SizedBox(height: 4),
             Row(
               children: [
-                _buildOrderChip(true, '第1个=名称, 第2个=ID'),
+                _buildOrderChip(true, l10n.voiceBatchNameThenId),
                 const SizedBox(width: 8),
-                _buildOrderChip(false, '第1个=ID, 第2个=名称'),
+                _buildOrderChip(false, l10n.voiceBatchIdThenName),
               ],
             ),
             // 多列选择器
@@ -399,7 +409,7 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
               const Divider(),
               const SizedBox(height: 4),
               Text(
-                '检测到 $_detectedColumns 列，请选择作为名称/ID的起始列：',
+                l10n.voiceBatchColumnChoice(_detectedColumns),
                 style: const TextStyle(fontSize: 13),
               ),
               const SizedBox(height: 8),
@@ -412,7 +422,10 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
                       padding: const EdgeInsets.only(right: 8),
                       child: _buildColumnChip(
                         i,
-                        '第${i + 1}列：${_columnSamples.length > i ? _columnSamples[i] : ""}',
+                        l10n.voiceBatchColumn(
+                          i + 1,
+                          _columnSamples.length > i ? _columnSamples[i] : '',
+                        ),
                       ),
                     ),
                   ),
@@ -426,25 +439,27 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
                   color: Theme.of(context).colorScheme.primaryContainer,
-                  borderRadius: BorderRadius.circular(6),
-                  border:
-                      Border.all(color: Theme.of(context).colorScheme.outline),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: Theme.of(context).colorScheme.outline,
+                  ),
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.info_outline,
-                        size: 18,
-                        color:
-                            Theme.of(context).colorScheme.onPrimaryContainer),
+                    Icon(
+                      Icons.info_outline,
+                      size: 18,
+                      color: Theme.of(context).colorScheme.onPrimaryContainer,
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        '识别到单列数据，将全部作为ID处理（名称 = ID）',
+                        l10n.voiceBatchSingleColumn,
                         style: TextStyle(
-                            fontSize: 13,
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onPrimaryContainer),
+                          fontSize: 13,
+                          color:
+                              Theme.of(context).colorScheme.onPrimaryContainer,
+                        ),
                       ),
                     ),
                   ],
@@ -470,7 +485,7 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
           color: selected
               ? Theme.of(context).colorScheme.primary
               : Colors.transparent,
-          borderRadius: BorderRadius.circular(6),
+          borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: selected
                 ? Theme.of(context).colorScheme.primary
@@ -495,12 +510,13 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
   // --------------------------------------------------------------------------
 
   Widget _buildInputArea() {
+    final l10n = AppLocalizations.of(context)!;
     return TextField(
       controller: _inputController,
       maxLines: 12,
       style: const TextStyle(fontFamily: 'monospace', fontSize: 14),
-      decoration: const InputDecoration(
-        hintText: '支持 Tab / 逗号 / 分号 / 竖线 作为分隔符，每行两个内容',
+      decoration: InputDecoration(
+        hintText: l10n.voiceBatchInputHint,
         hintStyle: TextStyle(color: Colors.grey),
         border: OutlineInputBorder(),
       ),
@@ -513,15 +529,16 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
   // --------------------------------------------------------------------------
 
   Widget _buildPreviewCard() {
+    final l10n = AppLocalizations.of(context)!;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(8),
         child: _parsedLines.isEmpty
-            ? const Padding(
+            ? Padding(
                 padding: EdgeInsets.all(24),
                 child: Center(
                   child: Text(
-                    '暂无解析结果',
+                    l10n.voiceBatchNoPreview,
                     style: TextStyle(color: Colors.grey),
                   ),
                 ),
@@ -529,7 +546,8 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
             : Table(
                 border: TableBorder(
                   horizontalInside: BorderSide(
-                      color: Theme.of(context).colorScheme.outlineVariant),
+                    color: Theme.of(context).colorScheme.outlineVariant,
+                  ),
                 ),
                 columnWidths: const {
                   0: FlexColumnWidth(2),
@@ -543,10 +561,10 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
                       color:
                           Theme.of(context).colorScheme.surfaceContainerHighest,
                     ),
-                    children: const [
-                      VbTableCell('音色名称', isHeader: true),
-                      VbTableCell('音色ID', isHeader: true),
-                      VbTableCell('状态', isHeader: true),
+                    children: [
+                      VbTableCell(l10n.voiceName, isHeader: true),
+                      VbTableCell(l10n.voiceId, isHeader: true),
+                      VbTableCell(l10n.status, isHeader: true),
                     ],
                   ),
                   // 数据行
@@ -568,11 +586,16 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
   }
 
   Widget _buildStatusCell(ParsedLine line) {
+    final l10n = AppLocalizations.of(context)!;
     final (String text, Color color) = switch (line.status) {
-      LineStatus.newVoice => ('✅ 新增', Colors.green.shade700),
-      LineStatus.duplicate => ('⚠️ ID已存在', Colors.orange.shade700),
+      LineStatus.newVoice => (l10n.voiceNew, Colors.green.shade700),
+      LineStatus.duplicate => (l10n.voiceIdExists, Colors.orange.shade700),
       LineStatus.formatError => (
-          '❌ 格式错误${line.errorMsg != null ? ': ${line.errorMsg}' : ''}',
+          l10n.voiceFormatError(
+            line.errorMsg != null
+                ? ': ${line.errorMsg}'
+                : ': ${l10n.voiceInsufficientColumnData}',
+          ),
           Colors.red.shade700,
         ),
     };
@@ -588,6 +611,7 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
   // --------------------------------------------------------------------------
 
   Widget _buildDuplicateBar() {
+    final l10n = AppLocalizations.of(context)!;
     final ids = _duplicateIds;
     if (ids.isEmpty) return const SizedBox.shrink();
     return Container(
@@ -599,13 +623,15 @@ class _VoiceBatchAddPageState extends State<VoiceBatchAddPage> {
       ),
       child: Row(
         children: [
-          Icon(Icons.info_outline,
-              size: 18,
-              color: Theme.of(context).colorScheme.onTertiaryContainer),
+          Icon(
+            Icons.info_outline,
+            size: 18,
+            color: Theme.of(context).colorScheme.onTertiaryContainer,
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              '发现 ${ids.length} 个重复ID: ${ids.join(", ")}',
+              l10n.voiceDuplicateIds(ids.length, ids.join(', ')),
               style: TextStyle(
                 fontSize: 13,
                 color: Theme.of(context).colorScheme.onTertiaryContainer,

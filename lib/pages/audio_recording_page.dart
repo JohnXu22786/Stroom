@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import '../l10n/app_localizations.dart';
 import '../providers/tts_state_provider.dart';
 import '../services/storage_service.dart';
 import '../utils/file_manifest.dart';
@@ -21,6 +22,8 @@ class AudioRecordingPage extends ConsumerStatefulWidget {
 }
 
 class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
+  AppLocalizations get _l10n => AppLocalizations.of(context)!;
+
   final RecorderController _controller = RecorderController();
   bool _isInitialized = false;
   bool _isRecording = false;
@@ -157,7 +160,7 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
     if (_isRecording || _isStarting) return;
 
     if (kIsWeb) {
-      _showSnackBar('浏览器暂不支持录音功能，请使用 App 版本');
+      _showSnackBar(_l10n.audioRecordingBrowserUnsupportedShort);
       return;
     }
 
@@ -168,7 +171,10 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
       if (!_isPermissionGranted) {
         final granted = await _controller.checkPermission();
         if (!granted) {
-          _showSnackBar('需要麦克风权限才能录音', isError: true);
+          if (mounted) {
+            _showSnackBar(_l10n.audioRecordingMicrophonePermissionRequired,
+                isError: true);
+          }
           if (mounted) {
             setState(() => _isStarting = false);
           }
@@ -213,7 +219,10 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
         });
       }
     } catch (e) {
-      _showSnackBar('开始录音失败: $e', isError: true);
+      if (mounted) {
+        _showSnackBar(_l10n.audioRecordingStartFailure(e.toString()),
+            isError: true);
+      }
       if (mounted) {
         setState(() => _isStarting = false);
       }
@@ -226,7 +235,10 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
       await _controller.pause();
       // _onRecorderState 会自动更新 _isPaused
     } catch (e) {
-      _showSnackBar('暂停录音失败: $e', isError: true);
+      if (mounted) {
+        _showSnackBar(_l10n.audioRecordingPauseFailure(e.toString()),
+            isError: true);
+      }
     }
   }
 
@@ -237,7 +249,10 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
       await _controller.record(path: _activeRecordingPath);
       // _onRecorderState 会自动更新 _isPaused
     } catch (e) {
-      _showSnackBar('恢复录音失败: $e', isError: true);
+      if (mounted) {
+        _showSnackBar(_l10n.audioRecordingResumeFailure(e.toString()),
+            isError: true);
+      }
     }
   }
 
@@ -258,7 +273,7 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
           _activeRecordingPath = null;
           _isRecoveredDraft = false;
         } else {
-          _showSnackBar('录音文件无效，请重新录制', isError: true);
+          _showSnackBar(_l10n.audioRecordingInvalidFile, isError: true);
         }
       }
     } catch (e) {
@@ -267,7 +282,8 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
           _isRecording = false;
           _isPaused = false;
         });
-        _showSnackBar('停止录音失败: $e', isError: true);
+        _showSnackBar(_l10n.audioRecordingStopFailure(e.toString()),
+            isError: true);
       }
     } finally {
       if (mounted) {
@@ -284,13 +300,17 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
     try {
       final file = File(_recordedFilePath!);
       if (!await file.exists()) {
-        _showSnackBar('录音文件不存在', isError: true);
+        if (mounted) {
+          _showSnackBar(_l10n.audioRecordingFileNotFound, isError: true);
+        }
         return;
       }
 
       final bytes = await file.readAsBytes();
       if (bytes.isEmpty) {
-        _showSnackBar('录音文件为空', isError: true);
+        if (mounted) {
+          _showSnackBar(_l10n.audioRecordingFileEmpty, isError: true);
+        }
         return;
       }
 
@@ -325,12 +345,15 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
         await ref.read(folderListProvider.notifier).loadFolders();
         if (!mounted) return;
 
-        _showSnackBar('录音已保存: $defaultName');
+        _showSnackBar(_l10n.audioRecordingSaved(defaultName));
 
         Navigator.pop(context);
       }
     } catch (e) {
-      _showSnackBar('保存录音失败: $e', isError: true);
+      if (mounted) {
+        _showSnackBar(_l10n.audioRecordingSaveFailure(e.toString()),
+            isError: true);
+      }
     } finally {
       if (mounted) {
         setState(() => _isSaving = false);
@@ -379,7 +402,7 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('录音'),
+        title: Text(_l10n.audioRecordingTitle),
         centerTitle: true,
       ),
       body: Center(
@@ -401,13 +424,13 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
           Icon(Icons.warning_amber_rounded,
               size: 64, color: Colors.orange[300]),
           const SizedBox(height: 16),
-          const Text(
-            '浏览器暂不支持录音功能',
+          Text(
+            _l10n.audioRecordingBrowserUnsupported,
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 8),
           Text(
-            '请使用 App 版本进行录音',
+            _l10n.audioRecordingUseApp,
             style: TextStyle(color: Colors.grey[600]),
           ),
         ],
@@ -454,7 +477,7 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
           const SizedBox(height: 8),
           if (_isRecoveredDraft) ...[
             Text(
-              '检测到未保存的录音草稿，可保存到音频库。',
+              _l10n.audioRecordingDraftRecoveryHint,
               style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
             ),
             const SizedBox(height: 8),
@@ -468,8 +491,8 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
                 color: Colors.red.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Text(
-                '录制中 ●',
+              child: Text(
+                _l10n.audioRecordingRecording,
                 style: TextStyle(color: Colors.red, fontSize: 13),
               ),
             ),
@@ -480,8 +503,8 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
                 color: Colors.orange.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Text(
-                '已暂停 ||',
+              child: Text(
+                _l10n.audioRecordingPaused,
                 style: TextStyle(color: Colors.orange, fontSize: 13),
               ),
             ),
@@ -494,7 +517,9 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
             _buildActionButton(
               onPressed: _isPermissionGranted ? _startRecording : null,
               icon: Icons.fiber_manual_record,
-              label: _isStarting ? '准备中...' : '开始录音',
+              label: _isStarting
+                  ? _l10n.audioRecordingPreparing
+                  : _l10n.audioRecordingStart,
               color: Colors.red,
               isLoading: _isStarting,
             ),
@@ -506,14 +531,16 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
                 _buildActionButton(
                   onPressed: _pauseRecording,
                   icon: Icons.pause_circle_filled,
-                  label: '暂停',
+                  label: _l10n.audioRecordingPause,
                   color: Colors.orange,
                 ),
                 const SizedBox(width: 24),
                 _buildActionButton(
                   onPressed: _stopRecording,
                   icon: Icons.stop,
-                  label: _isStopping ? '停止中...' : '停止',
+                  label: _isStopping
+                      ? _l10n.audioRecordingStopping
+                      : _l10n.audioRecordingStop,
                   color: Colors.red,
                   isLoading: _isStopping,
                 ),
@@ -527,14 +554,16 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
                 _buildActionButton(
                   onPressed: _resumeRecording,
                   icon: Icons.play_circle_filled,
-                  label: '恢复',
+                  label: _l10n.audioRecordingResume,
                   color: Colors.green,
                 ),
                 const SizedBox(width: 24),
                 _buildActionButton(
                   onPressed: _stopRecording,
                   icon: Icons.stop,
-                  label: _isStopping ? '停止中...' : '停止',
+                  label: _isStopping
+                      ? _l10n.audioRecordingStopping
+                      : _l10n.audioRecordingStop,
                   color: Colors.red,
                   isLoading: _isStopping,
                 ),
@@ -548,7 +577,9 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
                 _buildActionButton(
                   onPressed: _isSaving ? null : _saveRecording,
                   icon: Icons.save,
-                  label: _isSaving ? '保存中...' : '保存录音',
+                  label: _isSaving
+                      ? _l10n.audioRecordingSaving
+                      : _l10n.audioRecordingSave,
                   color: theme.colorScheme.primary,
                   isLoading: _isSaving,
                 ),
@@ -556,7 +587,7 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
                 _buildActionButton(
                   onPressed: _isSaving ? null : _resetForReRecord,
                   icon: Icons.refresh,
-                  label: '重新录制',
+                  label: _l10n.audioRecordingRecordAgain,
                   color: Colors.grey,
                 ),
               ],
@@ -597,7 +628,7 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
               scaleFactor: 25.0,
             ),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(8),
               color: Colors.black.withValues(alpha: 0.05),
             ),
             padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -606,7 +637,9 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
           const SizedBox(height: 4),
           // 波形提示文字
           Text(
-            _isPaused ? '暂停录制，波形已冻结' : '音量波形实时显示',
+            _isPaused
+                ? _l10n.audioRecordingWaveformPaused
+                : _l10n.audioRecordingWaveformLive,
             style: TextStyle(
               fontSize: 12,
               color: theme.colorScheme.onSurface.withValues(alpha: 0.5),

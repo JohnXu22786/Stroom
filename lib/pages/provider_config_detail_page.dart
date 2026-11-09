@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../providers/provider_config.dart';
 import '../utils/model_order.dart';
 import 'asr_model_config_page.dart';
@@ -308,9 +310,19 @@ class _ProviderConfigDetailPageState
         }
       case ModelConfigStyle.ocr:
         {
+          final providerRequestSizeBudget =
+              _config?.typeConfig['requestSizeBudgetBytes'];
           final result = await Navigator.push<ModelConfig>(
             context,
-            MaterialPageRoute(builder: (_) => const OcrModelConfigPage()),
+            MaterialPageRoute(
+              builder: (_) => OcrModelConfigPage(
+                providerRequestSizeBudgetBytes:
+                    providerRequestSizeBudget is num &&
+                            providerRequestSizeBudget > 0
+                        ? providerRequestSizeBudget.toInt()
+                        : null,
+              ),
+            ),
           );
           if (result != null && mounted) {
             await _insertModelResult(
@@ -484,6 +496,8 @@ class _ProviderConfigDetailPageState
         }
       case ModelConfigStyle.ocr:
         {
+          final providerRequestSizeBudget =
+              _config?.typeConfig['requestSizeBudgetBytes'];
           if (_isExistingConfig) {
             final config = _config;
             if (config == null ||
@@ -495,8 +509,14 @@ class _ProviderConfigDetailPageState
             final result = await Navigator.push<ModelConfig>(
               context,
               MaterialPageRoute(
-                builder: (_) =>
-                    OcrModelConfigPage(model: config.models[modelIndex].copy()),
+                builder: (_) => OcrModelConfigPage(
+                  model: config.models[modelIndex].copy(),
+                  providerRequestSizeBudgetBytes:
+                      providerRequestSizeBudget is num &&
+                              providerRequestSizeBudget > 0
+                          ? providerRequestSizeBudget.toInt()
+                          : null,
+                ),
               ),
             );
             if (result != null && mounted) {
@@ -513,6 +533,11 @@ class _ProviderConfigDetailPageState
               MaterialPageRoute(
                 builder: (_) => OcrModelConfigPage(
                   model: _pendingModels[modelIndex].copy(),
+                  providerRequestSizeBudgetBytes:
+                      providerRequestSizeBudget is num &&
+                              providerRequestSizeBudget > 0
+                          ? providerRequestSizeBudget.toInt()
+                          : null,
                 ),
               ),
             );
@@ -701,17 +726,17 @@ class _ProviderConfigDetailPageState
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('删除模型'),
-        content: const Text('确定要删除此模型吗？'),
+        title: Text(AppLocalizations.of(context)!.providerDeleteModel),
+        content: Text(AppLocalizations.of(context)!.providerDeleteModelConfirm),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('取消'),
+            child: Text(AppLocalizations.of(context)!.batchDlgCancel),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('删除'),
+            child: Text(AppLocalizations.of(context)!.fileManagerDelete),
           ),
         ],
       ),
@@ -763,8 +788,8 @@ class _ProviderConfigDetailPageState
     final title = _isExistingConfig
         ? (_providerNameController.text.isNotEmpty
             ? _providerNameController.text
-            : '编辑配置')
-        : '新建$entryName配置';
+            : AppLocalizations.of(context)!.providerEditConfig)
+        : AppLocalizations.of(context)!.providerCreateNamedConfig(entryName);
 
     final models = _displayModels;
     final reorderable = _enableModelReorder;
@@ -783,7 +808,7 @@ class _ProviderConfigDetailPageState
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: cs.primaryContainer.withValues(alpha: 0.3),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(8),
               border: Border.all(color: cs.primaryContainer, width: 0.5),
             ),
             child: Row(
@@ -793,7 +818,7 @@ class _ProviderConfigDetailPageState
                   height: 40,
                   decoration: BoxDecoration(
                     color: cs.primaryContainer.withValues(alpha: 0.5),
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(Icons.dns, color: Colors.teal, size: 24),
                 ),
@@ -805,7 +830,7 @@ class _ProviderConfigDetailPageState
                       Text(
                         _providerNameController.text.isNotEmpty
                             ? _providerNameController.text
-                            : '（未命名）',
+                            : AppLocalizations.of(context)!.providerUnnamed,
                         style: TextStyle(
                           fontWeight: FontWeight.w600,
                           color: cs.onSurface,
@@ -826,7 +851,7 @@ class _ProviderConfigDetailPageState
                 ),
                 IconButton(
                   icon: const Icon(Icons.tune, size: 20),
-                  tooltip: '编辑供应商设置',
+                  tooltip: AppLocalizations.of(context)!.providerEditSettings,
                   onPressed: () => _openSettingsPanel(),
                 ),
               ],
@@ -836,22 +861,25 @@ class _ProviderConfigDetailPageState
           // ==========================================================
           // 模型列表
           // ==========================================================
-          _buildSectionHeader('模型列表'),
+          _buildSectionHeader(AppLocalizations.of(context)!.providerModelList),
           const SizedBox(height: 8),
           SizedBox(
             width: double.infinity,
             child: TextButton.icon(
               icon: const Icon(Icons.add),
-              label: const Text('添加'),
+              label: Text(AppLocalizations.of(context)!.builtInPromptAdd),
               onPressed: _addModel,
             ),
           ),
           const SizedBox(height: 8),
           if (models.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
               child: Center(
-                child: Text('暂无模型', style: TextStyle(color: Colors.grey)),
+                child: Text(
+                  AppLocalizations.of(context)!.providerNoModels,
+                  style: TextStyle(color: Colors.grey),
+                ),
               ),
             )
           else if (reorderable)
@@ -897,15 +925,21 @@ class _ProviderConfigDetailPageState
               child: Icon(Icons.drag_handle, color: Colors.grey),
             )
           : const Icon(Icons.smart_toy),
-      title: Text(model.name.isNotEmpty ? model.name : '（未命名）'),
-      subtitle: Text('ID: ${model.modelId}'),
+      title: Text(
+        model.name.isNotEmpty
+            ? model.name
+            : AppLocalizations.of(context)!.providerUnnamed,
+      ),
+      subtitle: Text(
+        AppLocalizations.of(context)!.providerModelId(model.modelId),
+      ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           IconButton(
             icon: const Icon(Icons.delete, color: Colors.red),
             onPressed: () => _deleteModel(storageIndex),
-            tooltip: '删除模型',
+            tooltip: AppLocalizations.of(context)!.providerDeleteModel,
           ),
           const Icon(Icons.chevron_right),
         ],

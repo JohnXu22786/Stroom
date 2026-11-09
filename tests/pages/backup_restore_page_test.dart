@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/pages/backup_restore_page.dart';
 import 'package:stroom/services/backup_service.dart' show BackupSelection;
@@ -12,6 +13,9 @@ Widget createTestApp({
 }) {
   return ProviderScope(
     child: MaterialApp(
+      locale: const Locale('zh', 'CN'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: BackupRestorePage(clearDataForTest: clearDataForTest),
     ),
   );
@@ -94,7 +98,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.pump(const Duration(seconds: 10));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('确定清除'));
+      await tester.tap(find.widgetWithText(FilledButton, '清除所选数据'));
       await tester.pumpAndSettle();
 
       // Button-based restart prompt (mirrors the startup migration dialog),

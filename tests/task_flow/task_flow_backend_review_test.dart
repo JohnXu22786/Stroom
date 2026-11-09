@@ -100,6 +100,7 @@ class _ManualDownloads extends CatCatchNotifier {
     String audioFolder = '',
     String? taskId,
     bool deferSingleResourceSelection = false,
+    bool flowManagedSelection = false,
   }) {
     final id = taskId!;
     idsByUrl[url] = id;
@@ -244,6 +245,9 @@ class _Manager extends ChatStreamManager {
     required String text,
     required String convId,
     required List<ChatMessage> history,
+    List<ChatMessage>? requestHistoryOverride,
+    List<ChatMessage>? historyOnSuccess,
+    Map<String, String>? customParamValues,
     List<ToolDefinition> tools = const [],
     bool reasoning = false,
     String reasoningEffort = 'medium',

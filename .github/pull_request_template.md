@@ -19,3 +19,10 @@
 ### Breaking changes (if any)
 
 <!-- Describe backwards-incompatible changes, or write `None`. -->
+
+## UI consistency (when UI is affected)
+
+- [ ] Screens/components affected:
+- [ ] Searched shared widgets and all `lib/` / `packages/streaming_markdown/` call sites; updated affected callers.
+- [ ] Checked relevant validation and light/dark or responsive/layout state:
+- [ ] Added a representative screenshot/state when practical; preserved intentional feature accents and the external math ownership boundary.

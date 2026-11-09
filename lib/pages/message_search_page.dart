@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../l10n/app_localizations.dart';
 import '../models/chat_message.dart';
 import '../providers/conversation_provider.dart';
 
@@ -200,10 +201,11 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final localizations = AppLocalizations.of(context)!;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('全局消息搜索'),
+        title: Text(localizations.messageSearchTitle),
         leading: IconButton(
           icon: const Icon(Icons.close),
           onPressed: () => Navigator.of(context).pop(),
@@ -225,7 +227,7 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
               autofocus: true,
               onChanged: _onSearchChanged,
               decoration: InputDecoration(
-                hintText: '搜索所有对话中的消息...',
+                hintText: localizations.messageSearchHint,
                 prefixIcon: const Icon(Icons.search),
                 suffixIcon: _searchController.text.isNotEmpty
                     ? IconButton(
@@ -277,7 +279,7 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
           ),
           const SizedBox(height: 12),
           Text(
-            '输入关键词搜索所有对话中的消息',
+            AppLocalizations.of(context)!.messageSearchInitialState,
             style: TextStyle(color: cs.onSurfaceVariant, fontSize: 14),
           ),
         ],
@@ -303,7 +305,7 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
           ),
           const SizedBox(height: 12),
           Text(
-            '未找到匹配的消息',
+            AppLocalizations.of(context)!.messageSearchEmptyState,
             style: TextStyle(color: cs.onSurfaceVariant, fontSize: 14),
           ),
         ],
@@ -325,7 +327,10 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
 
   Widget _buildResultTile(SearchResult result, ColorScheme cs) {
     final conv = result.conversation;
-    final title = conv.title.isEmpty ? '新对话' : conv.title;
+    final localizations = AppLocalizations.of(context)!;
+    final title = conv.title.isEmpty
+        ? localizations.messageSearchNewConversation
+        : conv.title;
 
     // Build a preview of the first match
     const contextChars = 40;
@@ -375,10 +380,10 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
                   ),
                   decoration: BoxDecoration(
                     color: cs.primaryContainer,
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
-                    '${result.matchCount} 个匹配',
+                    localizations.messageSearchMatchCount(result.matchCount),
                     style: TextStyle(
                       fontSize: 11,
                       color: cs.onPrimaryContainer,

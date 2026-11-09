@@ -6,9 +6,7 @@ import Security
 @main
 class AppDelegate: FlutterAppDelegate {
   override func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-    // Keep the app running in the background even when all windows
-    // are closed. This ensures long-running background tasks
-    // (API calls, TTS, etc.) are not interrupted.
+    // Keep the app running in the background when the last window closes.
     return false
   }
 

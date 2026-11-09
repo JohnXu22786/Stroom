@@ -79,7 +79,7 @@ class _AnkiCardBrowserState extends ConsumerState<AnkiCardBrowser> {
                 hintText: '搜索卡片...',
                 prefixIcon: const Icon(Icons.search),
                 border:
-                    OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                 suffixIcon: _searchCtl.text.isNotEmpty
                     ? IconButton(
                         icon: const Icon(Icons.clear),

@@ -26,8 +26,9 @@ final textFolderListProvider =
 // 视图模式（false = 列表，true = 缩略图/网格）
 // ============================================================================
 
-final textViewModeProvider =
-    StateNotifierProvider<TextViewModeNotifier, bool>((ref) {
+final textViewModeProvider = StateNotifierProvider<TextViewModeNotifier, bool>((
+  ref,
+) {
   final notifier = TextViewModeNotifier();
   notifier.load();
   return notifier;
@@ -101,16 +102,59 @@ class TextRecordsNotifier extends StateNotifier<List<TextRecord>> {
         final content = oldStoragePath == newStoragePath
             ? null
             : await TextManifest.readFile(oldStoragePath);
-        if (content != null) {
-          await TextManifest.writeFile(newStoragePath, content);
-        }
-        await TextManifest.updateRecord(updated);
-        if (content != null &&
-            !records.any(
-              (record) =>
-                  record.id != id && record.storageFileName == oldStoragePath,
-            )) {
-          await TextManifest.deleteFile(oldStoragePath);
+        // The record and content may change while the source bytes are read.
+        // A missing initial read may also be stale if a concurrent save has
+        // already repointed the record and removed its old file. The lock
+        // helper includes the current hash and retries if it changes while
+        // locks are being acquired, so validate and reread under those locks.
+        var sourceReadFailed = false;
+        await TextManifest.withRecordSaveLocks(r.id, r.hash, () async {
+          final currentRecords = await TextManifest.loadRecordsUncached();
+          TextRecord? current;
+          for (final record in currentRecords) {
+            if (record.id == r.id) {
+              current = record;
+              break;
+            }
+          }
+
+          if (current == null) return;
+
+          final currentUpdated =
+              current.copyWithName(newName).copyWithFormat(format);
+          final currentStoragePath = current.storageFileName;
+          final currentNewStoragePath = currentUpdated.storageFileName;
+          var currentContent = content;
+          if (currentStoragePath == currentNewStoragePath) {
+            currentContent = null;
+          } else if (currentContent == null ||
+              currentStoragePath != oldStoragePath ||
+              current.hash != r.hash) {
+            currentContent = await TextManifest.readFile(currentStoragePath);
+          }
+          if (currentStoragePath != currentNewStoragePath &&
+              currentContent == null) {
+            sourceReadFailed = true;
+            return;
+          }
+
+          if (currentContent != null) {
+            await TextManifest.writeFile(
+              currentNewStoragePath,
+              currentContent,
+            );
+          }
+          await TextManifest.updateRecord(currentUpdated);
+          if (currentContent != null) {
+            await TextManifest.deleteFileIfUnreferenced(
+              current.hash,
+              currentStoragePath,
+            );
+          }
+        });
+        if (sourceReadFailed) {
+          await loadRecords();
+          throw Exception('无法读取原文件内容，格式转换未完成');
         }
       }
     }
@@ -217,8 +261,10 @@ class TextRecordsNotifier extends StateNotifier<List<TextRecord>> {
     TextManifest.invalidateCache();
     final baseName = TextManifest.getFolderBaseName(sourceName);
     // 规范化目标父路径（去首尾空白与尾部斜杠），'' 表示根目录
-    final targetParentClean =
-        targetParent.trim().replaceAll(RegExp(r'/+$'), '');
+    final targetParentClean = targetParent.trim().replaceAll(
+          RegExp(r'/+$'),
+          '',
+        );
     final newPath =
         targetParentClean.isEmpty ? baseName : '$targetParentClean/$baseName';
 
@@ -280,8 +326,10 @@ class TextRecordsNotifier extends StateNotifier<List<TextRecord>> {
   Future<void> copyFolder(String sourceName, String targetParent) async {
     final baseName = TextManifest.getFolderBaseName(sourceName);
     // 规范化目标父路径（去首尾空白与尾部斜杠），'' 表示根目录
-    final targetParentClean =
-        targetParent.trim().replaceAll(RegExp(r'/+$'), '');
+    final targetParentClean = targetParent.trim().replaceAll(
+          RegExp(r'/+$'),
+          '',
+        );
     final newPath =
         targetParentClean.isEmpty ? baseName : '$targetParentClean/$baseName';
 
@@ -305,15 +353,17 @@ class TextRecordsNotifier extends StateNotifier<List<TextRecord>> {
 
     for (final r in records) {
       if (r.folder == sourceName) {
-        await TextManifest.addRecord(TextRecord(
-          name: r.name,
-          hash: r.hash,
-          format: r.format,
-          createdAt: DateTime.now(),
-          size: r.size,
-          folder: newPath,
-          textLength: r.textLength,
-        ));
+        await TextManifest.addRecord(
+          TextRecord(
+            name: r.name,
+            hash: r.hash,
+            format: r.format,
+            createdAt: DateTime.now(),
+            size: r.size,
+            folder: newPath,
+            textLength: r.textLength,
+          ),
+        );
       }
     }
 
@@ -323,15 +373,17 @@ class TextRecordsNotifier extends StateNotifier<List<TextRecord>> {
       final newDescPath = '$newPath$suffix';
       for (final r in records) {
         if (r.folder == desc) {
-          await TextManifest.addRecord(TextRecord(
-            name: r.name,
-            hash: r.hash,
-            format: r.format,
-            createdAt: DateTime.now(),
-            size: r.size,
-            folder: newDescPath,
-            textLength: r.textLength,
-          ));
+          await TextManifest.addRecord(
+            TextRecord(
+              name: r.name,
+              hash: r.hash,
+              format: r.format,
+              createdAt: DateTime.now(),
+              size: r.size,
+              folder: newDescPath,
+              textLength: r.textLength,
+            ),
+          );
         }
       }
       // Empty subfolders (no records) must stay in the folder cache;

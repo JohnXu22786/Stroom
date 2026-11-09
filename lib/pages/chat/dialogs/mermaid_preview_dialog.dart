@@ -1,8 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:stroom/pages/chat/dialogs/mermaid_preview_web_controls.dart';
 import 'package:stroom/widgets/mermaid_render_widget.dart';
 
 /// Full-screen dialog that renders Mermaid diagram code in a full-size
@@ -21,17 +24,26 @@ import 'package:stroom/widgets/mermaid_render_widget.dart';
 void showMermaidPreviewDialog({
   required BuildContext context,
   required String mermaidCode,
+  bool showControlsBeforeWebViewReadyForTesting = false,
 }) {
   showDialog(
     context: context,
-    builder: (ctx) => _MermaidPreviewDialogContent(mermaidCode: mermaidCode),
+    builder: (ctx) => _MermaidPreviewDialogContent(
+      mermaidCode: mermaidCode,
+      showControlsBeforeWebViewReadyForTesting:
+          showControlsBeforeWebViewReadyForTesting,
+    ),
   );
 }
 
 class _MermaidPreviewDialogContent extends StatefulWidget {
   final String mermaidCode;
+  final bool showControlsBeforeWebViewReadyForTesting;
 
-  const _MermaidPreviewDialogContent({required this.mermaidCode});
+  const _MermaidPreviewDialogContent({
+    required this.mermaidCode,
+    this.showControlsBeforeWebViewReadyForTesting = false,
+  });
 
   @override
   State<_MermaidPreviewDialogContent> createState() =>
@@ -40,10 +52,18 @@ class _MermaidPreviewDialogContent extends StatefulWidget {
 
 class _MermaidPreviewDialogContentState
     extends State<_MermaidPreviewDialogContent> {
+  Key _webViewKey = const Key('mermaid_preview_webview');
+  String? _localizedHtmlLocaleName;
   InAppWebViewController? _webViewController;
   bool _isLoading = true;
   bool _hasError = false;
+  bool _webNavigationTimedOut = false;
   double _zoomLevel = 1.0;
+  bool _canApplyZoomDeltasAfterFit = false;
+  bool _checkingZoomReadiness = false;
+  bool _zoomReadinessCheckRequested = false;
+  bool _flushingPendingZoomDeltas = false;
+  final List<double> _pendingZoomDeltas = [];
 
   /// Bundled mermaid.js source, inlined into the render template so the
   /// diagram renders fully offline on every platform (no CDN request).
@@ -52,11 +72,14 @@ class _MermaidPreviewDialogContentState
   String? _inlineMermaidJs;
   bool _mermaidJsLoading = true;
 
-  /// Fallback timer that force-ends the loading state if [onLoadStop] never
-  /// fires (e.g. the web platform's iframe load event or its JS bridge is
-  /// unavailable). Without it the loading overlay could spin forever while
-  /// the WebView actually rendered (or failed to render) underneath.
+  /// Fallback timer that settles the preview if [onLoadStop] never fires.
+  /// Web shows an error because it does not use the Flutter loading overlay;
+  /// native platforms end their loading overlay as before.
   Timer? _readyFallbackTimer;
+  Timer? _zoomReadinessRetryTimer;
+  String? _pendingWebSourceKey;
+  InAppWebViewController? _pendingWebSourceController;
+  Future<bool>? _timedOutSourceCleanup;
 
   @override
   void initState() {
@@ -68,9 +91,39 @@ class _MermaidPreviewDialogContentState
       _isLoading = false;
       _mermaidJsLoading = false;
       _armReadyFallback();
+    } else if (widget.showControlsBeforeWebViewReadyForTesting) {
+      _mermaidJsLoading = false;
+      _armReadyFallback();
     } else {
       _loadMermaidAsset();
     }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final localeName = AppLocalizations.of(context)!.localeName;
+    final previousLocaleName = _localizedHtmlLocaleName;
+    _localizedHtmlLocaleName = localeName;
+    if (previousLocaleName == null || previousLocaleName == localeName) return;
+
+    // initialData is read only when the platform view is created. Recreate it
+    // with HTML built for the newly selected locale.
+    _initialHtml = null;
+    _webViewKey = UniqueKey();
+    _webViewController = null;
+    _hasError = false;
+    _isLoading = !kIsWeb;
+    _webNavigationTimedOut = false;
+    _canApplyZoomDeltasAfterFit = false;
+    _pendingZoomDeltas.clear();
+    _pendingWebSourceKey = null;
+    _pendingWebSourceController = null;
+    _readyFallbackTimer?.cancel();
+    _zoomReadinessRetryTimer?.cancel();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _armReadyFallback();
+    });
   }
 
   Future<void> _loadMermaidAsset() async {
@@ -89,13 +142,15 @@ class _MermaidPreviewDialogContentState
   @override
   void dispose() {
     _readyFallbackTimer?.cancel();
+    _zoomReadinessRetryTimer?.cancel();
+    _cleanupPendingWebSourceWithoutWaiting();
     _webViewController = null;
     super.dispose();
   }
 
   /// Arms a timeout once the WebView is eligible to mount. It reports a
-  /// visible error if no controller is created, or ends the loading overlay
-  /// if a created WebView never fires [onLoadStop].
+  /// visible error if no controller is created, or settles navigation if a
+  /// created WebView never fires [onLoadStop].
   void _armReadyFallback() {
     _readyFallbackTimer?.cancel();
     _readyFallbackTimer = Timer(const Duration(seconds: 3), () {
@@ -106,10 +161,25 @@ class _MermaidPreviewDialogContentState
           _isLoading = false;
           _hasError = true;
         });
+      } else if (kIsWeb && !_hasError) {
+        debugPrint(
+          '[MermaidPreviewDialog] web navigation did not settle '
+          'within 3s',
+        );
+        _timedOutSourceCleanup =
+            _pendingWebSourceKey == null ? null : _cleanupPendingWebSource();
+        setState(() {
+          _isLoading = false;
+          _hasError = true;
+          _webNavigationTimedOut = true;
+        });
       } else if (_isLoading) {
-        debugPrint('[MermaidPreviewDialog] onLoadStop did not fire within '
-            '3s, force-ending the loading state');
+        debugPrint(
+          '[MermaidPreviewDialog] onLoadStop did not fire within '
+          '3s, force-ending the loading state',
+        );
         setState(() => _isLoading = false);
+        unawaited(_checkZoomReadiness());
       }
     });
   }
@@ -127,8 +197,17 @@ class _MermaidPreviewDialogContentState
     }
     // Same shared template as the inline widget, with the bundled
     // mermaid.js inlined (offline rendering, no CDN request).
-    return _initialHtml ??= MermaidRenderWidget.buildMermaidHtml(code,
-        inlineMermaidJs: _inlineMermaidJs);
+    final strings = AppLocalizations.of(context)!;
+    return _initialHtml ??= MermaidRenderWidget.buildMermaidHtml(
+      code,
+      inlineMermaidJs: _inlineMermaidJs,
+      loadingMessage: strings.mermaidLoadingDiagram,
+      cdnLoadTimeoutMessage: strings.mermaidLoadTimeout,
+      cdnLoadFailedMessage: strings.mermaidCdnLoadFailed,
+      renderErrorPrefix: strings.mermaidRenderErrorPrefix(''),
+      initializeErrorPrefix: strings.mermaidInitializeErrorPrefix(''),
+      resourceErrorMessage: strings.mermaidResourceError,
+    );
   }
 
   /// Web-only: loads the bundled asset template (same origin) with the
@@ -136,11 +215,98 @@ class _MermaidPreviewDialogContentState
   /// itself from the same asset directory, so no CDN request is made.
   Future<void> _loadCode() async {
     final ctrl = _webViewController;
-    if (ctrl == null) return;
-    await ctrl.loadUrl(
-        urlRequest: URLRequest(
-            url: WebUri(
-                MermaidRenderWidget.buildWebAssetUrl(widget.mermaidCode))));
+    if (ctrl == null || widget.mermaidCode.trim().isEmpty) return;
+    String? preparedSourceKey;
+    try {
+      final url = await MermaidRenderWidget.prepareWebAssetUrl(
+        widget.mermaidCode,
+        (key, source) async {
+          preparedSourceKey = key;
+          _pendingWebSourceKey = key;
+          _pendingWebSourceController = ctrl;
+          await ctrl.evaluateJavascript(
+            source:
+                'window.sessionStorage.setItem(${jsonEncode(key)}, ${jsonEncode(source)});',
+          );
+        },
+      );
+      preparedSourceKey ??= Uri.parse(url).queryParameters['sourceKey'];
+      final sourceKey = preparedSourceKey;
+      if (!mounted ||
+          ctrl != _webViewController ||
+          (sourceKey != null && _webNavigationTimedOut)) {
+        if (sourceKey != null) {
+          await _removeStoredWebSource(ctrl, sourceKey);
+          _clearPendingWebSource(sourceKey);
+        }
+        return;
+      }
+      await ctrl.loadUrl(urlRequest: URLRequest(url: WebUri(url)));
+    } catch (error) {
+      if (preparedSourceKey != null) {
+        await _removeStoredWebSource(ctrl, preparedSourceKey!);
+        _clearPendingWebSource(preparedSourceKey!);
+      }
+      debugPrint('[MermaidPreviewDialog] Failed to prepare web source: $error');
+      if (mounted) {
+        _readyFallbackTimer?.cancel();
+        setState(() {
+          _isLoading = false;
+          _hasError = true;
+          _webNavigationTimedOut = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _removeStoredWebSource(
+    InAppWebViewController ctrl,
+    String sourceKey,
+  ) async {
+    try {
+      await ctrl.evaluateJavascript(
+        source: 'window.sessionStorage.removeItem(${jsonEncode(sourceKey)});',
+      );
+    } catch (error) {
+      debugPrint(
+        '[MermaidPreviewDialog] Failed to remove stored web source: $error',
+      );
+    }
+  }
+
+  Future<bool> _cleanupPendingWebSource() async {
+    final sourceKey = _pendingWebSourceKey;
+    final controller = _pendingWebSourceController;
+    if (sourceKey == null || controller == null) return false;
+    _clearPendingWebSource(sourceKey);
+    try {
+      final result = await controller.evaluateJavascript(
+        source: '(() => { '
+            'const key = ${jsonEncode(sourceKey)}; '
+            'const wasPending = window.sessionStorage.getItem(key) !== null; '
+            'window.sessionStorage.removeItem(key); '
+            'return wasPending; '
+            '})()',
+      );
+      return result == true || result == 'true';
+    } catch (error) {
+      debugPrint(
+        '[MermaidPreviewDialog] Failed to remove stored web source: $error',
+      );
+      // If cleanup could not be verified, keep a late load from appearing
+      // successful when its source may have been removed.
+      return true;
+    }
+  }
+
+  void _cleanupPendingWebSourceWithoutWaiting() {
+    unawaited(_cleanupPendingWebSource().then<void>((_) {}));
+  }
+
+  void _clearPendingWebSource(String sourceKey) {
+    if (_pendingWebSourceKey != sourceKey) return;
+    _pendingWebSourceKey = null;
+    _pendingWebSourceController = null;
   }
 
   /// Changes the zoom by [delta] at the center of the preview, based on the
@@ -154,21 +320,158 @@ class _MermaidPreviewDialogContentState
   }
 
   Future<void> _zoomAroundCenter(double delta) async {
+    final controller = _webViewController;
+
     // Keep native state current for other dialog behavior, but let JS apply
     // the button delta to its live zoom. On web the JS callback bridge is
     // unsupported, so the cached Flutter zoom can be stale after auto-fit.
     if (!kIsWeb) {
       final target = (_zoomLevel + delta).clamp(0.1, 10.0);
-      if (target == _zoomLevel) return;
+      // The page's fit can update after its helper exists, so the cached
+      // level may still be stale at either boundary. Always let JavaScript
+      // apply and clamp the relative delta against its live zoom.
       _zoomLevel = target;
     }
 
-    await _webViewController?.evaluateJavascript(
-      source: 'window.applyZoomDeltasAfterFit([$delta])',
+    _pendingZoomDeltas.add(delta);
+    if (controller == null ||
+        !_canApplyZoomDeltasAfterFit ||
+        _flushingPendingZoomDeltas) {
+      if (controller != null && !_canApplyZoomDeltasAfterFit) {
+        unawaited(_checkZoomReadiness());
+      }
+      return;
+    }
+
+    await _flushPendingZoomDeltas(controller);
+  }
+
+  Future<void> _flushPendingZoomDeltas(
+    InAppWebViewController controller,
+  ) async {
+    if (_pendingZoomDeltas.isEmpty || _flushingPendingZoomDeltas) return;
+
+    final deltas = List<double>.of(_pendingZoomDeltas);
+    _flushingPendingZoomDeltas = true;
+    try {
+      await controller.evaluateJavascript(
+        source: 'window.applyZoomDeltasAfterFit(${jsonEncode(deltas)})',
+      );
+      if (controller == _webViewController) {
+        _pendingZoomDeltas.removeRange(0, deltas.length);
+      }
+    } catch (_) {
+      if (controller == _webViewController) {
+        _canApplyZoomDeltasAfterFit = false;
+        _scheduleZoomReadinessRetry();
+      }
+    } finally {
+      _flushingPendingZoomDeltas = false;
+      final currentController = _webViewController;
+      if (mounted &&
+          currentController != null &&
+          _canApplyZoomDeltasAfterFit &&
+          _pendingZoomDeltas.isNotEmpty) {
+        unawaited(_flushPendingZoomDeltas(currentController));
+      }
+    }
+  }
+
+  Future<void> _markZoomInputQueueReady(
+    InAppWebViewController controller,
+  ) async {
+    await controller.evaluateJavascript(
+      source: 'window.applyZoomOperationsAfterFit([])',
     );
   }
 
-  static const _emptyPlaceholderHtml = '''
+  Future<void> _markZoomInputQueueReadyAndFlush(
+    InAppWebViewController controller,
+  ) async {
+    try {
+      await _markZoomInputQueueReady(controller);
+      if (!mounted || controller != _webViewController) return;
+      _canApplyZoomDeltasAfterFit = true;
+      await _flushPendingZoomDeltas(controller);
+    } catch (_) {
+      if (!mounted || controller != _webViewController) return;
+      _canApplyZoomDeltasAfterFit = false;
+      _scheduleZoomReadinessRetry();
+    }
+  }
+
+  Future<void> _checkZoomReadiness() async {
+    final controller = _webViewController;
+    if (controller == null || _hasError) return;
+    if (_canApplyZoomDeltasAfterFit) {
+      _zoomReadinessRetryTimer?.cancel();
+      _zoomReadinessRetryTimer = null;
+      return;
+    }
+    _zoomReadinessRetryTimer?.cancel();
+    _zoomReadinessRetryTimer = null;
+    if (_checkingZoomReadiness) {
+      _zoomReadinessCheckRequested = true;
+      return;
+    }
+
+    _checkingZoomReadiness = true;
+    try {
+      final result = await controller.evaluateJavascript(
+        source: "typeof window.applyZoomDeltasAfterFit === 'function'",
+      );
+      if (!mounted ||
+          controller != _webViewController ||
+          !(result == true || result == 'true')) {
+        return;
+      }
+
+      // This dialog applies toolbar zoom directly instead of routing through
+      // MermaidRenderWidget's pending-operation flush. Mark the shared HTML
+      // template's input queue ready first, or applyZoomDeltasAfterFit keeps
+      // queueing every delta indefinitely.
+      await _markZoomInputQueueReady(controller);
+      _canApplyZoomDeltasAfterFit = true;
+      await _flushPendingZoomDeltas(controller);
+    } catch (_) {
+      // The page may still be loading. Queued deltas schedule another
+      // readiness check; later taps can also request an immediate check.
+    } finally {
+      final shouldRetry = _zoomReadinessCheckRequested;
+      _zoomReadinessCheckRequested = false;
+      _checkingZoomReadiness = false;
+      if (shouldRetry &&
+          mounted &&
+          !_hasError &&
+          !_canApplyZoomDeltasAfterFit &&
+          _pendingZoomDeltas.isNotEmpty) {
+        unawaited(_checkZoomReadiness());
+      } else if (mounted &&
+          !_hasError &&
+          !_canApplyZoomDeltasAfterFit &&
+          _pendingZoomDeltas.isNotEmpty) {
+        _scheduleZoomReadinessRetry();
+      }
+    }
+  }
+
+  void _scheduleZoomReadinessRetry() {
+    if (!mounted ||
+        _hasError ||
+        _webViewController == null ||
+        _canApplyZoomDeltasAfterFit ||
+        _pendingZoomDeltas.isEmpty ||
+        (_zoomReadinessRetryTimer?.isActive ?? false)) {
+      return;
+    }
+
+    _zoomReadinessRetryTimer = Timer(const Duration(milliseconds: 500), () {
+      _zoomReadinessRetryTimer = null;
+      unawaited(_checkZoomReadiness());
+    });
+  }
+
+  String get _emptyPlaceholderHtml => '''
 <html>
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -188,14 +491,27 @@ class _MermaidPreviewDialogContentState
   </style>
 </head>
 <body>
-<div>No Mermaid code to preview</div>
+<div>${_escapeHtml(AppLocalizations.of(context)!.mermaidEmptyPlaceholder)}</div>
 </body>
 </html>''';
 
+  String _escapeHtml(String value) => value
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#39;');
+
   @override
   Widget build(BuildContext context) {
+    final currentWebViewKey = _webViewKey;
     final cs = Theme.of(context).colorScheme;
-    final showControls = !_isLoading && !_hasError;
+    final isEmptyCode = widget.mermaidCode.trim().isEmpty;
+    final showControls =
+        (!_isLoading || widget.showControlsBeforeWebViewReadyForTesting) &&
+            !_hasError;
+    final showWebControls = kIsWeb && (showControls || _hasError);
+    final showFlutterClose = !showControls && !showWebControls;
 
     return PopScope(
       canPop: false,
@@ -217,41 +533,55 @@ class _MermaidPreviewDialogContentState
             // so the WebView can be created immediately.
             if (!_mermaidJsLoading || kIsWeb)
               InAppWebView(
+                key: currentWebViewKey,
                 initialSettings: InAppWebViewSettings(
                   javaScriptEnabled: true,
                   transparentBackground: true,
                 ),
-                // On web the initial page is loaded via loadUrl (the
-                // bundled asset template, same origin) — a data: URL
-                // cannot carry the bundled mermaid.js (Chromium truncates
-                // data: URLs at ~1MB) nor reach same-origin assets.
+                // Non-empty web diagrams load through the bundled asset
+                // template (same origin) — a data: URL cannot carry
+                // mermaid.js (Chromium truncates data: URLs at ~1MB) nor
+                // reach same-origin assets. Empty previews use the static
+                // placeholder HTML directly.
                 initialData: kIsWeb
-                    ? null
+                    ? (isEmptyCode
+                        ? InAppWebViewInitialData(
+                            data: _emptyPlaceholderHtml,
+                            mimeType: 'text/html',
+                            encoding: 'utf8',
+                          )
+                        : null)
                     : InAppWebViewInitialData(
                         data: _buildHtml(),
                         mimeType: 'text/html',
                         encoding: 'utf8',
                       ),
                 onWebViewCreated: (ctrl) {
+                  if (currentWebViewKey != _webViewKey) return;
                   _readyFallbackTimer?.cancel();
                   final hadError = _hasError;
                   _webViewController = ctrl;
+                  _canApplyZoomDeltasAfterFit = false;
+                  _zoomReadinessRetryTimer?.cancel();
+                  _zoomReadinessRetryTimer = null;
                   if (hadError && mounted) {
                     setState(() {
                       _hasError = false;
                       _isLoading = !kIsWeb;
+                      _webNavigationTimedOut = false;
                     });
                   }
-                  // Give a created native WebView its own load-stop fallback
-                  // window, separate from the deadline for platform creation.
-                  if (!kIsWeb) _armReadyFallback();
-                  // On web the iframe manages its own loading state (the
-                  // asset template shows a hint until the diagram renders),
-                  // so the dialog is immediately ready and no fallback
-                  // timer is armed — the diagram appears when rendered.
+                  if (_pendingZoomDeltas.isNotEmpty) {
+                    unawaited(_checkZoomReadiness());
+                  }
+                  // Give a created WebView its own navigation deadline,
+                  // separate from the deadline for platform creation.
+                  _armReadyFallback();
+                  // On web the iframe manages its loading state; the fallback
+                  // reports an error only if navigation never settles.
                   if (kIsWeb) {
                     _isLoading = false;
-                    _loadCode();
+                    if (!isEmptyCode) _loadCode();
                   }
                   // Register the JS→Flutter message bridge. The web platform
                   // of flutter_inappwebview does not implement
@@ -262,8 +592,11 @@ class _MermaidPreviewDialogContentState
                     ctrl.addJavaScriptHandler(
                       handlerName: 'onMermaidError',
                       callback: (args) {
-                        if (mounted) {
-                          setState(() => _hasError = true);
+                        if (mounted && currentWebViewKey == _webViewKey) {
+                          setState(() {
+                            _hasError = true;
+                            _webNavigationTimedOut = false;
+                          });
                         }
                       },
                     );
@@ -274,7 +607,9 @@ class _MermaidPreviewDialogContentState
                         // not track pan; zoom buttons anchor in JS). No
                         // setState: _zoomLevel is not read in build() and
                         // the WebView reflects the transform visually.
-                        if (mounted && args.isNotEmpty) {
+                        if (mounted &&
+                            currentWebViewKey == _webViewKey &&
+                            args.isNotEmpty) {
                           _zoomLevel =
                               double.tryParse(args[0].toString()) ?? 1.0;
                         }
@@ -282,21 +617,65 @@ class _MermaidPreviewDialogContentState
                     );
                   } catch (e) {
                     debugPrint(
-                        '[MermaidPreviewDialog] JS handler bridge unavailable: $e');
+                      '[MermaidPreviewDialog] JS handler bridge unavailable: $e',
+                    );
                   }
                 },
                 onLoadStop: (ctrl, url) {
-                  _readyFallbackTimer?.cancel();
-                  if (mounted) {
-                    setState(() => _isLoading = false);
+                  if (currentWebViewKey != _webViewKey) return;
+                  final sourceKey = Uri.tryParse(url?.toString() ?? '')
+                      ?.queryParameters['sourceKey'];
+                  if (sourceKey != null) {
+                    _clearPendingWebSource(sourceKey);
+                  }
+                  void finishLoadStop(bool sourceWasAbandoned) {
+                    if (!mounted) return;
+                    _readyFallbackTimer?.cancel();
+                    _zoomReadinessRetryTimer?.cancel();
+                    _zoomReadinessRetryTimer = null;
+                    _canApplyZoomDeltasAfterFit = false;
+                    unawaited(_markZoomInputQueueReadyAndFlush(ctrl));
+                    setState(() {
+                      _isLoading = false;
+                      if (kIsWeb &&
+                          _webNavigationTimedOut &&
+                          !sourceWasAbandoned) {
+                        _hasError = false;
+                        _webNavigationTimedOut = false;
+                      }
+                      if (sourceWasAbandoned) {
+                        _hasError = true;
+                      }
+                    });
+                  }
+
+                  final sourceCleanup = _timedOutSourceCleanup;
+                  if (sourceCleanup == null) {
+                    finishLoadStop(false);
+                  } else {
+                    unawaited(sourceCleanup.then<void>(finishLoadStop));
                   }
                 },
                 onReceivedError: (controller, request, error) {
+                  if (currentWebViewKey != _webViewKey) return;
+                  if (request.isForMainFrame == false) return;
+                  if (kIsWeb) {
+                    final sourceKey = Uri.tryParse(request.url.toString())
+                        ?.queryParameters['sourceKey'];
+                    if (sourceKey != null &&
+                        sourceKey == _pendingWebSourceKey &&
+                        controller == _pendingWebSourceController) {
+                      _cleanupPendingWebSourceWithoutWaiting();
+                    }
+                  }
                   _readyFallbackTimer?.cancel();
+                  _zoomReadinessRetryTimer?.cancel();
+                  _zoomReadinessRetryTimer = null;
                   if (mounted) {
                     setState(() {
                       _isLoading = false;
                       _hasError = true;
+                      _webNavigationTimedOut = false;
                     });
                   }
                 },
@@ -317,7 +696,7 @@ class _MermaidPreviewDialogContentState
                         ),
                         const SizedBox(height: 12),
                         Text(
-                          '加载图表预览...',
+                          AppLocalizations.of(context)!.chatMermaidLoading,
                           style: TextStyle(
                             fontSize: 14,
                             color: cs.onSurfaceVariant,
@@ -338,18 +717,11 @@ class _MermaidPreviewDialogContentState
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(
-                          Icons.error_outline,
-                          size: 48,
-                          color: cs.error,
-                        ),
+                        Icon(Icons.error_outline, size: 48, color: cs.error),
                         const SizedBox(height: 12),
                         Text(
-                          '加载失败',
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: cs.onSurface,
-                          ),
+                          AppLocalizations.of(context)!.chatPreviewLoadFailed,
+                          style: TextStyle(fontSize: 16, color: cs.onSurface),
                         ),
                       ],
                     ),
@@ -357,9 +729,48 @@ class _MermaidPreviewDialogContentState
                 ),
               ),
 
+            // Keep a visible exit during loading. After a web navigation
+            // error, HTML controls provide the exit above the mounted iframe.
+            if (showFlutterClose)
+              Positioned(
+                top: MediaQuery.of(context).padding.top + 4,
+                right: 8,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: cs.surfaceContainerHighest.withValues(alpha: 0.85),
+                    shape: BoxShape.circle,
+                  ),
+                  child: IconButton(
+                    icon: const Icon(Icons.close, size: 24),
+                    tooltip: AppLocalizations.of(context)!.chatPreviewClose,
+                    color: cs.onSurface,
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ),
+              ),
+
             // Top bar with title, zoom controls, and close button
-            // Only show controls when WebView is ready and no error
-            if (showControls)
+            // Web controls render in the document above the iframe, including
+            // after a main-frame navigation error.
+            if (showWebControls)
+              Positioned(
+                top: MediaQuery.of(context).padding.top + 4,
+                left: 0,
+                right: 0,
+                child: SizedBox(
+                  key: const ValueKey('mermaid-preview-web-controls'),
+                  height: 44,
+                  child: buildMermaidPreviewWebControls(
+                    onZoomOut: _zoomOut,
+                    onZoomIn: _zoomIn,
+                    onClose: () => Navigator.pop(context),
+                    backgroundColor: cs.surfaceContainerHighest,
+                    foregroundColor: cs.onSurface,
+                    topInset: MediaQuery.of(context).padding.top + 4,
+                  ),
+                ),
+              )
+            else if (showControls)
               Positioned(
                 top: MediaQuery.of(context).padding.top + 4,
                 left: 0,
@@ -371,22 +782,23 @@ class _MermaidPreviewDialogContentState
                       padding: const EdgeInsets.only(left: 8),
                       child: Container(
                         decoration: BoxDecoration(
-                          color: cs.surfaceContainerHighest
-                              .withValues(alpha: 0.85),
-                          borderRadius: BorderRadius.circular(20),
+                          color: cs.surfaceContainerHighest.withValues(
+                            alpha: 0.85,
+                          ),
+                          borderRadius: BorderRadius.circular(16),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             _buildActionButton(
                               icon: Icons.zoom_out,
-                              label: '缩小',
+                              label: AppLocalizations.of(context)!.chatZoomOut,
                               onTap: _zoomOut,
                               cs: cs,
                             ),
                             _buildActionButton(
                               icon: Icons.zoom_in,
-                              label: '放大',
+                              label: AppLocalizations.of(context)!.chatZoomIn,
                               onTap: _zoomIn,
                               cs: cs,
                             ),
@@ -402,12 +814,13 @@ class _MermaidPreviewDialogContentState
                         vertical: 6,
                       ),
                       decoration: BoxDecoration(
-                        color:
-                            cs.surfaceContainerHighest.withValues(alpha: 0.85),
+                        color: cs.surfaceContainerHighest.withValues(
+                          alpha: 0.85,
+                        ),
                         borderRadius: BorderRadius.circular(16),
                       ),
                       child: Text(
-                        'Mermaid 预览',
+                        AppLocalizations.of(context)!.chatMermaidPreview,
                         style: TextStyle(
                           fontSize: 13,
                           color: cs.onSurface,
@@ -421,13 +834,15 @@ class _MermaidPreviewDialogContentState
                       padding: const EdgeInsets.only(right: 8),
                       child: Container(
                         decoration: BoxDecoration(
-                          color: cs.surfaceContainerHighest
-                              .withValues(alpha: 0.85),
+                          color: cs.surfaceContainerHighest.withValues(
+                            alpha: 0.85,
+                          ),
                           shape: BoxShape.circle,
                         ),
                         child: IconButton(
                           icon: const Icon(Icons.close, size: 24),
-                          tooltip: '关闭预览',
+                          tooltip:
+                              AppLocalizations.of(context)!.chatPreviewClose,
                           color: cs.onSurface,
                           onPressed: () => Navigator.pop(context),
                         ),
@@ -451,15 +866,16 @@ class _MermaidPreviewDialogContentState
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(16),
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 8,
-            vertical: 12,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+          child: Icon(
+            icon,
+            size: 20,
+            color: cs.onSurface,
+            semanticLabel: label,
           ),
-          child:
-              Icon(icon, size: 20, color: cs.onSurface, semanticLabel: label),
         ),
       ),
     );

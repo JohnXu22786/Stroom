@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import '../../l10n/app_localizations.dart';
 import '../../models/tool_call.dart';
 import '../../services/context_manager.dart'
     show kCompactedToolResultPlaceholder;
@@ -9,7 +11,7 @@ import '../../services/context_manager.dart'
 /// - 调用进行中（[ToolCallStatus.pending] / [ToolCallStatus.running]）：
 ///   始终展开显示参数与结果，不可折叠；
 /// - 调用完成（[ToolCallStatus.completed] / [ToolCallStatus.error]）：
-///   自动收起为一行（仅工具名称），失败时名称为红色，点击可展开/收起。
+///   自动收起为一行（仅工具名称），失败时名称使用主题错误色，点击可展开/收起。
 class ToolCallCard extends StatefulWidget {
   final ToolCallData data;
 
@@ -57,15 +59,15 @@ class _ToolCallCardState extends State<ToolCallCard> {
   Widget build(BuildContext context) {
     final data = widget.data;
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final bgColor = isDark ? Colors.grey[800]! : Colors.grey[200]!;
-    final borderColor = isDark ? Colors.grey[700]! : Colors.grey[300]!;
+    final colorScheme = theme.colorScheme;
+    final bgColor = colorScheme.surfaceContainerHigh;
+    final borderColor = colorScheme.outlineVariant;
 
     final statusColor = switch (data.status) {
       ToolCallStatus.running => Colors.orange,
       ToolCallStatus.completed => Colors.green,
-      ToolCallStatus.error => Colors.red,
-      ToolCallStatus.pending => Colors.grey,
+      ToolCallStatus.error => colorScheme.error,
+      ToolCallStatus.pending => colorScheme.onSurfaceVariant,
     };
 
     return Container(
@@ -106,9 +108,9 @@ class _ToolCallCardState extends State<ToolCallCard> {
                       style: TextStyle(
                         fontWeight: FontWeight.w600,
                         fontSize: 13,
-                        // 失败的调用名称显示为红色（收起与展开时一致）。
+                        // 失败的调用名称使用主题错误色（收起与展开时一致）。
                         color: data.status == ToolCallStatus.error
-                            ? Colors.red
+                            ? colorScheme.error
                             : theme.colorScheme.onSurface,
                       ),
                     ),
@@ -122,10 +124,10 @@ class _ToolCallCardState extends State<ToolCallCard> {
                       ),
                       decoration: BoxDecoration(
                         color: Colors.blueGrey.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(4),
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                      child: const Text(
-                        '已压缩',
+                      child: Text(
+                        AppLocalizations.of(context)!.toolCallCompacted,
                         style: TextStyle(fontSize: 10, color: Colors.blueGrey),
                       ),
                     ),
@@ -167,10 +169,11 @@ class _ToolCallCardState extends State<ToolCallCard> {
                     width: double.infinity,
                     padding: const EdgeInsets.all(6),
                     decoration: BoxDecoration(
-                      color: isDark ? Colors.grey[900] : Colors.white,
-                      borderRadius: BorderRadius.circular(4),
-                      border:
-                          Border.all(color: borderColor.withValues(alpha: 0.5)),
+                      color: colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: borderColor.withValues(alpha: 0.5),
+                      ),
                     ),
                     child: Text(
                       // 软删除语义：compacted 后渲染占位符（数据仍保留，
@@ -182,7 +185,7 @@ class _ToolCallCardState extends State<ToolCallCard> {
                         fontSize: 12,
                         fontFamily: 'monospace',
                         color: data.status == ToolCallStatus.error
-                            ? Colors.red
+                            ? colorScheme.error
                             : theme.colorScheme.onSurface,
                       ),
                     ),

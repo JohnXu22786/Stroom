@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 
 import 'package:stroom/widgets/running_elapsed_label.dart';
 
@@ -7,7 +8,11 @@ void main() {
   testWidgets('RunningElapsedLabel renders nothing when startedAt is null',
       (tester) async {
     await tester.pumpWidget(
-      const MaterialApp(home: Scaffold(body: RunningElapsedLabel())),
+      const MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          home: Scaffold(body: RunningElapsedLabel())),
     );
     expect(find.textContaining('已运行'), findsNothing);
   });
@@ -18,6 +23,9 @@ void main() {
     var now = DateTime(2026, 1, 1, 12, 2, 5); // 2:05 elapsed
     await tester.pumpWidget(
       MaterialApp(
+        locale: Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
         home: Scaffold(
           body: RunningElapsedLabel(startedAt: start, now: () => now),
         ),
@@ -37,6 +45,9 @@ void main() {
     final start = DateTime.now().subtract(const Duration(seconds: 30));
     await tester.pumpWidget(
       MaterialApp(
+        locale: Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
         home: Scaffold(
           body: RunningElapsedLabel(startedAt: start),
         ),
@@ -46,6 +57,9 @@ void main() {
 
     await tester.pumpWidget(
       const MaterialApp(
+        locale: Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
         home: Scaffold(body: RunningElapsedLabel()),
       ),
     );

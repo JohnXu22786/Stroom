@@ -400,6 +400,7 @@ class _FullscreenComposerEditorDialogState
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
@@ -414,15 +415,15 @@ class _FullscreenComposerEditorDialogState
             children: [
               Row(
                 children: [
-                  const Text(
-                    '编辑消息',
+                  Text(
+                    l10n.chatEditMessage,
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
                   ),
                   const Spacer(),
                   IconButton(
                     icon: const Icon(Icons.close),
                     onPressed: _closePreservingContent,
-                    tooltip: '关闭',
+                    tooltip: l10n.actionClose,
                   ),
                 ],
               ),
@@ -434,8 +435,8 @@ class _FullscreenComposerEditorDialogState
                   expands: true,
                   textAlignVertical: TextAlignVertical.top,
                   autofocus: true,
-                  decoration: const InputDecoration(
-                    hintText: '输入消息...',
+                  decoration: InputDecoration(
+                    hintText: l10n.chatMessageHint,
                     border: OutlineInputBorder(),
                     contentPadding: EdgeInsets.all(12),
                   ),
@@ -446,7 +447,7 @@ class _FullscreenComposerEditorDialogState
                 alignment: Alignment.centerRight,
                 child: FilledButton.icon(
                   icon: const Icon(Icons.send_rounded, size: 18),
-                  label: const Text('发送'),
+                  label: Text(l10n.actionSend),
                   onPressed: _send,
                 ),
               ),

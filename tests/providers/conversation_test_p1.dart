@@ -379,5 +379,30 @@ void conversationGroup1() {
       // CLIENT REQUIREMENT: selecting a conversation should NOT change its time
       expect(notifier.state[0].updatedAt, originalUpdatedAt);
     });
+
+    testWidgets('selecting another conversation marks the previous reply read',
+        (tester) async {
+      final previous = Conversation(
+        id: 'previous',
+        title: 'Previous',
+        messages: [
+          ChatMessage(
+            id: 'latest-reply',
+            role: 'assistant',
+            content: 'Done',
+          ),
+        ],
+      );
+      final next = Conversation(id: 'next', title: 'Next');
+      final container = _createContainer(initialState: [previous, next]);
+      addTearDown(container.dispose);
+      container.read(activeConversationIdProvider.notifier).state = 'previous';
+
+      container.read(conversationsProvider.notifier).selectConversation('next');
+
+      expect(previous.lastReadMessageId, 'latest-reply');
+      expect(container.read(activeConversationIdProvider), 'next');
+      await tester.pump(const Duration(milliseconds: 500));
+    });
   });
 }

@@ -282,7 +282,9 @@ class ImageRecordsNotifier extends StateNotifier<List<ImageRecord>> {
     final existing = await ImageManifest.getAllFolders();
     if (existing.any((f) => f == newPath || f.startsWith('$newPath/'))) return;
 
-    final records = await ImageManifest.loadRecords();
+    // addRecord mutates the manifest cache returned by loadRecords, so iterate
+    // over a snapshot while adding the copied records.
+    final records = List<ImageRecord>.from(await ImageManifest.loadRecords());
 
     // 复制 sourceName 本身的记录
     for (final r in records) {

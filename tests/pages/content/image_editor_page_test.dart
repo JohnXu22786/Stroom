@@ -1,6 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/pages/image_editor_page.dart';
+
+Widget _localizedMaterialApp({required Widget home}) => MaterialApp(
+      locale: const Locale('zh', 'CN'),
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: home,
+    );
 
 void main() {
   // ====================================================================
@@ -12,28 +26,54 @@ void main() {
   // case a future package upgrade changes the defaults.
   // ====================================================================
   group('buildImageEditorConfigs', () {
-    test('main editor top-right button is a save icon, close stays X', () {
-      final configs = buildImageEditorConfigs();
+    test(
+      'main editor top-right button is a save icon, close stays X',
+      () async {
+        final strings = await AppLocalizations.delegate.load(
+          const Locale('zh', 'CN'),
+        );
+        final configs = buildImageEditorConfigs(strings);
 
-      expect(configs.mainEditor.icons.doneIcon, Icons.save,
-          reason: 'final save must look like a save button, not a check');
-      expect(configs.mainEditor.icons.closeEditor, Icons.clear,
-          reason: 'closing without saving must stay an X');
+        expect(
+          configs.mainEditor.icons.doneIcon,
+          Icons.save,
+          reason: 'final save must look like a save button, not a check',
+        );
+        expect(
+          configs.mainEditor.icons.closeEditor,
+          Icons.clear,
+          reason: 'closing without saving must stay an X',
+        );
+      },
+    );
+
+    test('sub-editor confirm buttons stay checkmarks', () async {
+      final strings = await AppLocalizations.delegate.load(
+        const Locale('zh', 'CN'),
+      );
+      final configs = buildImageEditorConfigs(strings);
+
+      expect(
+        configs.cropRotateEditor.icons.applyChanges,
+        Icons.done,
+        reason: 'crop/rotate confirm (打勾) must remain a checkmark',
+      );
     });
 
-    test('sub-editor confirm buttons stay checkmarks', () {
-      final configs = buildImageEditorConfigs();
+    test('done tooltip and processing message follow the locale', () async {
+      final zh = await AppLocalizations.delegate.load(const Locale('zh', 'CN'));
+      final en = await AppLocalizations.delegate.load(const Locale('en'));
+      final zhConfig = buildImageEditorConfigs(zh);
+      final enConfig = buildImageEditorConfigs(en);
 
-      expect(configs.cropRotateEditor.icons.applyChanges, Icons.done,
-          reason: 'crop/rotate confirm (打勾) must remain a checkmark');
-    });
-
-    test('done tooltip and processing message are localized to Chinese', () {
-      final configs = buildImageEditorConfigs();
-
-      expect(configs.i18n.done, '保存');
-      expect(configs.i18n.doneLoadingMsg, '正在生成图片，请稍候…',
-          reason: 'user must see clear feedback while the image is generated');
+      expect(zhConfig.i18n.done, '保存');
+      expect(zhConfig.i18n.doneLoadingMsg, '正在生成图片，请稍候…');
+      expect(enConfig.i18n.done, 'Save');
+      expect(
+        enConfig.i18n.doneLoadingMsg,
+        'Generating image. Please wait…',
+        reason: 'editor controls and progress copy follow the selected locale',
+      );
     });
   });
 
@@ -42,14 +82,18 @@ void main() {
   // ====================================================================
   group('showImageSaveDialog', () {
     testWidgets('shows correct save options', (tester) async {
-      await tester.pumpWidget(MaterialApp(
-        home: Builder(builder: (context) {
-          return ElevatedButton(
-            onPressed: () => showImageSaveDialog(context),
-            child: const Text('保存'),
-          );
-        }),
-      ));
+      await tester.pumpWidget(
+        _localizedMaterialApp(
+          home: Builder(
+            builder: (context) {
+              return ElevatedButton(
+                onPressed: () => showImageSaveDialog(context),
+                child: const Text('保存'),
+              );
+            },
+          ),
+        ),
+      );
 
       // Tap save button to show dialog
       await tester.tap(find.text('保存'));
@@ -65,16 +109,20 @@ void main() {
     testWidgets('cancel returns SaveAction.cancel', (tester) async {
       SaveAction? result;
 
-      await tester.pumpWidget(MaterialApp(
-        home: Builder(builder: (context) {
-          return ElevatedButton(
-            onPressed: () async {
-              result = await showImageSaveDialog(context);
+      await tester.pumpWidget(
+        _localizedMaterialApp(
+          home: Builder(
+            builder: (context) {
+              return ElevatedButton(
+                onPressed: () async {
+                  result = await showImageSaveDialog(context);
+                },
+                child: const Text('保存'),
+              );
             },
-            child: const Text('保存'),
-          );
-        }),
-      ));
+          ),
+        ),
+      );
 
       await tester.tap(find.text('保存'));
       await tester.pumpAndSettle();
@@ -91,16 +139,20 @@ void main() {
     testWidgets('overwrite returns SaveAction.overwrite', (tester) async {
       SaveAction? result;
 
-      await tester.pumpWidget(MaterialApp(
-        home: Builder(builder: (context) {
-          return ElevatedButton(
-            onPressed: () async {
-              result = await showImageSaveDialog(context);
+      await tester.pumpWidget(
+        _localizedMaterialApp(
+          home: Builder(
+            builder: (context) {
+              return ElevatedButton(
+                onPressed: () async {
+                  result = await showImageSaveDialog(context);
+                },
+                child: const Text('保存'),
+              );
             },
-            child: const Text('保存'),
-          );
-        }),
-      ));
+          ),
+        ),
+      );
 
       await tester.tap(find.text('保存'));
       await tester.pumpAndSettle();
@@ -115,16 +167,20 @@ void main() {
     testWidgets('save-as returns SaveAction.saveAs', (tester) async {
       SaveAction? result;
 
-      await tester.pumpWidget(MaterialApp(
-        home: Builder(builder: (context) {
-          return ElevatedButton(
-            onPressed: () async {
-              result = await showImageSaveDialog(context);
+      await tester.pumpWidget(
+        _localizedMaterialApp(
+          home: Builder(
+            builder: (context) {
+              return ElevatedButton(
+                onPressed: () async {
+                  result = await showImageSaveDialog(context);
+                },
+                child: const Text('保存'),
+              );
             },
-            child: const Text('保存'),
-          );
-        }),
-      ));
+          ),
+        ),
+      );
 
       await tester.tap(find.text('保存'));
       await tester.pumpAndSettle();
@@ -137,14 +193,18 @@ void main() {
     });
 
     testWidgets('dialog is not dismissible by tapping outside', (tester) async {
-      await tester.pumpWidget(MaterialApp(
-        home: Builder(builder: (context) {
-          return ElevatedButton(
-            onPressed: () => showImageSaveDialog(context),
-            child: const Text('保存'),
-          );
-        }),
-      ));
+      await tester.pumpWidget(
+        _localizedMaterialApp(
+          home: Builder(
+            builder: (context) {
+              return ElevatedButton(
+                onPressed: () => showImageSaveDialog(context),
+                child: const Text('保存'),
+              );
+            },
+          ),
+        ),
+      );
 
       await tester.tap(find.text('保存'));
       await tester.pumpAndSettle();
@@ -164,14 +224,18 @@ void main() {
 
   group('showDiscardOrSaveDialog', () {
     testWidgets('shows correct title and options', (tester) async {
-      await tester.pumpWidget(MaterialApp(
-        home: Builder(builder: (context) {
-          return ElevatedButton(
-            onPressed: () => showDiscardOrSaveDialog(context),
-            child: const Text('保存'),
-          );
-        }),
-      ));
+      await tester.pumpWidget(
+        _localizedMaterialApp(
+          home: Builder(
+            builder: (context) {
+              return ElevatedButton(
+                onPressed: () => showDiscardOrSaveDialog(context),
+                child: const Text('保存'),
+              );
+            },
+          ),
+        ),
+      );
 
       await tester.tap(find.text('保存'));
       await tester.pumpAndSettle();
@@ -186,16 +250,20 @@ void main() {
     testWidgets('save returns SaveAction.save', (tester) async {
       SaveAction? result;
 
-      await tester.pumpWidget(MaterialApp(
-        home: Builder(builder: (context) {
-          return ElevatedButton(
-            onPressed: () async {
-              result = await showDiscardOrSaveDialog(context);
+      await tester.pumpWidget(
+        _localizedMaterialApp(
+          home: Builder(
+            builder: (context) {
+              return ElevatedButton(
+                onPressed: () async {
+                  result = await showDiscardOrSaveDialog(context);
+                },
+                child: const Text('保存'),
+              );
             },
-            child: const Text('保存'),
-          );
-        }),
-      ));
+          ),
+        ),
+      );
 
       await tester.tap(find.text('保存'));
       await tester.pumpAndSettle();
@@ -210,16 +278,20 @@ void main() {
     testWidgets('discard returns SaveAction.discard', (tester) async {
       SaveAction? result;
 
-      await tester.pumpWidget(MaterialApp(
-        home: Builder(builder: (context) {
-          return ElevatedButton(
-            onPressed: () async {
-              result = await showDiscardOrSaveDialog(context);
+      await tester.pumpWidget(
+        _localizedMaterialApp(
+          home: Builder(
+            builder: (context) {
+              return ElevatedButton(
+                onPressed: () async {
+                  result = await showDiscardOrSaveDialog(context);
+                },
+                child: const Text('保存'),
+              );
             },
-            child: const Text('保存'),
-          );
-        }),
-      ));
+          ),
+        ),
+      );
 
       await tester.tap(find.text('保存'));
       await tester.pumpAndSettle();
@@ -233,16 +305,20 @@ void main() {
     testWidgets('cancel returns SaveAction.cancel', (tester) async {
       SaveAction? result;
 
-      await tester.pumpWidget(MaterialApp(
-        home: Builder(builder: (context) {
-          return ElevatedButton(
-            onPressed: () async {
-              result = await showDiscardOrSaveDialog(context);
+      await tester.pumpWidget(
+        _localizedMaterialApp(
+          home: Builder(
+            builder: (context) {
+              return ElevatedButton(
+                onPressed: () async {
+                  result = await showDiscardOrSaveDialog(context);
+                },
+                child: const Text('保存'),
+              );
             },
-            child: const Text('保存'),
-          );
-        }),
-      ));
+          ),
+        ),
+      );
 
       await tester.tap(find.text('保存'));
       await tester.pumpAndSettle();

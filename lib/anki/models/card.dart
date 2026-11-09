@@ -35,8 +35,10 @@ enum CardType {
   final int value;
   const CardType(this.value);
 
-  static CardType fromValue(int v) => CardType.values
-      .firstWhere((e) => e.value == v, orElse: () => CardType.new_);
+  static CardType fromValue(int v) => CardType.values.firstWhere(
+        (e) => e.value == v,
+        orElse: () => CardType.new_,
+      );
 }
 
 /// Card queue mirroring `CardQueue` in anki rslib.
@@ -64,8 +66,10 @@ enum CardQueue {
   final int value;
   const CardQueue(this.value);
 
-  static CardQueue fromValue(int v) => CardQueue.values
-      .firstWhere((e) => e.value == v, orElse: () => CardQueue.new_);
+  static CardQueue fromValue(int v) => CardQueue.values.firstWhere(
+        (e) => e.value == v,
+        orElse: () => CardQueue.new_,
+      );
 }
 
 // ─── FSRS memory state ────────────────────────────────────────────────────
@@ -184,15 +188,18 @@ class Card {
         queue = queue ?? CardQueue.new_;
 
   /// Creates a new card linked to [noteId] in deck [deckId].
-  factory Card.createNew(
-      {required int note_id, required int deck_id, int template_idx = 0}) {
+  factory Card.createNew({
+    required int note_id,
+    required int deck_id,
+    int template_idx = 0,
+  }) {
     final now = DateTime.now().microsecondsSinceEpoch;
     return Card(
       id: now,
       note_id: note_id,
       deck_id: deck_id,
       template_idx: template_idx,
-      mtime: now ~/ 1000,
+      mtime: DateTime.now().millisecondsSinceEpoch ~/ 1000,
     );
   }
 
@@ -278,8 +285,12 @@ class Card {
   }
 
   /// Answer during learning. [answerIdx]: 0=again, 1=hard, 2=good, 3=easy.
-  void answerLearning(int nowMs,
-      {required List<int> steps, int answerIdx = 2, int graduatingIvl = 1}) {
+  void answerLearning(
+    int nowMs, {
+    required List<int> steps,
+    int answerIdx = 2,
+    int graduatingIvl = 1,
+  }) {
     if (queue != CardQueue.learn) return;
     final nowSec = nowMs ~/ 1000;
     final stepIdx = remaining_steps >> 8; // high byte
@@ -323,11 +334,13 @@ class Card {
   }
 
   /// Answer during review. [rating]: 1=again, 2=hard, 3=good, 4=easy.
-  void answerReview(int nowMs,
-      {int rating = 3,
-      double hardMult = 1.2,
-      int relearnSteps = 2,
-      int relearnMin = 1}) {
+  void answerReview(
+    int nowMs, {
+    int rating = 3,
+    double hardMult = 1.2,
+    int relearnSteps = 2,
+    int relearnMin = 1,
+  }) {
     if (queue != CardQueue.review && queue != CardQueue.dayLearn) return;
     final nowSec = nowMs ~/ 1000;
     if (rating == 1) {

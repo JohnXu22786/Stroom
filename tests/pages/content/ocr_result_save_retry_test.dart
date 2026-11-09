@@ -1,12 +1,46 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/unified_task_list/background_task_card.dart';
 import 'package:stroom/providers/background_task_provider.dart';
 import 'package:stroom/providers/task_provider.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets('failed OCR with an empty result hides partial-save action', (
+    tester,
+  ) async {
+    final notifier = BackgroundTaskNotifier();
+    final task = BackgroundTask(
+      id: 'empty-partial-save',
+      type: BackgroundTaskType.ocr,
+      title: 'OCR识别全部失败',
+      status: TaskStatus.failed,
+      result: '',
+      resultIsComplete: false,
+      error: '所有页面识别尝试均失败',
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [backgroundTasksProvider.overrideWith((ref) => notifier)],
+        child: MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          home: Scaffold(body: BackgroundTaskCard(task: task)),
+        ),
+      ),
+    );
+    await tester.tap(find.text('OCR识别全部失败'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text('保存部分结果'), findsNothing);
+    expect(find.text('重试'), findsOneWidget);
+  });
 
   testWidgets('failed OCR with a result offers save-only retry', (
     tester,
@@ -25,6 +59,9 @@ void main() {
       ProviderScope(
         overrides: [backgroundTasksProvider.overrideWith((ref) => notifier)],
         child: MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(body: BackgroundTaskCard(task: task)),
         ),
       ),
@@ -55,6 +92,9 @@ void main() {
       ProviderScope(
         overrides: [backgroundTasksProvider.overrideWith((ref) => notifier)],
         child: MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Scaffold(body: BackgroundTaskCard(task: task)),
         ),
       ),
@@ -65,5 +105,57 @@ void main() {
 
     expect(find.text('保存部分结果'), findsOneWidget);
     expect(find.text('重试'), findsOneWidget);
+  });
+
+  testWidgets('partial-save OCR actions fit a narrow task card', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final notifier = BackgroundTaskNotifier();
+    final task = BackgroundTask(
+      id: 'partial-save-narrow',
+      type: BackgroundTaskType.ocr,
+      title: 'OCR截断结果',
+      status: TaskStatus.failed,
+      result: 'partial recognized text',
+      resultIsComplete: false,
+      partialSaveRequested: true,
+      error: 'OCR结果不完整',
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [backgroundTasksProvider.overrideWith((ref) => notifier)],
+        child: MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          home: Scaffold(body: BackgroundTaskCard(task: task)),
+        ),
+      ),
+    );
+    await tester.tap(find.text('OCR截断结果'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text('仅重试保存部分结果'), findsOneWidget);
+    expect(find.text('重试'), findsOneWidget);
+    expect(find.text('删除'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    final cardRect = tester.getRect(find.byType(Card));
+    for (final label in ['仅重试保存部分结果', '重试', '删除']) {
+      final button = find.ancestor(
+        of: find.text(label),
+        matching: find.byType(TextButton),
+      );
+      final buttonRect = tester.getRect(button);
+      expect(buttonRect.left, greaterThanOrEqualTo(cardRect.left));
+      expect(buttonRect.right, lessThanOrEqualTo(cardRect.right));
+    }
   });
 }

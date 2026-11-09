@@ -1,7 +1,16 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 import 'package:stroom/services/batch_rename_presets.dart';
 import 'package:stroom/utils/batch_rename.dart';
+
+class _RejectedWriteStore extends InMemorySharedPreferencesStore {
+  _RejectedWriteStore() : super.empty();
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) async =>
+      false;
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -39,5 +48,21 @@ void main() {
     expect(loaded.keys, ['课程']);
     await store.delete('课程');
     expect(await store.load(), isEmpty);
+  });
+
+  test('偏好设置拒绝写入时抛出对话框识别的精确错误', () async {
+    SharedPreferences.setMockInitialValues({});
+    SharedPreferencesStorePlatform.instance = _RejectedWriteStore();
+
+    await expectLater(
+      BatchRenamePresets().save('课程', const BatchRenameConfig()),
+      throwsA(
+        isA<BatchRenamePresetWriteFailure>().having(
+          (error) => error.toString(),
+          'toString()',
+          'Bad state: 保存方案失败',
+        ),
+      ),
+    );
   });
 }

@@ -1,4 +1,5 @@
 part of 'provider_settings_panel.dart';
+
 // Extension methods on the State class cannot use @protected members
 // (setState / state) without analyzer warnings, but the receiver IS the
 // State/StateNotifier, so runtime behavior is identical to the original
@@ -14,9 +15,9 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
         children: [
           TextField(
             controller: _nameController,
-            decoration: const InputDecoration(
-              labelText: '供应商名称',
-              hintText: '输入供应商名称',
+            decoration: InputDecoration(
+              labelText: AppLocalizations.of(context)!.providerNameLabel,
+              hintText: AppLocalizations.of(context)!.providerNameHint,
               border: OutlineInputBorder(),
               prefixIcon: Icon(Icons.label, color: Colors.teal),
             ),
@@ -24,9 +25,9 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
           const SizedBox(height: 16),
           TextField(
             controller: _hostController,
-            decoration: const InputDecoration(
-              labelText: 'API 地址',
-              hintText: '输入完整的 API 端点地址',
+            decoration: InputDecoration(
+              labelText: AppLocalizations.of(context)!.providerApiUrlLabel,
+              hintText: AppLocalizations.of(context)!.providerApiUrlHint,
               border: OutlineInputBorder(),
               prefixIcon: Icon(Icons.link, color: Colors.orange),
             ),
@@ -35,8 +36,8 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
           TextField(
             controller: _keyController,
             decoration: InputDecoration(
-              labelText: 'Key',
-              hintText: '输入 API 密钥',
+              labelText: AppLocalizations.of(context)!.mcpApiKey,
+              hintText: AppLocalizations.of(context)!.providerApiKeyInputHint,
               border: const OutlineInputBorder(),
               prefixIcon: const Icon(Icons.key, color: Colors.amber),
               suffixIcon: IconButton(
@@ -53,9 +54,12 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
             const SizedBox(height: 16),
             // Supplier protocol default; authentication belongs to the connector.
             DropdownButtonFormField<String>(
+              dropdownColor: StroomMenuStyle.surface(context),
+              borderRadius: StroomMenuStyle.borderRadius,
               initialValue: _apiProtocol,
-              decoration: const InputDecoration(
-                labelText: '默认 API 协议',
+              decoration: InputDecoration(
+                labelText:
+                    AppLocalizations.of(context)!.providerEndpointTypeLabel,
                 border: OutlineInputBorder(),
                 prefixIcon: Icon(Icons.hub_outlined, color: Colors.blue),
               ),
@@ -77,7 +81,7 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
             ),
             const SizedBox(height: 8),
             Text(
-              '选择此供应商默认使用的上游 API 格式。账户连接器负责凭证和请求认证。',
+              AppLocalizations.of(context)!.llmEndpointHelp,
               style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
             ),
           ],
@@ -93,6 +97,28 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           ..._buildOverrideRuleSection(cs),
+          if (_isOcrType) ...[
+            TextField(
+              key: const Key('ocr_provider_request_size_budget_mib'),
+              controller: _ocrRequestSizeBudgetController,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              decoration: InputDecoration(
+                labelText:
+                    AppLocalizations.of(context)!.providerRequestJsonDefault,
+                hintText: AppLocalizations.of(context)!.providerUseAppDefault,
+                suffixText: 'MiB',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              AppLocalizations.of(context)!.providerModelJsonBudgetHelp,
+              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+            ),
+            const SizedBox(height: 20),
+          ],
           if (_isAsrType) ...[
             ..._buildAsrUploadSection(cs),
             const SizedBox(height: 32),
@@ -130,11 +156,8 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                '请求时将同时使用供应商和模型的所有已开启参数；如果存在重复参数，模型的参数值将覆盖供应商的。',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: cs.onTertiaryContainer,
-                ),
+                AppLocalizations.of(context)!.providerRequestParamsHelp,
+                style: TextStyle(fontSize: 12, color: cs.onTertiaryContainer),
               ),
             ),
           ],
@@ -147,7 +170,7 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
   List<Widget> _buildAsrUploadSection(ColorScheme cs) {
     return [
       Text(
-        '上传设置',
+        AppLocalizations.of(context)!.providerUploadSettings,
         style: TextStyle(
           fontWeight: FontWeight.w800,
           fontSize: 18,
@@ -155,20 +178,19 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
           letterSpacing: 0.3,
         ),
       ),
-      const SizedBox(height: 6),
+      const SizedBox(height: 8),
       Text(
-        '选择音频发送方式，不同供应商支持的上传方式和大小限制不同。',
-        style: TextStyle(
-          fontSize: 13,
-          color: cs.onSurfaceVariant,
-          height: 1.4,
-        ),
+        AppLocalizations.of(context)!.providerUploadMethodHelp,
+        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: cs.onSurfaceVariant,
+              height: 1.4,
+            ),
       ),
       const SizedBox(height: 16),
       Row(
         children: [
           Text(
-            '上传方式',
+            AppLocalizations.of(context)!.providerUploadMethod,
             style: TextStyle(
               fontWeight: FontWeight.w600,
               fontSize: 14,
@@ -184,21 +206,31 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
             child: DropdownButtonHideUnderline(
               child: DropdownButton<AudioUploadMethod>(
+                dropdownColor: StroomMenuStyle.surface(context),
+                borderRadius: StroomMenuStyle.borderRadius,
                 value: _uploadMethod,
                 isDense: true,
-                items: const [
+                items: [
                   DropdownMenuItem(
                     value: AudioUploadMethod.multipart,
-                    child:
-                        Text('Multipart（通用）', style: TextStyle(fontSize: 13)),
+                    child: Text(
+                      AppLocalizations.of(context)!.providerMultipart,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
                   ),
                   DropdownMenuItem(
                     value: AudioUploadMethod.base64Json,
-                    child: Text('Base64 JSON', style: TextStyle(fontSize: 13)),
+                    child: Text(
+                      'Base64 JSON',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
                   ),
                   DropdownMenuItem(
                     value: AudioUploadMethod.url,
-                    child: Text('URL（链接）', style: TextStyle(fontSize: 13)),
+                    child: Text(
+                      AppLocalizations.of(context)!.providerUrlUpload,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
                   ),
                 ],
                 onChanged: (v) {
@@ -209,13 +241,13 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
           ),
         ],
       ),
-      const SizedBox(height: 6),
+      const SizedBox(height: 8),
       Text(
         _uploadMethod == AudioUploadMethod.multipart
-            ? 'multipart/form-data 直传。最通用，受各供应商大小限制（通常 25 MB）。'
+            ? AppLocalizations.of(context)!.providerUploadMultipartHelp
             : _uploadMethod == AudioUploadMethod.base64Json
-                ? 'Base64 编码后 JSON 发送。可绕过部分供应商 multipart 大小限制。'
-                : '提供公网 URL，供应商自行下载。支持超大文件（Together AI 1 GB 等）。',
+                ? AppLocalizations.of(context)!.providerUploadBase64Help
+                : AppLocalizations.of(context)!.providerUploadUrlHelp,
         style: TextStyle(
           fontSize: 12,
           color: cs.onSurfaceVariant.withAlpha(180),
@@ -230,7 +262,7 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
             Row(
               children: [
                 Text(
-                  '最大文件大小',
+                  AppLocalizations.of(context)!.providerMaxUploadSize,
                   style: TextStyle(
                     fontWeight: FontWeight.w600,
                     fontSize: 14,
@@ -242,14 +274,17 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
                   width: 90,
                   child: TextField(
                     controller: _maxFileSizeController,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                     textAlign: TextAlign.center,
                     style: const TextStyle(fontSize: 13),
                     decoration: const InputDecoration(
                       isDense: true,
-                      contentPadding:
-                          EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 8,
+                      ),
                       border: OutlineInputBorder(),
                       suffixText: 'MB',
                     ),
@@ -263,10 +298,9 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
                 ),
               ],
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             Text(
-              '超过 ${_maxFileSizeMb.toStringAsFixed(1)} MB 的文件将被拒绝。'
-              '默认 25 MB 是 OpenAI 音频 API 上限。',
+              AppLocalizations.of(context)!.providerUploadBudgetHelp,
               style: TextStyle(
                 fontSize: 12,
                 color: cs.onSurfaceVariant.withAlpha(180),
@@ -281,7 +315,7 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
   List<Widget> _buildAsrFallbackSection(ColorScheme cs) {
     return [
       Text(
-        '兜底策略',
+        AppLocalizations.of(context)!.providerFallbackStrategy,
         style: TextStyle(
           fontWeight: FontWeight.w800,
           fontSize: 18,
@@ -289,20 +323,19 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
           letterSpacing: 0.3,
         ),
       ),
-      const SizedBox(height: 6),
+      const SizedBox(height: 8),
       Text(
-        '当文件超过大小限制时的处理方式。特定兜底（Base64）优先于通用兜底（压缩/切块）。',
-        style: TextStyle(
-          fontSize: 13,
-          color: cs.onSurfaceVariant,
-          height: 1.4,
-        ),
+        AppLocalizations.of(context)!.providerFallbackTriggerHelp,
+        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: cs.onSurfaceVariant,
+              height: 1.4,
+            ),
       ),
       const SizedBox(height: 16),
       Row(
         children: [
           Text(
-            '兜底方式',
+            AppLocalizations.of(context)!.providerFallbackMethod,
             style: TextStyle(
               fontWeight: FontWeight.w600,
               fontSize: 14,
@@ -318,26 +351,40 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
             child: DropdownButtonHideUnderline(
               child: DropdownButton<String>(
+                dropdownColor: StroomMenuStyle.surface(context),
+                borderRadius: StroomMenuStyle.borderRadius,
                 value: _fallbackMethod,
                 isDense: true,
-                items: const [
+                items: [
                   DropdownMenuItem(
                     value: 'none',
-                    child: Text('无（直接拒绝）', style: TextStyle(fontSize: 13)),
+                    child: Text(
+                      AppLocalizations.of(context)!.providerFallbackNone,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
                   ),
                   DropdownMenuItem(
                     value: 'specific',
-                    child: Text('特定兜底（Base64）', style: TextStyle(fontSize: 13)),
+                    child: Text(
+                      AppLocalizations.of(context)!.providerFallbackSpecific,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
                   ),
                   DropdownMenuItem(
                     value: 'generic',
-                    child: Text('通用兜底（压缩/切块）', style: TextStyle(fontSize: 13)),
+                    child: Text(
+                      AppLocalizations.of(context)!.providerFallbackGeneric,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
                   ),
                   DropdownMenuItem(
                     value: 'all',
-                    child: Text('全部尝试（推荐）',
-                        style: TextStyle(
-                            fontSize: 13, fontWeight: FontWeight.w600)),
+                    child: Text(
+                      AppLocalizations.of(context)!.providerFallbackAll,
+                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                    ),
                   ),
                 ],
                 onChanged: (v) {
@@ -348,15 +395,15 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
           ),
         ],
       ),
-      const SizedBox(height: 6),
+      const SizedBox(height: 8),
       Text(
         _fallbackMethod == 'specific'
-            ? '优先尝试 Base64 JSON 上传，绕过部分供应商的 multipart 大小限制。'
+            ? AppLocalizations.of(context)!.providerFallbackSpecificHelp
             : _fallbackMethod == 'generic'
-                ? '先应用压缩，再尝试切块，最后重新上传。'
+                ? AppLocalizations.of(context)!.providerFallbackGenericHelp
                 : _fallbackMethod == 'all'
-                    ? '先尝试特定兜底，再尝试通用兜底。最大化成功率。'
-                    : '文件超过限制时直接拒绝，不尝试任何兜底。',
+                    ? AppLocalizations.of(context)!.providerFallbackAllHelp
+                    : AppLocalizations.of(context)!.providerFallbackRejectHelp,
         style: TextStyle(
           fontSize: 12,
           color: cs.onSurfaceVariant.withAlpha(180),
@@ -369,7 +416,7 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
   List<Widget> _buildAsrPreprocessingSection(ColorScheme cs) {
     return [
       Text(
-        '音频预处理',
+        AppLocalizations.of(context)!.providerPreprocessing,
         style: TextStyle(
           fontWeight: FontWeight.w800,
           fontSize: 18,
@@ -377,20 +424,19 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
           letterSpacing: 0.3,
         ),
       ),
-      const SizedBox(height: 6),
+      const SizedBox(height: 8),
       Text(
-        '降低音频文件大小，不影响转写准确率。',
-        style: TextStyle(
-          fontSize: 13,
-          color: cs.onSurfaceVariant,
-          height: 1.4,
-        ),
+        AppLocalizations.of(context)!.providerPreprocessingHelp,
+        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: cs.onSurfaceVariant,
+              height: 1.4,
+            ),
       ),
       const SizedBox(height: 16),
       Row(
         children: [
           Text(
-            '预处理方式',
+            AppLocalizations.of(context)!.providerPreprocessingMethod,
             style: TextStyle(
               fontWeight: FontWeight.w600,
               fontSize: 14,
@@ -406,17 +452,24 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
             child: DropdownButtonHideUnderline(
               child: DropdownButton<String>(
+                dropdownColor: StroomMenuStyle.surface(context),
+                borderRadius: StroomMenuStyle.borderRadius,
                 value: _preprocessing,
                 isDense: true,
-                items: const [
+                items: [
                   DropdownMenuItem(
                     value: 'none',
-                    child: Text('无', style: TextStyle(fontSize: 13)),
+                    child: Text(
+                      AppLocalizations.of(context)!.providerPreprocessNone,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
                   ),
                   DropdownMenuItem(
                     value: 'resampleMono',
-                    child: Text('WAV 优化（16kHz Mono）',
-                        style: TextStyle(fontSize: 13)),
+                    child: Text(
+                      AppLocalizations.of(context)!.providerPreprocessResample,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
                   ),
                 ],
                 onChanged: (v) {
@@ -427,11 +480,11 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
           ),
         ],
       ),
-      const SizedBox(height: 6),
+      const SizedBox(height: 8),
       Text(
         _preprocessing == 'resampleMono'
-            ? '重采样到 16kHz + 单声道混音。体积缩小约 4-6x，语音转写准确率几乎不变。'
-            : '不进行预处理，原样发送。',
+            ? AppLocalizations.of(context)!.providerPreprocessResampleHelp
+            : AppLocalizations.of(context)!.providerPreprocessNoneHelp,
         style: TextStyle(
           fontSize: 12,
           color: cs.onSurfaceVariant.withAlpha(180),

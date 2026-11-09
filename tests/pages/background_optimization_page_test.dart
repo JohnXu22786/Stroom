@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:io' show exit;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,21 +10,67 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_background_service_platform_interface/flutter_background_service_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/background_optimization_page.dart';
 import 'package:stroom/services/background_service.dart';
 import 'package:stroom/services/desktop_app_service.dart';
 import 'package:stroom/providers/background_task_provider.dart';
 import 'package:stroom/services/ios_continued_task_service.dart';
+import 'package:tray_manager/legacy.dart' show Menu, TrayListener;
+
+class _TestDesktopTrayAdapter implements DesktopTrayAdapter {
+  _TestDesktopTrayAdapter({this.onSetContextMenu});
+
+  final Future<void> Function(Menu menu)? onSetContextMenu;
+
+  @override
+  Future<void> setIcon(String iconPath) async {}
+
+  @override
+  Future<void> setToolTip(String toolTip) async {}
+
+  @override
+  Future<void> setContextMenu(Menu menu) async => onSetContextMenu?.call(menu);
+
+  @override
+  Future<void> popUpContextMenu() async {}
+
+  @override
+  Future<void> destroy() async {}
+
+  @override
+  void addListener(TrayListener listener) {}
+
+  @override
+  void removeListener(TrayListener listener) {}
+}
+
+void _resetDesktopAppServiceForTest() {
+  final service = DesktopAppService.instance;
+  service.resetForTesting();
+  service.setTrayAdapterForTesting(_TestDesktopTrayAdapter());
+}
 
 /// Builds the test app wrapping BackgroundOptimizationPage.
 /// Optionally overrides [backgroundTasksProvider] with a pre-seeded notifier
 /// (e.g. to simulate running tasks for the quit-confirmation flow).
-Widget _buildTestApp({BackgroundTaskNotifier? taskNotifier}) {
+Widget _buildTestApp({
+  BackgroundTaskNotifier? taskNotifier,
+  Locale locale = const Locale('zh', 'CN'),
+}) {
   return ProviderScope(
     overrides: taskNotifier == null
         ? []
         : [backgroundTasksProvider.overrideWith((ref) => taskNotifier)],
-    child: const MaterialApp(
+    child: MaterialApp(
+      locale: locale,
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       home: BackgroundOptimizationPage(),
     ),
   );
@@ -35,6 +83,8 @@ class MockBackgroundServicePlatform extends FlutterBackgroundServicePlatform {
   bool _startResult = true;
   bool _throwOnStart = false;
   bool _throwOnCheck = false;
+  Completer<bool>? _serviceStatusCompleter;
+  int startCallCount = 0;
 
   void setServiceRunning(bool running) {
     _isRunning = running;
@@ -56,6 +106,10 @@ class MockBackgroundServicePlatform extends FlutterBackgroundServicePlatform {
     _throwOnCheck = shouldThrow;
   }
 
+  void setServiceStatusCompleter(Completer<bool> completer) {
+    _serviceStatusCompleter = completer;
+  }
+
   @override
   Future<bool> configure({
     required IosConfiguration iosConfiguration,
@@ -66,6 +120,7 @@ class MockBackgroundServicePlatform extends FlutterBackgroundServicePlatform {
 
   @override
   Future<bool> start() async {
+    startCallCount++;
     if (_throwOnStart) {
       throw 'Simulated start error';
     }
@@ -77,6 +132,10 @@ class MockBackgroundServicePlatform extends FlutterBackgroundServicePlatform {
   Future<bool> isServiceRunning() async {
     if (_throwOnCheck) {
       throw 'Simulated check error';
+    }
+    final serviceStatusCompleter = _serviceStatusCompleter;
+    if (serviceStatusCompleter != null) {
+      return serviceStatusCompleter.future;
     }
     return _isRunning;
   }
@@ -106,6 +165,38 @@ class _FailingDesktopCloseMinimizePreferenceStore
     }
     return super.setValue(valueType, key, value);
   }
+}
+
+class _FailingRecoveryPreferenceStore extends InMemorySharedPreferencesStore {
+  _FailingRecoveryPreferenceStore(
+    Map<String, Object> data, {
+    required Set<String> failedKeys,
+  })  : _failedKeys = failedKeys,
+        super.withData(data);
+
+  final Set<String> _failedKeys;
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) {
+    if (valueType == 'Bool' && _failedKeys.contains(key)) {
+      return Future<bool>.value(false);
+    }
+    return super.setValue(valueType, key, value);
+  }
+}
+
+Future<SharedPreferencesStorePlatform> _failRecoveryPreferenceWrites(
+  SharedPreferences preferences, {
+  required Map<String, Object> data,
+  required Set<String> failedKeys,
+}) async {
+  final originalStore = SharedPreferencesStorePlatform.instance;
+  SharedPreferencesStorePlatform.instance = _FailingRecoveryPreferenceStore(
+    data,
+    failedKeys: failedKeys,
+  );
+  await preferences.reload();
+  return originalStore;
 }
 
 /// Records method calls made on the keep-alive method channel.
@@ -150,6 +241,17 @@ MockBackgroundServicePlatform registerMockPlatform() {
 }
 
 void main() {
+  testWidgets('background optimization title follows the selected locale', (
+    tester,
+  ) async {
+    registerMockPlatform();
+    await tester.pumpWidget(_buildTestApp(locale: const Locale('en', 'US')));
+    await tester.pumpAndSettle();
+    expect(find.text('Background Optimization'), findsOneWidget);
+  });
+
+  setUp(_resetDesktopAppServiceForTest);
+
   tearDown(() {
     // 清理跨测试泄漏的 mock 通道处理器与平台覆盖。
     final messenger =
@@ -198,11 +300,13 @@ void main() {
       await tester.pumpWidget(_buildTestApp());
       await tester.pump();
 
-      // Tap the Android tutorial card by its unique subtitle
+      await tester.tap(find.text('查看各个平台的后台运行优化教程'));
+      await tester.pumpAndSettle();
+      expect(find.text('平台教程'), findsOneWidget);
+      expect(find.text('Android 后台运行优化教程'), findsOneWidget);
+
       await tester.tap(find.text('Android 后台运行优化教程'));
       await tester.pumpAndSettle();
-
-      // Should navigate to PlatformTutorialPage with Android tutorial
       expect(find.text('Android 后台运行教程'), findsOneWidget);
     });
 
@@ -221,10 +325,10 @@ void main() {
       await tester.pumpWidget(_buildTestApp());
       await tester.pump();
 
+      await tester.tap(find.text('查看各个平台的后台运行优化教程'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Windows 后台运行优化教程'));
       await tester.pumpAndSettle();
-
-      // Should navigate to PlatformTutorialPage with Windows tutorial
       expect(find.text('Windows 后台运行教程'), findsOneWidget);
     });
   });
@@ -445,6 +549,10 @@ void main() {
 
       // Should show error status
       expect(find.text('无法检测后台服务状态'), findsOneWidget);
+      expect(
+        find.text('后台服务状态未知，请重新检测以确认服务是否运行。'),
+        findsOneWidget,
+      );
       // Should still show re-detect button
       expect(find.text('重新检测'), findsOneWidget);
       // Should show start button since service is not running
@@ -531,11 +639,67 @@ void main() {
         const MethodChannel('window_manager'),
         (MethodCall call) async => true,
       );
-      messenger.setMockMethodCallHandler(
-        const MethodChannel('tray_manager'),
-        (MethodCall call) async => true,
-      );
       await DesktopAppService.instance.setupTrayAndCloseBehavior();
+    }
+
+    for (final closeMinimize in [true, false]) {
+      for (final disposeBeforeReady in [false, true]) {
+        testWidgets(
+            'async tray readiness refreshes status (minimize: $closeMinimize, disposed: $disposeBeforeReady)',
+            (tester) async {
+          registerMockPlatform();
+          SharedPreferences.setMockInitialValues({
+            'desktop_close_minimize': closeMinimize,
+          });
+          debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+          final service = DesktopAppService.instance;
+          _resetDesktopAppServiceForTest();
+          final menuReady = Completer<void>();
+          service.setTrayAdapterForTesting(
+            _TestDesktopTrayAdapter(
+              onSetContextMenu: (_) => menuReady.future,
+            ),
+          );
+          final messenger =
+              TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+          messenger.setMockMethodCallHandler(
+            const MethodChannel('window_manager'),
+            (call) async => true,
+          );
+          tester.view.physicalSize = const Size(1080, 4000);
+          tester.view.devicePixelRatio = 1.0;
+          try {
+            final setup = service.setupTrayAndCloseBehavior();
+            await tester.pumpWidget(_buildTestApp());
+            await tester.pumpAndSettle();
+            expect(service.isTrayReady, isFalse);
+            expect(find.text('桌面端托盘暂不可用，关闭窗口将直接退出'), findsOneWidget);
+
+            if (disposeBeforeReady) {
+              await tester.pumpWidget(const SizedBox.shrink());
+            }
+            menuReady.complete();
+            await tester.pumpAndSettle();
+            await setup;
+            expect(service.isTrayReady, isTrue);
+            expect(tester.takeException(), isNull);
+            if (!disposeBeforeReady) {
+              expect(find.text('桌面端托盘暂不可用，关闭窗口将直接退出'), findsNothing);
+              expect(
+                find.text(closeMinimize ? '桌面端使用托盘驻留保活' : '桌面端关闭窗口时退出应用'),
+                findsOneWidget,
+              );
+            }
+          } finally {
+            if (!menuReady.isCompleted) menuReady.complete();
+            await tester.pumpWidget(const SizedBox.shrink());
+            _resetDesktopAppServiceForTest();
+            debugDefaultTargetPlatformOverride = null;
+            tester.view.resetPhysicalSize();
+            tester.view.resetDevicePixelRatio();
+          }
+        });
+      }
     }
 
     testWidgets('desktop platforms explain tray-resident close behavior',
@@ -559,10 +723,44 @@ void main() {
 
         // The desktop description must mention the tray-resident behavior
         // (also present in the close-minimize toggle's detail text).
+        expect(find.text('桌面端使用托盘驻留保活'), findsOneWidget);
+        expect(find.textContaining('桌面平台已启用托盘驻留'), findsOneWidget);
         expect(find.textContaining('系统托盘'), findsWidgets);
       } finally {
         debugDefaultTargetPlatformOverride = null;
-        DesktopAppService.instance.resetForTesting();
+        _resetDesktopAppServiceForTest();
+      }
+    });
+
+    testWidgets(
+        'desktop platforms explain close-to-quit with a ready tray when close-minimize is disabled',
+        (tester) async {
+      registerMockPlatform();
+      SharedPreferences.setMockInitialValues({'desktop_close_minimize': false});
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      try {
+        await makeTrayReady();
+        expect(DesktopAppService.instance.isTrayReady, isTrue);
+
+        tester.view.physicalSize = const Size(1080, 4000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        await tester.pumpWidget(_buildTestApp());
+        await tester.pumpAndSettle();
+
+        expect(find.text('桌面端关闭窗口时退出应用'), findsOneWidget);
+        expect(
+          find.textContaining('关闭窗口后应用会按现有退出确认流程处理并退出'),
+          findsOneWidget,
+        );
+        expect(find.textContaining('桌面平台已启用托盘驻留'), findsNothing);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+        _resetDesktopAppServiceForTest();
       }
     });
 
@@ -588,7 +786,7 @@ void main() {
         expect(find.textContaining('托盘菜单选择「显示主窗口」'), findsOneWidget);
       } finally {
         debugDefaultTargetPlatformOverride = null;
-        DesktopAppService.instance.resetForTesting();
+        _resetDesktopAppServiceForTest();
       }
     });
 
@@ -728,7 +926,8 @@ void main() {
       );
     });
 
-    testWidgets('turning the watchdog on while running arms the alarm',
+    testWidgets(
+        'turning the watchdog on for a temporary running service preserves temporary intent',
         (tester) async {
       final mock = registerMockPlatform();
       mock.setServiceRunning(true);
@@ -736,7 +935,10 @@ void main() {
       // Watchdog starts disabled so the toggle can be turned on.
       SharedPreferences.setMockInitialValues({
         'background_service_watchdog': false,
+        'background_service_enabled': false,
+        'background_service_cold_start_restore': false,
       });
+      final prefs = await SharedPreferences.getInstance();
 
       tester.view.physicalSize = const Size(1080, 4000);
       tester.view.devicePixelRatio = 1.0;
@@ -751,12 +953,445 @@ void main() {
       await tester.tap(find.text('AlarmManager 看门狗'));
       await tester.pumpAndSettle();
 
+      expect(prefs.getBool('background_service_watchdog'), isTrue);
+      expect(prefs.getBool('background_service_enabled'), isFalse);
       expect(
-        keepAliveCalls.any((c) => c.method == 'startKeepAlive'),
+        await stopBackgroundServiceIfNotUserEnabled(),
         isTrue,
-        reason: 're-enabling the watchdog while the service runs must arm '
-            'the native keep-alive alarm',
+        reason: 'CatCatch idle cleanup must still be allowed to stop a '
+            'temporary service after the watchdog is enabled',
       );
+      expect(mock._isRunning, isFalse);
+    });
+
+    testWidgets(
+        'turning the watchdog on for a persistent running service retains recovery',
+        (tester) async {
+      final mock = registerMockPlatform()..setServiceRunning(true);
+
+      // Watchdog starts disabled so the toggle can be turned on.
+      SharedPreferences.setMockInitialValues({
+        'background_service_watchdog': false,
+        'background_service_enabled': true,
+        'background_service_cold_start_restore': false,
+      });
+      final prefs = await SharedPreferences.getInstance();
+
+      tester.view.physicalSize = const Size(1080, 4000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('AlarmManager 看门狗'));
+      await tester.pumpAndSettle();
+
+      expect(prefs.getBool('background_service_watchdog'), isTrue);
+      expect(prefs.getBool('background_service_enabled'), isTrue);
+      expect(
+        keepAliveCalls.map((call) => call.method),
+        contains('rearmKeepAlive'),
+        reason: 'enabling the watchdog must retain recovery for a running '
+            'service with persistent user intent',
+      );
+    });
+
+    testWidgets(
+        're-arms the watchdog for a stopped service with enabled persistent intent',
+        (tester) async {
+      final mock = registerMockPlatform()..setServiceRunning(false);
+      SharedPreferences.setMockInitialValues({
+        'background_service_watchdog': false,
+        'background_service_enabled': true,
+        'background_service_cold_start_restore': false,
+      });
+      final prefs = await SharedPreferences.getInstance();
+
+      tester.view.physicalSize = const Size(1080, 5000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      final toggle = find.ancestor(
+        of: find.text('AlarmManager 看门狗'),
+        matching: find.byType(SwitchListTile),
+      );
+      expect(find.text('后台服务未启动'), findsOneWidget);
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+
+      expect(tester.widget<SwitchListTile>(toggle).value, isTrue);
+      expect(prefs.getBool('background_service_watchdog'), isTrue);
+      expect(prefs.getBool('background_service_enabled'), isTrue);
+      expect(mock.startCallCount, 0);
+      expect(
+        keepAliveCalls.map((call) => call.method),
+        contains('rearmKeepAlive'),
+        reason: 'a stopped but persistently enabled service must regain its '
+            'native recovery schedule when the watchdog is enabled',
+      );
+    });
+
+    testWidgets(
+        're-arms the watchdog for a running service when persisted intent cannot be read',
+        (tester) async {
+      final mock = registerMockPlatform()..setServiceRunning(true);
+      SharedPreferences.setMockInitialValues({
+        'background_service_watchdog': false,
+        'background_service_enabled': 'unreadable',
+        'background_service_cold_start_restore': false,
+      });
+      final prefs = await SharedPreferences.getInstance();
+
+      tester.view.physicalSize = const Size(1080, 5000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      final toggle = find.ancestor(
+        of: find.text('AlarmManager 看门狗'),
+        matching: find.byType(SwitchListTile),
+      );
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+
+      expect(prefs.getBool('background_service_watchdog'), isTrue);
+      expect(prefs.get('background_service_enabled'), 'unreadable');
+      expect(mock.startCallCount, 0);
+      expect(
+        keepAliveCalls.map((call) => call.method),
+        contains('rearmKeepAlive'),
+        reason: 'an unreadable persisted intent must retain recovery instead '
+            'of reporting success without scheduling the watchdog',
+      );
+    });
+
+    testWidgets(
+        'reports watchdog re-arm failure for an enabled stopped service',
+        (tester) async {
+      final mock = registerMockPlatform()..setServiceRunning(false);
+      SharedPreferences.setMockInitialValues({
+        'background_service_watchdog': false,
+        'background_service_enabled': true,
+        'background_service_cold_start_restore': false,
+      });
+      final prefs = await SharedPreferences.getInstance();
+
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('com.johntsui.stroom/keepalive'),
+        (MethodCall call) async {
+          keepAliveCalls.add(call);
+          return call.method != 'rearmKeepAlive';
+        },
+      );
+
+      tester.view.physicalSize = const Size(1080, 5000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      final toggle = find.ancestor(
+        of: find.text('AlarmManager 看门狗'),
+        matching: find.byType(SwitchListTile),
+      );
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+
+      expect(find.text('看门狗激活失败，后台服务保活状态未确认'), findsOneWidget);
+      expect(tester.widget<SwitchListTile>(toggle).value, isTrue);
+      expect(prefs.getBool('background_service_watchdog'), isTrue);
+      expect(prefs.getBool('background_service_enabled'), isTrue);
+      expect(mock.startCallCount, 0);
+      expect(
+        keepAliveCalls.map((call) => call.method),
+        contains('rearmKeepAlive'),
+      );
+    });
+
+    testWidgets(
+        're-arms the watchdog while the initial service status check is pending',
+        (tester) async {
+      final status = Completer<bool>();
+      final mock = registerMockPlatform()
+        ..setServiceRunning(false)
+        ..setServiceStatusCompleter(status);
+      SharedPreferences.setMockInitialValues({
+        'background_service_watchdog': false,
+        'background_service_enabled': true,
+        'background_service_cold_start_restore': false,
+      });
+      final prefs = await SharedPreferences.getInstance();
+
+      tester.view.physicalSize = const Size(1080, 5000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('正在检测...'), findsOneWidget);
+
+      final toggle = find.ancestor(
+        of: find.text('AlarmManager 看门狗'),
+        matching: find.byType(SwitchListTile),
+      );
+      expect(tester.widget<SwitchListTile>(toggle).value, isFalse);
+      await tester.tap(toggle);
+      await tester.pump();
+
+      expect(prefs.getBool('background_service_watchdog'), isTrue);
+      expect(prefs.getBool('background_service_enabled'), isTrue);
+      expect(mock.startCallCount, 0);
+      expect(
+        keepAliveCalls.map((call) => call.method),
+        contains('rearmKeepAlive'),
+        reason: 'the pending first check must not leave persisted recovery '
+            'intent without a native alarm',
+      );
+
+      status.complete(false);
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets(
+        'does not start or re-arm a stopped service with disabled persistent intent',
+        (tester) async {
+      final mock = registerMockPlatform()..setServiceRunning(false);
+      SharedPreferences.setMockInitialValues({
+        'background_service_watchdog': false,
+        'background_service_enabled': false,
+        'background_service_cold_start_restore': false,
+      });
+      final prefs = await SharedPreferences.getInstance();
+
+      tester.view.physicalSize = const Size(1080, 5000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      final toggle = find.ancestor(
+        of: find.text('AlarmManager 看门狗'),
+        matching: find.byType(SwitchListTile),
+      );
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+
+      expect(prefs.getBool('background_service_watchdog'), isTrue);
+      expect(prefs.getBool('background_service_enabled'), isFalse);
+      expect(mock.startCallCount, 0);
+      expect(
+        keepAliveCalls.map((call) => call.method),
+        isNot(contains('rearmKeepAlive')),
+        reason: 'watchdog preference changes must preserve an explicit stop',
+      );
+      expect(
+        keepAliveCalls.map((call) => call.method),
+        isNot(contains('startKeepAlive')),
+      );
+    });
+
+    testWidgets('re-arms the watchdog when service status cannot be checked',
+        (tester) async {
+      final mock = registerMockPlatform()
+        ..setServiceRunning(true)
+        ..setThrowOnCheck(true);
+      SharedPreferences.setMockInitialValues({
+        'background_service_watchdog': false,
+        'background_service_enabled': true,
+        'background_service_cold_start_restore': false,
+      });
+      final prefs = await SharedPreferences.getInstance();
+
+      tester.view.physicalSize = const Size(1080, 5000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      final toggle = find.ancestor(
+        of: find.text('AlarmManager 看门狗'),
+        matching: find.byType(SwitchListTile),
+      );
+      expect(find.text('无法检测后台服务状态'), findsOneWidget);
+      expect(tester.widget<SwitchListTile>(toggle).value, isFalse);
+
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+
+      expect(tester.widget<SwitchListTile>(toggle).value, isTrue);
+      expect(prefs.getBool('background_service_watchdog'), isTrue);
+      expect(prefs.getBool('background_service_enabled'), isTrue);
+      expect(mock._isRunning, isTrue);
+      expect(mock.startCallCount, 0);
+      expect(
+        keepAliveCalls.map((call) => call.method),
+        contains('rearmKeepAlive'),
+        reason: 'enabling the watchdog after an unknown status must attempt '
+            'to restore the native recovery schedule',
+      );
+    });
+
+    testWidgets(
+        'reports watchdog re-arm failure while retaining enabled intent',
+        (tester) async {
+      final mock = registerMockPlatform()..setServiceRunning(true);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('background_service_watchdog', false);
+      await prefs.setBool('background_service_enabled', true);
+      await prefs.setBool('background_service_cold_start_restore', false);
+
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('com.johntsui.stroom/keepalive'),
+        (MethodCall call) async {
+          keepAliveCalls.add(call);
+          return call.method != 'rearmKeepAlive';
+        },
+      );
+
+      tester.view.physicalSize = const Size(1080, 5000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      final toggle = find.ancestor(
+        of: find.text('AlarmManager 看门狗'),
+        matching: find.byType(SwitchListTile),
+      );
+      expect(tester.widget<SwitchListTile>(toggle).value, isFalse);
+
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+
+      expect(find.text('看门狗激活失败，后台服务保活状态未确认'), findsOneWidget);
+      expect(tester.widget<SwitchListTile>(toggle).value, isTrue);
+      expect(prefs.getBool('background_service_watchdog'), isTrue);
+      expect(prefs.getBool('background_service_enabled'), isTrue);
+      expect(mock._isRunning, isTrue);
+      expect(
+        keepAliveCalls.map((call) => call.method),
+        contains('rearmKeepAlive'),
+      );
+    });
+
+    testWidgets('watchdog remains off when enabling its preference fails',
+        (tester) async {
+      final mock = registerMockPlatform()..setServiceRunning(true);
+      final prefs = await SharedPreferences.getInstance();
+      final originalStore = await _failRecoveryPreferenceWrites(
+        prefs,
+        data: const {
+          'flutter.background_service_watchdog': false,
+          'flutter.background_service_cold_start_restore': false,
+        },
+        failedKeys: const {'flutter.background_service_watchdog'},
+      );
+      addTearDown(() {
+        SharedPreferencesStorePlatform.instance = originalStore;
+      });
+
+      tester.view.physicalSize = const Size(1080, 5000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      final toggle = find.ancestor(
+        of: find.text('AlarmManager 看门狗'),
+        matching: find.byType(SwitchListTile),
+      );
+      expect(tester.widget<SwitchListTile>(toggle).value, isFalse);
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+
+      expect(tester.widget<SwitchListTile>(toggle).value, isFalse);
+      expect(prefs.getBool('background_service_watchdog'), isFalse);
+      expect(
+        keepAliveCalls.any((call) => call.method == 'startKeepAlive'),
+        isFalse,
+        reason: 'a rejected enable must not act on an unsaved watchdog choice',
+      );
+      expect(mock._isRunning, isTrue);
+    });
+
+    testWidgets(
+        'cold-start restore remains off when enabling its preference fails',
+        (tester) async {
+      registerMockPlatform();
+      final prefs = await SharedPreferences.getInstance();
+      final originalStore = await _failRecoveryPreferenceWrites(
+        prefs,
+        data: const {
+          'flutter.background_service_watchdog': false,
+          'flutter.background_service_cold_start_restore': false,
+        },
+        failedKeys: const {'flutter.background_service_cold_start_restore'},
+      );
+      addTearDown(() {
+        SharedPreferencesStorePlatform.instance = originalStore;
+      });
+
+      tester.view.physicalSize = const Size(1080, 5000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      final toggle = find.ancestor(
+        of: find.text('冷启动自动恢复'),
+        matching: find.byType(SwitchListTile),
+      );
+      expect(tester.widget<SwitchListTile>(toggle).value, isFalse);
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+
+      expect(tester.widget<SwitchListTile>(toggle).value, isFalse);
+      expect(prefs.getBool('background_service_cold_start_restore'), isFalse);
     });
   });
   group('BackgroundOptimizationPage - keep-alive strategy toggles', () {
@@ -908,13 +1543,6 @@ void main() {
           return true;
         },
       );
-      // 托盘通道同样 mock，并先完成托盘注册 —— 页面只会在托盘就绪后
-      // 才重新武装关闭拦截（托盘不可用时不武装，保证窗口仍可关闭）。
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(
-        const MethodChannel('tray_manager'),
-        (MethodCall call) async => true,
-      );
       debugDefaultTargetPlatformOverride = TargetPlatform.windows;
       try {
         await DesktopAppService.instance.setupTrayAndCloseBehavior();
@@ -930,6 +1558,8 @@ void main() {
         await tester.pumpWidget(_buildTestApp());
         await tester.pumpAndSettle();
 
+        expect(find.text('桌面端使用托盘驻留保活'), findsOneWidget);
+
         // The desktop card has exactly one SwitchListTile.
         await tester.tap(find.byType(SwitchListTile).first);
         await tester.pumpAndSettle();
@@ -942,6 +1572,11 @@ void main() {
               .widget<SwitchListTile>(find.byType(SwitchListTile).first)
               .value,
           isFalse,
+        );
+        expect(find.text('桌面端关闭窗口时退出应用'), findsOneWidget);
+        expect(
+          find.textContaining('关闭窗口后应用会按现有退出确认流程处理并退出'),
+          findsOneWidget,
         );
         // ...but the close interception must NEVER be released:
         // releasing it would let the native layer destroy the window
@@ -958,7 +1593,7 @@ void main() {
         );
       } finally {
         debugDefaultTargetPlatformOverride = null;
-        DesktopAppService.instance.resetForTesting();
+        _resetDesktopAppServiceForTest();
       }
     });
 
@@ -966,7 +1601,7 @@ void main() {
         'keeps saved close behavior when the desktop preference write fails',
         (tester) async {
       registerMockPlatform();
-      DesktopAppService.instance.resetForTesting();
+      _resetDesktopAppServiceForTest();
       debugDefaultTargetPlatformOverride = TargetPlatform.windows;
       final originalExitApp = DesktopAppService.exitApp;
       final exitCodes = <int>[];
@@ -999,11 +1634,6 @@ void main() {
             return true;
           },
         );
-        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-            .setMockMethodCallHandler(
-          const MethodChannel('tray_manager'),
-          (MethodCall call) async => true,
-        );
         await DesktopAppService.instance.setupTrayAndCloseBehavior();
         expect(DesktopAppService.instance.isTrayReady, isTrue);
 
@@ -1035,7 +1665,7 @@ void main() {
       } finally {
         DesktopAppService.exitApp = originalExitApp;
         debugDefaultTargetPlatformOverride = null;
-        DesktopAppService.instance.resetForTesting();
+        _resetDesktopAppServiceForTest();
       }
     });
 
@@ -1122,7 +1752,7 @@ void main() {
       final exitCodes = <int>[];
       DesktopAppService.exitApp = exitCodes.add;
       try {
-        DesktopAppService.instance.resetForTesting();
+        _resetDesktopAppServiceForTest();
         debugDefaultTargetPlatformOverride = TargetPlatform.windows;
         tester.view.physicalSize = const Size(1080, 5000);
         tester.view.devicePixelRatio = 1.0;
@@ -1146,7 +1776,7 @@ void main() {
       } finally {
         debugDefaultTargetPlatformOverride = null;
         DesktopAppService.exitApp = exit;
-        DesktopAppService.instance.resetForTesting();
+        _resetDesktopAppServiceForTest();
       }
     });
     testWidgets('quit button respects the injected quit confirmation',
@@ -1164,7 +1794,7 @@ void main() {
       final exitCodes = <int>[];
       DesktopAppService.exitApp = exitCodes.add;
       try {
-        DesktopAppService.instance.resetForTesting();
+        _resetDesktopAppServiceForTest();
         debugDefaultTargetPlatformOverride = TargetPlatform.windows;
         tester.view.physicalSize = const Size(1080, 5000);
         tester.view.devicePixelRatio = 1.0;
@@ -1193,7 +1823,7 @@ void main() {
         debugDefaultTargetPlatformOverride = null;
         DesktopAppService.exitApp = exit;
         DesktopAppService.instance.onQuitConfirmation = null;
-        DesktopAppService.instance.resetForTesting();
+        _resetDesktopAppServiceForTest();
       }
     });
   });
@@ -1253,7 +1883,8 @@ void main() {
   });
 
   group('BackgroundOptimizationPage - platform tutorial cards', () {
-    testWidgets('tutorial card list includes a Web entry', (tester) async {
+    testWidgets('tutorial entry is below system environment detection',
+        (tester) async {
       registerMockPlatform();
       tester.view.physicalSize = const Size(1080, 5000);
       tester.view.devicePixelRatio = 1.0;
@@ -1265,14 +1896,44 @@ void main() {
       await tester.pumpWidget(_buildTestApp());
       await tester.pumpAndSettle();
 
-      // 六个平台教程入口都可达（Android 同时出现在平台检测卡，
-      // 因此用 findsWidgets；'Web' 只在教程卡片出现，可精确断言）。
-      expect(find.text('Android'), findsWidgets);
-      expect(find.text('iOS'), findsWidgets);
-      expect(find.text('Windows'), findsWidgets);
-      expect(find.text('macOS'), findsWidgets);
-      expect(find.text('Linux'), findsWidgets);
-      expect(find.text('Web'), findsOneWidget);
+      final detectionCard = find
+          .ancestor(
+            of: find.text('Android'),
+            matching: find.byType(Card),
+          )
+          .first;
+      final tutorialCard = find.ancestor(
+        of: find.text('查看各个平台的后台运行优化教程'),
+        matching: find.byType(Card),
+      );
+      expect(
+        tester.getTopLeft(tutorialCard).dy,
+        greaterThan(tester.getBottomLeft(detectionCard).dy),
+      );
+      expect(find.text('Android 后台运行优化教程'), findsNothing);
+    });
+
+    testWidgets('platform tutorial page lists supported platforms',
+        (tester) async {
+      registerMockPlatform();
+      tester.view.physicalSize = const Size(1080, 5000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('查看各个平台的后台运行优化教程'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Android 后台运行优化教程'), findsOneWidget);
+      expect(find.text('iOS 后台运行优化教程'), findsOneWidget);
+      expect(find.text('Windows 后台运行优化教程'), findsOneWidget);
+      expect(find.text('macOS 后台运行优化教程'), findsOneWidget);
+      expect(find.text('Linux 后台运行优化教程'), findsOneWidget);
+      expect(find.text('Web 后台运行优化教程'), findsOneWidget);
     });
   });
 }

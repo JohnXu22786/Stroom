@@ -1,0 +1,329 @@
+import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:archive/archive.dart';
+import 'package:file_picker_platform_interface/file_picker_platform_interface.dart';
+import 'package:file_selector/file_selector.dart';
+import 'package:file_selector_platform_interface/file_selector_platform_interface.dart'
+    as selector_platform;
+import 'package:flutter/foundation.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/utils/file_picker_utils.dart';
+
+import '../fake_file_picker.dart';
+
+class _FakeFileSelector extends selector_platform.FileSelectorPlatform {
+  _FakeFileSelector(this.location);
+
+  final FileSaveLocation? location;
+  List<XTypeGroup>? acceptedTypeGroups;
+  selector_platform.SaveDialogOptions? options;
+
+  @override
+  Future<FileSaveLocation?> getSaveLocation({
+    List<XTypeGroup>? acceptedTypeGroups,
+    selector_platform.SaveDialogOptions options =
+        const selector_platform.SaveDialogOptions(),
+  }) async {
+    this.acceptedTypeGroups = acceptedTypeGroups;
+    this.options = options;
+    return location;
+  }
+}
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  late TargetPlatform? originalPlatform;
+  late FilePickerPlatform originalFilePicker;
+  late selector_platform.FileSelectorPlatform originalFileSelector;
+
+  setUp(() {
+    originalPlatform = debugDefaultTargetPlatformOverride;
+    originalFilePicker = FilePickerPlatform.instance;
+    originalFileSelector = selector_platform.FileSelectorPlatform.instance;
+  });
+
+  tearDown(() {
+    debugDefaultTargetPlatformOverride = originalPlatform;
+    FilePickerPlatform.instance = originalFilePicker;
+    selector_platform.FileSelectorPlatform.instance = originalFileSelector;
+  });
+
+  test('desktop save applies the extension filter and writes selected bytes',
+      () async {
+    final directory = await Directory.systemTemp.createTemp('picker_save_');
+    addTearDown(() => directory.delete(recursive: true));
+    final destination = '${directory.path}${Platform.pathSeparator}backup.zip';
+    final fileSelector = _FakeFileSelector(FileSaveLocation(destination));
+    selector_platform.FileSelectorPlatform.instance = fileSelector;
+    debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+    final bytes = Uint8List.fromList([1, 2, 3]);
+
+    final result = await saveFileWithType(
+      fileName: 'backup.zip',
+      bytes: bytes,
+      extensions: ['zip'],
+      dialogTitle: 'Save backup',
+      initialDirectory: directory.path,
+    );
+
+    expect(result, Uri.file(destination));
+    expect(await File(destination).readAsBytes(), bytes);
+    expect(fileSelector.acceptedTypeGroups, hasLength(1));
+    expect(fileSelector.acceptedTypeGroups!.single.extensions, ['zip']);
+    expect(fileSelector.options!.suggestedName, 'backup.zip');
+    expect(fileSelector.options!.initialDirectory, directory.path);
+    expect(FilePickerPlatform.instance, same(originalFilePicker));
+  });
+
+  test('cancelled desktop save does not create a file', () async {
+    final fileSelector = _FakeFileSelector(null);
+    selector_platform.FileSelectorPlatform.instance = fileSelector;
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    final bytes = Uint8List.fromList([4, 5]);
+
+    final result = await saveFileWithType(
+      fileName: 'image.png',
+      bytes: bytes,
+      extensions: ['png'],
+    );
+
+    expect(result, isNull);
+  });
+
+  test('mobile save keeps FilePicker byte-save behavior', () async {
+    final picker = FakeFilePicker(result: Uri.parse('content://saved/file'));
+    FilePickerPlatform.instance = picker;
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    final bytes = Uint8List.fromList([6, 7]);
+
+    final result = await saveFileWithType(
+      fileName: 'audio.wav',
+      bytes: bytes,
+      extensions: ['wav'],
+      mimeType: 'audio/wav',
+      dialogTitle: 'Save audio',
+      initialDirectory: '/storage/music',
+    );
+
+    expect(result, Uri.parse('content://saved/file'));
+    expect(picker.saveCallCount, 1);
+    expect(picker.lastFileName, 'audio.wav');
+    expect(picker.lastBytes, bytes);
+    expect(picker.lastMimeType, 'audio/wav');
+    expect(picker.lastDialogTitle, 'Save audio');
+  });
+
+  test('location label uses a local path for files and a URI for web saves',
+      () {
+    expect(filePickerLocationLabel(Uri.file('/tmp/archive.zip')),
+        '/tmp/archive.zip');
+    expect(
+      filePickerLocationLabel(Uri.parse('blob:https://example.test/id')),
+      'blob:https://example.test/id',
+    );
+  });
+
+  test('export archive keeps visible nested paths and empty folders', () {
+    final bytes = encodeUserVisibleExportArchive(
+      files: {
+        '旅行/2026/海边/photo.jpg': Uint8List.fromList([1, 2, 3]),
+      },
+      folders: const ['旅行/空目录'],
+    );
+
+    final entries = ZipDecoder().decodeBytes(bytes);
+    final names = entries.map((entry) => entry.name).toSet();
+    expect(names, contains('旅行/2026/海边/photo.jpg'));
+    expect(names, contains('旅行/空目录/'));
+    expect(names, isNot(contains('hash123.jpg')));
+  });
+
+  test('export paths reject case-only collisions for portable extraction', () {
+    expect(
+      () => validateUserVisibleExportPaths(
+        files: const ['Notes.txt', 'notes.txt'],
+      ),
+      throwsStateError,
+    );
+    expect(
+      () => validateUserVisibleExportPaths(
+        files: const [],
+        folders: const ['Audio', 'audio'],
+      ),
+      throwsStateError,
+    );
+    expect(
+      () => validateUserVisibleExportPaths(
+        files: const ['Audio/clip.wav'],
+        folders: const ['audio'],
+      ),
+      throwsStateError,
+    );
+  });
+
+  test('export paths reject canonically equivalent Unicode filenames', () {
+    expect(
+      () => validateUserVisibleExportPaths(
+        files: const ['caf\u00e9.txt', 'cafe\u0301.txt'],
+      ),
+      throwsStateError,
+    );
+  });
+
+  test('rejects export paths that collide after Windows trims trailing spaces',
+      () {
+    expect(
+      () => validateUserVisibleExportPaths(files: const ['report ']),
+      throwsArgumentError,
+    );
+    expect(
+      () => validateUserVisibleExportPaths(
+        files: const ['report', 'report '],
+      ),
+      throwsArgumentError,
+    );
+  });
+
+  test('rejects export paths Windows trims after a trailing period', () {
+    final bytes = Uint8List.fromList([1]);
+    expect(
+      () => encodeUserVisibleExportArchive(
+        files: {'report.txt': bytes, 'report.txt.': bytes},
+      ),
+      throwsArgumentError,
+    );
+    expect(
+      () => validateUserVisibleExportPaths(
+        files: const ['folder./report.txt'],
+      ),
+      throwsArgumentError,
+    );
+    expect(
+      () => validateUserVisibleExportPaths(
+        files: const [],
+        folders: const ['folder.'],
+      ),
+      throwsArgumentError,
+    );
+  });
+
+  test('rejects reserved Windows device names in files and folders', () {
+    for (final file in const [
+      'CON',
+      'con.txt',
+      'AUX.log',
+      'COM1.csv',
+      'LPT9',
+      'CON:stream',
+      'CONIN\$',
+    ]) {
+      expect(
+        () => validateUserVisibleExportPaths(files: [file]),
+        throwsArgumentError,
+        reason: 'File path component "$file" is reserved on Windows',
+      );
+    }
+    for (final folder in const ['CON', 'nested/NUL.txt', 'CONOUT\$.log']) {
+      expect(
+        () => validateUserVisibleExportPaths(
+          files: const [],
+          folders: [folder],
+        ),
+        throwsArgumentError,
+        reason: 'Folder path component "$folder" is reserved on Windows',
+      );
+    }
+  });
+
+  test('rejects Windows forbidden characters in file and folder components',
+      () {
+    for (final file in const [
+      'bad?.txt',
+      'bad*.txt',
+      'bad".txt',
+      'bad<.txt',
+      'bad>.txt',
+      'bad|.txt',
+      'bad:.txt',
+      'bad\u0001.txt',
+    ]) {
+      expect(
+        () => validateUserVisibleExportPaths(files: [file]),
+        throwsArgumentError,
+        reason:
+            'File path component "$file" contains a Windows-forbidden character',
+      );
+    }
+    for (final folder in const [
+      'nested/bad?',
+      'nested/bad*',
+      'nested/bad"',
+      'nested/bad<',
+      'nested/bad>',
+      'nested/bad|',
+      'nested/bad:',
+      'nested/bad\u0001',
+    ]) {
+      expect(
+        () => validateUserVisibleExportPaths(
+          files: const [],
+          folders: [folder],
+        ),
+        throwsArgumentError,
+        reason:
+            'Folder path component "$folder" contains a Windows-forbidden character',
+      );
+    }
+  });
+
+  test('allows distinct Unicode export names without case expansion', () {
+    expect(
+      () => validateUserVisibleExportPaths(
+        files: const ['straße.txt', 'strasse.txt'],
+      ),
+      returnsNormally,
+    );
+    expect(
+      () => validateUserVisibleExportPaths(
+        files: const ['ﬃ.txt', 'ffi.txt'],
+      ),
+      returnsNormally,
+    );
+  });
+
+  test('rejects Unicode export paths that are case-insensitive aliases', () {
+    expect(
+      () => validateUserVisibleExportPaths(
+        files: const ['Report.txt', 'report.txt'],
+      ),
+      throwsStateError,
+    );
+    expect(
+      () => validateUserVisibleExportPaths(
+        files: const ['σ.txt', 'ς.txt'],
+      ),
+      throwsStateError,
+    );
+    expect(
+      () => validateUserVisibleExportPaths(
+        files: const ['ᾀ.txt', 'ἈΙ.txt'],
+      ),
+      throwsStateError,
+    );
+    expect(
+      () => validateUserVisibleExportPaths(
+        files: const ['caf\u00e9.txt', 'cafe\u0301.txt'],
+      ),
+      throwsStateError,
+    );
+    expect(
+      () => validateUserVisibleExportPaths(
+        files: const ['Report.txt'],
+        folders: const ['report.txt'],
+      ),
+      throwsStateError,
+    );
+  });
+}

@@ -15,6 +15,7 @@ extension _ChatPageSearchExt on _ChatPageState {
       _searchQuery = query;
       _searchError = null;
       _searchMatches.clear();
+      _searchMatchFirstIndexByMessageId.clear();
       _currentMatchIndex = 0;
     });
     if (query.isEmpty) return;
@@ -97,6 +98,7 @@ extension _ChatPageSearchExt on _ChatPageState {
         _currentMatchIndex = 0;
         if (targetMatch >= 0) _currentMatchIndex = targetMatch;
         _pendingSearchMessageId = null;
+        _rebuildSearchMatchFirstIndex();
       });
       if (requestedMessageId != null && targetMatch < 0) {
         // Global search can find text inside code or math that local search
@@ -122,7 +124,18 @@ extension _ChatPageSearchExt on _ChatPageState {
           conversationId != ref.read(activeConversationIdProvider)) {
         return;
       }
-      setState(() => _searchError = '搜索失败');
+      setState(
+          () => _searchError = AppLocalizations.of(context)!.chatSearchError);
+    }
+  }
+
+  void _rebuildSearchMatchFirstIndex() {
+    _searchMatchFirstIndexByMessageId.clear();
+    for (var i = 0; i < _searchMatches.length; i++) {
+      _searchMatchFirstIndexByMessageId.putIfAbsent(
+        _searchMatches[i].messageId,
+        () => i,
+      );
     }
   }
 
@@ -412,7 +425,7 @@ extension _ChatPageSearchExt on _ChatPageState {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
         decoration: BoxDecoration(
           color: selected ? cs.primaryContainer : Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: selected ? cs.primary : cs.outlineVariant,
             width: selected ? 1.0 : 0.5,
@@ -570,6 +583,7 @@ extension _ChatPageSearchExt on _ChatPageState {
   /// keyboard stays up while browsing results, matching the pre-fix
   /// behavior the chat page deliberately preserves.
   Widget _buildSearchBar() {
+    final strings = AppLocalizations.of(context)!;
     return TextFieldTapRegion(
       groupId: chatComposerTapRegionGroupId,
       child: Container(
@@ -615,8 +629,8 @@ extension _ChatPageSearchExt on _ChatPageState {
                       },
                       decoration: InputDecoration(
                         hintText: _searchMode == SearchMode.current
-                            ? '搜索当前对话...'
-                            : '搜索所有对话...',
+                            ? strings.chatSearchCurrent
+                            : strings.chatSearchAll,
                         isDense: true,
                         contentPadding: const EdgeInsets.symmetric(
                           horizontal: 8,
@@ -651,7 +665,7 @@ extension _ChatPageSearchExt on _ChatPageState {
                   ),
                   IconButton(
                     icon: const Icon(Icons.refresh, size: 18),
-                    tooltip: '重试搜索',
+                    tooltip: strings.chatSearchRetry,
                     onPressed: () => _performSearch(
                       _searchQuery,
                       targetMessageId: _pendingSearchMessageId,
@@ -667,7 +681,7 @@ extension _ChatPageSearchExt on _ChatPageState {
                 if (_searchMode == SearchMode.current) ...[
                   IconButton(
                     icon: const Icon(Icons.keyboard_arrow_up, size: 20),
-                    tooltip: '上一个',
+                    tooltip: AppLocalizations.of(context)!.searchPrevious,
                     onPressed: _previousMatch,
                     visualDensity: VisualDensity.compact,
                     padding: EdgeInsets.zero,
@@ -678,7 +692,7 @@ extension _ChatPageSearchExt on _ChatPageState {
                   ),
                   IconButton(
                     icon: const Icon(Icons.keyboard_arrow_down, size: 20),
-                    tooltip: '下一个',
+                    tooltip: AppLocalizations.of(context)!.searchNext,
                     onPressed: _nextMatch,
                     visualDensity: VisualDensity.compact,
                     padding: EdgeInsets.zero,
@@ -690,7 +704,7 @@ extension _ChatPageSearchExt on _ChatPageState {
                 ],
                 IconButton(
                   icon: const Icon(Icons.close, size: 18),
-                  tooltip: '关闭搜索',
+                  tooltip: AppLocalizations.of(context)!.searchClose,
                   onPressed: _closeSearch,
                   visualDensity: VisualDensity.compact,
                   padding: EdgeInsets.zero,
@@ -706,7 +720,7 @@ extension _ChatPageSearchExt on _ChatPageState {
             Row(
               children: [
                 _buildModeChip(
-                  label: '当前对话',
+                  label: strings.chatSearchCurrentMode,
                   selected: _searchMode == SearchMode.current,
                   onTap: () {
                     if (_searchMode != SearchMode.current) {
@@ -718,7 +732,7 @@ extension _ChatPageSearchExt on _ChatPageState {
                 ),
                 const SizedBox(width: 8),
                 _buildModeChip(
-                  label: '所有对话',
+                  label: strings.chatSearchAllMode,
                   selected: _searchMode == SearchMode.global,
                   onTap: () {
                     if (_searchMode != SearchMode.global) {

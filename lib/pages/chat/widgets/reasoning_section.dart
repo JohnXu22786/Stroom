@@ -1,10 +1,14 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:markdown_widget/markdown_widget.dart';
 import 'package:stroom/providers/chat_stream_provider.dart';
 import 'package:stroom/providers/conversation_provider.dart';
+import 'package:stroom/providers/chat_manager_provider.dart';
 import 'package:stroom/widgets/markdown_extensions.dart';
+
 import '../chat_types.dart';
 
 /// Data model for the reasoning sections to display.
@@ -54,9 +58,11 @@ class ReasoningSection extends ConsumerWidget {
     for (var i = 0; i < sections.texts.length; i++) {
       if (sections.texts[i].isEmpty) continue;
       texts.add(sections.texts[i]);
-      indices.add(sections.sectionIndices.length == sections.texts.length
-          ? sections.sectionIndices[i]
-          : i);
+      indices.add(
+        sections.sectionIndices.length == sections.texts.length
+            ? sections.sectionIndices[i]
+            : i,
+      );
     }
     if (texts.isEmpty) return const SizedBox.shrink();
 
@@ -64,9 +70,7 @@ class ReasoningSection extends ConsumerWidget {
     for (int i = 0; i < texts.length; i++) {
       children.add(
         Padding(
-          padding: EdgeInsets.only(
-            bottom: i < texts.length - 1 ? 4 : 0,
-          ),
+          padding: EdgeInsets.only(bottom: i < texts.length - 1 ? 4 : 0),
           child: _ReasoningButton(
             reasoningText: texts[i],
             // Only mark the last section as streaming when the section
@@ -171,8 +175,12 @@ class _ReasoningButtonState extends ConsumerState<_ReasoningButton> {
 
   @override
   Widget build(BuildContext context) {
-    final label = widget.isStreaming ? '思考中' : '思考完成';
-    final prefix = widget.isMulti ? '思考 ${widget.index + 1} ' : '';
+    final label = widget.isStreaming
+        ? AppLocalizations.of(context)!.chatThinking
+        : AppLocalizations.of(context)!.chatThinkingComplete;
+    final prefix = widget.isMulti
+        ? '${AppLocalizations.of(context)!.chatThinkingNumbered(widget.index + 1)} '
+        : '';
     final accentColor = Colors.orange[700]!;
 
     return GestureDetector(
@@ -211,6 +219,7 @@ class _ReasoningButtonState extends ConsumerState<_ReasoningButton> {
   }
 
   void _openReasoningPanel(BuildContext context, WidgetRef ref) {
+    final convId = ref.read(activeConversationIdProvider);
     showDialog(
       context: context,
       builder: (ctx) => _ReasoningPanelDialog(
@@ -252,8 +261,16 @@ class _ReasoningPanelDialogState extends ConsumerState<_ReasoningPanelDialog>
     with SingleTickerProviderStateMixin {
   late ScrollController _scrollController;
   bool _userScrolledUp = false;
-  String _displayText = '';
+  final StringBuffer _displayBuffer = StringBuffer();
+  String? _displaySnapshot;
+  String? _markdownAppend;
+  int _markdownAppendSequence = 0;
+  int _markdownAppendCount = 0;
+  int _markdownSessionGeneration = 0;
   int _previousTextLength = 0;
+  int _lastReasoningSequence = -1;
+  int _pendingReasoningPrefixLength = 0;
+  bool _hasSeededReasoning = false;
 
   /// Drives the completion sequence for the corner status icon: spinner
   /// fades out (0.5s) → checkmark pops in with a jelly bounce (0.5s) →
@@ -283,8 +300,8 @@ class _ReasoningPanelDialogState extends ConsumerState<_ReasoningPanelDialog>
   @override
   void initState() {
     super.initState();
-    _displayText = widget.initialReasoningText;
-    _previousTextLength = _displayText.length;
+    _setDisplayText(widget.initialReasoningText);
+    _previousTextLength = _displayBuffer.length;
     _scrollController = ScrollController();
     _scrollController.addListener(_onScroll);
     _completionController = AnimationController(
@@ -361,6 +378,35 @@ class _ReasoningPanelDialogState extends ConsumerState<_ReasoningPanelDialog>
     }
   }
 
+  void _appendReasoningUpdate(StreamingReasoningAppend append) {
+    if (append.sequence <= _lastReasoningSequence) return;
+    _lastReasoningSequence = append.sequence;
+    if (append.sectionIndex != widget.sectionIndex || append.text.isEmpty) {
+      return;
+    }
+    final skippedLength = _pendingReasoningPrefixLength;
+    _pendingReasoningPrefixLength = 0;
+    if (append.text.length <= skippedLength) return;
+    final delta = append.text.substring(skippedLength);
+    _displayBuffer.write(delta);
+    _displaySnapshot = null;
+    _markdownAppend = delta;
+    _markdownAppendSequence++;
+    _markdownAppendCount++;
+  }
+
+  void _setDisplayText(String text) {
+    if (_displayBuffer.length != text.length) {
+      _markdownSessionGeneration++;
+    }
+    _displayBuffer
+      ..clear()
+      ..write(text);
+    _displaySnapshot = text;
+  }
+
+  String get _displayText => _displaySnapshot ??= _displayBuffer.toString();
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -373,17 +419,46 @@ class _ReasoningPanelDialogState extends ConsumerState<_ReasoningPanelDialog>
     final allSections = convId != null
         ? ref.watch(streamingReasoningSectionsProvider(convId))
         : const <String>[];
-    if (widget.sectionIndex < allSections.length) {
-      final providerText = allSections[widget.sectionIndex];
-      if (providerText.length >= _displayText.length) {
-        _displayText = providerText;
+    final latestReasoningAppend = convId != null
+        ? ref.watch(streamingReasoningAppendProvider(convId))
+        : null;
+    if (!_hasSeededReasoning) {
+      if (widget.isStreaming && convId != null) {
+        final manager = ref.read(chatStreamManagerProvider);
+        final sections = manager.reasoningSectionsFor(convId);
+        if (widget.sectionIndex < sections.length &&
+            sections[widget.sectionIndex].isNotEmpty) {
+          _setDisplayText(sections[widget.sectionIndex]);
+        }
+        _pendingReasoningPrefixLength =
+            manager.pendingReasoningDeltaLengthFor(convId);
       }
+      _lastReasoningSequence = convId == null
+          ? -1
+          : ref.read(streamingReasoningAppendProvider(convId))?.sequence ?? -1;
+      _hasSeededReasoning = true;
     }
+    final currentAppend = convId == null
+        ? latestReasoningAppend
+        : ref.read(streamingReasoningAppendProvider(convId));
+    if (currentAppend != null) _appendReasoningUpdate(currentAppend);
+    if (convId != null) {
+      ref.listen(streamingReasoningAppendProvider(convId), (prev, next) {
+        if (!mounted || next == null) return;
+        setState(() => _appendReasoningUpdate(next));
+      });
+    }
+    if (widget.sectionIndex < allSections.length &&
+        allSections[widget.sectionIndex].length > _displayBuffer.length) {
+      final providerText = allSections[widget.sectionIndex];
+      _setDisplayText(providerText);
+    }
+    final displayLength = _displayBuffer.length;
 
     // Auto-scroll to bottom when new content arrives, unless the user
     // has manually scrolled up (interrupted auto-scroll).
-    if (_displayText.length > _previousTextLength) {
-      _previousTextLength = _displayText.length;
+    if (displayLength > _previousTextLength) {
+      _previousTextLength = displayLength;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!_userScrolledUp && _scrollController.hasClients) {
           _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
@@ -401,7 +476,7 @@ class _ReasoningPanelDialogState extends ConsumerState<_ReasoningPanelDialog>
         : false;
     final isStreamActive =
         convId != null ? ref.watch(isStreamingProvider(convId)) : false;
-    final hasReasoningContent = _displayText.isNotEmpty;
+    final hasReasoningContent = displayLength > 0;
     final isReasoningComplete =
         hasReasoningContent && (hasFirstToken || !isStreamActive);
 
@@ -412,7 +487,7 @@ class _ReasoningPanelDialogState extends ConsumerState<_ReasoningPanelDialog>
     // open-time snapshot passed from the section.)
     final isPanelStreaming = !isReasoningComplete;
 
-    final showEmpty = _displayText.isEmpty && !isReasoningComplete;
+    final showEmpty = displayLength == 0 && !isReasoningComplete;
 
     // Detect completion transitions to drive the corner checkmark sequence.
     // The first build only records the initial state (a panel opened after
@@ -465,7 +540,9 @@ class _ReasoningPanelDialogState extends ConsumerState<_ReasoningPanelDialog>
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  isReasoningComplete ? '思考完成' : '思考中',
+                  isReasoningComplete
+                      ? AppLocalizations.of(context)!.chatThinkingComplete
+                      : AppLocalizations.of(context)!.chatThinking,
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
@@ -596,10 +673,26 @@ class _ReasoningPanelDialogState extends ConsumerState<_ReasoningPanelDialog>
                           controller: _scrollController,
                           padding: const EdgeInsets.all(16),
                           child: MarkdownWidget(
+                            key: ValueKey(
+                              'reasoning-markdown:$convId:${widget.messageId}:${widget.sectionIndex}',
+                            ),
                             data: _displayText,
                             selectable: true,
                             shrinkWrap: true,
                             physics: const NeverScrollableScrollPhysics(),
+                            incremental: isPanelStreaming,
+                            incrementalKey: isPanelStreaming
+                                ? '$convId:${widget.messageId}:${widget.sectionIndex}:${isDark}:$_markdownSessionGeneration'
+                                : null,
+                            incrementalAppend:
+                                isPanelStreaming ? _markdownAppend : null,
+                            incrementalSequence:
+                                isPanelStreaming && _markdownAppend != null
+                                    ? _markdownAppendSequence
+                                    : null,
+                            incrementalInitialUpdateCount: _markdownAppendCount,
+                            fullTextOnInvalidation:
+                                isPanelStreaming ? () => _displayText : null,
                             config: markdownConfig,
                             markdownGenerator: markdownGenerator,
                           ),

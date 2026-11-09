@@ -1,14 +1,21 @@
 import 'dart:io';
+
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
+import 'package:flutter/widgets.dart' show Locale;
 import 'package:path/path.dart' as p;
+
 import '../../services/storage_service.dart';
 import '../../utils/retry_helper.dart';
+
 import 'package:dio/dio.dart';
+
+import '../../providers/locale_provider.dart';
 import '../config/default_rules.dart';
 import '../models/catcatch_task.dart';
 import '../models/media_resource.dart';
 import 'sniffing_engine.dart';
 import 'm3u8_parser.dart';
+import 'playlist_merged_extensions.dart';
 import 'webview_sniffer.dart';
 import 'mpd_parser.dart';
 import 'dart_cat_catch_sniffer.dart';
@@ -26,12 +33,17 @@ class TaskExecutor {
     required CatCatchTask task,
     required void Function(CatCatchTask updated) onUpdate,
     CancelToken? cancelToken,
+    Dio Function()? playlistDioFactory,
+    Locale? locale,
   }) async {
     return _executeSteps(
-        task: task,
-        startFromIndex: 0,
-        onUpdate: onUpdate,
-        cancelToken: cancelToken);
+      task: task,
+      startFromIndex: 0,
+      onUpdate: onUpdate,
+      cancelToken: cancelToken,
+      playlistDioFactory: playlistDioFactory,
+      locale: locale,
+    );
   }
 
   /// 从指定步骤重试
@@ -40,10 +52,19 @@ class TaskExecutor {
     required StepType fromStep,
     required void Function(CatCatchTask updated) onUpdate,
     CancelToken? cancelToken,
+    Dio Function()? playlistDioFactory,
+    Locale? locale,
   }) async {
     try {
-      final stepIndex = StepType.values.indexOf(fromStep);
+      var stepIndex = StepType.values.indexOf(fromStep);
       if (stepIndex < 0) throw ArgumentError('Unknown step type: $fromStep');
+      // Conversion retries can happen after a restart, when the download step
+      // is complete but its local path was not persisted. Re-run that step.
+      if (fromStep == StepType.converting &&
+          (task.downloadedFilePath == null ||
+              task.downloadedFilePath!.isEmpty)) {
+        stepIndex = StepType.values.indexOf(StepType.downloading);
+      }
       final newSteps = List<StepStatus>.from(task.steps);
       for (int i = stepIndex; i < newSteps.length; i++) {
         newSteps[i] = StepStatus.pending(newSteps[i].type);
@@ -58,15 +79,17 @@ class TaskExecutor {
       );
       onUpdate(updatedTask);
       return await _executeSteps(
-          task: updatedTask,
-          startFromIndex: stepIndex,
-          onUpdate: onUpdate,
-          cancelToken: cancelToken);
+        task: updatedTask,
+        startFromIndex: stepIndex,
+        onUpdate: onUpdate,
+        cancelToken: cancelToken,
+        playlistDioFactory: playlistDioFactory,
+        locale: locale,
+      );
     } catch (e) {
       if (e is UnsupportedError) {
         throw Exception(
-          '此功能需要登录账户后使用，请使用右上角浏览器内登录功能',
-        );
+            appLocalizationsForLocale(locale).catCatchLoginRequired);
       }
       rethrow;
     }
@@ -78,12 +101,16 @@ class TaskExecutor {
     required int startFromIndex,
     required void Function(CatCatchTask updated) onUpdate,
     CancelToken? cancelToken,
+    Dio Function()? playlistDioFactory,
+    Locale? locale,
   }) async {
     return _executeStepsInternal(
       task: task,
       startFromIndex: startFromIndex,
       onUpdate: onUpdate,
       cancelToken: cancelToken,
+      playlistDioFactory: playlistDioFactory,
+      locale: locale,
     );
   }
 
@@ -93,6 +120,8 @@ class TaskExecutor {
     required int startFromIndex,
     required void Function(CatCatchTask updated) onUpdate,
     CancelToken? cancelToken,
+    Dio Function()? playlistDioFactory,
+    Locale? locale,
   }) async {
     final steps = List<StepStatus>.from(task.steps);
     ensureExecutorSteps(steps);
@@ -109,12 +138,16 @@ class TaskExecutor {
         switch (stepType) {
           case StepType.fetching:
             onUpdate(task.copyWith(steps: steps, status: TaskStatus.running));
-            final (detectedResources, fetchedPageTitle) =
-                await _executeFetchAndAnalyze(
-                    task: task,
-                    steps: steps,
-                    onUpdate: onUpdate,
-                    cancelToken: cancelToken);
+            final (
+              detectedResources,
+              fetchedPageTitle,
+            ) = await _executeFetchAndAnalyze(
+              task: task,
+              steps: steps,
+              onUpdate: onUpdate,
+              cancelToken: cancelToken,
+              locale: locale,
+            );
             detectedMedia = detectedResources;
             // Update local task with page title so downstream steps can use it
             if (fetchedPageTitle != null &&
@@ -122,10 +155,7 @@ class TaskExecutor {
                 fetchedPageTitle != task.title) {
               task = task.copyWith(
                 title: fetchedPageTitle,
-                metadata: {
-                  ...task.metadata,
-                  'pageTitle': fetchedPageTitle,
-                },
+                metadata: {...task.metadata, 'pageTitle': fetchedPageTitle},
               );
             }
             break;
@@ -135,27 +165,50 @@ class TaskExecutor {
             break;
           case StepType.parsingPlaylist:
             final result = await _executeParsePlaylist(
-                task: task,
-                steps: steps,
-                media: detectedMedia,
-                cancelToken: cancelToken);
-            if (result != null) detectedMedia = result;
+              task: task,
+              steps: steps,
+              media: detectedMedia,
+              cancelToken: cancelToken,
+              playlistDioFactory: playlistDioFactory,
+            );
+            if (result != null) {
+              detectedMedia = result.media;
+              if (result.mergedExtensions.isNotEmpty) {
+                task = task.copyWith(
+                  metadata: {
+                    ...task.metadata,
+                    PlaylistMergedExtensions.metadataKey:
+                        PlaylistMergedExtensions.encode(
+                      result.mergedExtensions,
+                    ),
+                  },
+                );
+              }
+            }
             onUpdate(task.copyWith(steps: steps, detectedMedia: detectedMedia));
             break;
           case StepType.filtering:
             final beforeCount = detectedMedia.length;
             final filtered = SniffingEngine.filterByDuration(
-                detectedMedia, task.expectedDurationSec,
-                toleranceSec: DefaultRules.durationToleranceSeconds);
+              detectedMedia,
+              task.expectedDurationSec,
+              toleranceSec: DefaultRules.durationToleranceSeconds,
+            );
             // 检测音视频分轨并标记
             final withSplitTrack = detectSplitTracks(filtered);
             final detail = buildDurationFilterDetail(
-                beforeCount, withSplitTrack.length, task.expectedDurationSec);
+              beforeCount,
+              withSplitTrack.length,
+              task.expectedDurationSec,
+            );
             markExecutorStep(steps, i, done: true, detail: detail);
-            onUpdate(task.copyWith(
+            onUpdate(
+              task.copyWith(
                 steps: steps,
                 detectedMedia: withSplitTrack,
-                progress: calcExecutorProgress(steps)));
+                progress: calcExecutorProgress(steps),
+              ),
+            );
             detectedMedia = withSplitTrack;
             break;
           case StepType.userSelecting:
@@ -164,7 +217,8 @@ class TaskExecutor {
                 (detectedMedia.length > 1 ||
                     task.metadata['deferSingleResourceSelection'] == 'true')) {
               final detail = '共${detectedMedia.length}个资源，请用户选择';
-              onUpdate(task.copyWith(
+              onUpdate(
+                task.copyWith(
                   steps: steps.map((s) {
                     if (s.type == StepType.userSelecting) {
                       return s.copyWith(detail: detail);
@@ -173,39 +227,53 @@ class TaskExecutor {
                   }).toList(),
                   status: TaskStatus.running,
                   detectedMedia: detectedMedia,
-                  progress: calcExecutorProgress(steps)));
+                  progress: calcExecutorProgress(steps),
+                ),
+              );
               return null;
             }
             selectedMedia ??=
                 detectedMedia.isNotEmpty ? detectedMedia.first : null;
             if (selectedMedia == null) {
-              throw Exception('未能获取到可用媒体资源，请检查URL是否正确以及目标网站是否可达');
+              throw Exception(
+                appLocalizationsForLocale(locale).catCatchNoUsableMedia,
+              );
             }
             final autoDetail =
                 detectedMedia.length == 1 ? '剩余1个结果，自动进入下载' : '自动选择第1个结果，进入下载';
             markExecutorStep(steps, i, done: true, detail: autoDetail);
-            onUpdate(task.copyWith(
+            onUpdate(
+              task.copyWith(
                 steps: steps,
                 selectedMedia: selectedMedia,
-                progress: calcExecutorProgress(steps)));
+                progress: calcExecutorProgress(steps),
+              ),
+            );
             break;
           case StepType.downloading:
             // 检查服务器是否支持断点续传
             if (task.metadata['resumeSupported'] == null &&
                 selectedMedia != null) {
+              final resumeCookieHeader =
+                  task.browserCookieHeaderForUrl(selectedMedia.url);
               final supportsResume =
                   await DownloadManager.checkServerResumeSupport(
                 selectedMedia.url,
                 headers: DefaultRules.buildBrowserHeaders(
                   referer: selectedMedia.initiator,
+                  extraHeaders: resumeCookieHeader == null
+                      ? null
+                      : {'Cookie': resumeCookieHeader},
                 ),
               );
-              onUpdate(task.copyWith(
-                metadata: {
-                  ...task.metadata,
-                  'resumeSupported': supportsResume ? 'true' : 'false',
-                },
-              ));
+              onUpdate(
+                task.copyWith(
+                  metadata: {
+                    ...task.metadata,
+                    'resumeSupported': supportsResume ? 'true' : 'false',
+                  },
+                ),
+              );
             }
             downloadedFilePath = await _executeDownload(
               task: task,
@@ -215,13 +283,15 @@ class TaskExecutor {
               detectedMedia: detectedMedia,
               onUpdate: onUpdate,
               cancelToken: cancelToken,
+              locale: locale,
             );
             break;
           case StepType.converting:
-            if (downloadedFilePath == null) throw Exception('下载文件路径为空，无法转换');
-
-            // 检查下载的文件是否仍然存在（防止重启后临时文件被清理）
-            if (!File(downloadedFilePath).existsSync()) {
+            // A restarted task may retain a completed download step without
+            // its path, or the temp file may have been cleaned up. Re-download.
+            if (downloadedFilePath == null ||
+                downloadedFilePath.isEmpty ||
+                !File(downloadedFilePath).existsSync()) {
               debugPrint('[TaskExecutor] 下载文件不存在，重新下载: $downloadedFilePath');
               downloadedFilePath = await _executeDownload(
                 task: task,
@@ -231,12 +301,23 @@ class TaskExecutor {
                 detectedMedia: detectedMedia,
                 onUpdate: onUpdate,
                 cancelToken: cancelToken,
+                locale: locale,
               );
-              if (downloadedFilePath == null) {
-                throw Exception('重新下载失败，下载文件不存在');
+              if (downloadedFilePath == null || downloadedFilePath.isEmpty) {
+                throw Exception(
+                  appLocalizationsForLocale(locale)
+                      .catCatchRedownloadFileMissing,
+                );
               }
               // 更新任务状态中的下载路径
               onUpdate(task.copyWith(downloadedFilePath: downloadedFilePath));
+            }
+
+            final localPath = downloadedFilePath;
+            if (localPath == null || localPath.isEmpty) {
+              throw Exception(
+                appLocalizationsForLocale(locale).catCatchRedownloadPathEmpty,
+              );
             }
 
             // Only formats that actually need MP4 conversion require
@@ -244,75 +325,110 @@ class TaskExecutor {
             // file, in which case its container must be preserved.
             final pendingConfirm = task.metadata['pendingConfirm'];
             if (pendingConfirm != 'done') {
-              final ext = p
-                  .extension(downloadedFilePath)
-                  .toLowerCase()
-                  .replaceAll('.', '');
+              final ext =
+                  p.extension(localPath).toLowerCase().replaceAll('.', '');
               if (isSpecialFormat(ext)) {
-                onUpdate(task.copyWith(
-                  steps: steps,
-                  metadata: {
-                    ...task.metadata,
-                    'pendingConfirm': 'special_format',
-                    'pendingConfirmFormat': ext,
-                  },
-                ));
+                onUpdate(
+                  task.copyWith(
+                    steps: steps,
+                    downloadedFilePath: localPath,
+                    metadata: {
+                      ...task.metadata,
+                      'pendingConfirm': 'special_format',
+                      'pendingConfirmFormat': ext,
+                    },
+                  ),
+                );
                 return null;
               }
             }
 
             // 普通格式文件不需要转码/合并，直接跳过
-            final skipExt = p
-                .extension(downloadedFilePath)
-                .toLowerCase()
-                .replaceAll('.', '');
+            final skipExt =
+                p.extension(localPath).toLowerCase().replaceAll('.', '');
             if (!isSpecialFormat(skipExt)) {
-              markExecutorStep(steps, i,
-                  skipped: true, detail: '.$skipExt 格式无需转换，已跳过');
-              onUpdate(task.copyWith(
-                  steps: steps, progress: calcExecutorProgress(steps)));
+              markExecutorStep(
+                steps,
+                i,
+                skipped: true,
+                detail: '.$skipExt 格式无需转换，已跳过',
+              );
+              onUpdate(
+                task.copyWith(
+                  steps: steps,
+                  progress: calcExecutorProgress(steps),
+                ),
+              );
               continue;
             }
 
             downloadedFilePath = await _executeConvert(
-                task: task,
-                steps: steps,
-                inputPath: downloadedFilePath,
-                onUpdate: onUpdate,
-                cancelToken: cancelToken);
+              task: task,
+              steps: steps,
+              inputPath: localPath,
+              onUpdate: onUpdate,
+              cancelToken: cancelToken,
+              locale: locale,
+            );
             break;
           case StepType.saving:
             downloadedFilePath = await executeSave(
-                task: task.copyWith(selectedMedia: selectedMedia),
-                steps: steps,
-                sourcePath: downloadedFilePath,
-                onUpdate: onUpdate,
-                cancelToken: cancelToken);
+              task: task.copyWith(selectedMedia: selectedMedia),
+              steps: steps,
+              sourcePath: downloadedFilePath,
+              onUpdate: onUpdate,
+              cancelToken: cancelToken,
+            );
             if (!kIsWeb) {
-              task = task.copyWith(metadata: {
-                ...task.metadata,
-                CatCatchTask.nativeRegisteredPathKey: downloadedFilePath,
-              });
+              task = task.copyWith(
+                metadata: {
+                  ...task.metadata,
+                  CatCatchTask.nativeRegisteredPathKey: downloadedFilePath,
+                },
+              );
             }
             break;
         }
       }
       if (cancelToken?.isCancelled ?? false) return null;
       markAllExecutorStepsDone(steps);
-      onUpdate(task.copyWith(
+      onUpdate(
+        task.copyWith(
           steps: steps,
           status: TaskStatus.completed,
           progress: 100,
           completedAt: DateTime.now(),
           selectedMedia: selectedMedia,
-          downloadedFilePath: downloadedFilePath));
+          downloadedFilePath: downloadedFilePath,
+          clearRuntimeBrowserCookieHeader: true,
+        ),
+      );
       return downloadedFilePath;
     } catch (e, s) {
       if (cancelToken?.isCancelled ?? false) return null;
+      if (e is WebViewRecoveryRequiredException) {
+        final metadata = {
+          ...task.metadata,
+          CatCatchTask.webViewRecoveryRequiredKey: 'true',
+        };
+        onUpdate(
+          task.copyWith(
+            status: TaskStatus.paused,
+            steps: steps,
+            detectedMedia: e.existingResources,
+            title: e.pageTitle?.trim().isNotEmpty == true
+                ? e.pageTitle!.trim()
+                : task.title,
+            metadata: metadata,
+            clearError: true,
+          ),
+        );
+        return null;
+      }
       debugPrint('[TaskExecutor] Task failed: $e\n$s');
       // Format DioException with user-friendly Chinese message
       if (e is DioException) {
-        taskError = formatDioError(e);
+        taskError = formatDioError(e, locale: locale);
       } else {
         taskError = e.toString();
       }
@@ -322,12 +438,16 @@ class TaskExecutor {
           break;
         }
       }
-      onUpdate(task.copyWith(
+      onUpdate(
+        task.copyWith(
           steps: steps,
           status: TaskStatus.failed,
           error: taskError,
           downloadedFilePath: downloadedFilePath,
-          progress: calcExecutorProgress(steps)));
+          progress: calcExecutorProgress(steps),
+          clearRuntimeBrowserCookieHeader: true,
+        ),
+      );
       return null;
     }
   }
@@ -339,6 +459,7 @@ class TaskExecutor {
     required List<StepStatus> steps,
     required void Function(CatCatchTask) onUpdate,
     CancelToken? cancelToken,
+    Locale? locale,
   }) async {
     var capturedPageTitle = task.title;
 
@@ -348,9 +469,7 @@ class TaskExecutor {
     // -----------------------------------------------------------------------
     final dartSniffer = DartCatCatchSniffer();
     try {
-      final headers = DefaultRules.buildBrowserHeaders(
-        referer: task.url,
-      );
+      final headers = DefaultRules.buildBrowserHeaders(referer: task.url);
 
       final dartResult = await dartSniffer.sniff(
         task.url,
@@ -358,8 +477,12 @@ class TaskExecutor {
         cancelToken: cancelToken,
       );
 
-      markExecutorStep(steps, 0,
-          running: true, progress: dartResult.resources.isNotEmpty ? 80 : 40);
+      markExecutorStep(
+        steps,
+        0,
+        running: true,
+        progress: dartResult.resources.isNotEmpty ? 80 : 40,
+      );
       onUpdate(task.copyWith(steps: steps, progress: 20));
 
       if (dartResult.resources.isNotEmpty) {
@@ -371,13 +494,20 @@ class TaskExecutor {
           resources = await probeMediaResources(resources);
         }
 
-        markExecutorStep(steps, 0,
-            done: true, detail: '获取到${resources.length}个媒体资源');
+        markExecutorStep(
+          steps,
+          0,
+          done: true,
+          detail: '获取到${resources.length}个媒体资源',
+        );
         markExecutorStep(steps, 1, done: true);
-        onUpdate(task.copyWith(
+        onUpdate(
+          task.copyWith(
             steps: steps,
             detectedMedia: resources,
-            progress: calcExecutorProgress(steps)));
+            progress: calcExecutorProgress(steps),
+          ),
+        );
         return (resources, capturedPageTitle);
       }
 
@@ -388,12 +518,12 @@ class TaskExecutor {
         // Skip WebView sniffing and fail with a clear message instead.
         if (kIsWeb) {
           throw Exception(
-            '网页无法直接获取资源（需要浏览器环境），请尝试在移动端或桌面端使用该功能。'
-            '或者直接粘贴视频/音频文件的直链地址。',
+            appLocalizationsForLocale(locale).catCatchWebBrowserRequired,
           );
         }
         debugPrint(
-            '[TaskExecutor] DartCatCatchSniffer recommends WebView fallback');
+          '[TaskExecutor] DartCatCatchSniffer recommends WebView fallback',
+        );
         return await _fallbackToWebView(
           task: task,
           steps: steps,
@@ -404,6 +534,7 @@ class TaskExecutor {
         );
       }
     } catch (e) {
+      if (e is WebViewRecoveryRequiredException) rethrow;
       debugPrint('[TaskExecutor] DartCatCatchSniffer failed: $e');
       // On web, if direct HTTP sniffing fails, don't fall through to Tier 2/3
       // because WebView will open a visible browser window.
@@ -422,11 +553,16 @@ class TaskExecutor {
     onUpdate(task.copyWith(steps: steps, progress: 5));
 
     try {
-      var resources = await SniffingEngine.analyzeUrl(task.url,
-          cancelToken: cancelToken, onProgress: (step, progress) {
-        markExecutorStep(steps, 0, running: true, progress: progress);
-        onUpdate(task.copyWith(steps: steps, progress: (progress * 20 ~/ 100)));
-      });
+      var resources = await SniffingEngine.analyzeUrl(
+        task.url,
+        cancelToken: cancelToken,
+        onProgress: (step, progress) {
+          markExecutorStep(steps, 0, running: true, progress: progress);
+          onUpdate(
+            task.copyWith(steps: steps, progress: (progress * 20 ~/ 100)),
+          );
+        },
+      );
 
       // -------------------------------------------------------------------
       // Tier 3: WebView sniffing if direct sniffing found nothing useful
@@ -439,8 +575,7 @@ class TaskExecutor {
         // Skip WebView sniffing and fail with a clear message instead.
         if (kIsWeb) {
           throw Exception(
-            '网页无法直接获取资源（需要浏览器环境），请尝试在移动端或桌面端使用该功能。'
-            '或者直接粘贴视频/音频文件的直链地址。',
+            appLocalizationsForLocale(locale).catCatchWebBrowserRequired,
           );
         }
         var (webViewResources, pageTitle) = await _fallbackToWebView(
@@ -463,13 +598,20 @@ class TaskExecutor {
         resources = await probeMediaResources(resources);
       }
 
-      markExecutorStep(steps, 0,
-          done: true, detail: '获取到${resources.length}个媒体资源');
+      markExecutorStep(
+        steps,
+        0,
+        done: true,
+        detail: '获取到${resources.length}个媒体资源',
+      );
       markExecutorStep(steps, 1, done: true);
-      onUpdate(task.copyWith(
+      onUpdate(
+        task.copyWith(
           steps: steps,
           detectedMedia: resources,
-          progress: calcExecutorProgress(steps)));
+          progress: calcExecutorProgress(steps),
+        ),
+      );
       return (resources, capturedPageTitle);
     } catch (e) {
       debugPrint('[TaskExecutor] All sniffing tiers failed: $e');
@@ -493,24 +635,45 @@ class TaskExecutor {
     onUpdate(task.copyWith(steps: steps, progress: 20));
 
     debugPrint(
-        '[TaskExecutor] Direct sniffing found only ${existingResources.length} resource(s), '
-        'launching WebView background sniffer');
+      '[TaskExecutor] Direct sniffing found only ${existingResources.length} resource(s), '
+      'launching WebView background sniffer',
+    );
 
     var resources = List<MediaResource>.from(existingResources);
     var pageTitle = capturedPageTitle;
 
     try {
-      final (webViewResources, pTitle) = await WebViewSniffer.sniff(
-        url: task.url,
-        timeout: const Duration(seconds: 30),
-        cancelToken: cancelToken,
-        onProgress: (step, progress) {
-          markExecutorStep(steps, 0,
-              running: true, progress: 50 + (progress ~/ 2));
-          onUpdate(task.copyWith(
-              steps: steps, progress: 20 + (progress * 30 ~/ 100)));
-        },
+      final attemptResult = await WebViewSniffer.runHeadlessRecoveryAttempts<
+          (List<MediaResource>, String?)>(
+        isCancelled: () => cancelToken?.isCancelled ?? false,
+        runAttempt: (timeout) => WebViewSniffer.sniff(
+          url: task.url,
+          timeout: timeout,
+          cancelToken: cancelToken,
+          onProgress: (step, progress) {
+            markExecutorStep(
+              steps,
+              0,
+              running: true,
+              progress: 50 + (progress ~/ 2),
+            );
+            onUpdate(
+              task.copyWith(
+                steps: steps,
+                progress: 20 + (progress * 30 ~/ 100),
+              ),
+            );
+          },
+        ),
       );
+      if (attemptResult == null) {
+        if (cancelToken?.isCancelled ?? false) return (resources, pageTitle);
+        throw WebViewRecoveryRequiredException(
+          existingResources: resources,
+          pageTitle: pageTitle,
+        );
+      }
+      final (webViewResources, pTitle) = attemptResult;
 
       if (pTitle != null && pTitle.isNotEmpty) {
         pageTitle = pTitle;
@@ -525,29 +688,38 @@ class TaskExecutor {
       }
 
       debugPrint(
-          '[TaskExecutor] WebView sniffer found ${webViewResources.length} resource(s), '
-          'total after merge: ${resources.length}');
+        '[TaskExecutor] WebView sniffer found ${webViewResources.length} resource(s), '
+        'total after merge: ${resources.length}',
+      );
     } catch (e) {
+      if (e is WebViewRecoveryRequiredException) rethrow;
       debugPrint(
-          '[TaskExecutor] WebView sniffing failed, continuing with direct results: $e');
+        '[TaskExecutor] WebView sniffing failed, continuing with direct results: $e',
+      );
     }
 
     return (resources, pageTitle);
   }
 
   /// Step 2: 解析播放列表
-  static Future<List<MediaResource>?> _executeParsePlaylist(
-      {required CatCatchTask task,
-      required List<StepStatus> steps,
-      required List<MediaResource> media,
-      CancelToken? cancelToken}) async {
+  static Future<
+          ({List<MediaResource> media, Map<String, String> mergedExtensions})?>
+      _executeParsePlaylist({
+    required CatCatchTask task,
+    required List<StepStatus> steps,
+    required List<MediaResource> media,
+    CancelToken? cancelToken,
+    Dio Function()? playlistDioFactory,
+  }) async {
     final playlist = media.where((m) => m.isPlaylist).toList();
     if (playlist.isEmpty) {
       markExecutorStep(steps, 2, done: true);
       return null;
     }
+    var parsedMedia = List<MediaResource>.from(media);
+    final parsedM3u8Playlists = <({String url, bool hasInitializationMap})>[];
     for (final pl in playlist) {
-      final dio = Dio();
+      final dio = playlistDioFactory?.call() ?? Dio();
       cancelToken?.whenCancel.then((_) {
         dio.close();
       });
@@ -558,6 +730,10 @@ class TaskExecutor {
               'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         };
         if (pl.initiator != null) headers['Referer'] = pl.initiator!;
+        final cookieHeader = task.browserCookieHeaderForUrl(pl.url);
+        if (cookieHeader != null && cookieHeader.isNotEmpty) {
+          headers['Cookie'] = cookieHeader;
+        }
         final response = await dio.get(
           pl.url,
           options: Options(headers: headers),
@@ -567,30 +743,77 @@ class TaskExecutor {
         dio.close();
       }
       List<String> segments;
+      List<M3U8PlaylistResource> playlistResources = [];
+      var mediaSegmentCount = 0;
       if (pl.isM3U8) {
-        segments = await M3U8Parser.parsePlaylist(content, pl.url);
+        final parsed = await M3U8Parser.parsePlaylistWithDetails(
+          content,
+          pl.url,
+        );
+        segments = parsed.resources;
+        playlistResources = parsed.playlistResources;
+        mediaSegmentCount = parsed.mediaSegmentCount;
+        parsedM3u8Playlists.add((
+          url: pl.url,
+          hasInitializationMap: parsed.hasInitializationMap,
+        ));
       } else if (pl.isMPD) {
         segments = await MPDParser.parseManifest(content, pl.url);
+        playlistResources = segments
+            .map((url) => (url: url, rangeStart: null, rangeLength: null))
+            .toList();
+        mediaSegmentCount = segments.length;
       } else {
         continue;
       }
-      final segmentMedia = segments.map((segUrl) {
-        final (name, ext) = SniffingEngine.parseFileName(segUrl);
+      final playlistSegmentUrls = segments.toSet();
+      final existingUrls = <String>{};
+      final enrichedMedia = <MediaResource>[];
+      for (final resource in parsedMedia) {
+        if (pl.isM3U8 && playlistSegmentUrls.contains(resource.url)) {
+          continue;
+        }
+        if (!existingUrls.add(resource.url)) continue;
+        enrichedMedia.add(
+          playlistSegmentUrls.contains(resource.url)
+              ? resource.copyWith(initiator: pl.url, isPlayable: false)
+              : resource,
+        );
+      }
+      final selectedPlaylistResources = pl.isM3U8
+          ? playlistResources
+          : playlistResources
+              .where((resource) => existingUrls.add(resource.url))
+              .toList();
+      final segmentMedia = selectedPlaylistResources.map((resource) {
+        final (name, ext) = SniffingEngine.parseFileName(resource.url);
         return MediaResource(
-            url: segUrl,
-            name: name,
-            ext: ext.isEmpty ? 'ts' : ext,
-            initiator: pl.url,
-            isPlayable: false,
-            isPlaylist: false);
+          url: resource.url,
+          name: name,
+          ext: ext.isEmpty ? 'ts' : ext,
+          initiator: pl.url,
+          isPlayable: false,
+          isPlaylist: false,
+          byteRangeStart: resource.rangeStart,
+          byteRangeLength: resource.rangeLength,
+        );
       }).toList();
-      final totalCount = media.length + segmentMedia.length;
-      markExecutorStep(steps, 2,
-          done: true, detail: '获取到$totalCount个资源（播放列表${segments.length}个分段）');
-      return [...media, ...segmentMedia];
+      final totalCount = enrichedMedia.length + segmentMedia.length;
+      markExecutorStep(
+        steps,
+        2,
+        done: true,
+        detail: '获取到$totalCount个资源（播放列表$mediaSegmentCount个分段）',
+      );
+      parsedMedia = [...enrichedMedia, ...segmentMedia];
     }
     markExecutorStep(steps, 2, done: true);
-    return null;
+    final mergedExtensions =
+        PlaylistMergedExtensions.fromPlaylists(parsedM3u8Playlists);
+    if (mergedExtensions.isEmpty && parsedMedia.length == media.length) {
+      return null;
+    }
+    return (media: parsedMedia, mergedExtensions: mergedExtensions);
   }
 
   static Future<String?> _executeDownload({
@@ -600,17 +823,22 @@ class TaskExecutor {
     required List<MediaResource> detectedMedia,
     required void Function(CatCatchTask updated) onUpdate,
     CancelToken? cancelToken,
+    Locale? locale,
   }) async {
-    if (media == null) throw Exception('未能获取到可用媒体资源，请检查URL是否正确以及目标网站是否可达');
+    if (media == null) {
+      throw Exception(appLocalizationsForLocale(locale).catCatchNoUsableMedia);
+    }
 
     // Web 端无法绕过 CORS 下载，引导用户安装浏览器扩展
     if (kIsWeb) {
-      throw Exception(webDownloadHint);
+      throw Exception(webDownloadHint(locale: locale));
     }
 
     final referer = media.initiator;
+    final cookieHeader = task.browserCookieHeaderForUrl(media.url);
     final browserHeaders = DefaultRules.buildBrowserHeaders(
       referer: referer,
+      extraHeaders: cookieHeader == null ? null : {'Cookie': cookieHeader},
     );
 
     return RetryHelper.retry(
@@ -618,44 +846,77 @@ class TaskExecutor {
         final appDirPath = await AppStorage.directory;
         final downloadDir = p.join(appDirPath, 'catcatch', 'downloads');
         if (media.isPlaylist) {
-          final segments = detectedMedia
+          final segmentResources = detectedMedia
               .where((m) => !m.isPlaylist && m.initiator == media.url)
-              .map((m) => m.url)
               .toList();
-          if (segments.isEmpty) throw Exception('播放列表没有可下载的分段');
+          if (segmentResources.isEmpty) {
+            throw Exception(
+              appLocalizationsForLocale(locale).catCatchPlaylistNoSegments,
+            );
+          }
+          final segments = segmentResources.map((m) => m.url).toList();
+          final segmentRanges = segmentResources.map((m) {
+            final start = m.byteRangeStart;
+            final length = m.byteRangeLength;
+            return start == null || length == null
+                ? null
+                : (start: start, length: length);
+          }).toList();
           // 使用网页标题命名播放列表合并文件
           final playlistBaseName = p.basenameWithoutExtension(
-              buildDownloadFileName(media, task.metadata));
+            buildDownloadFileName(media, task.metadata),
+          );
           final mergedPath = await DownloadManager.downloadSegmentsAndMerge(
             segmentUrls: segments,
-            outputPath: p.join(downloadDir, '${playlistBaseName}_merged.ts'),
-            headers: browserHeaders,
+            segmentRanges: segmentRanges,
+            outputPath: p.join(
+              downloadDir,
+              '${playlistBaseName}_merged.${PlaylistMergedExtensions.forPlaylist(task.metadata, media.url) == 'mp4' ? 'mp4' : 'ts'}',
+            ),
+            headers: DefaultRules.buildBrowserHeaders(referer: referer),
+            headersForUrl: (url) {
+              final segmentCookieHeader = task.browserCookieHeaderForUrl(url);
+              return DefaultRules.buildBrowserHeaders(
+                referer: referer,
+                extraHeaders: segmentCookieHeader == null
+                    ? null
+                    : {'Cookie': segmentCookieHeader},
+              );
+            },
             concurrency: DefaultRules.maxConcurrency,
             onProgress: (completed, total, progress) {
               markExecutorStep(steps, 5, running: true, progress: progress);
-              onUpdate(task.copyWith(
-                  steps: steps, progress: calcExecutorProgress(steps)));
+              onUpdate(
+                task.copyWith(
+                  steps: steps,
+                  progress: calcExecutorProgress(steps),
+                ),
+              );
             },
             onBytes: (totalBytes) {
               // Byte-granularity signal — percent progress only moves at
               // segment boundaries, so a slow segment would otherwise
               // look stalled to the flow's stall detection.
               onUpdate(
-                  task.copyWith(steps: steps, downloadedBytes: totalBytes));
+                task.copyWith(steps: steps, downloadedBytes: totalBytes),
+              );
             },
             cancelToken: cancelToken,
             taskId: task.id,
           );
           markExecutorStep(steps, 5, done: true);
-          onUpdate(task.copyWith(
-              steps: steps, progress: calcExecutorProgress(steps)));
+          onUpdate(
+            task.copyWith(steps: steps, progress: calcExecutorProgress(steps)),
+          );
           return mergedPath;
         }
         final fileName = buildDownloadFileName(media, task.metadata);
         final tempDir = Directory(downloadDir);
         if (!await tempDir.exists()) await tempDir.create(recursive: true);
-        final tempPath =
-            p.join(downloadDir, '.$fileName${DefaultRules.tempFileSuffix}');
+        final tempPath = p.join(
+          downloadDir,
+          '.$fileName${DefaultRules.tempFileSuffix}',
+        );
 
         final downloadedFilePath = await DownloadManager.downloadFile(
           url: media.url,
@@ -664,12 +925,19 @@ class TaskExecutor {
           headers: browserHeaders,
           onProgress: (received, total) {
             final progress = total > 0 ? (received * 100 ~/ total) : 0;
-            markExecutorStep(steps, 5,
-                running: true, progress: progress.clamp(0, 100));
-            onUpdate(task.copyWith(
+            markExecutorStep(
+              steps,
+              5,
+              running: true,
+              progress: progress.clamp(0, 100),
+            );
+            onUpdate(
+              task.copyWith(
                 steps: steps,
                 progress: calcExecutorProgress(steps),
-                downloadedBytes: received));
+                downloadedBytes: received,
+              ),
+            );
           },
           cancelToken: cancelToken,
           taskId: task.id,
@@ -677,7 +945,8 @@ class TaskExecutor {
         );
         markExecutorStep(steps, 5, done: true);
         onUpdate(
-            task.copyWith(steps: steps, progress: calcExecutorProgress(steps)));
+          task.copyWith(steps: steps, progress: calcExecutorProgress(steps)),
+        );
         return downloadedFilePath;
       },
       maxRetries: 2,
@@ -689,32 +958,40 @@ class TaskExecutor {
   }
 
   /// Step 6: 转换
-  static Future<String> _executeConvert(
-      {required CatCatchTask task,
-      required List<StepStatus> steps,
-      required String inputPath,
-      required void Function(CatCatchTask) onUpdate,
-      CancelToken? cancelToken}) async {
+  static Future<String> _executeConvert({
+    required CatCatchTask task,
+    required List<StepStatus> steps,
+    required String inputPath,
+    required void Function(CatCatchTask) onUpdate,
+    CancelToken? cancelToken,
+    Locale? locale,
+  }) async {
     // 防御性检查
     if (!File(inputPath).existsSync()) {
-      throw FileSystemException('下载源文件不存在，请重新下载', inputPath);
+      throw FileSystemException(
+        appLocalizationsForLocale(locale).catCatchDownloadedSourceMissing,
+        inputPath,
+      );
     }
     final appDirPath = await AppStorage.directory;
     final outputDir = p.join(appDirPath, 'catcatch', 'converted');
     final outputName = '${p.basenameWithoutExtension(inputPath)}.mp4';
     final outputPath = p.join(outputDir, outputName);
     final result = await FFmpegConverter.convertToMp4(
-        inputPath: inputPath,
-        outputPath: outputPath,
-        onProgress: (progress) {
-          markExecutorStep(steps, 6, running: true, progress: progress);
-          onUpdate(task.copyWith(
-              steps: steps, progress: calcExecutorProgress(steps)));
-        },
-        cancelToken: cancelToken);
+      inputPath: inputPath,
+      outputPath: outputPath,
+      onProgress: (progress) {
+        markExecutorStep(steps, 6, running: true, progress: progress);
+        onUpdate(
+          task.copyWith(steps: steps, progress: calcExecutorProgress(steps)),
+        );
+      },
+      cancelToken: cancelToken,
+    );
     markExecutorStep(steps, 6, done: true);
     onUpdate(
-        task.copyWith(steps: steps, progress: calcExecutorProgress(steps)));
+      task.copyWith(steps: steps, progress: calcExecutorProgress(steps)),
+    );
     return result;
   }
 }

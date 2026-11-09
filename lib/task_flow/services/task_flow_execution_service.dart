@@ -1,11 +1,13 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:uuid/uuid.dart';
 import 'package:path/path.dart' as p;
 
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart' show visibleForTesting, kIsWeb;
+import 'package:flutter/foundation.dart'
+    show debugPrint, visibleForTesting, kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../catcatch/models/media_kind.dart';
@@ -17,6 +19,7 @@ import '../../providers/assistant_provider.dart';
 import '../../providers/background_task_provider.dart';
 import '../../providers/chat_manager_provider.dart';
 import '../../providers/conversation_provider.dart';
+import '../../providers/locale_provider.dart';
 import '../../providers/provider_config.dart';
 import '../../providers/task_provider.dart';
 import '../../providers/tts_state_provider.dart';
@@ -26,12 +29,14 @@ import '../models/task_flow_definition.dart';
 import '../models/task_flow_execution.dart';
 import '../models/flow_launch_snapshot.dart';
 import '../models/flow_payload.dart';
+import '../models/flow_temporary_output.dart';
 import '../../utils/web_file_store.dart';
 import '../../utils/provider_models.dart';
 import '../models/task_flow_exception.dart';
 import '../providers/task_flow_execution_provider.dart';
 import '../providers/task_flow_provider.dart';
 import 'block_executors/block_executors.dart';
+import 'flow_temporary_artifact_storage.dart';
 import 'task_flow_scheduler.dart';
 import 'task_flow_validator.dart';
 
@@ -192,11 +197,18 @@ class TaskFlowExecutionService {
         .read(catcatchTasksProvider)
         .where((task) => task.id == taskId)
         .firstOrNull;
-    if (task == null || task.status != catcatch.TaskStatus.running) {
+    final awaitingBrowserRecovery =
+        task?.status == catcatch.TaskStatus.paused &&
+            task?.metadata[catcatch.CatCatchTask.webViewRecoveryRequiredKey] ==
+                'true';
+    if (task == null ||
+        (task.status != catcatch.TaskStatus.running &&
+            !(awaitingBrowserRecovery && !selecting))) {
       return null;
     }
     final awaitingSelection = task.selectedMedia == null &&
-        task.detectedMedia.length > 1 &&
+        (task.detectedMedia.length > 1 ||
+            task.metadata['deferSingleResourceSelection'] == 'true') &&
         task.steps.any((step) =>
             step.type == catcatch.StepType.userSelecting &&
             step.running &&
@@ -204,9 +216,18 @@ class TaskFlowExecutionService {
             !step.skipped);
     final awaitingConfirmation =
         task.metadata['pendingConfirm'] == 'special_format';
-    if (selecting ? !awaitingSelection : !awaitingConfirmation) return null;
+    if (selecting
+        ? !awaitingSelection
+        : !awaitingConfirmation && !awaitingBrowserRecovery) {
+      return null;
+    }
     return _notifier.executions.where((execution) {
-      return execution.status == FlowExecutionStatus.running &&
+      final isBrowserRecoveryContinuation = !selecting &&
+          awaitingBrowserRecovery &&
+          _manualCatCatchWaits[taskId] == execution.id &&
+          execution.status == FlowExecutionStatus.paused;
+      return (execution.status == FlowExecutionStatus.running ||
+              isBrowserRecoveryContinuation) &&
           _activeBlockTypes[execution.id] == BlockType.catcatch &&
           execution.subTasks.any((step) =>
               step.subTaskType == 'catcatch' &&
@@ -227,10 +248,45 @@ class TaskFlowExecutionService {
 
   /// Called by flow-managed CatCatch cards before an action starts engine work.
   /// Only one tap per task may wait in the scheduler queue at a time.
-  Future<bool> performManualCatCatchAction(String taskId, bool selecting,
-      void Function(CatCatchNotifier) action) async {
+  Future<bool> performManualCatCatchAction(
+      String taskId, bool selecting, void Function(CatCatchNotifier) action,
+      {String? selectedMediaUrl,
+      String? selectedMediaIdentity,
+      bool selectedMediaHasByteRange = false}) async {
     final execution = _manualCatCatchExecution(taskId, selecting);
-    if (execution == null || !_manualCatCatchActions.add(taskId)) return false;
+    if (execution == null || _manualCatCatchActions.contains(taskId))
+      return false;
+    if (selecting) {
+      final task = _ref
+          .read(catcatchTasksProvider)
+          .where((task) => task.id == taskId)
+          .firstOrNull;
+      final encoded =
+          task?.metadata[catcatch.CatCatchTask.flowSelectionCandidatesKey];
+      if (encoded != null) {
+        final candidates = (jsonDecode(encoded) as List).cast<String>().toSet();
+        final identityVersioned = task?.metadata.containsKey(
+              catcatch.CatCatchTask.flowSelectionCandidatesIdentityVersionKey,
+            ) ??
+            false;
+        final allowed = selectedMediaIdentity == null
+            ? !identityVersioned &&
+                selectedMediaUrl != null &&
+                candidates.contains(selectedMediaUrl)
+            : selectedMediaUrl != null &&
+                catcatch.CatCatchTask.flowSelectionCandidateAllowed(
+                  candidates: candidates,
+                  identity: selectedMediaIdentity,
+                  url: selectedMediaUrl,
+                  hasByteRange: selectedMediaHasByteRange,
+                  identityVersioned: identityVersioned,
+                );
+        if (!allowed) {
+          return false;
+        }
+      }
+    }
+    if (!_manualCatCatchActions.add(taskId)) return false;
     final id = execution.id;
     var acquired = false;
     try {
@@ -246,10 +302,31 @@ class TaskFlowExecutionService {
         }
         acquired = true;
       }
-      if (_manualCatCatchExecution(taskId, selecting)?.id != id ||
-          !_scheduler.holds(id)) {
+      final currentExecution = _manualCatCatchExecution(taskId, selecting);
+      if (currentExecution?.id != id || !_scheduler.holds(id)) {
         if (acquired) _scheduler.release(id);
         return false;
+      }
+      if (currentExecution!.status == FlowExecutionStatus.paused) {
+        // Browser recovery marks the CatCatch subtask paused while its live
+        // block runner waits for a manual Continue. Reopen that execution
+        // only after Continue has reacquired its scheduler slot.
+        _notifier.setExecutionStatus(id, FlowExecutionStatus.running);
+        final stepId = currentExecution.subTasks
+            .firstWhere((step) => step.subTaskId == taskId)
+            .id;
+        _notifier.updateSubTaskStatus(id, stepId, TaskStatus.running);
+        if (!await _notifier.persist()) {
+          _notifier.setExecutionStatus(id, FlowExecutionStatus.paused,
+              error: '继续状态无法保存');
+          _notifier.updateSubTaskStatus(id, stepId, TaskStatus.paused);
+          _scheduler.release(id);
+          return false;
+        }
+        action(_ref.read(catcatchTasksProvider.notifier));
+        _pauseGates.remove(id)?.complete();
+        _manualCatCatchWaits.remove(taskId);
+        return true;
       }
       action(_ref.read(catcatchTasksProvider.notifier));
       _manualCatCatchWaits.remove(taskId);
@@ -263,7 +340,7 @@ class TaskFlowExecutionService {
   }
 
   void cancelActiveRequest(String id) {
-    final token = _activeRequestCancelTokens.remove(id);
+    final token = _activeRequestCancelTokens[id];
     if (token != null && !token.isCancelled) token.cancel();
   }
 
@@ -419,6 +496,12 @@ class TaskFlowExecutionService {
     if (_disposed) {
       return;
     }
+    try {
+      await FlowTemporaryArtifactStorage.cleanupOrphanedExecutions(
+          _notifier.executions.map((execution) => execution.id));
+    } catch (error) {
+      debugPrint('[TaskFlow] Failed to clean orphaned temporary files: $error');
+    }
     final waiting = _notifier.executions
         .where((e) =>
             e.status == FlowExecutionStatus.waiting ||
@@ -464,6 +547,7 @@ class TaskFlowExecutionService {
     if (!e.isTerminal) {
       throw StateError('执行仍在运行，请先暂停或取消');
     }
+    await _cleanupUnreferencedTemporaryArtifacts(id);
     final inputs = [
       FlowRunInput(
           text: e.inputText,
@@ -529,7 +613,7 @@ class TaskFlowExecutionService {
       return;
     }
     try {
-      if (kIsWeb) {
+      if (kIsWeb || WebFileStore.isTestMode) {
         if ((await WebFileStore.read(path))?.isNotEmpty != true) {
           throw const FileSystemException();
         }
@@ -560,11 +644,17 @@ class TaskFlowExecutionService {
     await _ref.read(assistantProvider.notifier).ready;
     current = _currentControl(id, revision);
     if (current == null) return;
+    await _reconcileTemporaryArtifacts(id, current.snapshot!.flow,
+        allowPausedOrFailed: true);
+    current = _currentControl(id, revision);
+    if (current == null) return;
     for (final step in current.subTasks) {
       if (step.outcome != FlowStepOutcome.succeeded || step.result == null) {
         break;
       }
-      await _readable(step.result!, current.flowId);
+      if (step.artifactCleanupStatus != FlowArtifactCleanupStatus.cleaned) {
+        await _readable(step.result!, current.flowId);
+      }
       if (_currentControl(id, revision) == null) return;
     }
     current = _currentControl(id, revision);
@@ -850,6 +940,146 @@ class TaskFlowExecutionService {
     return false;
   }
 
+  Future<void> _reconcileTemporaryArtifacts(
+    String executionId,
+    TaskFlowDefinition flow, {
+    bool allowPausedOrFailed = false,
+  }) async {
+    final initial = _execution(executionId);
+    if (initial == null) return;
+    for (var index = 0;
+        index + 1 < flow.blocks.length && index + 1 < initial.subTasks.length;
+        index++) {
+      final execution = _execution(executionId);
+      if (execution == null) return;
+      final canClean = allowPausedOrFailed ||
+          execution.status == FlowExecutionStatus.running ||
+          execution.status == FlowExecutionStatus.waiting;
+      if (!canClean) return;
+      final previous = execution.subTasks[index];
+      final next = execution.subTasks[index + 1];
+      if (previous.outcome != FlowStepOutcome.succeeded ||
+          previous.result?.temporaryArtifact == null ||
+          next.outcome != FlowStepOutcome.succeeded ||
+          next.result == null) {
+        continue;
+      }
+      await _cleanupTemporaryArtifact(
+        executionId,
+        flow.blocks[index].id,
+        previous,
+        allowPausedOrFailed: allowPausedOrFailed,
+      );
+    }
+  }
+
+  Future<void> _cleanupUnreferencedTemporaryArtifacts(
+    String executionId, {
+    bool Function()? shouldDelete,
+  }) async {
+    final execution = _execution(executionId);
+    if (execution == null) return;
+    final retainedArtifacts = execution.subTasks
+        .where((step) =>
+            step.outcome == FlowStepOutcome.succeeded &&
+            step.artifactCleanupStatus != FlowArtifactCleanupStatus.cleaned)
+        .map((step) => step.result?.temporaryArtifact)
+        .whereType<FlowTemporaryArtifact>();
+    try {
+      await FlowTemporaryArtifactStorage.cleanupUnreferencedArtifacts(
+        executionId: executionId,
+        retainedArtifacts: retainedArtifacts,
+        shouldDelete: shouldDelete ?? () => _execution(executionId) != null,
+      );
+    } catch (error) {
+      debugPrint(
+        '[TaskFlow] Failed to clean unreferenced temporary files: $error',
+      );
+    }
+  }
+
+  Future<void> _cleanupTemporaryArtifact(
+    String executionId,
+    String expectedBlockId,
+    FlowSubTask step, {
+    bool allowPausedOrFailed = false,
+  }) async {
+    final controlRevision = _controlRevisions[executionId];
+    bool mayDelete(TaskFlowExecution? execution) {
+      if (execution == null ||
+          execution.status == FlowExecutionStatus.completed ||
+          execution.status == FlowExecutionStatus.cancelled) {
+        return false;
+      }
+      return allowPausedOrFailed ||
+          execution.status == FlowExecutionStatus.running ||
+          execution.status == FlowExecutionStatus.waiting;
+    }
+
+    final result = step.result;
+    final artifact = result?.temporaryArtifact;
+    if (result?.fileReference == null ||
+        artifact == null ||
+        artifact.executionId != executionId ||
+        artifact.blockId != expectedBlockId ||
+        artifact.reference != result!.fileReference) {
+      throw const TaskFlowPersistenceException('临时步骤文件的所有权无法验证，已保留文件');
+    }
+    if (step.artifactCleanupStatus == FlowArtifactCleanupStatus.cleaned) return;
+
+    if (step.artifactCleanupStatus != FlowArtifactCleanupStatus.pending &&
+        !await _notifier.setArtifactCleanupStatus(
+            executionId, step.id, FlowArtifactCleanupStatus.pending)) {
+      throw const TaskFlowPersistenceException('无法保存临时文件清理状态');
+    }
+
+    if (_controlRevisions[executionId] != controlRevision ||
+        !mayDelete(_execution(executionId))) {
+      return;
+    }
+
+    if (!await _clearTemporaryTaskFileReference(step)) {
+      throw const TaskFlowPersistenceException('无法保存临时文件引用清理状态，原文件已保留');
+    }
+    if (_controlRevisions[executionId] != controlRevision ||
+        !mayDelete(_execution(executionId))) {
+      return;
+    }
+    bool mayDeleteNow() =>
+        _controlRevisions[executionId] == controlRevision &&
+        mayDelete(_execution(executionId));
+
+    if (!await FlowTemporaryArtifactStorage.deleteArtifact(
+      artifact,
+      shouldDelete: mayDeleteNow,
+    )) {
+      if (!mayDeleteNow()) return;
+      throw const TaskFlowPersistenceException('临时步骤文件的存储位置无法验证，已保留文件');
+    }
+    if (!await _notifier.setArtifactCleanupStatus(
+        executionId, step.id, FlowArtifactCleanupStatus.cleaned)) {
+      throw const TaskFlowPersistenceException('无法保存临时文件已清理状态');
+    }
+  }
+
+  Future<bool> _clearTemporaryTaskFileReference(FlowSubTask step) async {
+    for (final taskId in step.temporaryFileReferenceTaskIdsToClear) {
+      final cleared = switch (step.subTaskType) {
+        'catcatch' => await _ref
+            .read(catcatchTasksProvider.notifier)
+            .clearDownloadedFilePath(taskId),
+        'synthesis' => await _ref
+            .read(taskListProvider.notifier)
+            .clearDownloadedFilePath(taskId),
+        _ => await _ref
+            .read(backgroundTasksProvider.notifier)
+            .clearDownloadedFilePath(taskId),
+      };
+      if (!cleared) return false;
+    }
+    return true;
+  }
+
   Future<void> _runSaved(String id) async {
     if (!_live(id)) {
       return;
@@ -872,6 +1102,12 @@ class TaskFlowExecutionService {
     final scheduler = _ref.read(taskFlowSchedulerProvider);
     String? activeStepId;
     try {
+      await _reconcileTemporaryArtifacts(id, flow);
+      await _cleanupUnreferencedTemporaryArtifacts(
+        id,
+        shouldDelete: () => _live(id),
+      );
+      if (!_live(id)) return;
       for (var i = 0; i < flow.blocks.length; i++) {
         await _waitUnpaused(id);
         if (!_live(id)) {
@@ -879,7 +1115,9 @@ class TaskFlowExecutionService {
         }
         final step = _execution(id)!.subTasks[i];
         if (step.outcome == FlowStepOutcome.succeeded && step.result != null) {
-          await _readable(step.result!, flow.id);
+          if (step.artifactCleanupStatus != FlowArtifactCleanupStatus.cleaned) {
+            await _readable(step.result!, flow.id);
+          }
           current = step.result!;
           continue;
         }
@@ -904,6 +1142,7 @@ class TaskFlowExecutionService {
           return;
         }
         final runner = _ref.read(taskFlowBlockRunnerProvider);
+        final temporaryOutput = isFlowBlockTemporary(flow.blocks, i);
         final FlowPayload result;
         _activeBlockTypes[id] = def.typeKey;
         try {
@@ -920,7 +1159,8 @@ class TaskFlowExecutionService {
                   inputDurationSec: original.inputDurationSec,
                   nextInputType: i + 1 < flow.blocks.length
                       ? flow.blocks[i + 1].getDefinition()?.inputType
-                      : null);
+                      : null,
+                  temporaryOutput: temporaryOutput);
         } finally {
           _activeBlockTypes.remove(id);
           _manualCatCatchWaits
@@ -930,10 +1170,34 @@ class TaskFlowExecutionService {
         if (!_live(id)) {
           return;
         }
-        if (!await _notifier.saveStepResult(id, step.id, result)) {
+        var savedResult = result;
+        if (temporaryOutput) {
+          final reference = result.fileReference;
+          if (reference == null ||
+              !await FlowTemporaryArtifactStorage.ownsReference(
+                executionId: id,
+                blockId: block.id,
+                reference: reference,
+              )) {
+            throw BlockExecutionException(
+              '临时文件未写入任务流专属存储',
+              blockType: def.typeKey.name,
+              blockTitle: def.label,
+            );
+          }
+          savedResult = result.withTemporaryArtifact(FlowTemporaryArtifact(
+            executionId: id,
+            blockId: block.id,
+            reference: reference,
+          ));
+        }
+        if (!await _notifier.saveStepResult(id, step.id, savedResult)) {
           throw const TaskFlowPersistenceException('无法保存步骤结果，后续步骤尚未运行');
         }
-        current = result;
+        current = savedResult;
+        if (_execution(id)?.status == FlowExecutionStatus.running) {
+          await _reconcileTemporaryArtifacts(id, flow);
+        }
       }
       await _waitUnpaused(id);
       if (!_live(id)) {
@@ -1019,6 +1283,7 @@ class TaskFlowExecutionService {
     required ProviderEntriesState providerEntries,
     int inputDurationSec = 0,
     IOType? nextInputType,
+    bool temporaryOutput = false,
   }) async {
     final manager = def.typeKey == BlockType.chat
         ? _ref.read(chatStreamManagerProvider)
@@ -1061,6 +1326,7 @@ class TaskFlowExecutionService {
         providerEntries: providerEntries,
         inputDurationSec: inputDurationSec,
         nextInputType: nextInputType,
+        temporaryOutput: temporaryOutput,
       );
     } finally {
       _activeRequestCancelTokens.remove(execId);
@@ -1082,6 +1348,7 @@ class TaskFlowExecutionService {
     required ProviderEntriesState providerEntries,
     int inputDurationSec = 0,
     IOType? nextInputType,
+    bool temporaryOutput = false,
   }) async {
     if (!def.acceptsInput(input.type)) {
       execNotifier.updateSubTaskStatus(
@@ -1094,7 +1361,8 @@ class TaskFlowExecutionService {
     }
     switch (def.typeKey) {
       case BlockType.catcatch:
-        var actualType = def.outputType;
+        IOType? actualType =
+            block.outputTypesForNext(nextInputType).singleOrNull;
         FlowPayload? outputPayload;
         final result = await executeCatCatchBlock(
           def: def,
@@ -1104,17 +1372,46 @@ class TaskFlowExecutionService {
           execNotifier: execNotifier,
           flowSubTask: flowSubTask,
           catcatchNotifier: catcatchNotifier,
-          videoFolder: block.params['videoFolder'] ?? '',
-          audioFolder: block.params['audioFolder'] ?? '',
+          videoFolder: temporaryOutput ? '' : block.params['videoFolder'] ?? '',
+          audioFolder: temporaryOutput ? '' : block.params['audioFolder'] ?? '',
+          temporaryOutput: temporaryOutput,
+          taskFailedFallback: appLocalizationsForLocale(
+            _ref.read(localeProvider),
+          ).notificationBannerTaskFailedHeading,
           // Per-run duration from the run-mode input box wins over the
           // block's configured duration (0 = use the configured value).
           durationSecOverride: inputDurationSec,
           nextInputType: nextInputType,
           onManualWait: (taskId) => _releaseManualCatCatchSlot(execId, taskId),
+          onManualActionInProgress: (taskId) =>
+              _manualCatCatchActions.contains(taskId),
+          onManualWaitWithCandidates: (taskId, candidates) {
+            catcatchNotifier.setFlowSelectionCandidates(taskId, candidates);
+          },
           onOutputType: (type) => actualType = type,
           onOutputPayload: (payload) => outputPayload = payload,
         );
-        return outputPayload ?? FlowPayload.fromValue(result, actualType);
+        final payload = outputPayload;
+        if (payload != null) {
+          if (payload.type != IOType.audio && payload.type != IOType.video) {
+            throw BlockExecutionException(
+              '下载任务未产生具体的音频或视频输出',
+              blockType: def.typeKey.name,
+              blockTitle: def.label,
+            );
+          }
+          return payload;
+        }
+        final resolvedType = actualType;
+        if (resolvedType == null ||
+            (resolvedType != IOType.audio && resolvedType != IOType.video)) {
+          throw BlockExecutionException(
+            '下载任务未能解析为具体的音频或视频输出',
+            blockType: def.typeKey.name,
+            blockTitle: def.label,
+          );
+        }
+        return FlowPayload.fromValue(result, resolvedType);
       case BlockType.audioSeparation:
         return FlowPayload.fromValue(
             await executeAudioSeparationBlock(
@@ -1125,6 +1422,7 @@ class TaskFlowExecutionService {
               execNotifier: execNotifier,
               flowSubTask: flowSubTask,
               bgNotifier: bgNotifier,
+              temporaryOutput: temporaryOutput,
             ),
             def.outputType);
       case BlockType.asr:
@@ -1139,6 +1437,8 @@ class TaskFlowExecutionService {
               bgNotifier: bgNotifier,
               providerEntries: providerEntries,
               cancelToken: _activeRequestCancelTokens[execId],
+              localizations:
+                  appLocalizationsForLocale(_ref.read(localeProvider)),
             ),
             def.outputType);
       case BlockType.ocr:
@@ -1152,6 +1452,8 @@ class TaskFlowExecutionService {
               flowSubTask: flowSubTask,
               bgNotifier: bgNotifier,
               providerEntries: providerEntries,
+              localizations:
+                  appLocalizationsForLocale(_ref.read(localeProvider)),
               cancelToken: _activeRequestCancelTokens[execId],
             ),
             def.outputType);
@@ -1166,6 +1468,10 @@ class TaskFlowExecutionService {
               flowSubTask: flowSubTask,
               taskListNotifier: taskListNotifier,
               providerEntries: providerEntries,
+              temporaryOutput: temporaryOutput,
+              taskFailedFallback: appLocalizationsForLocale(
+                _ref.read(localeProvider),
+              ).notificationBannerTaskFailedHeading,
             ),
             def.outputType);
       case BlockType.chat:

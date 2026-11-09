@@ -150,6 +150,10 @@ class VideoManifest {
   );
 
   static Future<List<VideoRecord>> loadRecords() => _ops.loadRecords();
+
+  /// Loads records while preserving read failures for callers that display them.
+  static Future<List<VideoRecord>> loadRecordsStrict() =>
+      _ops.loadRecords(forceRefresh: true, throwOnError: true);
   static Future<void> addRecord(VideoRecord record) => _ops.addRecord(record);
   static Future<void> deleteRecord(String id, {bool preserveFiles = false}) =>
       _ops.deleteRecord(id, preserveFiles: preserveFiles);

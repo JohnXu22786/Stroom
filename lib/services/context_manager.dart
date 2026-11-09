@@ -152,13 +152,14 @@ class ContextManager {
     String? assistantPrompt,
     List<ToolDefinition> tools = const [],
     int? toolOutputMaxChars,
+    RequestContentCache? contentCache,
   }) {
     var total = 0;
     if (assistantPrompt != null && assistantPrompt.isNotEmpty) {
       total += estimateTokens(assistantPrompt);
     }
     for (final msg in history) {
-      total += estimateTokens(msg.content);
+      total += estimateTokens(contentCache?.contentFor(msg) ?? msg.content);
       for (final att in msg.attachments) {
         // 附件只估算文件名（内容以 base64 或文本形式随消息发送）
         total += estimateTokens(att.fileName) + 8;

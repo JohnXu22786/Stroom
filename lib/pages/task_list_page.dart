@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+
+import '../l10n/app_localizations.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/task_provider.dart';
@@ -14,18 +17,20 @@ class TaskListPage extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('任务列表'),
+        title: Text(AppLocalizations.of(context)!.taskListTitle),
         centerTitle: true,
       ),
       body: tasks.isEmpty
-          ? const Center(
+          ? Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(Icons.task_alt, size: 48, color: Colors.grey),
                   SizedBox(height: 16),
-                  Text('暂无任务',
-                      style: TextStyle(fontSize: 16, color: Colors.grey)),
+                  Text(
+                    AppLocalizations.of(context)!.taskListEmpty,
+                    style: TextStyle(fontSize: 16, color: Colors.grey),
+                  ),
                 ],
               ),
             )

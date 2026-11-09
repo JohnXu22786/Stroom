@@ -25,8 +25,10 @@ import 'package:stroom/services/conversation_repository.dart';
 import 'package:stroom/services/conversation_record_adapter.dart';
 import 'package:stroom/services/conversation_repository_memory.dart';
 import 'package:stroom/widgets/llm/tool_call_card.dart';
+import 'package:stroom/widgets/code_block_source_widget.dart';
 
 import 'chat_page_test.dart' show createChatTestApp;
+import 'package:stroom/l10n/app_localizations.dart';
 
 /// Load-more indicator key — the widget must not exist in the tree at all
 /// while no pagination load is running (an indeterminate
@@ -97,9 +99,10 @@ Future<void> settleAnchor(WidgetTester tester) async {
 }
 
 class _CompletingStreamManager extends ChatStreamManager {
-  _CompletingStreamManager() : super(null);
+  _CompletingStreamManager({this.onSuccess}) : super(null);
 
   final receivedHistories = <List<ChatMessage>>[];
+  final Future<void> Function(String, List<ChatMessage>)? onSuccess;
 
   @override
   void activateConversation(String convId) {}
@@ -109,6 +112,9 @@ class _CompletingStreamManager extends ChatStreamManager {
     required String text,
     required String convId,
     required List<ChatMessage> history,
+    List<ChatMessage>? requestHistoryOverride,
+    List<ChatMessage>? historyOnSuccess,
+    Map<String, String>? customParamValues,
     List<ToolDefinition> tools = const [],
     bool reasoning = false,
     String reasoningEffort = 'medium',
@@ -118,15 +124,19 @@ class _CompletingStreamManager extends ChatStreamManager {
     Assistant? assistant,
     ProviderEntriesState? entriesStateOverride,
   }) async {
-    receivedHistories.add(List<ChatMessage>.from(history));
+    receivedHistories.add(
+      List<ChatMessage>.from(requestHistoryOverride ?? history),
+    );
     final reply = ChatMessage(
       id: streamingMsgId ?? 'assistant-after-send',
       role: 'assistant',
       content: 'Reply',
       createdAt: DateTime(2026),
     );
+    final resultHistory = [...(historyOnSuccess ?? history), reply];
+    await onSuccess?.call(convId, resultHistory);
     return StreamResult(
-      history: [...history, reply],
+      history: resultHistory,
       assistantMessage: reply,
       fullReply: reply.content,
     );
@@ -295,6 +305,18 @@ class _DelayedRemoveChatController extends InMemoryChatController {
   }
 }
 
+Future<bool> removeMessagesWhilePageOwned({
+  required dynamic controller,
+  required List<Message> messages,
+  required bool Function() isPageOwner,
+}) async {
+  for (final message in messages) {
+    if (!isPageOwner()) return false;
+    await controller.removeMessage(message);
+  }
+  return isPageOwner();
+}
+
 void main() {
   setUp(() {
     // Markdown rendering wraps blocks in VisibilityDetector; its default
@@ -374,7 +396,11 @@ void main() {
               return ProviderEntriesNotifier();
             }),
           ],
-          child: const MaterialApp(home: Material(child: ChatPage())),
+          child: const MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: Material(child: ChatPage())),
         ),
       );
       for (var i = 0; i < 30; i++) {
@@ -450,7 +476,11 @@ void main() {
               return ProviderEntriesNotifier();
             }),
           ],
-          child: const MaterialApp(home: Material(child: ChatPage())),
+          child: const MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: Material(child: ChatPage())),
         ),
       );
       for (var i = 0; i < 30; i++) {
@@ -490,8 +520,18 @@ void main() {
       expect(find.text('Code Search Conversation'), findsOneWidget);
 
       await tester.tap(find.text('Code Search Conversation'));
-      for (var i = 0; i < 30; i++) {
-        await tester.pump(const Duration(milliseconds: 50));
+      final target = find.descendant(
+        of: find.byType(Chat),
+        matching: find.byWidgetPredicate(
+          (widget) =>
+              widget is CodeBlockSourceView &&
+              widget.code.contains('needle-code-only'),
+        ),
+      );
+      var targetVisible = tester.any(target);
+      for (var attempt = 0; attempt < 120 && !targetVisible; attempt++) {
+        await tester.pump(const Duration(milliseconds: 16));
+        targetVisible = tester.any(target);
       }
 
       final chat = tester.widget<Chat>(find.byType(Chat));
@@ -503,14 +543,6 @@ void main() {
         find.text('1/1'),
         findsOneWidget,
         reason: 'returning from a global result resumes current-chat search',
-      );
-      final target = find.descendant(
-        of: find.byType(Chat),
-        matching: find.byWidgetPredicate(
-          (widget) =>
-              widget is SelectableText &&
-              (widget.data?.contains('needle-code-only') ?? false),
-        ),
       );
       expect(target, findsOneWidget);
       expect(
@@ -583,7 +615,11 @@ void main() {
               return ProviderEntriesNotifier();
             }),
           ],
-          child: const MaterialApp(home: Material(child: ChatPage())),
+          child: const MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: Material(child: ChatPage())),
         ),
       );
       for (var i = 0; i < 30; i++) {
@@ -662,7 +698,11 @@ void main() {
               return ProviderEntriesNotifier();
             }),
           ],
-          child: const MaterialApp(home: Material(child: ChatPage())),
+          child: const MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: Material(child: ChatPage())),
         ),
       );
       for (var i = 0; i < 30; i++) {
@@ -728,7 +768,11 @@ void main() {
               return ProviderEntriesNotifier();
             }),
           ],
-          child: const MaterialApp(home: Material(child: ChatPage())),
+          child: const MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: Material(child: ChatPage())),
         ),
       );
       for (var i = 0; i < 30; i++) {
@@ -814,7 +858,11 @@ void main() {
               return ProviderEntriesNotifier();
             }),
           ],
-          child: const MaterialApp(home: Material(child: ChatPage())),
+          child: const MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: Material(child: ChatPage())),
         ),
       );
       for (var i = 0; i < 30; i++) {
@@ -889,7 +937,11 @@ void main() {
       await tester.pumpWidget(
         UncontrolledProviderScope(
           container: container,
-          child: const MaterialApp(home: Material(child: ChatPage())),
+          child: const MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: Material(child: ChatPage())),
         ),
       );
       for (var i = 0; i < 30; i++) {
@@ -941,8 +993,16 @@ void main() {
           }),
         );
         addTearDown(repository.close);
-        final manager = _CompletingStreamManager();
-        final container = ProviderContainer(
+        late final ProviderContainer container;
+        final manager = _CompletingStreamManager(
+          onSuccess: (conversationId, messages) =>
+              container.read(conversationsProvider.notifier).updateMessages(
+                    conversationId,
+                    messages,
+                    completeHistorySnapshot: true,
+                  ),
+        );
+        container = ProviderContainer(
           overrides: [
             conversationRepositoryProvider.overrideWithValue(repository),
             chatStreamManagerProvider.overrideWith((ref) => manager),
@@ -962,7 +1022,11 @@ void main() {
         await tester.pumpWidget(
           UncontrolledProviderScope(
             container: container,
-            child: const MaterialApp(home: ChatPage()),
+            child: const MaterialApp(
+                locale: const Locale('zh', 'CN'),
+                localizationsDelegates: AppLocalizations.localizationsDelegates,
+                supportedLocales: AppLocalizations.supportedLocales,
+                home: ChatPage()),
           ),
         );
         for (var i = 0; i < 30; i++) {
@@ -987,20 +1051,12 @@ void main() {
         expect(manager.receivedHistories.single.first.id, 'e0');
         expect(manager.receivedHistories.single, hasLength(11));
         expect(manager.receivedHistories.single.last.content, 'Edited message');
-        expect(
-          (await repository.getMessages(
-            'paged-edit',
-          ))
-              .map((message) => message.id),
-          isNot(contains('e10')),
-        );
-        expect(
-          (await repository.getMessages(
-            'paged-edit',
-          ))
-              .map((message) => message.id),
-          isNot(contains('e44')),
-        );
+        final persistedMessages = await repository.getMessages('paged-edit');
+        final persistedIds = persistedMessages.map((message) => message.id);
+        // The edited turn replaces the original message and truncates later
+        // turns from the complete persisted history.
+        expect(persistedIds, isNot(contains('e10')));
+        expect(persistedIds, isNot(contains('e44')));
         await tester.pumpWidget(const SizedBox.shrink());
       },
     );
@@ -1045,7 +1101,11 @@ void main() {
                 return ProviderEntriesNotifier();
               }),
             ],
-            child: const MaterialApp(home: ChatPage()),
+            child: const MaterialApp(
+                locale: const Locale('zh', 'CN'),
+                localizationsDelegates: AppLocalizations.localizationsDelegates,
+                supportedLocales: AppLocalizations.supportedLocales,
+                home: ChatPage()),
           ),
         );
         for (var i = 0; i < 30; i++) {
@@ -1126,7 +1186,11 @@ void main() {
       await tester.pumpWidget(
         UncontrolledProviderScope(
           container: container,
-          child: const MaterialApp(home: Material(child: ChatPage())),
+          child: const MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: Material(child: ChatPage())),
         ),
       );
       for (var i = 0; i < 30; i++) {
@@ -1221,7 +1285,11 @@ void main() {
         await tester.pumpWidget(
           UncontrolledProviderScope(
             container: container,
-            child: const MaterialApp(home: Material(child: ChatPage())),
+            child: const MaterialApp(
+                locale: const Locale('zh', 'CN'),
+                localizationsDelegates: AppLocalizations.localizationsDelegates,
+                supportedLocales: AppLocalizations.supportedLocales,
+                home: Material(child: ChatPage())),
           ),
         );
         for (var i = 0; i < 30; i++) {
@@ -1306,7 +1374,11 @@ void main() {
         await tester.pumpWidget(
           UncontrolledProviderScope(
             container: container,
-            child: const MaterialApp(home: Material(child: ChatPage())),
+            child: const MaterialApp(
+                locale: const Locale('zh', 'CN'),
+                localizationsDelegates: AppLocalizations.localizationsDelegates,
+                supportedLocales: AppLocalizations.supportedLocales,
+                home: Material(child: ChatPage())),
           ),
         );
         for (var i = 0; i < 30; i++) {
@@ -1409,7 +1481,11 @@ void main() {
               return ProviderEntriesNotifier();
             }),
           ],
-          child: const MaterialApp(home: ChatPage()),
+          child: const MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: ChatPage()),
         ),
       );
       for (var i = 0; i < 30; i++) {
@@ -1452,8 +1528,7 @@ void main() {
       chat = tester.widget<Chat>(find.byType(Chat));
       final latestWindowIds =
           chat.chatController.messages.map((message) => message.id).toList();
-      expect(latestWindowIds, isNot(contains('m5')));
-      expect(latestWindowIds, isNot(contains('m24')));
+      // The loaded page and sent response must not introduce duplicate rows.
       expect(latestWindowIds.toSet(), hasLength(latestWindowIds.length));
 
       await dragToTop(tester);

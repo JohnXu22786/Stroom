@@ -19,6 +19,9 @@ class FolderPathUtils {
     'COM7',
     'COM8',
     'COM9',
+    'COM¹',
+    'COM²',
+    'COM³',
     'LPT1',
     'LPT2',
     'LPT3',
@@ -28,18 +31,22 @@ class FolderPathUtils {
     'LPT7',
     'LPT8',
     'LPT9',
+    'LPT¹',
+    'LPT²',
+    'LPT³',
   };
 
-  /// Windows 非法字符集（路径分隔符与保留字符）
-  static final RegExp _illegalChars = RegExp(r'[/\\:*?"<>|]');
+  /// Windows 非法字符集（控制字符、路径分隔符与保留字符）
+  static final RegExp _illegalChars = RegExp(r'[\x00-\x1F/\\:*?"<>|]');
 
   /// 公共名称校验：空名 / 超长 / 非法字符 / 尾点 / Windows 保留设备名
   static String? _validateName(String name, String kind, int maxLength) {
     final trimmed = name.trim();
     if (trimmed.isEmpty) return '$kind不能为空';
-    if (trimmed.length > maxLength) return '$kind不能超过$maxLength个字符';
-    if (_illegalChars.hasMatch(trimmed)) {
-      return '$kind不能包含 / \\ : * ? " < > | 字符';
+    if (name != name.trimRight()) return '$kind不能以空白结尾';
+    if (name.length > maxLength) return '$kind不能超过$maxLength个字符';
+    if (_illegalChars.hasMatch(name)) {
+      return '$kind不能包含 Windows 非法字符';
     }
     // 尾点：Windows 会静默去掉目录/文件名末尾的点，
     // 导致 foo 与 foo. 在导出时合并成同一个目录（可能互相覆盖）
@@ -58,6 +65,22 @@ class FolderPathUtils {
   /// 否则含这些字符的文件夹在原生端导出时会因路径写入失败而报错。
   static String? validateFolderName(String name) =>
       _validateName(name, '文件夹名', 100);
+
+  /// 校验完整文件夹路径中的每一级名称。
+  ///
+  /// 路径边界上的空白会由调用方按现有行为处理；内部目录名不能以空白结尾，
+  /// 因为 Windows 会静默移除它，导致不同路径在导出时指向同一目录。
+  static String? validateFolderPath(String folderPath) {
+    if (folderPath.isEmpty) return null;
+    for (final segment in folderPath.split('/')) {
+      if (segment != segment.trimRight()) {
+        return '文件夹名不能以空白结尾';
+      }
+      final error = validateFolderName(segment);
+      if (error != null) return error;
+    }
+    return null;
+  }
 
   /// 校验文件名是否合法（比文件夹名更严格：
   /// 额外拒绝 Windows 非法字符，否则导出时会在路径写入时失败）。

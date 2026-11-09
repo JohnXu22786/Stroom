@@ -71,7 +71,91 @@
     var panX = 0;
     var panY = 0;
     var fitComplete = false;
-    var pendingZoomDeltas = [];
+    var pendingZoomOperations = [];
+    var lastViewportWidth = 0;
+    var lastViewportHeight = 0;
+    window.zoomInputQueueReady = false;
+
+    function zoomInputTimestamp() {
+      var performance = window.performance;
+      if (performance && typeof performance.timeOrigin === 'number' &&
+          typeof performance.now === 'function') {
+        return performance.timeOrigin + performance.now();
+      }
+      return Date.now();
+    }
+
+    function queuePendingZoomOperation(operation) {
+      if (typeof operation.inputTimestamp !== 'number') {
+        operation.inputTimestamp = zoomInputTimestamp();
+      }
+      if (typeof operation.inputSequence !== 'number') {
+        try {
+          var parentWindow = window.parent;
+          if (parentWindow && parentWindow !== window) {
+            var sequence = Number(
+              parentWindow.__stroomMermaidZoomInputSequence
+            ) || 0;
+            operation.inputSequence = sequence + 1;
+            parentWindow.__stroomMermaidZoomInputSequence =
+              operation.inputSequence;
+          }
+        } catch (error) {
+          // Cross-origin parents cannot share the Dart/iframe sequence.
+        }
+      }
+      pendingZoomOperations.push(operation);
+    }
+
+    function replayPendingZoomOperations() {
+      if (!fitComplete || window.zoomInputQueueReady === false ||
+          pendingZoomOperations.length === 0) return;
+      var zoomOperations = pendingZoomOperations;
+      pendingZoomOperations = [];
+      zoomOperations.sort(function(a, b) {
+        if (typeof a.inputSequence === 'number' &&
+            typeof b.inputSequence === 'number') {
+          return a.inputSequence - b.inputSequence;
+        }
+        return a.inputTimestamp - b.inputTimestamp;
+      });
+      var viewport = document.getElementById('viewport');
+      for (var zoomIndex = 0; zoomIndex < zoomOperations.length; zoomIndex++) {
+        var zoomOperation = zoomOperations[zoomIndex];
+        if (zoomOperation.kind === 'touch-pan') {
+          panX += zoomOperation.panDeltaX;
+          panY += zoomOperation.panDeltaY;
+          updateTransform();
+          notifyTransform();
+        } else if (zoomOperation.kind === 'touch-pinch') {
+          window.setZoom(
+            zoomLevel * zoomOperation.scale,
+            zoomOperation.centerX,
+            zoomOperation.centerY,
+            true
+          );
+        } else if (zoomOperation.anchored) {
+          window.setZoom(
+            zoomLevel + zoomOperation.delta,
+            zoomOperation.centerX,
+            zoomOperation.centerY
+          );
+        } else {
+          window.setZoom(
+            zoomLevel + zoomOperation.delta,
+            viewport.clientWidth / 2,
+            viewport.clientHeight / 2
+          );
+        }
+      }
+      if (typeof touchLastX !== 'undefined' && touchLastX !== undefined &&
+          touchLastY !== undefined) {
+        touchStartX = touchLastX;
+        touchStartY = touchLastY;
+        touchPanStartX = panX;
+        touchPanStartY = panY;
+      }
+    }
 
     function updateTransform() {
       var container = document.getElementById('diagram-container');
@@ -106,9 +190,11 @@
     // Called from Flutter or local handlers to set zoom level.
     // When centerX / centerY are provided, the zoom is anchored at that
     // point (in viewport coordinates) instead of the top-left corner.
-    window.setZoom = function(level, centerX, centerY) {
+    window.setZoom = function(level, centerX, centerY, preserveSubFloorPinch) {
       var oldZoom = zoomLevel;
-      zoomLevel = Math.max(0.1, Math.min(10, level));
+      var minZoom = oldZoom < 0.1 && (level <= oldZoom || preserveSubFloorPinch)
+        ? oldZoom : 0.1;
+      zoomLevel = Math.max(minZoom, Math.min(10, level));
       if (centerX !== undefined && centerY !== undefined) {
         panX = centerX - (centerX - panX) * (zoomLevel / oldZoom);
         panY = centerY - (centerY - panY) * (zoomLevel / oldZoom);
@@ -121,16 +207,24 @@
     // inline widget, which tracks pan/zoom on the Flutter side and computes
     // the zoom anchor (finger position / preview center) itself.
     window.setPanZoom = function(x, y, level) {
+      var oldZoom = zoomLevel;
       panX = x;
       panY = y;
-      zoomLevel = Math.max(0.1, Math.min(10, level));
+      var minZoom = oldZoom < 0.1 && level <= oldZoom ? oldZoom : 0.1;
+      zoomLevel = Math.max(minZoom, Math.min(10, level));
       updateTransform();
     };
 
-    window.applyZoomDeltasAfterFit = function(deltas) {
+    window.applyZoomDeltasAfterFit = function(deltas, inputTimestamp) {
       if (!Array.isArray(deltas)) return;
-      if (!fitComplete) {
-        pendingZoomDeltas = pendingZoomDeltas.concat(deltas);
+      if (!fitComplete || window.zoomInputQueueReady === false) {
+        for (var i = 0; i < deltas.length; i++) {
+          queuePendingZoomOperation({
+            delta: deltas[i],
+            anchored: false,
+            inputTimestamp: inputTimestamp
+          });
+        }
         return;
       }
       var viewport = document.getElementById('viewport');
@@ -140,6 +234,49 @@
           viewport.clientWidth / 2,
           viewport.clientHeight / 2
         );
+      }
+    };
+
+    window.applyWheelZoomAfterFit = function(delta, centerX, centerY, inputTimestamp) {
+      if (!fitComplete || window.zoomInputQueueReady === false) {
+        queuePendingZoomOperation({
+          delta: delta,
+          anchored: true,
+          centerX: centerX,
+          centerY: centerY,
+          inputTimestamp: inputTimestamp
+        });
+        return;
+      }
+      window.setZoom(zoomLevel + delta, centerX, centerY);
+    };
+
+    window.applyZoomOperationsAfterFit = function(operations) {
+      if (!Array.isArray(operations)) return;
+      for (var i = 0; i < operations.length; i++) {
+        var operation = operations[i];
+        if (!operation || typeof operation.delta !== 'number') continue;
+        if (operation.kind === 'wheel') {
+          queuePendingZoomOperation({
+            delta: operation.delta,
+            anchored: true,
+            centerX: operation.centerX,
+            centerY: operation.centerY,
+            inputTimestamp: operation.inputTimestamp,
+            inputSequence: operation.inputSequence
+          });
+        } else if (operation.kind === 'toolbar') {
+          queuePendingZoomOperation({
+            delta: operation.delta,
+            anchored: false,
+            inputTimestamp: operation.inputTimestamp,
+            inputSequence: operation.inputSequence
+          });
+        }
+      }
+      window.zoomInputQueueReady = true;
+      if (typeof replayPendingZoomOperations === 'function') {
+        replayPendingZoomOperations();
       }
     };
 
@@ -189,71 +326,143 @@
       // double-scale the diagram (shrunk and misplaced).
       svg.setAttribute('width', sw);
       svg.setAttribute('height', sh);
-      zoomLevel = Math.max(0.1, Math.min(10, Math.min(vw / sw, vh / sh)));
+      zoomLevel = Math.min(10, Math.min(vw / sw, vh / sh));
       panX = (vw - sw * zoomLevel) / 2;
       panY = (vh - sh * zoomLevel) / 2;
+      lastViewportWidth = vw;
+      lastViewportHeight = vh;
       updateTransform();
       notifyTransform();
       fitComplete = true;
-      var deltas = pendingZoomDeltas;
-      pendingZoomDeltas = [];
-      window.applyZoomDeltasAfterFit(deltas);
+      if (typeof replayPendingZoomOperations === 'function') {
+        replayPendingZoomOperations();
+      }
     };
 
+    window.addEventListener('resize', function() {
+      if (!fitComplete) return;
+      var viewport = document.getElementById('viewport');
+      if (!viewport || viewport.clientWidth <= 0 || viewport.clientHeight <= 0) return;
+      panX += (viewport.clientWidth - lastViewportWidth) / 2;
+      panY += (viewport.clientHeight - lastViewportHeight) / 2;
+      lastViewportWidth = viewport.clientWidth;
+      lastViewportHeight = viewport.clientHeight;
+      updateTransform();
+      notifyTransform();
+    });
 
     var isDragging = false;
     var dragStartX = 0;
     var dragStartY = 0;
     var panStartX = 0;
     var panStartY = 0;
+    var hasDragged = false;
+    var dragSlop = 4;
+    var suppressClickAfterPan = false;
+    var suppressClickTimer = null;
+    var dragParentWindow = null;
+
+    function finishMouseDrag() {
+      if (isDragging && hasDragged) {
+        suppressClickAfterPan = true;
+        suppressClickTimer = setTimeout(function() {
+          suppressClickAfterPan = false;
+          suppressClickTimer = null;
+        }, 0);
+      }
+      isDragging = false;
+      hasDragged = false;
+      if (dragParentWindow !== null) {
+        try {
+          dragParentWindow.removeEventListener('mouseup', finishMouseDrag);
+        } catch(_) {}
+        dragParentWindow = null;
+      }
+    }
+
+    document.addEventListener('mouseup', finishMouseDrag);
+    window.addEventListener('blur', finishMouseDrag);
+    window.addEventListener('unload', finishMouseDrag);
 
     // Drag-to-pan with mouse
     document.addEventListener('mousedown', function(e) {
+      if (suppressClickTimer !== null) {
+        clearTimeout(suppressClickTimer);
+        suppressClickTimer = null;
+        suppressClickAfterPan = false;
+      }
       if (e.target.closest('#diagram-container')) {
         isDragging = true;
+        hasDragged = false;
         dragStartX = e.clientX;
         dragStartY = e.clientY;
         panStartX = panX;
         panStartY = panY;
+        try {
+          var parentWindow = window.parent;
+          if (parentWindow && parentWindow !== window) {
+            parentWindow.addEventListener('mouseup', finishMouseDrag);
+            dragParentWindow = parentWindow;
+          }
+        } catch(_) {
+          dragParentWindow = null;
+        }
         e.preventDefault();
       }
     });
 
     document.addEventListener('mousemove', function(e) {
       if (isDragging) {
-        panX = panStartX + (e.clientX - dragStartX);
-        panY = panStartY + (e.clientY - dragStartY);
-        updateTransform();
-        notifyTransform();
+        var deltaX = e.clientX - dragStartX;
+        var deltaY = e.clientY - dragStartY;
+        if (deltaX * deltaX + deltaY * deltaY > dragSlop * dragSlop) {
+          hasDragged = true;
+        }
+        if (hasDragged) {
+          panX = panStartX + deltaX;
+          panY = panStartY + deltaY;
+          updateTransform();
+          notifyTransform();
+        }
         e.preventDefault();
       }
     });
 
-    document.addEventListener('mouseup', function() {
-      isDragging = false;
-    });
+    document.addEventListener('click', function(e) {
+      if (!suppressClickAfterPan || e.detail === 0) return;
+      suppressClickAfterPan = false;
+      if (suppressClickTimer !== null) {
+        clearTimeout(suppressClickTimer);
+        suppressClickTimer = null;
+      }
+      e.preventDefault();
+      e.stopPropagation();
+    }, true);
 
     // Zoom with Ctrl/Meta + MouseWheel
     document.addEventListener('wheel', function(e) {
-      if (e.ctrlKey || e.metaKey) {
+      if ((e.ctrlKey || e.metaKey) && e.deltaY !== 0) {
         e.preventDefault();
         var rect = document.getElementById('viewport').getBoundingClientRect();
         var centerX = e.clientX - rect.left;
         var centerY = e.clientY - rect.top;
         var delta = e.deltaY > 0 ? -0.1 : 0.1;
-        window.setZoom(zoomLevel + delta, centerX, centerY);
+        window.applyWheelZoomAfterFit(delta, centerX, centerY);
       }
     }, { passive: false });
 
     // Touch events for mobile pan
     var touchStartX, touchStartY;
     var touchPanStartX, touchPanStartY;
+    var touchLastX, touchLastY;
     var lastTouchDist = 0;
 
     document.addEventListener('touchstart', function(e) {
       if (e.touches.length === 1) {
         touchStartX = e.touches[0].clientX;
         touchStartY = e.touches[0].clientY;
+        touchLastX = touchStartX;
+        touchLastY = touchStartY;
         touchPanStartX = panX;
         touchPanStartY = panY;
       } else if (e.touches.length === 2) {
@@ -266,8 +475,21 @@
 
     document.addEventListener('touchmove', function(e) {
       if (e.touches.length === 1) {
-        panX = touchPanStartX + (e.touches[0].clientX - touchStartX);
-        panY = touchPanStartY + (e.touches[0].clientY - touchStartY);
+        var touchX = e.touches[0].clientX;
+        var touchY = e.touches[0].clientY;
+        var panDeltaX = touchX - touchLastX;
+        var panDeltaY = touchY - touchLastY;
+        touchLastX = touchX;
+        touchLastY = touchY;
+        if (!fitComplete) {
+          queuePendingZoomOperation({
+            kind: 'touch-pan',
+            panDeltaX: panDeltaX,
+            panDeltaY: panDeltaY
+          });
+        }
+        panX = touchPanStartX + (touchX - touchStartX);
+        panY = touchPanStartY + (touchY - touchStartY);
         updateTransform();
         notifyTransform();
         e.preventDefault();
@@ -283,18 +505,35 @@
         var rect = document.getElementById('viewport').getBoundingClientRect();
         var centerX = midX - rect.left;
         var centerY = midY - rect.top;
-        window.setZoom(zoomLevel * scale, centerX, centerY);
+        if (!fitComplete) {
+          queuePendingZoomOperation({
+            kind: 'touch-pinch',
+            scale: scale,
+            centerX: centerX,
+            centerY: centerY
+          });
+        }
+        window.setZoom(zoomLevel * scale, centerX, centerY, true);
         e.preventDefault();
       }
     }, { passive: false });
 
     document.addEventListener('touchend', function(e) {
-      lastTouchDist = 0;
       if (e.touches.length === 1) {
+        lastTouchDist = 0;
         touchStartX = e.touches[0].clientX;
         touchStartY = e.touches[0].clientY;
+        touchLastX = touchStartX;
+        touchLastY = touchStartY;
         touchPanStartX = panX;
         touchPanStartY = panY;
+      } else if (e.touches.length === 2) {
+        lastTouchDist = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY
+        );
+      } else {
+        lastTouchDist = 0;
       }
     });
 
@@ -310,9 +549,18 @@
     // this template or the bundled library changes: the version keys the
     // CacheStorage entry, so a stale version would keep serving the
     // previous library.
-    var TEMPLATE_VERSION = 'v5';
+    var TEMPLATE_VERSION = 'v18';
     var LIB_CACHE_NAME = 'mermaid-render-' + TEMPLATE_VERSION;
     var LIB_CACHE_KEY = 'mermaid-lib-' + TEMPLATE_VERSION;
+    var libraryLoadTimer = null;
+    var libraryLoadTimedOut = false;
+
+    function clearLibraryLoadTimer() {
+      if (libraryLoadTimer !== null) {
+        clearTimeout(libraryLoadTimer);
+        libraryLoadTimer = null;
+      }
+    }
 
     // Loads the mermaid library blob. Every diagram opens a fresh iframe
     // document, so without a persistent cache each one would re-download
@@ -320,7 +568,7 @@
     // cached in CacheStorage (origin-wide, survives between iframes) so
     // only the FIRST diagram pays that cost. Any cache failure falls back
     // to the plain gz path.
-    function loadLibrary() {
+    function loadLibrary(skipCache) {
       function fromGz() {
         return fetch('mermaid.min.js.gz').then(function(resp) {
           if (!resp.ok) throw new Error('HTTP ' + resp.status);
@@ -342,11 +590,17 @@
           return jsBlob;
         });
       }
-      if (!window.caches) return fromGz();
+      if (skipCache || !window.caches) {
+        return fromGz().then(function(blob) {
+          return {blob: blob, cached: false};
+        });
+      }
       return caches.open(LIB_CACHE_NAME).then(function(cache) {
         return cache.match(LIB_CACHE_KEY);
       }).then(function(hit) {
-        return hit ? hit.blob() : null;
+        return hit ? hit.blob().then(function(blob) {
+          return {blob: blob, cached: true};
+        }) : null;
       }).catch(function() {
         // CacheStorage unavailable or errored (including a corrupt cache
         // entry): fall back to the plain gz path. A gz-path failure must
@@ -354,13 +608,16 @@
         // propagates to the caller, which then uses the raw file.
         return null;
       }).then(function(blob) {
-        return blob || fromGz();
+        return blob || fromGz().then(function(jsBlob) {
+          return {blob: jsBlob, cached: false};
+        });
       });
     }
 
     function initMermaid() {
       var hint = document.getElementById('loading-hint');
       var codeEl = document.getElementById('mermaid-code');
+      clearLibraryLoadTimer();
       // Render watchdog: if the diagram has not appeared 15s after the
       // library loaded, surface an error instead of a perpetual hint.
       var renderTimer = setTimeout(function() {
@@ -370,7 +627,9 @@
       try {
         mermaid.initialize({
           theme: 'default',
-          securityLevel: 'loose',
+          // Keep sanitized HTML labels; antiscript also sanitizes URLs and
+          // disables the click directives enabled by loose mode.
+          securityLevel: 'antiscript',
           fontFamily: 'sans-serif',
         });
         mermaid.run({
@@ -391,11 +650,22 @@
       }
     }
 
-    function runScriptUrl(url) {
+    function runScriptUrl(url, onError) {
       var script = document.createElement('script');
       script.async = true;
-      script.onload = initMermaid;
+      script.onload = function() {
+        if (libraryLoadTimedOut) return;
+        initMermaid();
+      };
       script.onerror = function() {
+        if (libraryLoadTimedOut) return;
+        if (onError) {
+          onError();
+          return;
+        }
+        clearLibraryLoadTimer();
+        var hint = document.getElementById('loading-hint');
+        if (hint) hint.style.display = 'none';
         reportError('Mermaid 资源加载失败: ' + url);
       };
       script.src = url;
@@ -406,17 +676,53 @@
       var hint = document.getElementById('loading-hint');
       var codeEl = document.getElementById('mermaid-code');
       var params = new URLSearchParams(window.location.search);
+      var sourceKey = params.get('sourceKey');
       var code = params.get('code');
+      if (sourceKey != null) {
+        try {
+          code = window.sessionStorage.getItem(sourceKey);
+          window.sessionStorage.removeItem(sourceKey);
+        } catch (error) {
+          code = null;
+        }
+        if (code == null) {
+          if (hint) hint.style.display = 'none';
+          reportError('Mermaid source unavailable');
+          return;
+        }
+      }
       if (code == null || code.length === 0) {
         codeEl.textContent = '(空 Mermaid 代码)';
         if (hint) hint.style.display = 'none';
         return;
       }
       codeEl.textContent = code;
+      libraryLoadTimer = setTimeout(function() {
+        libraryLoadTimer = null;
+        libraryLoadTimedOut = true;
+        if (hint) hint.style.display = 'none';
+        reportError('Mermaid 资源加载超时');
+      }, 15000);
       try {
-        loadLibrary().then(function(jsBlob) {
-          runScriptUrl(URL.createObjectURL(jsBlob));
+        loadLibrary().then(function(library) {
+          if (libraryLoadTimedOut) return;
+          runScriptUrl(URL.createObjectURL(library.blob), function() {
+            if (!library.cached) {
+              runScriptUrl('mermaid.min.js');
+              return;
+            }
+            loadLibrary(true).then(function(fallbackLibrary) {
+              if (libraryLoadTimedOut) return;
+              runScriptUrl(URL.createObjectURL(fallbackLibrary.blob), function() {
+                runScriptUrl('mermaid.min.js');
+              });
+            }).catch(function() {
+              if (libraryLoadTimedOut) return;
+              runScriptUrl('mermaid.min.js');
+            });
+          });
         }).catch(function(err) {
+          if (libraryLoadTimedOut) return;
           // DecompressionStream unavailable or the gz asset missing:
           // fall back to the raw library file.
           runScriptUrl('mermaid.min.js');

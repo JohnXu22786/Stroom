@@ -1,4 +1,5 @@
 part of 'provider_settings_panel.dart';
+
 // Extension methods on the State class cannot use @protected members
 // (setState / state) without analyzer warnings, but the receiver IS the
 // State/StateNotifier, so runtime behavior is identical to the original
@@ -9,7 +10,7 @@ extension _ProviderSettingsPanelTabAsrExt on _ProviderSettingsPanelState {
   List<Widget> _buildAsrChunkingSection(ColorScheme cs) {
     return [
       Text(
-        '音频切块',
+        AppLocalizations.of(context)!.providerAudioChunkingTitle,
         style: TextStyle(
           fontWeight: FontWeight.w800,
           fontSize: 18,
@@ -17,20 +18,19 @@ extension _ProviderSettingsPanelTabAsrExt on _ProviderSettingsPanelState {
           letterSpacing: 0.3,
         ),
       ),
-      const SizedBox(height: 6),
+      const SizedBox(height: 8),
       Text(
-        '智能裁切：分析音频环境、候选切点评分、句末优先。不重叠输出。',
-        style: TextStyle(
-          fontSize: 13,
-          color: cs.onSurfaceVariant,
-          height: 1.4,
-        ),
+        AppLocalizations.of(context)!.providerAudioChunkingHint,
+        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: cs.onSurfaceVariant,
+              height: 1.4,
+            ),
       ),
       const SizedBox(height: 16),
       Row(
         children: [
           Text(
-            '切块方式',
+            AppLocalizations.of(context)!.providerChunkingMode,
             style: TextStyle(
               fontWeight: FontWeight.w600,
               fontSize: 14,
@@ -46,26 +46,40 @@ extension _ProviderSettingsPanelTabAsrExt on _ProviderSettingsPanelState {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
             child: DropdownButtonHideUnderline(
               child: DropdownButton<String>(
+                dropdownColor: StroomMenuStyle.surface(context),
+                borderRadius: StroomMenuStyle.borderRadius,
                 value: _chunking,
                 isDense: true,
-                items: const [
+                items: [
                   DropdownMenuItem(
                     value: 'none',
-                    child: Text('不切块', style: TextStyle(fontSize: 13)),
+                    child: Text(
+                      AppLocalizations.of(context)!.providerChunkNone,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
                   ),
                   DropdownMenuItem(
                     value: 'silence',
-                    child: Text('智能裁切（推荐）',
-                        style: TextStyle(
-                            fontSize: 13, fontWeight: FontWeight.w600)),
+                    child: Text(
+                      AppLocalizations.of(context)!.providerChunkSmart,
+                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                    ),
                   ),
                   DropdownMenuItem(
                     value: 'fixedDuration',
-                    child: Text('固定时长切块', style: TextStyle(fontSize: 13)),
+                    child: Text(
+                      AppLocalizations.of(context)!.providerChunkFixedDuration,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
                   ),
                   DropdownMenuItem(
                     value: 'fixedSize',
-                    child: Text('固定大小切块', style: TextStyle(fontSize: 13)),
+                    child: Text(
+                      AppLocalizations.of(context)!.providerChunkFixedSize,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
                   ),
                 ],
                 onChanged: (v) {
@@ -76,7 +90,7 @@ extension _ProviderSettingsPanelTabAsrExt on _ProviderSettingsPanelState {
           ),
         ],
       ),
-      const SizedBox(height: 6),
+      const SizedBox(height: 8),
       Text(
         _chunkingDescription(),
         style: TextStyle(
@@ -91,7 +105,7 @@ extension _ProviderSettingsPanelTabAsrExt on _ProviderSettingsPanelState {
   List<Widget> _buildAsrCompressionSection(ColorScheme cs) {
     return [
       Text(
-        '压缩编码',
+        AppLocalizations.of(context)!.providerCompressionTitle,
         style: TextStyle(
           fontWeight: FontWeight.w800,
           fontSize: 18,
@@ -99,20 +113,19 @@ extension _ProviderSettingsPanelTabAsrExt on _ProviderSettingsPanelState {
           letterSpacing: 0.3,
         ),
       ),
-      const SizedBox(height: 6),
+      const SizedBox(height: 8),
       Text(
-        '选择音频压缩格式，减小上传体积。',
-        style: TextStyle(
-          fontSize: 13,
-          color: cs.onSurfaceVariant,
-          height: 1.4,
-        ),
+        AppLocalizations.of(context)!.providerCompressionHint,
+        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: cs.onSurfaceVariant,
+              height: 1.4,
+            ),
       ),
       const SizedBox(height: 16),
       Row(
         children: [
           Text(
-            '压缩方式',
+            AppLocalizations.of(context)!.providerCompressionMode,
             style: TextStyle(
               fontWeight: FontWeight.w600,
               fontSize: 14,
@@ -128,21 +141,31 @@ extension _ProviderSettingsPanelTabAsrExt on _ProviderSettingsPanelState {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
             child: DropdownButtonHideUnderline(
               child: DropdownButton<String>(
+                dropdownColor: StroomMenuStyle.surface(context),
+                borderRadius: StroomMenuStyle.borderRadius,
                 value: _compression,
                 isDense: true,
-                items: const [
+                items: [
                   DropdownMenuItem(
                     value: 'none',
-                    child: Text('无（原样发送）', style: TextStyle(fontSize: 13)),
+                    child: Text(
+                      AppLocalizations.of(context)!.providerCompressionNone,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
                   ),
                   DropdownMenuItem(
                     value: 'adpcm',
-                    child:
-                        Text('ADPCM（~4x 压缩）', style: TextStyle(fontSize: 13)),
+                    child: Text(
+                      AppLocalizations.of(context)!.providerCompressionAdpcm,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
                   ),
                   DropdownMenuItem(
                     value: 'flac',
-                    child: Text('FLAC（无损 ~2x）', style: TextStyle(fontSize: 13)),
+                    child: Text(
+                      AppLocalizations.of(context)!.providerCompressionFlac,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
                   ),
                 ],
                 onChanged: (v) {
@@ -153,13 +176,15 @@ extension _ProviderSettingsPanelTabAsrExt on _ProviderSettingsPanelState {
           ),
         ],
       ),
-      const SizedBox(height: 6),
+      const SizedBox(height: 8),
       Text(
         _compression == 'adpcm'
-            ? 'IMA ADPCM，4:1 有损压缩。纯 Dart 实现，音质适合语音转写。'
+            ? AppLocalizations.of(context)!.providerCompressionAdpcmDescription
             : _compression == 'flac'
-                ? 'FLAC 无损压缩，纯 Dart 实现。体积缩小约一半。'
-                : '不压缩，以原始 WAV 格式发送。',
+                ? AppLocalizations.of(context)!
+                    .providerCompressionFlacDescription
+                : AppLocalizations.of(context)!
+                    .providerCompressionWavDescription,
         style: TextStyle(
           fontSize: 12,
           color: cs.onSurfaceVariant.withAlpha(180),
@@ -172,7 +197,7 @@ extension _ProviderSettingsPanelTabAsrExt on _ProviderSettingsPanelState {
   List<Widget> _buildLlmParamsSection(ColorScheme cs) {
     return [
       Text(
-        'LLM 参数',
+        AppLocalizations.of(context)!.providerLlmParams,
         style: TextStyle(
           fontWeight: FontWeight.w700,
           fontSize: 16,
@@ -181,12 +206,12 @@ extension _ProviderSettingsPanelTabAsrExt on _ProviderSettingsPanelState {
       ),
       const SizedBox(height: 4),
       Text(
-        '开启的参数将作为默认值发送到 API 请求中',
+        AppLocalizations.of(context)!.providerEnabledParamsHelp,
         style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
       ),
       const SizedBox(height: 12),
       LlmToggleSlider(
-        label: '温度 (Temperature)',
+        label: AppLocalizations.of(context)!.providerTemperatureLabel,
         value: _temperature,
         min: 0.0,
         max: 2.0,
@@ -194,7 +219,7 @@ extension _ProviderSettingsPanelTabAsrExt on _ProviderSettingsPanelState {
         enabled: _enableTemperature,
         onChanged: (v) => setState(() => _temperature = v),
         onToggle: (v) => setState(() => _enableTemperature = v),
-        description: '控制输出的随机性，值越高越有创造性',
+        description: AppLocalizations.of(context)!.providerTemperatureHelp,
       ),
       LlmToggleSlider(
         label: 'Top P',
@@ -205,10 +230,10 @@ extension _ProviderSettingsPanelTabAsrExt on _ProviderSettingsPanelState {
         enabled: _enableTopP,
         onChanged: (v) => setState(() => _topP = v),
         onToggle: (v) => setState(() => _enableTopP = v),
-        description: '核采样参数，控制词汇选择的累积概率',
+        description: AppLocalizations.of(context)!.providerTopPHelp,
       ),
       LlmToggleSlider(
-        label: '频率惩罚 (Frequency Penalty)',
+        label: AppLocalizations.of(context)!.providerFrequencyPenaltyLabel,
         value: _frequencyPenalty,
         min: -2.0,
         max: 2.0,
@@ -216,10 +241,10 @@ extension _ProviderSettingsPanelTabAsrExt on _ProviderSettingsPanelState {
         enabled: _enableFrequencyPenalty,
         onChanged: (v) => setState(() => _frequencyPenalty = v),
         onToggle: (v) => setState(() => _enableFrequencyPenalty = v),
-        description: '减少重复词的频率，负值增加重复',
+        description: AppLocalizations.of(context)!.providerFrequencyPenaltyHelp,
       ),
       LlmToggleSlider(
-        label: '存在惩罚 (Presence Penalty)',
+        label: AppLocalizations.of(context)!.providerPresencePenaltyLabel,
         value: _presencePenalty,
         min: -2.0,
         max: 2.0,
@@ -227,42 +252,41 @@ extension _ProviderSettingsPanelTabAsrExt on _ProviderSettingsPanelState {
         enabled: _enablePresencePenalty,
         onChanged: (v) => setState(() => _presencePenalty = v),
         onToggle: (v) => setState(() => _enablePresencePenalty = v),
-        description: '鼓励讨论新话题，负值鼓励重复话题',
+        description: AppLocalizations.of(context)!.providerPresencePenaltyHelp,
       ),
       LlmToggleTextField(
-        label: '最大输出 Token 数',
+        label: AppLocalizations.of(context)!.providerMaxOutputTokensLabel,
         controller: _maxTokensController,
         enabled: _enableMaxTokens,
         onToggle: (v) => setState(() => _enableMaxTokens = v),
-        hintText: '可选，如 4096',
+        hintText: AppLocalizations.of(context)!.providerOptionalExample('4096'),
         keyboardType: TextInputType.number,
-        description: '每次响应最多生成的 token 数',
+        description: AppLocalizations.of(context)!.providerResponseTokensHelp,
       ),
       LlmToggleTextField(
-        label: '随机种子 (Seed)',
+        label: AppLocalizations.of(context)!.providerSeedLabel,
         controller: _seedController,
         enabled: _enableSeed,
         onToggle: (v) => setState(() => _enableSeed = v),
-        hintText: '可选，如 42',
+        hintText: AppLocalizations.of(context)!.providerOptionalExample('42'),
         keyboardType: TextInputType.number,
-        description: '设置后可使输出结果可复现',
+        description: AppLocalizations.of(context)!.providerSeedHelp,
       ),
       const SizedBox(height: 24),
     ];
   }
 
   String _chunkingDescription() {
+    final strings = AppLocalizations.of(context)!;
     switch (_chunking) {
       case 'silence':
-        return '智能分析音频环境 + 候选切点评分。'
-            '优先在句末/长静音处切，不重叠输出。'
-            '默认 20s min / 45s target / 60s max。';
+        return strings.providerChunkSmartDescription;
       case 'fixedDuration':
-        return '每 N 秒切一块（默认 60 秒）。简单直接，可能截断语句。';
+        return strings.providerChunkDurationDescription;
       case 'fixedSize':
-        return '按字节大小切块，确保不超限制。最机械，可能截断语句。';
+        return strings.providerChunkSizeDescription;
       default:
-        return '不切块。超过限制的文件将被拒绝。';
+        return strings.providerChunkNoneDescription;
     }
   }
 }

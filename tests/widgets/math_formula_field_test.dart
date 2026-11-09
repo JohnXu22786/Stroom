@@ -1,9 +1,24 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/widgets/math_formula_field.dart';
 
 void main() {
+  test('bundles the MathLive editor and its fonts', () async {
+    final html =
+        await rootBundle.loadString('assets/vendor/mathlive/editor.html');
+    final editor =
+        await rootBundle.loadString('assets/vendor/mathlive/editor.js');
+    final font = await rootBundle.load(
+      'assets/vendor/mathlive/fonts/KaTeX_AMS-Regular.woff2',
+    );
+
+    expect(html, contains('editor.js'));
+    expect(editor, isNotEmpty);
+    expect(font.lengthInBytes, greaterThan(0));
+  });
+
   testWidgets(
       'theme changes recolor the retained native editor without reimport',
       (tester) async {

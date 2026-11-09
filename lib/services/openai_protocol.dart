@@ -21,6 +21,7 @@ class OpenAIProtocol implements ChatProtocol {
     String? assistantPrompt,
     String? contextSummary,
     int? toolOutputMaxChars,
+    RequestContentCache? contentCache,
   }) async {
     final result = <Map<String, dynamic>>[];
 
@@ -38,22 +39,23 @@ class OpenAIProtocol implements ChatProtocol {
     }
 
     for (final msg in history) {
+      final messageContent = contentCache?.contentFor(msg) ?? msg.content;
       final toolCalls = msg.toolCalls;
       final hasToolCalls = toolCalls != null && toolCalls.isNotEmpty;
 
       if (msg.attachments.isEmpty && !hasToolCalls) {
-        result.add({'role': msg.role, 'content': msg.content});
+        result.add({'role': msg.role, 'content': messageContent});
         continue;
       }
 
       // 组装内容（文本 + 附件 parts；无附件时保持字符串形式）
       Object content;
       if (msg.attachments.isEmpty) {
-        content = msg.content;
+        content = messageContent;
       } else {
         final parts = <Map<String, dynamic>>[];
-        if (msg.content.isNotEmpty) {
-          parts.add({'type': 'text', 'text': msg.content});
+        if (messageContent.isNotEmpty) {
+          parts.add({'type': 'text', 'text': messageContent});
         }
         for (final att in msg.attachments) {
           if (att.fileType == 'image') {
@@ -236,6 +238,8 @@ class OpenAIProtocol implements ChatProtocol {
           {
             'id': tc.id,
             'type': 'function',
+            if (tc.thoughtSignature != null)
+              'thoughtSignature': tc.thoughtSignature,
             'function': {'name': tc.name, 'arguments': tc.argumentsJson},
           },
       ],

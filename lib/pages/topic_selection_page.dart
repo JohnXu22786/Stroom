@@ -1,9 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 
 import '../pages/assistant_selection_page.dart';
+import '../models/assistant.dart';
 import '../providers/assistant_provider.dart';
 import '../providers/conversation_provider.dart';
+import '../providers/chat_stream_provider.dart';
+import '../providers/chat_manager_provider.dart';
+import '../providers/provider_config.dart';
+import '../services/assistant_catalog_service.dart';
+import '../services/assistant_prompt_safety_review.dart';
+import '../services/assistant_update_service.dart';
+import '../services/assistant_tool_policy.dart';
+import '../services/chat_adapter.dart' show resolveModelRef;
 import '../widgets/llm/assistant_avatar.dart';
 import '../widgets/search_panel.dart';
 import '../widgets/topic_item.dart';
@@ -21,6 +31,145 @@ class TopicSelectionPage extends ConsumerStatefulWidget {
 class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
   bool _selectionMode = false;
   final Set<String> _selectedIds = {};
+  bool _checkedRemoteAssistant = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkSelectedAssistantForUpdate();
+    });
+  }
+
+  Future<void> _checkSelectedAssistantForUpdate() async {
+    if (_checkedRemoteAssistant || !mounted) return;
+    _checkedRemoteAssistant = true;
+    try {
+      await ref.read(assistantInitialLoadProvider.future);
+      if (!mounted) return;
+      final assistant = ref.read(selectedAssistantProvider);
+      if (assistant == null || assistant.remoteAssistantId == null) return;
+      final update = await AssistantUpdateService.checkForUpdate(assistant);
+      if (!mounted || update == null) return;
+      if (assistant.remoteUpdatePolicy == 'automatic') {
+        await _applyRemoteUpdate(assistant, update);
+      } else {
+        final isZh = Localizations.localeOf(context).languageCode == 'zh';
+        final apply = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: Text(isZh ? '助手有更新' : 'Assistant update available'),
+            content: Text(isZh
+                ? '${assistant.name} 有新版本 ${update.definition.version}。现在查看并更新吗？'
+                : '${assistant.name} has version ${update.definition.version}. Review and update now?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: Text(isZh ? '稍后' : 'Later'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: Text(isZh ? '更新' : 'Update'),
+              ),
+            ],
+          ),
+        );
+        if (apply == true && mounted)
+          await _applyRemoteUpdate(assistant, update);
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Assistant update check failed: $error')),
+        );
+      }
+    }
+  }
+
+  Future<void> _applyRemoteUpdate(
+    Assistant assistant,
+    DownloadedRemoteAssistant update,
+  ) async {
+    final definition = update.definition;
+    final requestedTools = definition.defaultToolNames;
+    final supportedTools = supportedAssistantToolNames(
+      ref.read(providerEntriesProvider),
+    );
+    if (requestedTools != null && !supportedTools.containsAll(requestedTools)) {
+      throw FormatException('Update contains unsupported Stroom tool names.');
+    }
+    if (assistant.remoteSecurityReview) {
+      final entries = ref.read(providerEntriesProvider);
+      final review = await AssistantPromptSafetyReview.review(
+        adapter: ref.read(chatStreamManagerProvider).adapter,
+        entriesState: entries,
+        assistantId: definition.id,
+        prompt: definition.prompt,
+        settings: definition.settings.toMap(),
+      );
+      if (!review.approved) {
+        if (mounted) {
+          final isZh = Localizations.localeOf(context).languageCode == 'zh';
+          await showDialog<void>(
+            context: context,
+            builder: (dialogContext) => AlertDialog(
+              title: Text(isZh ? '安全审查未通过' : 'Safety review rejected update'),
+              content: Text(review.reason),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: Text(isZh ? '关闭' : 'Close'),
+                ),
+              ],
+            ),
+          );
+        }
+        return;
+      }
+    }
+
+    final entries = ref.read(providerEntriesProvider);
+    final adapter = ref.read(chatStreamManagerProvider).adapter;
+    final models = adapter.availableModels(entries);
+    final remoteModel = resolveModelRef(
+      models: models,
+      modelId: definition.defaultModelId,
+      providerName: definition.defaultProviderName,
+      displayName: definition.defaultModelName,
+    );
+    final existingModel = resolveModelRef(
+      models: models,
+      modelId: assistant.defaultModelId,
+      providerName: assistant.defaultProviderName,
+      displayName: assistant.defaultModelName,
+    );
+    final replacement = Assistant(
+      name: definition.name,
+      description: definition.description,
+      emoji: definition.emoji,
+      prompt: definition.prompt,
+      settings: definition.settings,
+      defaultModelName: (remoteModel ?? existingModel)?.displayName,
+      defaultModelId: (remoteModel ?? existingModel)?.modelId,
+      defaultProviderName: (remoteModel ?? existingModel)?.providerName,
+      defaultToolNames: requestedTools ?? assistant.defaultToolNames,
+    );
+    ref.read(assistantProvider.notifier).updateRemoteAssistant(
+          localId: assistant.id,
+          replacement: replacement,
+          remoteVersion: definition.version,
+          remoteFileUrl: update.fileUrl,
+          remoteFormat: update.format,
+          remoteSha256: update.sha256,
+          remoteExtensions: definition.extensions,
+        );
+    if (mounted) {
+      final isZh = Localizations.localeOf(context).languageCode == 'zh';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(isZh ? '助手已更新' : 'Assistant updated')),
+      );
+    }
+  }
 
   /// 置顶优先、块内保持原有顺序（稳定排序——Dart 的 List.sort 在元素
   /// 超过 33 个时使用不稳定快排，会任意重排等键元素，导致对话多时
@@ -56,21 +205,22 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
 
   Future<void> _batchDelete() async {
     if (_selectedIds.isEmpty) return;
+    final l10n = AppLocalizations.of(context)!;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('删除对话'),
-        content: Text('确定要删除选中的 ${_selectedIds.length} 个对话吗？此操作无法撤销。'),
+        title: Text(l10n.conversationDeleteTitle),
+        content: Text(l10n.conversationDeleteMany(_selectedIds.length)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('取消'),
+            child: Text(l10n.actionCancel),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
             style: TextButton.styleFrom(
                 foregroundColor: Theme.of(context).colorScheme.error),
-            child: const Text('删除'),
+            child: Text(l10n.actionDelete),
           ),
         ],
       ),
@@ -114,19 +264,21 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
   }
 
   void _deleteTopic(Conversation topic) async {
+    final l10n = AppLocalizations.of(context)!;
     final convs = ref.read(conversationsProvider);
     final conv = convs.where((c) => c.id == topic.id).firstOrNull;
 
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('删除对话'),
-        content:
-            Text('确定要删除对话「${topic.title.isEmpty ? '新对话' : topic.title}」吗？'),
+        title: Text(l10n.conversationDeleteTitle),
+        content: Text(l10n.conversationDeleteNamed(
+          topic.title.isEmpty ? l10n.conversationNew : topic.title,
+        )),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
+            child: Text(l10n.actionCancel),
           ),
           TextButton(
             onPressed: () {
@@ -134,7 +286,7 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
             },
             style: TextButton.styleFrom(
                 foregroundColor: Theme.of(context).colorScheme.error),
-            child: const Text('删除'),
+            child: Text(l10n.actionDelete),
           ),
         ],
       ),
@@ -168,16 +320,17 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
   }
 
   void _renameTopic(String id, String currentTitle) {
+    final l10n = AppLocalizations.of(context)!;
     final controller = TextEditingController(text: currentTitle);
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('重命名对话'),
+        title: Text(l10n.conversationRename),
         content: TextField(
           controller: controller,
           autofocus: true,
-          decoration: const InputDecoration(
-            hintText: '输入新名称',
+          decoration: InputDecoration(
+            hintText: l10n.conversationRenameHint,
             border: OutlineInputBorder(),
           ),
           onSubmitted: (value) {
@@ -196,7 +349,7 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
               controller.dispose();
               Navigator.of(ctx).pop();
             },
-            child: const Text('取消'),
+            child: Text(l10n.actionCancel),
           ),
           TextButton(
             onPressed: () {
@@ -209,7 +362,7 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
               controller.dispose();
               Navigator.of(ctx).pop();
             },
-            child: const Text('确定'),
+            child: Text(l10n.actionConfirm),
           ),
         ],
       ),
@@ -254,6 +407,7 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
   }
 
   Widget _buildEmptyState(ColorScheme cs) {
+    final l10n = AppLocalizations.of(context)!;
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -262,11 +416,11 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
               size: 48, color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
           const SizedBox(height: 16),
           Text(
-            '暂无对话',
+            l10n.topicSelectionEmptyTitle,
             style: TextStyle(color: cs.onSurfaceVariant),
           ),
           const SizedBox(height: 8),
-          Text('创建一个新对话开始对话',
+          Text(l10n.topicSelectionEmptyMessage,
               style: TextStyle(
                   fontSize: 13,
                   color: cs.onSurfaceVariant.withValues(alpha: 0.7))),
@@ -277,8 +431,12 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final selectedAssistant = ref.watch(selectedAssistantProvider);
     final conversations = ref.watch(conversationsProvider);
+    final isLoading = ref.watch(conversationsInitialLoadProvider).isLoading;
+    final streamingConversations = ref.watch(streamingConversationsProvider);
+    final activeConversationId = ref.watch(activeConversationIdProvider);
     final cs = Theme.of(context).colorScheme;
 
     final assistantTopics = _getAssistantTopics(conversations);
@@ -287,7 +445,9 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
     return Scaffold(
       backgroundColor: cs.surface,
       appBar: AppBar(
-        title: Text(_selectionMode ? '已选 ${_selectedIds.length} 个' : '选择对话'),
+        title: Text(_selectionMode
+            ? l10n.conversationSelected(_selectedIds.length)
+            : l10n.conversationSelectTitle),
         centerTitle: false,
         elevation: 0,
         backgroundColor: cs.surface,
@@ -295,20 +455,20 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
           if (!_selectionMode)
             IconButton(
               icon: const Icon(Icons.search),
-              tooltip: '搜索',
+              tooltip: l10n.conversationSearch,
               onPressed: _showSearchPanel,
             ),
           if (_selectionMode)
             IconButton(
               icon: const Icon(Icons.delete),
-              tooltip: '删除选中',
+              tooltip: l10n.conversationDeleteSelected,
               onPressed: _selectedIds.isNotEmpty ? _batchDelete : null,
             ),
           IconButton(
             icon: Icon(
               _selectionMode ? Icons.close : Icons.checklist,
             ),
-            tooltip: _selectionMode ? '取消选择' : '选择',
+            tooltip: _selectionMode ? l10n.actionUnselect : l10n.actionSelect,
             onPressed: _toggleSelectionMode,
           ),
         ],
@@ -322,7 +482,8 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                       size: 48,
                       color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
                   const SizedBox(height: 16),
-                  Text('未选择助手', style: TextStyle(color: cs.onSurfaceVariant)),
+                  Text(l10n.topicSelectionNoAssistant,
+                      style: TextStyle(color: cs.onSurfaceVariant)),
                   const SizedBox(height: 16),
                   FilledButton(
                     onPressed: () {
@@ -330,7 +491,7 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                           null;
                       Navigator.pop(context);
                     },
-                    child: const Text('返回选择助手'),
+                    child: Text(l10n.topicSelectionBackToAssistants),
                   ),
                 ],
               ),
@@ -343,7 +504,7 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: cs.primaryContainer.withValues(alpha: 0.3),
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(16),
                     border: Border.all(
                       color: cs.primaryContainer,
                       width: 0.5,
@@ -383,7 +544,7 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                       ),
                       IconButton(
                         icon: const Icon(Icons.tune, size: 20),
-                        tooltip: '编辑助手',
+                        tooltip: l10n.topicSelectionEditAssistant,
                         onPressed: () {
                           showAssistantFullEditDialog(
                               context, ref, selectedAssistant);
@@ -398,7 +559,7 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
                   child: Text(
-                    '长按拖拽即可调整对话顺序',
+                    l10n.topicSelectionReorderHint,
                     style: TextStyle(
                       fontSize: 12,
                       color: cs.onSurfaceVariant.withValues(alpha: 0.5),
@@ -408,79 +569,105 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
 
                 // Conversation list
                 Expanded(
-                  child: sorted.isEmpty
-                      ? _buildEmptyState(cs)
-                      : ReorderableListView.builder(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 8),
-                          itemCount: sorted.length,
-                          buildDefaultDragHandles: false,
-                          onReorderItem: (oldIndex, newIndex) {
-                            final convs = ref.read(conversationsProvider);
-                            final item = sorted[oldIndex];
-                            final realOld =
-                                convs.indexWhere((c) => c.id == item.id);
-                            // onReorderItem 的 newIndex 已是移除后的索引
-                            // （框架会先移除 oldIndex 再计算插入位置），
-                            // 不需要再手动减一。
-                            final target = sorted[newIndex];
-                            final realNew =
-                                convs.indexWhere((c) => c.id == target.id);
-                            if (realOld >= 0 && realNew >= 0) {
-                              ref
-                                  .read(conversationsProvider.notifier)
-                                  .reorderConversation(realOld, realNew);
-                            }
-                          },
-                          proxyDecorator: (child, index, animation) => Material(
-                            elevation: 2,
-                            color: cs.surfaceContainerLow,
-                            borderRadius: BorderRadius.circular(12),
-                            child: child,
+                  child: isLoading
+                      ? TickerMode(
+                          enabled: TickerMode.of(context) &&
+                              ChatTabVisibility.of(context),
+                          child: const Center(
+                            child: CircularProgressIndicator(),
                           ),
-                          itemBuilder: (context, index) {
-                            final topic = sorted[index];
-                            final itemWidget = TopicItem(
-                              key: ValueKey('topic_${topic.id}'),
-                              topic: topic,
-                              selectionMode: _selectionMode,
-                              isSelected: _selectedIds.contains(topic.id),
-                              isActive: topic.id ==
-                                  ref.watch(activeConversationIdProvider),
-                              onTap: () {
-                                if (_selectionMode) {
-                                  _toggleSelection(topic.id);
-                                } else {
-                                  _onTopicSelected(topic);
+                        )
+                      : sorted.isEmpty
+                          ? _buildEmptyState(cs)
+                          : ReorderableListView.builder(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 8),
+                              itemCount: sorted.length,
+                              buildDefaultDragHandles: false,
+                              onReorderItem: (oldIndex, newIndex) {
+                                final convs = ref.read(conversationsProvider);
+                                final item = sorted[oldIndex];
+                                final realOld =
+                                    convs.indexWhere((c) => c.id == item.id);
+                                // onReorderItem 的 newIndex 已是移除后的索引
+                                // （框架会先移除 oldIndex 再计算插入位置），
+                                // 不需要再手动减一。
+                                final target = sorted[newIndex];
+                                final realNew =
+                                    convs.indexWhere((c) => c.id == target.id);
+                                if (realOld >= 0 && realNew >= 0) {
+                                  ref
+                                      .read(conversationsProvider.notifier)
+                                      .reorderConversation(realOld, realNew);
                                 }
                               },
-                              onDelete: () => _deleteTopic(topic),
-                              onPinToggle: () {
-                                ref
-                                    .read(conversationsProvider.notifier)
-                                    .togglePin(topic.id);
+                              proxyDecorator: (child, index, animation) =>
+                                  Material(
+                                elevation: 2,
+                                color: cs.surfaceContainerLow,
+                                borderRadius: BorderRadius.circular(16),
+                                child: child,
+                              ),
+                              itemBuilder: (context, index) {
+                                final topic = sorted[index];
+                                final isRunning =
+                                    streamingConversations.contains(topic.id);
+                                final latestMessage = topic.messages.isEmpty
+                                    ? null
+                                    : topic.messages.last;
+                                final isFailed = !isRunning &&
+                                    latestMessage?.role == 'assistant' &&
+                                    latestMessage?.isError == true;
+                                final itemWidget = TopicItem(
+                                  key: ValueKey('topic_${topic.id}'),
+                                  topic: topic,
+                                  selectionMode: _selectionMode,
+                                  isSelected: _selectedIds.contains(topic.id),
+                                  isActive: topic.id == activeConversationId,
+                                  isRunning: isRunning,
+                                  isFailed: isFailed,
+                                  isUnread: !isRunning &&
+                                      !isFailed &&
+                                      topic.id != activeConversationId &&
+                                      latestMessage?.role == 'assistant' &&
+                                      latestMessage?.isStreaming == false &&
+                                      latestMessage?.isError == false &&
+                                      latestMessage?.id !=
+                                          topic.lastReadMessageId,
+                                  onTap: () {
+                                    if (_selectionMode) {
+                                      _toggleSelection(topic.id);
+                                    } else {
+                                      _onTopicSelected(topic);
+                                    }
+                                  },
+                                  onDelete: () => _deleteTopic(topic),
+                                  onPinToggle: () {
+                                    ref
+                                        .read(conversationsProvider.notifier)
+                                        .togglePin(topic.id);
+                                  },
+                                  onRename: () =>
+                                      _renameTopic(topic.id, topic.title),
+                                  onAutoRename: () {
+                                    ref
+                                        .read(conversationsProvider.notifier)
+                                        .autoRenameConversation(topic.id);
+                                  },
+                                  onSelectionToggle: () =>
+                                      _toggleSelection(topic.id),
+                                );
+                                // When NOT in selection mode, wrap in long-press drag listener
+                                if (!_selectionMode) {
+                                  return ReorderableDelayedDragStartListener(
+                                    index: index,
+                                    key: ValueKey('drag_${topic.id}'),
+                                    child: itemWidget,
+                                  );
+                                }
+                                return itemWidget;
                               },
-                              onRename: () =>
-                                  _renameTopic(topic.id, topic.title),
-                              onAutoRename: () {
-                                ref
-                                    .read(conversationsProvider.notifier)
-                                    .autoRenameConversation(topic.id);
-                              },
-                              onSelectionToggle: () =>
-                                  _toggleSelection(topic.id),
-                            );
-                            // When NOT in selection mode, wrap in long-press drag listener
-                            if (!_selectionMode) {
-                              return ReorderableDelayedDragStartListener(
-                                index: index,
-                                key: ValueKey('drag_${topic.id}'),
-                                child: itemWidget,
-                              );
-                            }
-                            return itemWidget;
-                          },
-                        ),
+                            ),
                 ),
 
                 // Bottom: create new conversation button
@@ -492,7 +679,7 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                         width: double.infinity,
                         child: FilledButton.icon(
                           icon: const Icon(Icons.add),
-                          label: const Text('新话题'),
+                          label: Text(l10n.topicSelectionNewTopic),
                           onPressed: _createNewTopic,
                         ),
                       ),

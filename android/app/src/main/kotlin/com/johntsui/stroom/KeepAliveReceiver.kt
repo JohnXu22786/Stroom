@@ -35,6 +35,10 @@ import id.flutter.flutter_background_service.BackgroundService
  *   background-start restriction — the restart then depends on the user
  *   having granted the battery-optimization exemption (requested via
  *   requestIgnoreBatteryOptimizations).
+ * - When an exact alarm is scheduled, keep a distinct inexact backup one
+ *   minute later. Android removes exact alarms silently on permission revoke;
+ *   a delivery replaces the pair when rearming succeeds and retains a pending
+ *   pair member as recovery if replacement scheduling fails.
  * - Pre-M (API < 23): repeating alarm.
  * - The alarm is a one-shot that re-schedules itself on every fire, so a
  *   single failed firing (e.g. ForegroundServiceStartNotAllowedException
@@ -66,19 +70,26 @@ class KeepAliveReceiver : BroadcastReceiver() {
 
     companion object {
         private const val TAG = "KeepAliveReceiver"
-        private const val ALARM_REQUEST_CODE = 2001
+        private const val ALARM_REQUEST_CODE = KEEP_ALIVE_ALARM_REQUEST_CODE
+        private const val INEXACT_ALARM_REQUEST_CODE = KEEP_ALIVE_INEXACT_ALARM_REQUEST_CODE
+        private const val REVOCATION_BACKUP_REQUEST_CODE = KEEP_ALIVE_REVOCATION_BACKUP_REQUEST_CODE
         private const val SCHEDULE_RETRY_DELAY_MS = 1_000L
+        private const val KEY_KEEP_ALIVE_ALARM_GENERATION = "keep_alive_alarm_generation"
+        private const val EXTRA_KEEP_ALIVE_ALARM_GENERATION = "keep_alive_alarm_generation"
+        private val ALARM_GENERATION_LOCK = Any()
+        private val ALARM_DELIVERY_GENERATION_CLAIMS = AlarmDeliveryGenerationClaims()
 
         // 默认看门狗间隔（MainActivity 的 rearmKeepAlive 需要读取）。
-        const val KEEP_ALIVE_INTERVAL_MS = 5 * 60 * 1000L // 5 minutes
+        const val KEEP_ALIVE_INTERVAL_MS = KeepAliveScheduleIntervals.KEEP_ALIVE_INTERVAL_MS
 
         // 连续启动失败后的退避间隔（见类注释）。
         // MainActivity 的 rearmKeepAlive 需要读取，用于退避状态下
         // 沿用 30 分钟间隔（而不是用 5 分钟间隔替换退避闹钟）。
         const val MAX_CONSECUTIVE_FAILURES = 3
-        const val FAILURE_BACKOFF_INTERVAL_MS = 30 * 60 * 1000L
+        const val FAILURE_BACKOFF_INTERVAL_MS = KeepAliveScheduleIntervals.FAILURE_BACKOFF_INTERVAL_MS
 
-        const val ACTION_KEEP_ALIVE = "com.johntsui.stroom.KEEP_ALIVE"
+        const val ACTION_KEEP_ALIVE = KEEP_ALIVE_ALARM_ACTION
+        private const val ACTION_KEEP_ALIVE_REVOCATION_BACKUP = KEEP_ALIVE_REVOCATION_BACKUP_ACTION
 
         // SharedPreferences keys — mirror the Dart side's keys.
         // shared_preferences persists them with a "flutter." prefix.
@@ -112,7 +123,9 @@ class KeepAliveReceiver : BroadcastReceiver() {
          *    restriction; on Android 12+ the service restart from this
          *    alarm only works while the user has granted the battery
          *    optimization exemption (the app requests it via
-         *    requestIgnoreBatteryOptimizations).
+         *    requestIgnoreBatteryOptimizations). It also backs up the exact
+         *    alarm so revoking exact-alarm permission cannot remove the only
+         *    watchdog trigger.
          * 3. Older versions: [AlarmManager.setInexactRepeating].
          */
         fun scheduleAlarm(context: Context, intervalMs: Long = KEEP_ALIVE_INTERVAL_MS): Boolean =
@@ -121,83 +134,256 @@ class KeepAliveReceiver : BroadcastReceiver() {
                 schedule = { scheduleAlarmNow(context, intervalMs) },
             )
 
-        private fun scheduleAlarmNow(context: Context, intervalMs: Long): Boolean {
-            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-            val pendingIntent = createPendingIntent(context, PendingIntent.FLAG_UPDATE_CURRENT)
-            val triggerAt = SystemClock.elapsedRealtime() + intervalMs
-
-            // The watchdog intent is persisted before this attempt. Keep it
-            // active on failure so boot/package-replacement recovery can retry.
-            var scheduled = false
-
-            // Prefer exact alarms: on Android 12+ an exact alarm is an
-            // exemption that permits starting a foreground service from the
-            // background, and it is not deferred by Doze.
-            // Note: in Doze, setExactAndAllowWhileIdle is throttled to about
-            // once per 9 minutes, so the effective interval may stretch.
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && alarmManager.canScheduleExactAlarms()) {
-                try {
-                    alarmManager.setExactAndAllowWhileIdle(
-                        AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                        triggerAt,
-                        pendingIntent
-                    )
-                    scheduled = true
-                    Log.i(TAG, "Keep-alive exact alarm scheduled (interval=${intervalMs / 60000}min)")
-                } catch (e: SecurityException) {
-                    // canScheduleExactAlarms raced or permission revoked — fall through.
-                    Log.w(TAG, "Exact alarm denied, falling back to inexact", e)
-                }
-            }
-            if (!scheduled) {
-                // setAndAllowWhileIdle requires no permission; the system may
-                // defer the delivery a little to batch wake-ups.
-                try {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                        alarmManager.setAndAllowWhileIdle(
-                            AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                            triggerAt,
-                            pendingIntent
-                        )
-                        Log.i(TAG, "Keep-alive inexact alarm scheduled (interval=${intervalMs / 60000}min)")
-                    } else {
-                        alarmManager.setInexactRepeating(
-                            AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                            triggerAt,
-                            // 退避间隔同样作用于重复周期：API < 23 上
-                            // 只有首触发间隔会被尊重，重复周期必须显式
-                            // 传 intervalMs，否则退避设备仍每 5 分钟
-                            // 被唤醒一次。
-                            intervalMs,
-                            pendingIntent
-                        )
-                        Log.i(TAG, "Keep-alive repeating alarm scheduled (interval=${intervalMs / 60000}min)")
+        /** Schedule after an explicit start and retry once if the first attempt fails. */
+        fun scheduleExplicitStartAlarm(context: Context): Boolean {
+            val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+            val schedule = { scheduleAlarm(context) }
+            val scheduled = scheduleAlarmWithRetry(
+                schedule = schedule,
+                retrySchedule = schedule,
+                isStillActive = {
+                    prefs.getBoolean(KEY_KEEP_ALIVE_ACTIVE, false) &&
+                        prefs.getBoolean(KEY_SERVICE_ENABLED, false) &&
+                        prefs.getBoolean(KEY_WATCHDOG_ENABLED, true)
+                },
+                retryLater = { retry ->
+                    if (!Handler(Looper.getMainLooper()).postDelayed(retry, SCHEDULE_RETRY_DELAY_MS)) {
+                        Log.w(TAG, "Could not queue explicit keep-alive scheduling retry")
                     }
-                    scheduled = true
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to schedule keep-alive alarm", e)
-                }
+                },
+            )
+            if (!scheduled) {
+                Log.w(TAG, "Initial explicit keep-alive scheduling failed")
             }
             return scheduled
+        }
+
+        /** Re-arm without resetting the selected interval or failure count. */
+        fun scheduleRearmAlarm(context: Context, intervalMs: Long): Boolean {
+            val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+            val schedule = { interval: Long -> scheduleAlarm(context, interval) }
+            val scheduled = scheduleAlarmWithRetryAtInterval(
+                intervalMs = intervalMs,
+                scheduleAtInterval = schedule,
+                isStillActive = {
+                    prefs.getBoolean(KEY_KEEP_ALIVE_ACTIVE, false) &&
+                        prefs.getBoolean(KEY_SERVICE_ENABLED, false) &&
+                        prefs.getBoolean(KEY_WATCHDOG_ENABLED, true)
+                },
+                retryLater = { retry ->
+                    if (!Handler(Looper.getMainLooper()).postDelayed(retry, SCHEDULE_RETRY_DELAY_MS)) {
+                        Log.w(TAG, "Could not queue keep-alive rearm scheduling retry")
+                    }
+                },
+            )
+            if (!scheduled) {
+                Log.w(TAG, "Initial keep-alive rearm scheduling failed")
+            }
+            return scheduled
+        }
+
+        /** Restore a failed stop's enabled intent before scheduling recovery. */
+        fun scheduleFailedStopRecoveryAlarm(context: Context, intervalMs: Long): Boolean {
+            val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+            return scheduleFailedStopRecovery(
+                watchdogEnabled = prefs.getBoolean(KEY_WATCHDOG_ENABLED, true),
+                persistEnabledIntent = {
+                    prefs.edit().putBoolean(KEY_SERVICE_ENABLED, true).commit()
+                },
+                scheduleWatchdog = { scheduleRearmAlarm(context, intervalMs) },
+            )
+        }
+
+        private fun scheduleAlarmNow(
+            context: Context,
+            intervalMs: Long,
+            generationToReuse: Long? = null,
+        ): Boolean {
+            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            val generation = generationToReuse ?: nextAlarmGeneration(context) ?: run {
+                Log.e(TAG, "Failed to persist keep-alive alarm generation")
+                return false
+            }
+            val exactPendingIntent = createPendingIntent(
+                context,
+                PendingIntent.FLAG_UPDATE_CURRENT,
+                ACTION_KEEP_ALIVE,
+                ALARM_REQUEST_CODE,
+                generation,
+            ) ?: run {
+                Log.e(TAG, "Failed to create exact keep-alive PendingIntent")
+                return false
+            }
+            val inexactPendingIntent = createPendingIntent(
+                context,
+                PendingIntent.FLAG_UPDATE_CURRENT,
+                ACTION_KEEP_ALIVE,
+                INEXACT_ALARM_REQUEST_CODE,
+                generation,
+            ) ?: run {
+                Log.e(TAG, "Failed to create inexact keep-alive PendingIntent")
+                return false
+            }
+            updateExistingPendingIntentGeneration(
+                context,
+                ACTION_KEEP_ALIVE,
+                INEXACT_ALARM_REQUEST_CODE,
+                generation,
+            )
+            updateExistingPendingIntentGeneration(
+                context,
+                ACTION_KEEP_ALIVE_REVOCATION_BACKUP,
+                REVOCATION_BACKUP_REQUEST_CODE,
+                generation,
+            )
+            val triggerAt = SystemClock.elapsedRealtime() + intervalMs
+            return scheduleWithExactRevocationFallback(
+                canScheduleExact = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                    alarmManager.canScheduleExactAlarms(),
+                scheduleExact = {
+                    try {
+                        // The inexact backup survives Android silently removing
+                        // this alarm if exact-alarm permission is later revoked.
+                        alarmManager.setExactAndAllowWhileIdle(
+                            AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                            triggerAt,
+                            exactPendingIntent,
+                        )
+                        // Remove an inexact recovery primary from the previous
+                        // setup now that recovery and the exact replacement are armed.
+                        alarmManager.cancel(inexactPendingIntent)
+                        Log.i(TAG, "Keep-alive exact alarm scheduled (interval=${intervalMs / 60000}min)")
+                        true
+                    } catch (e: SecurityException) {
+                        // Permission can be revoked between the capability check and this call.
+                        Log.w(TAG, "Exact alarm denied, falling back to inexact", e)
+                        false
+                    }
+                },
+                scheduleRevocationFallback = revocationFallback@{
+                    try {
+                        val backupPendingIntent = createPendingIntent(
+                            context,
+                            PendingIntent.FLAG_UPDATE_CURRENT,
+                            ACTION_KEEP_ALIVE_REVOCATION_BACKUP,
+                            REVOCATION_BACKUP_REQUEST_CODE,
+                            generation,
+                        ) ?: return@revocationFallback false
+                        val backupTriggerAt = revocationBackupTriggerAt(triggerAt)
+                        val scheduled = scheduleCompatibleRevocationBackup(
+                            supportsAllowWhileIdle = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M,
+                            scheduleAllowWhileIdle = {
+                                alarmManager.setAndAllowWhileIdle(
+                                    AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                                    backupTriggerAt,
+                                    backupPendingIntent,
+                                )
+                                true
+                            },
+                            scheduleLegacy = {
+                                alarmManager.set(
+                                    AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                                    backupTriggerAt,
+                                    backupPendingIntent,
+                                )
+                                true
+                            },
+                        )
+                        if (scheduled) {
+                            Log.i(TAG, "Keep-alive revocation backup scheduled")
+                        }
+                        scheduled
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to schedule keep-alive revocation backup", e)
+                        false
+                    }
+                },
+                scheduleInexactPrimary = {
+                    try {
+                        // setAndAllowWhileIdle requires no permission; the system may
+                        // defer delivery a little to batch wake-ups.
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                            alarmManager.setAndAllowWhileIdle(
+                                AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                                triggerAt,
+                                inexactPendingIntent,
+                            )
+                            Log.i(TAG, "Keep-alive inexact alarm scheduled (interval=${intervalMs / 60000}min)")
+                        } else {
+                            scheduleLegacyInexactPrimary(
+                                scheduleRepeating = {
+                                    alarmManager.setInexactRepeating(
+                                        AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                                        triggerAt,
+                                        // 退避间隔同样作用于重复周期：API < 23 上
+                                        // 只有首触发间隔会被尊重，重复周期必须显式
+                                        // 传 intervalMs，否则退避设备仍每 5 分钟
+                                        // 被唤醒一次。
+                                        intervalMs,
+                                        inexactPendingIntent,
+                                    )
+                                    Log.i(TAG, "Keep-alive repeating alarm scheduled (interval=${intervalMs / 60000}min)")
+                                    true
+                                },
+                                cancelPreviousPrimary = {
+                                    cancelAlarmIntent(context, ACTION_KEEP_ALIVE, ALARM_REQUEST_CODE)
+                                },
+                            )
+                        }
+                        true
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to schedule keep-alive alarm", e)
+                        false
+                    }
+                },
+                cancelPreviousPrimaryAfterInexactFallback = {
+                    cancelAlarmIntent(context, ACTION_KEEP_ALIVE, ALARM_REQUEST_CODE)
+                },
+            )
         }
 
         /**
          * Cancel the keep-alive alarm and persist that it is inactive.
          */
         fun cancelAlarm(context: Context) {
+            // Persist cancellation before removing alarms so already-queued
+            // deliveries cannot claim the old generation and rearm the watchdog.
+            markActive(context, false)
+            cancelScheduledAlarms(context)
+        }
+
+        private fun cancelScheduledAlarms(context: Context) {
+            cancelAlarmIntent(context, ACTION_KEEP_ALIVE, ALARM_REQUEST_CODE)
+            cancelAlarmIntent(context, ACTION_KEEP_ALIVE, INEXACT_ALARM_REQUEST_CODE)
+            cancelAlarmIntent(
+                context,
+                ACTION_KEEP_ALIVE_REVOCATION_BACKUP,
+                REVOCATION_BACKUP_REQUEST_CODE,
+            )
+        }
+
+        private fun cancelAlarmIntent(context: Context, action: String, requestCode: Int) {
             val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
             val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_NO_CREATE
             } else {
                 PendingIntent.FLAG_NO_CREATE
             }
-            val pendingIntent = createPendingIntent(context, flags)
+            val pendingIntent = createPendingIntent(context, flags, action, requestCode)
             if (pendingIntent != null) {
                 alarmManager.cancel(pendingIntent)
                 pendingIntent.cancel()
-                Log.i(TAG, "Keep-alive alarm cancelled")
             }
-            markActive(context, false)
+        }
+
+        private fun nextAlarmGeneration(context: Context): Long? {
+            val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+            return synchronized(ALARM_GENERATION_LOCK) {
+                val currentGeneration = prefs.getLong(KEY_KEEP_ALIVE_ALARM_GENERATION, 0L)
+                persistNextAlarmGeneration(currentGeneration) { generation ->
+                    prefs.edit().putLong(KEY_KEEP_ALIVE_ALARM_GENERATION, generation).commit()
+                }
+            }
         }
 
         /**
@@ -214,22 +400,85 @@ class KeepAliveReceiver : BroadcastReceiver() {
                 .apply()
         }
 
-        private fun markActive(context: Context, active: Boolean): Boolean =
-            context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
-                .edit()
-                .putBoolean(KEY_KEEP_ALIVE_ACTIVE, active)
-                .commit()
+        private fun markActive(context: Context, active: Boolean): Boolean {
+            val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+            return synchronized(ALARM_GENERATION_LOCK) {
+                val editor = prefs.edit().putBoolean(KEY_KEEP_ALIVE_ACTIVE, active)
+                if (!active) {
+                    editor.putLong(
+                        KEY_KEEP_ALIVE_ALARM_GENERATION,
+                        prefs.getLong(KEY_KEEP_ALIVE_ALARM_GENERATION, 0L) + 1L,
+                    )
+                }
+                editor.commit()
+            }
+        }
 
-        private fun createPendingIntent(context: Context, extraFlags: Int): PendingIntent {
+        private fun claimAlarmDelivery(
+            context: Context,
+            intent: Intent,
+        ): AlarmGenerationClaimResult {
+            val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+            return synchronized(ALARM_GENERATION_LOCK) {
+                val keepAliveActive = prefs.getBoolean(KEY_KEEP_ALIVE_ACTIVE, false) &&
+                    prefs.getBoolean(KEY_SERVICE_ENABLED, false) &&
+                    prefs.getBoolean(KEY_WATCHDOG_ENABLED, true)
+                val currentGeneration = prefs.getLong(KEY_KEEP_ALIVE_ALARM_GENERATION, 0L)
+                val scheduledGeneration = if (intent.hasExtra(EXTRA_KEEP_ALIVE_ALARM_GENERATION)) {
+                    intent.getLongExtra(EXTRA_KEEP_ALIVE_ALARM_GENERATION, currentGeneration)
+                } else {
+                    // Accept a previously scheduled alarm from an older app version once.
+                    currentGeneration
+                }
+                ALARM_DELIVERY_GENERATION_CLAIMS.claim(
+                    scheduledGeneration = scheduledGeneration,
+                    currentGeneration = currentGeneration,
+                    keepAliveActive = keepAliveActive,
+                    persistGeneration = { generation ->
+                        prefs.edit()
+                            .putLong(KEY_KEEP_ALIVE_ALARM_GENERATION, generation)
+                            .commit()
+                    },
+                )
+            }
+        }
+
+        private fun createPendingIntent(
+            context: Context,
+            extraFlags: Int,
+            action: String,
+            requestCode: Int,
+            generation: Long? = null,
+        ): PendingIntent? {
             val intent = Intent(context, KeepAliveReceiver::class.java).apply {
-                action = ACTION_KEEP_ALIVE
+                this.action = action
+                generation?.let { putExtra(EXTRA_KEEP_ALIVE_ALARM_GENERATION, it) }
             }
             val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 PendingIntent.FLAG_IMMUTABLE or extraFlags
             } else {
                 extraFlags
             }
-            return PendingIntent.getBroadcast(context, ALARM_REQUEST_CODE, intent, flags)
+            return PendingIntent.getBroadcast(context, requestCode, intent, flags)
+        }
+
+        private fun updateExistingPendingIntentGeneration(
+            context: Context,
+            action: String,
+            requestCode: Int,
+            generation: Long,
+        ) {
+            val intent = Intent(context, KeepAliveReceiver::class.java).apply {
+                this.action = action
+                putExtra(EXTRA_KEEP_ALIVE_ALARM_GENERATION, generation)
+            }
+            val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_NO_CREATE or
+                    PendingIntent.FLAG_UPDATE_CURRENT
+            } else {
+                PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_UPDATE_CURRENT
+            }
+            PendingIntent.getBroadcast(context, requestCode, intent, flags)
         }
     }
 
@@ -240,8 +489,7 @@ class KeepAliveReceiver : BroadcastReceiver() {
             "android.intent.action.QUICKBOOT_POWERON",
             // 用户授予「精确闹钟」权限后系统会发送此广播（撤销时不会发送，
             // 且撤销会静默删除所有精确闹钟）。授予后立即恢复精确调度；
-            // 撤销场景由 Dart 侧在应用回到前台时补武装（见
-            // BackgroundService.rearmKeepAliveOnResume）。
+            // 已调度的独立非精确备份覆盖撤销后进程未恢复的场景。
             "android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED" -> {
                 // 开机 / 应用更新 / 快速开机 / 闹钟权限变化后系统可能清除闹钟：
                 // 如果之前看门狗处于激活状态，重新调度。注意：这里只重新调度
@@ -273,16 +521,52 @@ class KeepAliveReceiver : BroadcastReceiver() {
                 }
             }
 
-            ACTION_KEEP_ALIVE -> {
+            ACTION_KEEP_ALIVE,
+            ACTION_KEEP_ALIVE_REVOCATION_BACKUP -> {
                 val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+                val keepAliveActive = prefs.getBoolean(KEY_KEEP_ALIVE_ACTIVE, false)
                 val serviceEnabled = prefs.getBoolean(KEY_SERVICE_ENABLED, false)
                 // 看门狗开关同样是禁用条件：关闭开关后若取消调用未送达
                 // （进程被杀/超时），残留闹钟触发时必须在此兜底取消，
                 // 否则看门狗会永久运行且每次触发都自我续期。
                 val watchdogEnabled = prefs.getBoolean(KEY_WATCHDOG_ENABLED, true)
-                if (!serviceEnabled || !watchdogEnabled) {
+                if (!keepAliveActive || !serviceEnabled || !watchdogEnabled) {
                     // 用户已明确停止后台服务/关闭看门狗：取消闹钟，绝不复活服务。
                     Log.i(TAG, "Keep-alive alarm fired but service/watchdog disabled — cancelling watchdog")
+                    cancelAlarm(context)
+                    return
+                }
+                when (claimAlarmDelivery(context, intent)) {
+                    AlarmGenerationClaimResult.CLAIMED -> Unit
+                    AlarmGenerationClaimResult.STALE -> {
+                        // Exact and backup alarms share a generation. If both
+                        // were already queued, only the first handles delivery.
+                        Log.d(TAG, "Ignoring stale or duplicate keep-alive alarm delivery")
+                        return
+                    }
+                    AlarmGenerationClaimResult.PERSISTENCE_FAILED -> {
+                        // The generation was restored in memory. Re-arm the same
+                        // token so it remains valid even if generation persistence
+                        // is still failing; preserve the selected cadence/backoff.
+                        Log.w(TAG, "Failed to persist keep-alive alarm claim")
+                        val failures = prefs.getInt(KEY_KEEP_ALIVE_FAILURES, 0)
+                        val interval = if (failures >= MAX_CONSECUTIVE_FAILURES) {
+                            FAILURE_BACKOFF_INTERVAL_MS
+                        } else {
+                            KEEP_ALIVE_INTERVAL_MS
+                        }
+                        val generation = prefs.getLong(KEY_KEEP_ALIVE_ALARM_GENERATION, 0L)
+                        scheduleReceiverAlarm(context, interval, generationToReuse = generation)
+                        return
+                    }
+                }
+                val claimedGeneration = prefs.getLong(KEY_KEEP_ALIVE_ALARM_GENERATION, 0L)
+                // Preserve any still-pending paired alarm until a replacement
+                // succeeds; its generation token is updated during scheduling.
+                if (!prefs.getBoolean(KEY_KEEP_ALIVE_ACTIVE, false) ||
+                    !prefs.getBoolean(KEY_SERVICE_ENABLED, false) ||
+                    !prefs.getBoolean(KEY_WATCHDOG_ENABLED, true)
+                ) {
                     cancelAlarm(context)
                     return
                 }
@@ -313,7 +597,11 @@ class KeepAliveReceiver : BroadcastReceiver() {
                 if (startSucceeded) {
                     // 成功（服务已在运行或已启动）：重置连续失败计数。
                     prefs.edit().putInt(KEY_KEEP_ALIVE_FAILURES, 0).apply()
-                    scheduleReceiverAlarm(context, KEEP_ALIVE_INTERVAL_MS)
+                    scheduleReceiverAlarm(
+                        context,
+                        KEEP_ALIVE_INTERVAL_MS,
+                        generationToReuse = claimedGeneration,
+                    )
                 } else {
                     // 连续失败达到阈值后进入退避周期，避免看门狗持续
                     // 唤醒设备做无效尝试。计数封顶，避免无限增长。
@@ -326,9 +614,17 @@ class KeepAliveReceiver : BroadcastReceiver() {
                             "Keep-alive start failed $failures times consecutively — " +
                                 "backing off to ${FAILURE_BACKOFF_INTERVAL_MS / 60000}min interval"
                         )
-                        scheduleReceiverAlarm(context, FAILURE_BACKOFF_INTERVAL_MS)
+                        scheduleReceiverAlarm(
+                            context,
+                            FAILURE_BACKOFF_INTERVAL_MS,
+                            generationToReuse = claimedGeneration,
+                        )
                     } else {
-                        scheduleReceiverAlarm(context, KEEP_ALIVE_INTERVAL_MS)
+                        scheduleReceiverAlarm(
+                            context,
+                            KEEP_ALIVE_INTERVAL_MS,
+                            generationToReuse = claimedGeneration,
+                        )
                     }
                 }
             }
@@ -336,7 +632,11 @@ class KeepAliveReceiver : BroadcastReceiver() {
     }
 
     /** Retry a failed receiver-driven rearm once after a short delay. */
-    private fun scheduleReceiverAlarm(context: Context, intervalMs: Long) {
+    private fun scheduleReceiverAlarm(
+        context: Context,
+        intervalMs: Long,
+        generationToReuse: Long? = null,
+    ) {
         val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
         fun currentInterval(): Long = if (
             prefs.getInt(KEY_KEEP_ALIVE_FAILURES, 0) >= MAX_CONSECUTIVE_FAILURES
@@ -345,22 +645,35 @@ class KeepAliveReceiver : BroadcastReceiver() {
         } else {
             KEEP_ALIVE_INTERVAL_MS
         }
+        val isStillActive = {
+            prefs.getBoolean(KEY_KEEP_ALIVE_ACTIVE, false) &&
+                prefs.getBoolean(KEY_SERVICE_ENABLED, false) &&
+                prefs.getBoolean(KEY_WATCHDOG_ENABLED, true) &&
+                (generationToReuse == null ||
+                    prefs.getLong(KEY_KEEP_ALIVE_ALARM_GENERATION, 0L) == generationToReuse)
+        }
         val scheduleAtInterval: (Long) -> Boolean = { interval ->
-            val scheduled = scheduleAlarm(context, interval)
+            val scheduled = if (generationToReuse != null) {
+                synchronized(ALARM_GENERATION_LOCK) {
+                    if (isStillActive()) {
+                        scheduleAlarmNow(context, interval, generationToReuse)
+                    } else {
+                        false
+                    }
+                }
+            } else {
+                scheduleAlarm(context, interval)
+            }
             if (!scheduled) {
                 Log.w(TAG, "Keep-alive receiver scheduling failed")
             }
             scheduled
         }
 
-        scheduleReceiverAlarmWithRetry(
+        scheduleAlarmWithRetry(
             schedule = { scheduleAtInterval(intervalMs) },
             retrySchedule = { scheduleAtInterval(currentInterval()) },
-            isStillActive = {
-                prefs.getBoolean(KEY_KEEP_ALIVE_ACTIVE, false) &&
-                    prefs.getBoolean(KEY_SERVICE_ENABLED, false) &&
-                    prefs.getBoolean(KEY_WATCHDOG_ENABLED, true)
-            },
+            isStillActive = isStillActive,
             retryLater = { retry ->
                 val pendingResult = goAsync()
                 val retryPosted = Handler(Looper.getMainLooper()).postDelayed(
