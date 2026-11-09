@@ -5,6 +5,7 @@ import '../../providers/provider_config.dart';
 import '../../utils/provider_models.dart';
 import 'task_flow_definition.dart';
 import 'block_type_definition.dart';
+import 'task_flow_exception.dart';
 
 /// Detached launch configuration. Connection secrets remain in the provider
 /// store and are resolved by stable identity whenever an execution runs.
@@ -694,7 +695,7 @@ class FlowLaunchSnapshot {
             bySelectedIdentity == null &&
             (boundId == null || boundId.isEmpty) &&
             (requestedId == null || requestedId.isEmpty)) {
-          throw StateError('当前选择的对话模型已删除或供应商配置不可用，请重新选择模型');
+          throw const FlowLaunchModelUnavailableException();
         }
         final map = assistant.toMap();
         if (selected != null) {
@@ -712,7 +713,7 @@ class FlowLaunchSnapshot {
         final selected =
             resolveProviderModel(providers, 'llm', selectedChatModel);
         if (selected == null) {
-          throw StateError('当前选择的对话模型已删除或供应商配置不可用，请重新选择模型');
+          throw const FlowLaunchModelUnavailableException();
         }
         capture(selected);
         chatModels
