@@ -832,7 +832,7 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
             right: _playerMargin + 8,
             bottom: _textBottomPadding + 4,
             child: Card(
-              elevation: 6,
+              elevation: 4,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
               ),
