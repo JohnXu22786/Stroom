@@ -9,6 +9,7 @@ import '../models/built_in_assistants.dart';
 import '../providers/context_management_provider.dart';
 import '../providers/system_assistant_provider.dart';
 import '../providers/provider_config.dart';
+import '../providers/provider_config_display_names.dart';
 import '../providers/update_provider.dart';
 import '../services/chat_adapter.dart'
     show AvailableModel, availableLlmModels, resolveModelRef;
