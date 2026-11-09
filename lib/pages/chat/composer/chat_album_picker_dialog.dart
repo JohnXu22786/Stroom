@@ -258,6 +258,7 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
   void _clearSelection() {
     _cleanupTempFiles();
     setState(() {
+      _confirmingSelection = false;
       _selectedItems.clear();
       _editAttempts.clear();
       _selectionOrder.clear();
@@ -279,9 +280,9 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
         Future.wait<void>(List<Future<void>>.of(_pendingReads.values)),
         _pendingSelectionChanged.future,
       ]);
-      if (!mounted || _isClosing) return;
+      if (!mounted || _isClosing || !_confirmingSelection) return;
     }
-    if (!mounted || _isClosing) return;
+    if (!mounted || _isClosing || !_confirmingSelection) return;
     if (_confirmationFailedRead) {
       setState(() {
         _confirmingSelection = false;
