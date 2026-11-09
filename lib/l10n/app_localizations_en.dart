@@ -918,6 +918,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'The update check failed. Please try again.';
 
   @override
+  String topicAssistantUpdateCheckFailed(Object error) =>
+      'Assistant update check failed: $error';
+
+  @override
   String get aboutPrivacyContent =>
       'Stroom respects and protects the privacy of everyone who uses the service.\n\n1. Camera permission: Used only to take photos. No image data is collected or uploaded.\n\n2. Photo library permission: Used only to choose and save photos. All photos are stored locally on your device.\n\n3. Data security: All photos you take are stored locally on your device. We do not access or upload your data.\n\n4. Third-party services: This app contains no third-party analytics or advertising services.\n\nContact us if you have questions.';
 
