@@ -1161,6 +1161,14 @@ class AppLocalizationsEn extends AppLocalizations {
       'Installation failed. Open the APK manually.';
 
   @override
+  String get updateApkInstallerUnavailable =>
+      'Could not find an app to install this APK. Open it manually.';
+
+  @override
+  String get updateApkInstallPermissionDenied =>
+      'Allow Stroom to install unknown apps in system settings.';
+
+  @override
   String get updateRestartDialogTitle => 'App updated';
 
   @override
@@ -12349,6 +12357,14 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   @override
   String get updateApkInstallFailedNoDetails =>
       'Installation failed. Open the APK manually.';
+
+  @override
+  String get updateApkInstallerUnavailable =>
+      'Could not find an app to install this APK. Open it manually.';
+
+  @override
+  String get updateApkInstallPermissionDenied =>
+      'Allow Stroom to install unknown apps in system settings.';
 
   @override
   String get updateRestartDialogTitle => 'App updated';
