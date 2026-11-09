@@ -101,6 +101,24 @@ void chatServiceStreamingGroup1() {
       },
     );
 
+    test('sendStreamWithTools retains reasoning for direct callers', () async {
+      provider.reasoningText = 'private reasoning';
+      final service = ChatService(
+        provider: provider,
+        modelConfig: modelConfig,
+      );
+
+      final events = await service
+          .sendStreamWithTools('Hello', history: [], reasoning: true)
+          .toList();
+
+      expect(
+        events.whereType<ReasoningEvent>().single.text,
+        'private reasoning',
+      );
+      expect(service.reasoningContent, 'private reasoning');
+    });
+
     test(
       'sendStream passes reasoning=true and default reasoningEffort',
       () async {

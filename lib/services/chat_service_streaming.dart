@@ -336,6 +336,9 @@ extension ChatServiceStreamingExt on ChatService {
                 if (toolDefs.isNotEmpty) {
                   roundReasoningBuffer?.write(event.text);
                 }
+                if (takeCompletedToolCallReasoning == null) {
+                  _reasoningBuffer.write(event.text);
+                }
                 // Emit reasoning text as ReasoningEvent so the UI
                 // can stream it in real-time to the reasoning panel.
                 controller.add(ReasoningEvent(event.text));
