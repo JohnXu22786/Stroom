@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/foundation.dart'
     show TargetPlatform, defaultTargetPlatform, kIsWeb;
+import 'package:unorm_dart/unorm_dart.dart' as unorm;
 
 /// Opens a save dialog filtered to [extensions] and writes [bytes] to the
 /// selected location.
@@ -78,13 +79,17 @@ void validateUserVisibleExportPaths({
     return segments.join('/');
   }
 
+  // Normalize canonical Unicode equivalents and case variants to one key.
+  String comparisonPath(String path) =>
+      unorm.nfc(path).toUpperCase().toLowerCase();
+
   final filePaths = <String>{};
   final directoryPaths = <String>{};
 
   void addDirectoryAndAncestors(String path) {
     final segments = path.split('/');
     for (var i = 1; i <= segments.length; i++) {
-      directoryPaths.add(segments.take(i).join('/'));
+      directoryPaths.add(comparisonPath(segments.take(i).join('/')));
     }
   }
 
@@ -93,7 +98,7 @@ void validateUserVisibleExportPaths({
   }
   for (final file in files) {
     final path = safePath(file);
-    if (!filePaths.add(path)) {
+    if (!filePaths.add(comparisonPath(path))) {
       throw StateError('Duplicate export file path: $path');
     }
     final segments = path.split('/');
