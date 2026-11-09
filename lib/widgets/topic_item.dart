@@ -65,7 +65,7 @@ class TopicItem extends StatelessWidget {
           ? cs.primaryContainer.withValues(alpha: 0.2)
           : (isDark ? cs.surfaceContainerHigh : cs.surfaceContainerLow),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         side: BorderSide(
           color: isActive
               ? cs.primary.withValues(alpha: 0.3)
@@ -74,7 +74,7 @@ class TopicItem extends StatelessWidget {
         ),
       ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -97,7 +97,7 @@ class TopicItem extends StatelessWidget {
                       color: statusColor != null && !isRunning
                           ? statusColor.withValues(alpha: 0.12)
                           : cs.primaryContainer.withValues(alpha: 0.3),
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(8),
                     ),
                     child: Center(
                       child: isRunning

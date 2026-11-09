@@ -746,7 +746,7 @@ extension _ChatPageBubblesExt on _ChatPageState {
       decoration: BoxDecoration(
         color:
             (isDark ? Colors.red[900] : Colors.red[50])!.withValues(alpha: 0.7),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(8),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1455,7 +1455,7 @@ extension _ChatPageBubblesExt on _ChatPageState {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: isDark ? Colors.grey[850] : Colors.grey[100],
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(8),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

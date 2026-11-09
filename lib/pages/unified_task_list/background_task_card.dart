@@ -115,7 +115,7 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         side: BorderSide(color: colorScheme.outlineVariant, width: 0.5),
       ),
       child: Column(
@@ -124,7 +124,7 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
           // ── Header (always visible) ──
           InkWell(
             borderRadius: const BorderRadius.vertical(
-              top: Radius.circular(12),
+              top: Radius.circular(16),
               bottom: Radius.circular(0),
             ),
             onTap: () {
@@ -159,7 +159,7 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
                               colorScheme,
                               strings,
                             ),
-                            const SizedBox(width: 6),
+                            const SizedBox(width: 8),
                             Expanded(
                               child: Text(
                                 _localizedBackgroundTaskTitle(
@@ -297,22 +297,22 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
         ],
 
         // Step chain timeline — always visible in expanded mode
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
         _buildStepTimeline(task, cs, AppLocalizations.of(context)!),
         if (task.ocrPageOutcomes.isNotEmpty) ...[
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           _buildOcrPageOutcomes(task, cs, AppLocalizations.of(context)!),
         ],
 
         // Error message for failed tasks
         if (task.status == TaskStatus.failed && task.error != null) ...[
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             decoration: BoxDecoration(
               color: Colors.red.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(6),
+              borderRadius: BorderRadius.circular(8),
               border: Border.all(color: Colors.red.withValues(alpha: 0.25)),
             ),
             child: Column(
@@ -796,7 +796,7 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
       decoration: BoxDecoration(
         color: _taskTypeColor(type).withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

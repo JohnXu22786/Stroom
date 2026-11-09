@@ -222,7 +222,7 @@ class _LabeledTextFieldState extends State<LabeledTextField>
                     ListTile(
                       dense: true,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(8),
                       ),
                       title: Text(s),
                       onTap: () => _selectSuggestion(s),

@@ -264,7 +264,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
                 color: Colors.orange.shade50,
-                borderRadius: BorderRadius.circular(4),
+                borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: Colors.orange.shade200),
               ),
               child: Row(
@@ -1164,7 +1164,7 @@ class _ClearSelectedDataConfirmationDialogState
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               color: Colors.red.shade50,
-              borderRadius: BorderRadius.circular(4),
+              borderRadius: BorderRadius.circular(8),
               border: Border.all(color: Colors.red.shade200),
             ),
             child: Row(

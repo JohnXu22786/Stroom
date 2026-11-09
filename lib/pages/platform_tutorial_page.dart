@@ -80,7 +80,7 @@ class PlatformTutorialSelectionPage extends StatelessWidget {
                     height: 40,
                     decoration: BoxDecoration(
                       color: config.color.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(20),
+                      shape: BoxShape.circle,
                     ),
                     alignment: Alignment.center,
                     child: Icon(config.icon, color: config.color, size: 24),

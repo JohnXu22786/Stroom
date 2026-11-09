@@ -728,7 +728,7 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
                   },
                   style: ElevatedButton.styleFrom(
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(8),
                     ),
                   ),
                   icon: const Icon(Icons.mic, size: 20),
@@ -748,7 +748,7 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
                   onPressed: _importAudio,
                   style: ElevatedButton.styleFrom(
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(8),
                     ),
                   ),
                   icon: const Icon(Icons.file_download_outlined, size: 20),

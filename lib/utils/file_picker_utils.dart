@@ -80,8 +80,20 @@ void validateUserVisibleExportPaths({
   }
 
   // Normalize canonical Unicode equivalents and case variants to one key.
-  String comparisonPath(String path) =>
-      unorm.nfc(path).toUpperCase().toLowerCase();
+  // Decomposition exposes Greek iota-subscript case folds.
+  // Avoid uppercase expansions elsewhere when they merge distinct names.
+  String comparisonPath(String path) => unorm.nfc(
+        unorm.nfd(path).runes.map((rune) {
+          if (rune == 0x0345) return 'ι';
+          final character = String.fromCharCode(rune);
+          final uppercase = character.toUpperCase();
+          final expands = uppercase.runes.length > 1;
+          final isGreek = rune >= 0x1F00 && rune <= 0x1FFF;
+          return expands && !isGreek
+              ? character.toLowerCase()
+              : uppercase.toLowerCase();
+        }).join(),
+      );
 
   final filePaths = <String>{};
   final directoryPaths = <String>{};

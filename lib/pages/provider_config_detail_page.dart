@@ -808,7 +808,7 @@ class _ProviderConfigDetailPageState
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: cs.primaryContainer.withValues(alpha: 0.3),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(8),
               border: Border.all(color: cs.primaryContainer, width: 0.5),
             ),
             child: Row(
@@ -818,7 +818,7 @@ class _ProviderConfigDetailPageState
                   height: 40,
                   decoration: BoxDecoration(
                     color: cs.primaryContainer.withValues(alpha: 0.5),
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(Icons.dns, color: Colors.teal, size: 24),
                 ),

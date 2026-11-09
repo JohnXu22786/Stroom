@@ -77,7 +77,7 @@ class TaskCard extends ConsumerWidget {
                         ),
                         decoration: BoxDecoration(
                           color: Colors.red.withValues(alpha: 0.08),
-                          borderRadius: BorderRadius.circular(6),
+                          borderRadius: BorderRadius.circular(8),
                           border: Border.all(
                             color: Colors.red.withValues(alpha: 0.25),
                           ),
@@ -437,7 +437,7 @@ class TaskCard extends ConsumerWidget {
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
                       color: Colors.grey.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(4),
+                      borderRadius: BorderRadius.circular(8),
                     ),
                     child: SelectableText(
                       task.originalRequest!,
@@ -465,7 +465,7 @@ class TaskCard extends ConsumerWidget {
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
                       color: Colors.red.withValues(alpha: 0.05),
-                      borderRadius: BorderRadius.circular(4),
+                      borderRadius: BorderRadius.circular(8),
                     ),
                     child: SelectableText(
                       task.originalResponse!,

@@ -156,7 +156,7 @@ extension _SettingsPageSystemAssistantExt on _SettingsPageState {
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (ctx) => _SystemAssistantConfigPanel(
         title: title,
@@ -276,7 +276,7 @@ class _SystemAssistantConfigPanelState
     final selected = await showModalBottomSheet<String>(
       context: context,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (ctx) {
         final cs = Theme.of(ctx).colorScheme;
@@ -415,7 +415,7 @@ class _SystemAssistantConfigPanelState
                   height: 28,
                   decoration: BoxDecoration(
                     color: widget.iconColor.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(6),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(widget.icon, size: 18, color: widget.iconColor),
                 ),
@@ -457,7 +457,7 @@ class _SystemAssistantConfigPanelState
             const SizedBox(height: 4),
             Material(
               color: cs.surfaceContainerHighest.withValues(alpha: 0.3),
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(8),
               child: ListTile(
                 dense: true,
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16),

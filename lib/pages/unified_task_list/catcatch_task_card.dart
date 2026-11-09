@@ -243,7 +243,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         side: BorderSide(color: colorScheme.outlineVariant, width: 0.5),
       ),
       child: Column(
@@ -276,7 +276,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
               ),
             ),
           InkWell(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(16),
             onTap: () => setState(() => _expanded = !_expanded),
             child: Padding(
               padding: const EdgeInsets.all(12),
@@ -540,7 +540,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
                               color: colorScheme.surfaceContainerLow,
-                              borderRadius: BorderRadius.circular(6),
+                              borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
                               step.detail!,
@@ -576,7 +576,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                         if (step.running && step.progress > 0) ...[
                           const SizedBox(height: 4),
                           ClipRRect(
-                            borderRadius: BorderRadius.circular(4),
+                            borderRadius: BorderRadius.circular(8),
                             child: LinearProgressIndicator(
                               value: step.progress / 100.0,
                               minHeight: 4,
@@ -897,7 +897,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
           ),
           style: FilledButton.styleFrom(
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(8),
             ),
           ),
         ),
@@ -923,7 +923,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.amber.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(color: Colors.amber.shade300),
       ),
       child: Column(
@@ -1453,7 +1453,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: Colors.blue.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(8),
           border: Border.all(color: Colors.blue.shade200),
         ),
         child: Column(
@@ -1745,7 +1745,7 @@ class _ResourceKindBadge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
         label,

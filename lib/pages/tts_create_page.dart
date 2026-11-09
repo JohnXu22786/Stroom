@@ -564,7 +564,7 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
                 height: 34,
                 decoration: BoxDecoration(
                   color: cs.surface.withValues(alpha: 0.7),
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(8),
                   border: Border.all(
                     color: cs.outlineVariant.withValues(alpha: 0.3),
                   ),
@@ -818,7 +818,7 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
                     color: isOverLimit
                         ? cs.errorContainer
                         : cs.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.circular(16),
                   ),
                   child: Text(
                     limit > 0 ? '$textLen/$limit' : textLen.toString(),
@@ -845,7 +845,7 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
       height: 34,
       decoration: BoxDecoration(
         color: cs.primaryContainer,
-        borderRadius: BorderRadius.circular(11),
+        borderRadius: BorderRadius.circular(8),
       ),
       child: Icon(icon, size: 18, color: cs.onPrimaryContainer),
     );
@@ -858,7 +858,7 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
   }) {
     final cs = Theme.of(context).colorScheme;
     final border = OutlineInputBorder(
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(8),
       borderSide: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.7)),
     );
     return InputDecoration(
@@ -1300,11 +1300,11 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
     return Container(
       decoration: BoxDecoration(
         color: cs.surfaceContainerLow.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
       ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(8),
         onTap: _pickSaveFolder,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),

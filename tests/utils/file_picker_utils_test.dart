@@ -186,7 +186,22 @@ void main() {
     );
   });
 
-  test('rejects export paths that collide without case sensitivity', () {
+  test('allows distinct Unicode export names without case expansion', () {
+    expect(
+      () => validateUserVisibleExportPaths(
+        files: const ['straße.txt', 'strasse.txt'],
+      ),
+      returnsNormally,
+    );
+    expect(
+      () => validateUserVisibleExportPaths(
+        files: const ['ﬃ.txt', 'ffi.txt'],
+      ),
+      returnsNormally,
+    );
+  });
+
+  test('rejects Unicode export paths that are case-insensitive aliases', () {
     expect(
       () => validateUserVisibleExportPaths(
         files: const ['Report.txt', 'report.txt'],
@@ -196,6 +211,12 @@ void main() {
     expect(
       () => validateUserVisibleExportPaths(
         files: const ['σ.txt', 'ς.txt'],
+      ),
+      throwsStateError,
+    );
+    expect(
+      () => validateUserVisibleExportPaths(
+        files: const ['ᾀ.txt', 'ἈΙ.txt'],
       ),
       throwsStateError,
     );

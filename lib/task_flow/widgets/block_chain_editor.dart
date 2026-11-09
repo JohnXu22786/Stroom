@@ -180,7 +180,7 @@ class BlockChainEditor extends StatelessWidget {
         Card(
           elevation: 0,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(16),
             side: BorderSide(
               color: cs.tertiary.withValues(alpha: 0.4),
               width: 1,
@@ -330,7 +330,7 @@ class BlockChainEditor extends StatelessWidget {
                   ),
                   style: OutlinedButton.styleFrom(
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(8),
                     ),
                   ),
                 ),
@@ -399,7 +399,7 @@ class BlockChainEditor extends StatelessWidget {
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (ctx) => DraggableScrollableSheet(
         initialChildSize: 0.45,
@@ -501,7 +501,7 @@ class BlockChainEditor extends StatelessWidget {
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (ctx) => DraggableScrollableSheet(
         initialChildSize: 0.45,
@@ -581,11 +581,11 @@ class BlockChainEditor extends StatelessWidget {
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         side: BorderSide(color: cs.outlineVariant, width: 0.5),
       ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         onTap: () {
           Navigator.pop(ctx);
           if (replaceIndex != null) {
@@ -605,7 +605,7 @@ class BlockChainEditor extends StatelessWidget {
                 height: 36,
                 decoration: BoxDecoration(
                   color: type.color.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(type.icon, size: 20, color: type.color),
               ),

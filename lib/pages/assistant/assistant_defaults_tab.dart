@@ -541,7 +541,7 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: cs.secondaryContainer.withValues(alpha: 0.35),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(8),
                 border: Border.all(
                   color: cs.outlineVariant.withValues(alpha: 0.5),
                 ),
@@ -634,7 +634,7 @@ class _SectionCard extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Card(
         margin: EdgeInsets.zero,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(8, 12, 8, 8),
           child: Column(
@@ -649,7 +649,7 @@ class _SectionCard extends StatelessWidget {
                     height: 28,
                     decoration: BoxDecoration(
                       color: cs.tertiary.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(6),
+                      borderRadius: BorderRadius.circular(8),
                     ),
                     child: Icon(icon, size: 18, color: cs.tertiary),
                   ),

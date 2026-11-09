@@ -61,7 +61,7 @@ class ToggleButton extends StatelessWidget {
           color: isSelected
               ? Theme.of(context).colorScheme.primary
               : Colors.transparent,
-          borderRadius: BorderRadius.circular(6),
+          borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: isSelected
                 ? Theme.of(context).colorScheme.primary
@@ -159,7 +159,7 @@ class TrimSection extends ConsumerWidget {
                     ),
                     decoration: BoxDecoration(
                       color: Colors.orange[100],
-                      borderRadius: BorderRadius.circular(4),
+                      borderRadius: BorderRadius.circular(8),
                     ),
                     child: DefaultTextStyle(
                       style: TextStyle(fontSize: 11, color: Colors.orange[800]),

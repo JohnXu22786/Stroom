@@ -128,14 +128,14 @@ class EmojiAvatarButton extends StatelessWidget {
     return Tooltip(
       message: AppLocalizations.of(context)!.assistantChooseEmoji,
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(8),
         onTap: () => _showPickerPanel(context),
         child: Container(
           width: size,
           height: size,
           decoration: BoxDecoration(
             color: cs.primaryContainer.withValues(alpha: 0.3),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(8),
             border: Border.all(color: cs.outlineVariant),
           ),
           child: Center(
@@ -353,7 +353,7 @@ class CategorizedEmojiPicker extends StatelessWidget {
                             child: Container(
                               decoration: BoxDecoration(
                                 color: isSelected ? cs.primaryContainer : null,
-                                borderRadius: BorderRadius.circular(6),
+                                borderRadius: BorderRadius.circular(8),
                                 border: isSelected
                                     ? Border.all(color: cs.primary)
                                     : null,

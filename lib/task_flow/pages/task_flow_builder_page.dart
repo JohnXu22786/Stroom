@@ -459,7 +459,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
             decoration: InputDecoration(
               hintText: AppLocalizations.of(context)!.taskFlowUiNameHint,
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(8),
               ),
               filled: true,
               fillColor: cs.surfaceContainerLow,
@@ -481,7 +481,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
             decoration: InputDecoration(
               hintText: AppLocalizations.of(context)!.taskFlowUiDescriptionHint,
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(8),
               ),
               filled: true,
               fillColor: cs.surfaceContainerLow,
@@ -793,7 +793,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         side: BorderSide(color: cs.outlineVariant, width: 0.5),
       ),
       child: Padding(
@@ -826,7 +826,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                 decoration: InputDecoration(
                   hintText: AppLocalizations.of(context)!.taskFlowUiInputHint,
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                   prefixIcon: const Icon(Icons.text_fields, size: 18),
                   filled: true,
@@ -905,7 +905,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.5)),
       ),
       child: Padding(
@@ -923,7 +923,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                       hintText: AppLocalizations.of(context)!.taskFlowUiUrlHint,
                       prefixIcon: const Icon(Icons.link, size: 20),
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(8),
                       ),
                       filled: true,
                       fillColor: cs.surface,
@@ -966,7 +966,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                       labelText: AppLocalizations.of(context)!.taskFlowUiHour,
                       hintText: '0',
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(8),
                       ),
                       filled: true,
                       fillColor: cs.surface,
@@ -989,7 +989,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                       labelText: AppLocalizations.of(context)!.taskFlowUiMinute,
                       hintText: '0',
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(8),
                       ),
                       filled: true,
                       fillColor: cs.surface,
@@ -1012,7 +1012,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                       labelText: AppLocalizations.of(context)!.taskFlowUiSecond,
                       hintText: '0',
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(8),
                       ),
                       filled: true,
                       fillColor: cs.surface,
@@ -1241,7 +1241,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
         Card(
           elevation: 0,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(16),
             side: BorderSide(
               color: cs.tertiary.withValues(alpha: 0.4),
               width: 1,

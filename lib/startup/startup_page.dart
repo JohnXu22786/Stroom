@@ -148,7 +148,7 @@ class _StartupPageState extends State<StartupPage>
         decoration: BoxDecoration(
           color: _visualStyle.cardSurface.withValues(alpha: 0.24),
           border: Border.all(color: _visualStyle.cardBorder),
-          borderRadius: BorderRadius.circular(30),
+          borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
               color: _visualStyle.secondaryAccent.withValues(alpha: 0.12),
@@ -204,7 +204,7 @@ class _StartupPageState extends State<StartupPage>
             height: size,
             decoration: BoxDecoration(
               color: _visualStyle.cardSurface.withValues(alpha: 0.18),
-              borderRadius: BorderRadius.circular(24),
+              borderRadius: BorderRadius.circular(16),
               border: Border.all(color: _visualStyle.cardBorder),
               boxShadow: [
                 BoxShadow(

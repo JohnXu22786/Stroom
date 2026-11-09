@@ -498,7 +498,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
                 onPressed: _isProcessing ? null : _showVideoSourcePanel,
                 style: ElevatedButton.styleFrom(
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                 ),
                 icon: const Icon(Icons.video_file_outlined, size: 20),
@@ -520,7 +520,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (ctx) => Padding(
         padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
@@ -703,7 +703,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
           elevation: 0,
           margin: const EdgeInsets.only(bottom: 8),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(16),
             side: BorderSide(color: cs.outlineVariant, width: 0.5),
           ),
           child: Padding(
@@ -906,11 +906,11 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
     return Container(
       decoration: BoxDecoration(
         color: cs.surfaceContainerLow.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
       ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(8),
         onTap: _pickSaveFolder,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
