@@ -6265,5 +6265,11 @@
   "startupIssueConversationMessagesInvalid": "Conversation {index} messages field is not a valid list.",
   "@startupIssueConversationMessagesInvalid": { "placeholders": { "index": {} } },
   "startupIssueUnknownProviderType": "Provider entry {index} uses unknown provider type \"{type}\" and may not work correctly.",
-  "@startupIssueUnknownProviderType": { "placeholders": { "index": {}, "type": {} } }
+  "@startupIssueUnknownProviderType": { "placeholders": { "index": {}, "type": {} } },
+  "startupErrorTitle": "App startup failed",
+  "startupErrorDetails": "Error: {error}",
+  "@startupErrorDetails": {"placeholders": {"error": {}}},
+  "renderErrorTitle": "Interface rendering error",
+  "renderErrorDebugTitle": "Interface rendering error (Debug mode)",
+  "renderErrorRestartMessage": "Please try restarting the app."
 }

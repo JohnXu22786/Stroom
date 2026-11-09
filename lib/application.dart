@@ -274,6 +274,9 @@ class _ApplicationState extends ConsumerState<Application>
       }
       if (!mounted) return;
 
+      final navigatorContext = _navigatorKey.currentContext;
+      if (navigatorContext == null || !navigatorContext.mounted) return;
+
       debugPrint('[Application] Warm resume after APK install detected — '
           'showing restart dialog (Kotlin handler may have failed)');
 
@@ -290,7 +293,7 @@ class _ApplicationState extends ConsumerState<Application>
       );
 
       showDialog<void>(
-        context: context,
+        context: navigatorContext,
         barrierDismissible: false,
         builder: (ctx) => AlertDialog(
           title: Row(

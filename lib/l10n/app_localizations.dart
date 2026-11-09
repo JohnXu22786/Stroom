@@ -18290,6 +18290,21 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Provider entry {index} uses unknown provider type \"{type}\" and may not work correctly.'**
   String startupIssueUnknownProviderType(Object index, Object type);
+
+  /// Shown when application initialization fails before the main app is ready.
+  String get startupErrorTitle;
+
+  /// Includes the initialization error for diagnostics.
+  String startupErrorDetails(Object error);
+
+  /// Shown when a widget fails to render in a release build.
+  String get renderErrorTitle;
+
+  /// Shown when a widget fails to render in a debug build.
+  String get renderErrorDebugTitle;
+
+  /// Instructions shown below a release render error.
+  String get renderErrorRestartMessage;
 }
 
 class _AppLocalizationsDelegate

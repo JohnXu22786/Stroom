@@ -163,13 +163,19 @@ void main() {
         startupReadyNotifier.value = false;
       });
 
-      setPendingRestartInMemory(true);
       final dio = _createMockDio(_githubRelease('v0.2.13'));
 
       await _pumpThroughStartup(tester, dio: dio, extraPrefs: {
         localePreferenceKey: 'en_US',
-        pendingUpdateRestartKey: true,
       });
+
+      // Set the installer marker after Application is mounted so an earlier
+      // lifecycle notification cannot consume the warm-resume state.
+      setPendingRestartInMemory(true);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(pendingUpdateRestartKey, true);
+      expect(isPendingRestartInMemory, isTrue);
+      expect(await hasPendingUpdateRestart(), isTrue);
 
       // The test binding starts in the resumed state; transition through
       // paused so the resumed observer callback is delivered.
