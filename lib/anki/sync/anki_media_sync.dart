@@ -30,19 +30,19 @@ class AnkiMediaSync {
   static const List<String> _sqliteSuffixes = ['', '-wal', '-shm', '-journal'];
   static const AnkiSyncException _localFileFailure =
       AnkiSyncException.appGenerated(
-        '媒体同步读写本地文件失败',
-        failureCode: AnkiSyncFailureCode.localFileFailure,
-      );
+    '媒体同步读写本地文件失败',
+    failureCode: AnkiSyncFailureCode.localFileFailure,
+  );
   static const AnkiSyncException _corruptMediaIndex =
       AnkiSyncException.appGenerated(
-        '本地媒体同步索引已损坏，请重置媒体同步数据后重试',
-        failureCode: AnkiSyncFailureCode.mediaIndexCorrupt,
-      );
+    '本地媒体同步索引已损坏，请重置媒体同步数据后重试',
+    failureCode: AnkiSyncFailureCode.mediaIndexCorrupt,
+  );
   static const AnkiSyncException _mediaIndexFailure =
       AnkiSyncException.appGenerated(
-        '本地媒体同步索引无法读取或更新',
-        failureCode: AnkiSyncFailureCode.mediaIndexFailure,
-      );
+    '本地媒体同步索引无法读取或更新',
+    failureCode: AnkiSyncFailureCode.mediaIndexFailure,
+  );
 
   static AnkiSyncException _databaseFailure(DatabaseException error) {
     if (isSqliteLocalFileFailure(error)) return _localFileFailure;
