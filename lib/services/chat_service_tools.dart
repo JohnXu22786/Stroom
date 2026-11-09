@@ -22,9 +22,8 @@ extension _ChatServiceToolsExt on ChatService {
     // the disabled name, while still blocking the local handler itself.
     final entry = isDisabled ? null : ChatService._toolRegistries[name];
     if (entry != null) {
-      final localizedHandler =
-          entry['localizedHandler']
-              as dynamic Function(Map<String, dynamic>, Locale?)?;
+      final localizedHandler = entry['localizedHandler'] as dynamic Function(
+          Map<String, dynamic>, Locale?)?;
       final result = localizedHandler != null
           ? localizedHandler(args, _localeOverride?.call())
           : (entry['handler'] as dynamic Function(Map<String, dynamic>))(args);
