@@ -169,6 +169,14 @@ class AttachmentStorage {
   // 删除缓存永远是安全的（最坏情况是下次发送时重新压缩）。
   static const _compressedCacheDirName = 'temp_compressed';
 
+  static bool _isSafeConversationId(String? conversationId) =>
+      conversationId != null &&
+      conversationId.isNotEmpty &&
+      conversationId != '.' &&
+      conversationId != '..' &&
+      !conversationId.contains('/') &&
+      !conversationId.contains('\\');
+
   /// 图片压缩缓存目录：`<附件目录>/temp_compressed/<conversationId>/`
   static Future<Directory> _compressedCacheDir(String conversationId) async {
     final base = await _storageDir;
@@ -190,21 +198,22 @@ class AttachmentStorage {
     required Uint8List bytes,
     required String mimeType,
   }) async {
-    if (conversationId == null ||
-        conversationId.isEmpty ||
+    if (!_isSafeConversationId(conversationId) ||
         hash.isEmpty ||
         bytes.isEmpty) {
       return null;
     }
+    final safeConversationId = conversationId!;
     final ext = mimeType == 'image/png' ? 'png' : 'jpg';
     final storageName = '$hash.$ext';
-    final storagePath = '$_compressedCacheDirName/$conversationId/$storageName';
+    final storagePath =
+        '$_compressedCacheDirName/$safeConversationId/$storageName';
     await AppLogService.info(
         'AttachmentStorage', '保存图片压缩缓存: $storagePath, ${bytes.length} 字节');
     if (kIsWeb) {
       await WebFileStore.write(storagePath, bytes);
     } else {
-      final dir = await _compressedCacheDir(conversationId);
+      final dir = await _compressedCacheDir(safeConversationId);
       await File(p.join(dir.path, storageName)).writeAsBytes(bytes);
     }
     return storagePath;
@@ -218,22 +227,24 @@ class AttachmentStorage {
     required String? conversationId,
     required String hash,
   }) async {
-    if (conversationId == null || conversationId.isEmpty || hash.isEmpty) {
+    if (!_isSafeConversationId(conversationId) || hash.isEmpty) {
       return null;
     }
+    final safeConversationId = conversationId!;
     for (final (ext, mimeType) in [
       ('jpg', 'image/jpeg'),
       ('png', 'image/png'),
     ]) {
       Uint8List? bytes;
-      final storagePath = '$_compressedCacheDirName/$conversationId/$hash.$ext';
+      final storagePath =
+          '$_compressedCacheDirName/$safeConversationId/$hash.$ext';
       if (kIsWeb) {
         bytes = await WebFileStore.read(storagePath);
       } else {
         // 只读路径不创建目录：避免"删除后又被读操作重建空目录"
         final base = await _storageDir;
         final file = File(p.join(
-            base, _compressedCacheDirName, conversationId, '$hash.$ext'));
+            base, _compressedCacheDirName, safeConversationId, '$hash.$ext'));
         bytes = await file.exists() ? await file.readAsBytes() : null;
       }
       if (bytes == null || bytes.isEmpty) continue;
@@ -263,12 +274,14 @@ class AttachmentStorage {
     required String? conversationId,
     required String hash,
   }) async {
-    if (conversationId == null || conversationId.isEmpty || hash.isEmpty) {
+    if (!_isSafeConversationId(conversationId) || hash.isEmpty) {
       return false;
     }
+    final safeConversationId = conversationId!;
     var deleted = false;
     for (final ext in ['jpg', 'png']) {
-      final storagePath = '$_compressedCacheDirName/$conversationId/$hash.$ext';
+      final storagePath =
+          '$_compressedCacheDirName/$safeConversationId/$hash.$ext';
       if (kIsWeb) {
         // 与原生端语义一致：仅当文件真实存在才算删除
         if (await WebFileStore.exists(storagePath)) {
@@ -278,7 +291,7 @@ class AttachmentStorage {
       } else {
         final base = await _storageDir;
         final file = File(p.join(
-            base, _compressedCacheDirName, conversationId, '$hash.$ext'));
+            base, _compressedCacheDirName, safeConversationId, '$hash.$ext'));
         if (await file.exists()) {
           await file.delete();
           deleted = true;
@@ -291,7 +304,7 @@ class AttachmentStorage {
   /// 删除整个对话的图片压缩缓存目录（删除对话时调用）。
   static Future<void> deleteConversationCompressedImages(
       String conversationId) async {
-    if (conversationId.isEmpty) return;
+    if (!_isSafeConversationId(conversationId)) return;
     await AppLogService.info(
         'AttachmentStorage', '删除对话图片压缩缓存: $conversationId');
     if (kIsWeb) {
