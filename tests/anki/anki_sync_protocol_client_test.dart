@@ -723,7 +723,8 @@ void main() {
     test('preserves server media error diagnostics', () async {
       httpClient.responses
         ..add(_jsonResponse({'key': 'host-key'}))
-        ..add(_jsonResponse({'data': null, 'err': 'missing remote file: a.png'}));
+        ..add(
+            _jsonResponse({'data': null, 'err': 'missing remote file: a.png'}));
 
       await client.login('test@example.invalid', 'test-only');
       await expectLater(
