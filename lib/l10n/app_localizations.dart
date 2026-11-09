@@ -4964,6 +4964,48 @@ abstract class AppLocalizations {
   /// **'Skipped (nothing to process)'**
   String get catcatchSkipped;
 
+  /// **'Found {count} media resources'**
+  String catCatchDetailMediaResources(Object count);
+
+  /// **'Found {count} resources'**
+  String catCatchDetailResources(Object count);
+
+  /// **'Browser found {count} resources'**
+  String catCatchDetailBrowserResources(Object count);
+
+  /// **'Found {total} resources ({segments} playlist segments)'**
+  String catCatchDetailPlaylistResources(Object total, Object segments);
+
+  /// **'{count} resources found. Choose one.'**
+  String catCatchDetailChooseResource(Object count);
+
+  /// **'Automatically selected result 1 and started downloading'**
+  String get catCatchDetailAutoSelectFirst;
+
+  /// **'1 result remains; started downloading automatically'**
+  String get catCatchDetailAutoSelectRemaining;
+
+  /// **'Conversion skipped for {extension}; this format needs no conversion'**
+  String catCatchDetailSkipFormat(Object extension);
+
+  /// **'Conversion skipped; this format needs no conversion'**
+  String get catCatchDetailSkipNoExtension;
+
+  /// **'After filtering for {duration}, {remaining} results remain ({removed} unmatched resources excluded)'**
+  String catCatchDetailDurationFiltered(
+    Object duration,
+    Object remaining,
+    Object removed,
+  );
+
+  /// **'All {count} resources match the {duration} duration filter'**
+  String catCatchDetailDurationAllMatch(Object count, Object duration);
+
+  /// Duration components used in filtered detail text.
+  String catCatchDurationHours(Object count);
+  String catCatchDurationMinutes(Object count);
+  String catCatchDurationSeconds(Object count);
+
   /// No description provided for @catcatchRetryStep.
   ///
   /// In en, this message translates to:

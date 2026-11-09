@@ -2773,6 +2773,57 @@ class AppLocalizationsZh extends AppLocalizations {
   String get catcatchSkipped => '已跳过（无需处理）';
 
   @override
+  String catCatchDetailMediaResources(Object count) => '获取到$count个媒体资源';
+
+  @override
+  String catCatchDetailResources(Object count) => '获取到$count个资源';
+
+  @override
+  String catCatchDetailBrowserResources(Object count) =>
+      '浏览器中获取到$count个资源';
+
+  @override
+  String catCatchDetailPlaylistResources(Object total, Object segments) =>
+      '获取到$total个资源（播放列表$segments个分段）';
+
+  @override
+  String catCatchDetailChooseResource(Object count) => '共$count个资源，请用户选择';
+
+  @override
+  String get catCatchDetailAutoSelectFirst => '自动选择第1个结果，进入下载';
+
+  @override
+  String get catCatchDetailAutoSelectRemaining => '剩余1个结果，自动进入下载';
+
+  @override
+  String catCatchDetailSkipFormat(Object extension) =>
+      '.$extension 格式无需转换，已跳过';
+
+  @override
+  String get catCatchDetailSkipNoExtension => '. 格式无需转换，已跳过';
+
+  @override
+  String catCatchDetailDurationFiltered(
+    Object duration,
+    Object remaining,
+    Object removed,
+  ) =>
+      '按照$duration时长筛选后剩余$remaining个结果（已排除$removed个不匹配的资源）';
+
+  @override
+  String catCatchDetailDurationAllMatch(Object count, Object duration) =>
+      '按时长$duration筛选，$count个资源全部匹配';
+
+  @override
+  String catCatchDurationHours(Object count) => '$count小时';
+
+  @override
+  String catCatchDurationMinutes(Object count) => '$count分钟';
+
+  @override
+  String catCatchDurationSeconds(Object count) => '$count秒';
+
+  @override
   String get catcatchRetryStep => '重试此步骤';
 
   @override
@@ -13273,6 +13324,57 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get catcatchSkipped => '已跳过（无需处理）';
+
+  @override
+  String catCatchDetailMediaResources(Object count) => '获取到$count个媒体资源';
+
+  @override
+  String catCatchDetailResources(Object count) => '获取到$count个资源';
+
+  @override
+  String catCatchDetailBrowserResources(Object count) =>
+      '浏览器中获取到$count个资源';
+
+  @override
+  String catCatchDetailPlaylistResources(Object total, Object segments) =>
+      '获取到$total个资源（播放列表$segments个分段）';
+
+  @override
+  String catCatchDetailChooseResource(Object count) => '共$count个资源，请用户选择';
+
+  @override
+  String get catCatchDetailAutoSelectFirst => '自动选择第1个结果，进入下载';
+
+  @override
+  String get catCatchDetailAutoSelectRemaining => '剩余1个结果，自动进入下载';
+
+  @override
+  String catCatchDetailSkipFormat(Object extension) =>
+      '.$extension 格式无需转换，已跳过';
+
+  @override
+  String get catCatchDetailSkipNoExtension => '. 格式无需转换，已跳过';
+
+  @override
+  String catCatchDetailDurationFiltered(
+    Object duration,
+    Object remaining,
+    Object removed,
+  ) =>
+      '按照$duration时长筛选后剩余$remaining个结果（已排除$removed个不匹配的资源）';
+
+  @override
+  String catCatchDetailDurationAllMatch(Object count, Object duration) =>
+      '按时长$duration筛选，$count个资源全部匹配';
+
+  @override
+  String catCatchDurationHours(Object count) => '$count小时';
+
+  @override
+  String catCatchDurationMinutes(Object count) => '$count分钟';
+
+  @override
+  String catCatchDurationSeconds(Object count) => '$count秒';
 
   @override
   String get catcatchRetryStep => '重试此步骤';

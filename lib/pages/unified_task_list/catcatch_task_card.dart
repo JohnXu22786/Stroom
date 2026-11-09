@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../catcatch/models/media_resource.dart';
+import '../../catcatch/models/catcatch_step_detail_localizer.dart';
 import '../../l10n/app_localizations.dart';
 import '../../catcatch/providers/catcatch_provider.dart';
 import '../../catcatch/models/catcatch_task.dart' as catcatch;
@@ -543,7 +544,10 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
-                              step.detail!,
+                              localizeCatCatchStepDetail(
+                                step.detail!,
+                                AppLocalizations.of(context)!,
+                              ),
                               style: TextStyle(
                                 fontSize: 12,
                                 color: colorScheme.onSurfaceVariant,
@@ -554,7 +558,10 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                         ] else if (hasDetail && !isDetailExpanded) ...[
                           const SizedBox(height: 2),
                           Text(
-                            step.detail!,
+                            localizeCatCatchStepDetail(
+                              step.detail!,
+                              AppLocalizations.of(context)!,
+                            ),
                             style: TextStyle(
                               fontSize: 11,
                               color: colorScheme.onSurfaceVariant,
