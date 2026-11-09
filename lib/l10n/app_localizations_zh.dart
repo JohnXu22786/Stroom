@@ -1075,6 +1075,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get updateApkInstallFailedNoDetails => '安装失败，请手动打开 APK 安装';
 
   @override
+  String get updateRestartDialogTitle => '更新检测';
+
+  @override
+  String get updateRestartDialogBody => '检测到应用已更新，建议重启应用以确保稳定性。';
+
+  @override
+  String get updateRestartDialogLater => '稍后重启';
+
+  @override
+  String get updateRestartDialogNow => '立即重启';
+
+  @override
   String get contextCompactionHistoryIntro => '以下是需要压缩的对话历史：';
 
   @override
@@ -11515,6 +11527,18 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get updateApkInstallFailedNoDetails => '安装失败，请手动打开 APK 安装';
+
+  @override
+  String get updateRestartDialogTitle => '更新检测';
+
+  @override
+  String get updateRestartDialogBody => '检测到应用已更新，建议重启应用以确保稳定性。';
+
+  @override
+  String get updateRestartDialogLater => '稍后重启';
+
+  @override
+  String get updateRestartDialogNow => '立即重启';
 
   @override
   String get contextCompactionHistoryIntro => '以下是需要压缩的对话历史：';

@@ -298,26 +298,24 @@ class _ApplicationState extends ConsumerState<Application>
               Icon(Icons.system_update,
                   color: Theme.of(ctx).colorScheme.primary),
               const SizedBox(width: 8),
-              const Text('更新检测'),
+              Text(AppLocalizations.of(ctx)!.updateRestartDialogTitle),
             ],
           ),
-          content: const Text(
-            '检测到应用已更新，建议重启应用以确保稳定性。',
-          ),
+          content: Text(AppLocalizations.of(ctx)!.updateRestartDialogBody),
           actions: [
             TextButton(
               onPressed: () {
                 Navigator.of(ctx).pop();
                 // User chose to continue — hope for the best
               },
-              child: const Text('稍后重启'),
+              child: Text(AppLocalizations.of(ctx)!.updateRestartDialogLater),
             ),
             FilledButton(
               onPressed: () {
                 Navigator.of(ctx).pop();
                 _exitApp();
               },
-              child: const Text('立即重启'),
+              child: Text(AppLocalizations.of(ctx)!.updateRestartDialogNow),
             ),
           ],
         ),

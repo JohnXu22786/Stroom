@@ -1957,6 +1957,30 @@ abstract class AppLocalizations {
   /// **'Installation failed. Open the APK manually.'**
   String get updateApkInstallFailedNoDetails;
 
+  /// No description provided for @updateRestartDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'App updated'**
+  String get updateRestartDialogTitle;
+
+  /// No description provided for @updateRestartDialogBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The app has been updated. Restart the app to ensure stability.'**
+  String get updateRestartDialogBody;
+
+  /// No description provided for @updateRestartDialogLater.
+  ///
+  /// In en, this message translates to:
+  /// **'Restart Later'**
+  String get updateRestartDialogLater;
+
+  /// No description provided for @updateRestartDialogNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Restart Now'**
+  String get updateRestartDialogNow;
+
   /// No description provided for @contextCompactionHistoryIntro.
   ///
   /// In en, this message translates to:

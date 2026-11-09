@@ -138,9 +138,37 @@ void main() {
     // 每个测试用例需要复位以获得完整的启动后流程。
     resetPostStartupTasksFlag();
     startupReadyNotifier.value = false;
+    setPendingRestartInMemory(false);
   });
 
   group('Application - Startup Update Check', () {
+    testWidgets('post-update restart dialog follows the saved app locale',
+        (tester) async {
+      setPendingRestartInMemory(true);
+      final dio = _createMockDio(_githubRelease('v0.2.13'));
+
+      await _pumpThroughStartup(tester, dio: dio, extraPrefs: {
+        localePreferenceKey: 'en_US',
+        pendingUpdateRestartKey: true,
+      });
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+      await tester.pump();
+
+      expect(find.text('App updated'), findsOneWidget);
+      expect(
+        find.text(
+          'The app has been updated. Restart the app to ensure stability.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Restart Later'), findsOneWidget);
+      expect(find.text('Restart Now'), findsOneWidget);
+    });
+
     testWidgets('shows update dialog on startup when new version available',
         (tester) async {
       final dio = _createMockDio(

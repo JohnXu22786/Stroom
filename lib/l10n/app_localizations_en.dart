@@ -1148,6 +1148,19 @@ class AppLocalizationsEn extends AppLocalizations {
       'Installation failed. Open the APK manually.';
 
   @override
+  String get updateRestartDialogTitle => 'App updated';
+
+  @override
+  String get updateRestartDialogBody =>
+      'The app has been updated. Restart the app to ensure stability.';
+
+  @override
+  String get updateRestartDialogLater => 'Restart Later';
+
+  @override
+  String get updateRestartDialogNow => 'Restart Now';
+
+  @override
   String get contextCompactionHistoryIntro =>
       'Conversation history to condense:';
 
@@ -12156,6 +12169,19 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   @override
   String get updateApkInstallFailedNoDetails =>
       'Installation failed. Open the APK manually.';
+
+  @override
+  String get updateRestartDialogTitle => 'App updated';
+
+  @override
+  String get updateRestartDialogBody =>
+      'The app has been updated. Restart the app to ensure stability.';
+
+  @override
+  String get updateRestartDialogLater => 'Restart Later';
+
+  @override
+  String get updateRestartDialogNow => 'Restart Now';
 
   @override
   String get contextCompactionHistoryIntro =>
