@@ -98,7 +98,8 @@ class AnkiIncrementalSync {
 
         final rawGraves = start['graves'];
         if (rawGraves is! Map) {
-          throw const AnkiSyncException.appGenerated('同步服务器 start 响应缺少有效的 graves');
+          throw const AnkiSyncException.appGenerated(
+              '同步服务器 start 响应缺少有效的 graves');
         }
         final incomingGraves = _map(rawGraves);
         await _sendAndApplyGraves(txn, client, incomingGraves, remote.usn);
@@ -120,7 +121,8 @@ class AnkiIncrementalSync {
           final chunk = _map(payload);
           final done = chunk['done'];
           if (done is! bool) {
-            throw const AnkiSyncException.appGenerated('同步服务器 chunk 响应缺少有效的 done 状态');
+            throw const AnkiSyncException.appGenerated(
+                '同步服务器 chunk 响应缺少有效的 done 状态');
           }
           receivedCards += await _applyRemoteCards(
             txn,
