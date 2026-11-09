@@ -931,8 +931,9 @@ class AppLocalizationsEn extends AppLocalizations {
       'The update check failed. Please try again.';
 
   @override
-  String topicAssistantUpdateCheckFailed(Object error) =>
-      'Assistant update check failed: $error';
+  String topicAssistantUpdateCheckFailed(Object error) {
+    return 'Assistant update check failed: $error';
+  }
 
   @override
   String get aboutPrivacyContent =>
@@ -11125,7 +11126,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get startupErrorTitle => 'App startup failed';
 
   @override
-  String startupErrorDetails(Object error) => 'Error: $error';
+  String startupErrorDetails(Object error) {
+    return 'Error: $error';
+  }
 
   @override
   String get renderErrorTitle => 'Interface rendering error';
@@ -11135,6 +11138,72 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get renderErrorRestartMessage => 'Please try restarting the app.';
+
+  @override
+  String backupRestoreApkgImportSummary(int decks, int notes, int cards) {
+    return 'Imported $decks decks, $notes notes, and $cards cards';
+  }
+
+  @override
+  String backupRestoreApkgFileNotFound(String path) {
+    return 'The selected .apkg file could not be found: $path';
+  }
+
+  @override
+  String get backupRestoreApkgCollectionMissing =>
+      'The .apkg file does not contain collection.anki2.';
+
+  @override
+  String backupRestoreApkgTargetMissing(String path) {
+    return 'Open Anki flashcards before importing or exporting a deck: $path';
+  }
+
+  @override
+  String get backupRestoreApkgDatabaseCorrupt =>
+      'The Anki collection database is damaged.';
+
+  @override
+  String backupRestoreApkgUnexpectedError(String path) {
+    return 'The .apkg operation failed while accessing this path: $path';
+  }
+
+  @override
+  String get backupRestoreApkgOperationFailed =>
+      'The .apkg operation failed because the file or database could not be read.';
+
+  @override
+  String backupRestoreApkgExportFailed(String path) {
+    return 'The Anki deck could not be packaged from this database: $path';
+  }
+
+  @override
+  String get ankiWebSyncUnsupportedPlatform =>
+      'Sign in to AnkiWeb to sync on web. Open Anki settings with the cloud icon to log in.';
+
+  @override
+  String get ankiWebDecksUnsupportedPlatform =>
+      'To browse or manage decks on web, sign in to AnkiWeb using the cloud icon.';
+
+  @override
+  String get ankiStatsUnsupportedPlatform =>
+      'Anki statistics are unavailable on this platform.';
+
+  @override
+  String get ankiSyncStatusDeviceClockMismatch =>
+      'The device clock differs from the sync server by more than 5 minutes. Correct the clock and try again.';
+
+  @override
+  String get ankiSyncStatusFullDownloadRequired =>
+      'The sync sanity check failed and local changes were rolled back. Download the server collection in full, then try again.';
+
+  @override
+  String get ankiSyncStatusFullTransferRequired =>
+      'This collection cannot be synchronized incrementally. Choose a full upload or download to continue.';
+
+  @override
+  String get ankiSyncStatusIncrementalSyncFailed =>
+      'Incremental sync could not complete. Check the server and connection, then try again.';
+
   @override
   String get batchDlgFileName => 'File name';
 
@@ -12123,6 +12192,11 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   @override
   String get aboutUpdateCheckFailed =>
       'The update check failed. Please try again.';
+
+  @override
+  String topicAssistantUpdateCheckFailed(Object error) {
+    return 'Assistant update check failed: $error';
+  }
 
   @override
   String get aboutPrivacyContent =>
@@ -22310,4 +22384,21 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String startupIssueUnknownProviderType(Object index, Object type) {
     return 'Provider entry $index uses unknown provider type \"$type\" and may not work correctly.';
   }
+
+  @override
+  String get startupErrorTitle => 'App startup failed';
+
+  @override
+  String startupErrorDetails(Object error) {
+    return 'Error: $error';
+  }
+
+  @override
+  String get renderErrorTitle => 'Interface rendering error';
+
+  @override
+  String get renderErrorDebugTitle => 'Interface rendering error (Debug mode)';
+
+  @override
+  String get renderErrorRestartMessage => 'Please try restarting the app.';
 }

@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:sqflite/sqflite.dart';
+import '../../l10n/app_localizations.dart';
 
 import '../database/anki_database.dart';
 import '../models/note.dart';
@@ -24,26 +25,30 @@ class AnkiIncrementalSync {
     await _requireSameDestination(db, destination);
     final remote = await client.checkStatus();
     if (!remote.shouldContinue) {
-      throw AnkiSyncException(
-        remote.message.isEmpty ? '同步服务器要求更新客户端' : remote.message,
+      if (remote.message.isNotEmpty) {
+        throw AnkiSyncException(remote.message);
+      }
+      throw const AnkiSyncException.appGenerated(
+        '同步服务器要求更新客户端',
+        failureCode: AnkiSyncFailureCode.upgradeClientRequired,
       );
     }
 
     final localRows = await db.query('col', columns: ['mod', 'scm', 'usn']);
     if (localRows.isEmpty) {
-      throw const AnkiSyncException('本地 collection 缺少元数据');
+      throw const AnkiSyncException.appGenerated('本地 collection 缺少元数据');
     }
     final local = localRows.first;
     final localModified = _int(local['mod']);
     final localSchema = _int(local['scm']);
     final localUsn = _int(local['usn']);
     if (remote.isEmpty) {
-      throw const AnkiSyncFullTransferRequired(
+      throw const AnkiSyncFullTransferRequired.appGenerated(
         '服务器 collection 为空，请先选择完整上传或下载',
       );
     }
     if (await AnkiSyncDestinationState.read(db) == null) {
-      throw const AnkiSyncFullTransferRequired(
+      throw const AnkiSyncFullTransferRequired.appGenerated(
         '本地 collection 尚未绑定到此同步目标，请先明确选择完整上传或下载',
       );
     }
@@ -53,7 +58,7 @@ class AnkiIncrementalSync {
         hasPending;
 
     if (localSchema != remote.schema) {
-      throw const AnkiSyncFullTransferRequired(
+      throw const AnkiSyncFullTransferRequired.appGenerated(
         '本地和服务器的 collection 结构版本不同，请先选择完整上传或下载',
       );
     }
@@ -74,7 +79,10 @@ class AnkiIncrementalSync {
     final delta =
         DateTime.now().millisecondsSinceEpoch ~/ 1000 - remote.serverTime;
     if (remote.serverTime != 0 && delta.abs() > 300) {
-      throw const AnkiSyncException('设备时间与同步服务器相差超过 5 分钟');
+      throw const AnkiSyncException.appGenerated(
+        '设备时间与同步服务器相差超过 5 分钟',
+        failureCode: AnkiSyncFailureCode.deviceClockMismatch,
+      );
     }
 
     try {
@@ -85,12 +93,12 @@ class AnkiIncrementalSync {
           'lnewer': localModified > remote.modified,
         });
         if (start is! Map<String, dynamic>) {
-          throw const AnkiSyncException('同步服务器 start 响应无法解析');
+          throw const AnkiSyncException.appGenerated('同步服务器 start 响应无法解析');
         }
 
         final rawGraves = start['graves'];
         if (rawGraves is! Map) {
-          throw const AnkiSyncException('同步服务器 start 响应缺少有效的 graves');
+          throw const AnkiSyncException.appGenerated('同步服务器 start 响应缺少有效的 graves');
         }
         final incomingGraves = _map(rawGraves);
         await _sendAndApplyGraves(txn, client, incomingGraves, remote.usn);
@@ -107,12 +115,12 @@ class AnkiIncrementalSync {
         while (true) {
           final payload = await client.requestJson('chunk', const {});
           if (payload is! Map<String, dynamic>) {
-            throw const AnkiSyncException('同步服务器 chunk 响应无法解析');
+            throw const AnkiSyncException.appGenerated('同步服务器 chunk 响应无法解析');
           }
           final chunk = _map(payload);
           final done = chunk['done'];
           if (done is! bool) {
-            throw const AnkiSyncException('同步服务器 chunk 响应缺少有效的 done 状态');
+            throw const AnkiSyncException.appGenerated('同步服务器 chunk 响应缺少有效的 done 状态');
           }
           receivedCards += await _applyRemoteCards(
             txn,
@@ -134,7 +142,7 @@ class AnkiIncrementalSync {
 
         final finish = await client.requestJson('finish', const {});
         if (finish is! num) {
-          throw const AnkiSyncException('同步服务器 finish 响应无法解析');
+          throw const AnkiSyncException.appGenerated('同步服务器 finish 响应无法解析');
         }
         final finishedAt = finish.toInt();
         final nextUsn = remote.usn + 1;
@@ -172,7 +180,7 @@ class AnkiIncrementalSync {
   ) async {
     final existing = await AnkiSyncDestinationState.read(db);
     if (existing != null && existing != destination) {
-      throw const AnkiSyncFullTransferRequired(
+      throw const AnkiSyncFullTransferRequired.appGenerated(
         '此 collection 上次与其他同步账号或服务器同步。切换目标前请先完整上传或下载',
       );
     }
@@ -419,7 +427,7 @@ class AnkiIncrementalSync {
       'changes': localChanges,
     });
     if (response is! Map<String, dynamic>) {
-      throw const AnkiSyncException('同步服务器 applyChanges 响应无法解析');
+      throw const AnkiSyncException.appGenerated('同步服务器 applyChanges 响应无法解析');
     }
     final remote = _map(response);
     final remoteModels = _list(remote['models']);
@@ -463,7 +471,7 @@ class AnkiIncrementalSync {
     for (final rawConfig in remoteDeckConfigs) {
       final tuple = _list(rawConfig);
       if (tuple.length < 5 || tuple[4] is! Map || tuple[1] is! String) {
-        throw const AnkiSyncException('同步服务器 deck config 数据不完整');
+        throw const AnkiSyncException.appGenerated('同步服务器 deck config 数据不完整');
       }
       final id = _tupleInt(tuple[0], 'deck config');
       final mtime = _tupleInt(tuple[2], 'deck config');
@@ -547,7 +555,7 @@ class AnkiIncrementalSync {
     for (final raw in entries) {
       final e = _list(raw);
       if (e.length < 11) {
-        throw const AnkiSyncException('同步服务器 note 数据不完整');
+        throw const AnkiSyncException.appGenerated('同步服务器 note 数据不完整');
       }
       final id = _tupleInt(e[0], 'note');
       final modelId = _tupleInt(e[2], 'note');
@@ -609,7 +617,7 @@ class AnkiIncrementalSync {
     for (final raw in entries) {
       final e = _list(raw);
       if (e.length < 18) {
-        throw const AnkiSyncException('同步服务器 card 数据不完整');
+        throw const AnkiSyncException.appGenerated('同步服务器 card 数据不完整');
       }
       final id = _tupleInt(e[0], 'card');
       final noteId = _tupleInt(e[1], 'card');
@@ -675,7 +683,7 @@ class AnkiIncrementalSync {
     for (final raw in entries) {
       final e = _list(raw);
       if (e.length < 9) {
-        throw const AnkiSyncException('同步服务器 review 数据不完整');
+        throw const AnkiSyncException.appGenerated('同步服务器 review 数据不完整');
       }
       final id = _tupleInt(e[0], 'review');
       final cardId = _tupleInt(e[1], 'review');
@@ -835,7 +843,10 @@ class AnkiIncrementalSync {
       'client': clientCounts,
     });
     if (response is! Map<String, dynamic> || response['status'] != 'ok') {
-      throw const AnkiSyncException('同步数据校验失败，本地事务已回滚；请完整下载服务器 collection 后重试');
+      throw const AnkiSyncException.appGenerated(
+        '同步数据校验失败，本地事务已回滚；请完整下载服务器 collection 后重试',
+        failureCode: AnkiSyncFailureCode.fullDownloadRequired,
+      );
     }
   }
 
@@ -932,17 +943,17 @@ class AnkiIncrementalSync {
     if (!chunk.containsKey(key)) return const <dynamic>[];
     final value = chunk[key];
     if (value is List) return value;
-    throw AnkiSyncException('同步服务器 chunk $key 数据无法解析');
+    throw AnkiSyncException.appGenerated('同步服务器 chunk $key 数据无法解析');
   }
 
   static List<int> _graveIds(Object? value, String type) {
     if (value is! List) {
-      throw AnkiSyncException('同步服务器 graves $type 数据无法解析');
+      throw AnkiSyncException.appGenerated('同步服务器 graves $type 数据无法解析');
     }
     return value.map((raw) {
       final id = _tupleInt(raw, 'grave $type');
       if (id <= 0) {
-        throw AnkiSyncException('同步服务器 graves $type 数据包含无效 ID');
+        throw AnkiSyncException.appGenerated('同步服务器 graves $type 数据包含无效 ID');
       }
       return id;
     }).toList();
@@ -960,12 +971,12 @@ class AnkiIncrementalSync {
       final parsed = int.tryParse(value);
       if (parsed != null) return parsed;
     }
-    throw AnkiSyncException('同步服务器 $type 数据包含无效数字');
+    throw AnkiSyncException.appGenerated('同步服务器 $type 数据包含无效数字');
   }
 
   static String _tupleString(Object? value, String type) {
     if (value is String) return value;
-    throw AnkiSyncException('同步服务器 $type 数据包含无效文本');
+    throw AnkiSyncException.appGenerated('同步服务器 $type 数据包含无效文本');
   }
 
   static int _checksum(String text) {
@@ -989,7 +1000,16 @@ class AnkiCollectionSyncResult {
 
 class AnkiSyncFullTransferRequired implements Exception {
   final String message;
-  const AnkiSyncFullTransferRequired(this.message);
+  final AnkiSyncFailureCode? failureCode;
+
+  const AnkiSyncFullTransferRequired(this.message) : failureCode = null;
+  const AnkiSyncFullTransferRequired.appGenerated(this.message)
+      : failureCode = AnkiSyncFailureCode.fullTransferRequired;
+
+  String localizedMessage(AppLocalizations l10n) =>
+      failureCode == AnkiSyncFailureCode.fullTransferRequired
+          ? l10n.ankiSyncStatusFullTransferRequired
+          : message;
 
   @override
   String toString() => message;

@@ -7,6 +7,7 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
+import '../../l10n/app_localizations.dart';
 
 /// Anki's supported legacy multipart protocol. Version 10 remains accepted by
 /// current Anki sync servers and maps collection schema 11 to schema 11.
@@ -639,10 +640,38 @@ bool _requiredBool(Map<String, dynamic> json, String field) {
 
 class AnkiSyncException implements Exception {
   final String message;
-  const AnkiSyncException(this.message);
+  final AnkiSyncFailureCode? failureCode;
+
+  const AnkiSyncException(this.message) : failureCode = null;
+  const AnkiSyncException.appGenerated(
+    this.message, {
+    this.failureCode = AnkiSyncFailureCode.incrementalSync,
+  });
+
+  String localizedMessage(AppLocalizations l10n) => switch (failureCode) {
+        AnkiSyncFailureCode.incrementalSync =>
+          l10n.ankiSyncStatusIncrementalSyncFailed,
+        AnkiSyncFailureCode.deviceClockMismatch =>
+          l10n.ankiSyncStatusDeviceClockMismatch,
+        AnkiSyncFailureCode.fullTransferRequired =>
+          l10n.ankiSyncStatusFullTransferRequired,
+        AnkiSyncFailureCode.fullDownloadRequired =>
+          l10n.ankiSyncStatusFullDownloadRequired,
+        AnkiSyncFailureCode.upgradeClientRequired =>
+          l10n.ankiSyncStatusUpgradeClient,
+        null => message,
+      };
 
   @override
   String toString() => message;
+}
+
+enum AnkiSyncFailureCode {
+  incrementalSync,
+  deviceClockMismatch,
+  fullTransferRequired,
+  fullDownloadRequired,
+  upgradeClientRequired,
 }
 
 class _ProgressAwareMultipartRequest extends http.MultipartRequest

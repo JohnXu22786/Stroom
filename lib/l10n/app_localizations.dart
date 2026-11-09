@@ -63,7 +63,7 @@ import 'app_localizations_zh.dart';
 /// property.
 abstract class AppLocalizations {
   AppLocalizations(String locale)
-      : localeName = intl.Intl.canonicalizedLocale(locale.toString());
+    : localeName = intl.Intl.canonicalizedLocale(locale.toString());
 
   final String localeName;
 
@@ -86,11 +86,11 @@ abstract class AppLocalizations {
   /// of delegates is preferred or required.
   static const List<LocalizationsDelegate<dynamic>> localizationsDelegates =
       <LocalizationsDelegate<dynamic>>[
-    delegate,
-    GlobalMaterialLocalizations.delegate,
-    GlobalCupertinoLocalizations.delegate,
-    GlobalWidgetsLocalizations.delegate,
-  ];
+        delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+      ];
 
   /// A list of this localizations delegate's supported locales.
   static const List<Locale> supportedLocales = <Locale>[
@@ -1618,7 +1618,10 @@ abstract class AppLocalizations {
   /// **'The update check failed. Please try again.'**
   String get aboutUpdateCheckFailed;
 
-  /// Assistant update check failure shown on the topic selection page.
+  /// No description provided for @topicAssistantUpdateCheckFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Assistant update check failed: {error}'**
   String topicAssistantUpdateCheckFailed(Object error);
 
   /// No description provided for @aboutPrivacyContent.
@@ -10622,12 +10625,46 @@ abstract class AppLocalizations {
   /// **'Built-in'**
   String get providerBuiltinBadge;
 
+  /// No description provided for @providerBuiltinTtsName.
+  ///
+  /// In en, this message translates to:
+  /// **'TTS Provider'**
   String get providerBuiltinTtsName;
+
+  /// No description provided for @providerBuiltinLlmName.
+  ///
+  /// In en, this message translates to:
+  /// **'LLM Provider'**
   String get providerBuiltinLlmName;
+
+  /// No description provided for @providerBuiltinOcrName.
+  ///
+  /// In en, this message translates to:
+  /// **'OCR Provider'**
   String get providerBuiltinOcrName;
+
+  /// No description provided for @providerBuiltinAsrName.
+  ///
+  /// In en, this message translates to:
+  /// **'Speech Recognition Provider'**
   String get providerBuiltinAsrName;
+
+  /// No description provided for @providerBuiltinMcpName.
+  ///
+  /// In en, this message translates to:
+  /// **'MCP Provider'**
   String get providerBuiltinMcpName;
+
+  /// No description provided for @providerBuiltinSearchGroupName.
+  ///
+  /// In en, this message translates to:
+  /// **'Search'**
   String get providerBuiltinSearchGroupName;
+
+  /// No description provided for @providerBuiltinMcpServicesGroupName.
+  ///
+  /// In en, this message translates to:
+  /// **'Other MCP Services'**
   String get providerBuiltinMcpServicesGroupName;
 
   /// No description provided for @providerConnectivityTest.
@@ -18341,20 +18378,125 @@ abstract class AppLocalizations {
   /// **'Provider entry {index} uses unknown provider type \"{type}\" and may not work correctly.'**
   String startupIssueUnknownProviderType(Object index, Object type);
 
-  /// Shown when application initialization fails before the main app is ready.
+  /// No description provided for @startupErrorTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'App startup failed'**
   String get startupErrorTitle;
 
-  /// Includes the initialization error for diagnostics.
+  /// No description provided for @startupErrorDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'Error: {error}'**
   String startupErrorDetails(Object error);
 
-  /// Shown when a widget fails to render in a release build.
+  /// No description provided for @renderErrorTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Interface rendering error'**
   String get renderErrorTitle;
 
-  /// Shown when a widget fails to render in a debug build.
+  /// No description provided for @renderErrorDebugTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Interface rendering error (Debug mode)'**
   String get renderErrorDebugTitle;
 
-  /// Instructions shown below a release render error.
+  /// No description provided for @renderErrorRestartMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Please try restarting the app.'**
   String get renderErrorRestartMessage;
+
+  /// No description provided for @backupRestoreApkgImportSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'Imported {decks} decks, {notes} notes, and {cards} cards'**
+  String backupRestoreApkgImportSummary(int decks, int notes, int cards);
+
+  /// No description provided for @backupRestoreApkgFileNotFound.
+  ///
+  /// In en, this message translates to:
+  /// **'The selected .apkg file could not be found: {path}'**
+  String backupRestoreApkgFileNotFound(String path);
+
+  /// No description provided for @backupRestoreApkgCollectionMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'The .apkg file does not contain collection.anki2.'**
+  String get backupRestoreApkgCollectionMissing;
+
+  /// No description provided for @backupRestoreApkgTargetMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Anki flashcards before importing or exporting a deck: {path}'**
+  String backupRestoreApkgTargetMissing(String path);
+
+  /// No description provided for @backupRestoreApkgDatabaseCorrupt.
+  ///
+  /// In en, this message translates to:
+  /// **'The Anki collection database is damaged.'**
+  String get backupRestoreApkgDatabaseCorrupt;
+
+  /// No description provided for @backupRestoreApkgUnexpectedError.
+  ///
+  /// In en, this message translates to:
+  /// **'The .apkg operation failed while accessing this path: {path}'**
+  String backupRestoreApkgUnexpectedError(String path);
+
+  /// No description provided for @backupRestoreApkgOperationFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'The .apkg operation failed because the file or database could not be read.'**
+  String get backupRestoreApkgOperationFailed;
+
+  /// No description provided for @backupRestoreApkgExportFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'The Anki deck could not be packaged from this database: {path}'**
+  String backupRestoreApkgExportFailed(String path);
+
+  /// No description provided for @ankiWebSyncUnsupportedPlatform.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in to AnkiWeb to sync on web. Open Anki settings with the cloud icon to log in.'**
+  String get ankiWebSyncUnsupportedPlatform;
+
+  /// No description provided for @ankiWebDecksUnsupportedPlatform.
+  ///
+  /// In en, this message translates to:
+  /// **'To browse or manage decks on web, sign in to AnkiWeb using the cloud icon.'**
+  String get ankiWebDecksUnsupportedPlatform;
+
+  /// No description provided for @ankiStatsUnsupportedPlatform.
+  ///
+  /// In en, this message translates to:
+  /// **'Anki statistics are unavailable on this platform.'**
+  String get ankiStatsUnsupportedPlatform;
+
+  /// No description provided for @ankiSyncStatusDeviceClockMismatch.
+  ///
+  /// In en, this message translates to:
+  /// **'The device clock differs from the sync server by more than 5 minutes. Correct the clock and try again.'**
+  String get ankiSyncStatusDeviceClockMismatch;
+
+  /// No description provided for @ankiSyncStatusFullDownloadRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'The sync sanity check failed and local changes were rolled back. Download the server collection in full, then try again.'**
+  String get ankiSyncStatusFullDownloadRequired;
+
+  /// No description provided for @ankiSyncStatusFullTransferRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'This collection cannot be synchronized incrementally. Choose a full upload or download to continue.'**
+  String get ankiSyncStatusFullTransferRequired;
+
+  /// No description provided for @ankiSyncStatusIncrementalSyncFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Incremental sync could not complete. Check the server and connection, then try again.'**
+  String get ankiSyncStatusIncrementalSyncFailed;
 
   String get batchDlgFileName;
   String get batchDlgFolderName;

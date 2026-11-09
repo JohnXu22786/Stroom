@@ -1,10 +1,11 @@
 import 'dart:convert';
-import 'dart:convert';
 import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:archive/archive.dart';
 import 'package:sqflite/sqflite.dart';
+
+import 'apkg_result.dart';
 
 /// Imports .apkg files into Stroom's Anki collection.
 ///
@@ -13,11 +14,19 @@ import 'package:sqflite/sqflite.dart';
 /// them into the primary database.
 class AnkiApkgImporter {
   /// Import an .apkg file into the database at [targetDbPath].
-  /// Returns a summary string.
-  static Future<String> import(String apkgPath) async {
+  /// Returns imported counts; callers localize the user-facing summary.
+  static Future<AnkiApkgImportSummary> import(String apkgPath) async {
     // 1. Read ZIP
     final file = File(apkgPath);
-    if (!file.existsSync()) throw Exception('文件不存在: $apkgPath');
+    bool sourceExists;
+    try {
+      sourceExists = file.existsSync();
+    } catch (_) {
+      throw AnkiApkgException.unexpectedError(apkgPath);
+    }
+    if (!sourceExists) {
+      throw AnkiApkgException.fileNotFound(apkgPath);
+    }
 
     final bytes = file.readAsBytesSync();
     final archive = ZipDecoder().decodeBytes(bytes);
@@ -25,7 +34,9 @@ class AnkiApkgImporter {
     // 2. Extract collection.anki2
     final dbEntry = archive.files.firstWhere(
       (f) => f.name == 'collection.anki2',
-      orElse: () => throw Exception('.apkg 中缺少 collection.anki2'),
+      orElse: () => throw const AnkiApkgException(
+        AnkiApkgErrorCode.collectionMissing,
+      ),
     );
 
     // Write to temp file
@@ -39,7 +50,7 @@ class AnkiApkgImporter {
     final targetDbPath = p.join(docsDir.path, 'collection.anki2');
     if (!File(targetDbPath).existsSync()) {
       await File(tmpDbPath).delete();
-      throw Exception('目标数据库不存在，请先打开Anki闪卡功能');
+      throw AnkiApkgException.targetDatabaseMissing(targetDbPath);
     }
 
     // 4. Open both databases
@@ -58,7 +69,9 @@ class AnkiApkgImporter {
       // ── Import decks (merge JSON blobs in col row) ──────
       final srcCol = await importDb.query('col', where: 'id = 1');
       final tgtCol = await targetDb.query('col', where: 'id = 1');
-      if (srcCol.isEmpty || tgtCol.isEmpty) throw Exception('数据库损坏');
+      if (srcCol.isEmpty || tgtCol.isEmpty) {
+        throw const AnkiApkgException(AnkiApkgErrorCode.databaseCorrupt);
+      }
 
       final srcDecks =
           jsonDecode(srcCol.first['decks'] as String) as Map<String, dynamic>;
@@ -158,7 +171,11 @@ class AnkiApkgImporter {
         cardsImported++;
       }
 
-      return '导入完成：$decksImported 个牌组，$notesImported 个笔记，$cardsImported 张卡片';
+      return AnkiApkgImportSummary(
+        decksImported: decksImported,
+        notesImported: notesImported,
+        cardsImported: cardsImported,
+      );
     } finally {
       await targetDb.close();
       await importDb.close();

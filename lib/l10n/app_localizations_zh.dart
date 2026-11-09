@@ -867,7 +867,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aboutUpdateCheckFailed => '检查更新失败，请重试。';
 
   @override
-  String topicAssistantUpdateCheckFailed(Object error) => '检查助手更新失败：$error';
+  String topicAssistantUpdateCheckFailed(Object error) {
+    return '检查助手更新失败：$error';
+  }
 
   @override
   String get aboutPrivacyContent =>
@@ -10549,7 +10551,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get startupErrorTitle => '应用启动失败';
 
   @override
-  String startupErrorDetails(Object error) => '错误：$error';
+  String startupErrorDetails(Object error) {
+    return '错误：$error';
+  }
 
   @override
   String get renderErrorTitle => '界面渲染异常';
@@ -10559,6 +10563,68 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get renderErrorRestartMessage => '请尝试重启应用。';
+
+  @override
+  String backupRestoreApkgImportSummary(int decks, int notes, int cards) {
+    return '导入完成：$decks 个牌组，$notes 个笔记，$cards 张卡片';
+  }
+
+  @override
+  String backupRestoreApkgFileNotFound(String path) {
+    return '找不到所选的 .apkg 文件：$path';
+  }
+
+  @override
+  String get backupRestoreApkgCollectionMissing =>
+      '.apkg 文件中缺少 collection.anki2。';
+
+  @override
+  String backupRestoreApkgTargetMissing(String path) {
+    return '请先打开 Anki 闪卡功能，再导入或导出牌组：$path';
+  }
+
+  @override
+  String get backupRestoreApkgDatabaseCorrupt => 'Anki collection 数据库已损坏。';
+
+  @override
+  String backupRestoreApkgUnexpectedError(String path) {
+    return '.apkg 操作访问此路径时失败：$path';
+  }
+
+  @override
+  String get backupRestoreApkgOperationFailed => '.apkg 操作失败，无法读取文件或数据库。';
+
+  @override
+  String backupRestoreApkgExportFailed(String path) {
+    return '无法从此数据库打包导出 Anki 牌组：$path';
+  }
+
+  @override
+  String get ankiWebSyncUnsupportedPlatform =>
+      '网页端需登录 AnkiWeb 才能同步。请点击云朵图标打开 Anki 设置并登录。';
+
+  @override
+  String get ankiWebDecksUnsupportedPlatform =>
+      '如需在网页端浏览或管理牌组，请点击云朵图标登录 AnkiWeb。';
+
+  @override
+  String get ankiStatsUnsupportedPlatform => '当前平台无法查看 Anki 统计数据。';
+
+  @override
+  String get ankiSyncStatusDeviceClockMismatch =>
+      '设备时间与同步服务器相差超过 5 分钟，请校准设备时间后重试。';
+
+  @override
+  String get ankiSyncStatusFullDownloadRequired =>
+      '同步数据校验失败，本地更改已回滚。请完整下载服务器 collection 后重试。';
+
+  @override
+  String get ankiSyncStatusFullTransferRequired =>
+      '此 collection 无法增量同步。请选择完整上传或下载后继续。';
+
+  @override
+  String get ankiSyncStatusIncrementalSyncFailed => '增量同步未能完成。请检查服务器和网络连接后重试。';
+
   @override
   String get batchDlgFileName => '文件名';
 
@@ -11471,6 +11537,11 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get aboutUpdateCheckFailed => '检查更新失败，请重试。';
+
+  @override
+  String topicAssistantUpdateCheckFailed(Object error) {
+    return '检查助手更新失败：$error';
+  }
 
   @override
   String get aboutPrivacyContent =>
@@ -21147,4 +21218,82 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String startupIssueUnknownProviderType(Object index, Object type) {
     return '服务商条目 $index 使用未知类型“$type”，可能无法正常工作。';
   }
+
+  @override
+  String get startupErrorTitle => '应用启动失败';
+
+  @override
+  String startupErrorDetails(Object error) {
+    return '错误：$error';
+  }
+
+  @override
+  String get renderErrorTitle => '界面渲染异常';
+
+  @override
+  String get renderErrorDebugTitle => '界面渲染异常（调试模式）';
+
+  @override
+  String get renderErrorRestartMessage => '请尝试重启应用。';
+
+  @override
+  String backupRestoreApkgImportSummary(int decks, int notes, int cards) {
+    return '导入完成：$decks 个牌组，$notes 个笔记，$cards 张卡片';
+  }
+
+  @override
+  String backupRestoreApkgFileNotFound(String path) {
+    return '找不到所选的 .apkg 文件：$path';
+  }
+
+  @override
+  String get backupRestoreApkgCollectionMissing =>
+      '.apkg 文件中缺少 collection.anki2。';
+
+  @override
+  String backupRestoreApkgTargetMissing(String path) {
+    return '请先打开 Anki 闪卡功能，再导入或导出牌组：$path';
+  }
+
+  @override
+  String get backupRestoreApkgDatabaseCorrupt => 'Anki collection 数据库已损坏。';
+
+  @override
+  String backupRestoreApkgUnexpectedError(String path) {
+    return '.apkg 操作访问此路径时失败：$path';
+  }
+
+  @override
+  String get backupRestoreApkgOperationFailed => '.apkg 操作失败，无法读取文件或数据库。';
+
+  @override
+  String backupRestoreApkgExportFailed(String path) {
+    return '无法从此数据库打包导出 Anki 牌组：$path';
+  }
+
+  @override
+  String get ankiWebSyncUnsupportedPlatform =>
+      '网页端需登录 AnkiWeb 才能同步。请点击云朵图标打开 Anki 设置并登录。';
+
+  @override
+  String get ankiWebDecksUnsupportedPlatform =>
+      '如需在网页端浏览或管理牌组，请点击云朵图标登录 AnkiWeb。';
+
+  @override
+  String get ankiStatsUnsupportedPlatform => '当前平台无法查看 Anki 统计数据。';
+
+  @override
+  String get ankiSyncStatusDeviceClockMismatch =>
+      '设备时间与同步服务器相差超过 5 分钟，请校准设备时间后重试。';
+
+  @override
+  String get ankiSyncStatusFullDownloadRequired =>
+      '同步数据校验失败，本地更改已回滚。请完整下载服务器 collection 后重试。';
+
+  @override
+  String get ankiSyncStatusFullTransferRequired =>
+      '此 collection 无法增量同步。请选择完整上传或下载后继续。';
+
+  @override
+  String get ankiSyncStatusIncrementalSyncFailed => '增量同步未能完成。请检查服务器和网络连接后重试。';
 }
