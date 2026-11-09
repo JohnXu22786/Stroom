@@ -252,6 +252,29 @@ def _validated_fixtures(manifest: dict[str, Any]) -> list[dict[str, Any]]:
                 raise EvaluationError(
                     f"{fixture_id}: {field} must occur in gold_text"
                 )
+        if "table_text" in fixture:
+            table_column_counts = None
+            for line in fixture["table_text"].splitlines():
+                stripped = line.strip()
+                if "|" not in stripped:
+                    continue
+                raw_cells = _split_pipe_cells(stripped)
+                possible_counts = {len(raw_cells)}
+                if stripped.startswith("|"):
+                    possible_counts = {len(raw_cells) - 1}
+                    if _has_unescaped_trailing_pipe(stripped):
+                        possible_counts = {len(raw_cells) - 2}
+                elif _has_unescaped_trailing_pipe(stripped):
+                    possible_counts.add(len(raw_cells) - 1)
+                if len(raw_cells) > 1:
+                    if table_column_counts is None:
+                        table_column_counts = possible_counts
+                    else:
+                        table_column_counts &= possible_counts
+            if table_column_counts == set():
+                raise EvaluationError(
+                    f"{fixture_id}: table_text rows must have consistent columns"
+                )
     return fixtures
 
 
