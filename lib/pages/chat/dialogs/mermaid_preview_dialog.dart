@@ -612,8 +612,8 @@ class _MermaidPreviewDialogContentState
                     _readyFallbackTimer?.cancel();
                     _zoomReadinessRetryTimer?.cancel();
                     _zoomReadinessRetryTimer = null;
-                    _canApplyZoomDeltasAfterFit = true;
-                    unawaited(_flushPendingZoomDeltas(ctrl));
+                    _canApplyZoomDeltasAfterFit = false;
+                    unawaited(_checkZoomReadiness());
                     setState(() {
                       _isLoading = false;
                       if (kIsWeb &&
