@@ -100,6 +100,9 @@ void main() {
     await tester.tap(find.text('重试'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, '重试'));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
     await tester.pumpAndSettle();
     expect(find.text('助手对话 设置'), findsOneWidget);
     expect(executions.state, hasLength(1));
