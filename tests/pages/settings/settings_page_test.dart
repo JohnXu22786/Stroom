@@ -12,6 +12,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/l10n/app_localizations.dart';
+import 'package:stroom/l10n/app_localizations_en.dart';
+import 'package:stroom/l10n/app_localizations_zh.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/pages/settings_page.dart';
 import 'package:stroom/providers/context_management_provider.dart';
@@ -538,6 +540,54 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('版本信息'), findsNothing);
+    });
+  });
+
+  group('About update error localization', () {
+    test('localizes provider update errors in English', () {
+      final strings = AppLocalizationsEn();
+
+      expect(
+        localizeAboutUpdateError(
+          strings,
+          strings.updateCheckNetworkError('SocketException'),
+        ),
+        strings.aboutUpdateNetworkError('SocketException'),
+      );
+      expect(
+        localizeAboutUpdateError(
+          strings,
+          strings.updateCheckHttpFailed('502'),
+        ),
+        strings.aboutUpdateHttpError('502'),
+      );
+      expect(
+        localizeAboutUpdateError(strings, strings.updateCheckInvalidResponse),
+        strings.aboutUpdateInvalidResponse,
+      );
+    });
+
+    test('localizes provider update errors in Chinese', () {
+      final strings = AppLocalizationsZh();
+
+      expect(
+        localizeAboutUpdateError(
+          strings,
+          strings.updateCheckNetworkError('SocketException'),
+        ),
+        strings.aboutUpdateNetworkError('SocketException'),
+      );
+      expect(
+        localizeAboutUpdateError(
+          strings,
+          strings.updateCheckHttpFailed('502'),
+        ),
+        strings.aboutUpdateHttpError('502'),
+      );
+      expect(
+        localizeAboutUpdateError(strings, strings.updateCheckInvalidResponse),
+        strings.aboutUpdateInvalidResponse,
+      );
     });
   });
 }
