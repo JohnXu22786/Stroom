@@ -1631,6 +1631,26 @@ class ManifestOperations<T extends FileRecord> {
     }
   }
 
+  /// Removes cached folder metadata without changing record membership.
+  /// Folder move operations use this after migrating their snapshot so that a
+  /// concurrently added record is not flattened to the root during cleanup.
+  Future<void> removeFolderMetadataFromCache(String folderPath) async {
+    try {
+      await loadRecords();
+      if (_folderCache.remove(folderPath)) {
+        await ManifestDatabase.deleteFolder(folderPath, recordTable: tableName);
+      }
+    } catch (e, st) {
+      await AppLogService.error(
+        'ManifestOperations($manifestKey)',
+        'removeFolderMetadataFromCache failed',
+        e,
+        st,
+      );
+      rethrow;
+    }
+  }
+
   /// Ensure a folder path (and all its ancestors) is tracked in [_folderCache]
   /// and the database, so the folder won't disappear when all records are removed.
   Future<void> _ensureFolderPathTracked(String folderPath) async {

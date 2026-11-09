@@ -162,8 +162,22 @@ class ImageRecordsNotifier extends StateNotifier<List<ImageRecord>> {
 
     final records = await ImageManifest.loadRecords();
     final originalFolders = await ImageManifest.getAllFolders();
+    final recordsToRestore = List<ImageRecord>.unmodifiable(records.where(
+        (record) =>
+            record.folder == oldName ||
+            record.folder.startsWith('${oldName}/')));
+    final rollbackFolderAncestors = <String>{};
     await runFolderOperationWithRollback<ImageRecord>(
-      originalRecords: List.unmodifiable(records),
+      originalRecords: recordsToRestore,
+      rollbackFolderSubtrees: {oldName, newPath},
+      rollbackFolderPaths: rollbackFolderAncestors,
+      createdFolderPaths: folderOperationDestinationPaths(
+        sourceFolder: oldName,
+        destinationFolder: newPath,
+        originalFolders: originalFolders,
+        originalRecords: recordsToRestore,
+        recordFolder: (record) => record.folder,
+      ).union(rollbackFolderAncestors),
       originalFolders: originalFolders,
       recordId: (record) => record.id,
       recordFolder: (record) => record.folder,
@@ -198,7 +212,10 @@ class ImageRecordsNotifier extends StateNotifier<List<ImageRecord>> {
         await ImageManifest.addFolder(newPath);
 
         // 移除旧路径的文件夹缓存
-        await ImageManifest.removeFolderFromCache(oldName);
+        await ImageManifest.removeFolderMetadataFromCache(oldName);
+        for (final desc in descendants) {
+          await ImageManifest.removeFolderMetadataFromCache(desc);
+        }
 
         await loadRecords();
       },
@@ -231,8 +248,29 @@ class ImageRecordsNotifier extends StateNotifier<List<ImageRecord>> {
 
     final records = await ImageManifest.loadRecords();
     final originalFolders = await ImageManifest.getAllFolders();
+    final recordsToRestore = List<ImageRecord>.unmodifiable(records.where(
+        (record) =>
+            record.folder == sourceName ||
+            record.folder.startsWith('${sourceName}/')));
+    final rollbackFolderAncestors = <String>{};
+    if (targetParentClean.isNotEmpty) {
+      var ancestor = targetParentClean;
+      while (ancestor.isNotEmpty) {
+        rollbackFolderAncestors.add(ancestor);
+        ancestor = ImageManifest.getParentFolderPath(ancestor);
+      }
+    }
     await runFolderOperationWithRollback<ImageRecord>(
-      originalRecords: List.unmodifiable(records),
+      originalRecords: recordsToRestore,
+      rollbackFolderSubtrees: {sourceName, newPath},
+      rollbackFolderPaths: rollbackFolderAncestors,
+      createdFolderPaths: folderOperationDestinationPaths(
+        sourceFolder: sourceName,
+        destinationFolder: newPath,
+        originalFolders: originalFolders,
+        originalRecords: recordsToRestore,
+        recordFolder: (record) => record.folder,
+      ).union(rollbackFolderAncestors),
       originalFolders: originalFolders,
       recordId: (record) => record.id,
       recordFolder: (record) => record.folder,
@@ -264,9 +302,9 @@ class ImageRecordsNotifier extends StateNotifier<List<ImageRecord>> {
         }
 
         // 清理旧文件夹缓存（不删除记录）
-        await ImageManifest.removeFolderFromCache(sourceName);
+        await ImageManifest.removeFolderMetadataFromCache(sourceName);
         for (final desc in descendants) {
-          await ImageManifest.removeFolderFromCache(desc);
+          await ImageManifest.removeFolderMetadataFromCache(desc);
         }
 
         // 添加新文件夹缓存

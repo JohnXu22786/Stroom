@@ -541,6 +541,9 @@ class TextManifest {
 
   static Future<void> removeFolderFromCache(String folderPath) =>
       _withRecordMutationLock(() => _ops.removeFolderFromCache(folderPath));
+  static Future<void> removeFolderMetadataFromCache(String folderPath) =>
+      _withRecordMutationLock(
+          () => _ops.removeFolderMetadataFromCache(folderPath));
   static void invalidateCache() {
     unawaited(
       _withRecordMutationLock(() async {

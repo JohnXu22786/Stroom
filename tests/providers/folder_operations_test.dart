@@ -246,6 +246,68 @@ void main() {
     }
   });
 
+  test('metadata-only folder cleanup preserves concurrent record paths',
+      () async {
+    final now = DateTime.now();
+    await TextManifest.addRecord(TextRecord(
+      id: 'metadata_cleanup_text',
+      name: 'doc',
+      hash: 'metadata_cleanup_text_hash',
+      createdAt: now,
+      size: 1,
+      folder: 'shared/text',
+    ));
+    await ImageManifest.addRecord(ImageRecord(
+      id: 'metadata_cleanup_image',
+      name: 'img',
+      hash: 'metadata_cleanup_image_hash',
+      format: 'png',
+      createdAt: now,
+      size: 1,
+      folder: 'shared/image',
+    ));
+    await VideoManifest.addRecord(VideoRecord(
+      id: 'metadata_cleanup_video',
+      name: 'vid',
+      hash: 'metadata_cleanup_video_hash',
+      format: 'mp4',
+      createdAt: now,
+      size: 1,
+      folder: 'shared/video',
+    ));
+    await FileManifest.addRecord(AudioRecord(
+      id: 'metadata_cleanup_audio',
+      name: 'aud',
+      hash: 'metadata_cleanup_audio_hash',
+      format: 'wav',
+      createdAt: now,
+      size: 1,
+      folder: 'shared/audio',
+    ));
+    await TextManifest.addFolder('shared/concurrent_empty');
+    await ImageManifest.addFolder('shared/concurrent_empty');
+    await VideoManifest.addFolder('shared/concurrent_empty');
+    await FileManifest.addFolder('shared/concurrent_empty');
+
+    await TextManifest.removeFolderMetadataFromCache('shared');
+    await ImageManifest.removeFolderMetadataFromCache('shared');
+    await VideoManifest.removeFolderMetadataFromCache('shared');
+    await FileManifest.removeFolderMetadataFromCache('shared');
+
+    expect((await TextManifest.loadRecords()).single.folder, 'shared/text');
+    expect((await ImageManifest.loadRecords()).single.folder, 'shared/image');
+    expect((await VideoManifest.loadRecords()).single.folder, 'shared/video');
+    expect((await FileManifest.loadRecords()).single.folder, 'shared/audio');
+    expect(await TextManifest.getAllFolders(),
+        contains('shared/concurrent_empty'));
+    expect(await ImageManifest.getAllFolders(),
+        contains('shared/concurrent_empty'));
+    expect(await VideoManifest.getAllFolders(),
+        contains('shared/concurrent_empty'));
+    expect(await FileManifest.getAllFolders(),
+        contains('shared/concurrent_empty'));
+  });
+
   // ====================================================================
   // No-op guards — degenerate inputs must not corrupt data.
   // Regression: moveFolder('a','a') previously flattened/erased records.

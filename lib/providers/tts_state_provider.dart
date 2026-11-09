@@ -230,8 +230,22 @@ class AudioRecordsNotifier extends StateNotifier<List<AudioRecord>> {
 
     final records = await FileManifest.loadRecords();
     final originalFolders = await FileManifest.getAllFolders();
+    final recordsToRestore = List<AudioRecord>.unmodifiable(records.where(
+        (record) =>
+            record.folder == oldName ||
+            record.folder.startsWith('${oldName}/')));
+    final rollbackFolderAncestors = <String>{};
     await runFolderOperationWithRollback<AudioRecord>(
-      originalRecords: List.unmodifiable(records),
+      originalRecords: recordsToRestore,
+      rollbackFolderSubtrees: {oldName, newPath},
+      rollbackFolderPaths: rollbackFolderAncestors,
+      createdFolderPaths: folderOperationDestinationPaths(
+        sourceFolder: oldName,
+        destinationFolder: newPath,
+        originalFolders: originalFolders,
+        originalRecords: recordsToRestore,
+        recordFolder: (record) => record.folder,
+      ).union(rollbackFolderAncestors),
       originalFolders: originalFolders,
       recordId: (record) => record.id,
       recordFolder: (record) => record.folder,
@@ -265,7 +279,10 @@ class AudioRecordsNotifier extends StateNotifier<List<AudioRecord>> {
 
         await FileManifest.addFolderPath(newPath);
         // 记录已全部移出，仅清理旧目录缓存（不删除任何记录/文件）
-        await FileManifest.removeFolderFromCache(oldName);
+        await FileManifest.removeFolderMetadataFromCache(oldName);
+        for (final desc in oldDescendants) {
+          await FileManifest.removeFolderMetadataFromCache(desc);
+        }
         await loadRecords();
       },
     );
@@ -296,8 +313,29 @@ class AudioRecordsNotifier extends StateNotifier<List<AudioRecord>> {
 
     final records = await FileManifest.loadRecords();
     final originalFolders = await FileManifest.getAllFolders();
+    final recordsToRestore = List<AudioRecord>.unmodifiable(records.where(
+        (record) =>
+            record.folder == oldName ||
+            record.folder.startsWith('${oldName}/')));
+    final rollbackFolderAncestors = <String>{};
+    if (targetFolderClean.isNotEmpty) {
+      var ancestor = targetFolderClean;
+      while (ancestor.isNotEmpty) {
+        rollbackFolderAncestors.add(ancestor);
+        ancestor = FileManifest.getParentFolderPath(ancestor);
+      }
+    }
     await runFolderOperationWithRollback<AudioRecord>(
-      originalRecords: List.unmodifiable(records),
+      originalRecords: recordsToRestore,
+      rollbackFolderSubtrees: {oldName, newPath},
+      rollbackFolderPaths: rollbackFolderAncestors,
+      createdFolderPaths: folderOperationDestinationPaths(
+        sourceFolder: oldName,
+        destinationFolder: newPath,
+        originalFolders: originalFolders,
+        originalRecords: recordsToRestore,
+        recordFolder: (record) => record.folder,
+      ).union(rollbackFolderAncestors),
       originalFolders: originalFolders,
       recordId: (record) => record.id,
       recordFolder: (record) => record.folder,
@@ -341,7 +379,10 @@ class AudioRecordsNotifier extends StateNotifier<List<AudioRecord>> {
           }
         }
         // 记录已全部移出，仅清理旧目录缓存（不删除任何记录/文件）
-        await FileManifest.removeFolderFromCache(oldName);
+        await FileManifest.removeFolderMetadataFromCache(oldName);
+        for (final desc in oldDescendants) {
+          await FileManifest.removeFolderMetadataFromCache(desc);
+        }
         await loadRecords();
       },
     );

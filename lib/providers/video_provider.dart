@@ -161,8 +161,22 @@ class VideoRecordsNotifier extends StateNotifier<List<VideoRecord>> {
 
     final records = await VideoManifest.loadRecords();
     final originalFolders = await VideoManifest.getAllFolders();
+    final recordsToRestore = List<VideoRecord>.unmodifiable(records.where(
+        (record) =>
+            record.folder == oldName ||
+            record.folder.startsWith('${oldName}/')));
+    final rollbackFolderAncestors = <String>{};
     await runFolderOperationWithRollback<VideoRecord>(
-      originalRecords: List.unmodifiable(records),
+      originalRecords: recordsToRestore,
+      rollbackFolderSubtrees: {oldName, newPath},
+      rollbackFolderPaths: rollbackFolderAncestors,
+      createdFolderPaths: folderOperationDestinationPaths(
+        sourceFolder: oldName,
+        destinationFolder: newPath,
+        originalFolders: originalFolders,
+        originalRecords: recordsToRestore,
+        recordFolder: (record) => record.folder,
+      ).union(rollbackFolderAncestors),
       originalFolders: originalFolders,
       recordId: (record) => record.id,
       recordFolder: (record) => record.folder,
@@ -192,7 +206,10 @@ class VideoRecordsNotifier extends StateNotifier<List<VideoRecord>> {
         }
 
         await VideoManifest.addFolder(newPath);
-        await VideoManifest.removeFolderFromCache(oldName);
+        await VideoManifest.removeFolderMetadataFromCache(oldName);
+        for (final desc in descendants) {
+          await VideoManifest.removeFolderMetadataFromCache(desc);
+        }
 
         await loadRecords();
       },
@@ -225,8 +242,29 @@ class VideoRecordsNotifier extends StateNotifier<List<VideoRecord>> {
 
     final records = await VideoManifest.loadRecords();
     final originalFolders = await VideoManifest.getAllFolders();
+    final recordsToRestore = List<VideoRecord>.unmodifiable(records.where(
+        (record) =>
+            record.folder == sourceName ||
+            record.folder.startsWith('${sourceName}/')));
+    final rollbackFolderAncestors = <String>{};
+    if (targetParentClean.isNotEmpty) {
+      var ancestor = targetParentClean;
+      while (ancestor.isNotEmpty) {
+        rollbackFolderAncestors.add(ancestor);
+        ancestor = VideoManifest.getParentFolderPath(ancestor);
+      }
+    }
     await runFolderOperationWithRollback<VideoRecord>(
-      originalRecords: List.unmodifiable(records),
+      originalRecords: recordsToRestore,
+      rollbackFolderSubtrees: {sourceName, newPath},
+      rollbackFolderPaths: rollbackFolderAncestors,
+      createdFolderPaths: folderOperationDestinationPaths(
+        sourceFolder: sourceName,
+        destinationFolder: newPath,
+        originalFolders: originalFolders,
+        originalRecords: recordsToRestore,
+        recordFolder: (record) => record.folder,
+      ).union(rollbackFolderAncestors),
       originalFolders: originalFolders,
       recordId: (record) => record.id,
       recordFolder: (record) => record.folder,
@@ -255,9 +293,9 @@ class VideoRecordsNotifier extends StateNotifier<List<VideoRecord>> {
           await VideoManifest.addFolder(newDescPath);
         }
 
-        await VideoManifest.removeFolderFromCache(sourceName);
+        await VideoManifest.removeFolderMetadataFromCache(sourceName);
         for (final desc in descendants) {
-          await VideoManifest.removeFolderFromCache(desc);
+          await VideoManifest.removeFolderMetadataFromCache(desc);
         }
 
         await VideoManifest.addFolder(newPath);

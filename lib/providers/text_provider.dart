@@ -232,8 +232,22 @@ class TextRecordsNotifier extends StateNotifier<List<TextRecord>> {
 
     final records = await TextManifest.loadRecords();
     final originalFolders = await TextManifest.getAllFolders();
+    final recordsToRestore = List<TextRecord>.unmodifiable(records.where(
+        (record) =>
+            record.folder == oldName ||
+            record.folder.startsWith('${oldName}/')));
+    final rollbackFolderAncestors = <String>{};
     await runFolderOperationWithRollback<TextRecord>(
-      originalRecords: List.unmodifiable(records),
+      originalRecords: recordsToRestore,
+      rollbackFolderSubtrees: {oldName, newPath},
+      rollbackFolderPaths: rollbackFolderAncestors,
+      createdFolderPaths: folderOperationDestinationPaths(
+        sourceFolder: oldName,
+        destinationFolder: newPath,
+        originalFolders: originalFolders,
+        originalRecords: recordsToRestore,
+        recordFolder: (record) => record.folder,
+      ).union(rollbackFolderAncestors),
       originalFolders: originalFolders,
       recordId: (record) => record.id,
       recordFolder: (record) => record.folder,
@@ -263,7 +277,10 @@ class TextRecordsNotifier extends StateNotifier<List<TextRecord>> {
         }
 
         await TextManifest.addFolder(newPath);
-        await TextManifest.removeFolderFromCache(oldName);
+        await TextManifest.removeFolderMetadataFromCache(oldName);
+        for (final desc in descendants) {
+          await TextManifest.removeFolderMetadataFromCache(desc);
+        }
 
         await loadRecords();
       },
@@ -298,8 +315,29 @@ class TextRecordsNotifier extends StateNotifier<List<TextRecord>> {
 
     final records = await TextManifest.loadRecords();
     final originalFolders = await TextManifest.getAllFolders();
+    final recordsToRestore = List<TextRecord>.unmodifiable(records.where(
+        (record) =>
+            record.folder == sourceName ||
+            record.folder.startsWith('${sourceName}/')));
+    final rollbackFolderAncestors = <String>{};
+    if (targetParentClean.isNotEmpty) {
+      var ancestor = targetParentClean;
+      while (ancestor.isNotEmpty) {
+        rollbackFolderAncestors.add(ancestor);
+        ancestor = TextManifest.getParentFolderPath(ancestor);
+      }
+    }
     await runFolderOperationWithRollback<TextRecord>(
-      originalRecords: List.unmodifiable(records),
+      originalRecords: recordsToRestore,
+      rollbackFolderSubtrees: {sourceName, newPath},
+      rollbackFolderPaths: rollbackFolderAncestors,
+      createdFolderPaths: folderOperationDestinationPaths(
+        sourceFolder: sourceName,
+        destinationFolder: newPath,
+        originalFolders: originalFolders,
+        originalRecords: recordsToRestore,
+        recordFolder: (record) => record.folder,
+      ).union(rollbackFolderAncestors),
       originalFolders: originalFolders,
       recordId: (record) => record.id,
       recordFolder: (record) => record.folder,
@@ -328,9 +366,9 @@ class TextRecordsNotifier extends StateNotifier<List<TextRecord>> {
           await TextManifest.addFolder(newDescPath);
         }
 
-        await TextManifest.removeFolderFromCache(sourceName);
+        await TextManifest.removeFolderMetadataFromCache(sourceName);
         for (final desc in descendants) {
-          await TextManifest.removeFolderFromCache(desc);
+          await TextManifest.removeFolderMetadataFromCache(desc);
         }
 
         await TextManifest.addFolder(newPath);

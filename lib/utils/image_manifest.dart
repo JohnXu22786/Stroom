@@ -170,6 +170,8 @@ class ImageManifest {
   static Future<void> removeFolder(String name) => _ops.removeFolder(name);
   static Future<void> removeFolderFromCache(String folderPath) =>
       _ops.removeFolderFromCache(folderPath);
+  static Future<void> removeFolderMetadataFromCache(String folderPath) =>
+      _ops.removeFolderMetadataFromCache(folderPath);
   static void invalidateCache() => _ops.invalidateCache();
 
   // Path utilities — forward to shared utilities

@@ -675,6 +675,8 @@ class FileManifest {
   static Future<Set<String>> getAllFolders() => _ops.getAllFolders();
   static Future<void> removeFolderFromCache(String folderPath) =>
       _ops.removeFolderFromCache(folderPath);
+  static Future<void> removeFolderMetadataFromCache(String folderPath) =>
+      _ops.removeFolderMetadataFromCache(folderPath);
   static void invalidateCache() => _ops.invalidateCache();
 
   // Path utilities — forward to shared utilities

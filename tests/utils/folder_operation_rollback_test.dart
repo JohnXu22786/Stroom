@@ -14,9 +14,12 @@ void main() {
     final recordsById = <String, _Record>{
       'root': const _Record('root', 'old'),
       'child': const _Record('child', 'old/sub'),
+      'unrelated': const _Record('unrelated', 'outside'),
     };
-    final folders = <String>{'old', 'old/sub'};
-    final originalRecords = List<_Record>.unmodifiable(recordsById.values);
+    final folders = <String>{'old', 'old/sub', 'outside'};
+    final originalRecords = List<_Record>.unmodifiable(
+      recordsById.values.where((record) => record.folder.startsWith('old')),
+    );
     final originalFolders = Set<String>.of(folders);
 
     Future<List<_Record>> loadRecords() async => recordsById.values.toList();
@@ -44,6 +47,8 @@ void main() {
       runFolderOperationWithRollback<_Record>(
         originalRecords: originalRecords,
         originalFolders: originalFolders,
+        rollbackFolderSubtrees: {'old', 'new'},
+        createdFolderPaths: {'new', 'new/sub'},
         recordId: (record) => record.id,
         recordFolder: (record) => record.folder,
         loadRecords: loadRecords,
@@ -57,6 +62,9 @@ void main() {
           await moveRecord('child', 'new/sub');
           folders
               .removeWhere((path) => path == 'old' || path.startsWith('old/'));
+          await moveRecord('unrelated', 'outside/newer');
+          folders.add('outside/newer');
+          folders.add('new/external_empty');
           throw StateError('injected failure after partial folder mutation');
         },
       ),
@@ -65,6 +73,9 @@ void main() {
 
     expect(recordsById['root']?.folder, 'old');
     expect(recordsById['child']?.folder, 'old/sub');
-    expect(folders, originalFolders);
+    expect(recordsById['unrelated']?.folder, 'outside/newer');
+    expect(folders, containsAll(originalFolders));
+    expect(folders, contains('outside/newer'));
+    expect(folders, contains('new/external_empty'));
   });
 }
