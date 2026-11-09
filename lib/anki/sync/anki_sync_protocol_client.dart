@@ -44,27 +44,28 @@ class AnkiSyncProtocolClient {
     required Duration requestTimeout,
     required bool allowAnkiWebMetaRedirect,
     String? hostKey,
-  }) : _configuredSyncRoot = syncRoot,
-       _client = client,
-       _ownsClient = ownsClient,
-       _allowAnkiWebMetaRedirect = allowAnkiWebMetaRedirect,
-       _sessionKey = sessionKey,
-       _requestTimeout = requestTimeout,
-       _hostKey = hostKey;
+  })  : _configuredSyncRoot = syncRoot,
+        _client = client,
+        _ownsClient = ownsClient,
+        _allowAnkiWebMetaRedirect = allowAnkiWebMetaRedirect,
+        _sessionKey = sessionKey,
+        _requestTimeout = requestTimeout,
+        _hostKey = hostKey;
 
   factory AnkiSyncProtocolClient.ankiWeb({
     http.Client? client,
     String? hostKey,
     Duration requestTimeout = _timeout,
-  }) => AnkiSyncProtocolClient._(
-    syncRoot: ankiWebSyncRoot,
-    client: client ?? http.Client(),
-    ownsClient: client == null,
-    sessionKey: _newSessionKey(),
-    requestTimeout: requestTimeout,
-    allowAnkiWebMetaRedirect: true,
-    hostKey: hostKey,
-  );
+  }) =>
+      AnkiSyncProtocolClient._(
+        syncRoot: ankiWebSyncRoot,
+        client: client ?? http.Client(),
+        ownsClient: client == null,
+        sessionKey: _newSessionKey(),
+        requestTimeout: requestTimeout,
+        allowAnkiWebMetaRedirect: true,
+        hostKey: hostKey,
+      );
 
   factory AnkiSyncProtocolClient.selfHosted({
     required String endpoint,
@@ -306,9 +307,12 @@ class AnkiSyncProtocolClient {
   }
 
   Future<List<int>> downloadMediaZip(List<String> filenames) async {
-    return requestMediaData('downloadFiles', {
-      'files': filenames,
-    }, maxResponseBytes: maxMediaArchiveBytes);
+    return requestMediaData(
+        'downloadFiles',
+        {
+          'files': filenames,
+        },
+        maxResponseBytes: maxMediaArchiveBytes);
   }
 
   Future<List<int>> _send(
@@ -338,16 +342,15 @@ class AnkiSyncProtocolClient {
       });
     }
 
-    final request =
-        _ProgressAwareMultipartRequest(
-            _endpointFor(method),
-            abortTrigger: abortRequest.future,
-            onProgress: resetRequestTimer,
-          )
-          ..followRedirects = false
-          ..fields['c'] = compress ? '1' : '0'
-          ..fields['k'] = hostKey ?? _hostKey ?? ''
-          ..fields['s'] = _sessionKey;
+    final request = _ProgressAwareMultipartRequest(
+      _endpointFor(method),
+      abortTrigger: abortRequest.future,
+      onProgress: resetRequestTimer,
+    )
+      ..followRedirects = false
+      ..fields['c'] = compress ? '1' : '0'
+      ..fields['k'] = hostKey ?? _hostKey ?? ''
+      ..fields['s'] = _sessionKey;
     final requestBytes = precompressedPayloadFile == null
         ? (compress ? gzip.encode(payload) : payload)
         : null;
@@ -550,9 +553,8 @@ class AnkiSyncProtocolClient {
 
   Uri _endpointFor(String method) {
     final isMediaEndpoint = method.startsWith('../msync/');
-    final endpointName = isMediaEndpoint
-        ? method.substring('../msync/'.length)
-        : method;
+    final endpointName =
+        isMediaEndpoint ? method.substring('../msync/'.length) : method;
     if (!RegExp(r'^[A-Za-z][A-Za-z0-9]*$').hasMatch(endpointName)) {
       throw const AnkiSyncException.appGenerated(
         '同步请求路径无效',
@@ -561,9 +563,8 @@ class AnkiSyncProtocolClient {
     }
 
     final endpoint = syncRoot.resolve(method);
-    final endpointRoot = isMediaEndpoint
-        ? syncRoot.resolve('../msync/')
-        : syncRoot;
+    final endpointRoot =
+        isMediaEndpoint ? syncRoot.resolve('../msync/') : syncRoot;
     if (endpoint.origin != syncRoot.origin ||
         !endpoint.path.startsWith(endpointRoot.path)) {
       throw const AnkiSyncException.appGenerated(
@@ -631,8 +632,7 @@ class AnkiSyncProtocolClient {
     }
     final host = uri.host.toLowerCase();
     final address = InternetAddress.tryParse(host);
-    final isLoopback =
-        host == 'localhost' ||
+    final isLoopback = host == 'localhost' ||
         host.endsWith('.localhost') ||
         address?.isLoopback == true;
     if (uri.scheme == 'http' && !isLoopback) {
@@ -759,10 +759,10 @@ class AnkiSyncException implements Exception {
   final String? diagnosticText;
 
   const AnkiSyncException(this.message)
-    : failureCode = null,
-      diagnosticValue = null,
-      diagnosticCount = null,
-      diagnosticText = null;
+      : failureCode = null,
+        diagnosticValue = null,
+        diagnosticCount = null,
+        diagnosticText = null;
   const AnkiSyncException.appGenerated(
     this.message, {
     this.failureCode = AnkiSyncFailureCode.incrementalSync,
@@ -772,63 +772,67 @@ class AnkiSyncException implements Exception {
   });
 
   String localizedMessage(AppLocalizations l10n) => switch (failureCode) {
-    AnkiSyncFailureCode.incrementalSync =>
-      l10n.ankiSyncStatusIncrementalSyncFailed,
-    AnkiSyncFailureCode.deviceClockMismatch =>
-      l10n.ankiSyncStatusDeviceClockMismatch,
-    AnkiSyncFailureCode.fullTransferRequired =>
-      l10n.ankiSyncStatusFullTransferRequired,
-    AnkiSyncFailureCode.fullDownloadRequired =>
-      l10n.ankiSyncStatusFullDownloadRequired,
-    AnkiSyncFailureCode.upgradeClientRequired =>
-      l10n.ankiSyncStatusUpgradeClient,
-    AnkiSyncFailureCode.protocolFailure => l10n.ankiSyncStatusProtocolFailed,
-    AnkiSyncFailureCode.loginRequired => l10n.ankiSyncStatusLoginRequired,
-    AnkiSyncFailureCode.invalidServerAddress =>
-      l10n.ankiSyncStatusInvalidServerUrl,
-    AnkiSyncFailureCode.httpsRequired => l10n.ankiSyncStatusHttpsRequired,
-    AnkiSyncFailureCode.connectionTimeout =>
-      l10n.ankiSyncStatusConnectionTimeout,
-    AnkiSyncFailureCode.tlsFailure => l10n.ankiSyncStatusTlsFailure,
-    AnkiSyncFailureCode.connectionFailure =>
-      l10n.ankiSyncStatusConnectionFailure,
-    AnkiSyncFailureCode.requestFailure => l10n.ankiSyncStatusRequestFailure,
-    AnkiSyncFailureCode.serverHttpError => switch (diagnosticValue) {
-      400 ||
-      401 ||
-      403 => l10n.ankiSyncStatusServerAuthRejected(diagnosticValue!),
-      404 => l10n.ankiSyncStatusServerEndpointNotFound(diagnosticValue!),
-      _ => l10n.ankiSyncStatusServerHttpError(diagnosticValue ?? 0),
-    },
-    AnkiSyncFailureCode.responseTooLarge => l10n.ankiSyncStatusResponseTooLarge(
-      diagnosticValue ?? 0,
-    ),
-    AnkiSyncFailureCode.localFileFailure => l10n.ankiSyncStatusLocalFileFailure,
-    AnkiSyncFailureCode.collectionInvalid =>
-      l10n.ankiSyncStatusCollectionInvalid,
-    AnkiSyncFailureCode.mediaIndexCorrupt =>
-      l10n.ankiSyncStatusMediaIndexCorrupt,
-    AnkiSyncFailureCode.mediaIndexFailure =>
-      l10n.ankiSyncStatusMediaIndexFailure,
-    AnkiSyncFailureCode.mediaProtocolFailure =>
-      l10n.ankiSyncStatusMediaProtocolFailed,
-    AnkiSyncFailureCode.mediaChecksumMismatch =>
-      l10n.ankiSyncStatusMediaChecksumMismatch,
-    AnkiSyncFailureCode.mediaFilenameConflict =>
-      l10n.ankiSyncStatusMediaFilenameConflict(diagnosticText ?? ''),
-    AnkiSyncFailureCode.mediaInvalidFilename =>
-      l10n.ankiSyncStatusMediaInvalidFilename(diagnosticText ?? ''),
-    AnkiSyncFailureCode.mediaFileSizeLimit =>
-      l10n.ankiSyncStatusMediaFileSizeLimit(diagnosticValue ?? 0),
-    AnkiSyncFailureCode.mediaBatchLimitExceeded =>
-      l10n.ankiSyncStatusMediaBatchLimitExceeded(
-        diagnosticCount ?? 0,
-        diagnosticValue ?? 0,
-      ),
-    AnkiSyncFailureCode.mediaSanityCheckFailed =>
-      l10n.ankiSyncStatusMediaSanityCheckFailed,
-    null => message,
-  };
+        AnkiSyncFailureCode.incrementalSync =>
+          l10n.ankiSyncStatusIncrementalSyncFailed,
+        AnkiSyncFailureCode.deviceClockMismatch =>
+          l10n.ankiSyncStatusDeviceClockMismatch,
+        AnkiSyncFailureCode.fullTransferRequired =>
+          l10n.ankiSyncStatusFullTransferRequired,
+        AnkiSyncFailureCode.fullDownloadRequired =>
+          l10n.ankiSyncStatusFullDownloadRequired,
+        AnkiSyncFailureCode.upgradeClientRequired =>
+          l10n.ankiSyncStatusUpgradeClient,
+        AnkiSyncFailureCode.protocolFailure =>
+          l10n.ankiSyncStatusProtocolFailed,
+        AnkiSyncFailureCode.loginRequired => l10n.ankiSyncStatusLoginRequired,
+        AnkiSyncFailureCode.invalidServerAddress =>
+          l10n.ankiSyncStatusInvalidServerUrl,
+        AnkiSyncFailureCode.httpsRequired => l10n.ankiSyncStatusHttpsRequired,
+        AnkiSyncFailureCode.connectionTimeout =>
+          l10n.ankiSyncStatusConnectionTimeout,
+        AnkiSyncFailureCode.tlsFailure => l10n.ankiSyncStatusTlsFailure,
+        AnkiSyncFailureCode.connectionFailure =>
+          l10n.ankiSyncStatusConnectionFailure,
+        AnkiSyncFailureCode.requestFailure => l10n.ankiSyncStatusRequestFailure,
+        AnkiSyncFailureCode.serverHttpError => switch (diagnosticValue) {
+            400 ||
+            401 ||
+            403 =>
+              l10n.ankiSyncStatusServerAuthRejected(diagnosticValue!),
+            404 => l10n.ankiSyncStatusServerEndpointNotFound(diagnosticValue!),
+            _ => l10n.ankiSyncStatusServerHttpError(diagnosticValue ?? 0),
+          },
+        AnkiSyncFailureCode.responseTooLarge =>
+          l10n.ankiSyncStatusResponseTooLarge(
+            diagnosticValue ?? 0,
+          ),
+        AnkiSyncFailureCode.localFileFailure =>
+          l10n.ankiSyncStatusLocalFileFailure,
+        AnkiSyncFailureCode.collectionInvalid =>
+          l10n.ankiSyncStatusCollectionInvalid,
+        AnkiSyncFailureCode.mediaIndexCorrupt =>
+          l10n.ankiSyncStatusMediaIndexCorrupt,
+        AnkiSyncFailureCode.mediaIndexFailure =>
+          l10n.ankiSyncStatusMediaIndexFailure,
+        AnkiSyncFailureCode.mediaProtocolFailure =>
+          l10n.ankiSyncStatusMediaProtocolFailed,
+        AnkiSyncFailureCode.mediaChecksumMismatch =>
+          l10n.ankiSyncStatusMediaChecksumMismatch,
+        AnkiSyncFailureCode.mediaFilenameConflict =>
+          l10n.ankiSyncStatusMediaFilenameConflict(diagnosticText ?? ''),
+        AnkiSyncFailureCode.mediaInvalidFilename =>
+          l10n.ankiSyncStatusMediaInvalidFilename(diagnosticText ?? ''),
+        AnkiSyncFailureCode.mediaFileSizeLimit =>
+          l10n.ankiSyncStatusMediaFileSizeLimit(diagnosticValue ?? 0),
+        AnkiSyncFailureCode.mediaBatchLimitExceeded =>
+          l10n.ankiSyncStatusMediaBatchLimitExceeded(
+            diagnosticCount ?? 0,
+            diagnosticValue ?? 0,
+          ),
+        AnkiSyncFailureCode.mediaSanityCheckFailed =>
+          l10n.ankiSyncStatusMediaSanityCheckFailed,
+        null => message,
+      };
 
   @override
   String toString() => message;
