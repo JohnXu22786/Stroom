@@ -1,6 +1,29 @@
 part of 'chat_stream_manager_test.dart';
 
 void chatStreamManagerGroup4() {
+  test('compaction history stays inside the request prefix', () {
+    final requestHistory = [
+      _userMsg('first request', 'u1'),
+      ChatMessage(role: 'assistant', content: 'first reply', id: 'a1'),
+      _userMsg('second request', 'u2'),
+      ChatMessage(role: 'assistant', content: 'second reply', id: 'a2'),
+      _userMsg('retry target', 'u3'),
+      ChatMessage(role: 'assistant', content: 'later reply', id: 'a3'),
+      _userMsg('later request', 'u4'),
+    ];
+
+    final parts = ChatStreamManager.splitCompactionHistory(
+      requestHistory.take(5).toList(),
+    );
+
+    expect(parts.head.map((message) => message.id), ['u1', 'a1']);
+    expect(parts.tail.map((message) => message.id), ['u2', 'a2', 'u3']);
+    expect(
+      [...parts.head, ...parts.tail].any((message) => message.id == 'u4'),
+      isFalse,
+    );
+  });
+
   test('persists realtime input transcription on the user message', () async {
     SharedPreferences.setMockInitialValues({});
     final manager = ChatStreamManager();

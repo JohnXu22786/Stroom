@@ -877,4 +877,25 @@ class ChatStreamManager {
     }
     return 0;
   }
+
+  @visibleForTesting
+  static ({List<ChatMessage> head, List<ChatMessage> tail})
+      splitCompactionHistory(
+    List<ChatMessage> requestHistory, {
+    String? tailStartId,
+  }) {
+    final tailStart = _findTailStart(requestHistory);
+    var headStart = 0;
+    if (tailStartId != null) {
+      final idx = requestHistory.indexWhere((m) => m.id == tailStartId);
+      if (idx >= 0) headStart = idx;
+    }
+    if (headStart >= tailStart) {
+      return (head: const [], tail: const []);
+    }
+    return (
+      head: requestHistory.sublist(headStart, tailStart),
+      tail: requestHistory.sublist(tailStart),
+    );
+  }
 }
