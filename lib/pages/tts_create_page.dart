@@ -691,6 +691,7 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
     final cs = Theme.of(context).colorScheme;
 
     return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       clipBehavior: Clip.antiAlias,
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -887,6 +888,7 @@ class _TTSCreatePageState extends ConsumerState<TTSCreatePage> {
     }
 
     return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       clipBehavior: Clip.antiAlias,
       child: Padding(
         padding: const EdgeInsets.all(16),
