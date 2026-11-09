@@ -189,7 +189,8 @@ void main() {
       );
     });
 
-    test('localizes local file failures while downloading a collection', () async {
+    test('localizes local file failures while downloading a collection',
+        () async {
       final directory = await Directory.systemTemp.createTemp(
         'stroom-anki-protocol-local-file-error_',
       );

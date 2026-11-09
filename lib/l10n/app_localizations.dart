@@ -18500,24 +18500,34 @@ abstract class AppLocalizations {
 
   /// No description provided for @ankiSyncStatusProtocolFailed.
   String get ankiSyncStatusProtocolFailed;
+
   /// No description provided for @ankiSyncStatusLoginRequired.
   String get ankiSyncStatusLoginRequired;
+
   /// No description provided for @ankiSyncStatusInvalidServerUrl.
   String get ankiSyncStatusInvalidServerUrl;
+
   /// No description provided for @ankiSyncStatusHttpsRequired.
   String get ankiSyncStatusHttpsRequired;
+
   /// No description provided for @ankiSyncStatusConnectionTimeout.
   String get ankiSyncStatusConnectionTimeout;
+
   /// No description provided for @ankiSyncStatusTlsFailure.
   String get ankiSyncStatusTlsFailure;
+
   /// No description provided for @ankiSyncStatusConnectionFailure.
   String get ankiSyncStatusConnectionFailure;
+
   /// No description provided for @ankiSyncStatusRequestFailure.
   String get ankiSyncStatusRequestFailure;
+
   /// No description provided for @ankiSyncStatusServerHttpError.
   String ankiSyncStatusServerHttpError(int statusCode);
+
   /// No description provided for @ankiSyncStatusResponseTooLarge.
   String ankiSyncStatusResponseTooLarge(int limitMb);
+
   /// No description provided for @ankiSyncStatusLocalFileFailure.
   String get ankiSyncStatusLocalFileFailure;
 

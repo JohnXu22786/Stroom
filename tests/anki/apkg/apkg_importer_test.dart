@@ -77,8 +77,9 @@ void main() {
         );
         expect(
           documents.listSync().where(
-            (entry) => entry.uri.pathSegments.last.startsWith('tmp_import_'),
-          ),
+                (entry) =>
+                    entry.uri.pathSegments.last.startsWith('tmp_import_'),
+              ),
           isEmpty,
         );
       } finally {
@@ -139,8 +140,9 @@ void main() {
         );
         expect(
           documents.listSync().where(
-            (entry) => entry.uri.pathSegments.last.startsWith('tmp_import_'),
-          ),
+                (entry) =>
+                    entry.uri.pathSegments.last.startsWith('tmp_import_'),
+              ),
           isEmpty,
         );
       } finally {
@@ -161,7 +163,8 @@ void main() {
       final sourcePath = '${documents.path}/source.anki2';
       final targetPath = '${documents.path}/collection.anki2';
 
-      Future<void> createCollection(String path, {bool includeNote = false}) async {
+      Future<void> createCollection(String path,
+          {bool includeNote = false}) async {
         final db = await sqflite.openDatabase(
           path,
           version: 1,
@@ -218,8 +221,9 @@ void main() {
         );
         expect(
           documents.listSync().where(
-            (entry) => entry.uri.pathSegments.last.startsWith('tmp_import_'),
-          ),
+                (entry) =>
+                    entry.uri.pathSegments.last.startsWith('tmp_import_'),
+              ),
           isEmpty,
         );
       } finally {
