@@ -1086,6 +1086,12 @@
   "galleryChoiceApp": "App gallery",
   "galleryChoiceAppDescription": "Choose from the app gallery",
   "appMediaUnreadable": "Could not read file",
+  "appMediaLoadError": "Could not load files: {error}",
+  "@appMediaLoadError": {
+    "placeholders": {
+      "error": {}
+    }
+  },
   "appMediaClearSelection": "Clear ({count})",
   "appMediaConfirmSelectionCount": "Done ({count})",
   "appMediaConfirmSelection": "Done",

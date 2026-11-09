@@ -1088,6 +1088,12 @@
   "galleryChoiceApp": "应用相册",
   "galleryChoiceAppDescription": "从应用内部相册选择",
   "appMediaUnreadable": "无法读取文件",
+  "appMediaLoadError": "加载文件失败：{error}",
+  "@appMediaLoadError": {
+    "placeholders": {
+      "error": {}
+    }
+  },
   "appMediaClearSelection": "清除 ({count})",
   "appMediaConfirmSelectionCount": "确定 ({count})",
   "appMediaConfirmSelection": "确定",
