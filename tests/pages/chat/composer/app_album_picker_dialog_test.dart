@@ -426,30 +426,32 @@ void main() {
       expect(picker.result()!.single.value, isNotEmpty);
     });
 
-    testWidgets('clearing cancels confirmation while a selection read is pending', (
-      tester,
-    ) async {
-      final picker = await openPickerWithBlockedRead(tester);
+    testWidgets(
+      'clearing cancels confirmation while a selection read is pending',
+      (tester) async {
+        final picker = await openPickerWithBlockedRead(tester);
 
-      await tester.tap(find.byKey(const Key('album_picker_confirm_btn')));
-      await tester.pump();
-      expect(picker.result(), isNull);
+        await tester.tap(find.byKey(const Key('album_picker_confirm_btn')));
+        await tester.pump();
+        expect(picker.result(), isNull);
 
-      await tester.tap(find.byKey(const Key('album_picker_clear_btn')));
-      await tester.pump();
-      expect(
-        find.text('应用内相册'),
-        findsOneWidget,
-        reason: 'clearing the pending selection must cancel its confirmation',
-      );
-      expect(picker.result(), isNull);
+        await tester.tap(find.byKey(const Key('album_picker_clear_btn')));
+        await tester.pump();
+        expect(
+          find.text('应用内相册'),
+          findsOneWidget,
+          reason:
+              'clearing the pending selection must cancel its confirmation',
+        );
+        expect(picker.result(), isNull);
 
-      picker.releaseRead.complete();
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
-      expect(picker.result(), isNull);
-      expect(tester.takeException(), isNull);
-    });
+        picker.releaseRead.complete();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 50));
+        expect(picker.result(), isNull);
+        expect(tester.takeException(), isNull);
+      },
+    );
 
     testWidgets(
       'failed read during confirmation keeps picker open for replacement',

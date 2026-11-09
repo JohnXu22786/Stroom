@@ -185,4 +185,32 @@ void main() {
       throwsArgumentError,
     );
   });
+
+  test('rejects export paths that collide without case sensitivity', () {
+    expect(
+      () => validateUserVisibleExportPaths(
+        files: const ['Report.txt', 'report.txt'],
+      ),
+      throwsStateError,
+    );
+    expect(
+      () => validateUserVisibleExportPaths(
+        files: const ['σ.txt', 'ς.txt'],
+      ),
+      throwsStateError,
+    );
+    expect(
+      () => validateUserVisibleExportPaths(
+        files: const ['caf\u00e9.txt', 'cafe\u0301.txt'],
+      ),
+      throwsStateError,
+    );
+    expect(
+      () => validateUserVisibleExportPaths(
+        files: const ['Report.txt'],
+        folders: const ['report.txt'],
+      ),
+      throwsStateError,
+    );
+  });
 }

@@ -5,7 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/foundation.dart'
     show TargetPlatform, defaultTargetPlatform, kIsWeb;
-import 'package:unorm_dart/unorm_dart.dart' show nfc;
+import 'package:unorm_dart/unorm_dart.dart' as unorm;
 
 /// Opens a save dialog filtered to [extensions] and writes [bytes] to the
 /// selected location.
@@ -79,14 +79,16 @@ void validateUserVisibleExportPaths({
     return segments.join('/');
   }
 
-  String portablePathKey(String path) => nfc(path).toLowerCase();
+  // Normalize canonical Unicode equivalents and case variants to one key.
+  String comparisonPath(String path) =>
+      unorm.nfc(path).toUpperCase().toLowerCase();
 
   final filePaths = <String>{};
   final directoryPaths = <String>{};
   final directorySpellings = <String, String>{};
 
   void addDirectory(String path) {
-    final key = portablePathKey(path);
+    final key = comparisonPath(path);
     final existingSpelling = directorySpellings[key];
     if (existingSpelling != null && existingSpelling != path) {
       throw StateError('Case-insensitive export folder collision: $path');
@@ -107,7 +109,7 @@ void validateUserVisibleExportPaths({
   }
   for (final file in files) {
     final path = safePath(file);
-    if (!filePaths.add(portablePathKey(path))) {
+    if (!filePaths.add(comparisonPath(path))) {
       throw StateError('Duplicate export file path: $path');
     }
     final segments = path.split('/');
