@@ -91,12 +91,12 @@ void main() {
       ];
 
       for (final tableName in tables) {
-      final operations = ManifestOperations<AudioRecord>(
+        final operations = ManifestOperations<AudioRecord>(
           manifestKey: 'test_${tableName}_folder_metadata_delete_failure',
           storageDirName: tableName,
-        fromMap: AudioRecord.fromMap,
+          fromMap: AudioRecord.fromMap,
           tableName: tableName,
-        toMap: (record) => record.toMap(),
+          toMap: (record) => record.toMap(),
         );
         const folderPath = 'persisted_folder';
         await operations.addFolderPath(folderPath);
