@@ -18,7 +18,11 @@ class AnkiStatsPage extends ConsumerWidget {
       appBar: AppBar(title: Text(l10n.ankiStatsTooltip), centerTitle: true),
       body: dbAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('$e')),
+        error: (e, _) => Center(
+          child: Text(e is AnkiStatsUnsupportedException
+              ? l10n.ankiStatsUnsupportedPlatform
+              : l10n.ankiDeckLoadError(e.toString())),
+        ),
         data: (db) => _buildStats(context, db),
       ),
     );
