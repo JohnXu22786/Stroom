@@ -149,6 +149,7 @@ void main() {
     );
     expect(
       () => validateUserVisibleExportPaths(
+        files: const [],
         folders: const ['Audio', 'audio'],
       ),
       throwsStateError,
