@@ -158,7 +158,8 @@ class TextRecordsNotifier extends StateNotifier<List<TextRecord>> {
                   currentNewStoragePath,
                 );
               } catch (cleanupError) {
-                debugPrint('Failed to clean up renamed text file: $cleanupError');
+                debugPrint(
+                    'Failed to clean up renamed text file: $cleanupError');
               }
             }
             rethrow;
