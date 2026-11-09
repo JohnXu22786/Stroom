@@ -3101,6 +3101,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get appMediaUnreadable => 'Could not read file';
 
   @override
+  String appMediaLoadError(Object error) {
+    return 'Could not load files: $error';
+  }
+
+  @override
   String appMediaClearSelection(Object count) {
     return 'Clear ($count)';
   }
@@ -14053,6 +14058,11 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get appMediaUnreadable => 'Could not read file';
+
+  @override
+  String appMediaLoadError(Object error) {
+    return 'Could not load files: $error';
+  }
 
   @override
   String appMediaClearSelection(Object count) {
