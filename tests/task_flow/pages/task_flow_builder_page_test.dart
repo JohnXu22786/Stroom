@@ -215,8 +215,12 @@ void main() {
     await tester.tap(find.text('Close'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byType(FlowBlockCard).last);
+    final ttsCard = find.byType(FlowBlockCard).last;
+    await tester.ensureVisible(ttsCard);
     await tester.pumpAndSettle();
+    await tester.tap(ttsCard);
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsOneWidget);
     final modelLabel = find.descendant(
       of: find.byType(AlertDialog),
       matching: find.textContaining('Synthesis model'),
