@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/l10n/app_localizations.dart';
+import 'package:stroom/models/assistant.dart';
+import 'package:stroom/providers/assistant_provider.dart';
 
 import 'package:stroom/pages/unified_task_list/task_flow_card.dart';
 import 'package:stroom/providers/provider_config.dart';
@@ -26,6 +28,12 @@ class _Executions extends TaskFlowExecutionNotifier {
 class _Entries extends ProviderEntriesNotifier {
   _Entries(ProviderEntriesState entries) {
     state = entries;
+  }
+}
+
+class _Assistants extends AssistantsNotifier {
+  _Assistants(List<Assistant> assistants) {
+    state = assistants;
   }
 }
 
@@ -76,6 +84,10 @@ void main() {
         overrides: [
           taskFlowListProvider.overrideWith((ref) => flows),
           taskFlowExecutionsProvider.overrideWith((ref) => executions),
+          providerEntriesProvider.overrideWith(
+            (ref) => _Entries(const ProviderEntriesState()),
+          ),
+          assistantProvider.overrideWith((ref) => _Assistants(const [])),
         ],
         child: MaterialApp(
             locale: const Locale('zh', 'CN'),
@@ -89,8 +101,6 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, '重试'));
     await tester.pumpAndSettle();
-    debugPrint(
-        'TASK_FLOW_RETRY_DEBUG: builderPages=${find.byType(TaskFlowBuilderPage).evaluate().length} texts=${find.byType(Text).evaluate().map((e) => (e.widget as Text).data).toList()}');
     expect(find.text('助手对话 设置'), findsOneWidget);
     expect(executions.state, hasLength(1));
     expect(executions.state.single.id, id);
