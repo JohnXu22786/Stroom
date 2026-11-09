@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 import 'file_record.dart';
 import '../services/manifest_operations.dart';
 import 'folder_path_utils.dart';
+import 'content_hash_save_lock.dart';
 
 // ====================================================================
 // VideoRecord
@@ -139,6 +140,7 @@ String computeVideoHash(Uint8List data) {
 
 /// Video file manifest — delegates to [ManifestOperations].
 class VideoManifest {
+  static final _saveLocks = ContentHashSaveLock();
   static final _ops = ManifestOperations<VideoRecord>(
     manifestKey: 'video_manifest',
     storageDirName: 'videos',
@@ -154,11 +156,50 @@ class VideoManifest {
   /// Loads records while preserving read failures for callers that display them.
   static Future<List<VideoRecord>> loadRecordsStrict() =>
       _ops.loadRecords(forceRefresh: true, throwOnError: true);
-  static Future<void> addRecord(VideoRecord record) => _ops.addRecord(record);
-  static Future<void> deleteRecord(String id, {bool preserveFiles = false}) =>
-      _ops.deleteRecord(id, preserveFiles: preserveFiles);
-  static Future<void> deleteRecords(List<String> ids) =>
-      _ops.deleteRecords(ids);
+  /// Include file writing, thumbnail generation, and record insertion in the
+  /// action so deletion cannot remove bytes before their new record is saved.
+  static Future<T> withSaveLock<T>(
+    String hash,
+    Future<T> Function() action,
+  ) =>
+      _saveLocks.withLock(hash, action);
+
+  static Future<T> withSaveLocks<T>(
+    Iterable<String> hashes,
+    Future<T> Function() action,
+  ) =>
+      _saveLocks.withLocks(hashes, action);
+
+  static Future<void> addRecord(VideoRecord record) =>
+      withSaveLock(record.hash, () => _ops.addRecord(record));
+
+  static Future<void> deleteRecord(String id, {bool preserveFiles = false}) async {
+    final records = await _ops.loadRecords();
+    VideoRecord? record;
+    for (final candidate in records) {
+      if (candidate.id == id) {
+        record = candidate;
+        break;
+      }
+    }
+    if (record == null) {
+      await _ops.deleteRecord(id, preserveFiles: preserveFiles);
+      return;
+    }
+    await withSaveLock(
+      record.hash,
+      () => _ops.deleteRecord(id, preserveFiles: preserveFiles),
+    );
+  }
+
+  static Future<void> deleteRecords(List<String> ids) async {
+    final idSet = ids.toSet();
+    final records = await _ops.loadRecords();
+    final hashes = records
+        .where((record) => idSet.contains(record.id))
+        .map((record) => record.hash);
+    await withSaveLocks(hashes, () => _ops.deleteRecords(ids));
+  }
   static Future<void> updateRecord(VideoRecord updated) =>
       _ops.updateRecord(updated);
   static Future<void> renameRecord(String id, String newName) =>
@@ -189,7 +230,18 @@ class VideoManifest {
   // Folder management
   static Future<Set<String>> getAllFolders() => _ops.getAllFolders();
   static Future<void> addFolder(String name) => _ops.addFolder(name);
-  static Future<void> removeFolder(String name) => _ops.removeFolder(name);
+  static Future<void> removeFolder(String name) async {
+    final records = await _ops.loadRecords();
+    final allFolders = await _ops.getAllFolders();
+    final deletedFolders = {
+      name,
+      ...FolderPathUtils.getAllDescendantFolderPaths(name, allFolders),
+    };
+    final hashes = records
+        .where((record) => deletedFolders.contains(record.folder))
+        .map((record) => record.hash);
+    await withSaveLocks(hashes, () => _ops.removeFolder(name));
+  }
   static Future<void> removeFolderFromCache(String folderPath) =>
       _ops.removeFolderFromCache(folderPath);
   static Future<void> removeFolderMetadataFromCache(String folderPath) =>

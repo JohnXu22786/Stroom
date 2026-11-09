@@ -48,6 +48,7 @@ void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     ManifestDatabase.enableTestMode();
+    ManifestDatabase.beforeWebDataReadForTesting = null;
     VideoManifest.invalidateCache();
     FileManifest.invalidateCache();
     directory = await Directory.systemTemp.createTemp('catcatch_save_cancel_');
@@ -58,6 +59,7 @@ void main() {
   });
 
   tearDown(() async {
+    ManifestDatabase.beforeWebDataReadForTesting = null;
     PathProviderPlatform.instance = previous;
     AppStorage.resetCache();
     await directory.delete(recursive: true);
@@ -308,6 +310,47 @@ void main() {
     await secondRegistration.rollback();
     expect(await VideoManifest.loadRecords(), isEmpty);
     expect(await WebFileStore.exists('videos/$hash.mp4'), isTrue);
+  });
+
+  test('video rollback and registration keep a consistent lock order',
+      () async {
+    final bytes = await videoBytes(12);
+    final first = await File(p.join(directory.path, 'rollback-first.mp4'))
+        .writeAsBytes(bytes);
+    final second = await File(p.join(directory.path, 'rollback-second.mp4'))
+        .writeAsBytes(bytes);
+    final registration = await registerCompletedMedia(
+      first.path,
+      taskFor('rollback-first', first.path),
+    );
+
+    final recordLoadEntered = Completer<void>();
+    final releaseRecordLoad = Completer<void>();
+    VideoManifest.invalidateCache();
+    ManifestDatabase.beforeWebDataReadForTesting = () async {
+      if (!recordLoadEntered.isCompleted) {
+        recordLoadEntered.complete();
+        await releaseRecordLoad.future;
+      }
+    };
+    final rollback = registration.rollback();
+    await recordLoadEntered.future.timeout(const Duration(seconds: 5));
+    ManifestDatabase.beforeWebDataReadForTesting = null;
+
+    final nextRegistration = registerCompletedMedia(
+      second.path,
+      taskFor('rollback-second', second.path),
+    );
+    // Let the competing save compute its hash and queue for the storage lock.
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    releaseRecordLoad.complete();
+
+    await Future.wait([rollback, nextRegistration]).timeout(
+      const Duration(seconds: 5),
+    );
+    final hash = md5.convert(bytes).toString();
+    expect(await VideoManifest.loadRecords(), hasLength(1));
+    expect(await VideoManifest.readFile('$hash.mp4'), bytes);
   });
 
   test('gallery deletion during registration repairs the shared blob',
