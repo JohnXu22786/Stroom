@@ -12,6 +12,7 @@ import '../l10n/app_localizations.dart';
 import '../services/backup_service.dart';
 import '../startup/app_restart.dart';
 import '../anki/apkg/apkg_exporter.dart';
+import '../anki/apkg/apkg_result.dart';
 import '../anki/apkg/apkg_importer.dart';
 import '../utils/system_pick_utils.dart';
 
@@ -483,7 +484,11 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(_strings.backupRestoreExportFailed(e.toString())),
+            content: Text(_strings.backupRestoreExportFailed(
+              e is AnkiApkgException
+                  ? e.localizedMessage(_strings)
+                  : _strings.backupRestoreApkgOperationFailed,
+            )),
             backgroundColor: Colors.red,
           ),
         );
@@ -517,14 +522,21 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
       final summary = await AnkiApkgImporter.import(path);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(summary), backgroundColor: Colors.green),
+          SnackBar(
+            content: Text(summary.format(_strings)),
+            backgroundColor: Colors.green,
+          ),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(_strings.backupRestoreImportFailed(e.toString())),
+            content: Text(_strings.backupRestoreImportFailed(
+              e is AnkiApkgException
+                  ? e.localizedMessage(_strings)
+                  : _strings.backupRestoreApkgUnexpectedError(path),
+            )),
             backgroundColor: Colors.red,
           ),
         );

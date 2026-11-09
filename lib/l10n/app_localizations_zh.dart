@@ -867,7 +867,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aboutUpdateCheckFailed => '检查更新失败，请重试。';
 
   @override
-  String topicAssistantUpdateCheckFailed(Object error) => '检查助手更新失败：$error';
+  String topicAssistantUpdateCheckFailed(Object error) {
+    return '检查助手更新失败：$error';
+  }
 
   @override
   String get aboutPrivacyContent =>
@@ -10557,7 +10559,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get startupErrorTitle => '应用启动失败';
 
   @override
-  String startupErrorDetails(Object error) => '错误：$error';
+  String startupErrorDetails(Object error) {
+    return '错误：$error';
+  }
 
   @override
   String get renderErrorTitle => '界面渲染异常';
@@ -10567,6 +10571,124 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get renderErrorRestartMessage => '请尝试重启应用。';
+
+  @override
+  String backupRestoreApkgImportSummary(int decks, int notes, int cards) {
+    return '导入完成：$decks 个牌组，$notes 个笔记，$cards 张卡片';
+  }
+
+  @override
+  String backupRestoreApkgFileNotFound(String path) {
+    return '找不到所选的 .apkg 文件：$path';
+  }
+
+  @override
+  String get backupRestoreApkgInvalidArchive =>
+      '所选的 .apkg 文件已损坏或不是有效的压缩包。';
+
+  @override
+  String get backupRestoreApkgCollectionMissing =>
+      '.apkg 文件中缺少 collection.anki2。';
+
+  @override
+  String backupRestoreApkgTargetMissing(String path) {
+    return '请先打开 Anki 闪卡功能，再导入或导出牌组：$path';
+  }
+
+  @override
+  String get backupRestoreApkgDatabaseCorrupt => 'Anki collection 数据库已损坏。';
+
+  @override
+  String backupRestoreApkgLocalFileFailure(String path) {
+    return '无法访问本地 Anki 文件：$path';
+  }
+
+  @override
+  String backupRestoreApkgUnexpectedError(String path) {
+    return '.apkg 操作访问此路径时失败：$path';
+  }
+
+  @override
+  String get backupRestoreApkgOperationFailed => '.apkg 操作失败，无法读取文件或数据库。';
+
+  @override
+  String backupRestoreApkgExportFailed(String path) {
+    return '无法从此数据库打包导出 Anki 牌组：$path';
+  }
+
+  @override
+  String ankiSyncStatusServerAuthRejected(int statusCode) {
+    return '同步服务器拒绝了请求（HTTP $statusCode）。请检查登录凭据和服务器权限。';
+  }
+
+  @override
+  String ankiSyncStatusServerEndpointNotFound(int statusCode) {
+    return '找不到同步接口（HTTP $statusCode）。请检查服务器地址。';
+  }
+
+  @override
+  String get ankiSyncStatusMediaProtocolFailed =>
+      '媒体同步服务器返回了无效响应。请确认服务器支持 Anki 媒体同步后重试。';
+
+  @override
+  String get ankiSyncStatusMediaIndexCorrupt =>
+      '本地媒体同步索引已损坏。请重置媒体同步数据后重试。';
+
+  @override
+  String get ankiSyncStatusMediaIndexFailure => '本地媒体同步索引无法读取或更新。';
+
+  @override
+  String get ankiSyncStatusMediaChecksumMismatch => '下载的媒体文件校验失败。请重试媒体同步。';
+
+  @override
+  String ankiSyncStatusMediaFilenameConflict(String filename) {
+    return '媒体文件“$filename”在本地和服务器上均有修改。请先备份并解决同名冲突，再重试。';
+  }
+
+  @override
+  String ankiSyncStatusMediaInvalidFilename(String filename) {
+    return '媒体文件名“$filename”无法同步。请将其重命名为符合 Anki 规则的名称后重试。';
+  }
+
+  @override
+  String ankiSyncStatusMediaFileSizeLimit(int limitMb) {
+    return '媒体文件为空或超过 $limitMb MB 限制。';
+  }
+
+  @override
+  String ankiSyncStatusMediaBatchLimitExceeded(int count, int limit) {
+    return '媒体压缩包包含 $count 个条目，最多允许 $limit 个（含清单）。';
+  }
+
+  @override
+  String get ankiSyncStatusMediaSanityCheckFailed => '媒体同步校验失败。请重试同步。';
+
+  @override
+  String get ankiWebSyncUnsupportedPlatform =>
+      '网页端需登录 AnkiWeb 才能同步。请点击云朵图标打开 Anki 设置并登录。';
+
+  @override
+  String get ankiWebDecksUnsupportedPlatform =>
+      '如需在网页端浏览或管理牌组，请点击云朵图标登录 AnkiWeb。';
+
+  @override
+  String get ankiStatsUnsupportedPlatform => '当前平台无法查看 Anki 统计数据。';
+
+  @override
+  String get ankiSyncStatusDeviceClockMismatch =>
+      '设备时间与同步服务器相差超过 5 分钟，请校准设备时间后重试。';
+
+  @override
+  String get ankiSyncStatusFullDownloadRequired =>
+      '同步数据校验失败，本地更改已回滚。请完整下载服务器 collection 后重试。';
+
+  @override
+  String get ankiSyncStatusFullTransferRequired =>
+      '此 collection 无法增量同步。请选择完整上传或下载后继续。';
+
+  @override
+  String get ankiSyncStatusIncrementalSyncFailed => '增量同步未能完成。请检查服务器和网络连接后重试。';
+
   @override
   String get batchDlgFileName => '文件名';
 
@@ -10617,6 +10739,55 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String batchDlgTemplateMissingDate(String date) => '该项目没有$date，请调整模板';
+
+  @override
+  String get ankiSyncStatusProtocolFailed =>
+      '同步服务器响应无效或不完整。请确认服务器支持 Anki sync v10。';
+
+  @override
+  String get ankiSyncStatusLoginRequired =>
+      '请先登录 Anki 同步账户，再继续操作。';
+
+  @override
+  String get ankiSyncStatusInvalidServerUrl =>
+      '请输入有效的 HTTP 或 HTTPS 同步服务器地址。';
+
+  @override
+  String get ankiSyncStatusHttpsRequired =>
+      '远程自建同步服务器必须使用 HTTPS。';
+
+  @override
+  String get ankiSyncStatusConnectionTimeout =>
+      '同步请求超时。请检查服务器地址和网络后重试。';
+
+  @override
+  String get ankiSyncStatusTlsFailure =>
+      '无法验证服务器证书。请检查证书或配置自定义 CA。';
+
+  @override
+  String get ankiSyncStatusConnectionFailure =>
+      '无法连接到同步服务器。请检查服务器地址和网络。';
+
+  @override
+  String get ankiSyncStatusRequestFailure =>
+      '同步请求失败。请检查服务器和网络后重试。';
+
+  @override
+  String ankiSyncStatusServerHttpError(int statusCode) =>
+      '同步服务器返回了 HTTP $statusCode。';
+
+  @override
+  String ankiSyncStatusResponseTooLarge(int limitMb) =>
+      '同步响应超过 $limitMb MB 限制。';
+
+  @override
+  String get ankiSyncStatusLocalFileFailure =>
+      '无法读取或清理本地同步文件。请检查磁盘访问权限后重试。';
+
+  @override
+  String get ankiSyncStatusCollectionInvalid =>
+      '无法打开或更新 collection，或该文件未通过 SQLite/schema 校验。请恢复有效的 collection 备份或重新下载。';
+
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).
@@ -11479,6 +11650,11 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get aboutUpdateCheckFailed => '检查更新失败，请重试。';
+
+  @override
+  String topicAssistantUpdateCheckFailed(Object error) {
+    return '检查助手更新失败：$error';
+  }
 
   @override
   String get aboutPrivacyContent =>
@@ -21163,4 +21339,132 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String startupIssueUnknownProviderType(Object index, Object type) {
     return '服务商条目 $index 使用未知类型“$type”，可能无法正常工作。';
   }
+
+  @override
+  String get startupErrorTitle => '应用启动失败';
+
+  @override
+  String startupErrorDetails(Object error) {
+    return '错误：$error';
+  }
+
+  @override
+  String get renderErrorTitle => '界面渲染异常';
+
+  @override
+  String get renderErrorDebugTitle => '界面渲染异常（调试模式）';
+
+  @override
+  String get renderErrorRestartMessage => '请尝试重启应用。';
+
+  @override
+  String backupRestoreApkgImportSummary(int decks, int notes, int cards) {
+    return '导入完成：$decks 个牌组，$notes 个笔记，$cards 张卡片';
+  }
+
+  @override
+  String backupRestoreApkgFileNotFound(String path) {
+    return '找不到所选的 .apkg 文件：$path';
+  }
+
+  @override
+  String get backupRestoreApkgCollectionMissing =>
+      '.apkg 文件中缺少 collection.anki2。';
+
+  @override
+  String backupRestoreApkgTargetMissing(String path) {
+    return '请先打开 Anki 闪卡功能，再导入或导出牌组：$path';
+  }
+
+  @override
+  String get backupRestoreApkgDatabaseCorrupt => 'Anki collection 数据库已损坏。';
+
+  @override
+  String backupRestoreApkgUnexpectedError(String path) {
+    return '.apkg 操作访问此路径时失败：$path';
+  }
+
+  @override
+  String get backupRestoreApkgOperationFailed => '.apkg 操作失败，无法读取文件或数据库。';
+
+  @override
+  String backupRestoreApkgExportFailed(String path) {
+    return '无法从此数据库打包导出 Anki 牌组：$path';
+  }
+
+  @override
+  String get ankiWebSyncUnsupportedPlatform =>
+      '网页端需登录 AnkiWeb 才能同步。请点击云朵图标打开 Anki 设置并登录。';
+
+  @override
+  String get ankiWebDecksUnsupportedPlatform =>
+      '如需在网页端浏览或管理牌组，请点击云朵图标登录 AnkiWeb。';
+
+  @override
+  String get ankiStatsUnsupportedPlatform => '当前平台无法查看 Anki 统计数据。';
+
+  @override
+  String get ankiSyncStatusDeviceClockMismatch =>
+      '设备时间与同步服务器相差超过 5 分钟，请校准设备时间后重试。';
+
+  @override
+  String get ankiSyncStatusFullDownloadRequired =>
+      '同步数据校验失败，本地更改已回滚。请完整下载服务器 collection 后重试。';
+
+  @override
+  String get ankiSyncStatusFullTransferRequired =>
+      '此 collection 无法增量同步。请选择完整上传或下载后继续。';
+
+  @override
+  String get ankiSyncStatusIncrementalSyncFailed => '增量同步未能完成。请检查服务器和网络连接后重试。';
+
+  @override
+  String ankiSyncStatusServerAuthRejected(int statusCode) {
+    return '同步服务器拒绝了请求（HTTP $statusCode）。请检查登录凭据和服务器权限。';
+  }
+
+  @override
+  String ankiSyncStatusServerEndpointNotFound(int statusCode) {
+    return '找不到同步接口（HTTP $statusCode）。请检查服务器地址。';
+  }
+
+  @override
+  String get ankiSyncStatusMediaProtocolFailed =>
+      '媒体同步服务器返回了无效响应。请确认服务器支持 Anki 媒体同步后重试。';
+
+  @override
+  String get ankiSyncStatusMediaChecksumMismatch => '下载的媒体文件校验失败。请重试媒体同步。';
+
+  @override
+  String ankiSyncStatusMediaFilenameConflict(String filename) {
+    return '媒体文件“$filename”在本地和服务器上均有修改。请先备份并解决同名冲突，再重试。';
+  }
+
+  @override
+  String ankiSyncStatusMediaInvalidFilename(String filename) {
+    return '媒体文件名“$filename”无法同步。请将其重命名为符合 Anki 规则的名称后重试。';
+  }
+
+  @override
+  String ankiSyncStatusMediaFileSizeLimit(int limitMb) {
+    return '媒体文件为空或超过 $limitMb MB 限制。';
+  }
+
+  @override
+  String ankiSyncStatusMediaBatchLimitExceeded(int count, int limit) {
+    return '媒体压缩包包含 $count 个条目，最多允许 $limit 个（含清单）。';
+  }
+
+  @override
+  String get ankiSyncStatusMediaSanityCheckFailed => '媒体同步校验失败。请重试同步。';
+
+  @override
+  String backupRestoreApkgLocalFileFailure(String path) {
+    return '无法访问本地 Anki 文件：$path';
+  }
+
+  @override
+  String get ankiSyncStatusCollectionInvalid =>
+      '无法打开或更新 collection，或该文件未通过 SQLite/schema 校验。请恢复有效的 collection 备份或重新下载。';
+
 }

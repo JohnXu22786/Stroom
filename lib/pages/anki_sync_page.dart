@@ -623,12 +623,17 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
     _closeClientWhenIdle = false;
   }
 
-  String _safeMessage(BuildContext context, Object error) =>
-      error is AnkiSyncException
-          ? error.message
-          : error is AnkiSyncFullTransferRequired
-              ? error.message
-              : AppLocalizations.of(context)!.ankiSyncStatusOperationIncomplete;
+  String _safeMessage(BuildContext context, Object error) {
+    final l10n = AppLocalizations.of(context)!;
+    if (error is AnkiSyncException) return error.localizedMessage(l10n);
+    if (error is AnkiSyncFullTransferRequired) {
+      return error.localizedMessage(l10n);
+    }
+    if (error is AnkiStatsUnsupportedException) {
+      return l10n.ankiWebSyncUnsupportedPlatform;
+    }
+    return l10n.ankiSyncStatusOperationIncomplete;
+  }
 
   @override
   Widget build(BuildContext context) {
