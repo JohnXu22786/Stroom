@@ -1637,8 +1637,9 @@ class ManifestOperations<T extends FileRecord> {
   Future<void> removeFolderMetadataFromCache(String folderPath) async {
     try {
       await loadRecords();
-      if (_folderCache.remove(folderPath)) {
+      if (_folderCache.contains(folderPath)) {
         await ManifestDatabase.deleteFolder(folderPath, recordTable: tableName);
+        _folderCache.remove(folderPath);
       }
     } catch (e, st) {
       await AppLogService.error(

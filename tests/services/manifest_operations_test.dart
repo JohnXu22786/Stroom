@@ -62,6 +62,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     ManifestDatabase.enableTestMode();
     ManifestDatabase.beforeFolderInsertForTesting = null;
+    ManifestDatabase.beforeFolderDeleteForTesting = null;
     ManifestDatabase.beforeJsonRecordRegistrationForTesting = null;
     ManifestDatabase.beforeWebDataSaveForTesting = null;
     ManifestDatabase.beforeWebDataReadForTesting = null;
@@ -74,9 +75,61 @@ void main() {
   });
 
   tearDown(() {
+    ManifestDatabase.beforeFolderDeleteForTesting = null;
     ManifestDatabase.beforeWebDataSaveForTesting = null;
     ManifestDatabase.beforeWebDataReadForTesting = null;
   });
+
+  test(
+    'failed folder metadata persistence preserves cached folder paths',
+    () async {
+      final tables = [
+        ManifestTables.audioRecords,
+        ManifestTables.imageRecords,
+        ManifestTables.textRecords,
+        ManifestTables.videoRecords,
+      ];
+
+      for (final tableName in tables) {
+        final operations = ManifestOperations<AudioRecord>(
+          manifestKey: 'test_${tableName}_folder_metadata_delete_failure',
+          storageDirName: tableName,
+          fromMap: AudioRecord.fromMap,
+          tableName: tableName,
+          toMap: (record) => record.toMap(),
+        );
+        const folderPath = 'persisted_folder';
+        await operations.addFolderPath(folderPath);
+        final failure = StateError('injected folder metadata delete failure');
+        ManifestDatabase.beforeFolderDeleteForTesting = (path) {
+          if (path == folderPath) throw failure;
+        };
+
+        await expectLater(
+          operations.removeFolderMetadataFromCache(folderPath),
+          throwsA(same(failure)),
+        );
+        expect(
+          await operations.getAllFolders(),
+          contains(folderPath),
+          reason: 'failed persistence must leave the folder in the cache',
+        );
+        expect(
+          await ManifestDatabase.getAllFolders(recordTable: tableName),
+          contains(folderPath),
+          reason: 'failed persistence must leave the folder in storage',
+        );
+
+        operations.invalidateCache();
+        expect(
+          await operations.getAllFolders(),
+          contains(folderPath),
+          reason: 'a later read must reload the persisted folder metadata',
+        );
+        ManifestDatabase.beforeFolderDeleteForTesting = null;
+      }
+    },
+  );
 
   test('audio writes reject Windows-invalid filename characters', () async {
     await expectLater(
