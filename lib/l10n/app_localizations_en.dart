@@ -1161,6 +1161,14 @@ class AppLocalizationsEn extends AppLocalizations {
       'Installation failed. Open the APK manually.';
 
   @override
+  String get updateApkInstallerUnavailable =>
+      'Could not find an app to install this APK. Open it manually.';
+
+  @override
+  String get updateApkInstallPermissionDenied =>
+      'Allow Stroom to install unknown apps in system settings.';
+
+  @override
   String get updateRestartDialogTitle => 'App updated';
 
   @override
@@ -9653,6 +9661,37 @@ class AppLocalizationsEn extends AppLocalizations {
   String get connectivityTestRun => 'Run Test';
 
   @override
+  String get connectivityTestHttpSuccess => "HTTP tool request succeeded";
+  String get connectivityTestHttpFailure => "HTTP tool request failed";
+  String get connectivityTestInvalidMcpConfig => "Invalid MCP configuration";
+  String get connectivityTestMissingTransport => "A valid transport type configuration is missing.";
+  String get connectivityTestStdioUnsupported => "stdio is not supported on this platform";
+  String get connectivityTestStdioDesktopOnly => "stdio MCP requires starting a local process. Test it in the Stroom desktop app.";
+  String get connectivityTestInvalidContent => "Invalid test content";
+  String get connectivityTestMethodMustBeString => "method must be a string.";
+  String get connectivityTestUnsupportedMethod => "Unsupported test method";
+  String get connectivityTestReadOnlyMethodOnly => "To avoid writing remote business data, MCP connectivity tests only allow the read-only tools/list method.";
+  String get connectivityTestParamsMustBeObject => "params must be a JSON object.";
+  String get connectivityTestMcpConnectionFailed => "Could not connect to the MCP service";
+  String get connectivityTestCheckConnectionSettings => "Check the address, authentication, and network, or view the app log for connection details.";
+  String get connectivityTestRemainingToolsOmitted => "; remaining tools omitted";
+  String get connectivityTestMcpSuccess => "MCP connectivity test succeeded";
+  String get connectivityTestTodoMutationBlocked => "Test parameters would modify todo data";
+  String get connectivityTestTodoReadOnly => "To protect the current session todo list, omit todos or set it to null in connectivity tests.";
+  String get connectivityTestUnknownBuiltin => "Unknown built-in tool";
+  String get connectivityTestBuiltinSuccess => "Built-in tool test succeeded";
+  String get connectivityTestBuiltinFailure => "Built-in tool test failed";
+  String get connectivityTestResultTruncated => "… (result truncated)";
+  String get connectivityTestTopLevelObjectRequired => "Test content must be a top-level JSON object.";
+  String connectivityTestMcpRequestTimeout(String method) =>
+      'MCP request timed out: $method';
+  String get connectivityTestRequestTimeout => "Request timed out. Check the service response and network.";
+  String connectivityTestToolNames(String names) => ": $names";
+  String connectivityTestMcpSuccessDetails(int count, String names, String suffix) =>
+      "Connection and tools/list request succeeded; found $count tools$names$suffix.";
+  String connectivityTestBuiltinExecutorMissing(String toolName) =>
+      "No test executor found for tool \"$toolName\".";
+
   String get connectivityTestFailedSummary => 'Test could not be completed';
 
   @override
@@ -12530,6 +12569,14 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   @override
   String get updateApkInstallFailedNoDetails =>
       'Installation failed. Open the APK manually.';
+
+  @override
+  String get updateApkInstallerUnavailable =>
+      'Could not find an app to install this APK. Open it manually.';
+
+  @override
+  String get updateApkInstallPermissionDenied =>
+      'Allow Stroom to install unknown apps in system settings.';
 
   @override
   String get updateRestartDialogTitle => 'App updated';

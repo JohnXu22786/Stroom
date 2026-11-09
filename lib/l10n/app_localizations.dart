@@ -1981,6 +1981,18 @@ abstract class AppLocalizations {
   /// **'Installation failed. Open the APK manually.'**
   String get updateApkInstallFailedNoDetails;
 
+  /// No description provided for @updateApkInstallerUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not find an app to install this APK. Open it manually.'**
+  String get updateApkInstallerUnavailable;
+
+  /// No description provided for @updateApkInstallPermissionDenied.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow Stroom to install unknown apps in system settings.'**
+  String get updateApkInstallPermissionDenied;
+
   /// No description provided for @updateRestartDialogTitle.
   ///
   /// In en, this message translates to:
@@ -16112,6 +16124,34 @@ abstract class AppLocalizations {
   ///
   /// In en, this message translates to:
   /// **'{seconds} sec'**
+  String get connectivityTestHttpSuccess;
+  String get connectivityTestHttpFailure;
+  String get connectivityTestInvalidMcpConfig;
+  String get connectivityTestMissingTransport;
+  String get connectivityTestStdioUnsupported;
+  String get connectivityTestStdioDesktopOnly;
+  String get connectivityTestInvalidContent;
+  String get connectivityTestMethodMustBeString;
+  String get connectivityTestUnsupportedMethod;
+  String get connectivityTestReadOnlyMethodOnly;
+  String get connectivityTestParamsMustBeObject;
+  String get connectivityTestMcpConnectionFailed;
+  String get connectivityTestCheckConnectionSettings;
+  String get connectivityTestRemainingToolsOmitted;
+  String get connectivityTestMcpSuccess;
+  String get connectivityTestTodoMutationBlocked;
+  String get connectivityTestTodoReadOnly;
+  String get connectivityTestUnknownBuiltin;
+  String get connectivityTestBuiltinSuccess;
+  String get connectivityTestBuiltinFailure;
+  String get connectivityTestTopLevelObjectRequired;
+  String get connectivityTestRequestTimeout;
+  String connectivityTestMcpRequestTimeout(String method);
+  String get connectivityTestResultTruncated;
+  String connectivityTestToolNames(String names);
+  String connectivityTestMcpSuccessDetails(int count, String names, String suffix);
+  String connectivityTestBuiltinExecutorMissing(String toolName);
+
   String connectivityTestDurationSeconds(String seconds);
 
   /// No description provided for @connectivityTestDurationMilliseconds.

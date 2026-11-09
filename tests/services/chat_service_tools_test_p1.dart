@@ -184,6 +184,7 @@ void chatServiceToolsGroup1() {
       final service = ChatService(
         provider: mockProvider,
         modelConfig: _createMockModelConfig(),
+        localeOverride: () => const Locale('zh', 'CN'),
       );
       addTearDown(service.dispose);
 

@@ -22,8 +22,9 @@ extension _ChatServiceToolsExt on ChatService {
     // the disabled name, while still blocking the local handler itself.
     final entry = isDisabled ? null : ChatService._toolRegistries[name];
     if (entry != null) {
-      final localizedHandler = entry['localizedHandler']
-          as dynamic Function(Map<String, dynamic>, Locale?)?;
+      final localizedHandler =
+          entry['localizedHandler']
+              as dynamic Function(Map<String, dynamic>, Locale?)?;
       final result = localizedHandler != null
           ? localizedHandler(args, _localeOverride?.call())
           : (entry['handler'] as dynamic Function(Map<String, dynamic>))(args);
@@ -77,17 +78,21 @@ extension _ChatServiceToolsExt on ChatService {
         // If this server's real tool has the same name as its placeholder and
         // the name is otherwise unambiguous, execute it directly. A collision
         // alias must still be honored so the placeholder name remains reserved.
-        if (tools.any((tool) =>
-            tool.name == name &&
-            manager.getPublishedToolName(placeholderClientName, tool.name) ==
-                name)) {
+        if (tools.any(
+          (tool) =>
+              tool.name == name &&
+              manager.getPublishedToolName(placeholderClientName, tool.name) ==
+                  name,
+        )) {
           return client.callTool(name, args, locale: locale);
         }
         final available = tools
-            .map((tool) => manager.getPublishedToolName(
-                  placeholderClientName,
-                  tool.name,
-                ))
+            .map(
+              (tool) => manager.getPublishedToolName(
+                placeholderClientName,
+                tool.name,
+              ),
+            )
             .join(routeSeparator);
         final toolGuidance = <String>{};
         for (final tool in tools) {
@@ -103,19 +108,21 @@ extension _ChatServiceToolsExt on ChatService {
           final clientNames = manager.getToolClientNames(tool.name);
           if (clientNames.length < 2) continue;
           final routes = clientNames
-              .map((clientName) =>
-                  '"${manager.getPublishedToolName(clientName, tool.name)}" '
-                  '${l10n.toolResultMcpServerRoute(clientName)}')
+              .map(
+                (clientName) =>
+                    '"${manager.getPublishedToolName(clientName, tool.name)}" '
+                    '${l10n.toolResultMcpServerRoute(clientName)}',
+              )
               .join(routeSeparator);
-          toolGuidance.add(
-            l10n.toolResultMcpDuplicateNames(tool.name, routes),
-          );
+          toolGuidance.add(l10n.toolResultMcpDuplicateNames(tool.name, routes));
         }
         final collisionGuidance = toolGuidance.join(' ');
-        final hasAliasedRequestedName = tools.any((tool) =>
-            tool.name == name &&
-            manager.getPublishedToolName(placeholderClientName, tool.name) !=
-                name);
+        final hasAliasedRequestedName = tools.any(
+          (tool) =>
+              tool.name == name &&
+              manager.getPublishedToolName(placeholderClientName, tool.name) !=
+                  name,
+        );
         final missingToolMessage = hasAliasedRequestedName
             ? l10n.toolResultMcpAliasedConflict(name)
             : l10n.toolResultMcpMissingTool(client.config.name, name);
@@ -130,9 +137,11 @@ extension _ChatServiceToolsExt on ChatService {
 
         // 真实工具名：工具已在缓存中（上一次占位符调用发现过，或会话中
         // 曾发现过）→ 确保连接后调用。会话中掉线时 connect() 会重连。
-        final hasTool = client.cachedTools.any((tool) =>
-            tool.name == manager.getActualToolName(name) &&
-            manager.getPublishedToolName(entry.key, tool.name) == name);
+        final hasTool = client.cachedTools.any(
+          (tool) =>
+              tool.name == manager.getActualToolName(name) &&
+              manager.getPublishedToolName(entry.key, tool.name) == name,
+        );
         if (hasTool) {
           if (!client.isConnected) {
             final connected = await client.connect();
@@ -154,9 +163,11 @@ extension _ChatServiceToolsExt on ChatService {
       final knownOwners = manager.getToolClientNames(name);
       if (knownOwners.isNotEmpty) {
         final routes = knownOwners
-            .map((clientName) =>
-                '"${manager.getPublishedToolName(clientName, name)}" '
-                '${l10n.toolResultMcpServerRoute(clientName)}')
+            .map(
+              (clientName) =>
+                  '"${manager.getPublishedToolName(clientName, name)}" '
+                  '${l10n.toolResultMcpServerRoute(clientName)}',
+            )
             .join(routeSeparator);
         return l10n.toolResultMcpAliasConflict(name, routes);
       }

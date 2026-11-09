@@ -1,4 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/widgets.dart' show Locale;
+import 'package:stroom/l10n/app_localizations_en.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/services/connectivity_test_service.dart';
 
@@ -22,10 +24,15 @@ void main() {
         ],
       ),
       testContent: '{"query":""}',
+      localizations: AppLocalizationsEnUs(),
+      locale: const Locale('en', 'US'),
     );
 
     expect(result.succeeded, isFalse);
-    expect(result.details, contains('Brave Search API Key 未配置'));
+    expect(
+      result.details,
+      'Error: Brave Search API key is not configured. Configure it in settings.',
+    );
   });
 
   test('HTTP connectivity test uses the stable name after display rename',
@@ -47,9 +54,11 @@ void main() {
         ],
       ),
       testContent: '{"query":""}',
+      localizations: AppLocalizationsEnUs(),
+      locale: const Locale('en', 'US'),
     );
 
     expect(result.succeeded, isFalse);
-    expect(result.details, contains('搜索关键词不能为空'));
+    expect(result.details, 'Error: The search query cannot be empty.');
   });
 }

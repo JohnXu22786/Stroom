@@ -230,6 +230,7 @@ void main() {
     });
 
     test('returns empty message when no todos exist', () async {
+      await TodoToolService.handleTodoWrite({'todos': []});
       final result = await TodoToolService.handleTodoRead({});
       expect(result, 'There are no todo items yet.');
     });

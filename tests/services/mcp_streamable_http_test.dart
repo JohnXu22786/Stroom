@@ -417,7 +417,11 @@ void main() {
       final tools = await client.listTools();
       expect(tools.map((t) => t.name), contains('search'));
 
-      final result = await client.callTool('search', {'q': 'x'});
+      final result = await client.callTool(
+        'search',
+        {'q': 'x'},
+        locale: const Locale('en', 'US'),
+      );
       expect(result, equals('hello'));
     });
 
@@ -506,7 +510,11 @@ void main() {
       });
 
       await client.connect();
-      final result = await client.callTool('search', {'q': 'x'});
+      final result = await client.callTool(
+        'search',
+        {'q': 'x'},
+        locale: const Locale('en', 'US'),
+      );
       expect(result, contains('Error:'),
           reason: 'JSON-RPC error 应通过 callTool 的 Error 前缀暴露');
       expect(result, contains('Internal tool error'));
@@ -590,7 +598,11 @@ void main() {
 
       // POST 失败 → 断开，但旧 GET 流仍保持打开
       fake.failLegacyPost = true;
-      final result = await client.callTool('search', {'q': 'x'});
+      final result = await client.callTool(
+        'search',
+        {'q': 'x'},
+        locale: const Locale('en', 'US'),
+      );
       expect(result, contains('Error:'));
       expect(client.isConnected, isFalse);
 

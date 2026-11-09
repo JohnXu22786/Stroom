@@ -319,6 +319,8 @@
   "updateManualInstallFileError": "Could not open the file. Install it manually: {path}",
   "updateApkInstallFailed": "Installation failed. Open the APK manually: {details}",
   "updateApkInstallFailedNoDetails": "Installation failed. Open the APK manually.",
+  "updateApkInstallerUnavailable": "Could not find an app to install this APK. Open it manually.",
+  "updateApkInstallPermissionDenied": "Allow Stroom to install unknown apps in system settings.",
   "updateRestartDialogTitle": "App updated",
   "updateRestartDialogBody": "The app has been updated. Restart the app to ensure stability.",
   "updateRestartDialogLater": "Restart Later",
@@ -5180,6 +5182,33 @@
   "connectivityTestFailedSummary": "Test could not be completed",
   "connectivityTestDurationSeconds": "{seconds} sec",
   "connectivityTestDurationMilliseconds": "{milliseconds} ms",
+  "connectivityTestHttpSuccess": "HTTP tool request succeeded",
+  "connectivityTestHttpFailure": "HTTP tool request failed",
+  "connectivityTestInvalidMcpConfig": "Invalid MCP configuration",
+  "connectivityTestMissingTransport": "A valid transport type configuration is missing.",
+  "connectivityTestStdioUnsupported": "stdio is not supported on this platform",
+  "connectivityTestStdioDesktopOnly": "stdio MCP requires starting a local process. Test it in the Stroom desktop app.",
+  "connectivityTestInvalidContent": "Invalid test content",
+  "connectivityTestMethodMustBeString": "method must be a string.",
+  "connectivityTestUnsupportedMethod": "Unsupported test method",
+  "connectivityTestReadOnlyMethodOnly": "To avoid writing remote business data, MCP connectivity tests only allow the read-only tools/list method.",
+  "connectivityTestParamsMustBeObject": "params must be a JSON object.",
+  "connectivityTestMcpConnectionFailed": "Could not connect to the MCP service",
+  "connectivityTestCheckConnectionSettings": "Check the address, authentication, and network, or view the app log for connection details.",
+  "connectivityTestRemainingToolsOmitted": "; remaining tools omitted",
+  "connectivityTestMcpSuccess": "MCP connectivity test succeeded",
+  "connectivityTestToolNames": ": {names}",
+  "connectivityTestMcpSuccessDetails": "Connection and tools/list request succeeded; found {count} tools{names}{suffix}.",
+  "connectivityTestTodoMutationBlocked": "Test parameters would modify todo data",
+  "connectivityTestTodoReadOnly": "To protect the current session todo list, omit todos or set it to null in connectivity tests.",
+  "connectivityTestUnknownBuiltin": "Unknown built-in tool",
+  "connectivityTestBuiltinExecutorMissing": "No test executor found for tool \"{toolName}\".",
+  "connectivityTestBuiltinSuccess": "Built-in tool test succeeded",
+  "connectivityTestBuiltinFailure": "Built-in tool test failed",
+  "connectivityTestTopLevelObjectRequired": "Test content must be a top-level JSON object.",
+  "connectivityTestRequestTimeout": "Request timed out. Check the service response and network.",
+  "connectivityTestMcpRequestTimeout": "MCP request timed out: {method}",
+  "connectivityTestResultTruncated": "… (result truncated)",
   "messageSearchTitle": "Search Messages",
   "messageSearchHint": "Search messages across all conversations...",
   "messageSearchInitialState": "Type a keyword to search messages in all conversations",
@@ -5218,6 +5247,33 @@
     "placeholders": {
       "milliseconds": {
         "type": "int"
+      }
+    }
+  },
+  "@connectivityTestMcpSuccessDetails": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "names": {
+        "type": "String"
+      },
+      "suffix": {
+        "type": "String"
+      }
+    }
+  },
+  "@connectivityTestBuiltinExecutorMissing": {
+    "placeholders": {
+      "toolName": {
+        "type": "String"
+      }
+    }
+  },
+  "@connectivityTestMcpRequestTimeout": {
+    "placeholders": {
+      "method": {
+        "type": "String"
       }
     }
   },

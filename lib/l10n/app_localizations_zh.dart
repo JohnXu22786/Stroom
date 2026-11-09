@@ -1086,6 +1086,14 @@ class AppLocalizationsZh extends AppLocalizations {
   String get updateApkInstallFailedNoDetails => '安装失败，请手动打开 APK 安装';
 
   @override
+  String get updateApkInstallerUnavailable =>
+      '未找到可安装 APK 的应用，请手动打开 APK 安装。';
+
+  @override
+  String get updateApkInstallPermissionDenied =>
+      '请在系统设置中允许 Stroom 安装未知来源应用。';
+
+  @override
   String get updateRestartDialogTitle => '更新检测';
 
   @override
@@ -9140,6 +9148,37 @@ class AppLocalizationsZh extends AppLocalizations {
   String get connectivityTestRun => '运行测试';
 
   @override
+  String get connectivityTestHttpSuccess => "HTTP 工具请求成功";
+  String get connectivityTestHttpFailure => "HTTP 工具请求失败";
+  String get connectivityTestInvalidMcpConfig => "MCP 配置无效";
+  String get connectivityTestMissingTransport => "缺少有效的传输类型配置。";
+  String get connectivityTestStdioUnsupported => "当前平台不支持 stdio";
+  String get connectivityTestStdioDesktopOnly => "stdio MCP 需要启动本地进程，请在 Stroom 桌面版中测试。";
+  String get connectivityTestInvalidContent => "测试内容无效";
+  String get connectivityTestMethodMustBeString => "method 必须是字符串。";
+  String get connectivityTestUnsupportedMethod => "不支持的测试方法";
+  String get connectivityTestReadOnlyMethodOnly => "为避免测试写入远程业务数据，MCP 连通性测试只允许只读的 tools/list 方法。";
+  String get connectivityTestParamsMustBeObject => "params 必须是 JSON 对象。";
+  String get connectivityTestMcpConnectionFailed => "无法连接 MCP 服务";
+  String get connectivityTestCheckConnectionSettings => "请检查地址、认证信息和网络，或查看应用日志获取连接详情。";
+  String get connectivityTestRemainingToolsOmitted => "；其余工具已省略";
+  String get connectivityTestMcpSuccess => "MCP 连通性测试成功";
+  String get connectivityTestTodoMutationBlocked => "测试参数会修改待办数据";
+  String get connectivityTestTodoReadOnly => "为保护当前会话待办列表，连通性测试只允许省略 todos 或设置为 null。";
+  String get connectivityTestUnknownBuiltin => "未知的内置工具";
+  String get connectivityTestBuiltinSuccess => "内置工具测试成功";
+  String get connectivityTestBuiltinFailure => "内置工具测试失败";
+  String get connectivityTestResultTruncated => "…（结果已截断）";
+  String get connectivityTestTopLevelObjectRequired => "测试内容顶层必须是 JSON 对象。";
+  String connectivityTestMcpRequestTimeout(String method) =>
+      'MCP 请求超时：$method';
+  String get connectivityTestRequestTimeout => "请求超时，请检查服务响应和网络。";
+  String connectivityTestToolNames(String names) => "：$names";
+  String connectivityTestMcpSuccessDetails(int count, String names, String suffix) =>
+      "连接及 tools/list 请求成功，共发现 $count 个工具$names$suffix。";
+  String connectivityTestBuiltinExecutorMissing(String toolName) =>
+      "找不到工具“$toolName”的测试执行器。";
+
   String get connectivityTestFailedSummary => '测试未能完成';
 
   @override
@@ -11862,6 +11901,14 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get updateApkInstallFailedNoDetails => '安装失败，请手动打开 APK 安装';
+
+  @override
+  String get updateApkInstallerUnavailable =>
+      '未找到可安装 APK 的应用，请手动打开 APK 安装。';
+
+  @override
+  String get updateApkInstallPermissionDenied =>
+      '请在系统设置中允许 Stroom 安装未知来源应用。';
 
   @override
   String get updateRestartDialogTitle => '更新检测';
