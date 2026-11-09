@@ -259,10 +259,14 @@ extension _ProviderSettingsPanelSaveExt on _ProviderSettingsPanelState {
       typeConfig['fallbackMethod'] = _fallbackMethod;
     }
 
-    if (_isOcrType && _ocrRequestSizeBudgetController.text.trim().isNotEmpty) {
-      typeConfig['requestSizeBudgetBytes'] = ocrRequestSizeBudgetBytesFromMib(
-        _ocrRequestSizeBudgetController.text,
-      );
+    if (_isOcrType) {
+      final requestSizeBudget = _ocrRequestSizeBudgetController.text.trim();
+      if (requestSizeBudget.isEmpty) {
+        typeConfig.remove('requestSizeBudgetBytes');
+      } else {
+        typeConfig['requestSizeBudgetBytes'] =
+            ocrRequestSizeBudgetBytesFromMib(requestSizeBudget);
+      }
     }
 
     // 保存前规范化：boolean 类型无参数值（清空 options，与模型页一致）

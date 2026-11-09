@@ -182,6 +182,51 @@ void main() {
   });
 
   group('Display mode (existing config)', () {
+    testWidgets('clearing the OCR request budget removes the provider override',
+        (
+      tester,
+    ) async {
+      await tester.pumpDetailPage(
+        entry: ProviderEntry(
+          id: 'test_entry_id',
+          type: 'ocr',
+          name: 'OCR供应商',
+          configs: [
+            ProviderConfigItem(
+              providerName: 'OCRProvider',
+              host: 'https://ocr.example.test',
+              key: 'ocr-key',
+              typeConfig: const {
+                'requestSizeBudgetBytes': 5 * 1024 * 1024,
+              },
+            ),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('编辑供应商设置'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('参数设置'));
+      await tester.pumpAndSettle();
+
+      final budgetField = find.byKey(
+        const Key('ocr_provider_request_size_budget_mib'),
+      );
+      expect(tester.widget<TextField>(budgetField).controller!.text, '5');
+      await tester.enterText(budgetField, '');
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      final state = ProviderScope.containerOf(
+        tester.element(find.byType(ProviderConfigDetailPage)),
+      ).read(providerEntriesProvider);
+      expect(
+        state.entries.single.configs.single.typeConfig,
+        isNot(contains('requestSizeBudgetBytes')),
+      );
+    });
+
     testWidgets('shows provider card and model list, no edit button', (
       tester,
     ) async {
