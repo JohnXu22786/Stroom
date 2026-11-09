@@ -41,6 +41,10 @@ void main() {
   testWidgets(
     'localizes statistics labels and progress in English and Chinese',
     (tester) async {
+      tester.view.physicalSize = const Size(800, 1200);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+
       for (final locale in const [Locale('en'), Locale('zh')]) {
         await tester.pumpWidget(
           ProviderScope(

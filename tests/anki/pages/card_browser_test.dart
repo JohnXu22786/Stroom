@@ -28,7 +28,7 @@ void main() {
         await tester.pumpWidget(
           ProviderScope(
             overrides: [
-              ankiCardDaoProvider.overrideWith((_) async => _EmptyCardDao()),
+              ankiCardDaoProvider.overrideWithValue(AsyncData(_EmptyCardDao())),
             ],
             child: MaterialApp(
               locale: locale,
