@@ -71,6 +71,29 @@ extension OpenAICompatibleChatProviderExt on OpenAICompatibleChatProvider {
                 if (url != null) imagePart['image_url'] = url;
                 return imagePart;
               }
+              if (part['type'] == 'file' && role != 'assistant') {
+                final file = part['file'];
+                if (file is Map) {
+                  final fileData = file['file_data'];
+                  final fileId = file['file_id'];
+                  if (fileData is String && fileData.isNotEmpty) {
+                    return <String, dynamic>{
+                      'type': 'input_file',
+                      'file_data': fileData,
+                      if (file['filename'] is String)
+                        'filename': file['filename'],
+                    };
+                  }
+                  if (fileId is String && fileId.isNotEmpty) {
+                    return <String, dynamic>{
+                      'type': 'input_file',
+                      'file_id': fileId,
+                      if (file['filename'] is String)
+                        'filename': file['filename'],
+                    };
+                  }
+                }
+              }
               return <String, dynamic>{
                 'type': role == 'assistant' ? 'output_text' : 'input_text',
                 'text': part['text'] ?? '',

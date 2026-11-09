@@ -145,6 +145,45 @@ void main() {
       ]);
     });
 
+    test('preserves PDF file parts when converting to Responses input', () {
+      final provider = OpenAICompatibleChatProvider(
+        baseUrl: 'https://api.example.com/v1/responses',
+        apiKey: 'test-key',
+        apiProtocol: 'openai.responses',
+      );
+
+      final body = provider.buildBody([
+        {
+          'role': 'user',
+          'content': [
+            {'type': 'text', 'text': 'Summarize this document.'},
+            {
+              'type': 'file',
+              'file': {
+                'filename': 'report.pdf',
+                'file_data': 'data:application/pdf;base64,cGRm',
+              },
+            },
+          ],
+        },
+      ]);
+
+      expect(body['input'], [
+        {
+          'type': 'message',
+          'role': 'user',
+          'content': [
+            {'type': 'input_text', 'text': 'Summarize this document.'},
+            {
+              'type': 'input_file',
+              'filename': 'report.pdf',
+              'file_data': 'data:application/pdf;base64,cGRm',
+            },
+          ],
+        },
+      ]);
+    });
+
     test('decodes Responses stream text, function calls, and usage', () {
       final provider = OpenAICompatibleChatProvider(
         baseUrl: 'https://api.example.com/v1/responses',
