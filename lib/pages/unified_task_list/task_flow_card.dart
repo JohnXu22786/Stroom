@@ -525,11 +525,12 @@ class _ExpandedContent extends ConsumerWidget {
           ),
         );
     } on TaskFlowValidationException catch (error) {
+      final hasFlow =
+          ref.read(taskFlowListProvider).any((f) => f.id == execution.flowId);
+      debugPrint(
+          'TASK_FLOW_RETRY_CATCH: latest=$useLatest snapshotNull=${execution.snapshot == null} flow=${execution.flowId} hasFlow=$hasFlow error=${error.message} blockId=${error.blockId} index=${error.blockIndex} input=${error.isInputError}');
       if (!context.mounted) return;
-      if (!useLatest ||
-          !ref
-              .read(taskFlowListProvider)
-              .any((f) => f.id == execution.flowId)) {
+      if (!useLatest || !hasFlow) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(error.toString())));
         return;

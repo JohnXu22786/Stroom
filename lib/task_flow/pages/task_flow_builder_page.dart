@@ -1884,6 +1884,8 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
   }
 
   Future<void> _showValidationError(TaskFlowValidationException error) async {
+    debugPrint(
+        'TASK_FLOW_BUILDER_ERROR: flow=${widget.flowId} blocks=${_blocks.length} errorFlow=${error.flowId} blockId=${error.blockId} index=${error.blockIndex} input=${error.isInputError}');
     final strings = AppLocalizations.of(context)!;
     final message = _localizedValidationMessage(error, strings);
     final displayedMessage = error.blockIndex == null
