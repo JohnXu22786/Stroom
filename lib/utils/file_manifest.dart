@@ -13,6 +13,8 @@ import 'file_record.dart';
 import '../services/manifest_database.dart';
 import '../services/manifest_operations.dart';
 import 'folder_path_utils.dart';
+import 'folder_membership_lock.dart';
+import 'content_hash_save_lock.dart';
 
 // ====================================================================
 // AudioRecord
@@ -203,9 +205,9 @@ String computeAudioHash(Uint8List data) {
 }
 
 class _StorageFileSaveContext {
-  _StorageFileSaveContext(this.storageName);
+  _StorageFileSaveContext(this.storageNames);
 
-  final String storageName;
+  final Set<String> storageNames;
   bool active = true;
 }
 
@@ -222,6 +224,7 @@ class _AudioHashFileSaveContext {
 
 /// Audio file manifest — delegates to [ManifestOperations].
 class FileManifest {
+  static final _recordMutationLocks = ContentHashSaveLock();
   static final Map<String, Future<void>> _storageFileSaveTails = {};
   static final Object _storageFileSaveZoneKey = Object();
   static final Map<String, Future<void>> _audioHashFileSaveTails = {};
@@ -368,6 +371,24 @@ class FileManifest {
         onQueued: onQueued,
       );
 
+  static Future<T> withCopySourceLocks<T>(
+    Iterable<String> storageNames,
+    Future<T> Function() operation,
+  ) {
+    final ordered = storageNames.toSet().toList()..sort();
+    Future<T> acquire(int index) {
+      if (index == ordered.length) {
+        return _recordMutationLocks.withLock('manifest-records', operation);
+      }
+      return withStorageFileSaveLock(
+        ordered[index],
+        () => acquire(index + 1),
+      );
+    }
+
+    return acquire(0);
+  }
+
   static Future<T> _withStorageFileSaveLock<T>(
     String storageName,
     Future<T> Function() operation, {
@@ -380,7 +401,7 @@ class FileManifest {
         currentContext is _StorageFileSaveContext && currentContext.active;
     if (currentContext is _StorageFileSaveContext &&
         currentContext.active &&
-        currentContext.storageName == storageName) {
+        currentContext.storageNames.contains(storageName)) {
       return operation();
     }
 
@@ -434,7 +455,12 @@ class FileManifest {
       }
     }
 
-    final saveContext = _StorageFileSaveContext(storageName);
+    final inheritedStorageNames =
+        currentContext is _StorageFileSaveContext && currentContext.active
+            ? currentContext.storageNames
+            : const <String>{};
+    final saveContext =
+        _StorageFileSaveContext({...inheritedStorageNames, storageName});
     try {
       return await runZoned<Future<T>>(
         () => acquireAudioHashLock
@@ -502,12 +528,18 @@ class FileManifest {
     final currentContext = Zone.current[_storageFileSaveZoneKey];
     if (currentContext is _StorageFileSaveContext &&
         currentContext.active &&
-        currentContext.storageName == record.storageFileName) {
-      return _ops.addRecord(record);
+        currentContext.storageNames.contains(record.storageFileName)) {
+      return _recordMutationLocks.withLock(
+        'manifest-records',
+        () => _ops.addRecord(record),
+      );
     }
     return withStorageFileSaveLock(
       record.storageFileName,
-      () => _ops.addRecord(record),
+      () => _recordMutationLocks.withLock(
+        'manifest-records',
+        () => _ops.addRecord(record),
+      ),
     );
   }
 
@@ -676,21 +708,24 @@ class FileManifest {
   }
 
   // Folder management
-  static Future<void> addFolder(String name) => _ops.addFolder(name);
+  static Future<void> addFolder(String name) =>
+      FolderMembershipLock.withAddLock('audio', name, () => _ops.addFolder(name));
   static Future<void> addFolderPath(String pathName) =>
-      _ops.addFolderPath(pathName);
+      FolderMembershipLock.withAddLock(
+        'audio', pathName, () => _ops.addFolderPath(pathName));
   static Future<void> removeFolder(
     String name, {
     void Function()? onWaitingForSaves,
-  }) =>
-      _withFolderRemovalLock(
-        () async {
-          await loadRecordsStrict();
-          await _ops.removeFolder(name);
-        },
-        onWaitingForSaves: onWaitingForSaves,
-      );
+  }) => FolderMembershipLock.withDeleteLock(
+    'audio',
+    name,
+    () => _withFolderRemovalLock(() async {
+      await loadRecordsStrict();
+      await _ops.removeFolder(name);
+    }, onWaitingForSaves: onWaitingForSaves),
+  );
   static Future<Set<String>> getAllFolders() => _ops.getAllFolders();
+
   static Future<void> removeFolderFromCache(String folderPath) =>
       _ops.removeFolderFromCache(folderPath);
   static Future<void> removeFolderMetadataFromCache(String folderPath) =>
