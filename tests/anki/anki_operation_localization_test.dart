@@ -33,6 +33,25 @@ void main() {
       missingFile.localizedMessage(chinese),
       '找不到所选的 .apkg 文件：/tmp/deck.apkg',
     );
+    const invalidArchive = AnkiApkgException.invalidArchive('/tmp/deck.apkg');
+    expect(
+      invalidArchive.localizedMessage(english),
+      'The selected .apkg file is damaged or is not a valid archive.',
+    );
+    expect(
+      invalidArchive.localizedMessage(chinese),
+      '所选的 .apkg 文件已损坏或不是有效的压缩包。',
+    );
+    const localFileFailure =
+        AnkiApkgException.localFileFailure('/tmp/deck.apkg');
+    expect(
+      localFileFailure.localizedMessage(english),
+      'Could not access the local Anki file: /tmp/deck.apkg',
+    );
+    expect(
+      localFileFailure.localizedMessage(chinese),
+      '无法访问本地 Anki 文件：/tmp/deck.apkg',
+    );
     expect(
       const AnkiApkgException.unexpectedError('/tmp/deck.apkg')
           .localizedMessage(english),
@@ -78,7 +97,15 @@ void main() {
         failureCode: AnkiSyncFailureCode.serverHttpError,
         diagnosticValue: 404,
       ).localizedMessage(AppLocalizationsEn()),
-      'The sync server returned HTTP 404.',
+      'The sync endpoint could not be found (HTTP 404). Check the server address.',
+    );
+    expect(
+      const AnkiSyncException.appGenerated(
+        '同步服务器返回 HTTP 401',
+        failureCode: AnkiSyncFailureCode.serverHttpError,
+        diagnosticValue: 401,
+      ).localizedMessage(AppLocalizationsEn()),
+      'The sync server rejected the request (HTTP 401). Check the login credentials and server permissions.',
     );
     expect(
       const AnkiSyncException.appGenerated(
@@ -92,6 +119,67 @@ void main() {
       const AnkiSyncException('remote diagnostic')
           .localizedMessage(AppLocalizationsEn()),
       'remote diagnostic',
+    );
+    expect(
+      AnkiSyncException.appGenerated(
+        '本地和服务器同时修改媒体文件 tracked.png',
+        failureCode: AnkiSyncFailureCode.mediaFilenameConflict,
+        diagnosticText: 'tracked.png',
+      ).localizedMessage(AppLocalizationsEn()),
+      'The media file “tracked.png” has conflicting local and server changes. Back it up and resolve the name conflict before retrying.',
+    );
+    expect(
+      AnkiSyncException.appGenerated(
+        '媒体文件名有问题: bad:name.png',
+        failureCode: AnkiSyncFailureCode.mediaInvalidFilename,
+        diagnosticText: 'bad:name.png',
+      ).localizedMessage(AppLocalizationsZh()),
+      '媒体文件名“bad:name.png”无法同步。请将其重命名为符合 Anki 规则的名称后重试。',
+    );
+    expect(
+      AnkiSyncException.appGenerated(
+        '本地媒体文件为空或超过 100 MB',
+        failureCode: AnkiSyncFailureCode.mediaFileSizeLimit,
+        diagnosticValue: 100,
+      ).localizedMessage(AppLocalizationsZh()),
+      '媒体文件为空或超过 100 MB 限制。',
+    );
+    expect(
+      const AnkiSyncException.appGenerated(
+        '本地媒体同步索引已损坏',
+        failureCode: AnkiSyncFailureCode.mediaIndexCorrupt,
+      ).localizedMessage(AppLocalizationsEn()),
+      'The local media sync index is corrupted. Reset media sync data and try again.',
+    );
+    expect(
+      const AnkiSyncException.appGenerated(
+        '本地媒体同步索引已损坏',
+        failureCode: AnkiSyncFailureCode.mediaIndexCorrupt,
+      ).localizedMessage(AppLocalizationsZh()),
+      '本地媒体同步索引已损坏。请重置媒体同步数据后重试。',
+    );
+    expect(
+      const AnkiSyncException.appGenerated(
+        '本地媒体同步索引无法读取或更新',
+        failureCode: AnkiSyncFailureCode.mediaIndexFailure,
+      ).localizedMessage(AppLocalizationsEn()),
+      'The local media sync index could not be read or updated.',
+    );
+    expect(
+      const AnkiSyncException.appGenerated(
+        '本地媒体同步索引无法读取或更新',
+        failureCode: AnkiSyncFailureCode.mediaIndexFailure,
+      ).localizedMessage(AppLocalizationsZh()),
+      '本地媒体同步索引无法读取或更新。',
+    );
+    expect(
+      AnkiSyncException.appGenerated(
+        '媒体压缩包包含 27 个条目',
+        failureCode: AnkiSyncFailureCode.mediaBatchLimitExceeded,
+        diagnosticCount: 27,
+        diagnosticValue: 26,
+      ).localizedMessage(AppLocalizationsZh()),
+      '媒体压缩包包含 27 个条目，最多允许 26 个（含清单）。',
     );
     expect(
       AppLocalizationsEn().ankiWebSyncUnsupportedPlatform,

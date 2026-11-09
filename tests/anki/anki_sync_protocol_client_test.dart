@@ -168,8 +168,14 @@ void main() {
       }
 
       expect(thrown, isA<AnkiSyncException>());
-      expect(thrown.toString(), isNot(contains('test-only')));
-      expect(thrown.toString(), contains('HTTP 400'));
+      final exception = thrown as AnkiSyncException;
+      expect(exception.toString(), isNot(contains('test-only')));
+      expect(exception.toString(), contains('HTTP 400'));
+      expect(exception.failureCode, AnkiSyncFailureCode.serverHttpError);
+      expect(
+        exception.localizedMessage(AppLocalizationsEn()),
+        'The sync server rejected the request (HTTP 400). Check the login credentials and server permissions.',
+      );
     });
 
     test('localizes app-generated connection failures', () async {
@@ -712,6 +718,24 @@ void main() {
       final fields = _multipartFields(httpClient.requests[2]);
       expect(utf8.decode(fields['c']!), '0');
       expect(fields['data'], zipBytes);
+    });
+
+    test('preserves server media error diagnostics', () async {
+      httpClient.responses
+        ..add(_jsonResponse({'key': 'host-key'}))
+        ..add(_jsonResponse({'data': null, 'err': 'missing remote file: a.png'}));
+
+      await client.login('test@example.invalid', 'test-only');
+      await expectLater(
+        client.requestMediaJson('begin', const {}),
+        throwsA(
+          isA<AnkiSyncException>().having(
+            (error) => error.localizedMessage(AppLocalizationsEn()),
+            'localizedMessage',
+            'missing remote file: a.png',
+          ),
+        ),
+      );
     });
 
     test(

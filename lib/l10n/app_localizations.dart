@@ -1984,6 +1984,18 @@ abstract class AppLocalizations {
   /// **'Installation failed. Open the APK manually.'**
   String get updateApkInstallFailedNoDetails;
 
+  /// No description provided for @updateApkInstallerUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not find an app to install this APK. Open it manually.'**
+  String get updateApkInstallerUnavailable;
+
+  /// No description provided for @updateApkInstallPermissionDenied.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow Stroom to install unknown apps in system settings.'**
+  String get updateApkInstallPermissionDenied;
+
   /// No description provided for @updateRestartDialogTitle.
   ///
   /// In en, this message translates to:
@@ -18420,6 +18432,8 @@ abstract class AppLocalizations {
   /// **'The selected .apkg file could not be found: {path}'**
   String backupRestoreApkgFileNotFound(String path);
 
+  String get backupRestoreApkgInvalidArchive;
+
   /// No description provided for @backupRestoreApkgCollectionMissing.
   ///
   /// In en, this message translates to:
@@ -18437,6 +18451,9 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'The Anki collection database is damaged.'**
   String get backupRestoreApkgDatabaseCorrupt;
+
+  /// **'Could not access the local Anki file: {path}'**
+  String backupRestoreApkgLocalFileFailure(String path);
 
   /// No description provided for @backupRestoreApkgUnexpectedError.
   ///
@@ -18460,6 +18477,18 @@ abstract class AppLocalizations {
   ///
   /// In en, this message translates to:
   /// **'Sign in to AnkiWeb to sync on web. Open Anki settings with the cloud icon to log in.'**
+  String ankiSyncStatusServerAuthRejected(int statusCode);
+  String ankiSyncStatusServerEndpointNotFound(int statusCode);
+  String get ankiSyncStatusMediaProtocolFailed;
+  String get ankiSyncStatusMediaIndexCorrupt;
+  String get ankiSyncStatusMediaIndexFailure;
+  String get ankiSyncStatusMediaChecksumMismatch;
+  String ankiSyncStatusMediaFilenameConflict(String filename);
+  String ankiSyncStatusMediaInvalidFilename(String filename);
+  String ankiSyncStatusMediaFileSizeLimit(int limitMb);
+  String ankiSyncStatusMediaBatchLimitExceeded(int count, int limit);
+  String get ankiSyncStatusMediaSanityCheckFailed;
+
   String get ankiWebSyncUnsupportedPlatform;
 
   /// No description provided for @ankiWebDecksUnsupportedPlatform.
@@ -18530,6 +18559,9 @@ abstract class AppLocalizations {
 
   /// No description provided for @ankiSyncStatusLocalFileFailure.
   String get ankiSyncStatusLocalFileFailure;
+
+  /// No description provided for @ankiSyncStatusCollectionInvalid.
+  String get ankiSyncStatusCollectionInvalid;
 
   String get batchDlgFileName;
   String get batchDlgFolderName;

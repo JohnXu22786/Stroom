@@ -10,6 +10,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:unorm_dart/unorm_dart.dart' as unorm;
 
 import '../database/anki_database.dart';
+import '../database/sqlite_error_classifier.dart';
 import 'anki_full_download_recovery.dart';
 import 'anki_sync_protocol_client.dart';
 
@@ -27,6 +28,37 @@ class AnkiMediaSync {
   static const int _maxServerMediaFilenameBytes = 255;
   static const int _targetZipBytes = 2621440;
   static const List<String> _sqliteSuffixes = ['', '-wal', '-shm', '-journal'];
+  static const AnkiSyncException _localFileFailure =
+      AnkiSyncException.appGenerated(
+        '媒体同步读写本地文件失败',
+        failureCode: AnkiSyncFailureCode.localFileFailure,
+      );
+  static const AnkiSyncException _corruptMediaIndex =
+      AnkiSyncException.appGenerated(
+        '本地媒体同步索引已损坏，请重置媒体同步数据后重试',
+        failureCode: AnkiSyncFailureCode.mediaIndexCorrupt,
+      );
+  static const AnkiSyncException _mediaIndexFailure =
+      AnkiSyncException.appGenerated(
+        '本地媒体同步索引无法读取或更新',
+        failureCode: AnkiSyncFailureCode.mediaIndexFailure,
+      );
+
+  static AnkiSyncException _databaseFailure(DatabaseException error) {
+    if (isSqliteLocalFileFailure(error)) return _localFileFailure;
+    if (isSqliteCorruption(error)) return _corruptMediaIndex;
+    return _mediaIndexFailure;
+  }
+
+  static AnkiSyncException _collectionDatabaseFailure(
+    DatabaseException error,
+  ) =>
+      AnkiSyncException.appGenerated(
+        'collection 无法打开或更新',
+        failureCode: isSqliteLocalFileFailure(error)
+            ? AnkiSyncFailureCode.localFileFailure
+            : AnkiSyncFailureCode.collectionInvalid,
+      );
 
   const AnkiMediaSync._();
 
@@ -40,16 +72,18 @@ class AnkiMediaSync {
         documentsPath ?? (await getApplicationDocumentsDirectory()).path;
     final mediaPath = p.join(docs, 'collection.media');
     final folder = Directory(mediaPath);
-    if (!await folder.exists()) await folder.create(recursive: true);
     final indexPath = _indexPath(
       docs,
       syncIdentity ?? client.destinationIdentity,
     );
-    final index = await openDatabase(
-      indexPath,
-      version: 1,
-      onCreate: (db, _) async {
-        await db.execute('''
+    late final Database index;
+    try {
+      if (!await folder.exists()) await folder.create(recursive: true);
+      index = await openDatabase(
+        indexPath,
+        version: 1,
+        onCreate: (db, _) async {
+          await db.execute('''
           CREATE TABLE media_files (
             fname TEXT PRIMARY KEY,
             sha1 TEXT,
@@ -57,15 +91,20 @@ class AnkiMediaSync {
             sync_required INTEGER NOT NULL DEFAULT 1
           )
         ''');
-        await db.execute('''
+          await db.execute('''
           CREATE TABLE media_meta (
             id INTEGER PRIMARY KEY CHECK (id = 1),
             last_sync_usn INTEGER NOT NULL DEFAULT 0
           )
         ''');
-        await db.insert('media_meta', {'id': 1, 'last_sync_usn': 0});
-      },
-    );
+          await db.insert('media_meta', {'id': 1, 'last_sync_usn': 0});
+        },
+      );
+    } on FileSystemException {
+      throw _localFileFailure;
+    } on DatabaseException catch (error) {
+      throw _databaseFailure(error);
+    }
 
     AnkiDatabase? ownedCollection;
     try {
@@ -74,11 +113,17 @@ class AnkiMediaSync {
         'v': 'stroom:0.4.47',
       });
       if (begin is! Map) {
-        throw const AnkiSyncException('媒体同步 begin 响应无法解析');
+        throw const AnkiSyncException.appGenerated(
+          '媒体同步 begin 响应无法解析',
+          failureCode: AnkiSyncFailureCode.mediaProtocolFailure,
+        );
       }
       final remoteUsnValue = begin['usn'];
       if (remoteUsnValue is! int || remoteUsnValue < 0) {
-        throw const AnkiSyncException('媒体同步 begin 响应中的 USN 无效');
+        throw const AnkiSyncException.appGenerated(
+          '媒体同步 begin 响应中的 USN 无效',
+          failureCode: AnkiSyncFailureCode.mediaProtocolFailure,
+        );
       }
       final remoteUsn = remoteUsnValue;
       final localMeta = (await index.query(
@@ -110,14 +155,20 @@ class AnkiMediaSync {
             'lastUsn': lastUsn,
           });
           if (response is! List) {
-            throw const AnkiSyncException('媒体变更列表无法解析');
+            throw const AnkiSyncException.appGenerated(
+              '媒体变更列表无法解析',
+              failureCode: AnkiSyncFailureCode.mediaProtocolFailure,
+            );
           }
           if (response.isEmpty) break;
 
           final changes = response.map(_mediaChange).toList();
           final nextUsn = changes.last.usn;
           if (nextUsn <= lastUsn) {
-            throw const AnkiSyncException('媒体同步服务器返回了重复变更');
+            throw const AnkiSyncException.appGenerated(
+              '媒体同步服务器返回了重复变更',
+              failureCode: AnkiSyncFailureCode.mediaProtocolFailure,
+            );
           }
           final actions = <_MediaAction>[];
           for (final remote in changes) {
@@ -128,9 +179,11 @@ class AnkiMediaSync {
                 localSha.isNotEmpty &&
                 remote.sha1.isNotEmpty &&
                 localSha != remote.sha1) {
-              throw AnkiSyncException(
+              throw AnkiSyncException.appGenerated(
                 '本地和服务器同时修改了媒体文件「${remote.filename}」，'
                 '为避免覆盖本地内容，请先备份并手动解决同名冲突后重试同步',
+                failureCode: AnkiSyncFailureCode.mediaFilenameConflict,
+                diagnosticText: remote.filename,
               );
             }
             final action = _requiredAction(localSha, remote.sha1, pending);
@@ -155,15 +208,24 @@ class AnkiMediaSync {
                 final zip = await client.downloadMediaZip([name]);
                 final archiveFiles = decodeDownloadArchive(zip);
                 if (archiveFiles.keys.any((filename) => filename != name)) {
-                  throw const AnkiSyncException('媒体服务器返回了未请求的文件');
+                  throw const AnkiSyncException.appGenerated(
+                    '媒体服务器返回了未请求的文件',
+                    failureCode: AnkiSyncFailureCode.mediaProtocolFailure,
+                  );
                 }
                 final content = archiveFiles[name];
                 if (content == null) {
-                  throw const AnkiSyncException('媒体服务器没有返回请求的文件');
+                  throw const AnkiSyncException.appGenerated(
+                    '媒体服务器没有返回请求的文件',
+                    failureCode: AnkiSyncFailureCode.mediaProtocolFailure,
+                  );
                 }
                 if (sha1.convert(content).toString() !=
                     expectedShas[name]!.toLowerCase()) {
-                  throw const AnkiSyncException('媒体文件校验失败，请重试同步');
+                  throw const AnkiSyncException.appGenerated(
+                    '媒体文件校验失败，请重试同步',
+                    failureCode: AnkiSyncFailureCode.mediaChecksumMismatch,
+                  );
                 }
                 final stagedFile = File(
                   p.join(staging.path, stagedFiles.length.toString()),
@@ -189,11 +251,19 @@ class AnkiMediaSync {
               final collectionFile = File(p.join(docs, 'collection.anki2'));
               if (await collectionFile.exists()) {
                 ownedCollection ??= AnkiDatabase(basePath: docs);
-                await ownedCollection.open();
+                try {
+                  await ownedCollection.open();
+                } on DatabaseException catch (error) {
+                  throw _collectionDatabaseFailure(error);
+                }
                 collection = ownedCollection;
               }
             }
-            await collection?.col.replaceMediaReferences(renamedFiles);
+            try {
+              await collection?.col.replaceMediaReferences(renamedFiles);
+            } on DatabaseException catch (error) {
+              throw _collectionDatabaseFailure(error);
+            }
           }
 
           await index.transaction((txn) async {
@@ -203,7 +273,10 @@ class AnkiMediaSync {
                 case _MediaActionKind.download:
                   final localFilename = localFilenames[change.filename];
                   if (localFilename == null) {
-                    throw const AnkiSyncException('媒体服务器没有返回请求的文件');
+                    throw const AnkiSyncException.appGenerated(
+                      '媒体服务器没有返回请求的文件',
+                      failureCode: AnkiSyncFailureCode.mediaProtocolFailure,
+                    );
                   }
                   if (localFilename == change.filename) {
                     await _put(
@@ -294,7 +367,11 @@ class AnkiMediaSync {
           }
           final length = await file.length();
           if (length == 0 || length > _maxMediaFileBytes) {
-            throw const AnkiSyncException('待上传媒体文件为空或超过 100 MB，请修复后重试同步');
+            throw AnkiSyncException.appGenerated(
+              '待上传媒体文件为空或超过 100 MB，请修复后重试同步',
+              failureCode: AnkiSyncFailureCode.mediaFileSizeLimit,
+              diagnosticValue: _maxMediaFileBytes ~/ (1024 * 1024),
+            );
           }
           final bytes = await file.readAsBytes();
           batch.add(AnkiMediaUploadEntry(name, bytes));
@@ -304,7 +381,10 @@ class AnkiMediaSync {
         final processed = _int(reply['processed']);
         final currentUsn = _int(reply['currentUsn']);
         if (processed <= 0 || processed > batch.length) {
-          throw const AnkiSyncException('媒体服务器没有接受待上传文件');
+          throw const AnkiSyncException.appGenerated(
+            '媒体服务器没有接受待上传文件',
+            failureCode: AnkiSyncFailureCode.mediaProtocolFailure,
+          );
         }
         final accepted = batch.take(processed).toList();
         await index.transaction((txn) async {
@@ -343,16 +423,38 @@ class AnkiMediaSync {
         'local': _int(localCount.first['n']),
       });
       if (sanity != 'OK') {
-        throw const AnkiSyncException('媒体同步校验失败，请重试');
+        throw const AnkiSyncException.appGenerated(
+          '媒体同步校验失败，请重试',
+          failureCode: AnkiSyncFailureCode.mediaSanityCheckFailed,
+        );
       }
       return AnkiMediaSyncResult(
         downloadedFiles: received,
         uploadedFiles: uploaded,
         deletedFiles: deleted,
       );
+    } on FileSystemException {
+      throw _localFileFailure;
+    } on DatabaseException catch (error) {
+      throw _databaseFailure(error);
     } finally {
-      await index.close();
-      await ownedCollection?.close();
+      try {
+        try {
+          await index.close();
+        } on FileSystemException {
+          throw _localFileFailure;
+        } on DatabaseException catch (error) {
+          throw _databaseFailure(error);
+        }
+      } finally {
+        try {
+          await ownedCollection?.close();
+        } on FileSystemException {
+          throw _localFileFailure;
+        } on DatabaseException catch (error) {
+          throw _collectionDatabaseFailure(error);
+        }
+      }
     }
   }
 
@@ -372,13 +474,13 @@ class AnkiMediaSync {
     final stamp = DateTime.now().microsecondsSinceEpoch;
     final backupPath =
         recovery?.mediaBackupPath ?? '$mediaPath.pre-sync-$stamp';
-    final existed = await folder.exists();
     final indexPath = recovery?.mediaIndexPath ??
         _indexPath(docs, client.destinationIdentity);
     final backupIndexPath =
         recovery?.mediaIndexBackupPath ?? '$indexPath.pre-sync-$stamp';
     var moved = false;
     try {
+      final existed = await folder.exists();
       await recovery?.markMediaResetStarted();
       if (existed) {
         await recovery?.markMediaMoveStarted();
@@ -408,16 +510,24 @@ class AnkiMediaSync {
         indexPath: indexPath,
         backupIndexPath: backupIndexPath,
       );
-    } catch (_) {
-      if (recovery != null) rethrow;
-      if (moved) {
-        final current = Directory(mediaPath);
-        if (await current.exists()) await current.delete(recursive: true);
-        if (await Directory(backupPath).exists()) {
-          await Directory(backupPath).rename(mediaPath);
-        }
+    } catch (error) {
+      if (recovery != null) {
+        if (error is FileSystemException) throw _localFileFailure;
+        rethrow;
       }
-      await _restoreIndexFiles(indexPath, backupIndexPath);
+      try {
+        if (moved) {
+          final current = Directory(mediaPath);
+          if (await current.exists()) await current.delete(recursive: true);
+          if (await Directory(backupPath).exists()) {
+            await Directory(backupPath).rename(mediaPath);
+          }
+        }
+        await _restoreIndexFiles(indexPath, backupIndexPath);
+      } on FileSystemException {
+        throw _localFileFailure;
+      }
+      if (error is FileSystemException) throw _localFileFailure;
       rethrow;
     }
   }
@@ -496,10 +606,18 @@ class AnkiMediaSync {
                 sha1.convert(await entity.readAsBytes()).toString()) {
           continue;
         }
-        throw const AnkiSyncException('本地媒体文件名不符合 Anki 同步规则，请先重命名后重试同步');
+        throw AnkiSyncException.appGenerated(
+          '本地媒体文件名不符合 Anki 同步规则，请先重命名后重试同步',
+          failureCode: AnkiSyncFailureCode.mediaInvalidFilename,
+          diagnosticText: filename,
+        );
       }
       if (length == 0 || length > _maxMediaFileBytes) {
-        throw const AnkiSyncException('本地媒体文件为空或超过 100 MB，请修复后重试同步');
+        throw AnkiSyncException.appGenerated(
+          '本地媒体文件为空或超过 100 MB，请修复后重试同步',
+          failureCode: AnkiSyncFailureCode.mediaFileSizeLimit,
+          diagnosticValue: _maxMediaFileBytes ~/ (1024 * 1024),
+        );
       }
       final bytes = await entity.readAsBytes();
       final hash = sha1.convert(bytes).toString();
@@ -565,13 +683,21 @@ class AnkiMediaSync {
           _validateFilename(entry.key);
           final content = await entry.value.readAsBytes();
           if (content.isEmpty || content.length > _maxMediaFileBytes) {
-            throw const AnkiSyncException('下载的媒体文件为空或超过 100 MB');
+            throw AnkiSyncException.appGenerated(
+              '下载的媒体文件为空或超过 100 MB',
+              failureCode: AnkiSyncFailureCode.mediaFileSizeLimit,
+              diagnosticValue: _maxMediaFileBytes ~/ (1024 * 1024),
+            );
           }
           final normalizedFilename = _normalizeFilename(entry.key);
           if (normalizedFilename.isEmpty ||
               normalizedFilename == '.' ||
               normalizedFilename == '..') {
-            throw const AnkiSyncException('媒体文件名无法安全归一化');
+            throw AnkiSyncException.appGenerated(
+              '媒体文件名无法安全归一化',
+              failureCode: AnkiSyncFailureCode.mediaInvalidFilename,
+              diagnosticText: entry.key,
+            );
           }
           final localFilename = await _availableNormalizedFilename(
             folder,
@@ -648,16 +774,25 @@ class AnkiMediaSync {
 
   static _MediaChange _mediaChange(Object? raw) {
     if (raw is! List || raw.length < 3) {
-      throw const AnkiSyncException('媒体变更记录无法解析');
+      throw const AnkiSyncException.appGenerated(
+        '媒体变更记录无法解析',
+        failureCode: AnkiSyncFailureCode.mediaProtocolFailure,
+      );
     }
     final name = raw[0];
     if (name is! String) {
-      throw const AnkiSyncException('媒体变更记录无法解析');
+      throw const AnkiSyncException.appGenerated(
+        '媒体变更记录无法解析',
+        failureCode: AnkiSyncFailureCode.mediaProtocolFailure,
+      );
     }
     _validateFilename(name);
     final sha1 = raw[2];
     if (sha1 is! String) {
-      throw const AnkiSyncException('媒体变更记录无法解析');
+      throw const AnkiSyncException.appGenerated(
+        '媒体变更记录无法解析',
+        failureCode: AnkiSyncFailureCode.mediaProtocolFailure,
+      );
     }
     return _MediaChange(name, _int(raw[1]), sha1);
   }
@@ -682,7 +817,12 @@ class AnkiMediaSync {
   /// Build the exact ZIP body expected by `/msync/uploadChanges`.
   static List<int> encodeUploadArchive(List<AnkiMediaUploadEntry> entries) {
     if (entries.length > _maxFilesPerRequest) {
-      throw const AnkiSyncException('单次媒体上传不能超过 25 个文件');
+      throw AnkiSyncException.appGenerated(
+        '单次媒体上传不能超过 25 个文件',
+        failureCode: AnkiSyncFailureCode.mediaBatchLimitExceeded,
+        diagnosticCount: entries.length + 1,
+        diagnosticValue: _maxMediaArchiveEntries,
+      );
     }
     final archive = Archive();
     final meta = <List<Object?>>[];
@@ -707,7 +847,11 @@ class AnkiMediaSync {
   static Map<String, List<int>> decodeDownloadArchive(List<int> bytes) {
     try {
       if (bytes.length > _maxMediaArchiveBytes) {
-        throw const AnkiSyncException('媒体 ZIP 压缩数据超过 128 MB');
+        throw AnkiSyncException.appGenerated(
+          '媒体 ZIP 压缩数据超过 128 MB',
+          failureCode: AnkiSyncFailureCode.responseTooLarge,
+          diagnosticValue: _maxMediaArchiveBytes ~/ (1024 * 1024),
+        );
       }
       _checkArchiveHeaders(bytes);
       var archiveEntryCount = 0;
@@ -716,7 +860,12 @@ class AnkiMediaSync {
         callback: (_) {
           archiveEntryCount++;
           if (archiveEntryCount > _maxMediaArchiveEntries) {
-            throw const AnkiSyncException('媒体 ZIP 文件数量超出限制');
+            throw AnkiSyncException.appGenerated(
+              '媒体 ZIP 文件数量超出限制',
+              failureCode: AnkiSyncFailureCode.mediaBatchLimitExceeded,
+              diagnosticCount: archiveEntryCount,
+              diagnosticValue: _maxMediaArchiveEntries,
+            );
           }
         },
       );
@@ -724,15 +873,25 @@ class AnkiMediaSync {
           .where((file) => file.name == '_meta' && file.isFile)
           .toList();
       if (metaFiles.length != 1) {
-        throw const AnkiSyncException('媒体 ZIP 缺少文件清单');
+        throw const AnkiSyncException.appGenerated(
+          '媒体 ZIP 缺少文件清单',
+          failureCode: AnkiSyncFailureCode.mediaProtocolFailure,
+        );
       }
       final metaFile = metaFiles.single;
       if (metaFile.size <= 0 || metaFile.size > _maxMediaManifestBytes) {
-        throw const AnkiSyncException('媒体 ZIP 文件清单超过 1 MB');
+        throw AnkiSyncException.appGenerated(
+          '媒体 ZIP 文件清单超过 1 MB',
+          failureCode: AnkiSyncFailureCode.responseTooLarge,
+          diagnosticValue: _maxMediaManifestBytes ~/ (1024 * 1024),
+        );
       }
       final meta = jsonDecode(utf8.decode(_fileBytes(metaFile.content)));
       if (meta is! Map || meta.length > _maxFilesPerRequest) {
-        throw const AnkiSyncException('媒体 ZIP 清单无法解析');
+        throw const AnkiSyncException.appGenerated(
+          '媒体 ZIP 清单无法解析',
+          failureCode: AnkiSyncFailureCode.mediaProtocolFailure,
+        );
       }
 
       final archiveNames = archive.files.map((file) => file.name).toList();
@@ -744,7 +903,10 @@ class AnkiMediaSync {
           archive.files.any(
             (file) => !file.isFile || !expectedArchiveNames.contains(file.name),
           )) {
-        throw const AnkiSyncException('媒体 ZIP 包含未声明的文件');
+        throw const AnkiSyncException.appGenerated(
+          '媒体 ZIP 包含未声明的文件',
+          failureCode: AnkiSyncFailureCode.mediaProtocolFailure,
+        );
       }
 
       final result = <String, List<int>>{};
@@ -755,16 +917,27 @@ class AnkiMediaSync {
         final archiveName = entry.key.toString();
         final file = archive.findFile(archiveName);
         if (file == null || !file.isFile || file.size <= 0) {
-          throw const AnkiSyncException('媒体 ZIP 文件缺失或为空');
+          throw const AnkiSyncException.appGenerated(
+            '媒体 ZIP 文件缺失或为空',
+            failureCode: AnkiSyncFailureCode.mediaProtocolFailure,
+          );
         }
         if (file.size > _maxMediaFileBytes ||
             file.size > _maxMediaFileBytes - totalBytes) {
-          throw const AnkiSyncException('媒体 ZIP 文件超过 100 MB 总限制');
+          throw AnkiSyncException.appGenerated(
+            '媒体 ZIP 文件超过 100 MB 总限制',
+            failureCode: AnkiSyncFailureCode.mediaFileSizeLimit,
+            diagnosticValue: _maxMediaFileBytes ~/ (1024 * 1024),
+          );
         }
         totalBytes += file.size;
         final content = _fileBytes(file.content);
         if (content.isEmpty || content.length != file.size) {
-          throw const AnkiSyncException('媒体 ZIP 文件为空或超过 100 MB');
+          throw AnkiSyncException.appGenerated(
+            '媒体 ZIP 文件为空或超过 100 MB',
+            failureCode: AnkiSyncFailureCode.mediaFileSizeLimit,
+            diagnosticValue: _maxMediaFileBytes ~/ (1024 * 1024),
+          );
         }
         result[filename] = content;
       }
@@ -772,7 +945,10 @@ class AnkiMediaSync {
     } on AnkiSyncException {
       rethrow;
     } catch (_) {
-      throw const AnkiSyncException('媒体 ZIP 无法安全读取');
+      throw const AnkiSyncException.appGenerated(
+        '媒体 ZIP 无法安全读取',
+        failureCode: AnkiSyncFailureCode.mediaProtocolFailure,
+      );
     }
   }
 
@@ -780,15 +956,27 @@ class AnkiMediaSync {
     final directory = ZipDirectory()..read(InputMemoryStream(bytes));
     final headers = directory.fileHeaders;
     if (headers.length > _maxMediaArchiveEntries) {
-      throw const AnkiSyncException('媒体 ZIP 文件数量超出限制');
+      throw AnkiSyncException.appGenerated(
+        '媒体 ZIP 文件数量超出限制',
+        failureCode: AnkiSyncFailureCode.mediaBatchLimitExceeded,
+        diagnosticCount: headers.length,
+        diagnosticValue: _maxMediaArchiveEntries,
+      );
     }
     final manifests = headers.where((header) => header.filename == '_meta');
     if (manifests.length != 1) {
-      throw const AnkiSyncException('媒体 ZIP 缺少文件清单');
+      throw const AnkiSyncException.appGenerated(
+        '媒体 ZIP 缺少文件清单',
+        failureCode: AnkiSyncFailureCode.mediaProtocolFailure,
+      );
     }
     final manifestSize = manifests.single.uncompressedSize;
     if (manifestSize <= 0 || manifestSize > _maxMediaManifestBytes) {
-      throw const AnkiSyncException('媒体 ZIP 文件清单超过 1 MB');
+      throw AnkiSyncException.appGenerated(
+        '媒体 ZIP 文件清单超过 1 MB',
+        failureCode: AnkiSyncFailureCode.responseTooLarge,
+        diagnosticValue: _maxMediaManifestBytes ~/ (1024 * 1024),
+      );
     }
 
     var totalBytes = 0;
@@ -798,7 +986,11 @@ class AnkiMediaSync {
       if (size <= 0 ||
           size > _maxMediaFileBytes ||
           size > _maxMediaFileBytes - totalBytes) {
-        throw const AnkiSyncException('媒体 ZIP 文件超过 100 MB 总限制');
+        throw AnkiSyncException.appGenerated(
+          '媒体 ZIP 文件超过 100 MB 总限制',
+          failureCode: AnkiSyncFailureCode.mediaFileSizeLimit,
+          diagnosticValue: _maxMediaFileBytes ~/ (1024 * 1024),
+        );
       }
       totalBytes += size;
     }
@@ -807,7 +999,10 @@ class AnkiMediaSync {
   static List<int> _fileBytes(Object? content) {
     if (content is List<int>) return content;
     if (content is Uint8List) return content;
-    throw const AnkiSyncException('媒体 ZIP 内容格式无效');
+    throw const AnkiSyncException.appGenerated(
+      '媒体 ZIP 内容格式无效',
+      failureCode: AnkiSyncFailureCode.mediaProtocolFailure,
+    );
   }
 
   static void _validateFilename(String filename) {
@@ -819,7 +1014,11 @@ class AnkiMediaSync {
         filename.contains('\\') ||
         filename.contains('\u0000') ||
         p.basename(filename) != filename) {
-      throw const AnkiSyncException('媒体文件名不安全，已停止同步');
+      throw AnkiSyncException.appGenerated(
+        '媒体文件名不安全，已停止同步',
+        failureCode: AnkiSyncFailureCode.mediaInvalidFilename,
+        diagnosticText: filename,
+      );
     }
   }
 

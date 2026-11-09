@@ -25,6 +25,107 @@ void main() {
   });
 
   group('Anki media sync archives', () {
+    test('localizes media directory setup failures', () async {
+      final workDir = await Directory.systemTemp.createTemp(
+        'stroom_anki_media_directory_error_test_',
+      );
+      final mediaPath = '${workDir.path}/collection.media';
+      await File(mediaPath).writeAsString('not a directory');
+      final client = AnkiSyncProtocolClient.ankiWeb(
+        client: _QueueHttpClient(),
+      );
+
+      try {
+        await expectLater(
+          AnkiMediaSync.sync(client, documentsPath: workDir.path),
+          throwsA(
+            isA<AnkiSyncException>().having(
+              (error) => error.failureCode,
+              'failureCode',
+              AnkiSyncFailureCode.localFileFailure,
+            ),
+          ),
+        );
+        await expectLater(
+          AnkiMediaSync.prepareForFullDownload(
+            client: client,
+            documentsPath: workDir.path,
+          ),
+          throwsA(
+            isA<AnkiSyncException>().having(
+              (error) => error.failureCode,
+              'failureCode',
+              AnkiSyncFailureCode.localFileFailure,
+            ),
+          ),
+        );
+      } finally {
+        client.close();
+        await workDir.delete(recursive: true);
+      }
+    });
+
+    test('localizes media index filesystem open failures', () async {
+      final workDir = await Directory.systemTemp.createTemp(
+        'stroom_anki_media_index_open_error_test_',
+      );
+      final client = AnkiSyncProtocolClient.ankiWeb(
+        client: _QueueHttpClient(),
+      );
+      final indexHash =
+          sha256.convert(utf8.encode(client.destinationIdentity)).toString();
+      await Directory(
+        '${workDir.path}/collection.media.sync.$indexHash.db',
+      ).create();
+
+      try {
+        await expectLater(
+          AnkiMediaSync.sync(client, documentsPath: workDir.path),
+          throwsA(
+            isA<AnkiSyncException>().having(
+              (error) => error.failureCode,
+              'failureCode',
+              AnkiSyncFailureCode.localFileFailure,
+            ),
+          ),
+        );
+      } finally {
+        client.close();
+        await workDir.delete(recursive: true);
+      }
+    });
+
+    test('keeps corrupt media index errors distinct from file failures',
+        () async {
+      final workDir = await Directory.systemTemp.createTemp(
+        'stroom_anki_media_index_corrupt_test_',
+      );
+      final client = AnkiSyncProtocolClient.ankiWeb(
+        client: _QueueHttpClient(),
+      );
+      final indexHash =
+          sha256.convert(utf8.encode(client.destinationIdentity)).toString();
+      await File(
+        '${workDir.path}/collection.media.sync.$indexHash.db',
+      ).writeAsString('not a SQLite database');
+
+      try {
+        await expectLater(
+          AnkiMediaSync.sync(client, documentsPath: workDir.path),
+          throwsA(
+            isA<AnkiSyncException>().having(
+              (error) => error.failureCode,
+              'failureCode',
+              AnkiSyncFailureCode.mediaIndexCorrupt,
+            ),
+          ),
+        );
+      } finally {
+        client.close();
+        await workDir.delete(recursive: true);
+      }
+    });
+
     test('encodes upload metadata and file bytes in Anki ZIP format', () {
       final bytes = AnkiMediaSync.encodeUploadArchive([
         const AnkiMediaUploadEntry('front.jpg', [1, 2, 3]),

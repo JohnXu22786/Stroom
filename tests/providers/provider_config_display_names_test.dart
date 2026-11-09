@@ -11,6 +11,7 @@ void main() {
       final entries = [
         ProviderEntry(id: 'builtin_tts', type: 'tts', name: 'TTS供应商'),
         ProviderEntry(id: 'builtin_llm', type: 'llm', name: 'LLM供应商'),
+        ProviderEntry(id: 'migrated_llm', type: 'llm', name: 'LLM供应商'),
         ProviderEntry(id: 'builtin_ocr', type: 'ocr', name: 'OCR供应商'),
         ProviderEntry(id: 'builtin_asr', type: 'asr', name: '音频转写供应商'),
         ProviderEntry(id: 'builtin_mcp', type: 'mcp', name: 'MCP供应商'),
@@ -34,9 +35,10 @@ void main() {
       final zh = AppLocalizationsZhCn();
 
       expect(
-        entries.take(5).map((entry) => providerEntryDisplayName(entry, en)),
+        entries.take(6).map((entry) => providerEntryDisplayName(entry, en)),
         [
           'TTS Provider',
+          'LLM Provider',
           'LLM Provider',
           'OCR Provider',
           'Speech Recognition Provider',
@@ -44,11 +46,11 @@ void main() {
         ],
       );
       expect(
-        entries.take(5).map((entry) => providerEntryDisplayName(entry, zh)),
-        ['TTS供应商', 'LLM供应商', 'OCR供应商', '音频转写供应商', 'MCP供应商'],
+        entries.take(6).map((entry) => providerEntryDisplayName(entry, zh)),
+        ['TTS供应商', 'LLM供应商', 'LLM供应商', 'OCR供应商', '音频转写供应商', 'MCP供应商'],
       );
-      expect(providerEntryDisplayName(entries[5], en), 'My Speech Setup');
-      expect(providerEntryDisplayName(entries[6], en), 'My Custom Provider');
+      expect(providerEntryDisplayName(entries[6], en), 'My Speech Setup');
+      expect(providerEntryDisplayName(entries[7], en), 'My Custom Provider');
 
       expect(groups.take(2).map((group) => mcpGroupDisplayName(group, en)), [
         'Search',

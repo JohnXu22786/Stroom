@@ -7,6 +7,8 @@ class FolderPathUtils {
   /// 原生端导出时会直接失败，因此在校验阶段就拒绝
   static const Set<String> _reservedWindowsNames = {
     'CON',
+    r'CONIN$',
+    r'CONOUT$',
     'PRN',
     'AUX',
     'NUL',

@@ -1162,6 +1162,14 @@ class AppLocalizationsEn extends AppLocalizations {
       'Installation failed. Open the APK manually.';
 
   @override
+  String get updateApkInstallerUnavailable =>
+      'Could not find an app to install this APK. Open it manually.';
+
+  @override
+  String get updateApkInstallPermissionDenied =>
+      'Allow Stroom to install unknown apps in system settings.';
+
+  @override
   String get updateRestartDialogTitle => 'App updated';
 
   @override
@@ -11150,6 +11158,10 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get backupRestoreApkgInvalidArchive =>
+      'The selected .apkg file is damaged or is not a valid archive.';
+
+  @override
   String get backupRestoreApkgCollectionMissing =>
       'The .apkg file does not contain collection.anki2.';
 
@@ -11161,6 +11173,11 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get backupRestoreApkgDatabaseCorrupt =>
       'The Anki collection database is damaged.';
+
+  @override
+  String backupRestoreApkgLocalFileFailure(String path) {
+    return 'Could not access the local Anki file: $path';
+  }
 
   @override
   String backupRestoreApkgUnexpectedError(String path) {
@@ -11175,6 +11192,56 @@ class AppLocalizationsEn extends AppLocalizations {
   String backupRestoreApkgExportFailed(String path) {
     return 'The Anki deck could not be packaged from this database: $path';
   }
+
+  @override
+  String ankiSyncStatusServerAuthRejected(int statusCode) {
+    return 'The sync server rejected the request (HTTP $statusCode). Check the login credentials and server permissions.';
+  }
+
+  @override
+  String ankiSyncStatusServerEndpointNotFound(int statusCode) {
+    return 'The sync endpoint could not be found (HTTP $statusCode). Check the server address.';
+  }
+
+  @override
+  String get ankiSyncStatusMediaProtocolFailed =>
+      'The media sync server returned an invalid response. Check that it supports Anki media sync and try again.';
+
+  @override
+  String get ankiSyncStatusMediaIndexCorrupt =>
+      'The local media sync index is corrupted. Reset media sync data and try again.';
+
+  @override
+  String get ankiSyncStatusMediaIndexFailure =>
+      'The local media sync index could not be read or updated.';
+
+  @override
+  String get ankiSyncStatusMediaChecksumMismatch =>
+      'A downloaded media file failed checksum validation. Retry media sync.';
+
+  @override
+  String ankiSyncStatusMediaFilenameConflict(String filename) {
+    return 'The media file “$filename” has conflicting local and server changes. Back it up and resolve the name conflict before retrying.';
+  }
+
+  @override
+  String ankiSyncStatusMediaInvalidFilename(String filename) {
+    return 'The media filename “$filename” cannot be synchronized. Rename it to a valid Anki filename and retry.';
+  }
+
+  @override
+  String ankiSyncStatusMediaFileSizeLimit(int limitMb) {
+    return 'A media file is empty or exceeds the $limitMb MB limit.';
+  }
+
+  @override
+  String ankiSyncStatusMediaBatchLimitExceeded(int count, int limit) {
+    return 'The media archive contains $count entries; the maximum is $limit including its manifest.';
+  }
+
+  @override
+  String get ankiSyncStatusMediaSanityCheckFailed =>
+      'Media sync verification failed. Retry the sync.';
 
   @override
   String get ankiWebSyncUnsupportedPlatform =>
@@ -11310,6 +11377,10 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get ankiSyncStatusLocalFileFailure =>
       'A local sync file could not be read or cleaned up. Check disk access and retry.';
+
+  @override
+  String get ankiSyncStatusCollectionInvalid =>
+      'The collection could not be opened, updated, or passed SQLite/schema validation. Restore a valid collection or download it again.';
 }
 
 /// The translations for English, as used in the United States (`en_US`).
@@ -12467,6 +12538,14 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   @override
   String get updateApkInstallFailedNoDetails =>
       'Installation failed. Open the APK manually.';
+
+  @override
+  String get updateApkInstallerUnavailable =>
+      'Could not find an app to install this APK. Open it manually.';
+
+  @override
+  String get updateApkInstallPermissionDenied =>
+      'Allow Stroom to install unknown apps in system settings.';
 
   @override
   String get updateRestartDialogTitle => 'App updated';
@@ -22445,4 +22524,56 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get renderErrorRestartMessage => 'Please try restarting the app.';
+
+  @override
+  String ankiSyncStatusServerAuthRejected(int statusCode) {
+    return 'The sync server rejected the request (HTTP $statusCode). Check the login credentials and server permissions.';
+  }
+
+  @override
+  String ankiSyncStatusServerEndpointNotFound(int statusCode) {
+    return 'The sync endpoint could not be found (HTTP $statusCode). Check the server address.';
+  }
+
+  @override
+  String get ankiSyncStatusMediaProtocolFailed =>
+      'The media sync server returned an invalid response. Check that it supports Anki media sync and try again.';
+
+  @override
+  String get ankiSyncStatusMediaChecksumMismatch =>
+      'A downloaded media file failed checksum validation. Retry media sync.';
+
+  @override
+  String ankiSyncStatusMediaFilenameConflict(String filename) {
+    return 'The media file “$filename” has conflicting local and server changes. Back it up and resolve the name conflict before retrying.';
+  }
+
+  @override
+  String ankiSyncStatusMediaInvalidFilename(String filename) {
+    return 'The media filename “$filename” cannot be synchronized. Rename it to a valid Anki filename and retry.';
+  }
+
+  @override
+  String ankiSyncStatusMediaFileSizeLimit(int limitMb) {
+    return 'A media file is empty or exceeds the $limitMb MB limit.';
+  }
+
+  @override
+  String ankiSyncStatusMediaBatchLimitExceeded(int count, int limit) {
+    return 'The media archive contains $count entries; the maximum is $limit including its manifest.';
+  }
+
+  @override
+  String get ankiSyncStatusMediaSanityCheckFailed =>
+      'Media sync verification failed. Retry the sync.';
+
+  @override
+  String backupRestoreApkgLocalFileFailure(String path) {
+    return 'Could not access the local Anki file: $path';
+  }
+
+  @override
+  String get ankiSyncStatusCollectionInvalid =>
+      'The collection could not be opened, updated, or passed SQLite/schema validation. Restore a valid collection or download it again.';
+
 }

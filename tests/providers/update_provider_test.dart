@@ -1187,6 +1187,80 @@ void main() {
       }
     });
 
+    test(
+        'localizes Android installer error codes without showing platform text',
+        () async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      const channel = MethodChannel('com.johntsui.stroom/install');
+      var errorCode = 'ACTIVITY_NOT_FOUND';
+      var platformMessage = '未找到 APK 安装程序，请手动安装';
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+        throw PlatformException(code: errorCode, message: platformMessage);
+      });
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+
+      try {
+        final cases = [
+          (
+            'ACTIVITY_NOT_FOUND',
+            '未找到 APK 安装程序，请手动安装',
+            'Could not find an app to install this APK. Open it manually.',
+            '未找到可安装 APK 的应用，请手动打开 APK 安装。',
+          ),
+          (
+            'SECURITY_EXCEPTION',
+            '缺少安装权限，请在设置中允许安装未知来源应用',
+            'Allow Stroom to install unknown apps in system settings.',
+            '请在系统设置中允许 Stroom 安装未知来源应用。',
+          ),
+          (
+            'INSTALL_FAILED',
+            'APK 安装失败: private platform details',
+            'Installation failed. Open the APK manually.',
+            '安装失败，请手动打开 APK 安装',
+          ),
+          (
+            'NULL_FILEPATH',
+            '安装文件路径为空',
+            'Installation failed. Open the APK manually.',
+            '安装失败，请手动打开 APK 安装',
+          ),
+          (
+            'UNRECOGNIZED_CODE',
+            'unrecognized private platform details',
+            'Installation failed. Open the APK manually.',
+            '安装失败，请手动打开 APK 安装',
+          ),
+        ];
+        for (final (code, message, englishText, chineseText) in cases) {
+          errorCode = code;
+          platformMessage = message;
+          for (final (locale, expected) in [
+            (const Locale('en', 'US'), englishText),
+            (const Locale('zh', 'CN'), chineseText),
+          ]) {
+            final notifier = UpdateNotifier(
+              dio: Dio(BaseOptions()),
+              localizations: () => appLocalizationsForLocale(locale),
+            )..state = UpdateState(downloadedFilePath: '$tempDir/update.apk');
+
+            await notifier.installDownloadedFile();
+
+            expect(notifier.state.downloadError, expected);
+            expect(
+              notifier.state.downloadError,
+              isNot(contains(platformMessage)),
+            );
+          }
+        }
+      } finally {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, null);
+        debugDefaultTargetPlatformOverride = originalPlatform;
+      }
+    });
+
     test('installDownloadedFile does nothing when downloadedFilePath is empty',
         () async {
       final notifier = UpdateNotifier(dio: Dio(BaseOptions()));
@@ -2091,6 +2165,25 @@ void main() {
       expect(notifier.state.updateAvailable, true);
       expect(notifier.state.availableVersions!.length, 1);
       expect(notifier.state.availableVersions![0].version, '0.2.14');
+    });
+
+    test('current release with a v-prefixed installed version is not offered',
+        () async {
+      // A build from a v-prefixed tag can report the installed version as
+      // "v0.2.13". The release list uses the normalized "0.2.13" version,
+      // and its published_at can be later than the timestamp baked from the
+      // release draft. The current release must still be excluded.
+      UpdateNotifier.debugAppVersionOverride = 'v0.2.13';
+      UpdateNotifier.debugAppReleaseTimeOverride = '2024-06-15T10:00:00Z';
+      final releases = _githubReleases([
+        ('v0.2.13', false, 'Current version', '2024-06-15T10:05:00Z'),
+      ]);
+      final notifier = UpdateNotifier(dio: _createMockDioForList(releases));
+
+      await notifier.checkForUpdate();
+
+      expect(notifier.state.updateAvailable, false);
+      expect(notifier.state.availableVersions, isNull);
     });
 
     test(

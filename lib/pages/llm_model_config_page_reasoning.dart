@@ -429,7 +429,9 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
             savedOptions: snapshot.options,
             savedOrder: snapshot.optionOrder,
           );
-          _additionalSelectedValues[param] = snapshot.options.isNotEmpty
+          final hasSavedSelection =
+              snapshot.options.isNotEmpty || snapshot.optionOrder.isNotEmpty;
+          _additionalSelectedValues[param] = hasSavedSelection
               ? snapshot.options.toSet()
               : {...providerOptions};
         }

@@ -1088,6 +1088,14 @@ class AppLocalizationsZh extends AppLocalizations {
   String get updateApkInstallFailedNoDetails => '安装失败，请手动打开 APK 安装';
 
   @override
+  String get updateApkInstallerUnavailable =>
+      '未找到可安装 APK 的应用，请手动打开 APK 安装。';
+
+  @override
+  String get updateApkInstallPermissionDenied =>
+      '请在系统设置中允许 Stroom 安装未知来源应用。';
+
+  @override
   String get updateRestartDialogTitle => '更新检测';
 
   @override
@@ -10575,6 +10583,10 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get backupRestoreApkgInvalidArchive =>
+      '所选的 .apkg 文件已损坏或不是有效的压缩包。';
+
+  @override
   String get backupRestoreApkgCollectionMissing =>
       '.apkg 文件中缺少 collection.anki2。';
 
@@ -10585,6 +10597,11 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get backupRestoreApkgDatabaseCorrupt => 'Anki collection 数据库已损坏。';
+
+  @override
+  String backupRestoreApkgLocalFileFailure(String path) {
+    return '无法访问本地 Anki 文件：$path';
+  }
 
   @override
   String backupRestoreApkgUnexpectedError(String path) {
@@ -10598,6 +10615,53 @@ class AppLocalizationsZh extends AppLocalizations {
   String backupRestoreApkgExportFailed(String path) {
     return '无法从此数据库打包导出 Anki 牌组：$path';
   }
+
+  @override
+  String ankiSyncStatusServerAuthRejected(int statusCode) {
+    return '同步服务器拒绝了请求（HTTP $statusCode）。请检查登录凭据和服务器权限。';
+  }
+
+  @override
+  String ankiSyncStatusServerEndpointNotFound(int statusCode) {
+    return '找不到同步接口（HTTP $statusCode）。请检查服务器地址。';
+  }
+
+  @override
+  String get ankiSyncStatusMediaProtocolFailed =>
+      '媒体同步服务器返回了无效响应。请确认服务器支持 Anki 媒体同步后重试。';
+
+  @override
+  String get ankiSyncStatusMediaIndexCorrupt =>
+      '本地媒体同步索引已损坏。请重置媒体同步数据后重试。';
+
+  @override
+  String get ankiSyncStatusMediaIndexFailure => '本地媒体同步索引无法读取或更新。';
+
+  @override
+  String get ankiSyncStatusMediaChecksumMismatch => '下载的媒体文件校验失败。请重试媒体同步。';
+
+  @override
+  String ankiSyncStatusMediaFilenameConflict(String filename) {
+    return '媒体文件“$filename”在本地和服务器上均有修改。请先备份并解决同名冲突，再重试。';
+  }
+
+  @override
+  String ankiSyncStatusMediaInvalidFilename(String filename) {
+    return '媒体文件名“$filename”无法同步。请将其重命名为符合 Anki 规则的名称后重试。';
+  }
+
+  @override
+  String ankiSyncStatusMediaFileSizeLimit(int limitMb) {
+    return '媒体文件为空或超过 $limitMb MB 限制。';
+  }
+
+  @override
+  String ankiSyncStatusMediaBatchLimitExceeded(int count, int limit) {
+    return '媒体压缩包包含 $count 个条目，最多允许 $limit 个（含清单）。';
+  }
+
+  @override
+  String get ankiSyncStatusMediaSanityCheckFailed => '媒体同步校验失败。请重试同步。';
 
   @override
   String get ankiWebSyncUnsupportedPlatform =>
@@ -10719,6 +10783,10 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get ankiSyncStatusLocalFileFailure =>
       '无法读取或清理本地同步文件。请检查磁盘访问权限后重试。';
+
+  @override
+  String get ankiSyncStatusCollectionInvalid =>
+      '无法打开或更新 collection，或该文件未通过 SQLite/schema 校验。请恢复有效的 collection 备份或重新下载。';
 
 }
 
@@ -11805,6 +11873,14 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get updateApkInstallFailedNoDetails => '安装失败，请手动打开 APK 安装';
 
   @override
+  String get updateApkInstallerUnavailable =>
+      '未找到可安装 APK 的应用，请手动打开 APK 安装。';
+
+  @override
+  String get updateApkInstallPermissionDenied =>
+      '请在系统设置中允许 Stroom 安装未知来源应用。';
+
+  @override
   String get updateRestartDialogTitle => '更新检测';
 
   @override
@@ -21341,4 +21417,54 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get ankiSyncStatusIncrementalSyncFailed => '增量同步未能完成。请检查服务器和网络连接后重试。';
+
+  @override
+  String ankiSyncStatusServerAuthRejected(int statusCode) {
+    return '同步服务器拒绝了请求（HTTP $statusCode）。请检查登录凭据和服务器权限。';
+  }
+
+  @override
+  String ankiSyncStatusServerEndpointNotFound(int statusCode) {
+    return '找不到同步接口（HTTP $statusCode）。请检查服务器地址。';
+  }
+
+  @override
+  String get ankiSyncStatusMediaProtocolFailed =>
+      '媒体同步服务器返回了无效响应。请确认服务器支持 Anki 媒体同步后重试。';
+
+  @override
+  String get ankiSyncStatusMediaChecksumMismatch => '下载的媒体文件校验失败。请重试媒体同步。';
+
+  @override
+  String ankiSyncStatusMediaFilenameConflict(String filename) {
+    return '媒体文件“$filename”在本地和服务器上均有修改。请先备份并解决同名冲突，再重试。';
+  }
+
+  @override
+  String ankiSyncStatusMediaInvalidFilename(String filename) {
+    return '媒体文件名“$filename”无法同步。请将其重命名为符合 Anki 规则的名称后重试。';
+  }
+
+  @override
+  String ankiSyncStatusMediaFileSizeLimit(int limitMb) {
+    return '媒体文件为空或超过 $limitMb MB 限制。';
+  }
+
+  @override
+  String ankiSyncStatusMediaBatchLimitExceeded(int count, int limit) {
+    return '媒体压缩包包含 $count 个条目，最多允许 $limit 个（含清单）。';
+  }
+
+  @override
+  String get ankiSyncStatusMediaSanityCheckFailed => '媒体同步校验失败。请重试同步。';
+
+  @override
+  String backupRestoreApkgLocalFileFailure(String path) {
+    return '无法访问本地 Anki 文件：$path';
+  }
+
+  @override
+  String get ankiSyncStatusCollectionInvalid =>
+      '无法打开或更新 collection，或该文件未通过 SQLite/schema 校验。请恢复有效的 collection 备份或重新下载。';
+
 }

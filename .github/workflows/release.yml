@@ -69,7 +69,8 @@ jobs:
       - id: extract-version
         run: |
           TAG="${{ env.TAG }}"
-          echo "app_version=$TAG" >> "$GITHUB_OUTPUT"
+          APP_VERSION="${TAG#v}"
+          echo "app_version=$APP_VERSION" >> "$GITHUB_OUTPUT"
 
       # 构建信息：发布时间 + 更新内容，写入应用「版本信息」面板。
       # - tag push：从预先创建的 release draft 读取创建时间和自动生成的说明。
@@ -92,7 +93,8 @@ jobs:
             : > "$RELEASE_NOTES_FILE"
           fi
           echo "release_time=$RELEASE_TIME" >> "$GITHUB_OUTPUT"
-          python3 - "$GITHUB_WORKSPACE/build-info.json" "$TAG" "$RELEASE_TIME" "$RELEASE_NOTES_FILE" <<'PY'
+          APP_VERSION="${TAG#v}"
+          python3 - "$GITHUB_WORKSPACE/build-info.json" "$APP_VERSION" "$RELEASE_TIME" "$RELEASE_NOTES_FILE" <<'PY'
           import base64
           import json
           import pathlib

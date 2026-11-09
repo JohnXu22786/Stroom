@@ -40,6 +40,82 @@ void main() {
     }
   });
 
+  test('classifies package read failures as local file failures', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'stroom_anki_apkg_read_error_test_',
+    );
+    final unreadablePath = '${directory.path}/package.apkg';
+    await File(unreadablePath).writeAsBytes([0]);
+
+    try {
+      await expectLater(
+        AnkiApkgImporter.import(
+          unreadablePath,
+          readPackageBytes: (_) => throw const FileSystemException(
+            'Permission denied',
+          ),
+        ),
+        throwsA(
+          isA<AnkiApkgException>().having(
+            (error) => error.code,
+            'code',
+            AnkiApkgErrorCode.localFileFailure,
+          ),
+        ),
+      );
+    } finally {
+      await directory.delete(recursive: true);
+    }
+  });
+
+  test('classifies a valid archive without a collection database', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'stroom_anki_apkg_collection_missing_test_',
+    );
+    final archive = Archive()
+      ..addFile(ArchiveFile('README.txt', 5, [104, 101, 108, 108, 111]));
+    final packagePath = '${directory.path}/no-collection.apkg';
+    await File(packagePath).writeAsBytes(ZipEncoder().encode(archive));
+
+    try {
+      await expectLater(
+        AnkiApkgImporter.import(packagePath),
+        throwsA(
+          isA<AnkiApkgException>().having(
+            (error) => error.code,
+            'code',
+            AnkiApkgErrorCode.collectionMissing,
+          ),
+        ),
+      );
+    } finally {
+      await directory.delete(recursive: true);
+    }
+  });
+
+  test('classifies malformed package archives', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'stroom_anki_apkg_archive_error_test_',
+    );
+    final packagePath = '${directory.path}/broken.apkg';
+    await File(packagePath).writeAsBytes([0x50, 0x4b, 0x03]);
+
+    try {
+      await expectLater(
+        AnkiApkgImporter.import(packagePath),
+        throwsA(
+          isA<AnkiApkgException>().having(
+            (error) => error.code,
+            'code',
+            AnkiApkgErrorCode.invalidArchive,
+          ),
+        ),
+      );
+    } finally {
+      await directory.delete(recursive: true);
+    }
+  });
+
   test(
     'maps invalid SQLite package data and removes the extracted temp file',
     () async {
@@ -134,7 +210,7 @@ void main() {
             isA<AnkiApkgException>().having(
               (error) => error.code,
               'code',
-              AnkiApkgErrorCode.databaseCorrupt,
+              AnkiApkgErrorCode.unexpectedError,
             ),
           ),
         );
@@ -215,7 +291,7 @@ void main() {
             isA<AnkiApkgException>().having(
               (error) => error.code,
               'code',
-              AnkiApkgErrorCode.databaseCorrupt,
+              AnkiApkgErrorCode.unexpectedError,
             ),
           ),
         );

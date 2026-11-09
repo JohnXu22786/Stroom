@@ -2,9 +2,11 @@ import '../../l10n/app_localizations.dart';
 
 enum AnkiApkgErrorCode {
   fileNotFound,
+  invalidArchive,
   collectionMissing,
   targetDatabaseMissing,
   databaseCorrupt,
+  localFileFailure,
   exportFailed,
   unexpectedError,
 }
@@ -16,8 +18,12 @@ class AnkiApkgException implements Exception {
   const AnkiApkgException(this.code) : path = null;
   const AnkiApkgException.fileNotFound(this.path)
       : code = AnkiApkgErrorCode.fileNotFound;
+  const AnkiApkgException.invalidArchive(this.path)
+      : code = AnkiApkgErrorCode.invalidArchive;
   const AnkiApkgException.targetDatabaseMissing(this.path)
       : code = AnkiApkgErrorCode.targetDatabaseMissing;
+  const AnkiApkgException.localFileFailure(this.path)
+      : code = AnkiApkgErrorCode.localFileFailure;
   const AnkiApkgException.unexpectedError(this.path)
       : code = AnkiApkgErrorCode.unexpectedError;
   const AnkiApkgException.exportFailed(this.path)
@@ -27,12 +33,16 @@ class AnkiApkgException implements Exception {
         AnkiApkgErrorCode.fileNotFound => l10n.backupRestoreApkgFileNotFound(
             path ?? '',
           ),
+        AnkiApkgErrorCode.invalidArchive =>
+          l10n.backupRestoreApkgInvalidArchive,
         AnkiApkgErrorCode.collectionMissing =>
           l10n.backupRestoreApkgCollectionMissing,
         AnkiApkgErrorCode.targetDatabaseMissing =>
           l10n.backupRestoreApkgTargetMissing(path ?? ''),
         AnkiApkgErrorCode.databaseCorrupt =>
           l10n.backupRestoreApkgDatabaseCorrupt,
+        AnkiApkgErrorCode.localFileFailure =>
+          l10n.backupRestoreApkgLocalFileFailure(path ?? ''),
         AnkiApkgErrorCode.exportFailed =>
           l10n.backupRestoreApkgExportFailed(path ?? ''),
         AnkiApkgErrorCode.unexpectedError =>

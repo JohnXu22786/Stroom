@@ -58,6 +58,7 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
 
   // Selected items across all tabs: key = "tabType:recordId", value = (fileName, bytes)
   final Map<String, MapEntry<String, Uint8List>> _selectedItems = {};
+  int _selectionGeneration = 0;
 
   /// Track temp file paths created during edit for cleanup on dialog close.
   final List<String> _tempEditFiles = [];
@@ -186,6 +187,7 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
   }
 
   void _clearSelection() {
+    _selectionGeneration++;
     _cleanupTempFiles();
     setState(() {
       _selectedItems.clear();
@@ -616,19 +618,19 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
   }
 
   void _onFileTap(_FileTabType type, FileRecord record) async {
+    final selectionGeneration = _selectionGeneration;
     // Read file bytes
     Uint8List? bytes;
     try {
       bytes = await _readFileBytes(type, record);
     } catch (_) {}
+    if (!mounted || selectionGeneration != _selectionGeneration) return;
     if (bytes == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(AppLocalizations.of(context)!.appMediaUnreadable),
-          ),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.appMediaUnreadable),
+        ),
+      );
       return;
     }
     final fileName = '${record.name}.${record.format}';

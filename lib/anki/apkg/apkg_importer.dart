@@ -5,6 +5,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:archive/archive.dart';
 import 'package:sqflite/sqflite.dart';
 
+import '../database/sqlite_error_classifier.dart';
 import 'apkg_result.dart';
 
 /// Imports .apkg files into Stroom's Anki collection.
@@ -15,21 +16,37 @@ import 'apkg_result.dart';
 class AnkiApkgImporter {
   /// Import an .apkg file into the database at [targetDbPath].
   /// Returns imported counts; callers localize the user-facing summary.
-  static Future<AnkiApkgImportSummary> import(String apkgPath) async {
+  static Future<AnkiApkgImportSummary> import(
+    String apkgPath, {
+    List<int> Function(File file)? readPackageBytes,
+  }) async {
     // 1. Read ZIP
     final file = File(apkgPath);
     bool sourceExists;
     try {
       sourceExists = file.existsSync();
+    } on FileSystemException {
+      throw AnkiApkgException.localFileFailure(apkgPath);
     } catch (_) {
       throw AnkiApkgException.unexpectedError(apkgPath);
     }
     if (!sourceExists) {
       throw AnkiApkgException.fileNotFound(apkgPath);
     }
-
-    final bytes = file.readAsBytesSync();
-    final archive = ZipDecoder().decodeBytes(bytes);
+    late final List<int> bytes;
+    try {
+      bytes = readPackageBytes?.call(file) ?? file.readAsBytesSync();
+    } on FileSystemException {
+      throw AnkiApkgException.localFileFailure(apkgPath);
+    } catch (_) {
+      throw AnkiApkgException.unexpectedError(apkgPath);
+    }
+    late final Archive archive;
+    try {
+      archive = ZipDecoder().decodeBytes(bytes);
+    } catch (_) {
+      throw AnkiApkgException.invalidArchive(apkgPath);
+    }
 
     // 2. Extract collection.anki2
     final dbEntry = archive.files.firstWhere(
@@ -40,16 +57,42 @@ class AnkiApkgImporter {
     );
 
     // Write to temp file
-    final tmpDir = await getApplicationDocumentsDirectory();
+    late final Directory tmpDir;
+    try {
+      tmpDir = await getApplicationDocumentsDirectory();
+    } on FileSystemException {
+      throw AnkiApkgException.localFileFailure(apkgPath);
+    }
     final tmpDbPath = p.join(tmpDir.path,
         'tmp_import_${DateTime.now().microsecondsSinceEpoch}.anki2');
-    await File(tmpDbPath).writeAsBytes(dbEntry.content as List<int>);
+    try {
+      await File(tmpDbPath).writeAsBytes(dbEntry.content as List<int>);
+    } on FileSystemException {
+      try {
+        final partialFile = File(tmpDbPath);
+        if (partialFile.existsSync()) await partialFile.delete();
+      } on FileSystemException {
+        // Keep reporting the original write failure with its local path.
+      }
+      throw AnkiApkgException.localFileFailure(tmpDbPath);
+    }
 
     // 3. Get target DB path
-    final docsDir = await getApplicationDocumentsDirectory();
+    final docsDir = tmpDir;
     final targetDbPath = p.join(docsDir.path, 'collection.anki2');
-    if (!File(targetDbPath).existsSync()) {
-      await File(tmpDbPath).delete();
+    bool targetExists;
+    try {
+      targetExists = File(targetDbPath).existsSync();
+    } on FileSystemException {
+      await _deleteTemporaryFile(tmpDbPath);
+      throw AnkiApkgException.localFileFailure(targetDbPath);
+    }
+    if (!targetExists) {
+      try {
+        await File(tmpDbPath).delete();
+      } on FileSystemException {
+        throw AnkiApkgException.localFileFailure(tmpDbPath);
+      }
       throw AnkiApkgException.targetDatabaseMissing(targetDbPath);
     }
 
@@ -59,10 +102,18 @@ class AnkiApkgImporter {
     try {
       try {
         importDb = await openDatabase(tmpDbPath, readOnly: true);
+      } on DatabaseException catch (error) {
+        throw _databaseException(error, tmpDbPath);
       } catch (_) {
-        throw const AnkiApkgException(AnkiApkgErrorCode.databaseCorrupt);
+        throw AnkiApkgException.unexpectedError(tmpDbPath);
       }
-      targetDb = await openDatabase(targetDbPath);
+      try {
+        targetDb = await openDatabase(targetDbPath);
+      } on DatabaseException catch (error) {
+        throw _databaseException(error, targetDbPath);
+      } catch (_) {
+        throw AnkiApkgException.unexpectedError(targetDbPath);
+      }
 
       // Generate unique IDs using timestamp
       final now = DateTime.now().millisecondsSinceEpoch;
@@ -76,18 +127,21 @@ class AnkiApkgImporter {
       List<Map<String, Object?>> srcCol;
       try {
         srcCol = await importDb.query('col', where: 'id = 1');
+      } on DatabaseException catch (error) {
+        throw _databaseException(error, tmpDbPath);
       } catch (_) {
-        throw const AnkiApkgException(AnkiApkgErrorCode.databaseCorrupt);
+        throw AnkiApkgException.unexpectedError(tmpDbPath);
       }
       List<Map<String, Object?>> tgtCol;
       try {
         tgtCol = await targetDb.query('col', where: 'id = 1');
+      } on DatabaseException catch (error) {
+        throw _databaseException(error, targetDbPath);
       } catch (_) {
-        throw const AnkiApkgException(AnkiApkgErrorCode.databaseCorrupt);
+        throw AnkiApkgException.unexpectedError(targetDbPath);
       }
-      if (srcCol.isEmpty || tgtCol.isEmpty) {
-        throw const AnkiApkgException(AnkiApkgErrorCode.databaseCorrupt);
-      }
+      if (srcCol.isEmpty) throw AnkiApkgException.unexpectedError(tmpDbPath);
+      if (tgtCol.isEmpty) throw AnkiApkgException.unexpectedError(targetDbPath);
 
       final srcDecks =
           jsonDecode(srcCol.first['decks'] as String) as Map<String, dynamic>;
@@ -135,8 +189,10 @@ class AnkiApkgImporter {
       List<Map<String, Object?>> srcNotes;
       try {
         srcNotes = await importDb.rawQuery('SELECT * FROM notes');
+      } on DatabaseException catch (error) {
+        throw _databaseException(error, tmpDbPath);
       } catch (_) {
-        throw const AnkiApkgException(AnkiApkgErrorCode.databaseCorrupt);
+        throw AnkiApkgException.unexpectedError(tmpDbPath);
       }
       for (final note in srcNotes) {
         final guid = note['guid'] as String;
@@ -148,8 +204,10 @@ class AnkiApkgImporter {
             where: 'guid = ?',
             whereArgs: [guid],
           );
+        } on DatabaseException catch (error) {
+          throw _databaseException(error, targetDbPath);
         } catch (_) {
-          throw const AnkiApkgException(AnkiApkgErrorCode.databaseCorrupt);
+          throw AnkiApkgException.unexpectedError(targetDbPath);
         }
         if (dup.isNotEmpty) continue;
 
@@ -174,8 +232,10 @@ class AnkiApkgImporter {
       List<Map<String, Object?>> srcCards;
       try {
         srcCards = await importDb.rawQuery('SELECT * FROM cards');
+      } on DatabaseException catch (error) {
+        throw _databaseException(error, tmpDbPath);
       } catch (_) {
-        throw const AnkiApkgException(AnkiApkgErrorCode.databaseCorrupt);
+        throw AnkiApkgException.unexpectedError(tmpDbPath);
       }
       for (final card in srcCards) {
         final id = ++newId;
@@ -210,16 +270,53 @@ class AnkiApkgImporter {
         notesImported: notesImported,
         cardsImported: cardsImported,
       );
+    } on DatabaseException catch (error) {
+      throw _databaseException(error, targetDbPath);
     } finally {
       try {
         if (targetDb != null) await targetDb.close();
+      } on DatabaseException catch (error) {
+        throw _databaseException(error, targetDbPath);
+      } on FileSystemException {
+        throw AnkiApkgException.localFileFailure(targetDbPath);
       } finally {
         try {
           if (importDb != null) await importDb.close();
+        } on DatabaseException catch (error) {
+          throw _databaseException(error, tmpDbPath);
+        } on FileSystemException {
+          throw AnkiApkgException.localFileFailure(tmpDbPath);
         } finally {
-          if (File(tmpDbPath).existsSync()) await File(tmpDbPath).delete();
+          try {
+            final tempFile = File(tmpDbPath);
+            if (tempFile.existsSync()) await tempFile.delete();
+          } on FileSystemException {
+            throw AnkiApkgException.localFileFailure(tmpDbPath);
+          }
         }
       }
+    }
+  }
+
+  static AnkiApkgException _databaseException(
+    DatabaseException error,
+    String path,
+  ) {
+    if (isSqliteLocalFileFailure(error)) {
+      return AnkiApkgException.localFileFailure(path);
+    }
+    if (isSqliteCorruption(error)) {
+      return const AnkiApkgException(AnkiApkgErrorCode.databaseCorrupt);
+    }
+    return AnkiApkgException.unexpectedError(path);
+  }
+
+  static Future<void> _deleteTemporaryFile(String path) async {
+    try {
+      final file = File(path);
+      if (file.existsSync()) await file.delete();
+    } on FileSystemException {
+      throw AnkiApkgException.localFileFailure(path);
     }
   }
 }
