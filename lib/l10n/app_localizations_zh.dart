@@ -867,8 +867,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aboutUpdateCheckFailed => '检查更新失败，请重试。';
 
   @override
-  String topicAssistantUpdateCheckFailed(Object error) =>
-      '检查助手更新失败：$error';
+  String topicAssistantUpdateCheckFailed(Object error) => '检查助手更新失败：$error';
 
   @override
   String get aboutPrivacyContent =>

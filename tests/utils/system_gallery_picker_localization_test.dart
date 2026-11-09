@@ -46,9 +46,9 @@ void main() {
     ) async {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(_photoManagerChannel, (call) async {
-            expect(call.method, 'requestPermissionExtend');
-            return 2; // PermissionState.denied
-          });
+        expect(call.method, 'requestPermissionExtend');
+        return 2; // PermissionState.denied
+      });
       addTearDown(
         () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
             .setMockMethodCallHandler(_photoManagerChannel, null),
