@@ -1884,8 +1884,19 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     if (error.isInputError) return;
     setState(() => _isRunMode = false);
     await WidgetsBinding.instance.endOfFrame;
-    if (!mounted || error.blockId == null) return;
-    final index = _blocks.indexWhere((b) => b.id == error.blockId);
+    if (!mounted) return;
+    var index = error.blockId == null
+        ? -1
+        : _blocks.indexWhere((b) => b.id == error.blockId);
+    // A retry can validate a freshly captured flow against a persisted
+    // execution's block identity. If that identity is stale or absent, the
+    // validator's stable position still identifies the step to repair.
+    if (index < 0 &&
+        error.blockIndex != null &&
+        error.blockIndex! >= 0 &&
+        error.blockIndex! < _blocks.length) {
+      index = error.blockIndex!;
+    }
     if (index >= 0) await _editBlock(index);
   }
 
