@@ -133,6 +133,7 @@ String computeImageHash(Uint8List data) {
 /// Image file manifest — delegates to [ManifestOperations].
 class ImageManifest {
   static final _saveLocks = ContentHashSaveLock();
+  static const _folderMutationLockKey = 'image-folder-mutation';
   static final _ops = ManifestOperations<ImageRecord>(
     manifestKey: 'image_manifest',
     storageDirName: 'pictures',
@@ -147,6 +148,7 @@ class ImageManifest {
   /// Loads records while preserving read failures for callers that display them.
   static Future<List<ImageRecord>> loadRecordsStrict() =>
       _ops.loadRecords(forceRefresh: true, throwOnError: true);
+
   /// Include file writing, thumbnail generation, and record insertion in the
   /// action so deletion cannot remove bytes before their new record is saved.
   static Future<T> withSaveLock<T>(
@@ -161,8 +163,21 @@ class ImageManifest {
   ) =>
       _saveLocks.withLocks(hashes, action);
 
+  /// Keeps folder deletion from racing with a save that is publishing a
+  /// record into a folder. Acquire this before any content-hash locks.
+  static Future<T> withFolderMutationLock<T>(
+    Future<T> Function() action,
+  ) =>
+      _saveLocks.withLock(_folderMutationLockKey, action);
+
+  static Future<T> withFilePublicationLock<T>(
+    String hash,
+    Future<T> Function() action,
+  ) =>
+      withFolderMutationLock(() => withSaveLock(hash, action));
+
   static Future<void> addRecord(ImageRecord record) =>
-      withSaveLock(record.hash, () => _ops.addRecord(record));
+      withFilePublicationLock(record.hash, () => _ops.addRecord(record));
 
   static Future<void> deleteRecord(String id) async {
     final records = await _ops.loadRecords();
@@ -188,12 +203,13 @@ class ImageManifest {
         .map((record) => record.hash);
     await withSaveLocks(hashes, () => _ops.deleteRecords(ids));
   }
+
   static Future<void> updateRecord(ImageRecord updated) =>
-      _ops.updateRecord(updated);
+      withFolderMutationLock(() => _ops.updateRecord(updated));
   static Future<void> renameRecord(String id, String newName) =>
       _ops.renameRecord(id, newName);
   static Future<void> moveRecord(String id, String targetFolder) =>
-      _ops.moveRecord(id, targetFolder);
+      withFolderMutationLock(() => _ops.moveRecord(id, targetFolder));
 
   static Future<String> writeFile(String fileName, Uint8List data) =>
       _ops.writeFile(fileName, data);
@@ -207,17 +223,20 @@ class ImageManifest {
   static Future<Set<String>> getAllFolders() => _ops.getAllFolders();
   static Future<void> addFolder(String name) => _ops.addFolder(name);
   static Future<void> removeFolder(String name) async {
-    final records = await _ops.loadRecords();
-    final allFolders = await _ops.getAllFolders();
-    final deletedFolders = {
-      name,
-      ...FolderPathUtils.getAllDescendantFolderPaths(name, allFolders),
-    };
-    final hashes = records
-        .where((record) => deletedFolders.contains(record.folder))
-        .map((record) => record.hash);
-    await withSaveLocks(hashes, () => _ops.removeFolder(name));
+    await withFolderMutationLock(() async {
+      final records = await _ops.loadRecords();
+      final allFolders = await _ops.getAllFolders();
+      final deletedFolders = {
+        name,
+        ...FolderPathUtils.getAllDescendantFolderPaths(name, allFolders),
+      };
+      final hashes = records
+          .where((record) => deletedFolders.contains(record.folder))
+          .map((record) => record.hash);
+      await withSaveLocks(hashes, () => _ops.removeFolder(name));
+    });
   }
+
   static Future<void> removeFolderFromCache(String folderPath) =>
       _ops.removeFolderFromCache(folderPath);
   static Future<void> removeFolderMetadataFromCache(String folderPath) =>

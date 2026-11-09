@@ -169,7 +169,7 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
       final hash = computeImageHash(bytes);
       const format = 'jpg';
       final fileName = '$hash.$format';
-      await ImageManifest.withSaveLock(hash, () async {
+      await ImageManifest.withFilePublicationLock(hash, () async {
         await ImageManifest.writeFile(fileName, bytes);
         final thumbnailBytes = await ImageThumbnailLoader.generateThumbnail(
           bytes,
@@ -292,7 +292,7 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
         );
         usedInBatch.add(displayName);
 
-        await ImageManifest.withSaveLock(hash, () async {
+        await ImageManifest.withFilePublicationLock(hash, () async {
           await ImageManifest.writeFile(storageFileName, bytes);
           final thumbnailBytes = await ImageThumbnailLoader.generateThumbnail(
             bytes,

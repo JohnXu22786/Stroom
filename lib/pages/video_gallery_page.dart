@@ -182,7 +182,7 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
         );
 
         int videoDurationMs = 0;
-        await VideoManifest.withSaveLock(hash, () async {
+        await VideoManifest.withFilePublicationLock(hash, () async {
           await VideoManifest.writeFile(storageFileName, bytes);
           // Try to obtain video duration and thumbnail from the file
           final videoPath = await VideoManifest.readFilePath(storageFileName);
@@ -324,8 +324,9 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
         usedInBatch.add(displayName);
 
         int videoDurationMs = 0;
-        await VideoManifest.withSaveLock(hash, () async {
-          final videoPath = await VideoManifest.writeFile(storageFileName, bytes);
+        await VideoManifest.withFilePublicationLock(hash, () async {
+          final videoPath =
+              await VideoManifest.writeFile(storageFileName, bytes);
           // Try to obtain video duration and thumbnail from the file
           if (kIsWeb || videoPath.isEmpty) {
             // Web 没有真实文件路径（writeFile 返回虚拟 key），
