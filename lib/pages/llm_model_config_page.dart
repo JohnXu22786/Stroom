@@ -668,9 +668,8 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
       );
       final hasSavedSelection =
           modelOptions.isNotEmpty || p.optionOrder.isNotEmpty;
-      _additionalSelectedValues[p] = hasSavedSelection
-          ? modelOptions.toSet()
-          : {...providerOptions};
+      _additionalSelectedValues[p] =
+          hasSavedSelection ? modelOptions.toSet() : {...providerOptions};
     }
   }
 

@@ -120,13 +120,11 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
               (reasoningParamValues[param.paramName]?.isNotEmpty ?? false),
         )
         .length;
-    final hasActiveReasoningCustomParams =
-        activeReasoningCustomParamsCount > 0;
-    final reasoningColor = (reasoningEnabled ||
-            hasActiveEffort ||
-            hasActiveReasoningCustomParams)
-        ? Colors.purple
-        : Colors.grey;
+    final hasActiveReasoningCustomParams = activeReasoningCustomParamsCount > 0;
+    final reasoningColor =
+        (reasoningEnabled || hasActiveEffort || hasActiveReasoningCustomParams)
+            ? Colors.purple
+            : Colors.grey;
     final activeCustomParamsCount =
         activeConfiguredCustomParamsCount + activeReasoningCustomParamsCount;
     final bool hasActiveCustomParams = activeCustomParamsCount > 0;
