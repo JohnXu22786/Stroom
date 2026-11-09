@@ -610,7 +610,7 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
     try {
       bytes = await _readFileBytes(type, record);
     } catch (_) {}
-    if (bytes == null || bytes.isEmpty) {
+    if (bytes == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

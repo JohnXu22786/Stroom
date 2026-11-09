@@ -58,6 +58,61 @@ void main() {
     TextManifest.invalidateCache();
   });
 
+  testWidgets('empty text files can be selected while missing files error',
+      (tester) async {
+    await tester.runAsync(() async {
+      await TextManifest.writeText('empty-note.txt', '');
+      await TextManifest.addRecord(TextRecord(
+        name: 'empty-note',
+        hash: 'empty-note',
+        size: 0,
+        createdAt: DateTime.now(),
+      ));
+      await TextManifest.addRecord(TextRecord(
+        name: 'missing-note',
+        hash: 'missing-note',
+        size: 10,
+        createdAt: DateTime.now(),
+      ));
+    });
+
+    List<MapEntry<String, Uint8List>>? pickerResult;
+    await tester.pumpWidget(MaterialApp(
+      locale: const Locale('en', 'US'),
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      home: Builder(
+        builder: (context) => ElevatedButton(
+          onPressed: () async {
+            pickerResult = await showAppFilePickerDialog(context);
+          },
+          child: const Text('Open Picker'),
+        ),
+      ),
+    ));
+    await tester.tap(find.text('Open Picker'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    await tester.tap(find.text('empty-note.txt'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.byType(PreviewChip), findsOneWidget);
+    expect(find.text('Could not read file'), findsNothing);
+
+    await tester.tap(find.text('missing-note.txt'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('Could not read file'), findsOneWidget);
+    expect(find.byType(PreviewChip), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('file_picker_confirm_btn')));
+    await tester.pump();
+    expect(pickerResult, hasLength(1));
+    expect(pickerResult!.single.key, 'empty-note.txt');
+    expect(pickerResult!.single.value, isEmpty);
+  });
+
   // ====================================================================
   // Quick-edit flow: the editor processes the image in place (the page
   // stays open while processing) and the selection is updated with the
