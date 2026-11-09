@@ -116,8 +116,8 @@ class _AssistantSchemaInfoDialog extends StatelessWidget {
             'maxToolCalls / enableMaxToolCalls',
             '正整数 / bool',
             isZh
-                ? '最大工具调用轮数；UI 接受任意正整数，运行时最多按 100 轮执行；关闭开关表示不限。'
-                : 'Tool-call rounds; the UI accepts any positive integer and runtime execution is capped at 100 rounds; disabled means unlimited.'),
+                ? '最大工具调用轮数；运行时接受 1–100，越界回退默认 20；关闭后仍受 1,000 轮安全上限约束。'
+                : 'Tool-call rounds; runtime accepts 1–100 and falls back to 20 outside that range; disabling the setting keeps a 1,000-round safety limit.'),
         _InfoRow('streamOutput', 'bool',
             isZh ? '是否流式输出。' : 'Whether to stream output.'),
         _InfoRow('frequencyPenalty / enableFrequencyPenalty', '-2–2 / bool',
