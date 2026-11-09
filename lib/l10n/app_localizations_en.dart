@@ -11172,6 +11172,33 @@ class AppLocalizationsEn extends AppLocalizations {
   String get batchDlgModifiedDate => 'modification';
 
   @override
+  String get emojiCategorySmileys => 'Smileys';
+
+  @override
+  String get emojiCategoryPeople => 'People';
+
+  @override
+  String get emojiCategoryAnimals => 'Animals';
+
+  @override
+  String get emojiCategoryFood => 'Food';
+
+  @override
+  String get emojiCategoryActivities => 'Activities';
+
+  @override
+  String get emojiCategoryTravel => 'Travel';
+
+  @override
+  String get emojiCategoryObjects => 'Objects';
+
+  @override
+  String get emojiCategorySymbols => 'Symbols';
+
+  @override
+  String get emojiCategoryFlags => 'Flags';
+
+  @override
   String batchDlgNameEmpty(String kind) => '$kind cannot be empty';
 
   @override

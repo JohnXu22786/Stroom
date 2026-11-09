@@ -6327,5 +6327,14 @@
   "batchDlgTemplateMissingDate": "This item has no {date} date; adjust the template",
   "@batchDlgTemplateMissingDate": {"placeholders":{"date":{"type":"String"}}},
   "batchDlgCreatedDate": "creation",
-  "batchDlgModifiedDate": "modification"
+  "batchDlgModifiedDate": "modification",
+  "emojiCategorySmileys": "Smileys",
+  "emojiCategoryPeople": "People",
+  "emojiCategoryAnimals": "Animals",
+  "emojiCategoryFood": "Food",
+  "emojiCategoryActivities": "Activities",
+  "emojiCategoryTravel": "Travel",
+  "emojiCategoryObjects": "Objects",
+  "emojiCategorySymbols": "Symbols",
+  "emojiCategoryFlags": "Flags"
 }

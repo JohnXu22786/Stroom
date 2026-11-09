@@ -6327,5 +6327,14 @@
   "batchDlgTemplateMissingDate": "该项目没有{date}，请调整模板",
   "@batchDlgTemplateMissingDate": {"placeholders":{"date":{"type":"String"}}},
   "batchDlgCreatedDate": "创建时间",
-  "batchDlgModifiedDate": "修改时间"
+  "batchDlgModifiedDate": "修改时间",
+  "emojiCategorySmileys": "表情",
+  "emojiCategoryPeople": "人物",
+  "emojiCategoryAnimals": "动物",
+  "emojiCategoryFood": "食物",
+  "emojiCategoryActivities": "活动",
+  "emojiCategoryTravel": "旅行",
+  "emojiCategoryObjects": "物品",
+  "emojiCategorySymbols": "符号",
+  "emojiCategoryFlags": "旗帜"
 }

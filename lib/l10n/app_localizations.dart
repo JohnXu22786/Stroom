@@ -18373,6 +18373,15 @@ abstract class AppLocalizations {
   String batchDlgTemplateMissingDate(String date);
   String get batchDlgCreatedDate;
   String get batchDlgModifiedDate;
+  String get emojiCategorySmileys;
+  String get emojiCategoryPeople;
+  String get emojiCategoryAnimals;
+  String get emojiCategoryFood;
+  String get emojiCategoryActivities;
+  String get emojiCategoryTravel;
+  String get emojiCategoryObjects;
+  String get emojiCategorySymbols;
+  String get emojiCategoryFlags;
 }
 
 class _AppLocalizationsDelegate
