@@ -1,3 +1,4 @@
+import 'package:flutter/widgets.dart' show Locale;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/services/chat_adapter.dart';
@@ -52,11 +53,50 @@ void main() {
       // With no real key configured the tool must report "key not
       // configured" — it must NOT have the 6-char "Bearer" placeholder
       // auto-filled as its API key.
-      final result = await HttpToolService.handleBochaSearch({'query': ''});
-      expect(result, contains('API Key 未配置'),
+      final result = await HttpToolService.handleBochaSearch(
+        {'query': ''},
+        locale: const Locale('en', 'US'),
+      );
+      expect(result, contains('API key is not configured'),
           reason: 'placeholder "Bearer " header must not be collected as an '
               'API key (regression: the 6-char "Bearer" was auto-filled, '
               'sending "Authorization: Bearer Bearer")');
+    });
+    test(
+        'localizes search output labels and errors without changing provider text',
+        () async {
+      final englishEmptyQuery = await HttpToolService.handleBraveSearch(
+        {'query': ''},
+        apiKey: 'test-key',
+        locale: const Locale('en', 'US'),
+      );
+      final chineseEmptyQuery = await HttpToolService.handleBraveSearch(
+        {'query': ''},
+        apiKey: 'test-key',
+        locale: const Locale('zh', 'CN'),
+      );
+      expect(englishEmptyQuery, 'Error: The search query cannot be empty.');
+      expect(chineseEmptyQuery, '错误：搜索关键词不能为空。');
+
+      const result = (
+        title: 'Provider title',
+        url: 'https://example.com/article',
+        description: 'Provider snippet',
+      );
+      final englishResults = HttpToolService.formatSearchResults(
+        [result],
+        locale: const Locale('en', 'US'),
+      );
+      final chineseResults = HttpToolService.formatSearchResults(
+        [result],
+        locale: const Locale('zh', 'CN'),
+      );
+      expect(englishResults, contains('Title: Provider title'));
+      expect(englishResults, contains('Link: https://example.com/article'));
+      expect(englishResults, contains('Summary: Provider snippet'));
+      expect(chineseResults, contains('标题: Provider title'));
+      expect(chineseResults, contains('链接: https://example.com/article'));
+      expect(chineseResults, contains('摘要: Provider snippet'));
     });
   });
 }

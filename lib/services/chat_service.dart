@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
+import 'package:flutter/widgets.dart' show Locale;
 
 import '../models/assistant.dart' show AssistantSettings, CustomParameter;
 import '../models/ai_stream_event.dart';
@@ -10,6 +11,7 @@ import '../models/chat_event.dart';
 import '../models/chat_message.dart';
 import '../models/mcp.dart' show McpServerConfig;
 import '../models/tool_call.dart';
+import '../providers/locale_provider.dart' show appLocalizationsForLocale;
 import '../providers/chat_api_provider.dart';
 import '../providers/provider_config.dart';
 import 'chat_protocol.dart';
@@ -57,6 +59,7 @@ class ChatService {
   // ── Instance fields (used when constructed with a provider) ─────
   final BaseChatProvider? _provider;
   final ModelConfig? _modelConfig;
+  final Locale? Function()? _localeOverride;
 
   /// 工具结果存储上限（对齐 opencode tool-output-store MAX_BYTES = 50KB）。
   /// 50KB 内**完整保留**（UI 可展开查看、历史重建可发送），
@@ -208,8 +211,10 @@ class ChatService {
     ProviderConfigItem? providerConfig,
     String endpointType = 'openai',
     ChatProtocol? protocol,
+    Locale? Function()? localeOverride,
   })  : _provider = provider,
         _modelConfig = modelConfig,
+        _localeOverride = localeOverride,
         _providerConfig = providerConfig,
         _protocol = protocol ?? createChatProtocol(endpointType);
 
@@ -345,9 +350,14 @@ class ChatService {
   /// The handler can be sync (`String`) or async (`Future<String>`).
   static void registerTool(
     ToolDefinition def,
-    dynamic Function(Map<String, dynamic>) handler,
-  ) {
-    _toolRegistries[def.name] = {'definition': def, 'handler': handler};
+    dynamic Function(Map<String, dynamic>)? handler, {
+    dynamic Function(Map<String, dynamic>, Locale?)? localizedHandler,
+  }) {
+    _toolRegistries[def.name] = {
+      'definition': def,
+      'handler': handler,
+      'localizedHandler': localizedHandler,
+    };
   }
 
   /// Prevents registered tools from executing while their provider group is off.

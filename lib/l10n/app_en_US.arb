@@ -3373,34 +3373,6 @@
   "@toolBuiltinEnableHelp": {
     "placeholders": {}
   },
-  "httpToolBraveDescription": "Search the web with the Brave Search API. Requires an API key.",
-  "@httpToolBraveDescription": {
-    "placeholders": {}
-  },
-  "httpToolBochaDescription": "Search the web with the Bocha AI Search API. Requires an API key.",
-  "@httpToolBochaDescription": {
-    "placeholders": {}
-  },
-  "httpToolQueritDescription": "Search the web with Querit Search. Requires an API key.",
-  "@httpToolQueritDescription": {
-    "placeholders": {}
-  },
-  "httpToolSearxngDescription": "A privacy-focused, self-hosted metasearch engine that aggregates search sources. Requires an instance URL.",
-  "@httpToolSearxngDescription": {
-    "placeholders": {}
-  },
-  "httpToolSearchQueryDescription": "Search terms.",
-  "@httpToolSearchQueryDescription": {
-    "placeholders": {}
-  },
-  "httpToolSearchCountDescription": "Number of results to return.",
-  "@httpToolSearchCountDescription": {
-    "placeholders": {}
-  },
-  "httpToolSearchCountMax20Description": "Number of results to return (maximum 20).",
-  "@httpToolSearchCountMax20Description": {
-    "placeholders": {}
-  },
   "mcpSseUrlLabel": "SSE URL",
   "@mcpSseUrlLabel": {
     "placeholders": {}
@@ -6589,6 +6561,271 @@
   },
   "batchDlgCreatedDate": "creation",
   "batchDlgModifiedDate": "modification",
+  "connectivityTestHttpSuccess": "HTTP tool request succeeded",
+  "connectivityTestHttpFailure": "HTTP tool request failed",
+  "connectivityTestInvalidMcpConfig": "Invalid MCP configuration",
+  "connectivityTestMissingTransport": "A valid transport type configuration is missing.",
+  "connectivityTestStdioUnsupported": "stdio is not supported on this platform",
+  "connectivityTestStdioDesktopOnly": "stdio MCP requires starting a local process. Test it in the Stroom desktop app.",
+  "connectivityTestInvalidContent": "Invalid test content",
+  "connectivityTestMethodMustBeString": "method must be a string.",
+  "connectivityTestUnsupportedMethod": "Unsupported test method",
+  "connectivityTestReadOnlyMethodOnly": "To avoid writing remote business data, MCP connectivity tests only allow the read-only tools/list method.",
+  "connectivityTestParamsMustBeObject": "params must be a JSON object.",
+  "connectivityTestMcpConnectionFailed": "Could not connect to the MCP service",
+  "connectivityTestCheckConnectionSettings": "Check the address, authentication, and network, or view the app log for connection details.",
+  "connectivityTestRemainingToolsOmitted": "; remaining tools omitted",
+  "connectivityTestMcpSuccess": "MCP connectivity test succeeded",
+  "connectivityTestToolNames": ": {names}",
+  "connectivityTestMcpSuccessDetails": "Connection and tools/list request succeeded; found {count} tools{names}{suffix}.",
+  "connectivityTestTodoMutationBlocked": "Test parameters would modify todo data",
+  "connectivityTestTodoReadOnly": "To protect the current session todo list, omit todos or set it to null in connectivity tests.",
+  "connectivityTestUnknownBuiltin": "Unknown built-in tool",
+  "connectivityTestBuiltinExecutorMissing": "No test executor found for tool \"{toolName}\".",
+  "connectivityTestBuiltinSuccess": "Built-in tool test succeeded",
+  "connectivityTestBuiltinFailure": "Built-in tool test failed",
+  "connectivityTestTopLevelObjectRequired": "Test content must be a top-level JSON object.",
+  "connectivityTestRequestTimeout": "Request timed out. Check the service response and network.",
+  "connectivityTestMcpRequestTimeout": "MCP request timed out: {method}",
+  "connectivityTestResultTruncated": "… (result truncated)",
+  "@connectivityTestMcpSuccessDetails": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "names": {
+        "type": "String"
+      },
+      "suffix": {
+        "type": "String"
+      }
+    }
+  },
+  "@connectivityTestBuiltinExecutorMissing": {
+    "placeholders": {
+      "toolName": {
+        "type": "String"
+      }
+    }
+  },
+  "@connectivityTestMcpRequestTimeout": {
+    "placeholders": {
+      "method": {
+        "type": "String"
+      }
+    }
+  },
+  "toolResultWebSearchEmptyQuery": "Error: The search query cannot be empty.",
+  "toolResultWebSearchInvalidSource": "Error: Unsupported search engine \"{source}\". Supported values: google, bing, baidu.",
+  "toolResultWebSearchFallback": "The preferred engine {preferred} {reason}; switched to {fallback}.",
+  "toolResultWebSearchNotFound": "No relevant search results were found.",
+  "toolResultWebSearchNotFoundFrom": "No relevant search results were found ({sources} explicitly returned no results).",
+  "toolResultWebSearchIncomplete": "Search incomplete: {sources} explicitly returned no results; other engines were unavailable or returned pages that could not be parsed: {failures}",
+  "toolResultWebSearchUnavailable": "Error: All search engines are unavailable. {failures}",
+  "toolResultWebSearchResultsHeader": "Search results from {source}:",
+  "toolResultWebSearchLinkLabel": "Link",
+  "toolResultWebSearchSummaryLabel": "Summary",
+  "toolResultWebSearchEmptyResults": "No relevant search results were found.",
+  "toolResultTodoInvalid": "Error: The todos parameter must be an array (omit it or pass null to read the todo list).",
+  "toolResultTodoEmpty": "There are no todo items yet.",
+  "toolResultTodoCount": "Active todo items: {count}",
+  "toolResultMcpReconnectFailed": "Error: Could not reconnect to MCP server \"{server}\".",
+  "toolResultMcpUnavailable": "Error: MCP server \"{server}\" is currently unavailable.",
+  "toolResultMcpNoTools": "Error: MCP server \"{server}\" failed to connect or returned no tools. Check the server configuration.",
+  "toolResultMcpAliasedName": "Real tool \"{tool}\" is published under the call name \"{alias}\" on this server.",
+  "toolResultMcpDuplicateNames": "Tool \"{tool}\" is provided by multiple MCP servers; use the matching call name: {routes}.",
+  "toolResultMcpAliasedConflict": "Error: Real tool \"{tool}\" has a name conflict. Use one of the call names listed above.",
+  "toolResultMcpMissingTool": "Error: MCP server \"{server}\" has no tool named \"{tool}\".",
+  "toolResultMcpAvailableTools": "Tools available on this server: {tools}. Use these names instead.",
+  "toolResultMcpAliasConflict": "Error: MCP tool \"{tool}\" currently has a conflicting alias. Use the matching call name: {routes}.",
+  "toolResultToolDisabled": "Error: Tool \"{tool}\" is disabled.",
+  "toolResultToolUnknown": "Error: Unknown tool \"{tool}\"",
+  "@toolResultWebSearchInvalidSource": {
+    "placeholders": {
+      "source": {}
+    }
+  },
+  "@toolResultWebSearchFallback": {
+    "placeholders": {
+      "preferred": {},
+      "reason": {},
+      "fallback": {}
+    }
+  },
+  "@toolResultWebSearchNotFoundFrom": {
+    "placeholders": {
+      "sources": {}
+    }
+  },
+  "@toolResultWebSearchIncomplete": {
+    "placeholders": {
+      "sources": {},
+      "failures": {}
+    }
+  },
+  "@toolResultWebSearchUnavailable": {
+    "placeholders": {
+      "failures": {}
+    }
+  },
+  "@toolResultWebSearchResultsHeader": {
+    "placeholders": {
+      "source": {}
+    }
+  },
+  "@toolResultTodoCount": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "@toolResultMcpReconnectFailed": {
+    "placeholders": {
+      "server": {}
+    }
+  },
+  "@toolResultMcpUnavailable": {
+    "placeholders": {
+      "server": {}
+    }
+  },
+  "@toolResultMcpNoTools": {
+    "placeholders": {
+      "server": {}
+    }
+  },
+  "@toolResultMcpAliasedName": {
+    "placeholders": {
+      "tool": {},
+      "alias": {}
+    }
+  },
+  "@toolResultMcpDuplicateNames": {
+    "placeholders": {
+      "tool": {},
+      "routes": {}
+    }
+  },
+  "@toolResultMcpAliasedConflict": {
+    "placeholders": {
+      "tool": {}
+    }
+  },
+  "@toolResultMcpMissingTool": {
+    "placeholders": {
+      "server": {},
+      "tool": {}
+    }
+  },
+  "@toolResultMcpAvailableTools": {
+    "placeholders": {
+      "tools": {}
+    }
+  },
+  "@toolResultMcpAliasConflict": {
+    "placeholders": {
+      "tool": {},
+      "routes": {}
+    }
+  },
+  "@toolResultToolDisabled": {
+    "placeholders": {
+      "tool": {}
+    }
+  },
+  "@toolResultToolUnknown": {
+    "placeholders": {
+      "tool": {}
+    }
+  },
+  "toolResultWebSearchFallbackNoResults": "returned no results",
+  "toolResultWebSearchFallbackUnavailable": "is temporarily unavailable",
+  "toolResultMcpServerRoute": "(MCP server {server})",
+  "@toolResultMcpServerRoute": {
+    "placeholders": {
+      "server": {}
+    }
+  },
+  "toolResultWebSearchUnparsedResults": "returned a page that could not be parsed",
+  "toolResultSearchTitleLabel": "Title",
+  "toolResultSearchContentLabel": "Content",
+  "toolResultHttpApiKeyMissing": "Error: {provider} API key is not configured. Configure it in settings.",
+  "@toolResultHttpApiKeyMissing": {
+    "placeholders": {
+      "provider": {}
+    }
+  },
+  "toolResultHttpUrlMissing": "Error: {provider} instance URL is not configured. Configure it in settings.",
+  "@toolResultHttpUrlMissing": {
+    "placeholders": {
+      "provider": {}
+    }
+  },
+  "toolResultHttpRequestFailedStatus": "Error: {provider} request failed (HTTP {statusCode})",
+  "@toolResultHttpRequestFailedStatus": {
+    "placeholders": {
+      "provider": {},
+      "statusCode": {}
+    }
+  },
+  "toolResultHttpRequestFailed": "Error: {provider} request failed: {detail}",
+  "@toolResultHttpRequestFailed": {
+    "placeholders": {
+      "provider": {},
+      "detail": {}
+    }
+  },
+  "toolResultHttpUnknownTool": "Error: Unknown HTTP tool \"{provider}\"",
+  "@toolResultHttpUnknownTool": {
+    "placeholders": {
+      "provider": {}
+    }
+  },
+  "toolResultMcpNotConnected": "Error: MCP server \"{server}\" is not connected.",
+  "toolResultMcpNoResponse": "Error: No response from MCP tool \"{tool}\".",
+  "toolResultMcpCallFailed": "Error: {detail}",
+  "@toolResultMcpNotConnected": {
+    "placeholders": {
+      "server": {}
+    }
+  },
+  "@toolResultMcpNoResponse": {
+    "placeholders": {
+      "tool": {}
+    }
+  },
+  "@toolResultMcpCallFailed": {
+    "placeholders": {
+      "detail": {}
+    }
+  },
+  "httpToolBraveDescription": "Search the web with the Brave Search API. Requires an API key.",
+  "@httpToolBraveDescription": {
+    "placeholders": {}
+  },
+  "httpToolBochaDescription": "Search the web with the Bocha AI Search API. Requires an API key.",
+  "@httpToolBochaDescription": {
+    "placeholders": {}
+  },
+  "httpToolQueritDescription": "Search the web with Querit Search. Requires an API key.",
+  "@httpToolQueritDescription": {
+    "placeholders": {}
+  },
+  "httpToolSearxngDescription": "A privacy-focused, self-hosted metasearch engine that aggregates search sources. Requires an instance URL.",
+  "@httpToolSearxngDescription": {
+    "placeholders": {}
+  },
+  "httpToolSearchQueryDescription": "Search terms.",
+  "@httpToolSearchQueryDescription": {
+    "placeholders": {}
+  },
+  "httpToolSearchCountDescription": "Number of results to return.",
+  "@httpToolSearchCountDescription": {
+    "placeholders": {}
+  },
+  "httpToolSearchCountMax20Description": "Number of results to return (maximum 20).",
+  "@httpToolSearchCountMax20Description": {
+    "placeholders": {}
+  },
   "emojiCategorySmileys": "Smileys",
   "emojiCategoryPeople": "People",
   "emojiCategoryAnimals": "Animals",

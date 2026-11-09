@@ -9688,6 +9688,37 @@ class AppLocalizationsEn extends AppLocalizations {
   String get connectivityTestRun => 'Run Test';
 
   @override
+  String get connectivityTestHttpSuccess => "HTTP tool request succeeded";
+  String get connectivityTestHttpFailure => "HTTP tool request failed";
+  String get connectivityTestInvalidMcpConfig => "Invalid MCP configuration";
+  String get connectivityTestMissingTransport => "A valid transport type configuration is missing.";
+  String get connectivityTestStdioUnsupported => "stdio is not supported on this platform";
+  String get connectivityTestStdioDesktopOnly => "stdio MCP requires starting a local process. Test it in the Stroom desktop app.";
+  String get connectivityTestInvalidContent => "Invalid test content";
+  String get connectivityTestMethodMustBeString => "method must be a string.";
+  String get connectivityTestUnsupportedMethod => "Unsupported test method";
+  String get connectivityTestReadOnlyMethodOnly => "To avoid writing remote business data, MCP connectivity tests only allow the read-only tools/list method.";
+  String get connectivityTestParamsMustBeObject => "params must be a JSON object.";
+  String get connectivityTestMcpConnectionFailed => "Could not connect to the MCP service";
+  String get connectivityTestCheckConnectionSettings => "Check the address, authentication, and network, or view the app log for connection details.";
+  String get connectivityTestRemainingToolsOmitted => "; remaining tools omitted";
+  String get connectivityTestMcpSuccess => "MCP connectivity test succeeded";
+  String get connectivityTestTodoMutationBlocked => "Test parameters would modify todo data";
+  String get connectivityTestTodoReadOnly => "To protect the current session todo list, omit todos or set it to null in connectivity tests.";
+  String get connectivityTestUnknownBuiltin => "Unknown built-in tool";
+  String get connectivityTestBuiltinSuccess => "Built-in tool test succeeded";
+  String get connectivityTestBuiltinFailure => "Built-in tool test failed";
+  String get connectivityTestResultTruncated => "… (result truncated)";
+  String get connectivityTestTopLevelObjectRequired => "Test content must be a top-level JSON object.";
+  String connectivityTestMcpRequestTimeout(String method) =>
+      'MCP request timed out: $method';
+  String get connectivityTestRequestTimeout => "Request timed out. Check the service response and network.";
+  String connectivityTestToolNames(String names) => ": $names";
+  String connectivityTestMcpSuccessDetails(int count, String names, String suffix) =>
+      "Connection and tools/list request succeeded; found $count tools$names$suffix.";
+  String connectivityTestBuiltinExecutorMissing(String toolName) =>
+      "No test executor found for tool \"$toolName\".";
+
   String get connectivityTestFailedSummary => 'Test could not be completed';
 
   @override
@@ -11386,6 +11417,187 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String batchDlgTemplateMissingDate(String date) =>
       'This item has no $date date; adjust the template';
+
+  @override
+  String get toolResultWebSearchEmptyQuery =>
+      'Error: The search query cannot be empty.';
+
+  @override
+  String toolResultWebSearchInvalidSource(Object source) {
+    return 'Error: Unsupported search engine \"$source\". Supported values: google, bing, baidu.';
+  }
+
+  @override
+  String toolResultWebSearchFallback(
+    Object preferred,
+    Object reason,
+    Object fallback,
+  ) {
+    return 'The preferred engine $preferred $reason; switched to $fallback.';
+  }
+
+  @override
+  String get toolResultWebSearchNotFound =>
+      'No relevant search results were found.';
+
+  @override
+  String toolResultWebSearchNotFoundFrom(Object sources) {
+    return 'No relevant search results were found ($sources explicitly returned no results).';
+  }
+
+  @override
+  String toolResultWebSearchIncomplete(Object sources, Object failures) {
+    return 'Search incomplete: $sources explicitly returned no results; other engines were unavailable or returned pages that could not be parsed: $failures';
+  }
+
+  @override
+  String toolResultWebSearchUnavailable(Object failures) {
+    return 'Error: All search engines are unavailable. $failures';
+  }
+
+  @override
+  String toolResultWebSearchResultsHeader(Object source) {
+    return 'Search results from $source:';
+  }
+
+  @override
+  String get toolResultWebSearchLinkLabel => 'Link';
+
+  @override
+  String get toolResultWebSearchSummaryLabel => 'Summary';
+
+  @override
+  String get toolResultWebSearchEmptyResults =>
+      'No relevant search results were found.';
+
+  @override
+  String get toolResultTodoInvalid =>
+      'Error: The todos parameter must be an array (omit it or pass null to read the todo list).';
+
+  @override
+  String get toolResultTodoEmpty => 'There are no todo items yet.';
+
+  @override
+  String toolResultTodoCount(Object count) {
+    return 'Active todo items: $count';
+  }
+
+  @override
+  String toolResultMcpReconnectFailed(Object server) {
+    return 'Error: Could not reconnect to MCP server \"$server\".';
+  }
+
+  @override
+  String toolResultMcpUnavailable(Object server) {
+    return 'Error: MCP server \"$server\" is currently unavailable.';
+  }
+
+  @override
+  String toolResultMcpNoTools(Object server) {
+    return 'Error: MCP server \"$server\" failed to connect or returned no tools. Check the server configuration.';
+  }
+
+  @override
+  String toolResultMcpAliasedName(Object tool, Object alias) {
+    return 'Real tool \"$tool\" is published under the call name \"$alias\" on this server.';
+  }
+
+  @override
+  String toolResultMcpDuplicateNames(Object tool, Object routes) {
+    return 'Tool \"$tool\" is provided by multiple MCP servers; use the matching call name: $routes.';
+  }
+
+  @override
+  String toolResultMcpAliasedConflict(Object tool) {
+    return 'Error: Real tool \"$tool\" has a name conflict. Use one of the call names listed above.';
+  }
+
+  @override
+  String toolResultMcpMissingTool(Object server, Object tool) {
+    return 'Error: MCP server \"$server\" has no tool named \"$tool\".';
+  }
+
+  @override
+  String toolResultMcpAvailableTools(Object tools) {
+    return 'Tools available on this server: $tools. Use these names instead.';
+  }
+
+  @override
+  String toolResultMcpAliasConflict(Object tool, Object routes) {
+    return 'Error: MCP tool \"$tool\" currently has a conflicting alias. Use the matching call name: $routes.';
+  }
+
+  @override
+  String toolResultToolDisabled(Object tool) {
+    return 'Error: Tool \"$tool\" is disabled.';
+  }
+
+  @override
+  String toolResultToolUnknown(Object tool) {
+    return 'Error: Unknown tool \"$tool\"';
+  }
+
+  @override
+  String get toolResultWebSearchFallbackNoResults => 'returned no results';
+
+  @override
+  String get toolResultWebSearchFallbackUnavailable =>
+      'is temporarily unavailable';
+
+  @override
+  String toolResultMcpServerRoute(Object server) {
+    return '(MCP server $server)';
+  }
+
+  @override
+  String get toolResultWebSearchUnparsedResults =>
+      'returned a page that could not be parsed';
+
+  @override
+  String get toolResultSearchTitleLabel => 'Title';
+
+  @override
+  String get toolResultSearchContentLabel => 'Content';
+
+  @override
+  String toolResultHttpApiKeyMissing(Object provider) {
+    return 'Error: $provider API key is not configured. Configure it in settings.';
+  }
+
+  @override
+  String toolResultHttpUrlMissing(Object provider) {
+    return 'Error: $provider instance URL is not configured. Configure it in settings.';
+  }
+
+  @override
+  String toolResultHttpRequestFailedStatus(Object provider, Object statusCode) {
+    return 'Error: $provider request failed (HTTP $statusCode)';
+  }
+
+  @override
+  String toolResultHttpRequestFailed(Object provider, Object detail) {
+    return 'Error: $provider request failed: $detail';
+  }
+
+  @override
+  String toolResultHttpUnknownTool(Object provider) {
+    return 'Error: Unknown HTTP tool \"$provider\"';
+  }
+
+  @override
+  String toolResultMcpNotConnected(Object server) {
+    return 'Error: MCP server \"$server\" is not connected.';
+  }
+
+  @override
+  String toolResultMcpNoResponse(Object tool) {
+    return 'Error: No response from MCP tool \"$tool\".';
+  }
+
+  @override
+  String toolResultMcpCallFailed(Object detail) {
+    return 'Error: $detail';
+  }
 
   @override
   String get ankiSyncStatusProtocolFailed =>
