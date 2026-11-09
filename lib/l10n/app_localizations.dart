@@ -2554,6 +2554,30 @@ abstract class AppLocalizations {
   /// **'Search all conversations...'**
   String get chatSearchAll;
 
+  /// No description provided for @chatSearchCurrentMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Current conversation'**
+  String get chatSearchCurrentMode;
+
+  /// No description provided for @chatSearchAllMode.
+  ///
+  /// In en, this message translates to:
+  /// **'All conversations'**
+  String get chatSearchAllMode;
+
+  /// No description provided for @chatSearchRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry search'**
+  String get chatSearchRetry;
+
+  /// No description provided for @chatSearchError.
+  ///
+  /// In en, this message translates to:
+  /// **'Search failed'**
+  String get chatSearchError;
+
   /// No description provided for @searchPrevious.
   ///
   /// In en, this message translates to:

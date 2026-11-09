@@ -1403,6 +1403,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chatSearchAll => '搜索所有对话...';
 
   @override
+  String get chatSearchCurrentMode => '当前对话';
+
+  @override
+  String get chatSearchAllMode => '所有对话';
+
+  @override
+  String get chatSearchRetry => '重试搜索';
+
+  @override
+  String get chatSearchError => '搜索失败';
+
+  @override
   String get searchPrevious => '上一个';
 
   @override
@@ -11787,6 +11799,18 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get chatSearchAll => '搜索所有对话...';
+
+  @override
+  String get chatSearchCurrentMode => '当前对话';
+
+  @override
+  String get chatSearchAllMode => '所有对话';
+
+  @override
+  String get chatSearchRetry => '重试搜索';
+
+  @override
+  String get chatSearchError => '搜索失败';
 
   @override
   String get searchPrevious => '上一个';

@@ -124,7 +124,8 @@ extension _ChatPageSearchExt on _ChatPageState {
           conversationId != ref.read(activeConversationIdProvider)) {
         return;
       }
-      setState(() => _searchError = '搜索失败');
+      setState(
+          () => _searchError = AppLocalizations.of(context)!.chatSearchError);
     }
   }
 
@@ -582,6 +583,7 @@ extension _ChatPageSearchExt on _ChatPageState {
   /// keyboard stays up while browsing results, matching the pre-fix
   /// behavior the chat page deliberately preserves.
   Widget _buildSearchBar() {
+    final strings = AppLocalizations.of(context)!;
     return TextFieldTapRegion(
       groupId: chatComposerTapRegionGroupId,
       child: Container(
@@ -627,8 +629,8 @@ extension _ChatPageSearchExt on _ChatPageState {
                       },
                       decoration: InputDecoration(
                         hintText: _searchMode == SearchMode.current
-                            ? '搜索当前对话...'
-                            : '搜索所有对话...',
+                            ? strings.chatSearchCurrent
+                            : strings.chatSearchAll,
                         isDense: true,
                         contentPadding: const EdgeInsets.symmetric(
                           horizontal: 8,
@@ -663,7 +665,7 @@ extension _ChatPageSearchExt on _ChatPageState {
                   ),
                   IconButton(
                     icon: const Icon(Icons.refresh, size: 18),
-                    tooltip: '重试搜索',
+                    tooltip: strings.chatSearchRetry,
                     onPressed: () => _performSearch(
                       _searchQuery,
                       targetMessageId: _pendingSearchMessageId,
@@ -718,7 +720,7 @@ extension _ChatPageSearchExt on _ChatPageState {
             Row(
               children: [
                 _buildModeChip(
-                  label: '当前对话',
+                  label: strings.chatSearchCurrentMode,
                   selected: _searchMode == SearchMode.current,
                   onTap: () {
                     if (_searchMode != SearchMode.current) {
@@ -730,7 +732,7 @@ extension _ChatPageSearchExt on _ChatPageState {
                 ),
                 const SizedBox(width: 8),
                 _buildModeChip(
-                  label: '所有对话',
+                  label: strings.chatSearchAllMode,
                   selected: _searchMode == SearchMode.global,
                   onTap: () {
                     if (_searchMode != SearchMode.global) {

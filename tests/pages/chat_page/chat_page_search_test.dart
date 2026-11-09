@@ -17,7 +17,8 @@ import 'package:stroom/pages/chat_page.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 
-Widget _buildApp({String? initialSearchQuery}) {
+Widget _buildApp(
+    {String? initialSearchQuery, Locale locale = const Locale('zh', 'CN')}) {
   SharedPreferences.setMockInitialValues({});
   return ProviderScope(
     overrides: [
@@ -30,7 +31,7 @@ Widget _buildApp({String? initialSearchQuery}) {
       }),
     ],
     child: MaterialApp(
-      locale: const Locale('zh', 'CN'),
+      locale: locale,
       supportedLocales: AppLocalizations.supportedLocales,
       localizationsDelegates: const [
         AppLocalizations.delegate,
@@ -49,8 +50,11 @@ Future<void> _pumpChat(
   WidgetTester tester, {
   required List<ChatMessage> messages,
   String? initialSearchQuery,
+  Locale locale = const Locale('zh', 'CN'),
 }) async {
-  await tester.pumpWidget(_buildApp(initialSearchQuery: initialSearchQuery));
+  await tester.pumpWidget(
+    _buildApp(initialSearchQuery: initialSearchQuery, locale: locale),
+  );
   await tester.pump();
 
   final ctx = tester.element(find.byType(ChatPage));
@@ -110,6 +114,20 @@ void main() {
   });
 
   group('ChatPage search keeps markdown and highlights matches', () {
+    testWidgets('search controls use the selected locale', (tester) async {
+      await _pumpChat(
+        tester,
+        messages: _messages(),
+        initialSearchQuery: 'term',
+        locale: const Locale('en', 'US'),
+      );
+
+      expect(find.text('Search this conversation...'), findsOneWidget);
+      expect(find.text('Current conversation'), findsOneWidget);
+      expect(find.text('All conversations'), findsOneWidget);
+      expect(find.text('搜索当前对话...'), findsNothing);
+    });
+
     testWidgets('search does not flatten markdown into plain text',
         (tester) async {
       await _pumpChat(tester,
