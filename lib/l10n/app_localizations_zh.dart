@@ -10744,6 +10744,33 @@ class AppLocalizationsZh extends AppLocalizations {
   String get batchDlgModifiedDate => '修改时间';
 
   @override
+  String get emojiCategorySmileys => '表情';
+
+  @override
+  String get emojiCategoryPeople => '人物';
+
+  @override
+  String get emojiCategoryAnimals => '动物';
+
+  @override
+  String get emojiCategoryFood => '食物';
+
+  @override
+  String get emojiCategoryActivities => '活动';
+
+  @override
+  String get emojiCategoryTravel => '旅行';
+
+  @override
+  String get emojiCategoryObjects => '物品';
+
+  @override
+  String get emojiCategorySymbols => '符号';
+
+  @override
+  String get emojiCategoryFlags => '旗帜';
+
+  @override
   String batchDlgNameEmpty(String kind) => '$kind不能为空';
 
   @override
