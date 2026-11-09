@@ -206,7 +206,8 @@ class AttachmentStorage {
     final safeConversationId = conversationId!;
     final ext = mimeType == 'image/png' ? 'png' : 'jpg';
     final storageName = '$hash.$ext';
-    final storagePath = '$_compressedCacheDirName/$safeConversationId/$storageName';
+    final storagePath =
+        '$_compressedCacheDirName/$safeConversationId/$storageName';
     await AppLogService.info(
         'AttachmentStorage', '保存图片压缩缓存: $storagePath, ${bytes.length} 字节');
     if (kIsWeb) {
@@ -235,7 +236,8 @@ class AttachmentStorage {
       ('png', 'image/png'),
     ]) {
       Uint8List? bytes;
-      final storagePath = '$_compressedCacheDirName/$safeConversationId/$hash.$ext';
+      final storagePath =
+          '$_compressedCacheDirName/$safeConversationId/$hash.$ext';
       if (kIsWeb) {
         bytes = await WebFileStore.read(storagePath);
       } else {
@@ -278,7 +280,8 @@ class AttachmentStorage {
     final safeConversationId = conversationId!;
     var deleted = false;
     for (final ext in ['jpg', 'png']) {
-      final storagePath = '$_compressedCacheDirName/$safeConversationId/$hash.$ext';
+      final storagePath =
+          '$_compressedCacheDirName/$safeConversationId/$hash.$ext';
       if (kIsWeb) {
         // 与原生端语义一致：仅当文件真实存在才算删除
         if (await WebFileStore.exists(storagePath)) {

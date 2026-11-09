@@ -281,8 +281,7 @@ void main() {
       await AttachmentStorage.deleteConversationCompressedImages(
           '../../outside');
 
-      expect(await marker.exists(), isTrue,
-          reason: '删除对话缓存不能递归删除缓存根目录外目录');
+      expect(await marker.exists(), isTrue, reason: '删除对话缓存不能递归删除缓存根目录外目录');
     });
 
     test('conversationId / hash 缺失时保存与删除均为 no-op', () async {
