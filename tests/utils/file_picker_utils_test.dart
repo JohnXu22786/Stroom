@@ -186,6 +186,98 @@ void main() {
     );
   });
 
+  test('rejects export paths Windows trims after a trailing period', () {
+    final bytes = Uint8List.fromList([1]);
+    expect(
+      () => encodeUserVisibleExportArchive(
+        files: {'report.txt': bytes, 'report.txt.': bytes},
+      ),
+      throwsArgumentError,
+    );
+    expect(
+      () => validateUserVisibleExportPaths(
+        files: const ['folder./report.txt'],
+      ),
+      throwsArgumentError,
+    );
+    expect(
+      () => validateUserVisibleExportPaths(
+        files: const [],
+        folders: const ['folder.'],
+      ),
+      throwsArgumentError,
+    );
+  });
+
+  test('rejects reserved Windows device names in files and folders', () {
+    for (final file in const [
+      'CON',
+      'con.txt',
+      'AUX.log',
+      'COM1.csv',
+      'LPT9',
+      'CON:stream',
+      'CONIN\$',
+    ]) {
+      expect(
+        () => validateUserVisibleExportPaths(files: [file]),
+        throwsArgumentError,
+        reason: 'File path component "$file" is reserved on Windows',
+      );
+    }
+    for (final folder in const ['CON', 'nested/NUL.txt', 'CONOUT\$.log']) {
+      expect(
+        () => validateUserVisibleExportPaths(
+          files: const [],
+          folders: [folder],
+        ),
+        throwsArgumentError,
+        reason: 'Folder path component "$folder" is reserved on Windows',
+      );
+    }
+  });
+
+  test('rejects Windows forbidden characters in file and folder components',
+      () {
+    for (final file in const [
+      'bad?.txt',
+      'bad*.txt',
+      'bad".txt',
+      'bad<.txt',
+      'bad>.txt',
+      'bad|.txt',
+      'bad:.txt',
+      'bad\u0001.txt',
+    ]) {
+      expect(
+        () => validateUserVisibleExportPaths(files: [file]),
+        throwsArgumentError,
+        reason:
+            'File path component "$file" contains a Windows-forbidden character',
+      );
+    }
+    for (final folder in const [
+      'nested/bad?',
+      'nested/bad*',
+      'nested/bad"',
+      'nested/bad<',
+      'nested/bad>',
+      'nested/bad|',
+      'nested/bad:',
+      'nested/bad\u0001',
+    ]) {
+      expect(
+        () => validateUserVisibleExportPaths(
+          files: const [],
+          folders: [folder],
+        ),
+        throwsArgumentError,
+        reason:
+            'Folder path component "$folder" contains a Windows-forbidden character',
+      );
+    }
+  });
+
   test('allows distinct Unicode export names without case expansion', () {
     expect(
       () => validateUserVisibleExportPaths(

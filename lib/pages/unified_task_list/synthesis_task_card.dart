@@ -117,7 +117,9 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                               ),
                               style: TextStyle(
                                 fontSize: 12,
-                                color: Colors.grey[500],
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
                               ),
                             ),
                             if (widget.task.status == TaskStatus.running) ...[
@@ -128,7 +130,9 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                                 startedAt: widget.task.createdAt,
                                 style: TextStyle(
                                   fontSize: 12,
-                                  color: Colors.grey[500],
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant,
                                 ),
                               ),
                             ],
@@ -232,11 +236,13 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                 leading: Icon(
                   Icons.delete_outline,
                   size: 20,
-                  color: Colors.red,
+                  color: Theme.of(context).colorScheme.error,
                 ),
                 title: Text(
                   AppLocalizations.of(context)!.unifiedTaskClearTask,
-                  style: TextStyle(color: Colors.red),
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.error,
+                  ),
                 ),
                 dense: true,
                 contentPadding: EdgeInsets.zero,
@@ -282,11 +288,13 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                     leading: Icon(
                       Icons.delete_outline,
                       size: 20,
-                      color: Colors.red,
+                      color: Theme.of(context).colorScheme.error,
                     ),
                     title: Text(
                       AppLocalizations.of(context)!.unifiedTaskClearTask,
-                      style: TextStyle(color: Colors.red),
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
                     ),
                     dense: true,
                     contentPadding: EdgeInsets.zero,
@@ -337,11 +345,13 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                     leading: Icon(
                       Icons.delete_outline,
                       size: 20,
-                      color: Colors.red,
+                      color: Theme.of(context).colorScheme.error,
                     ),
                     title: Text(
                       AppLocalizations.of(context)!.unifiedTaskClearTask,
-                      style: TextStyle(color: Colors.red),
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
                     ),
                     dense: true,
                     contentPadding: EdgeInsets.zero,
@@ -494,19 +504,25 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                     vertical: 8,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.red.withValues(alpha: 0.08),
+                    color: Theme.of(context)
+                        .colorScheme
+                        .error
+                        .withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                      color: Colors.red.withValues(alpha: 0.25),
+                      color: Theme.of(context)
+                          .colorScheme
+                          .error
+                          .withValues(alpha: 0.25),
                     ),
                   ),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.error_outline,
                         size: 14,
-                        color: Colors.red,
+                        color: Theme.of(context).colorScheme.error,
                       ),
                       const SizedBox(width: 6),
                       Expanded(
@@ -517,9 +533,9 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                           ),
                           child: Text(
                             widget.task.error!,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 12,
-                              color: Colors.red,
+                              color: Theme.of(context).colorScheme.error,
                               height: 1.4,
                             ),
                           ),
@@ -535,7 +551,7 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                             AppLocalizations.of(context)!.unifiedTaskDetails,
                             style: TextStyle(
                               fontSize: 12,
-                              color: Colors.red,
+                              color: Theme.of(context).colorScheme.error,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -558,7 +574,11 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
       builder: (ctx) => AlertDialog(
         title: Row(
           children: [
-            Icon(Icons.error_outline, color: Colors.red, size: 20),
+            Icon(
+              Icons.error_outline,
+              color: Theme.of(context).colorScheme.error,
+              size: 20,
+            ),
             SizedBox(width: 8),
             Text(AppLocalizations.of(context)!.unifiedTaskSynthesisError),
           ],
@@ -603,7 +623,7 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: Colors.blueGrey,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -611,7 +631,10 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                     width: double.infinity,
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: Colors.grey.withValues(alpha: 0.1),
+                      color: Theme.of(context)
+                          .colorScheme
+                          .onSurface
+                          .withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: SelectableText(
@@ -631,7 +654,7 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: Colors.red,
+                      color: Theme.of(context).colorScheme.error,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -639,7 +662,10 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
                     width: double.infinity,
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: Colors.red.withValues(alpha: 0.05),
+                      color: Theme.of(context)
+                          .colorScheme
+                          .error
+                          .withValues(alpha: 0.05),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: SelectableText(
