@@ -251,7 +251,8 @@ class _GalleryViewerPageState extends State<GalleryViewerPage> {
       final newHash = computeImageHash(editedBytes);
       final newFileName = '$newHash.${file.format}';
       late ImageRecord newRecord;
-      await ImageManifest.withFolderMutationLock(
+      await ImageManifest.withFolderReadLock(
+        file.folder,
         () => ImageManifest.withSaveLocks([newHash, file.hash], () async {
           await ImageManifest.writeFile(newFileName, editedBytes);
           if (isSaveAs) {

@@ -133,7 +133,6 @@ String computeImageHash(Uint8List data) {
 /// Image file manifest — delegates to [ManifestOperations].
 class ImageManifest {
   static final _saveLocks = ContentHashSaveLock();
-  static const _folderMutationLockKey = 'image-folder-mutation';
   static final _ops = ManifestOperations<ImageRecord>(
     manifestKey: 'image_manifest',
     storageDirName: 'pictures',
@@ -155,61 +154,216 @@ class ImageManifest {
     String hash,
     Future<T> Function() action,
   ) =>
-      _saveLocks.withLock(hash, action);
+      _saveLocks.withLock(_hashLockKey(hash), action);
 
   static Future<T> withSaveLocks<T>(
     Iterable<String> hashes,
     Future<T> Function() action,
   ) =>
-      _saveLocks.withLocks(hashes, action);
+      _saveLocks.withLocks(hashes.map(_hashLockKey), action);
 
-  /// Keeps folder deletion from racing with a save that is publishing a
-  /// record into a folder. Acquire this before any content-hash locks.
-  static Future<T> withFolderMutationLock<T>(
+  static String _hashLockKey(String hash) => 'hash:$hash';
+
+  static List<String> _folderLockKeys(Iterable<String> folders) {
+    final keys = <String>{};
+    for (final folder in folders) {
+      var current = '';
+      for (final part in folder.split('/').where((part) => part.isNotEmpty)) {
+        current = current.isEmpty ? part : '$current/$part';
+        keys.add('folder:$current');
+      }
+    }
+    return keys.toList()..sort();
+  }
+
+  static Future<T> _withFolderPathLocks<T>(
+    Iterable<String> folders,
     Future<T> Function() action,
   ) =>
-      _saveLocks.withLock(_folderMutationLockKey, action);
+      _saveLocks.withFolderReadLocks(_folderLockKeys(folders), action);
+
+  /// Excludes changes to this folder and descendants while sharing ancestors.
+  static Future<T> withFolderMutationLock<T>(
+    String folder,
+    Future<T> Function() action,
+  ) {
+    final keys = _folderLockKeys([folder]);
+    if (keys.isEmpty) return action();
+    final ancestors = keys.take(keys.length - 1);
+    final leaf = keys.last;
+    return _saveLocks.withFolderReadLocks(
+      ancestors,
+      () => _saveLocks.withFolderWriteLock(leaf, action),
+    );
+  }
+
+  /// Lets publication and membership updates share the folder path hierarchy.
+  static Future<T> withFolderReadLock<T>(
+    String folder,
+    Future<T> Function() action,
+  ) =>
+      _withFolderPathLocks([folder], action);
 
   static Future<T> withFilePublicationLock<T>(
     String hash,
+    String folder,
     Future<T> Function() action,
   ) =>
-      withFolderMutationLock(() => withSaveLock(hash, action));
+      withFolderReadLock(folder, () => withSaveLock(hash, action));
 
-  static Future<void> addRecord(ImageRecord record) =>
-      withFilePublicationLock(record.hash, () => _ops.addRecord(record));
+  static Future<void> addRecord(ImageRecord record) => withFilePublicationLock(
+        record.hash,
+        record.folder,
+        () => _ops.addRecord(record),
+      );
 
   static Future<void> deleteRecord(String id) async {
-    final records = await _ops.loadRecords();
-    ImageRecord? record;
-    for (final candidate in records) {
-      if (candidate.id == id) {
-        record = candidate;
-        break;
+    while (true) {
+      final records = await _ops.loadRecords();
+      ImageRecord? record;
+      for (final candidate in records) {
+        if (candidate.id == id) {
+          record = candidate;
+          break;
+        }
       }
+      if (record == null) return;
+      final snapshot = record;
+
+      var retry = false;
+      await _withFolderPathLocks([snapshot.folder], () async {
+        await withSaveLock(snapshot.hash, () async {
+          final current = await _ops.loadRecords();
+          ImageRecord? latest;
+          for (final candidate in current) {
+            if (candidate.id == id) {
+              latest = candidate;
+              break;
+            }
+          }
+          if (latest == null) return;
+          if (latest.hash != snapshot.hash ||
+              latest.folder != snapshot.folder) {
+            retry = true;
+            return;
+          }
+          await _ops.deleteRecord(id);
+        });
+      });
+      if (!retry) return;
     }
-    if (record == null) {
-      await _ops.deleteRecord(id);
-      return;
-    }
-    await withSaveLock(record.hash, () => _ops.deleteRecord(id));
   }
 
   static Future<void> deleteRecords(List<String> ids) async {
     final idSet = ids.toSet();
-    final records = await _ops.loadRecords();
-    final hashes = records
-        .where((record) => idSet.contains(record.id))
-        .map((record) => record.hash);
-    await withSaveLocks(hashes, () => _ops.deleteRecords(ids));
+    while (true) {
+      final records = await _ops.loadRecords();
+      final selected =
+          records.where((record) => idSet.contains(record.id)).toList();
+      if (selected.isEmpty) return;
+      final selectedById = {for (final record in selected) record.id: record};
+      var retry = false;
+      await _withFolderPathLocks(
+        selected.map((record) => record.folder),
+        () => withSaveLocks(selected.map((record) => record.hash), () async {
+          final current = await _ops.loadRecords();
+          final latest =
+              current.where((record) => idSet.contains(record.id)).toList();
+          if (latest.length != selected.length ||
+              latest.any((record) {
+                final previous = selectedById[record.id];
+                return previous == null ||
+                    previous.hash != record.hash ||
+                    previous.folder != record.folder;
+              })) {
+            retry = true;
+            return;
+          }
+          await _ops.deleteRecords(ids);
+        }),
+      );
+      if (!retry) return;
+    }
   }
 
-  static Future<void> updateRecord(ImageRecord updated) =>
-      withFolderMutationLock(() => _ops.updateRecord(updated));
+  static Future<void> updateRecord(ImageRecord updated) async {
+    while (true) {
+      final records = await _ops.loadRecords();
+      ImageRecord? current;
+      for (final record in records) {
+        if (record.id == updated.id) {
+          current = record;
+          break;
+        }
+      }
+      if (current == null) return;
+      final snapshot = current;
+      var retry = false;
+      await _withFolderPathLocks(
+        [updated.folder, snapshot.folder],
+        () => withSaveLocks(
+          [updated.hash, snapshot.hash],
+          () async {
+            final latestRecords = await _ops.loadRecords();
+            ImageRecord? latest;
+            for (final record in latestRecords) {
+              if (record.id == updated.id) {
+                latest = record;
+                break;
+              }
+            }
+            if (latest == null) return;
+            if (latest.hash != snapshot.hash ||
+                latest.folder != snapshot.folder) {
+              retry = true;
+              return;
+            }
+            await _ops.updateRecord(updated);
+          },
+        ),
+      );
+      if (!retry) return;
+    }
+  }
+
   static Future<void> renameRecord(String id, String newName) =>
       _ops.renameRecord(id, newName);
-  static Future<void> moveRecord(String id, String targetFolder) =>
-      withFolderMutationLock(() => _ops.moveRecord(id, targetFolder));
+  static Future<void> moveRecord(String id, String targetFolder) async {
+    while (true) {
+      final records = await _ops.loadRecords();
+      ImageRecord? current;
+      for (final record in records) {
+        if (record.id == id) {
+          current = record;
+          break;
+        }
+      }
+      if (current == null) return;
+      final snapshot = current;
+      var retry = false;
+      await _withFolderPathLocks(
+        [targetFolder, snapshot.folder],
+        () => withSaveLock(snapshot.hash, () async {
+          final latestRecords = await _ops.loadRecords();
+          ImageRecord? latest;
+          for (final record in latestRecords) {
+            if (record.id == id) {
+              latest = record;
+              break;
+            }
+          }
+          if (latest == null) return;
+          if (latest.hash != snapshot.hash ||
+              latest.folder != snapshot.folder) {
+            retry = true;
+            return;
+          }
+          await _ops.moveRecord(id, targetFolder);
+        }),
+      );
+      if (!retry) return;
+    }
+  }
 
   static Future<String> writeFile(String fileName, Uint8List data) =>
       _ops.writeFile(fileName, data);
@@ -221,9 +375,10 @@ class ImageManifest {
 
   // Folder management
   static Future<Set<String>> getAllFolders() => _ops.getAllFolders();
-  static Future<void> addFolder(String name) => _ops.addFolder(name);
+  static Future<void> addFolder(String name) =>
+      _withFolderPathLocks([name], () => _ops.addFolder(name));
   static Future<void> removeFolder(String name) async {
-    await withFolderMutationLock(() async {
+    await withFolderMutationLock(name, () async {
       final records = await _ops.loadRecords();
       final allFolders = await _ops.getAllFolders();
       final deletedFolders = {

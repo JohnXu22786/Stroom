@@ -169,7 +169,9 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
       final hash = computeImageHash(bytes);
       const format = 'jpg';
       final fileName = '$hash.$format';
-      await ImageManifest.withFilePublicationLock(hash, () async {
+      final destinationFolder = _currentFolder;
+      await ImageManifest.withFilePublicationLock(hash, destinationFolder,
+          () async {
         await ImageManifest.writeFile(fileName, bytes);
         final thumbnailBytes = await ImageThumbnailLoader.generateThumbnail(
           bytes,
@@ -190,7 +192,7 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
             format: format,
             createdAt: DateTime.now(),
             size: bytes.length,
-            folder: _currentFolder,
+            folder: destinationFolder,
           ),
         );
       });
@@ -292,7 +294,9 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
         );
         usedInBatch.add(displayName);
 
-        await ImageManifest.withFilePublicationLock(hash, () async {
+        final destinationFolder = _currentFolder;
+        await ImageManifest.withFilePublicationLock(hash, destinationFolder,
+            () async {
           await ImageManifest.writeFile(storageFileName, bytes);
           final thumbnailBytes = await ImageThumbnailLoader.generateThumbnail(
             bytes,
@@ -310,7 +314,7 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
               format: format,
               createdAt: DateTime.now(),
               size: bytes.length,
-              folder: _currentFolder,
+              folder: destinationFolder,
             ),
           );
         });

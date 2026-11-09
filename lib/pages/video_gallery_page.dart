@@ -182,7 +182,9 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
         );
 
         int videoDurationMs = 0;
-        await VideoManifest.withFilePublicationLock(hash, () async {
+        final destinationFolder = _currentFolder;
+        await VideoManifest.withFilePublicationLock(hash, destinationFolder,
+            () async {
           await VideoManifest.writeFile(storageFileName, bytes);
           // Try to obtain video duration and thumbnail from the file
           final videoPath = await VideoManifest.readFilePath(storageFileName);
@@ -217,7 +219,7 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
               format: format,
               createdAt: DateTime.now(),
               size: bytes.length,
-              folder: _currentFolder,
+              folder: destinationFolder,
               duration: videoDurationMs,
             ),
           );
@@ -324,7 +326,9 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
         usedInBatch.add(displayName);
 
         int videoDurationMs = 0;
-        await VideoManifest.withFilePublicationLock(hash, () async {
+        final destinationFolder = _currentFolder;
+        await VideoManifest.withFilePublicationLock(hash, destinationFolder,
+            () async {
           final videoPath =
               await VideoManifest.writeFile(storageFileName, bytes);
           // Try to obtain video duration and thumbnail from the file
@@ -359,7 +363,7 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
               format: format,
               createdAt: DateTime.now(),
               size: bytes.length,
-              folder: _currentFolder,
+              folder: destinationFolder,
               duration: videoDurationMs,
             ),
           );

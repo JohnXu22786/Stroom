@@ -32,4 +32,46 @@ void main() {
 
     expect(entries, [1, 2, 3]);
   });
+
+  test('folder readers coexist and a parent deletion waits for descendants',
+      () async {
+    final locks = ContentHashSaveLock();
+    final firstEntered = Completer<void>();
+    final releaseFirst = Completer<void>();
+    final secondEntered = Completer<void>();
+    final releaseSecond = Completer<void>();
+    final deletionEntered = Completer<void>();
+
+    final first = locks.withFolderReadLocks(
+      ['folder:Trips'],
+      () async {
+        firstEntered.complete();
+        await releaseFirst.future;
+      },
+    );
+    await firstEntered.future;
+    final second = locks.withFolderReadLocks(
+      ['folder:Trips'],
+      () async {
+        secondEntered.complete();
+        await releaseSecond.future;
+      },
+    );
+    try {
+      await secondEntered.future.timeout(const Duration(seconds: 5));
+      final deletion = locks.withFolderWriteLock('folder:Trips', () async {
+        deletionEntered.complete();
+      });
+      await Future<void>.delayed(Duration.zero);
+      expect(deletionEntered.isCompleted, isFalse);
+      releaseFirst.complete();
+      releaseSecond.complete();
+      await Future.wait([first, second]);
+      await deletion;
+    } finally {
+      if (!releaseFirst.isCompleted) releaseFirst.complete();
+      if (!releaseSecond.isCompleted) releaseSecond.complete();
+    }
+    expect(deletionEntered.isCompleted, isTrue);
+  });
 }
