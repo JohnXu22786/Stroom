@@ -71,7 +71,7 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
             ),
             onTap: () => setState(() => _expanded = !_expanded),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              padding: const EdgeInsets.all(12),
               child: Row(
                 children: [
                   if (widget.isUnread)
@@ -486,7 +486,7 @@ class _SynthesisTaskCardState extends ConsumerState<SynthesisTaskCard> {
               // Error message for failed tasks
               if (widget.task.status == TaskStatus.failed &&
                   widget.task.error != null) ...[
-                const SizedBox(height: 10),
+                const SizedBox(height: 12),
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(

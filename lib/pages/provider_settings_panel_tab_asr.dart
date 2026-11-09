@@ -18,7 +18,7 @@ extension _ProviderSettingsPanelTabAsrExt on _ProviderSettingsPanelState {
           letterSpacing: 0.3,
         ),
       ),
-      const SizedBox(height: 6),
+      const SizedBox(height: 8),
       Text(
         AppLocalizations.of(context)!.providerAudioChunkingHint,
         style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant, height: 1.4),
@@ -88,7 +88,7 @@ extension _ProviderSettingsPanelTabAsrExt on _ProviderSettingsPanelState {
           ),
         ],
       ),
-      const SizedBox(height: 6),
+      const SizedBox(height: 8),
       Text(
         _chunkingDescription(),
         style: TextStyle(
@@ -111,7 +111,7 @@ extension _ProviderSettingsPanelTabAsrExt on _ProviderSettingsPanelState {
           letterSpacing: 0.3,
         ),
       ),
-      const SizedBox(height: 6),
+      const SizedBox(height: 8),
       Text(
         AppLocalizations.of(context)!.providerCompressionHint,
         style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant, height: 1.4),
@@ -171,7 +171,7 @@ extension _ProviderSettingsPanelTabAsrExt on _ProviderSettingsPanelState {
           ),
         ],
       ),
-      const SizedBox(height: 6),
+      const SizedBox(height: 8),
       Text(
         _compression == 'adpcm'
             ? AppLocalizations.of(context)!.providerCompressionAdpcmDescription
