@@ -396,6 +396,17 @@ void main() {
         providerEntries: ProviderEntriesState(entries: [_ocrEntry()]),
         localizations: localizations,
         ocrDio: flowDio,
+        requestOcr: (bytes, format) async {
+          // This test compares the direct HTTP payload with the page request.
+          // Route resolution has dedicated tests and needs a gateway runtime,
+          // so keep this fixture on the injected scripted Dio.
+          final service = OcrService(config: config, dio: flowDio);
+          final result = await service.recognize(
+            imageBytes: bytes,
+            imageFormat: format,
+          );
+          return result.text;
+        },
       ),
     );
     expect(flowResult, 'Task flow text');

@@ -920,7 +920,17 @@ void main() {
     ) async {
       final entry = _createOcrEntry(withModels: true);
       final bgNotifier = BackgroundTaskNotifier();
-      final retryData = await _createLegacyModelIndexRetryData();
+      // This test covers duplicate submission while the instruction restore
+      // is pending. Keep image bytes inline so another widget test's orphan
+      // cache cleanup cannot race this UI-only fixture.
+      final retryData = <String, dynamic>{
+        'type': 'ocr',
+        'images': [
+          {'bytes': base64Encode(_createTestPngBytes()), 'format': 'png'},
+        ],
+        'modelIndex': 0,
+        'instructionIndex': 1,
+      };
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
