@@ -1931,10 +1931,9 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
         return path != null && execNotifier.referencesInputStoragePath(path);
       });
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(
-                content: Text(taskFlowLaunchErrorMessage(
-                    error, AppLocalizations.of(context)!))));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(taskFlowLaunchErrorMessage(
+                error, AppLocalizations.of(context)!))));
       }
       return;
     } finally {
