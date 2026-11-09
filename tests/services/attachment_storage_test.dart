@@ -247,6 +247,44 @@ void main() {
       expect(await convADir.exists(), isFalse, reason: '对话目录整体删除');
     });
 
+    test('路径遍历 conversationId 不能保存、读取或删除缓存根目录外文件', () async {
+      final outsideDir = Directory(p.join(tmpRoot.path, 'outside'));
+      await outsideDir.create(recursive: true);
+      final outsideFile = File(p.join(outsideDir.path, 'hash.jpg'));
+      final originalBytes = Uint8List.fromList([0xFF, 0xD8, 0xFF, 0xE0]);
+      await outsideFile.writeAsBytes(originalBytes);
+
+      final savedPath = await AttachmentStorage.saveCompressedImage(
+        conversationId: '../../outside',
+        hash: 'hash',
+        bytes: Uint8List.fromList([0xFF, 0xD8, 0xFF, 0xE1]),
+        mimeType: 'image/jpeg',
+      );
+      final read = await AttachmentStorage.readCompressedImage(
+          conversationId: '../../outside', hash: 'hash');
+      final deleted = await AttachmentStorage.deleteCompressedImage(
+          conversationId: '../../outside', hash: 'hash');
+
+      expect(savedPath, isNull);
+      expect(read, isNull);
+      expect(deleted, isFalse);
+      expect(await outsideFile.readAsBytes(), originalBytes,
+          reason: '缓存操作不能覆盖或删除缓存根目录外的文件');
+    });
+
+    test('路径遍历 conversationId 不能递归删除缓存根目录外目录', () async {
+      final outsideDir = Directory(p.join(tmpRoot.path, 'outside'));
+      await outsideDir.create(recursive: true);
+      final marker = File(p.join(outsideDir.path, 'keep.txt'));
+      await marker.writeAsString('keep');
+
+      await AttachmentStorage.deleteConversationCompressedImages(
+          '../../outside');
+
+      expect(await marker.exists(), isTrue,
+          reason: '删除对话缓存不能递归删除缓存根目录外目录');
+    });
+
     test('conversationId / hash 缺失时保存与删除均为 no-op', () async {
       final path = await AttachmentStorage.saveCompressedImage(
         conversationId: null,
