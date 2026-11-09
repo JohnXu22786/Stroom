@@ -10449,6 +10449,21 @@ class AppLocalizationsZh extends AppLocalizations {
   String startupIssueUnknownProviderType(Object index, Object type) {
     return '服务商条目 $index 使用未知类型“$type”，可能无法正常工作。';
   }
+
+  @override
+  String get startupErrorTitle => '应用启动失败';
+
+  @override
+  String startupErrorDetails(Object error) => '错误：$error';
+
+  @override
+  String get renderErrorTitle => '界面渲染异常';
+
+  @override
+  String get renderErrorDebugTitle => '界面渲染异常（调试模式）';
+
+  @override
+  String get renderErrorRestartMessage => '请尝试重启应用。';
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).

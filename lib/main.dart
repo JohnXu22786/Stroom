@@ -23,6 +23,7 @@ import 'task_flow/services/task_flow_execution_service.dart';
 import 'services/background_service.dart';
 import 'services/desktop_app_service.dart';
 import 'services/notification_service.dart';
+import 'providers/locale_provider.dart';
 
 final asrRetryAudioStoreProvider =
     Provider<AsrRetryAudioStore>((ref) => AsrRetryAudioStore());
@@ -114,9 +115,10 @@ void _initGlobalErrorHandling() {
 
   // 2. 替换默认的红色错误页为安全降级组件
   ErrorWidget.builder = (FlutterErrorDetails details) {
+    final strings = appLocalizationsForLocale(null);
     if (kReleaseMode) {
       // 生产环境：显示友好提示，不暴露详细信息
-      return const Material(
+      return Material(
         color: Color(0xFF1E1E2E),
         child: Center(
           child: Padding(
@@ -127,8 +129,8 @@ void _initGlobalErrorHandling() {
                 Icon(Icons.error_outline, size: 48, color: Colors.redAccent),
                 SizedBox(height: 16),
                 Text(
-                  '界面渲染异常',
-                  style: TextStyle(
+                  strings.renderErrorTitle,
+                  style: const TextStyle(
                     color: Colors.white70,
                     fontSize: 16,
                     fontWeight: FontWeight.w500,
@@ -136,8 +138,8 @@ void _initGlobalErrorHandling() {
                 ),
                 SizedBox(height: 8),
                 Text(
-                  '请尝试重启应用。',
-                  style: TextStyle(color: Colors.white38, fontSize: 14),
+                  strings.renderErrorRestartMessage,
+                  style: const TextStyle(color: Colors.white38, fontSize: 14),
                 ),
               ],
             ),
@@ -161,9 +163,9 @@ void _initGlobalErrorHandling() {
                   color: Colors.redAccent,
                 ),
                 const SizedBox(height: 16),
-                const Text(
-                  '界面渲染异常（Debug 模式）',
-                  style: TextStyle(
+                Text(
+                  strings.renderErrorDebugTitle,
+                  style: const TextStyle(
                     color: Colors.white70,
                     fontSize: 16,
                     fontWeight: FontWeight.w500,
@@ -249,6 +251,7 @@ Future<void> main() async {
       } catch (e, s) {
         // If initialization fails, show an error screen
         debugPrint('[GlobalError] App initialization failed: $e\n$s');
+        final strings = appLocalizationsForLocale(null);
         runApp(
           MaterialApp(
             home: Scaffold(
@@ -256,15 +259,15 @@ Future<void> main() async {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Text(
-                      '应用启动失败',
+                    Text(
+                      strings.startupErrorTitle,
                       style: TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                     const SizedBox(height: 20),
-                    Text('错误: $e'),
+                    Text(strings.startupErrorDetails('$e')),
                   ],
                 ),
               ),

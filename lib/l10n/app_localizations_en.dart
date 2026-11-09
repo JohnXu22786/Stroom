@@ -11017,6 +11017,21 @@ class AppLocalizationsEn extends AppLocalizations {
   String startupIssueUnknownProviderType(Object index, Object type) {
     return 'Provider entry $index uses unknown provider type \"$type\" and may not work correctly.';
   }
+
+  @override
+  String get startupErrorTitle => 'App startup failed';
+
+  @override
+  String startupErrorDetails(Object error) => 'Error: $error';
+
+  @override
+  String get renderErrorTitle => 'Interface rendering error';
+
+  @override
+  String get renderErrorDebugTitle => 'Interface rendering error (Debug mode)';
+
+  @override
+  String get renderErrorRestartMessage => 'Please try restarting the app.';
 }
 
 /// The translations for English, as used in the United States (`en_US`).

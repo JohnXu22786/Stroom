@@ -6257,5 +6257,11 @@
   "startupIssueConversationMessagesInvalid": "会话 {index} 的消息字段不是有效列表。",
   "@startupIssueConversationMessagesInvalid": { "placeholders": { "index": {} } },
   "startupIssueUnknownProviderType": "服务商条目 {index} 使用未知类型“{type}”，可能无法正常工作。",
-  "@startupIssueUnknownProviderType": { "placeholders": { "index": {}, "type": {} } }
+  "@startupIssueUnknownProviderType": { "placeholders": { "index": {}, "type": {} } },
+  "startupErrorTitle": "应用启动失败",
+  "startupErrorDetails": "错误：{error}",
+  "@startupErrorDetails": {"placeholders": {"error": {}}},
+  "renderErrorTitle": "界面渲染异常",
+  "renderErrorDebugTitle": "界面渲染异常（调试模式）",
+  "renderErrorRestartMessage": "请尝试重启应用。"
 }
