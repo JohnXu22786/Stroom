@@ -25,6 +25,36 @@ class _DocumentsDirectory extends PathProviderPlatform {
   Future<String?> getApplicationDocumentsPath() async => path;
 }
 
+final class _RealIO extends IOOverrides {}
+
+final class _FailingReplacementFile extends Fake implements File {
+  _FailingReplacementFile(this.file);
+
+  final File file;
+
+  @override
+  String get path => file.path;
+
+  @override
+  File get absolute => file.absolute;
+
+  @override
+  Directory get parent => file.parent;
+
+  @override
+  Future<File> writeAsBytes(
+    List<int> bytes, {
+    FileMode mode = FileMode.write,
+    bool flush = false,
+  }) async {
+    await file.writeAsBytes(bytes.take(1).toList(), mode: mode, flush: flush);
+    throw FileSystemException('Injected partial replacement failure', path);
+  }
+
+  @override
+  Future<File> rename(String newPath) => file.rename(newPath);
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -87,6 +117,41 @@ void main() {
       existenceResult.complete(false);
 
       await expectLater(read, throwsA(same(cancelToken.cancelError)));
+    },
+  );
+
+  test(
+    'failed native sidecar replacement preserves the previous bytes',
+    () async {
+      final originalPathProvider = PathProviderPlatform.instance;
+      final directory = await Directory.systemTemp.createTemp(
+        'manifest-atomic-write-test-',
+      );
+      PathProviderPlatform.instance = _DocumentsDirectory(directory.path);
+      WebFileStore.disableTestMode();
+      addTearDown(() async {
+        PathProviderPlatform.instance = originalPathProvider;
+        WebFileStore.enableTestMode();
+        await directory.delete(recursive: true);
+      });
+
+      const sidecarName = 'mutable_audio_hash.txt';
+      final previousBytes = Uint8List.fromList([111, 108, 100]);
+      await FileManifest.writeFile(sidecarName, previousBytes);
+      final realIO = _RealIO();
+
+      await expectLater(
+        IOOverrides.runZoned(
+          () => FileManifest.writeFile(
+            sidecarName,
+            Uint8List.fromList([110, 101, 119, 32, 116, 101, 120, 116]),
+          ),
+          createFile: (path) => _FailingReplacementFile(realIO.createFile(path)),
+        ),
+        throwsA(isA<FileSystemException>()),
+      );
+
+      expect(await FileManifest.readFile(sidecarName), previousBytes);
     },
   );
 

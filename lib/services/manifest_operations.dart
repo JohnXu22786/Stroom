@@ -1013,15 +1013,11 @@ class ManifestOperations<T extends FileRecord> {
       }
       final dir = await _storageDir;
       final filePath = _storedFilePath(dir, fileName);
-      if (beforeCommit == null) {
-        await File(filePath).writeAsBytes(data);
-      } else {
-        await AtomicFile.writeBytes(
-          File(filePath),
-          data,
-          beforeCommit: beforeCommit,
-        );
-      }
+      await AtomicFile.writeBytes(
+        File(filePath),
+        data,
+        beforeCommit: beforeCommit,
+      );
       return filePath;
     } catch (e, st) {
       debugPrint('ManifestOperations($manifestKey).writeFile error: $e');
