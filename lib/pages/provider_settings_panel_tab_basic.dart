@@ -116,7 +116,7 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
                 border: OutlineInputBorder(),
               ),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             Text(
               AppLocalizations.of(context)!.providerModelJsonBudgetHelp,
               style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
@@ -182,7 +182,7 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
           letterSpacing: 0.3,
         ),
       ),
-      const SizedBox(height: 6),
+      const SizedBox(height: 8),
       Text(
         AppLocalizations.of(context)!.providerUploadMethodHelp,
         style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant, height: 1.4),
@@ -239,7 +239,7 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
           ),
         ],
       ),
-      const SizedBox(height: 6),
+      const SizedBox(height: 8),
       Text(
         _uploadMethod == AudioUploadMethod.multipart
             ? AppLocalizations.of(context)!.providerUploadMultipartHelp
@@ -296,7 +296,7 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
                 ),
               ],
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             Text(
               AppLocalizations.of(context)!.providerUploadBudgetHelp,
               style: TextStyle(
@@ -321,7 +321,7 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
           letterSpacing: 0.3,
         ),
       ),
-      const SizedBox(height: 6),
+      const SizedBox(height: 8),
       Text(
         AppLocalizations.of(context)!.providerFallbackTriggerHelp,
         style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant, height: 1.4),
@@ -391,7 +391,7 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
           ),
         ],
       ),
-      const SizedBox(height: 6),
+      const SizedBox(height: 8),
       Text(
         _fallbackMethod == 'specific'
             ? AppLocalizations.of(context)!.providerFallbackSpecificHelp
@@ -420,7 +420,7 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
           letterSpacing: 0.3,
         ),
       ),
-      const SizedBox(height: 6),
+      const SizedBox(height: 8),
       Text(
         AppLocalizations.of(context)!.providerPreprocessingHelp,
         style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant, height: 1.4),
@@ -473,7 +473,7 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
           ),
         ],
       ),
-      const SizedBox(height: 6),
+      const SizedBox(height: 8),
       Text(
         _preprocessing == 'resampleMono'
             ? AppLocalizations.of(context)!.providerPreprocessResampleHelp

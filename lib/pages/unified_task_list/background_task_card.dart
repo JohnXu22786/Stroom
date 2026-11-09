@@ -159,7 +159,7 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
                               colorScheme,
                               strings,
                             ),
-                            const SizedBox(width: 6),
+                            const SizedBox(width: 8),
                             Expanded(
                               child: Text(
                                 _localizedBackgroundTaskTitle(
@@ -297,16 +297,16 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
         ],
 
         // Step chain timeline — always visible in expanded mode
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
         _buildStepTimeline(task, cs, AppLocalizations.of(context)!),
         if (task.ocrPageOutcomes.isNotEmpty) ...[
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           _buildOcrPageOutcomes(task, cs, AppLocalizations.of(context)!),
         ],
 
         // Error message for failed tasks
         if (task.status == TaskStatus.failed && task.error != null) ...[
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
