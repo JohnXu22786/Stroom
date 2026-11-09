@@ -5,6 +5,7 @@ import 'file_record.dart';
 import '../services/manifest_operations.dart';
 import 'folder_path_utils.dart';
 import 'content_hash_save_lock.dart';
+import 'folder_membership_lock.dart';
 
 // ====================================================================
 // VideoRecord
@@ -171,6 +172,11 @@ class VideoManifest {
   ) =>
       _saveLocks.withLocks(hashes.map(_hashLockKey), action);
 
+  static Future<T> withRecordMutationLock<T>(
+    Future<T> Function() action,
+  ) =>
+      _saveLocks.withLock('manifest-records', action);
+
   static String _hashLockKey(String hash) => 'hash:$hash';
 
   static List<String> _folderLockKeys(Iterable<String> folders) {
@@ -213,6 +219,12 @@ class VideoManifest {
   ) =>
       _withFolderPathLocks([folder], action);
 
+  static Future<T> withFolderReadLocks<T>(
+    Iterable<String> folders,
+    Future<T> Function() action,
+  ) =>
+      _withFolderPathLocks(folders, action);
+
   static Future<T> withFilePublicationLock<T>(
     String hash,
     String folder,
@@ -223,7 +235,7 @@ class VideoManifest {
   static Future<void> addRecord(VideoRecord record) => withFilePublicationLock(
         record.hash,
         record.folder,
-        () => _ops.addRecord(record),
+        () => withRecordMutationLock(() => _ops.addRecord(record)),
       );
 
   static Future<void> deleteRecord(String id,
@@ -446,19 +458,22 @@ class VideoManifest {
   // Folder management
   static Future<Set<String>> getAllFolders() => _ops.getAllFolders();
   static Future<void> addFolder(String name) =>
-      _withFolderPathLocks([name], () => _ops.addFolder(name));
+      FolderMembershipLock.withAddLock('video', name,
+          () => _withFolderPathLocks([name], () => _ops.addFolder(name)));
   static Future<void> removeFolder(String name) async {
-    await withFolderMutationLock(name, () async {
-      final records = await _ops.loadRecords();
-      final allFolders = await _ops.getAllFolders();
-      final deletedFolders = {
-        name,
-        ...FolderPathUtils.getAllDescendantFolderPaths(name, allFolders),
-      };
-      final hashes = records
-          .where((record) => deletedFolders.contains(record.folder))
-          .map((record) => record.hash);
-      await withSaveLocks(hashes, () => _ops.removeFolder(name));
+    await FolderMembershipLock.withDeleteLock('video', name, () async {
+      await withFolderMutationLock(name, () async {
+        final records = await _ops.loadRecords();
+        final allFolders = await _ops.getAllFolders();
+        final deletedFolders = {
+          name,
+          ...FolderPathUtils.getAllDescendantFolderPaths(name, allFolders),
+        };
+        final hashes = records
+            .where((record) => deletedFolders.contains(record.folder))
+            .map((record) => record.hash);
+        await withSaveLocks(hashes, () => _ops.removeFolder(name));
+      });
     });
   }
 

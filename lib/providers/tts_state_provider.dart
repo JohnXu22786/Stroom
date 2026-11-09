@@ -9,6 +9,7 @@ import '../l10n/app_localizations.dart';
 import 'locale_provider.dart';
 
 import '../utils/folder_copy_lock.dart';
+import '../utils/folder_membership_lock.dart';
 import '../utils/folder_operation_rollback.dart';
 import '../utils/file_manifest.dart';
 import '../utils/tts_audio_saver.dart';
@@ -413,7 +414,12 @@ class AudioRecordsNotifier extends StateNotifier<List<AudioRecord>> {
     await FolderCopyLock.withLock(
       'audio',
       newPath,
-      () => _copyFolderToDestination(sourceFolder, targetFolderClean, newPath),
+      () => FolderMembershipLock.withCopyLock(
+        'audio',
+        sourceFolder,
+        () =>
+            _copyFolderToDestination(sourceFolder, targetFolderClean, newPath),
+      ),
     );
   }
 
@@ -422,6 +428,48 @@ class AudioRecordsNotifier extends StateNotifier<List<AudioRecord>> {
     String targetFolderClean,
     String newPath,
   ) async {
+    final prefix = '$sourceFolder/';
+    final initialRecords = (await FileManifest.loadRecords()).where(
+      (record) =>
+          record.folder == sourceFolder || record.folder.startsWith(prefix),
+    );
+    final initialKeys =
+        initialRecords.map((record) => record.storageFileName).toSet();
+    var retry = false;
+    Future<void> publishWithLocks() async {
+      final records = (await FileManifest.loadRecordsStrict())
+          .where(
+            (record) =>
+                record.folder == sourceFolder ||
+                record.folder.startsWith(prefix),
+          )
+          .toList();
+      if (records.any(
+        (record) => !initialKeys.contains(record.storageFileName),
+      )) {
+        retry = true;
+        return;
+      }
+      await FolderMembershipLock.afterCopySnapshotForTesting?.call();
+      await _copyFolderSnapshot(
+        sourceFolder,
+        targetFolderClean,
+        newPath,
+        records,
+      );
+    }
+
+    await FileManifest.withCopySourceLocks(initialKeys, publishWithLocks);
+    if (retry)
+      await _copyFolderToDestination(sourceFolder, targetFolderClean, newPath);
+  }
+
+  Future<void> _copyFolderSnapshot(
+    String sourceFolder,
+    String targetFolderClean,
+    String newPath,
+    List<AudioRecord> records,
+  ) async {
     // 目标位置（或其下）已存在同名文件夹：拒绝，避免重复复制/合并
     final existing = await FileManifest.getAllFolders();
     if (existing.any((f) => f == newPath || f.startsWith('$newPath/'))) return;
@@ -429,7 +477,6 @@ class AudioRecordsNotifier extends StateNotifier<List<AudioRecord>> {
     // Snapshot: addRecord mutates the manifest cache, which loadRecords
     // returns directly — iterating it while copying would throw
     // ConcurrentModificationError.
-    final records = List<AudioRecord>.from(await FileManifest.loadRecords());
 
     final rollbackFolderAncestors = <String>{};
     if (targetFolderClean.isNotEmpty) {

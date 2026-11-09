@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/legacy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../utils/folder_copy_lock.dart';
+import '../utils/folder_membership_lock.dart';
 import '../utils/folder_operation_rollback.dart';
 import '../utils/image_manifest.dart';
 
@@ -349,7 +350,11 @@ class ImageRecordsNotifier extends StateNotifier<List<ImageRecord>> {
     await FolderCopyLock.withLock(
       'image',
       newPath,
-      () => _copyFolderToDestination(sourceName, targetParentClean, newPath),
+      () => FolderMembershipLock.withCopyLock(
+        'image',
+        sourceName,
+        () => _copyFolderToDestination(sourceName, targetParentClean, newPath),
+      ),
     );
   }
 
@@ -358,14 +363,74 @@ class ImageRecordsNotifier extends StateNotifier<List<ImageRecord>> {
     String targetParentClean,
     String newPath,
   ) async {
+    final prefix = '$sourceName/';
+    final initialRecords = (await ImageManifest.loadRecords()).where(
+      (record) =>
+          record.folder == sourceName || record.folder.startsWith(prefix),
+    );
+    final initialKeys = initialRecords.map((record) => record.hash).toSet();
+    final initialFolders = await ImageManifest.getAllFolders();
+    final sourceFolders = <String>{sourceName};
+    final foldersToLock = <String>{sourceName, newPath};
+    for (final folder in initialFolders) {
+      if (folder.startsWith(prefix)) {
+        sourceFolders.add(folder);
+        foldersToLock.add('$newPath${folder.substring(sourceName.length)}');
+      }
+    }
+    var retry = false;
+    Future<void> publishWithLocks() async {
+      final currentFolders = await ImageManifest.getAllFolders();
+      if (currentFolders.any(
+        (folder) =>
+            (folder == sourceName || folder.startsWith(prefix)) &&
+            !sourceFolders.contains(folder),
+      )) {
+        retry = true;
+        return;
+      }
+      final records = (await ImageManifest.loadRecordsStrict())
+          .where(
+            (record) =>
+                record.folder == sourceName || record.folder.startsWith(prefix),
+          )
+          .toList();
+      if (records.any((record) => !initialKeys.contains(record.hash))) {
+        retry = true;
+        return;
+      }
+      await FolderMembershipLock.afterCopySnapshotForTesting?.call();
+      await _copyFolderSnapshot(
+        sourceName,
+        targetParentClean,
+        newPath,
+        records,
+      );
+    }
+
+    await ImageManifest.withFolderReadLocks(
+      foldersToLock,
+      () => ImageManifest.withSaveLocks(
+        initialKeys,
+        () => ImageManifest.withRecordMutationLock(publishWithLocks),
+      ),
+    );
+    if (retry)
+      await _copyFolderToDestination(sourceName, targetParentClean, newPath);
+  }
+
+  Future<void> _copyFolderSnapshot(
+    String sourceName,
+    String targetParentClean,
+    String newPath,
+    List<ImageRecord> records,
+  ) async {
     // 目标位置（或其下）已存在同名文件夹：拒绝，避免重复复制/合并
     final existing = await ImageManifest.getAllFolders();
     if (existing.any((f) => f == newPath || f.startsWith('$newPath/'))) return;
 
     // addRecord mutates the manifest cache returned by loadRecords, so iterate
     // over a snapshot while adding the copied records.
-    final records = List<ImageRecord>.from(await ImageManifest.loadRecords());
-
     final rollbackFolderAncestors = <String>{};
     if (targetParentClean.isNotEmpty) {
       var ancestor = targetParentClean;

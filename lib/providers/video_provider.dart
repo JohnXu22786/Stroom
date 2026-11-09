@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/legacy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../utils/folder_copy_lock.dart';
+import '../utils/folder_membership_lock.dart';
 import '../utils/folder_operation_rollback.dart';
 import '../utils/video_manifest.dart';
 
@@ -339,7 +340,11 @@ class VideoRecordsNotifier extends StateNotifier<List<VideoRecord>> {
     await FolderCopyLock.withLock(
       'video',
       newPath,
-      () => _copyFolderToDestination(sourceName, targetParentClean, newPath),
+      () => FolderMembershipLock.withCopyLock(
+        'video',
+        sourceName,
+        () => _copyFolderToDestination(sourceName, targetParentClean, newPath),
+      ),
     );
   }
 
@@ -348,6 +353,68 @@ class VideoRecordsNotifier extends StateNotifier<List<VideoRecord>> {
     String targetParentClean,
     String newPath,
   ) async {
+    final prefix = '$sourceName/';
+    final initialRecords = (await VideoManifest.loadRecords()).where(
+      (record) =>
+          record.folder == sourceName || record.folder.startsWith(prefix),
+    );
+    final initialKeys = initialRecords.map((record) => record.hash).toSet();
+    final initialFolders = await VideoManifest.getAllFolders();
+    final sourceFolders = <String>{sourceName};
+    final foldersToLock = <String>{sourceName, newPath};
+    for (final folder in initialFolders) {
+      if (folder.startsWith(prefix)) {
+        sourceFolders.add(folder);
+        foldersToLock.add('$newPath${folder.substring(sourceName.length)}');
+      }
+    }
+    var retry = false;
+    Future<void> publishWithLocks() async {
+      final currentFolders = await VideoManifest.getAllFolders();
+      if (currentFolders.any(
+        (folder) =>
+            (folder == sourceName || folder.startsWith(prefix)) &&
+            !sourceFolders.contains(folder),
+      )) {
+        retry = true;
+        return;
+      }
+      final records = (await VideoManifest.loadRecordsStrict())
+          .where(
+            (record) =>
+                record.folder == sourceName || record.folder.startsWith(prefix),
+          )
+          .toList();
+      if (records.any((record) => !initialKeys.contains(record.hash))) {
+        retry = true;
+        return;
+      }
+      await FolderMembershipLock.afterCopySnapshotForTesting?.call();
+      await _copyFolderSnapshot(
+        sourceName,
+        targetParentClean,
+        newPath,
+        records,
+      );
+    }
+
+    await VideoManifest.withFolderReadLocks(
+      foldersToLock,
+      () => VideoManifest.withSaveLocks(
+        initialKeys,
+        () => VideoManifest.withRecordMutationLock(publishWithLocks),
+      ),
+    );
+    if (retry)
+      await _copyFolderToDestination(sourceName, targetParentClean, newPath);
+  }
+
+  Future<void> _copyFolderSnapshot(
+    String sourceName,
+    String targetParentClean,
+    String newPath,
+    List<VideoRecord> records,
+  ) async {
     // 目标位置（或其下）已存在同名文件夹：拒绝，避免重复复制/合并
     final existing = await VideoManifest.getAllFolders();
     if (existing.any((f) => f == newPath || f.startsWith('$newPath/'))) return;
@@ -355,7 +422,6 @@ class VideoRecordsNotifier extends StateNotifier<List<VideoRecord>> {
     // Snapshot: addRecord mutates the manifest cache, which loadRecords
     // returns directly — iterating it while copying would throw
     // ConcurrentModificationError.
-    final records = List<VideoRecord>.from(await VideoManifest.loadRecords());
 
     final rollbackFolderAncestors = <String>{};
     if (targetParentClean.isNotEmpty) {
