@@ -151,7 +151,6 @@ Future<List<XFile>> pickGalleryMedia(
   }
   final files = await FilePicker.pickFiles(
     type: kind == GalleryMediaKind.image ? FileType.image : FileType.video,
-    allowMultiple: true,
     initialDirectory: kind == GalleryMediaKind.image
         ? SystemPickDirectories.pictures()
         : SystemPickDirectories.videos(),
