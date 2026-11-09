@@ -10955,6 +10955,60 @@ abstract class AppLocalizations {
   /// **'Browse cards'**
   String get ankiBrowseCardsTooltip;
 
+  /// No description provided for @ankiStatsTotalCards.
+  ///
+  /// In en, this message translates to:
+  /// **'Total cards'**
+  String get ankiStatsTotalCards;
+
+  /// No description provided for @ankiStatsNewCards.
+  ///
+  /// In en, this message translates to:
+  /// **'New cards'**
+  String get ankiStatsNewCards;
+
+  /// No description provided for @ankiStatsLearning.
+  ///
+  /// In en, this message translates to:
+  /// **'Learning'**
+  String get ankiStatsLearning;
+
+  /// No description provided for @ankiStatsDueForReview.
+  ///
+  /// In en, this message translates to:
+  /// **'Due for review'**
+  String get ankiStatsDueForReview;
+
+  /// No description provided for @ankiStatsReviewHistory.
+  ///
+  /// In en, this message translates to:
+  /// **'Review history'**
+  String get ankiStatsReviewHistory;
+
+  /// No description provided for @ankiStatsLearningProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'Study progress'**
+  String get ankiStatsLearningProgress;
+
+  /// No description provided for @ankiStatsReviewRate.
+  ///
+  /// In en, this message translates to:
+  /// **'Review rate'**
+  String get ankiStatsReviewRate;
+
+  /// No description provided for @ankiBrowserSearchHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Search cards...'**
+  String get ankiBrowserSearchHint;
+
+  /// No description provided for @ankiBrowserEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No cards'**
+  String get ankiBrowserEmpty;
+
   /// No description provided for @ankiSyncTooltip.
   ///
   /// In en, this message translates to:
