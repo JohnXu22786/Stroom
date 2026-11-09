@@ -7,6 +7,7 @@ String providerEntryDisplayName(ProviderEntry entry, AppLocalizations l10n) {
   final localizedName = switch ((entry.id, entry.name)) {
     ('builtin_tts', 'TTS供应商') => l10n.providerBuiltinTtsName,
     ('builtin_llm', 'LLM供应商') => l10n.providerBuiltinLlmName,
+    ('migrated_llm', 'LLM供应商') => l10n.providerBuiltinLlmName,
     ('builtin_ocr', 'OCR供应商') => l10n.providerBuiltinOcrName,
     ('builtin_asr', '音频转写供应商') => l10n.providerBuiltinAsrName,
     ('builtin_mcp', 'MCP供应商') => l10n.providerBuiltinMcpName,
