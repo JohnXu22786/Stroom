@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -9,6 +10,7 @@ import 'package:stroom/providers/tts_state_provider.dart';
 import 'package:stroom/providers/video_provider.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/file_manifest.dart';
+import 'package:stroom/utils/folder_membership_lock.dart';
 import 'package:stroom/utils/image_manifest.dart';
 import 'package:stroom/utils/text_manifest.dart';
 import 'package:stroom/utils/video_manifest.dart';
@@ -20,10 +22,506 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     ManifestDatabase.enableTestMode();
     ManifestDatabase.beforeFolderInsertForTesting = null;
+    FolderMembershipLock.afterCopySnapshotForTesting = null;
     FileManifest.invalidateCache();
     ImageManifest.invalidateCache();
     TextManifest.invalidateCache();
     VideoManifest.invalidateCache();
+  });
+
+  testWidgets(
+    'folder copies protect source content from concurrent deletion for all providers',
+    (WidgetTester t) async {
+      final now = DateTime.now();
+      final operations =
+          <
+            ({
+              String provider,
+              Future<void> Function() save,
+              Future<void> Function() copy,
+              Future<void> Function() delete,
+              Future<List<dynamic>> Function() load,
+              Future<Uint8List?> Function(String) read,
+              String fileName,
+              String destination,
+            })
+          >[
+            (
+              provider: 'text',
+              fileName: 'race_text.txt',
+              destination: 'target/race_text',
+              save: () async {
+                await TextManifest.writeFile(
+                  'race_text.txt',
+                  Uint8List.fromList([1]),
+                );
+                await TextManifest.addRecord(
+                  TextRecord(
+                    id: 'race_text',
+                    name: 'text',
+                    hash: 'race_text',
+                    createdAt: now,
+                    size: 1,
+                    folder: 'race_text',
+                  ),
+                );
+              },
+              copy: () =>
+                  TextRecordsNotifier().copyFolder('race_text', 'target'),
+              delete: () => TextManifest.removeFolder('race_text'),
+              load: TextManifest.loadRecords,
+              read: TextManifest.readFile,
+            ),
+            (
+              provider: 'image',
+              fileName: 'race_image.png',
+              destination: 'target/race_image',
+              save: () async {
+                await ImageManifest.writeFile(
+                  'race_image.png',
+                  Uint8List.fromList([1]),
+                );
+                await ImageManifest.addRecord(
+                  ImageRecord(
+                    id: 'race_image',
+                    name: 'image',
+                    hash: 'race_image',
+                    format: 'png',
+                    createdAt: now,
+                    size: 1,
+                    folder: 'race_image',
+                  ),
+                );
+              },
+              copy: () =>
+                  ImageRecordsNotifier().copyFolder('race_image', 'target'),
+              delete: () => ImageManifest.removeFolder('race_image'),
+              load: ImageManifest.loadRecords,
+              read: ImageManifest.readFile,
+            ),
+            (
+              provider: 'video',
+              fileName: 'race_video.mp4',
+              destination: 'target/race_video/child',
+              save: () async {
+                await VideoManifest.writeFile(
+                  'race_video.mp4',
+                  Uint8List.fromList([1]),
+                );
+                await VideoManifest.addRecord(
+                  VideoRecord(
+                    id: 'race_video',
+                    name: 'video',
+                    hash: 'race_video',
+                    format: 'mp4',
+                    createdAt: now,
+                    size: 1,
+                    folder: 'race_video/child',
+                  ),
+                );
+              },
+              copy: () =>
+                  VideoRecordsNotifier().copyFolder('race_video', 'target'),
+              delete: () => VideoManifest.removeFolder('race_video/child'),
+              load: VideoManifest.loadRecords,
+              read: VideoManifest.readFile,
+            ),
+            (
+              provider: 'audio',
+              fileName: 'race_audio.wav',
+              destination: 'target/race_audio',
+              save: () async {
+                await FileManifest.writeFile(
+                  'race_audio.wav',
+                  Uint8List.fromList([1]),
+                );
+                await FileManifest.addRecord(
+                  AudioRecord(
+                    id: 'race_audio',
+                    name: 'audio',
+                    hash: 'race_audio',
+                    format: 'wav',
+                    createdAt: now,
+                    size: 1,
+                    folder: 'race_audio',
+                  ),
+                );
+              },
+              copy: () =>
+                  AudioRecordsNotifier().copyFolder('race_audio', 'target'),
+              delete: () => FileManifest.removeFolder('race_audio'),
+              load: FileManifest.loadRecords,
+              read: FileManifest.readFile,
+            ),
+          ];
+      for (final item in operations) {
+        await item.save();
+        final snapshotted = Completer<void>();
+        final resume = Completer<void>();
+        FolderMembershipLock.afterCopySnapshotForTesting = () async {
+          FolderMembershipLock.afterCopySnapshotForTesting = null;
+          snapshotted.complete();
+          await resume.future;
+        };
+        final copy = item.copy();
+        await snapshotted.future;
+        var deleted = false;
+        final deletion = item.delete().then((_) => deleted = true);
+        await Future<void>.delayed(Duration.zero);
+        expect(
+          deleted,
+          isFalse,
+          reason: '${item.provider} delete should wait for copy',
+        );
+        resume.complete();
+        await Future.wait([copy, deletion]);
+        expect(
+          (await item.load()).where(
+            (record) => record.folder == item.destination,
+          ),
+          hasLength(1),
+        );
+        expect(
+          await item.read(item.fileName),
+          isNotNull,
+          reason: item.provider,
+        );
+      }
+    },
+  );
+
+  testWidgets('direct record deletion waits for a copy holding its content reference',
+      (WidgetTester t) async {
+    await ImageManifest.writeFile('hash_delete_race.png', Uint8List.fromList([1]));
+    await ImageManifest.addRecord(ImageRecord(
+      id: 'delete_race',
+      name: 'image',
+      hash: 'hash_delete_race',
+      format: 'png',
+      createdAt: DateTime.now(),
+      size: 1,
+      folder: 'delete_race',
+    ));
+
+    final snapshotted = Completer<void>();
+    final resume = Completer<void>();
+    FolderMembershipLock.afterCopySnapshotForTesting = () async {
+      FolderMembershipLock.afterCopySnapshotForTesting = null;
+      snapshotted.complete();
+      await resume.future;
+    };
+    final copy = ImageRecordsNotifier().copyFolder('delete_race', 'target');
+    await snapshotted.future;
+    var deleted = false;
+    final deletion = ImageManifest.deleteRecord('delete_race').then((_) {
+      deleted = true;
+    });
+    await Future<void>.delayed(Duration.zero);
+    expect(deleted, isFalse);
+    resume.complete();
+    await Future.wait([copy, deletion]);
+    expect(
+      (await ImageManifest.loadRecords())
+          .where((record) => record.folder == 'target/delete_race'),
+      hasLength(1),
+    );
+    expect(await ImageManifest.readFile('hash_delete_race.png'), isNotNull);
+  });
+
+  testWidgets('adding an empty descendant waits for a stable folder copy', (
+    WidgetTester t,
+  ) async {
+    await ImageManifest.addFolder('copy_empty_source/known');
+    final snapshotted = Completer<void>();
+    final resume = Completer<void>();
+    FolderMembershipLock.afterCopySnapshotForTesting = () async {
+      FolderMembershipLock.afterCopySnapshotForTesting = null;
+      snapshotted.complete();
+      await resume.future;
+    };
+
+    final copy = ImageRecordsNotifier().copyFolder(
+      'copy_empty_source',
+      'target',
+    );
+    await snapshotted.future;
+    var added = false;
+    final add = ImageManifest.addFolder('copy_empty_source/late').then((_) {
+      added = true;
+    });
+    await Future<void>.delayed(Duration.zero);
+    expect(added, isFalse);
+
+    resume.complete();
+    await Future.wait([copy, add]);
+    final folders = await ImageManifest.getAllFolders();
+    expect(folders, contains('target/copy_empty_source/known'));
+    expect(folders, contains('copy_empty_source/late'));
+    expect(folders, isNot(contains('target/copy_empty_source/late')));
+  });
+
+  testWidgets('new source records wait while each provider publishes a copy', (
+    WidgetTester t,
+  ) async {
+    final now = DateTime.now();
+    final cases =
+        <
+          ({
+            String provider,
+            Future<void> Function() saveInitial,
+            Future<void> Function() copy,
+            Future<void> Function() addSecond,
+            Future<List<dynamic>> Function() load,
+            Future<Uint8List?> Function(String) read,
+            String destination,
+            String initialFile,
+            String secondFile,
+            String initialId,
+            String secondId,
+          })
+        >[
+          (
+            provider: 'text',
+            destination: 'target/copy_add_text',
+            initialFile: 'copy_add_text.txt',
+            secondFile: 'copy_add_text_second.txt',
+            initialId: 'copy_add_text',
+            secondId: 'copy_add_text_second',
+            saveInitial: () async {
+              await TextManifest.writeFile(
+                'copy_add_text.txt',
+                Uint8List.fromList([1]),
+              );
+              await TextManifest.addRecord(
+                TextRecord(
+                  id: 'copy_add_text',
+                  name: 'text',
+                  hash: 'copy_add_text',
+                  createdAt: now,
+                  size: 1,
+                  folder: 'copy_add_text',
+                ),
+              );
+            },
+            copy: () =>
+                TextRecordsNotifier().copyFolder('copy_add_text', 'target'),
+            addSecond: () async {
+              await TextManifest.writeFile(
+                'copy_add_text_second.txt',
+                Uint8List.fromList([2]),
+              );
+              await TextManifest.addRecord(
+                TextRecord(
+                  id: 'copy_add_text_second',
+                  name: 'second',
+                  hash: 'copy_add_text_second',
+                  createdAt: now,
+                  size: 1,
+                  folder: 'copy_add_text',
+                ),
+              );
+            },
+            load: TextManifest.loadRecords,
+            read: TextManifest.readFile,
+          ),
+          (
+            provider: 'image',
+            destination: 'target/copy_add_image',
+            initialFile: 'copy_add_image.png',
+            secondFile: 'copy_add_image_second.png',
+            initialId: 'copy_add_image',
+            secondId: 'copy_add_image_second',
+            saveInitial: () async {
+              await ImageManifest.writeFile(
+                'copy_add_image.png',
+                Uint8List.fromList([1]),
+              );
+              await ImageManifest.addRecord(
+                ImageRecord(
+                  id: 'copy_add_image',
+                  name: 'image',
+                  hash: 'copy_add_image',
+                  format: 'png',
+                  createdAt: now,
+                  size: 1,
+                  folder: 'copy_add_image',
+                ),
+              );
+            },
+            copy: () =>
+                ImageRecordsNotifier().copyFolder('copy_add_image', 'target'),
+            addSecond: () async {
+              await ImageManifest.writeFile(
+                'copy_add_image_second.png',
+                Uint8List.fromList([2]),
+              );
+              await ImageManifest.addRecord(
+                ImageRecord(
+                  id: 'copy_add_image_second',
+                  name: 'second',
+                  hash: 'copy_add_image_second',
+                  format: 'png',
+                  createdAt: now,
+                  size: 1,
+                  folder: 'copy_add_image',
+                ),
+              );
+            },
+            load: ImageManifest.loadRecords,
+            read: ImageManifest.readFile,
+          ),
+          (
+            provider: 'video',
+            destination: 'target/copy_add_video',
+            initialFile: 'copy_add_video.mp4',
+            secondFile: 'copy_add_video_second.mp4',
+            initialId: 'copy_add_video',
+            secondId: 'copy_add_video_second',
+            saveInitial: () async {
+              await VideoManifest.writeFile(
+                'copy_add_video.mp4',
+                Uint8List.fromList([1]),
+              );
+              await VideoManifest.addRecord(
+                VideoRecord(
+                  id: 'copy_add_video',
+                  name: 'video',
+                  hash: 'copy_add_video',
+                  format: 'mp4',
+                  createdAt: now,
+                  size: 1,
+                  folder: 'copy_add_video',
+                ),
+              );
+            },
+            copy: () =>
+                VideoRecordsNotifier().copyFolder('copy_add_video', 'target'),
+            addSecond: () async {
+              await VideoManifest.writeFile(
+                'copy_add_video_second.mp4',
+                Uint8List.fromList([2]),
+              );
+              await VideoManifest.addRecord(
+                VideoRecord(
+                  id: 'copy_add_video_second',
+                  name: 'second',
+                  hash: 'copy_add_video_second',
+                  format: 'mp4',
+                  createdAt: now,
+                  size: 1,
+                  folder: 'copy_add_video',
+                ),
+              );
+            },
+            load: VideoManifest.loadRecords,
+            read: VideoManifest.readFile,
+          ),
+          (
+            provider: 'audio',
+            destination: 'target/copy_add_audio',
+            initialFile: 'copy_add_audio.wav',
+            secondFile: 'copy_add_audio_second.wav',
+            initialId: 'copy_add_audio',
+            secondId: 'copy_add_audio_second',
+            saveInitial: () async {
+              await FileManifest.writeFile(
+                'copy_add_audio.wav',
+                Uint8List.fromList([1]),
+              );
+              await FileManifest.addRecord(
+                AudioRecord(
+                  id: 'copy_add_audio',
+                  name: 'audio',
+                  hash: 'copy_add_audio',
+                  format: 'wav',
+                  createdAt: now,
+                  size: 1,
+                  folder: 'copy_add_audio',
+                ),
+              );
+            },
+            copy: () =>
+                AudioRecordsNotifier().copyFolder('copy_add_audio', 'target'),
+            addSecond: () async {
+              await FileManifest.writeFile(
+                'copy_add_audio_second.wav',
+                Uint8List.fromList([2]),
+              );
+              await FileManifest.addRecord(
+                AudioRecord(
+                  id: 'copy_add_audio_second',
+                  name: 'second',
+                  hash: 'copy_add_audio_second',
+                  format: 'wav',
+                  createdAt: now,
+                  size: 1,
+                  folder: 'copy_add_audio',
+                ),
+              );
+            },
+            load: FileManifest.loadRecords,
+            read: FileManifest.readFile,
+          ),
+        ];
+    for (final item in cases) {
+      await item.saveInitial();
+      final snapshotted = Completer<void>();
+      final resume = Completer<void>();
+      FolderMembershipLock.afterCopySnapshotForTesting = () async {
+        FolderMembershipLock.afterCopySnapshotForTesting = null;
+        snapshotted.complete();
+        await resume.future;
+      };
+      final copy = item.copy();
+      await snapshotted.future;
+      var added = false;
+      final add = item.addSecond().then((_) => added = true);
+      await Future<void>.delayed(Duration.zero);
+      expect(added, isFalse, reason: item.provider);
+      resume.complete();
+      await Future.wait([copy, add]);
+      final records = await item.load();
+      final copied = records.where(
+        (record) => record.folder == item.destination,
+      );
+      expect(copied.map((record) => record.id), [item.initialId]);
+      expect(records.any((record) => record.id == item.secondId), isTrue);
+      expect(await item.read(item.initialFile), isNotNull);
+      expect(await item.read(item.secondFile), isNotNull);
+    }
+  });
+
+  testWidgets('one copy cannot add a descendant during another copy snapshot', (
+    WidgetTester t,
+  ) async {
+    await ImageManifest.addFolder('copy_donor/empty');
+    await ImageManifest.addFolder('copy_parent/known');
+    final snapshotted = Completer<void>();
+    final resume = Completer<void>();
+    FolderMembershipLock.afterCopySnapshotForTesting = () async {
+      FolderMembershipLock.afterCopySnapshotForTesting = null;
+      snapshotted.complete();
+      await resume.future;
+    };
+
+    final parentCopy = ImageRecordsNotifier().copyFolder(
+      'copy_parent',
+      'target',
+    );
+    await snapshotted.future;
+    var donorCopyFinished = false;
+    final donorCopy = ImageRecordsNotifier()
+        .copyFolder('copy_donor', 'copy_parent')
+        .then((_) => donorCopyFinished = true);
+    await Future<void>.delayed(Duration.zero);
+    expect(donorCopyFinished, isFalse);
+
+    resume.complete();
+    await Future.wait([parentCopy, donorCopy]);
+    final folders = await ImageManifest.getAllFolders();
+    expect(folders, contains('copy_parent/copy_donor'));
+    expect(folders, contains('target/copy_parent/known'));
+    expect(folders, isNot(contains('target/copy_parent/copy_donor')));
   });
 
   testWidgets(

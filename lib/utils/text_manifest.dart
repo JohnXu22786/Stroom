@@ -7,6 +7,7 @@ import 'package:uuid/uuid.dart';
 import 'file_record.dart';
 import '../services/manifest_operations.dart';
 import 'folder_path_utils.dart';
+import 'folder_membership_lock.dart';
 
 // ====================================================================
 // TextRecord
@@ -206,6 +207,12 @@ class TextManifest {
 
     return acquire(0);
   }
+
+  static Future<T> withCopySourceLocks<T>(
+    Iterable<String> hashes,
+    Future<T> Function() action,
+  ) =>
+      _withSaveLocks(hashes, () => _withRecordMutationLock(action));
 
   /// Serializes text-row and folder membership changes with folder deletion.
   /// Callers that also need a content hash lock must acquire that lock first.
@@ -530,8 +537,16 @@ class TextManifest {
         () => _ops.getAllFolders(throwOnError: throwOnError),
       );
   static Future<void> addFolder(String name) =>
-      _withRecordMutationLock(() => _ops.addFolder(name));
-  static Future<void> removeFolder(String name) async {
+      FolderMembershipLock.withAddLock(
+        'text', name, () => _withRecordMutationLock(() => _ops.addFolder(name)));
+  static Future<void> removeFolder(String name) =>
+      FolderMembershipLock.withDeleteLock(
+        'text',
+        name,
+        () => _removeFolder(name),
+      );
+
+  static Future<void> _removeFolder(String name) async {
     if (name.isEmpty) {
       await _withRecordMutationLock(() => _ops.removeFolder(name));
       return;
