@@ -41,7 +41,9 @@ void main() {
     expect(localizeCatCatchStepDetail('共2个资源，请用户选择', chinese), '共2个资源，请用户选择');
   });
 
-  test('localizes legacy duration details without losing values and preserves unknown text', () {
+  test(
+      'localizes legacy duration details without losing values and preserves unknown text',
+      () {
     final english = lookupAppLocalizations(const Locale('en', 'US'));
     final chinese = lookupAppLocalizations(const Locale('zh', 'CN'));
 

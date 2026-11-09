@@ -45,8 +45,8 @@ String localizeCatCatchStepDetail(String detail, AppLocalizations strings) {
     return strings.catCatchDetailSkipFormat(match[1]!);
   }
 
-  match = RegExp(r'^按照(.+)时长筛选后剩余(\d+)个结果（已排除(\d+)个不匹配的资源）$')
-      .firstMatch(detail);
+  match =
+      RegExp(r'^按照(.+)时长筛选后剩余(\d+)个结果（已排除(\d+)个不匹配的资源）$').firstMatch(detail);
   if (match != null) {
     final duration = _localizeDuration(match[1]!, strings);
     if (duration != null) {
