@@ -4,6 +4,8 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:archive/archive.dart';
 
+import 'apkg_result.dart';
+
 /// Exports Stroom's Anki collection to the .apkg format.
 ///
 /// .apkg is a ZIP archive containing:
@@ -19,15 +21,26 @@ class AnkiApkgExporter {
     final docsDir = await getApplicationDocumentsDirectory();
     final src = dbPath ?? p.join(docsDir.path, 'collection.anki2');
 
-    if (!File(src).existsSync()) {
-      throw Exception('找不到 Anki 数据库: $src');
+    bool sourceExists;
+    try {
+      sourceExists = File(src).existsSync();
+    } catch (_) {
+      throw AnkiApkgException.unexpectedError(src);
+    }
+    if (!sourceExists) {
+      throw AnkiApkgException.targetDatabaseMissing(src);
     }
 
     // Build the ZIP archive
     final archive = Archive();
 
     // 1. Add collection.anki2
-    final dbBytes = File(src).readAsBytesSync();
+    late final List<int> dbBytes;
+    try {
+      dbBytes = File(src).readAsBytesSync();
+    } catch (_) {
+      throw AnkiApkgException.unexpectedError(src);
+    }
     archive.addFile(ArchiveFile('collection.anki2', dbBytes.length, dbBytes));
 
     // 2. Add media map (empty for now — no media support)
@@ -36,15 +49,24 @@ class AnkiApkgExporter {
     archive.addFile(ArchiveFile('media', mediaBytes.length, mediaBytes));
 
     // 3. Compress as ZIP
-    final encoded = ZipEncoder().encode(archive);
-    if (encoded == null) throw Exception('打包失败');
+    List<int>? encoded;
+    try {
+      encoded = ZipEncoder().encode(archive);
+    } catch (_) {
+      throw AnkiApkgException.unexpectedError(src);
+    }
+    if (encoded == null) throw AnkiApkgException.exportFailed(src);
 
     // Write to downloads directory
     final dlDir = await getApplicationDocumentsDirectory();
     final timestamp =
         DateTime.now().toIso8601String().replaceAll(RegExp(r'[:.]'), '-');
     final outPath = p.join(dlDir.path, 'stroom_anki_$timestamp.apkg');
-    await File(outPath).writeAsBytes(encoded);
+    try {
+      await File(outPath).writeAsBytes(encoded);
+    } catch (_) {
+      throw AnkiApkgException.unexpectedError(outPath);
+    }
 
     return outPath;
   }

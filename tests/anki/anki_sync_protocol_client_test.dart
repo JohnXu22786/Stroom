@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
+import 'package:stroom/l10n/app_localizations_en.dart';
 import 'package:stroom/anki/sync/anki_sync_protocol_client.dart';
 import 'package:stroom/anki/sync/anki_sync_provider.dart';
 
@@ -167,8 +168,62 @@ void main() {
       }
 
       expect(thrown, isA<AnkiSyncException>());
-      expect(thrown.toString(), isNot(contains('test-only')));
-      expect(thrown.toString(), contains('HTTP 400'));
+      final exception = thrown as AnkiSyncException;
+      expect(exception.toString(), isNot(contains('test-only')));
+      expect(exception.toString(), contains('HTTP 400'));
+      expect(exception.failureCode, AnkiSyncFailureCode.serverHttpError);
+      expect(
+        exception.localizedMessage(AppLocalizationsEn()),
+        'The sync server rejected the request (HTTP 400). Check the login credentials and server permissions.',
+      );
+    });
+
+    test('localizes app-generated connection failures', () async {
+      httpClient.sendError = const SocketException('test connection failure');
+
+      AnkiSyncException? thrown;
+      try {
+        await client.login('test@example.invalid', 'test-only');
+      } on AnkiSyncException catch (error) {
+        thrown = error;
+      }
+
+      expect(thrown?.failureCode, AnkiSyncFailureCode.connectionFailure);
+      expect(
+        thrown?.localizedMessage(AppLocalizationsEn()),
+        'Could not connect to the sync server. Check the address and network.',
+      );
+    });
+
+    test('localizes local file failures while downloading a collection',
+        () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'stroom-anki-protocol-local-file-error_',
+      );
+      httpClient.responses.add(_jsonResponse({'key': 'host-key'}));
+      httpClient.streamedResponses.add(
+        http.StreamedResponse(Stream<List<int>>.empty(), HttpStatus.ok),
+      );
+
+      try {
+        await client.login('test@example.invalid', 'test-only');
+        AnkiSyncException? thrown;
+        try {
+          await client.downloadCollectionToFile(
+            File('${directory.path}/missing/collection.anki2'),
+          );
+        } on AnkiSyncException catch (error) {
+          thrown = error;
+        }
+
+        expect(thrown?.failureCode, AnkiSyncFailureCode.localFileFailure);
+        expect(
+          thrown?.localizedMessage(AppLocalizationsEn()),
+          'A local sync file could not be read or cleaned up. Check disk access and retry.',
+        );
+      } finally {
+        await directory.delete(recursive: true);
+      }
     });
 
     test('cancels a response body stream after its read times out', () async {
@@ -665,6 +720,25 @@ void main() {
       expect(fields['data'], zipBytes);
     });
 
+    test('preserves server media error diagnostics', () async {
+      httpClient.responses
+        ..add(_jsonResponse({'key': 'host-key'}))
+        ..add(
+            _jsonResponse({'data': null, 'err': 'missing remote file: a.png'}));
+
+      await client.login('test@example.invalid', 'test-only');
+      await expectLater(
+        client.requestMediaJson('begin', const {}),
+        throwsA(
+          isA<AnkiSyncException>().having(
+            (error) => error.localizedMessage(AppLocalizationsEn()),
+            'localizedMessage',
+            'missing remote file: a.png',
+          ),
+        ),
+      );
+    });
+
     test(
       'allows a multipart upload to progress beyond its inactivity timeout',
       () async {
@@ -914,12 +988,15 @@ class _QueueHttpClient extends http.BaseClient {
   final streamedResponses = <http.StreamedResponse>[];
   final requests = <_CapturedRequest>[];
   bool _closed = false;
+  Object? sendError;
   int? nextContentLength;
   bool omitNextContentLength = false;
 
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
     if (_closed) throw StateError('HTTP client is closed');
+    final error = sendError;
+    if (error != null) throw error;
     final body = await request.finalize().fold<List<int>>(
       <int>[],
       (collected, chunk) => collected..addAll(chunk),

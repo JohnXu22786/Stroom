@@ -931,8 +931,9 @@ class AppLocalizationsEn extends AppLocalizations {
       'The update check failed. Please try again.';
 
   @override
-  String topicAssistantUpdateCheckFailed(Object error) =>
-      'Assistant update check failed: $error';
+  String topicAssistantUpdateCheckFailed(Object error) {
+    return 'Assistant update check failed: $error';
+  }
 
   @override
   String get aboutPrivacyContent =>
@@ -6409,6 +6410,32 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get toolBuiltinEnableHelp =>
       'Enable this tool for an assistant in that assistant’s default tool settings.';
+
+  @override
+  String get httpToolBraveDescription =>
+      'Search the web with the Brave Search API. Requires an API key.';
+
+  @override
+  String get httpToolBochaDescription =>
+      'Search the web with the Bocha AI Search API. Requires an API key.';
+
+  @override
+  String get httpToolQueritDescription =>
+      'Search the web with Querit Search. Requires an API key.';
+
+  @override
+  String get httpToolSearxngDescription =>
+      'A privacy-focused, self-hosted metasearch engine that aggregates search sources. Requires an instance URL.';
+
+  @override
+  String get httpToolSearchQueryDescription => 'Search terms.';
+
+  @override
+  String get httpToolSearchCountDescription => 'Number of results to return.';
+
+  @override
+  String get httpToolSearchCountMax20Description =>
+      'Number of results to return (maximum 20).';
 
   @override
   String get mcpSseUrlLabel => 'SSE URL';
@@ -11164,7 +11191,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get startupErrorTitle => 'App startup failed';
 
   @override
-  String startupErrorDetails(Object error) => 'Error: $error';
+  String startupErrorDetails(Object error) {
+    return 'Error: $error';
+  }
 
   @override
   String get renderErrorTitle => 'Interface rendering error';
@@ -11174,6 +11203,131 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get renderErrorRestartMessage => 'Please try restarting the app.';
+
+  @override
+  String backupRestoreApkgImportSummary(int decks, int notes, int cards) {
+    return 'Imported $decks decks, $notes notes, and $cards cards';
+  }
+
+  @override
+  String backupRestoreApkgFileNotFound(String path) {
+    return 'The selected .apkg file could not be found: $path';
+  }
+
+  @override
+  String get backupRestoreApkgInvalidArchive =>
+      'The selected .apkg file is damaged or is not a valid archive.';
+
+  @override
+  String get backupRestoreApkgCollectionMissing =>
+      'The .apkg file does not contain collection.anki2.';
+
+  @override
+  String backupRestoreApkgTargetMissing(String path) {
+    return 'Open Anki flashcards before importing or exporting a deck: $path';
+  }
+
+  @override
+  String get backupRestoreApkgDatabaseCorrupt =>
+      'The Anki collection database is damaged.';
+
+  @override
+  String backupRestoreApkgLocalFileFailure(String path) {
+    return 'Could not access the local Anki file: $path';
+  }
+
+  @override
+  String backupRestoreApkgUnexpectedError(String path) {
+    return 'The .apkg operation failed while accessing this path: $path';
+  }
+
+  @override
+  String get backupRestoreApkgOperationFailed =>
+      'The .apkg operation failed because the file or database could not be read.';
+
+  @override
+  String backupRestoreApkgExportFailed(String path) {
+    return 'The Anki deck could not be packaged from this database: $path';
+  }
+
+  @override
+  String ankiSyncStatusServerAuthRejected(int statusCode) {
+    return 'The sync server rejected the request (HTTP $statusCode). Check the login credentials and server permissions.';
+  }
+
+  @override
+  String ankiSyncStatusServerEndpointNotFound(int statusCode) {
+    return 'The sync endpoint could not be found (HTTP $statusCode). Check the server address.';
+  }
+
+  @override
+  String get ankiSyncStatusMediaProtocolFailed =>
+      'The media sync server returned an invalid response. Check that it supports Anki media sync and try again.';
+
+  @override
+  String get ankiSyncStatusMediaIndexCorrupt =>
+      'The local media sync index is corrupted. Reset media sync data and try again.';
+
+  @override
+  String get ankiSyncStatusMediaIndexFailure =>
+      'The local media sync index could not be read or updated.';
+
+  @override
+  String get ankiSyncStatusMediaChecksumMismatch =>
+      'A downloaded media file failed checksum validation. Retry media sync.';
+
+  @override
+  String ankiSyncStatusMediaFilenameConflict(String filename) {
+    return 'The media file “$filename” has conflicting local and server changes. Back it up and resolve the name conflict before retrying.';
+  }
+
+  @override
+  String ankiSyncStatusMediaInvalidFilename(String filename) {
+    return 'The media filename “$filename” cannot be synchronized. Rename it to a valid Anki filename and retry.';
+  }
+
+  @override
+  String ankiSyncStatusMediaFileSizeLimit(int limitMb) {
+    return 'A media file is empty or exceeds the $limitMb MB limit.';
+  }
+
+  @override
+  String ankiSyncStatusMediaBatchLimitExceeded(int count, int limit) {
+    return 'The media archive contains $count entries; the maximum is $limit including its manifest.';
+  }
+
+  @override
+  String get ankiSyncStatusMediaSanityCheckFailed =>
+      'Media sync verification failed. Retry the sync.';
+
+  @override
+  String get ankiWebSyncUnsupportedPlatform =>
+      'Sign in to AnkiWeb to sync on web. Open Anki settings with the cloud icon to log in.';
+
+  @override
+  String get ankiWebDecksUnsupportedPlatform =>
+      'To browse or manage decks on web, sign in to AnkiWeb using the cloud icon.';
+
+  @override
+  String get ankiStatsUnsupportedPlatform =>
+      'Anki statistics are unavailable on this platform.';
+
+  @override
+  String get ankiSyncStatusDeviceClockMismatch =>
+      'The device clock differs from the sync server by more than 5 minutes. Correct the clock and try again.';
+
+  @override
+  String get ankiSyncStatusFullDownloadRequired =>
+      'The sync sanity check failed and local changes were rolled back. Download the server collection in full, then try again.';
+
+  @override
+  String get ankiSyncStatusFullTransferRequired =>
+      'This collection cannot be synchronized incrementally. Choose a full upload or download to continue.';
+
+  @override
+  String get ankiSyncStatusIncrementalSyncFailed =>
+      'Incremental sync could not complete. Check the server and connection, then try again.';
+
   @override
   String get batchDlgFileName => 'File name';
 
@@ -11209,6 +11363,33 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get batchDlgModifiedDate => 'modification';
+
+  @override
+  String get emojiCategorySmileys => 'Smileys';
+
+  @override
+  String get emojiCategoryPeople => 'People';
+
+  @override
+  String get emojiCategoryAnimals => 'Animals';
+
+  @override
+  String get emojiCategoryFood => 'Food';
+
+  @override
+  String get emojiCategoryActivities => 'Activities';
+
+  @override
+  String get emojiCategoryTravel => 'Travel';
+
+  @override
+  String get emojiCategoryObjects => 'Objects';
+
+  @override
+  String get emojiCategorySymbols => 'Symbols';
+
+  @override
+  String get emojiCategoryFlags => 'Flags';
 
   @override
   String batchDlgNameEmpty(String kind) => '$kind cannot be empty';
@@ -11417,6 +11598,54 @@ class AppLocalizationsEn extends AppLocalizations {
   String toolResultMcpCallFailed(Object detail) {
     return 'Error: $detail';
   }
+
+  @override
+  String get ankiSyncStatusProtocolFailed =>
+      'The sync server response is invalid or incomplete. Check that the server supports Anki sync v10.';
+
+  @override
+  String get ankiSyncStatusLoginRequired =>
+      'Log in to Anki sync before continuing.';
+
+  @override
+  String get ankiSyncStatusInvalidServerUrl =>
+      'Enter a valid HTTP or HTTPS sync server address.';
+
+  @override
+  String get ankiSyncStatusHttpsRequired =>
+      'Remote self-hosted sync servers must use HTTPS.';
+
+  @override
+  String get ankiSyncStatusConnectionTimeout =>
+      'The sync request timed out. Check the server address and network, then retry.';
+
+  @override
+  String get ankiSyncStatusTlsFailure =>
+      'The server certificate could not be verified. Check the certificate or configure a custom CA.';
+
+  @override
+  String get ankiSyncStatusConnectionFailure =>
+      'Could not connect to the sync server. Check the address and network.';
+
+  @override
+  String get ankiSyncStatusRequestFailure =>
+      'The sync request failed. Check the server and network, then retry.';
+
+  @override
+  String ankiSyncStatusServerHttpError(int statusCode) =>
+      'The sync server returned HTTP $statusCode.';
+
+  @override
+  String ankiSyncStatusResponseTooLarge(int limitMb) =>
+      'The sync response exceeded the $limitMb MB limit.';
+
+  @override
+  String get ankiSyncStatusLocalFileFailure =>
+      'A local sync file could not be read or cleaned up. Check disk access and retry.';
+
+  @override
+  String get ankiSyncStatusCollectionInvalid =>
+      'The collection could not be opened, updated, or passed SQLite/schema validation. Restore a valid collection or download it again.';
 }
 
 /// The translations for English, as used in the United States (`en_US`).
@@ -12343,6 +12572,11 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   @override
   String get aboutUpdateCheckFailed =>
       'The update check failed. Please try again.';
+
+  @override
+  String topicAssistantUpdateCheckFailed(Object error) {
+    return 'Assistant update check failed: $error';
+  }
 
   @override
   String get aboutPrivacyContent =>
@@ -17821,6 +18055,32 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
       'Enable this tool for an assistant in that assistant’s default tool settings.';
 
   @override
+  String get httpToolBraveDescription =>
+      'Search the web with the Brave Search API. Requires an API key.';
+
+  @override
+  String get httpToolBochaDescription =>
+      'Search the web with the Bocha AI Search API. Requires an API key.';
+
+  @override
+  String get httpToolQueritDescription =>
+      'Search the web with Querit Search. Requires an API key.';
+
+  @override
+  String get httpToolSearxngDescription =>
+      'A privacy-focused, self-hosted metasearch engine that aggregates search sources. Requires an instance URL.';
+
+  @override
+  String get httpToolSearchQueryDescription => 'Search terms.';
+
+  @override
+  String get httpToolSearchCountDescription => 'Number of results to return.';
+
+  @override
+  String get httpToolSearchCountMax20Description =>
+      'Number of results to return (maximum 20).';
+
+  @override
   String get mcpSseUrlLabel => 'SSE URL';
 
   @override
@@ -22538,4 +22798,73 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String startupIssueUnknownProviderType(Object index, Object type) {
     return 'Provider entry $index uses unknown provider type \"$type\" and may not work correctly.';
   }
+
+  @override
+  String get startupErrorTitle => 'App startup failed';
+
+  @override
+  String startupErrorDetails(Object error) {
+    return 'Error: $error';
+  }
+
+  @override
+  String get renderErrorTitle => 'Interface rendering error';
+
+  @override
+  String get renderErrorDebugTitle => 'Interface rendering error (Debug mode)';
+
+  @override
+  String get renderErrorRestartMessage => 'Please try restarting the app.';
+
+  @override
+  String ankiSyncStatusServerAuthRejected(int statusCode) {
+    return 'The sync server rejected the request (HTTP $statusCode). Check the login credentials and server permissions.';
+  }
+
+  @override
+  String ankiSyncStatusServerEndpointNotFound(int statusCode) {
+    return 'The sync endpoint could not be found (HTTP $statusCode). Check the server address.';
+  }
+
+  @override
+  String get ankiSyncStatusMediaProtocolFailed =>
+      'The media sync server returned an invalid response. Check that it supports Anki media sync and try again.';
+
+  @override
+  String get ankiSyncStatusMediaChecksumMismatch =>
+      'A downloaded media file failed checksum validation. Retry media sync.';
+
+  @override
+  String ankiSyncStatusMediaFilenameConflict(String filename) {
+    return 'The media file “$filename” has conflicting local and server changes. Back it up and resolve the name conflict before retrying.';
+  }
+
+  @override
+  String ankiSyncStatusMediaInvalidFilename(String filename) {
+    return 'The media filename “$filename” cannot be synchronized. Rename it to a valid Anki filename and retry.';
+  }
+
+  @override
+  String ankiSyncStatusMediaFileSizeLimit(int limitMb) {
+    return 'A media file is empty or exceeds the $limitMb MB limit.';
+  }
+
+  @override
+  String ankiSyncStatusMediaBatchLimitExceeded(int count, int limit) {
+    return 'The media archive contains $count entries; the maximum is $limit including its manifest.';
+  }
+
+  @override
+  String get ankiSyncStatusMediaSanityCheckFailed =>
+      'Media sync verification failed. Retry the sync.';
+
+  @override
+  String backupRestoreApkgLocalFileFailure(String path) {
+    return 'Could not access the local Anki file: $path';
+  }
+
+  @override
+  String get ankiSyncStatusCollectionInvalid =>
+      'The collection could not be opened, updated, or passed SQLite/schema validation. Restore a valid collection or download it again.';
+
 }

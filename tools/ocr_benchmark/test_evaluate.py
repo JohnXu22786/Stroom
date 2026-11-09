@@ -69,6 +69,49 @@ def predictions(results):
 
 
 class EvaluateTests(unittest.TestCase):
+    def test_ragged_pipe_table_annotation_is_rejected(self):
+        for table in ("A | B\nx | y | z", "A | B\n| C |"):
+            with self.subTest(table=table):
+                manifest = {
+                    "fixtures": [
+                        {
+                            "id": "ragged-table",
+                            "gold_text": table,
+                            "table_text": table,
+                            "categories": ["english", "table"],
+                        }
+                    ]
+                }
+
+                with self.assertRaisesRegex(
+                    EvaluationError, "table_text rows must have consistent columns"
+                ):
+                    evaluate_predictions(
+                        manifest,
+                        predictions([{"fixture_id": "ragged-table", "text": table}]),
+                    )
+
+    def test_rectangular_pipe_table_annotation_scores_exact_prediction(self):
+        for table in ("A | B\nx | y", "A | B\nA | B |"):
+            with self.subTest(table=table):
+                report = evaluate_predictions(
+                    {
+                        "fixtures": [
+                            {
+                                "id": "rectangular-table",
+                                "gold_text": table,
+                                "table_text": table,
+                                "categories": ["english", "table"],
+                            }
+                        ]
+                    },
+                    predictions(
+                        [{"fixture_id": "rectangular-table", "text": table}]
+                    ),
+                )
+
+                self.assertEqual(report["metrics"]["table_fidelity"]["value"], 1)
+
     def _run_cli_with_output(self, directory, output_path):
         directory_path = Path(directory)
         manifest_path = directory_path / "manifest.json"

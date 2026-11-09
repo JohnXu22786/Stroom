@@ -58,6 +58,7 @@ Future<String> executeOcrBlock({
   final inputBasename = p.basename(input);
   final title = '文字识别_${p.basenameWithoutExtension(inputBasename)}';
   final saveFolder = asStringParam(block.params, 'saveFolder', '');
+  final strings = localizations ?? appLocalizationsForLocale(null);
 
   final taskId = const Uuid().v4();
   execNotifier.updateSubTaskId(execId, flowSubTask.id, taskId);
@@ -144,8 +145,7 @@ Future<String> executeOcrBlock({
     host: config.host,
     apiKey: config.key,
     model: model.modelId,
-    systemPrompt: (localizations ?? appLocalizationsForLocale(null))
-        .ocrDefaultSystemPrompt,
+    systemPrompt: strings.ocrDefaultSystemPrompt,
     requestSizeBudgetBytes: requestSizeBudgetBytes,
     typeConfig: model.typeConfig,
     customParams: model.customParams,
@@ -324,7 +324,9 @@ Future<String> executeOcrBlock({
           );
         }
         bgNotifier.setResult(taskId, ocrResult.text, isComplete: false);
-        final error = 'OCR 返回了不完整结果（finish_reason=${ocrResult.finishReason}）';
+        final error = strings.bgTaskOcrResultIncomplete(
+          ocrResult.finishReason ?? 'null',
+        );
         bgNotifier.updateStep(taskId, 0, failed: true, error: error);
         failSubTask(
           bgNotifier,
