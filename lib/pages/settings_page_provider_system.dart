@@ -24,7 +24,9 @@ extension _SettingsPageSystemAssistantExt on _SettingsPageState {
         Icons.business,
         color: Theme.of(context).colorScheme.primary,
       ),
-      title: Text(entry.name),
+      title: Text(
+        providerEntryDisplayName(entry, AppLocalizations.of(context)!),
+      ),
       trailing: const Icon(Icons.chevron_right),
       contentPadding: EdgeInsets.zero,
       onTap: () => _openProviderConfig(entry.id),
