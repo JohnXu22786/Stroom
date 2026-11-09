@@ -6,13 +6,13 @@ import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/models/assistant.dart';
 import 'package:stroom/providers/assistant_provider.dart';
 
-import 'package:stroom/pages/unified_task_list/task_flow_card.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/task_flow/models/block_type_definition.dart';
 import 'package:stroom/task_flow/models/task_flow_definition.dart';
 import 'package:stroom/task_flow/pages/task_flow_builder_page.dart';
 import 'package:stroom/task_flow/providers/task_flow_execution_provider.dart';
 import 'package:stroom/task_flow/providers/task_flow_provider.dart';
+import 'package:stroom/task_flow/services/task_flow_validator.dart';
 import 'package:stroom/task_flow/widgets/block_editor_dialog.dart';
 
 class _Flows extends TaskFlowNotifier {
@@ -68,8 +68,7 @@ void main() {
     expect(find.text('任务流已启动'), findsNothing);
   });
 
-  testWidgets(
-      'history retry opens the same invalid step and preserves its record',
+  testWidgets('validation with a stale block ID opens the step by position',
       (tester) async {
     final flows = _Flows();
     final flow = TaskFlowDefinition(name: 'Flow', blocks: [
@@ -93,18 +92,16 @@ void main() {
             locale: const Locale('zh', 'CN'),
             supportedLocales: AppLocalizations.supportedLocales,
             localizationsDelegates: AppLocalizations.localizationsDelegates,
-            home: Scaffold(
-                body: TaskFlowCard(execution: executions.state.single)))));
-    await tester.pumpAndSettle();
-    expect(find.text('Previous failure'), findsOneWidget);
-    await tester.tap(find.text('重试'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, '重试'));
-    // Retry checks the native temporary-artifact namespace before routing.
-    // Let that real filesystem work finish outside the widget test's fake clock.
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(seconds: 1)),
-    );
+            home: TaskFlowBuilderPage(
+              flowId: flow.id,
+              startInRunMode: true,
+              validationError: TaskFlowValidationException(
+                '助手未选择或已删除，请重新选择助手',
+                flowId: flow.id,
+                blockId: 'stale-block-id',
+                blockIndex: 0,
+              ),
+            ))));
     await tester.pumpAndSettle();
     expect(find.text('助手对话 设置'), findsOneWidget);
     expect(executions.state, hasLength(1));
