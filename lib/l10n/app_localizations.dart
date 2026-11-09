@@ -63,7 +63,7 @@ import 'app_localizations_zh.dart';
 /// property.
 abstract class AppLocalizations {
   AppLocalizations(String locale)
-    : localeName = intl.Intl.canonicalizedLocale(locale.toString());
+      : localeName = intl.Intl.canonicalizedLocale(locale.toString());
 
   final String localeName;
 
@@ -86,11 +86,11 @@ abstract class AppLocalizations {
   /// of delegates is preferred or required.
   static const List<LocalizationsDelegate<dynamic>> localizationsDelegates =
       <LocalizationsDelegate<dynamic>>[
-        delegate,
-        GlobalMaterialLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-      ];
+    delegate,
+    GlobalMaterialLocalizations.delegate,
+    GlobalCupertinoLocalizations.delegate,
+    GlobalWidgetsLocalizations.delegate,
+  ];
 
   /// A list of this localizations delegate's supported locales.
   static const List<Locale> supportedLocales = <Locale>[
@@ -99,6 +99,30 @@ abstract class AppLocalizations {
     Locale('en'),
     Locale('zh'),
   ];
+
+  /// No description provided for @galleryPermissionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Photo library access required'**
+  String get galleryPermissionTitle;
+
+  /// No description provided for @galleryPermissionMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow Stroom to access photos and videos in system settings.'**
+  String get galleryPermissionMessage;
+
+  /// No description provided for @galleryPermissionCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get galleryPermissionCancel;
+
+  /// No description provided for @galleryPermissionOpenSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Open settings'**
+  String get galleryPermissionOpenSettings;
 
   /// No description provided for @languageSettingsTitle.
   ///

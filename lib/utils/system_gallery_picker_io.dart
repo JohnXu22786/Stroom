@@ -5,6 +5,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as p;
 import 'package:wechat_assets_picker/wechat_assets_picker.dart';
 
+import '../l10n/app_localizations.dart';
+
 Future<List<XFile>> pickNativeGalleryMedia(
   BuildContext context, {
   required bool isVideo,
@@ -94,19 +96,20 @@ Future<List<XFile>> pickNativeGalleryMedia(
 
 Future<void> _showPermissionDialog(BuildContext context) async {
   if (!context.mounted) return;
+  final l10n = AppLocalizations.of(context)!;
   final shouldOpenSettings = await showDialog<bool>(
     context: context,
     builder: (dialogContext) => AlertDialog(
-      title: const Text('需要访问相册'),
-      content: const Text('请在系统设置中允许 Stroom 访问照片和视频。'),
+      title: Text(l10n.galleryPermissionTitle),
+      content: Text(l10n.galleryPermissionMessage),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(dialogContext, false),
-          child: const Text('取消'),
+          child: Text(l10n.galleryPermissionCancel),
         ),
         FilledButton(
           onPressed: () => Navigator.pop(dialogContext, true),
-          child: const Text('打开设置'),
+          child: Text(l10n.galleryPermissionOpenSettings),
         ),
       ],
     ),

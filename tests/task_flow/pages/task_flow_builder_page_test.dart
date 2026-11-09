@@ -217,6 +217,12 @@ void main() {
 
     await tester.tap(find.byType(FlowBlockCard).last);
     await tester.pumpAndSettle();
+    final dialogScrollView = find.descendant(
+      of: find.byType(AlertDialog),
+      matching: find.byType(SingleChildScrollView),
+    );
+    await tester.drag(dialogScrollView, const Offset(0, -400));
+    await tester.pumpAndSettle();
     expect(find.text('Synthesis model: '), findsOneWidget);
     expect(
       find.text(

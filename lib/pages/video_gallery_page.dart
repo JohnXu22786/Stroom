@@ -181,45 +181,49 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
           <String>{},
         );
 
-        await VideoManifest.writeFile(storageFileName, bytes);
-        // Try to obtain video duration and thumbnail from the file
         int videoDurationMs = 0;
-        final videoPath = await VideoManifest.readFilePath(storageFileName);
-        if (kIsWeb || videoPath == null || videoPath.isEmpty) {
-          // Web 没有真实文件路径（readFilePath 返回虚拟 key），
-          // 直接从字节生成缩略图。
-          try {
-            final thumbBytes = await _generateThumbnailFromBytes(bytes);
-            if (thumbBytes != null) {
-              await VideoManifest.writeThumbnail(hash, thumbBytes);
+        final destinationFolder = _currentFolder;
+        await VideoManifest.withFilePublicationLock(hash, destinationFolder,
+            () async {
+          await VideoManifest.writeFile(storageFileName, bytes);
+          // Try to obtain video duration and thumbnail from the file
+          final videoPath = await VideoManifest.readFilePath(storageFileName);
+          if (kIsWeb || videoPath == null || videoPath.isEmpty) {
+            // Web 没有真实文件路径（readFilePath 返回虚拟 key），
+            // 直接从字节生成缩略图。
+            try {
+              final thumbBytes = await _generateThumbnailFromBytes(bytes);
+              if (thumbBytes != null) {
+                await VideoManifest.writeThumbnail(hash, thumbBytes);
+              }
+            } catch (_) {}
+          } else {
+            try {
+              videoDurationMs = await _probeVideoDuration(videoPath);
+            } catch (_) {
+              // 时长探测失败不影响缩略图生成（下面继续尝试）
             }
-          } catch (_) {}
-        } else {
-          try {
-            videoDurationMs = await _probeVideoDuration(videoPath);
-          } catch (_) {
-            // 时长探测失败不影响缩略图生成（下面继续尝试）
-          }
-          try {
-            final thumbBytes = await _generateThumbnailFromPath(videoPath);
-            if (thumbBytes != null) {
-              await VideoManifest.writeThumbnail(hash, thumbBytes);
+            try {
+              final thumbBytes = await _generateThumbnailFromPath(videoPath);
+              if (thumbBytes != null) {
+                await VideoManifest.writeThumbnail(hash, thumbBytes);
+              }
+            } catch (_) {
+              // Thumbnail detection failed
             }
-          } catch (_) {
-            // Thumbnail detection failed
           }
-        }
-        await VideoManifest.addRecord(
-          VideoRecord(
-            name: displayName,
-            hash: hash,
-            format: format,
-            createdAt: DateTime.now(),
-            size: bytes.length,
-            folder: _currentFolder,
-            duration: videoDurationMs,
-          ),
-        );
+          await VideoManifest.addRecord(
+            VideoRecord(
+              name: displayName,
+              hash: hash,
+              format: format,
+              createdAt: DateTime.now(),
+              size: bytes.length,
+              folder: destinationFolder,
+              duration: videoDurationMs,
+            ),
+          );
+        });
         videoSaved = true;
       }
 
@@ -321,44 +325,49 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
         );
         usedInBatch.add(displayName);
 
-        final videoPath = await VideoManifest.writeFile(storageFileName, bytes);
-        // Try to obtain video duration and thumbnail from the file
         int videoDurationMs = 0;
-        if (kIsWeb || videoPath.isEmpty) {
-          // Web 没有真实文件路径（writeFile 返回虚拟 key），
-          // 直接从字节生成缩略图。
-          try {
-            final thumbBytes = await _generateThumbnailFromBytes(bytes);
-            if (thumbBytes != null) {
-              await VideoManifest.writeThumbnail(hash, thumbBytes);
+        final destinationFolder = _currentFolder;
+        await VideoManifest.withFilePublicationLock(hash, destinationFolder,
+            () async {
+          final videoPath =
+              await VideoManifest.writeFile(storageFileName, bytes);
+          // Try to obtain video duration and thumbnail from the file
+          if (kIsWeb || videoPath.isEmpty) {
+            // Web 没有真实文件路径（writeFile 返回虚拟 key），
+            // 直接从字节生成缩略图。
+            try {
+              final thumbBytes = await _generateThumbnailFromBytes(bytes);
+              if (thumbBytes != null) {
+                await VideoManifest.writeThumbnail(hash, thumbBytes);
+              }
+            } catch (_) {}
+          } else {
+            try {
+              videoDurationMs = await _probeVideoDuration(videoPath);
+            } catch (_) {
+              // 时长探测失败不影响缩略图生成（下面继续尝试）
             }
-          } catch (_) {}
-        } else {
-          try {
-            videoDurationMs = await _probeVideoDuration(videoPath);
-          } catch (_) {
-            // 时长探测失败不影响缩略图生成（下面继续尝试）
-          }
-          try {
-            final thumbBytes = await _generateThumbnailFromPath(videoPath);
-            if (thumbBytes != null) {
-              await VideoManifest.writeThumbnail(hash, thumbBytes);
+            try {
+              final thumbBytes = await _generateThumbnailFromPath(videoPath);
+              if (thumbBytes != null) {
+                await VideoManifest.writeThumbnail(hash, thumbBytes);
+              }
+            } catch (_) {
+              // Thumbnail detection failed
             }
-          } catch (_) {
-            // Thumbnail detection failed
           }
-        }
-        await VideoManifest.addRecord(
-          VideoRecord(
-            name: displayName,
-            hash: hash,
-            format: format,
-            createdAt: DateTime.now(),
-            size: bytes.length,
-            folder: _currentFolder,
-            duration: videoDurationMs,
-          ),
-        );
+          await VideoManifest.addRecord(
+            VideoRecord(
+              name: displayName,
+              hash: hash,
+              format: format,
+              createdAt: DateTime.now(),
+              size: bytes.length,
+              folder: destinationFolder,
+              duration: videoDurationMs,
+            ),
+          );
+        });
         count++;
       }
 
