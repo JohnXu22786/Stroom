@@ -34,6 +34,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Backup and Restore'), findsOneWidget);
     expect(find.text('Chat History and Attachments'), findsOneWidget);
+    expect(find.text('Export .apkg'), findsOneWidget);
+    expect(find.text('Import .apkg'), findsOneWidget);
     expect(find.text('Settings'), findsOneWidget);
   });
 
