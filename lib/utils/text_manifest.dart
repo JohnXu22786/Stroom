@@ -373,6 +373,12 @@ class TextManifest {
   /// file reference counts after rechecking authoritative rows.
   static Future<List<TextRecord>> loadRecords() =>
       _withRecordMutationLock(() => _ops.loadRecords());
+
+  /// Loads records while preserving read failures for callers that display them.
+  static Future<List<TextRecord>> loadRecordsStrict() =>
+      _withRecordMutationLock(
+        () => _ops.loadRecords(forceRefresh: true, throwOnError: true),
+      );
   static Future<List<TextRecord>> loadRecordsUncached() =>
       _ops.loadRecordsUncached();
   static Future<void> addRecord(

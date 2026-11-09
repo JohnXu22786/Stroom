@@ -121,22 +121,22 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
 
       switch (type) {
         case _FileTabType.text:
-          final textRecords = await TextManifest.loadRecords();
+          final textRecords = await TextManifest.loadRecordsStrict();
           records = textRecords.cast<FileRecord>();
           folders = await TextManifest.getAllFolders();
           break;
         case _FileTabType.image:
-          final imageRecords = await ImageManifest.loadRecords();
+          final imageRecords = await ImageManifest.loadRecordsStrict();
           records = imageRecords.cast<FileRecord>();
           folders = await ImageManifest.getAllFolders();
           break;
         case _FileTabType.video:
-          final videoRecords = await VideoManifest.loadRecords();
+          final videoRecords = await VideoManifest.loadRecordsStrict();
           records = videoRecords.cast<FileRecord>();
           folders = await VideoManifest.getAllFolders();
           break;
         case _FileTabType.audio:
-          final audioRecords = await FileManifest.loadRecords();
+          final audioRecords = await FileManifest.loadRecordsStrict();
           records = audioRecords.cast<FileRecord>();
           folders = await FileManifest.getAllFolders();
           break;
@@ -153,7 +153,7 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _tabData[type] = _TabData(records: [], allFolders: {});
+        // Keep data absent so the tab renders its load-failure state.
         _tabLoading[type] = false;
       });
     }
