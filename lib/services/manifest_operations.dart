@@ -621,15 +621,31 @@ class ManifestOperations<T extends FileRecord> {
           legacyName.contains('\u0000')) {
         continue;
       }
-      final legacyNameIsAnotherStorageTarget = records.any(
-        (other) =>
-            other.id != record.id &&
-            _windowsNormalizedFileName(storageNameOf(other)) ==
-                _windowsNormalizedFileName(legacyName),
-      );
-      if (legacyNameIsAnotherStorageTarget &&
-          await _storedFileExists(storageName)) {
-        continue;
+      final collidingStorageNames = records
+          .where(
+            (other) =>
+                other.id != record.id &&
+                _windowsNormalizedFileName(storageNameOf(other)) ==
+                    _windowsNormalizedFileName(legacyName),
+          )
+          .map(storageNameOf);
+      if (!_useWebFileStore) {
+        final legacyFile = File(p.join(directory!, legacyName));
+        var aliasesAnotherStorageTarget = false;
+        for (final otherStorageName in collidingStorageNames) {
+          final otherTarget = File(
+            _storedFilePath(directory, otherStorageName),
+          );
+          if (await otherTarget.exists() &&
+              await FileSystemEntity.identical(
+                legacyFile.path,
+                otherTarget.path,
+              )) {
+            aliasesAnotherStorageTarget = true;
+            break;
+          }
+        }
+        if (aliasesAnotherStorageTarget) continue;
       }
 
       try {
