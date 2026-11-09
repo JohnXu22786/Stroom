@@ -365,6 +365,54 @@ class ImageManifest {
     }
   }
 
+  static Future<bool> moveRecordIfFolder(
+    String id,
+    String expectedFolder,
+    String targetFolder, {
+    void Function()? onMoved,
+  }) async {
+    while (true) {
+      final records = await _ops.loadRecords();
+      ImageRecord? current;
+      for (final record in records) {
+        if (record.id == id) {
+          current = record;
+          break;
+        }
+      }
+      if (current == null || current.folder != expectedFolder) return false;
+      final snapshot = current;
+      var retry = false;
+      var moved = false;
+      await _withFolderPathLocks(
+        [targetFolder, snapshot.folder],
+        () => withSaveLock(snapshot.hash, () async {
+          final latestRecords = await _ops.loadRecords();
+          ImageRecord? latest;
+          for (final record in latestRecords) {
+            if (record.id == id) {
+              latest = record;
+              break;
+            }
+          }
+          if (latest == null) return;
+          if (latest.hash != snapshot.hash ||
+              latest.folder != snapshot.folder) {
+            retry = true;
+            return;
+          }
+          moved = await _ops.moveRecordIfFolder(
+            id,
+            expectedFolder,
+            targetFolder,
+            onMoved: onMoved,
+          );
+        }),
+      );
+      if (!retry) return moved;
+    }
+  }
+
   static Future<String> writeFile(String fileName, Uint8List data) =>
       _ops.writeFile(fileName, data);
   static Future<Uint8List?> readFile(String fileName) =>

@@ -600,6 +600,25 @@ class FileManifest {
         () => _ops.moveRecord(id, targetFolder),
       );
 
+  static Future<bool> moveRecordIfFolder(
+    String id,
+    String expectedFolder,
+    String targetFolder, {
+    void Function()? onMoved,
+  }
+  ) async {
+    var moved = false;
+    await _withRecordStorageFileSaveLock(id, () async {
+      moved = await _ops.moveRecordIfFolder(
+        id,
+        expectedFolder,
+        targetFolder,
+        onMoved: onMoved,
+      );
+    });
+    return moved;
+  }
+
   static Future<void> _withRecordStorageFileSaveLock(
     String id,
     Future<void> Function() operation,

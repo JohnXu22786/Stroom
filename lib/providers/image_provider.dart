@@ -184,14 +184,14 @@ class ImageRecordsNotifier extends StateNotifier<List<ImageRecord>> {
       recordFolder: (record) => record.folder,
       loadRecords: ImageManifest.loadRecords,
       getFolders: ImageManifest.getAllFolders,
-      moveRecord: ImageManifest.moveRecord,
+      moveRecordIfFolder: ImageManifest.moveRecordIfFolder,
       addFolder: ImageManifest.addFolder,
-      removeFolder: ImageManifest.removeFolderFromCache,
-      operation: () async {
+      removeFolder: ImageManifest.removeFolderMetadataFromCache,
+      operation: (moveOperationRecord) async {
         // 更新 oldName 本身的记录
         for (final r in records) {
           if (r.folder == oldName) {
-            await ImageManifest.moveRecord(r.id, newPath);
+            await moveOperationRecord(r.id, r.folder, newPath);
           }
         }
 
@@ -202,7 +202,7 @@ class ImageRecordsNotifier extends StateNotifier<List<ImageRecord>> {
           final newDescPath = '$newPath$suffix';
           for (final r in records) {
             if (r.folder == desc) {
-              await ImageManifest.moveRecord(r.id, newDescPath);
+              await moveOperationRecord(r.id, r.folder, newDescPath);
             }
           }
           // Empty subfolders (no records) must stay in the folder cache; otherwise the old-path cleanup would drop their paths.
@@ -277,14 +277,14 @@ class ImageRecordsNotifier extends StateNotifier<List<ImageRecord>> {
       recordFolder: (record) => record.folder,
       loadRecords: ImageManifest.loadRecords,
       getFolders: ImageManifest.getAllFolders,
-      moveRecord: ImageManifest.moveRecord,
+      moveRecordIfFolder: ImageManifest.moveRecordIfFolder,
       addFolder: ImageManifest.addFolder,
-      removeFolder: ImageManifest.removeFolderFromCache,
-      operation: () async {
+      removeFolder: ImageManifest.removeFolderMetadataFromCache,
+      operation: (moveOperationRecord) async {
         // 移动 sourceName 本身的记录到 newPath
         for (final r in records) {
           if (r.folder == sourceName) {
-            await ImageManifest.moveRecord(r.id, newPath);
+            await moveOperationRecord(r.id, r.folder, newPath);
           }
         }
 
@@ -295,7 +295,7 @@ class ImageRecordsNotifier extends StateNotifier<List<ImageRecord>> {
           final newDescPath = '$newPath$suffix';
           for (final r in records) {
             if (r.folder == desc) {
-              await ImageManifest.moveRecord(r.id, newDescPath);
+              await moveOperationRecord(r.id, r.folder, newDescPath);
             }
           }
           // Empty subfolders (no records) must stay in the folder cache; otherwise the old-path cleanup would drop their paths.
@@ -397,11 +397,11 @@ class ImageRecordsNotifier extends StateNotifier<List<ImageRecord>> {
       recordFolder: (record) => record.folder,
       loadRecords: ImageManifest.loadRecords,
       getFolders: ImageManifest.getAllFolders,
-      moveRecord: ImageManifest.moveRecord,
+      moveRecordIfFolder: ImageManifest.moveRecordIfFolder,
       addFolder: ImageManifest.addFolder,
       removeFolder: ImageManifest.removeFolderFromCache,
       deleteRecords: ImageManifest.deleteRecords,
-      operation: () async {
+      operation: (moveOperationRecord) async {
         // 复制 sourceName 本身的记录
         for (final r in records) {
           if (r.folder == sourceName) {

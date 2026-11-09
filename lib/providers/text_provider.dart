@@ -272,13 +272,13 @@ class TextRecordsNotifier extends StateNotifier<List<TextRecord>> {
       recordFolder: (record) => record.folder,
       loadRecords: TextManifest.loadRecords,
       getFolders: TextManifest.getAllFolders,
-      moveRecord: TextManifest.moveRecord,
+      moveRecordIfFolder: TextManifest.moveRecordIfFolder,
       addFolder: TextManifest.addFolder,
-      removeFolder: TextManifest.removeFolderFromCache,
-      operation: () async {
+      removeFolder: TextManifest.removeFolderMetadataFromCache,
+      operation: (moveOperationRecord) async {
         for (final r in records) {
           if (r.folder == oldName) {
-            await TextManifest.moveRecord(r.id, newPath);
+            await moveOperationRecord(r.id, r.folder, newPath);
           }
         }
 
@@ -288,7 +288,7 @@ class TextRecordsNotifier extends StateNotifier<List<TextRecord>> {
           final newDescPath = '$newPath$suffix';
           for (final r in records) {
             if (r.folder == desc) {
-              await TextManifest.moveRecord(r.id, newDescPath);
+              await moveOperationRecord(r.id, r.folder, newDescPath);
             }
           }
           // Empty subfolders (no records) must stay in the folder cache; otherwise the old-path cleanup would drop their paths.
@@ -362,13 +362,13 @@ class TextRecordsNotifier extends StateNotifier<List<TextRecord>> {
       recordFolder: (record) => record.folder,
       loadRecords: TextManifest.loadRecords,
       getFolders: TextManifest.getAllFolders,
-      moveRecord: TextManifest.moveRecord,
+      moveRecordIfFolder: TextManifest.moveRecordIfFolder,
       addFolder: TextManifest.addFolder,
-      removeFolder: TextManifest.removeFolderFromCache,
-      operation: () async {
+      removeFolder: TextManifest.removeFolderMetadataFromCache,
+      operation: (moveOperationRecord) async {
         for (final r in records) {
           if (r.folder == sourceName) {
-            await TextManifest.moveRecord(r.id, newPath);
+            await moveOperationRecord(r.id, r.folder, newPath);
           }
         }
 
@@ -378,7 +378,7 @@ class TextRecordsNotifier extends StateNotifier<List<TextRecord>> {
           final newDescPath = '$newPath$suffix';
           for (final r in records) {
             if (r.folder == desc) {
-              await TextManifest.moveRecord(r.id, newDescPath);
+              await moveOperationRecord(r.id, r.folder, newDescPath);
             }
           }
           // Empty subfolders (no records) must stay in the folder cache; otherwise the old-path cleanup would drop their paths.
@@ -478,11 +478,11 @@ class TextRecordsNotifier extends StateNotifier<List<TextRecord>> {
       recordFolder: (record) => record.folder,
       loadRecords: TextManifest.loadRecords,
       getFolders: TextManifest.getAllFolders,
-      moveRecord: TextManifest.moveRecord,
+      moveRecordIfFolder: TextManifest.moveRecordIfFolder,
       addFolder: TextManifest.addFolder,
       removeFolder: TextManifest.removeFolderFromCache,
       deleteRecords: TextManifest.deleteRecords,
-      operation: () async {
+      operation: (moveOperationRecord) async {
         for (final r in records) {
           if (r.folder == sourceName) {
             await addCopiedRecord(
