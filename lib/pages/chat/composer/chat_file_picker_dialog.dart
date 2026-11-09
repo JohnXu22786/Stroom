@@ -426,6 +426,7 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
   // ====================================================================
 
   Widget _buildBackItem(_FileTabType type, String currentFolder) {
+    final cs = Theme.of(context).colorScheme;
     final parentFolder = FolderPathUtils.getParentFolderPath(currentFolder);
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
@@ -459,6 +460,7 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
 
   Widget _buildFolderItem(
       _FileTabType type, String folderPath, String currentFolder) {
+    final cs = Theme.of(context).colorScheme;
     final baseName = FolderPathUtils.getFolderBaseName(folderPath);
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
@@ -507,6 +509,7 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
   // ====================================================================
 
   Widget _buildFileItem(_FileTabType type, FileRecord record) {
+    final cs = Theme.of(context).colorScheme;
     final isSelected = _isSelected(type, record.id);
     final isImage = type == _FileTabType.image;
 
