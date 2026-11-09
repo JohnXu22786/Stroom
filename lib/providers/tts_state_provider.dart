@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../l10n/app_localizations.dart';
 import 'locale_provider.dart';
 
+import '../utils/folder_copy_lock.dart';
 import '../utils/folder_operation_rollback.dart';
 import '../utils/file_manifest.dart';
 import '../utils/tts_audio_saver.dart';
@@ -409,6 +410,18 @@ class AudioRecordsNotifier extends StateNotifier<List<AudioRecord>> {
       return;
     }
 
+    await FolderCopyLock.withLock(
+      'audio',
+      newPath,
+      () => _copyFolderToDestination(sourceFolder, targetFolderClean, newPath),
+    );
+  }
+
+  Future<void> _copyFolderToDestination(
+    String sourceFolder,
+    String targetFolderClean,
+    String newPath,
+  ) async {
     // 目标位置（或其下）已存在同名文件夹：拒绝，避免重复复制/合并
     final existing = await FileManifest.getAllFolders();
     if (existing.any((f) => f == newPath || f.startsWith('$newPath/'))) return;

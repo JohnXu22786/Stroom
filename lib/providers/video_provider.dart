@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../utils/folder_copy_lock.dart';
 import '../utils/folder_operation_rollback.dart';
 import '../utils/video_manifest.dart';
 
@@ -335,6 +336,18 @@ class VideoRecordsNotifier extends StateNotifier<List<VideoRecord>> {
       return;
     }
 
+    await FolderCopyLock.withLock(
+      'video',
+      newPath,
+      () => _copyFolderToDestination(sourceName, targetParentClean, newPath),
+    );
+  }
+
+  Future<void> _copyFolderToDestination(
+    String sourceName,
+    String targetParentClean,
+    String newPath,
+  ) async {
     // 目标位置（或其下）已存在同名文件夹：拒绝，避免重复复制/合并
     final existing = await VideoManifest.getAllFolders();
     if (existing.any((f) => f == newPath || f.startsWith('$newPath/'))) return;
