@@ -31,7 +31,10 @@ void main() {
           child: const MaterialApp(home: AnkiStatsPage()),
         ),
       );
-      await tester.pumpAndSettle();
+      // The loading state uses an indeterminate progress indicator, so settle
+      // a bounded frame instead of waiting for all animations to stop.
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
 
       expect(find.text('总卡片数'), findsOneWidget);
       final plate = tester.widget<Container>(
