@@ -1,6 +1,11 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:path/path.dart' as p;
+
+import 'atomic_file_platform_stub.dart'
+    if (dart.library.ffi) 'atomic_file_platform_ffi.dart'
+    as atomic_file_platform;
 
 /// 原子文件写入工具。
 ///
@@ -11,17 +16,24 @@ class AtomicFile {
   AtomicFile._();
 
   static final Map<String, Future<void>> _pendingWrites = {};
+  static final p.Context _windowsPath = p.Context(style: p.Style.windows);
 
   /// 将 [data] 原子写入 [file]，失败时抛出文件系统异常。
   static Future<void> writeString(File file, String data) =>
       _enqueue(file, (f) => f.writeAsString(data, flush: true));
 
   /// 将 [bytes] 原子写入 [file]，失败时抛出文件系统异常。
-  static Future<void> writeBytes(File file, List<int> bytes,
-      {void Function()? beforeCommit}) {
+  static Future<void> writeBytes(
+    File file,
+    List<int> bytes, {
+    void Function()? beforeCommit,
+  }) {
     final snapshot = List<int>.of(bytes);
-    return _enqueue(file, (f) => f.writeAsBytes(snapshot, flush: true),
-        beforeCommit: beforeCommit);
+    return _enqueue(
+      file,
+      (f) => f.writeAsBytes(snapshot, flush: true),
+      beforeCommit: beforeCommit,
+    );
   }
 
   static Future<void> _enqueue(
@@ -29,10 +41,12 @@ class AtomicFile {
     Future<void> Function(File) write, {
     void Function()? beforeCommit,
   }) {
-    final key = p.normalize(file.absolute.path);
+    final path = p.normalize(file.absolute.path);
+    final key = atomic_file_platform.isWindows ? _windowsPathKey(path) : path;
     final previous = _pendingWrites[key] ?? Future<void>.value();
-    final operation =
-        previous.then((_) => _write(file, write, beforeCommit: beforeCommit));
+    final operation = previous.then(
+      (_) => _write(file, write, beforeCommit: beforeCommit),
+    );
     // 调用方收到原始异常；队列本身始终继续，失败不会阻塞后续重试。
     late final Future<void> settled;
     settled = operation
@@ -44,13 +58,51 @@ class AtomicFile {
     return operation;
   }
 
+  static String _windowsPathKey(String path) => _computeWindowsPathKey(
+        path,
+        directoryIsCaseSensitive: atomic_file_platform.isCaseSensitiveDirectory,
+        fold: atomic_file_platform.windowsOrdinalFold,
+      );
+
+  @visibleForTesting
+  static String windowsPathKeyForTesting(
+    String path, {
+    required bool? Function(String) directoryIsCaseSensitive,
+    required String Function(String) fold,
+  }) =>
+      _computeWindowsPathKey(
+        path,
+        directoryIsCaseSensitive: directoryIsCaseSensitive,
+        fold: fold,
+      );
+
+  static String _computeWindowsPathKey(
+    String path, {
+    required bool? Function(String) directoryIsCaseSensitive,
+    required String Function(String) fold,
+  }) {
+    final components = _windowsPath.split(path);
+    if (components.length < 2) return path;
+
+    var currentDirectory = components.first;
+    final keyComponents = <String>[fold(components.first)];
+    for (final component in components.skip(1)) {
+      final sensitivity = directoryIsCaseSensitive(currentDirectory);
+      final normalized = sensitivity == false ? fold(component) : component;
+      keyComponents.add(normalized);
+      currentDirectory = _windowsPath.join(currentDirectory, component);
+    }
+    return _windowsPath.joinAll(keyComponents);
+  }
+
   static Future<void> _write(
     File file,
     Future<void> Function(File) write, {
     void Function()? beforeCommit,
   }) async {
-    final tempDir =
-        await file.parent.createTemp('.${p.basename(file.path)}.tmp-');
+    final tempDir = await file.parent.createTemp(
+      '.${p.basename(file.path)}.tmp-',
+    );
     final tmpFile = File(p.join(tempDir.path, 'data'));
     try {
       await write(tmpFile);
