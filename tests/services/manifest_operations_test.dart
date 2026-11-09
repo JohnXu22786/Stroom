@@ -148,6 +148,7 @@ void main() {
 
   test('loading empty audio manifest does not create storage directory',
       () async {
+    await ManifestDatabase.clearRecords(ManifestTables.audioRecords);
     final originalPathProvider = PathProviderPlatform.instance;
     final directory = await Directory.systemTemp.createTemp(
       'manifest-empty-audio-test-',
