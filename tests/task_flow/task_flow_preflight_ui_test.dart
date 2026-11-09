@@ -6,6 +6,7 @@ import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/models/assistant.dart';
 import 'package:stroom/providers/assistant_provider.dart';
 
+import 'package:stroom/pages/unified_task_list/task_flow_card.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/task_flow/models/block_type_definition.dart';
 import 'package:stroom/task_flow/models/task_flow_definition.dart';
@@ -14,6 +15,7 @@ import 'package:stroom/task_flow/providers/task_flow_execution_provider.dart';
 import 'package:stroom/task_flow/providers/task_flow_provider.dart';
 import 'package:stroom/task_flow/services/task_flow_validator.dart';
 import 'package:stroom/task_flow/widgets/block_editor_dialog.dart';
+import 'package:stroom/utils/web_file_store.dart';
 
 class _Flows extends TaskFlowNotifier {
   @override
@@ -102,6 +104,45 @@ void main() {
                 blockIndex: 0,
               ),
             ))));
+    await tester.pumpAndSettle();
+    expect(find.text('助手对话 设置'), findsOneWidget);
+    expect(executions.state, hasLength(1));
+    expect(executions.state.single.id, id);
+  });
+
+  testWidgets('history retry opens the invalid step and preserves its record',
+      (tester) async {
+    WebFileStore.enableTestMode();
+    addTearDown(WebFileStore.disableTestMode);
+    final flows = _Flows();
+    final flow = TaskFlowDefinition(name: 'Flow', blocks: [
+      TaskFlowBlock(typeKey: BlockType.chat, params: {'assistantId': 'deleted'})
+    ]);
+    await flows.saveFlow(flow);
+    final executions = _Executions();
+    final id = executions.addExecution(
+        flowId: flow.id, flowName: flow.name, inputText: 'Hello');
+    executions.failExecution(id, error: 'Previous failure');
+    await tester.pumpWidget(ProviderScope(
+        overrides: [
+          taskFlowListProvider.overrideWith((ref) => flows),
+          taskFlowExecutionsProvider.overrideWith((ref) => executions),
+          providerEntriesProvider.overrideWith(
+            (ref) => _Entries(const ProviderEntriesState()),
+          ),
+          assistantProvider.overrideWith((ref) => _Assistants(const [])),
+        ],
+        child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            home: Scaffold(
+                body: TaskFlowCard(execution: executions.state.single)))));
+    await tester.pumpAndSettle();
+    expect(find.text('Previous failure'), findsOneWidget);
+    await tester.tap(find.text('重试'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '重试'));
     await tester.pumpAndSettle();
     expect(find.text('助手对话 设置'), findsOneWidget);
     expect(executions.state, hasLength(1));
