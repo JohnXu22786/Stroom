@@ -119,6 +119,8 @@ void main() {
           },
           addRecord: (_) async => throw StateError('record insert failed'),
           loadRecords: () async => [existing],
+          readFile: (name) async => files[name],
+          fileExists: (name) async => files.containsKey(name),
           deleteFile: (name) async {
             files.remove(name);
           },
@@ -126,11 +128,98 @@ void main() {
         throwsStateError,
       );
 
-      expect(files.keys, contains(candidate.textStoragePath));
-      expect(files[candidate.textStoragePath], text);
+      expect(files.keys, isNot(contains(candidate.textStoragePath)));
       expect(files[candidate.storageFileName], audio);
     },
   );
+
+  test(
+    'failed save restores a sidecar referenced by an existing record',
+    () async {
+      final candidate = record();
+      final existing = record();
+      final originalText = Uint8List.fromList(utf8.encode('existing text'));
+      final attemptedText = Uint8List.fromList(
+        utf8.encode('new attempted text'),
+      );
+      final files = <String, Uint8List>{
+        candidate.textStoragePath: originalText,
+      };
+
+      await expectLater(
+        writeTtsAudioAndPublish(
+          candidate,
+          audio,
+          attemptedText,
+          writeFile: (name, bytes) async {
+            files[name] = Uint8List.fromList(bytes);
+          },
+          addRecord: (_) async => throw StateError('record insert failed'),
+          loadRecords: () async => [existing],
+          readFile: (name) async => files[name],
+          fileExists: (name) async => files.containsKey(name),
+          deleteFile: (name) async {
+            files.remove(name);
+          },
+        ),
+        throwsStateError,
+      );
+
+      expect(files[candidate.textStoragePath], originalText);
+    },
+  );
+
+  test('unreadable existing sidecar prevents an attempted overwrite', () async {
+    final candidate = record();
+    final files = <String, Uint8List>{
+      candidate.textStoragePath: Uint8List.fromList(utf8.encode('existing')),
+    };
+    var audioWasWritten = false;
+
+    await expectLater(
+      writeTtsAudioAndPublish(
+        candidate,
+        audio,
+        text,
+        writeFile: (name, bytes) async {
+          if (name == candidate.storageFileName) audioWasWritten = true;
+          files[name] = bytes;
+        },
+        readFile: (_) async => null,
+        fileExists: (_) async => true,
+      ),
+      throwsStateError,
+    );
+
+    expect(audioWasWritten, isFalse);
+    expect(files[candidate.textStoragePath], utf8.encode('existing'));
+  });
+
+  test('uncertain record load keeps a newly written sidecar', () async {
+    final candidate = record();
+    final files = <String, Uint8List>{};
+
+    await expectLater(
+      writeTtsAudioAndPublish(
+        candidate,
+        audio,
+        text,
+        writeFile: (name, bytes) async {
+          files[name] = Uint8List.fromList(bytes);
+        },
+        addRecord: (_) async => throw StateError('publish outcome unknown'),
+        loadRecords: () async => throw StateError('record load failed'),
+        fileExists: (name) async => files.containsKey(name),
+        readFile: (name) async => files[name],
+        deleteFile: (name) async {
+          files.remove(name);
+        },
+      ),
+      throwsStateError,
+    );
+
+    expect(files[candidate.textStoragePath], text);
+  });
 
   test(
     'successful save publishes record and leaves expected contents',

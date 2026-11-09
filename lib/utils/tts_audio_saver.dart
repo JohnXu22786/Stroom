@@ -9,6 +9,8 @@ typedef TtsAudioFileWriter = Future<void> Function(
 typedef TtsAudioRecordWriter = Future<void> Function(AudioRecord record);
 typedef TtsAudioRecordLoader = Future<List<AudioRecord>> Function();
 typedef TtsAudioFileDeleter = Future<void> Function(String fileName);
+typedef TtsAudioFileReader = Future<Uint8List?> Function(String fileName);
+typedef TtsAudioFileExistenceChecker = Future<bool> Function(String fileName);
 
 /// Writes TTS content before publishing its record, removing any newly
 /// unreferenced destinations if publication fails.
@@ -20,11 +22,22 @@ Future<AudioRecord> writeTtsAudioAndPublish(
   TtsAudioRecordWriter? addRecord,
   TtsAudioRecordLoader? loadRecords,
   TtsAudioFileDeleter? deleteFile,
+  TtsAudioFileReader? readFile,
+  TtsAudioFileExistenceChecker? fileExists,
 }) async {
   final write = writeFile ?? FileManifest.writeFile;
   final publish = addRecord ?? FileManifest.addRecord;
   final load = loadRecords ?? FileManifest.loadRecordsStrict;
   final delete = deleteFile ?? FileManifest.deleteFile;
+  final read = readFile ?? FileManifest.readFile;
+  final exists = fileExists ?? FileManifest.fileExists;
+  final previousTextExists =
+      textData != null && await exists(record.textStoragePath);
+  final previousText =
+      previousTextExists ? await read(record.textStoragePath) : null;
+  if (previousTextExists && previousText == null) {
+    throw StateError('Could not read existing TTS text sidecar');
+  }
   final writtenNames = <String>[];
 
   try {
@@ -44,6 +57,13 @@ Future<AudioRecord> writeTtsAudioAndPublish(
     try {
       records = await load();
     } catch (_) {
+      if (textData != null && previousTextExists) {
+        try {
+          await write(record.textStoragePath, previousText!);
+        } catch (_) {
+          // Keep the original write/publication failure as the reported error.
+        }
+      }
       Error.throwWithStackTrace(error, stackTrace);
     }
 
@@ -53,7 +73,17 @@ Future<AudioRecord> writeTtsAudioAndPublish(
             name == candidate.storageFileName ||
             (name == record.textStoragePath && candidate.hash == record.hash),
       );
-      if (!isReferenced) {
+      if (name == record.textStoragePath && isReferenced) {
+        try {
+          if (previousTextExists) {
+            await write(name, previousText!);
+          } else {
+            await delete(name);
+          }
+        } catch (_) {
+          // Keep the original write/publication failure as the reported error.
+        }
+      } else if (!isReferenced) {
         try {
           await delete(name);
         } catch (_) {
