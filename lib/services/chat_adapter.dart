@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
 import 'package:flutter/widgets.dart' show Locale;
 
-import '../l10n/app_localizations.dart';
 import '../models/assistant.dart'
     show Assistant, AssistantSettings, CustomParameter;
 import '../models/chat_event.dart';
@@ -366,6 +365,7 @@ class ChatAdapter {
       modelConfig: modelConfig,
       providerConfig: providerConfig,
       endpointType: endpointType,
+      localeOverride: _localeOverride,
     );
     // Apply the assistant prompt/settings (explicit assistant wins over
     // the global cached assistant template).
@@ -535,6 +535,7 @@ class ChatAdapter {
       modelConfig: modelConfig,
       providerConfig: providerConfig,
       endpointType: endpointType,
+      localeOverride: _localeOverride,
     );
     if (_cachedAssistantPrompt != null) {
       svc.setAssistantPrompt(_cachedAssistantPrompt);

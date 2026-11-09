@@ -1,6 +1,50 @@
 part of 'chat_service_tools_test.dart';
 
 void chatServiceToolsGroup1() {
+  group('ChatService - tool result localization', () {
+    test('uses the active locale for app-authored routing errors', () async {
+      Future<String?> run(Locale locale) async {
+        final provider = _MockToolCallProvider([
+          const [
+            {
+              'id': 'call_missing_tool',
+              'type': 'function',
+              'function': {
+                'name': 'missing_localized_tool',
+                'arguments': '{}',
+              },
+            },
+          ],
+        ]);
+        final service = ChatService(
+          provider: provider,
+          modelConfig: _createMockModelConfig(),
+          localeOverride: () => locale,
+        );
+        addTearDown(service.dispose);
+        final events = <ChatEvent>[];
+        await service
+            .sendStreamWithTools(
+              'Run tool',
+              history: [ChatMessage(role: 'user', content: 'Run tool')],
+              tools: const [],
+            )
+            .listen(events.add, onError: (error) => fail('$error'))
+            .asFuture();
+        return events.whereType<ToolCallCompleteEvent>().first.result;
+      }
+
+      expect(
+        await run(const Locale('en', 'US')),
+        'Error: Unknown tool "missing_localized_tool"',
+      );
+      expect(
+        await run(const Locale('zh', 'CN')),
+        '错误：未知工具“missing_localized_tool”',
+      );
+    });
+  });
+
   group('ChatService - MCP master switch', () {
     test('blocks a stale search tool call after the switch is turned off',
         () async {

@@ -10609,6 +10609,181 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String batchDlgTemplateMissingDate(String date) => '该项目没有$date，请调整模板';
+
+  @override
+  String get toolResultWebSearchEmptyQuery => '错误：搜索关键词不能为空。';
+
+  @override
+  String toolResultWebSearchInvalidSource(Object source) {
+    return '错误：不支持的搜索引擎“$source”。可选值：google、bing、baidu。';
+  }
+
+  @override
+  String toolResultWebSearchFallback(
+    Object preferred,
+    Object reason,
+    Object fallback,
+  ) {
+    return '首选引擎 $preferred $reason，已切换到 $fallback。';
+  }
+
+  @override
+  String get toolResultWebSearchNotFound => '未找到相关搜索结果。';
+
+  @override
+  String toolResultWebSearchNotFoundFrom(Object sources) {
+    return '未找到相关搜索结果（$sources 均明确返回无结果）。';
+  }
+
+  @override
+  String toolResultWebSearchIncomplete(Object sources, Object failures) {
+    return '搜索不完整：$sources 明确返回无结果；其他引擎不可用或返回了无法解析的页面：$failures';
+  }
+
+  @override
+  String toolResultWebSearchUnavailable(Object failures) {
+    return '错误：所有搜索引擎均不可用。$failures';
+  }
+
+  @override
+  String toolResultWebSearchResultsHeader(Object source) {
+    return '来自 $source 的搜索结果：';
+  }
+
+  @override
+  String get toolResultWebSearchLinkLabel => '链接';
+
+  @override
+  String get toolResultWebSearchSummaryLabel => '摘要';
+
+  @override
+  String get toolResultWebSearchEmptyResults => '未找到相关搜索结果。';
+
+  @override
+  String get toolResultTodoInvalid => '错误：todos 参数必须是数组（省略或传 null 表示读取待办列表）。';
+
+  @override
+  String get toolResultTodoEmpty => '当前没有待办事项。';
+
+  @override
+  String toolResultTodoCount(Object count) {
+    return '$count 个待办事项未完成';
+  }
+
+  @override
+  String toolResultMcpReconnectFailed(Object server) {
+    return '错误：MCP 服务器“$server”重新连接失败。';
+  }
+
+  @override
+  String toolResultMcpUnavailable(Object server) {
+    return '错误：MCP 服务器“$server”当前不可用。';
+  }
+
+  @override
+  String toolResultMcpNoTools(Object server) {
+    return '错误：MCP 服务器“$server”连接失败或未返回任何工具，请检查服务器配置。';
+  }
+
+  @override
+  String toolResultMcpAliasedName(Object tool, Object alias) {
+    return '真实工具“$tool”在此服务器上的调用名为“$alias”。';
+  }
+
+  @override
+  String toolResultMcpDuplicateNames(Object tool, Object routes) {
+    return '同名工具“$tool”由多个 MCP 服务器提供；请使用对应调用名：$routes。';
+  }
+
+  @override
+  String toolResultMcpAliasedConflict(Object tool) {
+    return '错误：真实工具“$tool”存在名称冲突，请使用上面列出的调用名。';
+  }
+
+  @override
+  String toolResultMcpMissingTool(Object server, Object tool) {
+    return '错误：MCP 服务器“$server”没有名为“$tool”的工具。';
+  }
+
+  @override
+  String toolResultMcpAvailableTools(Object tools) {
+    return '该服务器可用的工具：$tools。请改用这些工具名调用。';
+  }
+
+  @override
+  String toolResultMcpAliasConflict(Object tool, Object routes) {
+    return '错误：MCP 工具“$tool”当前使用了冲突别名。请使用对应调用名：$routes。';
+  }
+
+  @override
+  String toolResultToolDisabled(Object tool) {
+    return '错误：工具“$tool”已停用。';
+  }
+
+  @override
+  String toolResultToolUnknown(Object tool) {
+    return '错误：未知工具“$tool”';
+  }
+
+  @override
+  String get toolResultWebSearchFallbackNoResults => '未找到相关结果';
+
+  @override
+  String get toolResultWebSearchFallbackUnavailable => '暂不可用';
+
+  @override
+  String toolResultMcpServerRoute(Object server) {
+    return '（MCP 服务器 $server）';
+  }
+
+  @override
+  String get toolResultWebSearchUnparsedResults => '未返回可解析的搜索结果';
+
+  @override
+  String get toolResultSearchTitleLabel => '标题';
+
+  @override
+  String get toolResultSearchContentLabel => '内容';
+
+  @override
+  String toolResultHttpApiKeyMissing(Object provider) {
+    return '错误：$provider API Key 未配置，请在设置页面配置。';
+  }
+
+  @override
+  String toolResultHttpUrlMissing(Object provider) {
+    return '错误：$provider 实例 URL 未配置，请在设置页面配置。';
+  }
+
+  @override
+  String toolResultHttpRequestFailedStatus(Object provider, Object statusCode) {
+    return '错误：$provider 请求失败 (HTTP $statusCode)';
+  }
+
+  @override
+  String toolResultHttpRequestFailed(Object provider, Object detail) {
+    return '错误：$provider 请求失败：$detail';
+  }
+
+  @override
+  String toolResultHttpUnknownTool(Object provider) {
+    return '错误：未知的 HTTP 工具“$provider”';
+  }
+
+  @override
+  String toolResultMcpNotConnected(Object server) {
+    return '错误：MCP 服务器“$server”未连接。';
+  }
+
+  @override
+  String toolResultMcpNoResponse(Object tool) {
+    return '错误：MCP 工具“$tool”无响应。';
+  }
+
+  @override
+  String toolResultMcpCallFailed(Object detail) {
+    return '错误：$detail';
+  }
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).

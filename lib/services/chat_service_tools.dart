@@ -11,6 +11,9 @@ extension _ChatServiceToolsExt on ChatService {
   /// - 调用名已在某服务器的工具缓存中（模型从上一条错误信息得知的真实
   ///   工具名）：确保连接后直接调用。
   Future<String> _executeTool(String name, Map<String, dynamic> args) async {
+    final locale = _localeOverride?.call();
+    final l10n = appLocalizationsForLocale(locale);
+    final routeSeparator = l10n.localeName.startsWith('en') ? ', ' : '、';
     final isDisabled = ChatService._disabledToolNames.contains(name);
 
     // First check locally registered tools
@@ -19,9 +22,11 @@ extension _ChatServiceToolsExt on ChatService {
     // the disabled name, while still blocking the local handler itself.
     final entry = isDisabled ? null : ChatService._toolRegistries[name];
     if (entry != null) {
-      final handler =
-          entry['handler'] as dynamic Function(Map<String, dynamic>);
-      final result = handler(args);
+      final localizedHandler = entry['localizedHandler']
+          as dynamic Function(Map<String, dynamic>, Locale?)?;
+      final result = localizedHandler != null
+          ? localizedHandler(args, _localeOverride?.call())
+          : (entry['handler'] as dynamic Function(Map<String, dynamic>))(args);
       // Handle both sync and async handlers
       if (result is Future<String>) {
         return await result;
@@ -43,9 +48,11 @@ extension _ChatServiceToolsExt on ChatService {
             !client.isDisposed &&
             client.cachedTools.any((tool) => tool.name == actualToolName)) {
           if (!client.isConnected && !await client.connect()) {
-            return 'Error: MCP 服务器 "${client.config.name}" 重新连接失败。';
+            return l10n.toolResultMcpReconnectFailed(client.config.name);
           }
-          if (client.isConnected) return client.callTool(actualToolName, args);
+          if (client.isConnected) {
+            return client.callTool(actualToolName, args, locale: locale);
+          }
         }
       }
 
@@ -53,7 +60,7 @@ extension _ChatServiceToolsExt on ChatService {
       if (placeholderClientName != null) {
         final client = manager.getClient(placeholderClientName);
         if (client == null || client.isDisposed) {
-          return 'Error: MCP 服务器 "$placeholderClientName" 当前不可用。';
+          return l10n.toolResultMcpUnavailable(placeholderClientName);
         }
         var tools = client.cachedTools;
         if (tools.isEmpty) {
@@ -61,7 +68,7 @@ extension _ChatServiceToolsExt on ChatService {
           tools = await client.listTools();
         }
         if (tools.isEmpty) {
-          return 'Error: MCP 服务器 "${client.config.name}" 连接失败或未返回任何工具，请检查服务器配置。';
+          return l10n.toolResultMcpNoTools(client.config.name);
         }
         manager.routeToolsToClient(
           placeholderClientName,
@@ -74,14 +81,14 @@ extension _ChatServiceToolsExt on ChatService {
             tool.name == name &&
             manager.getPublishedToolName(placeholderClientName, tool.name) ==
                 name)) {
-          return client.callTool(name, args);
+          return client.callTool(name, args, locale: locale);
         }
         final available = tools
             .map((tool) => manager.getPublishedToolName(
                   placeholderClientName,
                   tool.name,
                 ))
-            .join(', ');
+            .join(routeSeparator);
         final toolGuidance = <String>{};
         for (final tool in tools) {
           final publishedName = manager.getPublishedToolName(
@@ -90,7 +97,7 @@ extension _ChatServiceToolsExt on ChatService {
           );
           if (publishedName != tool.name) {
             toolGuidance.add(
-              '真实工具 "${tool.name}" 在此服务器上的调用名为 "$publishedName"。',
+              l10n.toolResultMcpAliasedName(tool.name, publishedName),
             );
           }
           final clientNames = manager.getToolClientNames(tool.name);
@@ -98,10 +105,10 @@ extension _ChatServiceToolsExt on ChatService {
           final routes = clientNames
               .map((clientName) =>
                   '"${manager.getPublishedToolName(clientName, tool.name)}" '
-                  '(MCP 服务器 $clientName)')
-              .join('、');
+                  '${l10n.toolResultMcpServerRoute(clientName)}')
+              .join(routeSeparator);
           toolGuidance.add(
-            '同名工具 "${tool.name}" 由多个 MCP 服务器提供；请使用对应调用名：$routes。',
+            l10n.toolResultMcpDuplicateNames(tool.name, routes),
           );
         }
         final collisionGuidance = toolGuidance.join(' ');
@@ -110,10 +117,10 @@ extension _ChatServiceToolsExt on ChatService {
             manager.getPublishedToolName(placeholderClientName, tool.name) !=
                 name);
         final missingToolMessage = hasAliasedRequestedName
-            ? '真实工具 "$name" 存在名称冲突，请使用上面列出的调用名。'
-            : 'MCP 服务器 "${client.config.name}" 没有名为 "$name" 的工具。';
-        return 'Error: $missingToolMessage'
-            '该服务器可用的工具: $available。请改用这些工具名调用。'
+            ? l10n.toolResultMcpAliasedConflict(name)
+            : l10n.toolResultMcpMissingTool(client.config.name, name);
+        return '$missingToolMessage\n'
+            '${l10n.toolResultMcpAvailableTools(available)}'
             '${collisionGuidance.isEmpty ? '' : ' $collisionGuidance'}';
       }
 
@@ -135,7 +142,11 @@ extension _ChatServiceToolsExt on ChatService {
             }
           }
           if (client.isConnected) {
-            return client.callTool(manager.getActualToolName(name), args);
+            return client.callTool(
+              manager.getActualToolName(name),
+              args,
+              locale: locale,
+            );
           }
         }
       }
@@ -145,16 +156,15 @@ extension _ChatServiceToolsExt on ChatService {
         final routes = knownOwners
             .map((clientName) =>
                 '"${manager.getPublishedToolName(clientName, name)}" '
-                '(MCP 服务器 $clientName)')
-            .join('、');
-        return 'Error: MCP 工具 "$name" 当前使用了冲突别名。'
-            '请使用对应调用名：$routes。';
+                '${l10n.toolResultMcpServerRoute(clientName)}')
+            .join(routeSeparator);
+        return l10n.toolResultMcpAliasConflict(name, routes);
       }
     }
 
     if (isDisabled) {
-      return 'Error: Tool "$name" is disabled.';
+      return l10n.toolResultToolDisabled(name);
     }
-    return 'Error: Unknown tool "$name"';
+    return l10n.toolResultToolUnknown(name);
   }
 }

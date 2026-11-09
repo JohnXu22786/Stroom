@@ -1,8 +1,11 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter/widgets.dart' show Locale;
 
+import '../l10n/app_localizations.dart';
 import '../models/mcp.dart';
 import '../models/tool_call.dart';
+import '../providers/locale_provider.dart' show appLocalizationsForLocale;
 import 'app_log_service.dart';
 
 // ============================================================================
@@ -14,6 +17,12 @@ import 'app_log_service.dart';
 // ============================================================================
 
 /// HTTP 工具的服务层，管理 API Key 并提供工具处理函数
+typedef HttpSearchResult = ({
+  String title,
+  String url,
+  String description,
+});
+
 class HttpToolService {
   static const Map<String, Set<String>> _credentialHeaderNamesByProvider = {
     'Brave Search': {'x-subscription-token'},
@@ -171,7 +180,9 @@ class HttpToolService {
   static Future<String> handleBraveSearch(
     Map<String, dynamic> args, {
     String? apiKey,
+    Locale? locale,
   }) async {
+    final l10n = appLocalizationsForLocale(locale);
     final query = (args['query'] as String?) ?? '';
     final count = (args['count'] as num?)?.toInt() ?? 10;
     final effectiveApiKey = apiKey ?? _braveApiKey;
@@ -179,9 +190,9 @@ class HttpToolService {
         'HttpToolService', 'Brave 搜索: query=$query, count=$count');
 
     if (effectiveApiKey.isEmpty) {
-      return '错误: Brave Search API Key 未配置，请在设置页面配置。';
+      return l10n.toolResultHttpApiKeyMissing('Brave Search');
     }
-    if (query.isEmpty) return '错误: 搜索关键词不能为空。';
+    if (query.isEmpty) return l10n.toolResultWebSearchEmptyQuery;
 
     try {
       final response = await _dio.get(
@@ -200,13 +211,14 @@ class HttpToolService {
 
       if (response.statusCode == 200) {
         final data = response.data as Map<String, dynamic>;
-        return _extractBraveResults(data);
+        return _extractBraveResults(data, l10n);
       }
-      return '错误: Brave Search 请求失败 (HTTP ${response.statusCode})';
+      return l10n.toolResultHttpRequestFailedStatus(
+          'Brave Search', response.statusCode.toString());
     } catch (e) {
       debugPrint('Brave Search error: $e');
       await AppLogService.error('HttpToolService', 'Brave 搜索失败: $query', e);
-      return '错误: Brave Search 请求失败: $e';
+      return l10n.toolResultHttpRequestFailed('Brave Search', e.toString());
     }
   }
 
@@ -214,7 +226,9 @@ class HttpToolService {
   static Future<String> handleBochaSearch(
     Map<String, dynamic> args, {
     String? apiKey,
+    Locale? locale,
   }) async {
+    final l10n = appLocalizationsForLocale(locale);
     final query = (args['query'] as String?) ?? '';
     final count = (args['count'] as num?)?.toInt() ?? 10;
     final effectiveApiKey = apiKey ?? _bochaApiKey;
@@ -222,9 +236,9 @@ class HttpToolService {
         'HttpToolService', 'Bocha 搜索: query=$query, count=$count');
 
     if (effectiveApiKey.isEmpty) {
-      return '错误: Bocha API Key 未配置，请在设置页面配置。';
+      return l10n.toolResultHttpApiKeyMissing('Bocha');
     }
-    if (query.isEmpty) return '错误: 搜索关键词不能为空。';
+    if (query.isEmpty) return l10n.toolResultWebSearchEmptyQuery;
 
     try {
       final response = await _dio.post(
@@ -244,13 +258,14 @@ class HttpToolService {
 
       if (response.statusCode == 200) {
         final data = response.data as Map<String, dynamic>;
-        return _extractBochaResults(data);
+        return _extractBochaResults(data, l10n);
       }
-      return '错误: Bocha 请求失败 (HTTP ${response.statusCode})';
+      return l10n.toolResultHttpRequestFailedStatus(
+          'Bocha', response.statusCode.toString());
     } catch (e) {
       debugPrint('Bocha search error: $e');
       await AppLogService.error('HttpToolService', 'Bocha 搜索失败: $query', e);
-      return '错误: Bocha 请求失败: $e';
+      return l10n.toolResultHttpRequestFailed('Bocha', e.toString());
     }
   }
 
@@ -258,7 +273,9 @@ class HttpToolService {
   static Future<String> handleQueritSearch(
     Map<String, dynamic> args, {
     String? apiKey,
+    Locale? locale,
   }) async {
+    final l10n = appLocalizationsForLocale(locale);
     final query = (args['query'] as String?) ?? '';
     final count = (args['count'] as num?)?.toInt() ?? 10;
     final effectiveApiKey = apiKey ?? _queritApiKey;
@@ -266,9 +283,9 @@ class HttpToolService {
         'HttpToolService', 'Querit 搜索: query=$query, count=$count');
 
     if (effectiveApiKey.isEmpty) {
-      return '错误: Querit API Key 未配置，请在设置页面配置。';
+      return l10n.toolResultHttpApiKeyMissing('Querit');
     }
-    if (query.isEmpty) return '错误: 搜索关键词不能为空。';
+    if (query.isEmpty) return l10n.toolResultWebSearchEmptyQuery;
 
     try {
       final response = await _dio.post(
@@ -287,13 +304,14 @@ class HttpToolService {
 
       if (response.statusCode == 200) {
         final data = response.data as Map<String, dynamic>;
-        return _extractQueritResults(data);
+        return _extractQueritResults(data, l10n);
       }
-      return '错误: Querit 请求失败 (HTTP ${response.statusCode})';
+      return l10n.toolResultHttpRequestFailedStatus(
+          'Querit', response.statusCode.toString());
     } catch (e) {
       debugPrint('Querit search error: $e');
       await AppLogService.error('HttpToolService', 'Querit 搜索失败: $query', e);
-      return '错误: Querit 请求失败: $e';
+      return l10n.toolResultHttpRequestFailed('Querit', e.toString());
     }
   }
 
@@ -302,7 +320,9 @@ class HttpToolService {
     Map<String, dynamic> args, {
     String? url,
     String? apiKey,
+    Locale? locale,
   }) async {
+    final l10n = appLocalizationsForLocale(locale);
     final query = (args['query'] as String?) ?? '';
     final count = (args['count'] as num?)?.toInt() ?? 10;
     final effectiveUrl = url ?? _searxngUrl;
@@ -311,9 +331,9 @@ class HttpToolService {
         'HttpToolService', 'SearXNG 搜索: query=$query, count=$count');
 
     if (effectiveUrl.isEmpty || effectiveUrl == 'http://localhost:8080') {
-      return '错误: SearXNG 实例 URL 未配置，请在设置页面配置。';
+      return l10n.toolResultHttpUrlMissing('SearXNG');
     }
-    if (query.isEmpty) return '错误: 搜索关键词不能为空。';
+    if (query.isEmpty) return l10n.toolResultWebSearchEmptyQuery;
 
     try {
       final headers = <String, String>{
@@ -335,13 +355,14 @@ class HttpToolService {
 
       if (response.statusCode == 200) {
         final data = response.data as Map<String, dynamic>;
-        return _extractSearxngResults(data);
+        return _extractSearxngResults(data, l10n);
       }
-      return '错误: SearXNG 请求失败 (HTTP ${response.statusCode})';
+      return l10n.toolResultHttpRequestFailedStatus(
+          'SearXNG', response.statusCode.toString());
     } catch (e) {
       debugPrint('Searxng search error: $e');
       await AppLogService.error('HttpToolService', 'SearXNG 搜索失败: $query', e);
-      return '错误: SearXNG 请求失败: $e';
+      return l10n.toolResultHttpRequestFailed('SearXNG', e.toString());
     }
   }
 
@@ -352,22 +373,27 @@ class HttpToolService {
     required Map<String, dynamic> arguments,
     required String apiKey,
     required String url,
+    Locale? locale,
   }) {
     switch (providerName) {
       case 'Brave Search':
-        return handleBraveSearch(arguments, apiKey: apiKey);
+        return handleBraveSearch(arguments, apiKey: apiKey, locale: locale);
       case 'Bocha':
-        return handleBochaSearch(arguments, apiKey: apiKey);
+        return handleBochaSearch(arguments, apiKey: apiKey, locale: locale);
       case 'Querit':
-        return handleQueritSearch(arguments, apiKey: apiKey);
+        return handleQueritSearch(arguments, apiKey: apiKey, locale: locale);
       case 'Searxng':
         return handleSearxngSearch(
           arguments,
           url: url,
           apiKey: apiKey,
+          locale: locale,
         );
       default:
-        return Future.value('错误: 未知的 HTTP 工具 "$providerName"');
+        return Future.value(
+          appLocalizationsForLocale(locale)
+              .toolResultHttpUnknownTool(providerName),
+        );
     }
   }
 
@@ -375,74 +401,98 @@ class HttpToolService {
   // Result extractors
   // ======================================================================
 
-  static String _extractBraveResults(Map<String, dynamic> data) {
-    final results = <String>[];
+  static String _extractBraveResults(
+    Map<String, dynamic> data,
+    AppLocalizations l10n,
+  ) {
+    final results = <HttpSearchResult>[];
     final web = data['web'] as Map<String, dynamic>?;
-    if (web != null) {
-      final items = web['results'] as List<dynamic>?;
-      if (items != null) {
-        for (final item in items) {
-          final title = item['title'] as String? ?? '';
-          final url = item['url'] as String? ?? '';
-          final desc = item['description'] as String? ?? '';
-          results.add('标题: $title\n链接: $url\n摘要: $desc\n');
-        }
+    final items = web?['results'] as List<dynamic>?;
+    if (items != null) {
+      for (final item in items) {
+        results.add((
+          title: item['title'] as String? ?? '',
+          url: item['url'] as String? ?? '',
+          description: item['description'] as String? ?? '',
+        ));
       }
     }
-    if (results.isEmpty) return '未找到相关结果。';
-    return results.join('\n---\n');
+    return formatSearchResults(results, l10n: l10n);
   }
 
-  static String _extractBochaResults(Map<String, dynamic> data) {
-    // Bocha API returns: { "data": { "webPages": { "value": [...] } } }
-    final results = <String>[];
+  static String _extractBochaResults(
+    Map<String, dynamic> data,
+    AppLocalizations l10n,
+  ) {
+    final results = <HttpSearchResult>[];
     final dataObj = data['data'] as Map<String, dynamic>?;
-    if (dataObj != null) {
-      final webPages = dataObj['webPages'] as Map<String, dynamic>?;
-      if (webPages != null) {
-        final items = webPages['value'] as List<dynamic>?;
-        if (items != null) {
-          for (final item in items) {
-            final name = item['name'] as String? ?? '';
-            final url = item['url'] as String? ?? '';
-            final snippet = item['snippet'] as String? ?? '';
-            results.add('标题: $name\n链接: $url\n摘要: $snippet\n');
-          }
-        }
+    final webPages = dataObj?['webPages'] as Map<String, dynamic>?;
+    final items = webPages?['value'] as List<dynamic>?;
+    if (items != null) {
+      for (final item in items) {
+        results.add((
+          title: item['name'] as String? ?? '',
+          url: item['url'] as String? ?? '',
+          description: item['snippet'] as String? ?? '',
+        ));
       }
     }
-    if (results.isEmpty) return '未找到相关结果。';
-    return results.join('\n---\n');
+    return formatSearchResults(results, l10n: l10n);
   }
 
-  static String _extractQueritResults(Map<String, dynamic> data) {
-    final results = <String>[];
-    // Querit returns: { "results": [...] }
+  static String _extractQueritResults(
+    Map<String, dynamic> data,
+    AppLocalizations l10n,
+  ) {
+    final results = <HttpSearchResult>[];
     final items = data['results'] as List<dynamic>?;
     if (items != null) {
       for (final item in items) {
-        final title = item['title'] as String? ?? '';
-        final url = item['url'] as String? ?? '';
-        final content = item['content'] as String? ?? '';
-        results.add('标题: $title\n链接: $url\n内容: $content\n');
+        results.add((
+          title: item['title'] as String? ?? '',
+          url: item['url'] as String? ?? '',
+          description: item['content'] as String? ?? '',
+        ));
       }
     }
-    if (results.isEmpty) return '未找到相关结果。';
-    return results.join('\n---\n');
+    return formatSearchResults(results, l10n: l10n, contentLabel: true);
   }
 
-  static String _extractSearxngResults(Map<String, dynamic> data) {
-    final results = <String>[];
+  static String _extractSearxngResults(
+    Map<String, dynamic> data,
+    AppLocalizations l10n,
+  ) {
+    final results = <HttpSearchResult>[];
     final items = data['results'] as List<dynamic>?;
     if (items != null) {
       for (final item in items) {
-        final title = item['title'] as String? ?? '';
-        final url = item['url'] as String? ?? '';
-        final content = item['content'] as String? ?? '';
-        results.add('标题: $title\n链接: $url\n摘要: $content\n');
+        results.add((
+          title: item['title'] as String? ?? '',
+          url: item['url'] as String? ?? '',
+          description: item['content'] as String? ?? '',
+        ));
       }
     }
-    if (results.isEmpty) return '未找到相关结果。';
-    return results.join('\n---\n');
+    return formatSearchResults(results, l10n: l10n);
+  }
+
+  static String formatSearchResults(
+    List<HttpSearchResult> results, {
+    AppLocalizations? l10n,
+    Locale? locale,
+    bool contentLabel = false,
+  }) {
+    final strings = l10n ?? appLocalizationsForLocale(locale);
+    if (results.isEmpty) return strings.toolResultWebSearchEmptyResults;
+
+    final descriptionLabel = contentLabel
+        ? strings.toolResultSearchContentLabel
+        : strings.toolResultWebSearchSummaryLabel;
+    return results
+        .map((result) =>
+            '${strings.toolResultSearchTitleLabel}: ${result.title}\n'
+            '${strings.toolResultWebSearchLinkLabel}: ${result.url}\n'
+            '$descriptionLabel: ${result.description}\n')
+        .join('\n---\n');
   }
 }

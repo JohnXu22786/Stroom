@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/widgets.dart' show Locale;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/models/mcp.dart';
 import 'package:stroom/services/mcp_client.dart';
@@ -529,9 +530,12 @@ void main() {
       });
 
       await client.connect();
-      final result = await client.callTool('search', {'q': 'x'});
-      expect(result, contains('Error:'));
-      expect(result, contains('tool reported failure'));
+      final result = await client.callTool(
+        'search',
+        {'q': 'x'},
+        locale: const Locale('zh', 'CN'),
+      );
+      expect(result, '错误：tool reported failure');
     });
 
     test('streamable POST 失败(405)时回退 legacy SSE GET 连接', () async {

@@ -18373,6 +18373,244 @@ abstract class AppLocalizations {
   String batchDlgTemplateMissingDate(String date);
   String get batchDlgCreatedDate;
   String get batchDlgModifiedDate;
+
+  /// No description provided for @toolResultWebSearchEmptyQuery.
+  ///
+  /// In en, this message translates to:
+  /// **'Error: The search query cannot be empty.'**
+  String get toolResultWebSearchEmptyQuery;
+
+  /// No description provided for @toolResultWebSearchInvalidSource.
+  ///
+  /// In en, this message translates to:
+  /// **'Error: Unsupported search engine \"{source}\". Supported values: google, bing, baidu.'**
+  String toolResultWebSearchInvalidSource(Object source);
+
+  /// No description provided for @toolResultWebSearchFallback.
+  ///
+  /// In en, this message translates to:
+  /// **'The preferred engine {preferred} {reason}; switched to {fallback}.'**
+  String toolResultWebSearchFallback(
+    Object preferred,
+    Object reason,
+    Object fallback,
+  );
+
+  /// No description provided for @toolResultWebSearchNotFound.
+  ///
+  /// In en, this message translates to:
+  /// **'No relevant search results were found.'**
+  String get toolResultWebSearchNotFound;
+
+  /// No description provided for @toolResultWebSearchNotFoundFrom.
+  ///
+  /// In en, this message translates to:
+  /// **'No relevant search results were found ({sources} explicitly returned no results).'**
+  String toolResultWebSearchNotFoundFrom(Object sources);
+
+  /// No description provided for @toolResultWebSearchIncomplete.
+  ///
+  /// In en, this message translates to:
+  /// **'Search incomplete: {sources} explicitly returned no results; other engines were unavailable or returned pages that could not be parsed: {failures}'**
+  String toolResultWebSearchIncomplete(Object sources, Object failures);
+
+  /// No description provided for @toolResultWebSearchUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Error: All search engines are unavailable. {failures}'**
+  String toolResultWebSearchUnavailable(Object failures);
+
+  /// No description provided for @toolResultWebSearchResultsHeader.
+  ///
+  /// In en, this message translates to:
+  /// **'Search results from {source}:'**
+  String toolResultWebSearchResultsHeader(Object source);
+
+  /// No description provided for @toolResultWebSearchLinkLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Link'**
+  String get toolResultWebSearchLinkLabel;
+
+  /// No description provided for @toolResultWebSearchSummaryLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Summary'**
+  String get toolResultWebSearchSummaryLabel;
+
+  /// No description provided for @toolResultWebSearchEmptyResults.
+  ///
+  /// In en, this message translates to:
+  /// **'No relevant search results were found.'**
+  String get toolResultWebSearchEmptyResults;
+
+  /// No description provided for @toolResultTodoInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Error: The todos parameter must be an array (omit it or pass null to read the todo list).'**
+  String get toolResultTodoInvalid;
+
+  /// No description provided for @toolResultTodoEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'There are no todo items yet.'**
+  String get toolResultTodoEmpty;
+
+  /// No description provided for @toolResultTodoCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} active todos'**
+  String toolResultTodoCount(Object count);
+
+  /// No description provided for @toolResultMcpReconnectFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Error: Could not reconnect to MCP server \"{server}\".'**
+  String toolResultMcpReconnectFailed(Object server);
+
+  /// No description provided for @toolResultMcpUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Error: MCP server \"{server}\" is currently unavailable.'**
+  String toolResultMcpUnavailable(Object server);
+
+  /// No description provided for @toolResultMcpNoTools.
+  ///
+  /// In en, this message translates to:
+  /// **'Error: MCP server \"{server}\" failed to connect or returned no tools. Check the server configuration.'**
+  String toolResultMcpNoTools(Object server);
+
+  /// No description provided for @toolResultMcpAliasedName.
+  ///
+  /// In en, this message translates to:
+  /// **'Real tool \"{tool}\" is published under the call name \"{alias}\" on this server.'**
+  String toolResultMcpAliasedName(Object tool, Object alias);
+
+  /// No description provided for @toolResultMcpDuplicateNames.
+  ///
+  /// In en, this message translates to:
+  /// **'Tool \"{tool}\" is provided by multiple MCP servers; use the matching call name: {routes}.'**
+  String toolResultMcpDuplicateNames(Object tool, Object routes);
+
+  /// No description provided for @toolResultMcpAliasedConflict.
+  ///
+  /// In en, this message translates to:
+  /// **'Error: Real tool \"{tool}\" has a name conflict. Use one of the call names listed above.'**
+  String toolResultMcpAliasedConflict(Object tool);
+
+  /// No description provided for @toolResultMcpMissingTool.
+  ///
+  /// In en, this message translates to:
+  /// **'Error: MCP server \"{server}\" has no tool named \"{tool}\".'**
+  String toolResultMcpMissingTool(Object server, Object tool);
+
+  /// No description provided for @toolResultMcpAvailableTools.
+  ///
+  /// In en, this message translates to:
+  /// **'Tools available on this server: {tools}. Use these names instead.'**
+  String toolResultMcpAvailableTools(Object tools);
+
+  /// No description provided for @toolResultMcpAliasConflict.
+  ///
+  /// In en, this message translates to:
+  /// **'Error: MCP tool \"{tool}\" currently has a conflicting alias. Use the matching call name: {routes}.'**
+  String toolResultMcpAliasConflict(Object tool, Object routes);
+
+  /// No description provided for @toolResultToolDisabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Error: Tool \"{tool}\" is disabled.'**
+  String toolResultToolDisabled(Object tool);
+
+  /// No description provided for @toolResultToolUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'Error: Unknown tool \"{tool}\"'**
+  String toolResultToolUnknown(Object tool);
+
+  /// No description provided for @toolResultWebSearchFallbackNoResults.
+  ///
+  /// In en, this message translates to:
+  /// **'returned no results'**
+  String get toolResultWebSearchFallbackNoResults;
+
+  /// No description provided for @toolResultWebSearchFallbackUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'is temporarily unavailable'**
+  String get toolResultWebSearchFallbackUnavailable;
+
+  /// No description provided for @toolResultMcpServerRoute.
+  ///
+  /// In en, this message translates to:
+  /// **'(MCP server {server})'**
+  String toolResultMcpServerRoute(Object server);
+
+  /// No description provided for @toolResultWebSearchUnparsedResults.
+  ///
+  /// In en, this message translates to:
+  /// **'returned a page that could not be parsed'**
+  String get toolResultWebSearchUnparsedResults;
+
+  /// No description provided for @toolResultSearchTitleLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Title'**
+  String get toolResultSearchTitleLabel;
+
+  /// No description provided for @toolResultSearchContentLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Content'**
+  String get toolResultSearchContentLabel;
+
+  /// No description provided for @toolResultHttpApiKeyMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'Error: {provider} API key is not configured. Configure it in settings.'**
+  String toolResultHttpApiKeyMissing(Object provider);
+
+  /// No description provided for @toolResultHttpUrlMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'Error: {provider} instance URL is not configured. Configure it in settings.'**
+  String toolResultHttpUrlMissing(Object provider);
+
+  /// No description provided for @toolResultHttpRequestFailedStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Error: {provider} request failed (HTTP {statusCode})'**
+  String toolResultHttpRequestFailedStatus(Object provider, Object statusCode);
+
+  /// No description provided for @toolResultHttpRequestFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Error: {provider} request failed: {detail}'**
+  String toolResultHttpRequestFailed(Object provider, Object detail);
+
+  /// No description provided for @toolResultHttpUnknownTool.
+  ///
+  /// In en, this message translates to:
+  /// **'Error: Unknown HTTP tool \"{provider}\"'**
+  String toolResultHttpUnknownTool(Object provider);
+
+  /// No description provided for @toolResultMcpNotConnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Error: MCP server "{server}" is not connected.'**
+  String toolResultMcpNotConnected(Object server);
+
+  /// No description provided for @toolResultMcpNoResponse.
+  ///
+  /// In en, this message translates to:
+  /// **'Error: No response from MCP tool "{tool}".'**
+  String toolResultMcpNoResponse(Object tool);
+
+  /// No description provided for @toolResultMcpCallFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Error: {detail}'**
+  String toolResultMcpCallFailed(Object detail);
 }
 
 class _AppLocalizationsDelegate
