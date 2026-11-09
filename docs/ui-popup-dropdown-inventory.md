@@ -1,111 +1,99 @@
 # Popup, dropdown, and selection overlay inventory
 
-Generated from every tracked Dart source root in the repository, not only the main application directory. To reproduce the tracked source counts, run `git ls-files '*.dart'` and group by the first path segment. To reproduce the menu-family search, run `rg -n "PopupMenuButton|showMenu|DropdownButton|DropdownMenu|MenuAnchor|MenuItemButton|Autocomplete|OverlayEntry|OverlayPortal|CompositedTransformFollower|CompositedTransformTarget" lib tool integration_test --glob '*.dart'`, then review each overlay owner to distinguish menus from unrelated drag feedback. The externally owned math component/package is excluded from this audit and from all code changes and renders.
+This is the current production-source inventory for Stroom-owned Flutter UI: `lib/` and the first-party [`packages/streaming_markdown/`](../packages/streaming_markdown/) package. Test fixtures are not counted as app call sites; `tool/` and `integration_test/` were also searched and contain no in-scope production call sites. The external math component is excluded.
 
-## Repository-wide Dart-source coverage
+## Coverage and counts
 
-The tracked repository contains 959 Dart files across four top-level roots: `lib/` (534 application and built-in-module source files), `tests/` (423 test files), `integration_test/` (1 test file), and `tool/` (1 utility). `lib/` is the only production app source root; the built-in Stroom modules, including Anki and CatCatch, are inside it. There are no tracked Dart source files under separate component, module, or package roots outside `lib/`. The one `tool/` file (`tool/asr_evaluate.dart`) and one integration test (`integration_test/app_smoke_test.dart`) were also searched; neither contains an in-scope menu or selection overlay callsite. Test files are counted above but are not treated as application source callsites.
+Counts below come from tracked Dart files at the documentation baseline (`84f78a72db776809319e890ddbca520004bbf980`). Recount with `git ls-files '*.dart'` and group by first path segment. The menu census searches all production roots for `PopupMenuButton`, `showMenu`, `DropdownButton`, `DropdownMenu`, `MenuAnchor`, `MenuItemButton`, `Autocomplete`, `RawAutocomplete`, and `OverlayEntry`, then manually checks each overlay owner. Test sources were reviewed separately; their widget fixtures are not counted as production screens.
 
-The repository-wide search found no relevant popup, dropdown, menu, autocomplete, or menu-like overlay callsites outside `lib/`. All 26 `PopupMenuButton`, 1 `showMenu`, 33 legacy dropdown, and 2 `OverlayEntry` instances found in app source are in `lib/`; the two overlays are the LabeledTextField suggestion menu and DragSortArea drag feedback, respectively. No `DropdownMenu`, `MenuAnchor`, `MenuItemButton`, `Autocomplete`, or `RawAutocomplete` callsites were found. The external math package is a dependency, not a tracked source root in this repository.
+| Tracked Dart source root | Files | Use in this inventory |
+|---|---:|---|
+| `lib/` | 558 | Application and built-in features |
+| `packages/streaming_markdown/` | 87 | First-party Markdown renderer |
+| `tests/` | 461 | Test sources, not app call sites |
+| `integration_test/` | 1 | Test source |
+| `tool/` | 1 | Utility source |
+| **Total** | **1108** | **645 production files in guide scope** |
 
-## Shared visual system
+The production census found **27** `PopupMenuButton`, **1** `showMenu`, **33** legacy `DropdownButton` / `DropdownButtonFormField`, and **2** `OverlayEntry` owners. There are no production call sites for `DropdownMenu`, `MenuAnchor`, `MenuItemButton`, `Autocomplete`, or `RawAutocomplete`. The [UI guidelines](ui-guidelines.md) explain component selection, shared styling, and review expectations.
 
-`StroomMenuStyle` in `lib/widgets/stroom_menu_style.dart` is the shared source of menu surface and shape styling. The light and dark application themes both use it. Popup menus and `showMenu` inherit a `surfaceContainerHigh` surface, transparent tint, 16 dp rounded corners, and a subtle `outlineVariant` border. Dropdown menus built with `DropdownMenu` inherit a `MenuStyle` with the same surface/shape and 8 dp elevation. Every legacy `DropdownButton` / `DropdownButtonFormField` callsite sets the same themed surface and 16 dp `borderRadius`, because Flutter does not expose a global border-radius property for those legacy widgets. Flutter supplies the menu item hover, focus, disabled, and selected interaction states; existing destructive actions retain their `error` color and are separated from routine actions by `PopupMenuDivider` where both kinds appear.
+## Shared menu styling
 
-## API families and callsites
+[`StroomMenuStyle`](../lib/widgets/stroom_menu_style.dart) is the shared source for popup and dropdown menu surfaces. It uses `surfaceContainerHigh`, transparent surface tint, 16 dp corners, and a 0.5 dp `outlineVariant` stroke at 35% alpha. The Material 3 `DropdownMenu` theme also specifies 8 dp elevation. Both light and dark app themes apply the shared popup/dropdown styling in [`application.dart`](../lib/application.dart).
 
-| Family | Count | Styling applied | Notes |
-|---|---:|---|---|
-| `PopupMenuButton` | 26 | shared `PopupMenuThemeData` | All menu buttons inherit the app theme; destructive groups keep existing dividers. |
-| `showMenu` | 1 | shared `PopupMenuThemeData` | Mermaid editor mode picker. |
-| `DropdownButton` / `DropdownButtonFormField` | 33 | shared surface/radius token at each callsite | Legacy Flutter widget has no global menu-shape theme property. |
-| `DropdownMenu` / `MenuAnchor` | 0 | shared `DropdownMenuThemeData` is configured | No current callsites. |
-| App-authored suggestion `OverlayEntry` | 1 | shared surface/radius, outline, rounded rows | `LabeledTextField` model/context suggestions. |
-| Other `OverlayEntry` | 1 | not menu styling | `DragSortArea` release animation renders drag feedback; it is not a menu or selection list. |
+Legacy `DropdownButton` and `DropdownButtonFormField` do not inherit a global menu radius, so their call sites set `StroomMenuStyle.surface(context)` and `StroomMenuStyle.borderRadius`. Keep those values aligned when adding a legacy control. Flutter supplies ordinary hover, focus, disabled, and selected states. Preserve destructive-action `error` color and separate destructive actions from routine menu actions when both are present.
 
-### Popup buttons
+## Production call sites
 
-| Screen / component | Source file | Callsite(s) | Styling / exception |
-|---|---|---:|---|
-| batch rename dialog | `lib/widgets/batch_rename_dialog.dart` | 386 | shared popup theme; destructive separator preserved where applicable |
-| batch rename dialog | `lib/widgets/batch_rename_dialog.dart` | 464 | shared popup theme; destructive separator preserved where applicable |
-| batch rename dialog | `lib/widgets/batch_rename_dialog.dart` | 579 | shared popup theme; destructive separator preserved where applicable |
-| file manager view | `lib/widgets/file_manager_view.dart` | 576 | shared popup theme; destructive separator preserved where applicable |
-| file manager view | `lib/widgets/file_manager_view.dart` | 700 | shared popup theme; destructive separator preserved where applicable |
-| file manager view | `lib/widgets/file_manager_view.dart` | 1003 | shared popup theme; destructive separator preserved where applicable |
-| file manager view | `lib/widgets/file_manager_view.dart` | 1109 | shared popup theme; destructive separator preserved where applicable |
-| file manager view | `lib/widgets/file_manager_view.dart` | 1205 | shared popup theme; destructive separator preserved where applicable |
-| file manager view | `lib/widgets/file_manager_view.dart` | 1466 | shared popup theme; destructive separator preserved where applicable |
-| batch rename rule editor | `lib/widgets/batch_rename_rule_editor.dart` | 329 | shared popup theme; destructive separator preserved where applicable |
-| topic item | `lib/widgets/topic_item.dart` | 162 | shared popup theme; destructive separator preserved where applicable |
-| anki page | `lib/pages/anki_page.dart` | 378 | shared popup theme; destructive separator preserved where applicable |
-| provider config page | `lib/pages/provider_config_page.dart` | 1317 | shared popup theme; destructive separator preserved where applicable |
-| conversations page | `lib/pages/conversations_page.dart` | 460 | shared popup theme; destructive separator preserved where applicable |
-| ocr page | `lib/pages/ocr_page.dart` | 526 | shared popup theme; destructive separator preserved where applicable |
-| ocr page | `lib/pages/ocr_page.dart` | 1153 | shared popup theme; destructive separator preserved where applicable |
-| task list shared | `lib/pages/task_list_shared.dart` | 149 | shared popup theme; destructive separator preserved where applicable |
-| task list shared | `lib/pages/task_list_shared.dart` | 198 | shared popup theme; destructive separator preserved where applicable |
-| task list shared | `lib/pages/task_list_shared.dart` | 238 | shared popup theme; destructive separator preserved where applicable |
-| task list shared | `lib/pages/task_list_shared.dart` | 279 | shared popup theme; destructive separator preserved where applicable |
-| unified task list page | `lib/pages/unified_task_list_page.dart` | 299 | shared popup theme; destructive separator preserved where applicable |
-| flow block card | `lib/task_flow/widgets/flow_block_card.dart` | 361 | shared popup theme; destructive separator preserved where applicable |
-| synthesis task card | `lib/pages/unified_task_list/synthesis_task_card.dart` | 202 | shared popup theme; destructive separator preserved where applicable |
-| synthesis task card | `lib/pages/unified_task_list/synthesis_task_card.dart` | 253 | shared popup theme; destructive separator preserved where applicable |
-| synthesis task card | `lib/pages/unified_task_list/synthesis_task_card.dart` | 299 | shared popup theme; destructive separator preserved where applicable |
-| synthesis task card | `lib/pages/unified_task_list/synthesis_task_card.dart` | 341 | shared popup theme; destructive separator preserved where applicable |
+Line links below are source locations at this inventory baseline. Refresh them after code changes. A row with several line references represents distinct constructors in the same source file.
 
-### Programmatic popup menus
+### PopupMenuButton
 
-| Screen / component | Source file | Callsite(s) | Styling / exception |
-|---|---|---:|---|
-| mermaid chart page | `lib/pages/mermaid_chart_page.dart` | 296 | shared popup theme |
+| Screen / component | Source call sites |
+|---|---|
+| anki page | [`396`](../lib/pages/anki_page.dart#L396) |
+| conversations page | [`496`](../lib/pages/conversations_page.dart#L496) |
+| ocr page | [`609`](../lib/pages/ocr_page.dart#L609), [`1269`](../lib/pages/ocr_page.dart#L1269) |
+| provider config page | [`1372`](../lib/pages/provider_config_page.dart#L1372) |
+| task list shared | [`165`](../lib/pages/task_list_shared.dart#L165), [`223`](../lib/pages/task_list_shared.dart#L223), [`271`](../lib/pages/task_list_shared.dart#L271), [`320`](../lib/pages/task_list_shared.dart#L320) |
+| synthesis task card | [`213`](../lib/pages/unified_task_list/synthesis_task_card.dart#L213), [`275`](../lib/pages/unified_task_list/synthesis_task_card.dart#L275), [`332`](../lib/pages/unified_task_list/synthesis_task_card.dart#L332), [`385`](../lib/pages/unified_task_list/synthesis_task_card.dart#L385) |
+| unified task list page | [`331`](../lib/pages/unified_task_list_page.dart#L331) |
+| catcatch policy menu | [`32`](../lib/task_flow/widgets/catcatch_policy_menu.dart#L32) |
+| flow block card | [`393`](../lib/task_flow/widgets/flow_block_card.dart#L393) |
+| batch rename dialog | [`457`](../lib/widgets/batch_rename_dialog.dart#L457), [`573`](../lib/widgets/batch_rename_dialog.dart#L573), [`710`](../lib/widgets/batch_rename_dialog.dart#L710) |
+| batch rename rule editor | [`518`](../lib/widgets/batch_rename_rule_editor.dart#L518) |
+| file manager view | [`578`](../lib/widgets/file_manager_view.dart#L578), [`725`](../lib/widgets/file_manager_view.dart#L725), [`1054`](../lib/widgets/file_manager_view.dart#L1054), [`1160`](../lib/widgets/file_manager_view.dart#L1160), [`1259`](../lib/widgets/file_manager_view.dart#L1259), [`1529`](../lib/widgets/file_manager_view.dart#L1529) |
+| topic item | [`205`](../lib/widgets/topic_item.dart#L205) |
 
-### Dropdown buttons and form fields
+### showMenu
 
-| Screen / component | Source file | Callsite(s) | Styling / exception |
-|---|---|---:|---|
-| batch rename dialog | `lib/widgets/batch_rename_dialog.dart` | 562 | shared dropdown surface and 16 dp menu radius |
-| batch rename dialog | `lib/widgets/batch_rename_dialog.dart` | 607 | shared dropdown surface and 16 dp menu radius |
-| file manager view | `lib/widgets/file_manager_view.dart` | 2828 | shared dropdown surface and 16 dp menu radius |
-| provider settings panel tab basic | `lib/pages/provider_settings_panel_tab_basic.dart` | 55 | shared dropdown surface and 16 dp menu radius |
-| provider settings panel tab basic | `lib/pages/provider_settings_panel_tab_basic.dart` | 210 | shared dropdown surface and 16 dp menu radius |
-| provider settings panel tab basic | `lib/pages/provider_settings_panel_tab_basic.dart` | 346 | shared dropdown surface and 16 dp menu radius |
-| provider settings panel tab basic | `lib/pages/provider_settings_panel_tab_basic.dart` | 436 | shared dropdown surface and 16 dp menu radius |
-| simple model config page | `lib/pages/simple_model_config_page.dart` | 246 | shared dropdown surface and 16 dp menu radius |
-| anki page | `lib/pages/anki_page.dart` | 239 | shared dropdown surface and 16 dp menu radius |
-| llm model config page reasoning builders | `lib/pages/llm_model_config_page_reasoning_builders.dart` | 416 | shared dropdown surface and 16 dp menu radius |
-| tts create page | `lib/pages/tts_create_page.dart` | 563 | shared dropdown surface and 16 dp menu radius |
-| tts create page | `lib/pages/tts_create_page.dart` | 1008 | shared dropdown surface and 16 dp menu radius |
-| voice batch add page | `lib/pages/voice_batch_add_page.dart` | 351 | shared dropdown surface and 16 dp menu radius |
-| model config page | `lib/pages/model_config_page.dart` | 1113 | shared dropdown surface and 16 dp menu radius |
-| ocr page | `lib/pages/ocr_page.dart` | 813 | OCR model selector; shared dropdown surface and rounded menu |
-| ocr page | `lib/pages/ocr_page.dart` | 960 | shared dropdown surface and 16 dp menu radius |
-| assistant selection page edit custom param | `lib/pages/assistant_selection_page_edit_custom_param.dart` | 63 | shared dropdown surface and 16 dp menu radius |
-| llm model config page sections | `lib/pages/llm_model_config_page_sections.dart` | 199 | shared dropdown surface and 16 dp menu radius |
-| llm model config page sections | `lib/pages/llm_model_config_page_sections.dart` | 409 | shared dropdown surface and 16 dp menu radius |
-| provider settings panel custom params | `lib/pages/provider_settings_panel_custom_params.dart` | 228 | shared dropdown surface and 16 dp menu radius |
-| asr page | `lib/pages/asr_page.dart` | 670 | shared dropdown surface and 16 dp menu radius |
-| provider settings panel tab asr | `lib/pages/provider_settings_panel_tab_asr.dart` | 48 | shared dropdown surface and 16 dp menu radius |
-| provider settings panel tab asr | `lib/pages/provider_settings_panel_tab_asr.dart` | 132 | shared dropdown surface and 16 dp menu radius |
-| asr model config page | `lib/pages/asr_model_config_page.dart` | 512 | shared dropdown surface and 16 dp menu radius |
-| asr model config page | `lib/pages/asr_model_config_page.dart` | 671 | shared dropdown surface and 16 dp menu radius |
-| asr model config page | `lib/pages/asr_model_config_page.dart` | 771 | shared dropdown surface and 16 dp menu radius |
-| assistant selection page add custom param | `lib/pages/assistant_selection_page_add_custom_param.dart` | 52 | shared dropdown surface and 16 dp menu radius |
-| text storage shared | `lib/pages/text_storage_shared.dart` | 118 | shared dropdown surface and 16 dp menu radius |
-| ocr model config page | `lib/pages/ocr_model_config_page.dart` | 631 | shared dropdown surface and 16 dp menu radius |
-| provider settings panel reasoning | `lib/pages/provider_settings_panel_reasoning.dart` | 635 | shared dropdown surface and 16 dp menu radius |
-| block chain editor | `lib/task_flow/widgets/block_chain_editor.dart` | 213 | shared dropdown surface and 16 dp menu radius |
-| block editor dialog | `lib/task_flow/widgets/block_editor_dialog.dart` | 437 | shared dropdown surface and 16 dp menu radius |
-| block editor dialog | `lib/task_flow/widgets/block_editor_dialog.dart` | 596 | shared dropdown surface and 16 dp menu radius |
+| Screen / component | Source call sites |
+|---|---|
+| mermaid chart page | [`312`](../lib/pages/mermaid_chart_page.dart#L312) |
 
-## Custom overlay and reviewed exclusions
+### DropdownButton / DropdownButtonFormField
 
-- `lib/pages/llm_model_config_shared.dart:135` creates the `LabeledTextField` suggestion list overlay at line 191. It now shares the theme surface, border, and 16 dp corner radius, with rounded interactive rows. This is the only menu-like app-authored overlay found outside Flutter menu APIs.
-- `lib/widgets/drag_sort_area.dart:329` creates a release-animation overlay for drag feedback. It has no menu or selectable list and is outside this styling pass.
-- Source search found no app-owned `DropdownMenu`, `MenuAnchor`, `Autocomplete`, or `RawAutocomplete` callsites.
-- Search sheets, media/action sheets, and dialogs opened with `showModalBottomSheet` / `showDialog` were reviewed separately. They are structured sheets/dialogs with their own actions, search, or content rather than popup/dropdown menus. Existing picker sheets keep their placement and sheet-specific design.
-- External math UI is excluded because it is owned by the external math component; no math-owned source was changed or rendered.
+| Screen / component | Source call sites |
+|---|---|
+| anki page | [`250`](../lib/pages/anki_page.dart#L250) |
+| asr model config page | [`535`](../lib/pages/asr_model_config_page.dart#L535), [`705`](../lib/pages/asr_model_config_page.dart#L705), [`819`](../lib/pages/asr_model_config_page.dart#L819) |
+| asr page | [`693`](../lib/pages/asr_page.dart#L693) |
+| assistant selection page add custom param | [`59`](../lib/pages/assistant_selection_page_add_custom_param.dart#L59) |
+| assistant selection page edit custom param | [`70`](../lib/pages/assistant_selection_page_edit_custom_param.dart#L70) |
+| llm model config page reasoning builders | [`431`](../lib/pages/llm_model_config_page_reasoning_builders.dart#L431) |
+| llm model config page sections | [`196`](../lib/pages/llm_model_config_page_sections.dart#L196), [`409`](../lib/pages/llm_model_config_page_sections.dart#L409) |
+| model config page | [`1183`](../lib/pages/model_config_page.dart#L1183) |
+| ocr model config page | [`731`](../lib/pages/ocr_model_config_page.dart#L731) |
+| ocr page | [`921`](../lib/pages/ocr_page.dart#L921), [`1070`](../lib/pages/ocr_page.dart#L1070) |
+| provider settings panel custom params | [`241`](../lib/pages/provider_settings_panel_custom_params.dart#L241) |
+| provider settings panel reasoning | [`632`](../lib/pages/provider_settings_panel_reasoning.dart#L632) |
+| provider settings panel tab asr | [`48`](../lib/pages/provider_settings_panel_tab_asr.dart#L48), [`143`](../lib/pages/provider_settings_panel_tab_asr.dart#L143) |
+| provider settings panel tab basic | [`56`](../lib/pages/provider_settings_panel_tab_basic.dart#L56), [`212`](../lib/pages/provider_settings_panel_tab_basic.dart#L212), [`357`](../lib/pages/provider_settings_panel_tab_basic.dart#L357), [`458`](../lib/pages/provider_settings_panel_tab_basic.dart#L458) |
+| simple model config page | [`276`](../lib/pages/simple_model_config_page.dart#L276) |
+| text storage shared | [`123`](../lib/pages/text_storage_shared.dart#L123) |
+| tts create page | [`574`](../lib/pages/tts_create_page.dart#L574), [`1045`](../lib/pages/tts_create_page.dart#L1045) |
+| voice batch add page | [`354`](../lib/pages/voice_batch_add_page.dart#L354) |
+| block chain editor | [`231`](../lib/task_flow/widgets/block_chain_editor.dart#L231) |
+| block editor dialog | [`509`](../lib/task_flow/widgets/block_editor_dialog.dart#L509), [`677`](../lib/task_flow/widgets/block_editor_dialog.dart#L677) |
+| batch rename dialog | [`691`](../lib/widgets/batch_rename_dialog.dart#L691), [`756`](../lib/widgets/batch_rename_dialog.dart#L756) |
+| file manager view | [`2997`](../lib/widgets/file_manager_view.dart#L2997) |
 
-## Render captures
+### LabeledTextField suggestions
 
-Actual widget-test renders are saved (the Files, task-list, and OCR frames use 1280 × 800; the taller model-settings screen uses 800 × 1400) outside the repository at `/tmp/stroom-popup-overlay-renders/`: `files-popup.png`, `task-list-menu.png`, `ocr-model-dropdown.png`, and `model-suggestions.png`. `contact-sheet.png` shows all four families side by side. The focused short-viewport suggestion test also checks that its list remains inside the viewport. The container test renderer lacks the app locale fonts, so its glyphs appear as fallback boxes; the frames still show actual Stroom screens, menu placement, surfaces, and row spacing.
+| Screen / component | Source call sites |
+|---|---|
+| llm model config shared | [`135`](../lib/pages/llm_model_config_shared.dart#L135) |
+
+### DragSortArea feedback
+
+| Screen / component | Source call sites |
+|---|---|
+| drag sort area | [`329`](../lib/widgets/drag_sort_area.dart#L329) |
+
+## Reviewed exclusions and boundaries
+
+- [`lib/pages/llm_model_config_shared.dart`](../lib/pages/llm_model_config_shared.dart) owns a suggestion-list `OverlayEntry`; it is selection UI and shares the menu surface/shape treatment.
+- [`lib/widgets/drag_sort_area.dart`](../lib/widgets/drag_sort_area.dart) owns an `OverlayEntry` for drag-release feedback, not a menu or selectable list.
+- `showDialog` and `showModalBottomSheet` are separate confirmation-dialog, structured-picker, and contextual-sheet families. The [UI guidelines](ui-guidelines.md) describe their usage; these APIs are not included in popup/dropdown counts.
+- No `DropdownMenu`, `MenuAnchor`, `MenuItemButton`, `Autocomplete`, or `RawAutocomplete` call sites were found in production roots.
+- The first-party Markdown package is included in the tracked source count, but it currently owns none of the listed menu APIs. The external math component/package is excluded from this inventory and all related code changes.
