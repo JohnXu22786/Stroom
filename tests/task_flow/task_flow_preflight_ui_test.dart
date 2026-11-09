@@ -89,6 +89,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, '重试'));
     await tester.pumpAndSettle();
+    debugPrint(
+        'TASK_FLOW_RETRY_DEBUG: builderPages=${find.byType(TaskFlowBuilderPage).evaluate().length} texts=${find.byType(Text).evaluate().map((e) => (e.widget as Text).data).toList()}');
     expect(find.text('助手对话 设置'), findsOneWidget);
     expect(executions.state, hasLength(1));
     expect(executions.state.single.id, id);
