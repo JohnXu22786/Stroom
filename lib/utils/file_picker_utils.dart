@@ -80,10 +80,11 @@ void validateUserVisibleExportPaths({
   }
 
   // Normalize canonical Unicode equivalents and case variants to one key.
-  // Avoid collisions caused by uppercase expansions such as ß → SS and
-  // ﬃ → FFI, while retaining Greek case aliases whose mappings expand.
+  // Decomposition exposes Greek iota-subscript case folds.
+  // Avoid uppercase expansions elsewhere when they merge distinct names.
   String comparisonPath(String path) => unorm.nfc(
-        path.runes.map((rune) {
+        unorm.nfd(path).runes.map((rune) {
+          if (rune == 0x0345) return 'ι';
           final character = String.fromCharCode(rune);
           final uppercase = character.toUpperCase();
           final expands = uppercase.runes.length > 1;
