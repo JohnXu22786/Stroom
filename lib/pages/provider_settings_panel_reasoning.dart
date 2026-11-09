@@ -281,10 +281,7 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
           ),
           label: Text(
             AppLocalizations.of(context)!.providerAddReasoningParam,
-            style: TextStyle(
-              fontSize: 13,
-              color: null,
-            ),
+            style: Theme.of(context).textTheme.labelLarge,
           ),
           onPressed: _addReasoningParam,
         ),
@@ -304,7 +301,7 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
             icon: const Icon(Icons.add, size: 16),
             label: Text(
               AppLocalizations.of(context)!.providerAddReasoningToggle,
-              style: const TextStyle(fontSize: 13),
+              style: Theme.of(context).textTheme.labelLarge,
             ),
             onPressed: () {
               setState(() {
@@ -469,10 +466,7 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
           ),
           label: Text(
             AppLocalizations.of(context)!.providerAddReasoningEffort,
-            style: TextStyle(
-              fontSize: 13,
-              color: null,
-            ),
+            style: Theme.of(context).textTheme.labelLarge,
           ),
           onPressed: _addEffortReasoningParam,
         ),
@@ -613,7 +607,7 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
                 icon: Icon(Icons.add, size: 16),
                 label: Text(
                   AppLocalizations.of(context)!.providerAddOption,
-                  style: const TextStyle(fontSize: 13),
+                  style: Theme.of(context).textTheme.labelLarge,
                 ),
                 onPressed: () =>
                     _addOptionToParam(_reasoningParams.indexOf(effort)),
@@ -798,7 +792,7 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
                 icon: const Icon(Icons.add, size: 16),
                 label: Text(
                   AppLocalizations.of(context)!.providerAddOption,
-                  style: const TextStyle(fontSize: 13),
+                  style: Theme.of(context).textTheme.labelLarge,
                 ),
                 onPressed: () => _addOptionToParam(actualIndex),
               ),
