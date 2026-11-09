@@ -146,6 +146,21 @@ void main() {
       expect(await file.readAsString(), 'new-content');
     });
 
+    test(
+      'replacement preserves restrictive permissions on POSIX',
+      () async {
+        final file = File('${tempDir.path}/private.txt');
+        await file.writeAsString('private');
+        final chmod = await Process.run('chmod', ['0600', file.path]);
+        expect(chmod.exitCode, 0);
+
+        await AtomicFile.writeString(file, 'updated');
+
+        expect((await file.stat()).mode & 0x1ff, 0x180);
+      },
+      skip: Platform.isWindows,
+    );
+
     test('leaves no temporary data behind after success', () async {
       final file = File('${tempDir.path}/tasks.json');
       await AtomicFile.writeString(file, 'data');
