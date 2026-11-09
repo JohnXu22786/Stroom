@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../utils/folder_copy_lock.dart';
 import '../utils/folder_operation_rollback.dart';
 import '../utils/image_manifest.dart';
 
@@ -345,6 +346,18 @@ class ImageRecordsNotifier extends StateNotifier<List<ImageRecord>> {
       return;
     }
 
+    await FolderCopyLock.withLock(
+      'image',
+      newPath,
+      () => _copyFolderToDestination(sourceName, targetParentClean, newPath),
+    );
+  }
+
+  Future<void> _copyFolderToDestination(
+    String sourceName,
+    String targetParentClean,
+    String newPath,
+  ) async {
     // 目标位置（或其下）已存在同名文件夹：拒绝，避免重复复制/合并
     final existing = await ImageManifest.getAllFolders();
     if (existing.any((f) => f == newPath || f.startsWith('$newPath/'))) return;
