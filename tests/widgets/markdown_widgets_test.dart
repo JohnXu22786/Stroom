@@ -149,18 +149,18 @@ $$
 
       final tabClosedFenceNodes = _parseLikeMarkdownGenerator(
         r'$$'
-            '\nx\n```\n'
-            r'$$'
-            '\n```\t\n'
-            r'$$',
+        '\nx\n```\n'
+        r'$$'
+        '\n```\t\n'
+        r'$$',
       );
       final tabClosedFenceMath = _findElement(tabClosedFenceNodes, 'latex');
       expect(tabClosedFenceMath, isNotNull);
       expect(
         tabClosedFenceMath!.attributes['content'],
         'x\n```\n'
-            r'$$'
-            '\n```\t',
+        r'$$'
+        '\n```\t',
       );
     });
   });
