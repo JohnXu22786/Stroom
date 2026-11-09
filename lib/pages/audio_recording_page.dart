@@ -319,17 +319,19 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
       const format = 'm4a';
       final now = DateTime.now();
       final defaultName = '录音_${now.month}${now.day}_${now.hour}${now.minute}';
-      await FileManifest.withStorageFileSaveLock('$hash.$format', () async {
-        await FileManifest.writeFile('$hash.$format', bytes);
-        await FileManifest.addRecord(AudioRecord(
-          name: defaultName,
-          hash: hash,
-          format: format,
-          createdAt: now,
-          size: bytes.length,
-          folder: '',
-          duration: _recordDurationSeconds,
-        ));
+      final record = AudioRecord(
+        name: defaultName,
+        hash: hash,
+        format: format,
+        createdAt: now,
+        size: bytes.length,
+        folder: '',
+        duration: _recordDurationSeconds,
+      );
+      await FileManifest.withStorageFileSaveLock(
+          record.storageFileName, () async {
+        await FileManifest.writeFile(record.storageFileName, bytes);
+        await FileManifest.addRecord(record);
       });
 
       // 删除临时文件

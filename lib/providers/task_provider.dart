@@ -192,7 +192,10 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
         final temporaryPath = await FlowTemporaryArtifactStorage.writeBytes(
           executionId: temporaryExecutionId!,
           blockId: temporaryBlockId!,
-          fileName: '${computeAudioHash(audioData)}.$actualFormat',
+          fileName: AudioRecord.storageFileNameFor(
+            hash: computeAudioHash(audioData),
+            format: actualFormat,
+          ),
           bytes: audioData,
         );
         if (cancelToken.isCancelled || !isCurrent()) {
@@ -213,7 +216,10 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
       // 保存音频文件
       final saveFolder = task.customParams?['saveFolder'] ?? '';
       final savedFilePath = await FileManifest.withStorageFileSaveLock(
-        '${computeAudioHash(audioData)}.$actualFormat',
+        AudioRecord.storageFileNameFor(
+          hash: computeAudioHash(audioData),
+          format: actualFormat,
+        ),
         () async {
           final saved = await _saveAudioFile(
             audioData,
@@ -560,12 +566,21 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
     String folder = '',
   }) async {
     final hash = computeAudioHash(audioData);
-    final audioName = '$hash.$format';
     final textName = '$hash.txt';
     // 如果未提供标题，使用文本的前几个字
     final displayName = name.isNotEmpty
         ? name
         : (text.length > 20 ? text.substring(0, 20) : text);
+    final record = AudioRecord(
+      name: displayName,
+      hash: hash,
+      format: format,
+      createdAt: DateTime.now(),
+      size: audioData.length,
+      sourceText: text,
+      folder: folder,
+    );
+    final audioName = record.storageFileName;
 
     // Two attempts can produce the same hash. Keep the old save and its
     // rollback together so a resumed attempt never loses its new files.
@@ -589,16 +604,6 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
       final audioExisted = await FileManifest.readFilePath(audioName) != null;
       final previousText = await FileManifest.readFile(textName);
       if (!isCurrent()) return null;
-
-      final record = AudioRecord(
-        name: displayName,
-        hash: hash,
-        format: format,
-        createdAt: DateTime.now(),
-        size: audioData.length,
-        sourceText: text,
-        folder: folder,
-      );
 
       var wroteAudio = false;
       var wroteText = false;

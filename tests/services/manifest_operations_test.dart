@@ -78,6 +78,140 @@ void main() {
     ManifestDatabase.beforeWebDataReadForTesting = null;
   });
 
+  test('audio writes reject Windows-invalid filename characters', () async {
+    await expectLater(
+      FileManifest.writeFile('hash?.wav', Uint8List.fromList([1])),
+      throwsArgumentError,
+    );
+  });
+
+  test('audio records write using their safe storage filename', () async {
+    final record = AudioRecord(
+      id: 'audio_safe_format_path',
+      name: 'imported',
+      hash: 'safe_hash',
+      format: 'wa?v',
+      createdAt: DateTime(2024, 1, 1),
+      size: 2,
+    );
+    final bytes = Uint8List.fromList([1, 2]);
+
+    await FileManifest.withStorageFileSaveLock(record.storageFileName, () async {
+      await FileManifest.writeFile(record.storageFileName, bytes);
+      await FileManifest.addRecord(record);
+    });
+
+    expect(await FileManifest.readFile(record.storagePath), bytes);
+  });
+
+  test('legacy migration preserves a Windows-normalized sibling file', () async {
+    final wav = AudioRecord(
+      id: 'audio_normalized_wav',
+      name: 'wav',
+      hash: 'shared_legacy_hash',
+      format: 'wav',
+      createdAt: DateTime(2024, 1, 1),
+      size: 1,
+    );
+    final wavDot = AudioRecord(
+      id: 'audio_normalized_wav_dot',
+      name: 'wav dot',
+      hash: 'shared_legacy_hash',
+      format: 'wav.',
+      createdAt: DateTime(2024, 1, 1),
+      size: 1,
+    );
+    final wavBytes = Uint8List.fromList([1]);
+    final wavDotBytes = Uint8List.fromList([2]);
+    await FileManifest.writeFile(wav.storageFileName, wavBytes);
+    await WebFileStore.write(
+      'tts_audio/shared_legacy_hash.wav.',
+      wavDotBytes,
+    );
+    await FileManifest.addRecord(wav);
+    await FileManifest.addRecord(wavDot);
+    FileManifest.invalidateCache();
+
+    await FileManifest.loadRecords();
+
+    expect(await FileManifest.readFile(wav.storageFileName), wavBytes);
+    expect(await FileManifest.readFile(wavDot.storageFileName), wavDotBytes);
+
+    final questionFormat = AudioRecord(
+      id: 'audio_percent_collision_question',
+      name: 'question',
+      hash: 'shared_percent_hash',
+      format: 'wa?v',
+      createdAt: DateTime(2024, 1, 1),
+      size: 1,
+    );
+    final percentFormat = AudioRecord(
+      id: 'audio_percent_collision_literal',
+      name: 'literal percent sequence',
+      hash: 'shared_percent_hash',
+      format: 'wa%003fv',
+      createdAt: DateTime(2024, 1, 1),
+      size: 1,
+    );
+    final questionBytes = Uint8List.fromList([3]);
+    final percentBytes = Uint8List.fromList([4]);
+    await WebFileStore.write(
+      'tts_audio/shared_percent_hash.wa?v',
+      questionBytes,
+    );
+    await WebFileStore.write(
+      'tts_audio/shared_percent_hash.wa%003fv',
+      percentBytes,
+    );
+    await FileManifest.addRecord(questionFormat);
+    await FileManifest.addRecord(percentFormat);
+    FileManifest.invalidateCache();
+    await FileManifest.loadRecords();
+
+    expect(
+      await FileManifest.readFile(questionFormat.storageFileName),
+      questionBytes,
+    );
+    expect(
+      await FileManifest.readFile(percentFormat.storageFileName),
+      percentBytes,
+    );
+
+    FileManifest.invalidateCache();
+    await FileManifest.loadRecords();
+    expect(
+      await FileManifest.readFile(questionFormat.storageFileName),
+      questionBytes,
+    );
+    expect(
+      await FileManifest.readFile(percentFormat.storageFileName),
+      percentBytes,
+    );
+  });
+
+  test('legacy audio files migrate to escaped storage names', () async {
+    final record = AudioRecord(
+      id: 'audio_legacy_invalid_format',
+      name: 'imported',
+      hash: 'legacy_hash',
+      format: 'wa?v',
+      createdAt: DateTime(2024, 1, 1),
+      size: 2,
+    );
+    await FileManifest.addRecord(record);
+    const legacyPath = 'tts_audio/legacy_hash.wa?v';
+    const storagePath = 'tts_audio/legacy_hash.wa%003fv';
+    final bytes = Uint8List.fromList([1, 2]);
+    await WebFileStore.write(legacyPath, bytes);
+    FileManifest.invalidateCache();
+
+    final records = await FileManifest.loadRecords();
+
+    expect(records.single.storagePath, 'legacy_hash.wa%003fv');
+    expect(await WebFileStore.read(storagePath), bytes);
+    expect(await WebFileStore.exists(legacyPath), isFalse);
+  });
+
   test(
     'cancellable native read reports cancellation after file existence wait',
     () async {

@@ -153,18 +153,18 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
         );
         usedInBatch.add(displayName);
 
-        await FileManifest.withStorageFileSaveLock('$hash.$format', () async {
-          await FileManifest.writeFile('$hash.$format', bytes);
-          await FileManifest.addRecord(
-            AudioRecord(
-              name: displayName,
-              hash: hash,
-              format: format,
-              createdAt: DateTime.now(),
-              size: bytes.length,
-              folder: _currentFolder,
-            ),
-          );
+        final record = AudioRecord(
+          name: displayName,
+          hash: hash,
+          format: format,
+          createdAt: DateTime.now(),
+          size: bytes.length,
+          folder: _currentFolder,
+        );
+        await FileManifest.withStorageFileSaveLock(
+            record.storageFileName, () async {
+          await FileManifest.writeFile(record.storageFileName, bytes);
+          await FileManifest.addRecord(record);
         });
         count++;
       }
