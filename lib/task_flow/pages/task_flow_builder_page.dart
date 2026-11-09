@@ -492,7 +492,9 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
             ),
             maxLines: 2,
             minLines: 1,
-            style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: cs.onSurfaceVariant,
+            ),
           ),
         ],
       ),
@@ -753,7 +755,9 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
             const SizedBox(height: 4),
             Text(
               _descController.text.trim(),
-              style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: cs.onSurfaceVariant,
+              ),
             ),
           ],
         ],
@@ -873,8 +877,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
             child: Center(
               child: Text(
                 AppLocalizations.of(context)!.taskFlowUiNoInput,
-                style: TextStyle(
-                  fontSize: 13,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: cs.onSurfaceVariant.withValues(alpha: 0.6),
                 ),
               ),
@@ -1037,7 +1040,9 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                   const SizedBox(width: 4),
                   Text(
                     AppLocalizations.of(context)!.taskFlowUiPreview,
-                    style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: cs.onSurfaceVariant,
+                    ),
                   ),
                   Text(
                     preview,
@@ -1164,7 +1169,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                     child: Text(
                       _inputDisplayNames[_mediaInputs[i]] ??
                           _fileName(_mediaInputs[i]),
-                      style: const TextStyle(fontSize: 13),
+                      style: Theme.of(context).textTheme.bodyMedium,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -1378,7 +1383,9 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                       children: [
                         Text(
                           '${paramDef == null ? e.key : localizedBlockParamLabel(def!, paramDef, strings)}: ',
-                          style: TextStyle(fontSize: 13, color: cs.primary),
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: cs.primary,
+                          ),
                         ),
                         Expanded(
                           // Friendly display — raw ids (assistant uuids,
@@ -1390,8 +1397,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                               ref,
                               params: block.params,
                             ),
-                            style: TextStyle(
-                              fontSize: 13,
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                               color: cs.onSurfaceVariant,
                             ),
                           ),

@@ -258,8 +258,7 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                     children: [
                       Text(
                         strings.taskFlowUiBlockSettings(blockLabel),
-                        style: const TextStyle(
-                          fontSize: 16,
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -335,8 +334,7 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                       child: Text(
                         AppLocalizations.of(context)!
                             .taskFlowUiNoExtraParameters,
-                        style: TextStyle(
-                          fontSize: 13,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: cs.onSurfaceVariant,
                         ),
                       ),
@@ -418,8 +416,7 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
         children: [
           Text(
             '${label}${param.required ? ' *' : ''}',
-            style: TextStyle(
-              fontSize: 13,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
               fontWeight: FontWeight.w500,
               color: cs.onSurface,
             ),
@@ -488,7 +485,7 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
           // Multi-line for text prompts (e.g. a custom instruction field)
           // — single-line scrolling hides long instructions.
           maxLines: 1,
-          style: const TextStyle(fontSize: 13),
+          style: Theme.of(context).textTheme.bodyMedium,
           onChanged: (v) => _params[param.key] = v,
         );
 
@@ -527,7 +524,9 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                   vertical: 8,
                 ),
               ),
-              style: TextStyle(fontSize: 13, color: cs.onSurface),
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: cs.onSurface,
+              ),
               items: List.generate(models.length, (i) {
                 final dynamic m = models[i].model;
                 final dynamic c = models[i].config;
@@ -658,7 +657,7 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
               ),
               hintText: AppLocalizations.of(context)!.taskFlowUiTtsVoiceMissing,
             ),
-            style: const TextStyle(fontSize: 13),
+            style: Theme.of(context).textTheme.bodyMedium,
           );
         }
         final selected = resolveProviderModel(
@@ -689,14 +688,18 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
               vertical: 8,
             ),
           ),
-          style: TextStyle(fontSize: 13, color: cs.onSurface),
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: cs.onSurface,
+              ),
           hint: Text(
             // A persisted voice id that no longer exists must not show the
             // raw id string — guide re-selection instead.
             currentOption == null && current.isNotEmpty
                 ? AppLocalizations.of(context)!.taskFlowUiVoiceUnavailable
                 : AppLocalizations.of(context)!.taskFlowUiSelectVoice,
-            style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: cs.onSurfaceVariant,
+            ),
           ),
           items: voiceOptions.map((o) {
             return DropdownMenuItem<String>(
@@ -755,8 +758,7 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                                 : AppLocalizations.of(context)!
                                     .taskFlowUiAssistantUnavailable)
                             : '${display.$1} ${display.$2}',
-                        style: TextStyle(
-                          fontSize: 13,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: display == null
                               ? cs.onSurfaceVariant
                               : cs.onSurface,
@@ -816,7 +818,9 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
               width: 44,
               child: Text(
                 '${display.toStringAsFixed(1)}x',
-                style: TextStyle(fontSize: 13, color: cs.onSurface),
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: cs.onSurface,
+                ),
                 textAlign: TextAlign.right,
               ),
             ),
@@ -866,7 +870,7 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                 ),
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                style: const TextStyle(fontSize: 13),
+                style: Theme.of(context).textTheme.bodyMedium,
                 onChanged: (_) => rebuild(),
               ),
             ),
@@ -879,7 +883,7 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                 ),
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                style: const TextStyle(fontSize: 13),
+                style: Theme.of(context).textTheme.bodyMedium,
                 onChanged: (_) => rebuild(),
               ),
             ),
@@ -892,7 +896,7 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                 ),
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                style: const TextStyle(fontSize: 13),
+                style: Theme.of(context).textTheme.bodyMedium,
                 onChanged: (_) => rebuild(),
               ),
             ),
@@ -915,7 +919,7 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
             ),
           ),
           keyboardType: TextInputType.number,
-          style: const TextStyle(fontSize: 13),
+          style: Theme.of(context).textTheme.bodyMedium,
           controller: controller,
           onChanged: (v) {
             final parsed = num.tryParse(v);
@@ -933,7 +937,9 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
             value == true
                 ? AppLocalizations.of(context)!.taskFlowUiYes
                 : AppLocalizations.of(context)!.taskFlowUiNo,
-            style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: cs.onSurfaceVariant,
+            ),
           ),
         );
 
@@ -953,8 +959,7 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                   value?.toString().isNotEmpty == true
                       ? value.toString()
                       : AppLocalizations.of(context)!.taskFlowUiDefaultRoot,
-                  style: TextStyle(
-                    fontSize: 13,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: value?.toString().isNotEmpty == true
                         ? cs.onSurface
                         : cs.onSurfaceVariant,
