@@ -253,14 +253,14 @@ class AudioRecordsNotifier extends StateNotifier<List<AudioRecord>> {
       recordFolder: (record) => record.folder,
       loadRecords: FileManifest.loadRecords,
       getFolders: FileManifest.getAllFolders,
-      moveRecord: FileManifest.moveRecord,
+      moveRecordIfFolder: FileManifest.moveRecordIfFolder,
       addFolder: FileManifest.addFolder,
-      removeFolder: FileManifest.removeFolderFromCache,
-      operation: () async {
+      removeFolder: FileManifest.removeFolderMetadataFromCache,
+      operation: (moveOperationRecord) async {
         // 更新 oldName 本身的记录
         for (final r in records) {
           if (r.folder == oldName) {
-            await FileManifest.moveRecord(r.id, newPath);
+            await moveOperationRecord(r.id, r.folder, newPath);
           }
         }
 
@@ -272,7 +272,7 @@ class AudioRecordsNotifier extends StateNotifier<List<AudioRecord>> {
           final newDescPath = '$newPath$suffix';
           for (final r in records) {
             if (r.folder == desc) {
-              await FileManifest.moveRecord(r.id, newDescPath);
+              await moveOperationRecord(r.id, r.folder, newDescPath);
             }
           }
           // Empty subfolders (no records) must stay in the folder cache; otherwise the old-path cleanup would drop their paths.
@@ -343,14 +343,14 @@ class AudioRecordsNotifier extends StateNotifier<List<AudioRecord>> {
       recordFolder: (record) => record.folder,
       loadRecords: FileManifest.loadRecords,
       getFolders: FileManifest.getAllFolders,
-      moveRecord: FileManifest.moveRecord,
+      moveRecordIfFolder: FileManifest.moveRecordIfFolder,
       addFolder: FileManifest.addFolder,
-      removeFolder: FileManifest.removeFolderFromCache,
-      operation: () async {
+      removeFolder: FileManifest.removeFolderMetadataFromCache,
+      operation: (moveOperationRecord) async {
         // 移动 oldName 本身的记录到 newPath
         for (final r in records) {
           if (r.folder == oldName) {
-            await FileManifest.moveRecord(r.id, newPath);
+            await moveOperationRecord(r.id, r.folder, newPath);
           }
         }
 
@@ -362,7 +362,7 @@ class AudioRecordsNotifier extends StateNotifier<List<AudioRecord>> {
           final newDescPath = '$newPath$suffix';
           for (final r in records) {
             if (r.folder == desc) {
-              await FileManifest.moveRecord(r.id, newDescPath);
+              await moveOperationRecord(r.id, r.folder, newDescPath);
             }
           }
           // Empty subfolders (no records) must stay in the folder cache; otherwise the old-path cleanup would drop their paths.
@@ -462,11 +462,11 @@ class AudioRecordsNotifier extends StateNotifier<List<AudioRecord>> {
       recordFolder: (record) => record.folder,
       loadRecords: FileManifest.loadRecords,
       getFolders: FileManifest.getAllFolders,
-      moveRecord: FileManifest.moveRecord,
+      moveRecordIfFolder: FileManifest.moveRecordIfFolder,
       addFolder: FileManifest.addFolder,
       removeFolder: FileManifest.removeFolderFromCache,
       deleteRecords: FileManifest.deleteRecords,
-      operation: () async {
+      operation: (moveOperationRecord) async {
         // 复制 sourceFolder 本身的记录
         for (final r in records) {
           if (r.folder == sourceFolder) {

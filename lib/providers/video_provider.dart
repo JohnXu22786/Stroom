@@ -183,13 +183,13 @@ class VideoRecordsNotifier extends StateNotifier<List<VideoRecord>> {
       recordFolder: (record) => record.folder,
       loadRecords: VideoManifest.loadRecords,
       getFolders: VideoManifest.getAllFolders,
-      moveRecord: VideoManifest.moveRecord,
+      moveRecordIfFolder: VideoManifest.moveRecordIfFolder,
       addFolder: VideoManifest.addFolder,
-      removeFolder: VideoManifest.removeFolderFromCache,
-      operation: () async {
+      removeFolder: VideoManifest.removeFolderMetadataFromCache,
+      operation: (moveOperationRecord) async {
         for (final r in records) {
           if (r.folder == oldName) {
-            await VideoManifest.moveRecord(r.id, newPath);
+            await moveOperationRecord(r.id, r.folder, newPath);
           }
         }
 
@@ -199,7 +199,7 @@ class VideoRecordsNotifier extends StateNotifier<List<VideoRecord>> {
           final newDescPath = '$newPath$suffix';
           for (final r in records) {
             if (r.folder == desc) {
-              await VideoManifest.moveRecord(r.id, newDescPath);
+              await moveOperationRecord(r.id, r.folder, newDescPath);
             }
           }
           // Empty subfolders (no records) must stay in the folder cache; otherwise the old-path cleanup would drop their paths.
@@ -271,13 +271,13 @@ class VideoRecordsNotifier extends StateNotifier<List<VideoRecord>> {
       recordFolder: (record) => record.folder,
       loadRecords: VideoManifest.loadRecords,
       getFolders: VideoManifest.getAllFolders,
-      moveRecord: VideoManifest.moveRecord,
+      moveRecordIfFolder: VideoManifest.moveRecordIfFolder,
       addFolder: VideoManifest.addFolder,
-      removeFolder: VideoManifest.removeFolderFromCache,
-      operation: () async {
+      removeFolder: VideoManifest.removeFolderMetadataFromCache,
+      operation: (moveOperationRecord) async {
         for (final r in records) {
           if (r.folder == sourceName) {
-            await VideoManifest.moveRecord(r.id, newPath);
+            await moveOperationRecord(r.id, r.folder, newPath);
           }
         }
 
@@ -287,7 +287,7 @@ class VideoRecordsNotifier extends StateNotifier<List<VideoRecord>> {
           final newDescPath = '$newPath$suffix';
           for (final r in records) {
             if (r.folder == desc) {
-              await VideoManifest.moveRecord(r.id, newDescPath);
+              await moveOperationRecord(r.id, r.folder, newDescPath);
             }
           }
           // Empty subfolders (no records) must stay in the folder cache; otherwise the old-path cleanup would drop their paths.
@@ -388,11 +388,11 @@ class VideoRecordsNotifier extends StateNotifier<List<VideoRecord>> {
       recordFolder: (record) => record.folder,
       loadRecords: VideoManifest.loadRecords,
       getFolders: VideoManifest.getAllFolders,
-      moveRecord: VideoManifest.moveRecord,
+      moveRecordIfFolder: VideoManifest.moveRecordIfFolder,
       addFolder: VideoManifest.addFolder,
       removeFolder: VideoManifest.removeFolderFromCache,
       deleteRecords: VideoManifest.deleteRecords,
-      operation: () async {
+      operation: (moveOperationRecord) async {
         for (final r in records) {
           if (r.folder == sourceName) {
             await addCopiedRecord(

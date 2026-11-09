@@ -38,14 +38,36 @@ Future<void> runFolderOperationWithRollback<T>({
   required String Function(T) recordFolder,
   required Future<List<T>> Function() loadRecords,
   required Future<Set<String>> Function() getFolders,
-  required Future<void> Function(String id, String folder) moveRecord,
+  required Future<bool> Function(
+    String id,
+    String expectedFolder,
+    String folder, {
+    void Function()? onMoved,
+  }) moveRecordIfFolder,
   required Future<void> Function(String folder) addFolder,
   required Future<void> Function(String folder) removeFolder,
   Future<void> Function(List<String> ids)? deleteRecords,
-  required Future<void> Function() operation,
+  required Future<void> Function(
+    Future<void> Function(String id, String sourceFolder, String folder)
+        moveOperationRecord,
+  ) operation,
 }) async {
+  final operationRecordFolders = <String, String>{};
+  Future<void> moveOperationRecord(
+    String id,
+    String sourceFolder,
+    String folder,
+  ) async {
+    await moveRecordIfFolder(
+      id,
+      sourceFolder,
+      folder,
+      onMoved: () => operationRecordFolders[id] = folder,
+    );
+  }
+
   try {
-    await operation();
+    await operation(moveOperationRecord);
   } catch (error, stackTrace) {
     bool isInRollbackScope(String folder) {
       if (rollbackFolderPaths.contains(folder)) return true;
@@ -59,13 +81,9 @@ Future<void> runFolderOperationWithRollback<T>({
     try {
       currentRecords = await loadRecords();
     } catch (_) {
-      // Fall back to restoring every original record if reading the current
-      // manifest fails.
+      // Skip folder cleanup without a row snapshot. Tracked moves still use
+      // their live conditional restore below.
     }
-    final currentFoldersById = {
-      for (final record in currentRecords ?? <T>[])
-        recordId(record): recordFolder(record),
-    };
     final originalRecordIds = originalRecords.map(recordId).toSet();
     if (deleteRecords != null && rollbackRecordIds.isNotEmpty) {
       try {
@@ -97,7 +115,10 @@ Future<void> runFolderOperationWithRollback<T>({
           true;
       final hasUnrelatedRecords = currentRecords?.any((record) {
             final recordPath = recordFolder(record);
-            return !originalRecordIds.contains(recordId(record)) &&
+            final id = recordId(record);
+            final wasIndependentlyMoved = originalRecordIds.contains(id) &&
+                operationRecordFolders[id] != recordPath;
+            return (!originalRecordIds.contains(id) || wasIndependentlyMoved) &&
                 (recordPath == folder || recordPath.startsWith('$folder/'));
           }) ??
           true;
@@ -109,14 +130,35 @@ Future<void> runFolderOperationWithRollback<T>({
       }
     }
     for (final record in originalRecords) {
-      if (currentRecords != null &&
-          currentFoldersById[recordId(record)] == recordFolder(record)) {
-        continue;
-      }
+      final id = recordId(record);
+      final operationFolder = operationRecordFolders[id];
+      if (operationFolder == null) continue;
       try {
-        await moveRecord(recordId(record), recordFolder(record));
+        await moveRecordIfFolder(
+          id,
+          operationFolder,
+          recordFolder(record),
+        );
       } catch (_) {
         // Continue restoring the other records even if one write fails.
+      }
+    }
+    try {
+      currentRecords = await loadRecords();
+    } catch (_) {
+      // Keep the last snapshot when refreshing records is unavailable.
+    }
+    for (final record in currentRecords ?? <T>[]) {
+      var folder = recordFolder(record);
+      if (!isInRollbackScope(folder)) continue;
+      while (folder.isNotEmpty) {
+        try {
+          await addFolder(folder);
+        } catch (_) {
+          // Continue restoring folder metadata for other records.
+        }
+        final separator = folder.lastIndexOf('/');
+        folder = separator == -1 ? '' : folder.substring(0, separator);
       }
     }
     for (final folder in originalFolders.where(isInRollbackScope)) {
