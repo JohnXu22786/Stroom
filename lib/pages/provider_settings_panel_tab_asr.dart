@@ -21,7 +21,10 @@ extension _ProviderSettingsPanelTabAsrExt on _ProviderSettingsPanelState {
       const SizedBox(height: 8),
       Text(
         AppLocalizations.of(context)!.providerAudioChunkingHint,
-        style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant, height: 1.4),
+        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: cs.onSurfaceVariant,
+              height: 1.4,
+            ),
       ),
       const SizedBox(height: 16),
       Row(
@@ -52,31 +55,30 @@ extension _ProviderSettingsPanelTabAsrExt on _ProviderSettingsPanelState {
                     value: 'none',
                     child: Text(
                       AppLocalizations.of(context)!.providerChunkNone,
-                      style: TextStyle(fontSize: 13),
+                      style: Theme.of(context).textTheme.bodyMedium,
                     ),
                   ),
                   DropdownMenuItem(
                     value: 'silence',
                     child: Text(
                       AppLocalizations.of(context)!.providerChunkSmart,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
                     ),
                   ),
                   DropdownMenuItem(
                     value: 'fixedDuration',
                     child: Text(
                       AppLocalizations.of(context)!.providerChunkFixedDuration,
-                      style: TextStyle(fontSize: 13),
+                      style: Theme.of(context).textTheme.bodyMedium,
                     ),
                   ),
                   DropdownMenuItem(
                     value: 'fixedSize',
                     child: Text(
                       AppLocalizations.of(context)!.providerChunkFixedSize,
-                      style: TextStyle(fontSize: 13),
+                      style: Theme.of(context).textTheme.bodyMedium,
                     ),
                   ),
                 ],
@@ -114,7 +116,10 @@ extension _ProviderSettingsPanelTabAsrExt on _ProviderSettingsPanelState {
       const SizedBox(height: 8),
       Text(
         AppLocalizations.of(context)!.providerCompressionHint,
-        style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant, height: 1.4),
+        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: cs.onSurfaceVariant,
+              height: 1.4,
+            ),
       ),
       const SizedBox(height: 16),
       Row(
@@ -145,21 +150,21 @@ extension _ProviderSettingsPanelTabAsrExt on _ProviderSettingsPanelState {
                     value: 'none',
                     child: Text(
                       AppLocalizations.of(context)!.providerCompressionNone,
-                      style: TextStyle(fontSize: 13),
+                      style: Theme.of(context).textTheme.bodyMedium,
                     ),
                   ),
                   DropdownMenuItem(
                     value: 'adpcm',
                     child: Text(
                       AppLocalizations.of(context)!.providerCompressionAdpcm,
-                      style: TextStyle(fontSize: 13),
+                      style: Theme.of(context).textTheme.bodyMedium,
                     ),
                   ),
                   DropdownMenuItem(
                     value: 'flac',
                     child: Text(
                       AppLocalizations.of(context)!.providerCompressionFlac,
-                      style: TextStyle(fontSize: 13),
+                      style: Theme.of(context).textTheme.bodyMedium,
                     ),
                   ),
                 ],

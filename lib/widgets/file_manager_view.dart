@@ -1784,7 +1784,8 @@ class _FileManagerViewState<T extends FileRecord>
             (r) =>
                 r.id != fileId &&
                 r.folder == selectedFolder &&
-                r.name == source.first.name,
+                r.name == source.first.name &&
+                r.format == source.first.format,
           )) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -2193,17 +2194,22 @@ class _FileManagerViewState<T extends FileRecord>
         }
         return;
       }
-      // 目标文件夹已存在同名文件、或批内两个被移动文件同名
+      // 目标文件夹已存在同名同格式文件、或批内两个被移动文件同名同格式
       // （选择模式支持跨文件夹选择，不同文件夹允许同名文件）→ 拒绝，
       // 避免产生无法通过重命名解决的永久重复记录
-      final movedNames = <String>{};
+      final movedNames = <(String, String)>{};
       final nameConflict = adjustedFileIds.any((id) {
         final matches = widget.sortedRecords.where((r) => r.id == id);
         if (matches.isEmpty) return false;
-        final name = matches.first.name;
-        if (!movedNames.add(name)) return true; // 批内同名冲突
+        final record = matches.first;
+        final identity = (record.name, record.format);
+        if (!movedNames.add(identity)) return true; // 批内同名同格式冲突
         return widget.sortedRecords.any(
-          (r) => r.id != id && r.folder == selectedFolder && r.name == name,
+          (r) =>
+              r.id != id &&
+              r.folder == selectedFolder &&
+              r.name == record.name &&
+              r.format == record.format,
         );
       });
       if (nameConflict) {
@@ -2292,14 +2298,15 @@ class _FileManagerViewState<T extends FileRecord>
       fileIds,
       topLevelFolders,
     );
-    // 批内两个被复制文件同名（选择模式支持跨文件夹选择，
+    // 批内两个被复制文件同名同格式（选择模式支持跨文件夹选择，
     // 不同文件夹允许同名文件）时，各页面的 _副本 去重基于
     // 快照并发计算，会生成同名副本 → 拒绝整批复制
-    final copiedNames = <String>{};
+    final copiedNames = <(String, String)>{};
     final nameConflict = adjustedFileIds.any((id) {
       final matches = widget.sortedRecords.where((r) => r.id == id);
       if (matches.isEmpty) return false;
-      return !copiedNames.add(matches.first.name);
+      final record = matches.first;
+      return !copiedNames.add((record.name, record.format));
     });
     if (nameConflict) {
       if (mounted) {
