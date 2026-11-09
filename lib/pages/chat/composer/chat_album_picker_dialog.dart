@@ -328,7 +328,7 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
                 onPressed: _clearSelection,
                 child: Text(
                   l10n.appMediaClearSelection(_selectionCount),
-                  style: const TextStyle(color: Colors.red),
+                  style: TextStyle(color: cs.primary),
                 ),
               ),
           ],
@@ -476,7 +476,7 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
           child: Row(
             children: [
-              const Icon(Icons.arrow_back, size: 20, color: Colors.blue),
+              Icon(Icons.arrow_back, size: 20, color: cs.primary),
               const SizedBox(width: 12),
               Text(
                 parent.isEmpty
@@ -484,12 +484,12 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
                     : AppLocalizations.of(context)!.appMediaParentFolder(
                         FolderPathUtils.getFolderBaseName(parent),
                       ),
-                style: const TextStyle(fontSize: 15, color: Colors.blue),
+                style: TextStyle(fontSize: 15, color: cs.primary),
               ),
               const Spacer(),
               Text(
                 FolderPathUtils.getFolderBaseName(_currentFolder),
-                style: TextStyle(fontSize: 13, color: Colors.grey[500]),
+                style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
               ),
             ],
           ),
@@ -530,7 +530,7 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              const Icon(Icons.chevron_right, color: Colors.grey),
+              Icon(Icons.chevron_right, color: cs.onSurfaceVariant),
             ],
           ),
         ),
@@ -585,13 +585,14 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
                       children: [
                         if (record.folder.isNotEmpty &&
                             record.folder != _currentFolder) ...[
-                          Icon(Icons.folder, size: 12, color: Colors.grey[400]),
+                          Icon(Icons.folder,
+                              size: 12, color: cs.onSurfaceVariant),
                           const SizedBox(width: 3),
                           Flexible(
                             child: Text(
                               record.folder,
                               style: TextStyle(
-                                  fontSize: 12, color: Colors.grey[400]),
+                                  fontSize: 12, color: cs.onSurfaceVariant),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -601,15 +602,15 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
                             width: 3,
                             height: 3,
                             decoration: BoxDecoration(
-                                color: Colors.grey[400]!,
+                                color: cs.onSurfaceVariant,
                                 shape: BoxShape.circle),
                           ),
                           const SizedBox(width: 6),
                         ],
                         Text(
                           _formatSize(record.size),
-                          style:
-                              TextStyle(fontSize: 12, color: Colors.grey[600]),
+                          style: TextStyle(
+                              fontSize: 12, color: cs.onSurfaceVariant),
                         ),
                       ],
                     ),

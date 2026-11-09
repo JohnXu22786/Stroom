@@ -419,14 +419,17 @@ class _ExpandedContent extends ConsumerWidget {
                   onPressed: restoreReady
                       ? () => _confirmDelete(context, ref, executionId)
                       : null,
-                  icon: const Icon(
+                  icon: Icon(
                     Icons.delete_outline,
                     size: 18,
-                    color: Colors.red,
+                    color: Theme.of(context).colorScheme.error,
                   ),
                   label: Text(
                     strings.taskFlowCardDelete,
-                    style: TextStyle(fontSize: 13, color: Colors.red),
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Theme.of(context).colorScheme.error,
+                    ),
                   ),
                   style: TextButton.styleFrom(
                     padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -665,7 +668,7 @@ class _ExpandedContent extends ConsumerWidget {
             },
             child: Text(
               strings.taskFlowCardConfirm,
-              style: TextStyle(color: Colors.red),
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
             ),
           ),
         ],
