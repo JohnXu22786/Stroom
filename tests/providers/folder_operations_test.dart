@@ -826,6 +826,27 @@ void main() {
   // ====================================================================
 
   group('ImageRecordsNotifier folder ops', () {
+    testWidgets('copyFolder snapshots records before adding copied records',
+        (WidgetTester t) async {
+      final notifier = ImageRecordsNotifier();
+      await notifier.loadRecords();
+      await ImageManifest.addRecord(ImageRecord(
+        id: 'img_cp_snapshot_1',
+        name: 'pic',
+        hash: 'hash_img_cp_snapshot_1',
+        format: 'jpg',
+        createdAt: DateTime.now(),
+        size: 4,
+        folder: 'a',
+      ));
+
+      await expectLater(notifier.copyFolder('a', 'x'), completes);
+
+      final records = await ImageManifest.loadRecords();
+      expect(records.where((record) => record.folder == 'a'), hasLength(1));
+      expect(records.where((record) => record.folder == 'x/a'), hasLength(1));
+    });
+
     testWidgets('moveFolder keeps empty descendant folders',
         (WidgetTester t) async {
       final notifier = ImageRecordsNotifier();
