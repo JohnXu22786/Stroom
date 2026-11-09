@@ -106,6 +106,7 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
         "services/batch_rename_presets_test.dart",
         "providers/folder*_test.dart",
         "utils/atomic_file_test.dart",
+        "utils/atomic_file_platform_*_test.dart",
         "utils/batch_rename*_test.dart",
         "utils/cross_tab_folder_isolation_test.dart",
         "utils/file_picker_utils_test.dart",
