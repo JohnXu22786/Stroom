@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 72557)
-Total output lines: 6265
-
 {
   "@@locale": "en",
   "galleryPermissionTitle": "Photo library access required",
@@ -1206,7 +1203,3560 @@ Total output lines: 6265
   "fileManagerCancel": "Cancel",
   "fileManagerDeleteFailed": "Delete failed: {error}",
   "fileManagerFolderAlreadyThere": "The folder is already at the destination. Operation canceled.",
-  "fileManagerFolderConflict": "A folder with the same name exist…37557 tokens truncated…tleHint": {
+  "fileManagerFolderConflict": "A folder with the same name exists at the destination, or the destination is inside the selected folder. Operation canceled.",
+  "fileManagerBatchDeleteTitle": "Confirm bulk deletion",
+  "fileManagerDeleteSelectedConfirm": "Delete the {count} selected items? This action cannot be undone.",
+  "fileManagerBatchDeleteFailed": "Bulk delete failed: {error}",
+  "fileManagerExportConflict": "Export paths for the selected files and folders conflict",
+  "fileManagerSelectedAlreadyThere": "The selected file is already at the destination. Move canceled.",
+  "fileManagerBatchMoveFailed": "Bulk move failed: {error}",
+  "fileManagerCopyConflict": "The selection contains files with duplicate names. Copy canceled; copy them one at a time.",
+  "fileManagerBatchCopyFailed": "Bulk copy failed: {error}",
+  "fileManagerClosedError": "The file page is closed",
+  "fileManagerBatchRenameFailed": "Bulk rename failed: {error}",
+  "fileManagerFolderNameHint": "Enter a folder name",
+  "fileManagerCreate": "Create",
+  "fileManagerFolderExists": "Folder already exists",
+  "fileManagerCreateFolderFailed": "Could not create folder: {error}",
+  "fileManagerFolderCreated": "Folder “{name}” created",
+  "fileManagerRenameFolderTitle": "Rename folder",
+  "fileManagerNewNameHint": "Enter a new name",
+  "fileManagerTargetFolderConflict": "A folder with the same name already exists at the destination. Operation canceled.",
+  "fileManagerMoveFolderTitle": "Move folder to…",
+  "fileManagerCopyFolderTitle": "Copy folder to…",
+  "fileManagerFolderSelfConflict": "A folder with the same name exists at the destination, or the destination is the folder itself. Operation canceled.",
+  "fileManagerDeleteFolderConfirm": "Delete folder “{name}”? Its {count} files will also be deleted.",
+  "fileManagerDeleteEmptyFolderConfirm": "Delete empty folder “{name}”?",
+  "fileManagerDeleteFolderTitle": "Confirm folder deletion",
+  "fileManagerRefreshFailed": "Refresh failed: {error}",
+  "fileManagerRefreshed": "File list refreshed",
+  "fileManagerRenameFileTitle": "Rename file",
+  "fileManagerFormat": "Format",
+  "fileManagerFolderAtDestination": "Folder is already at the destination",
+  "folderPickerTitle": "Choose folder",
+  "folderPickerExists": "Folder already exists",
+  "folderPickerCreateFailed": "Could not create folder: {error}",
+  "folderPickerRefreshFailed": "Could not refresh folder list: {error}",
+  "folderPickerInstruction": "Click to select; double-click to open a folder",
+  "folderPickerFileName": "File name",
+  "folderPickerFileNameHint": "Enter a file name",
+  "folderPickerBack": "Go up one level",
+  "folderPickerPath": "Root > {path}",
+  "folderPickerRoot": "Root",
+  "folderPickerCurrentFolder": "Current folder",
+  "folderPickerSubfolders": "Subfolders",
+  "folderPickerExistingFolders": "Existing folders",
+  "folderPickerCreateNew": "Create new folder",
+  "folderPickerFolderNameHint": "Enter a folder name",
+  "folderPickerCancelCreate": "Cancel creation",
+  "folderPickerCancel": "Cancel",
+  "folderPickerConfirm": "Done",
+  "batchRunReadFailed": "Could not read file list: {error}",
+  "batchRunPreparing": "Preparing…",
+  "batchRunUndo": "Undo",
+  "batchRunRename": "Rename",
+  "batchRunFailedAction": "Could not {label}",
+  "batchRunCompletedCount": "{label} {count} items",
+  "batchRunSummary": "{label}: {completed} succeeded, {failed} failed, {remaining} remaining",
+  "batchRunFailedItem": "Failed: {id} → {name}",
+  "batchRunReportCopied": "Execution report copied",
+  "batchRunCopyFailed": "Copy failed. Try again.",
+  "batchRunWorking": "{label}…",
+  "batchRunTitle": "Batch rename results",
+  "batchRunStoppedRetain": "Stopping keeps completed items. You can undo them on the results page.",
+  "batchRunFailedRemaining": "Failed; remaining items were not processed",
+  "batchRunUndoInfo": "Undo restores the original names for items completed in this run. Undo is refused if the file list has changed since.",
+  "batchRunUncertain": "Some item states could not be confirmed. Check the file list; automatic undo is unavailable to avoid overwriting files.",
+  "batchRunUndoing": "Restoring original names…",
+  "batchRunStopping": "Stopping…",
+  "batchRunStopRemaining": "Stop remaining items",
+  "batchRunCopyReport": "Copy report",
+  "batchRunUndoRemaining": "Continue undoing the remaining {count}",
+  "batchRunUndoCompleted": "Undo completed renames",
+  "batchRunDone": "Done",
+  "codeEditorTitle": "Edit parameter value",
+  "codeEditorFormat": "Format",
+  "codeEditorCancel": "Cancel",
+  "codeEditorConfirm": "OK",
+  "codeEditorInvalidJson": "Invalid JSON. Fix it before saving.",
+  "codeEditorParamPath": "Parameter name path (expanded into nested JSON when sent)",
+  "codeEditorErrorPosition": "Line {line}, column {column}: {message}",
+  "@codeEditorErrorPosition": {
+    "placeholders": {
+      "line": {
+        "type": "String"
+      },
+      "column": {
+        "type": "String"
+      },
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  "codeEditorJsonError": "JSON format error: {message}",
+  "@codeEditorJsonError": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  "codeEditorInvalidFormat": "Invalid JSON format",
+  "toolCallCompacted": "Compacted",
+  "mermaidSaveEmpty": "Mermaid code is empty. Nothing to save.",
+  "mermaidFolderLoadFailed": "Could not load folders: {error}",
+  "@mermaidFolderLoadFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "mermaidSaveTitle": "Save Mermaid diagram",
+  "mermaidSaveHint": "Choose or create a folder for the .mmd file",
+  "mermaidSaveFilenameHint": "Enter a file name (.mmd is added automatically)",
+  "mermaidFilenameEmpty": "File name cannot be empty",
+  "mermaidSaveSuccess": "Saved to text storage: {folder}/{name}.mmd",
+  "@mermaidSaveSuccess": {
+    "placeholders": {
+      "folder": {
+        "type": "String"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "mermaidSaveFailed": "Save failed: {error}",
+  "@mermaidSaveFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "mermaidPrepareEngine": "Preparing rendering engine...",
+  "mermaidRetry": "Retry",
+  "batchRuleEmpty": "Cannot be empty",
+  "batchRuleNumber": "Enter a number",
+  "batchRulePositive": "Enter a number greater than 0",
+  "batchRuleMin": "Must be at least {min}",
+  "@batchRuleMin": {
+    "placeholders": {
+      "min": {
+        "type": "String"
+      }
+    }
+  },
+  "batchRuleMax": "Must be no greater than {max}",
+  "@batchRuleMax": {
+    "placeholders": {
+      "max": {
+        "type": "String"
+      }
+    }
+  },
+  "batchRulePrefix": "Prefix",
+  "batchRuleSuffix": "Suffix",
+  "batchRuleStart": "Start",
+  "batchRuleStep": "Step",
+  "batchRuleDigits": "Digits",
+  "batchRuleSeparator": "Separator",
+  "batchRuleRestartFolder": "Restart numbering in each folder",
+  "batchRuleNumberHelp": "Numbers follow preview order; excluded items do not use a number. Step can be negative or 0.",
+  "batchRuleFind": "Find",
+  "batchRuleReplace": "Replace with (leave empty to delete)",
+  "batchRuleCaseSensitive": "Case sensitive",
+  "batchRuleRegex": "Regular expression",
+  "batchRuleFirstOnly": "Replace first match only",
+  "batchRuleRegexHelp": "Capture groups: $1, $2; full match: $0; literal $: $$. Example: ^IMG_(\\d+)$ → Photo_$1",
+  "batchRuleFindRequired": "Enter text to find to enable this rule.",
+  "batchRuleBeginning": "Beginning",
+  "batchRuleEnd": "End",
+  "batchRulePosition": "Position",
+  "batchRuleInsertText": "Text to insert",
+  "batchRuleBeforeChar": "Before character N",
+  "batchRulePositionHelp": "Positions start at 1; values beyond the end are appended. Combined emoji count as one character.",
+  "batchRuleFromBeginning": "From beginning",
+  "batchRuleFromEnd": "From end",
+  "batchRuleFromChar": "Starting at character N",
+  "batchRuleCount": "Count",
+  "batchRuleDeleteHelp": "If deletion empties the name, a later insert rule must add text before execution.",
+  "batchRuleUpper": "UPPERCASE",
+  "batchRuleLower": "lowercase",
+  "batchRuleFirstUpper": "Capitalize first letter",
+  "batchRuleTitleCase": "Capitalize Each Word",
+  "batchRuleTemplate": "New name template",
+  "batchRuleTemplateHint": "Course_{n}_{name}",
+  "@batchRuleTemplateHint": {
+    "placeholders": {
+      "n": {
+        "type": "String"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "batchRuleTemplateHelp": "{name} original name · {n} sequence · {folder} folder name\n{created} creation date · {modified} modified date · {ext} original extension\nDate format YYYY-MM-DD; missing dates are reported. The template replaces the whole base name; the extension is kept automatically.",
+  "@batchRuleTemplateHelp": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "n": {
+        "type": "String"
+      },
+      "folder": {
+        "type": "String"
+      },
+      "created": {
+        "type": "String"
+      },
+      "modified": {
+        "type": "String"
+      },
+      "ext": {
+        "type": "String"
+      }
+    }
+  },
+  "batchRuleTrim": "Trim leading and trailing spaces",
+  "batchRuleCollapseSpaces": "Replace consecutive spaces with one space",
+  "batchRuleActions": "Rule actions",
+  "batchRuleDuplicate": "Duplicate rule",
+  "batchRuleRemove": "Delete rule",
+  "batchRuleMoveUp": "Move rule up",
+  "batchRuleMoveDown": "Move rule down",
+  "batchDlgSavePreset": "Save preset",
+  "batchDlgPresetName": "Preset name",
+  "batchDlgPresetHint": "Saves rules and order, but not exclusions or manual names",
+  "batchDlgCancel": "Cancel",
+  "batchDlgSave": "Save",
+  "batchDlgOverwriteTitle": "Overwrite existing preset?",
+  "batchDlgOverwriteBody": "Update the rules in “{name}”.",
+  "@batchDlgOverwriteBody": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "batchDlgOverwrite": "Overwrite",
+  "batchDlgManagePresets": "Manage presets",
+  "batchDlgNoPresets": "No saved presets",
+  "batchDlgDeletePreset": "Delete preset",
+  "batchDlgDone": "Done",
+  "batchDlgEditName": "Edit name individually",
+  "batchDlgBaseName": "Base name",
+  "batchDlgOverrideHelp": "This name overrides the rule result",
+  "batchDlgExtensionRetained": "Extension .{extension} is kept automatically",
+  "@batchDlgExtensionRetained": {
+    "placeholders": {
+      "extension": {
+        "type": "String"
+      }
+    }
+  },
+  "batchDlgConfirm": "Confirm",
+  "batchDlgHelp": "Instructions",
+  "batchDlgClose": "Close",
+  "batchDlgLoadPreset": "Load preset (replaces rules and clears manual names)",
+  "batchDlgLoad": "Load preset",
+  "batchDlgSaving": "Saving…",
+  "batchDlgReset": "Reset all rules and included items",
+  "batchDlgRuleInstructions": "Rules run from top to bottom. Copy, move, or disable them. File extensions stay unchanged.",
+  "batchDlgSortName": "Name",
+  "batchDlgSortCreated": "Created",
+  "batchDlgSortModified": "Modified",
+  "batchDlgSortSize": "Size",
+  "batchDlgAscending": "Ascending",
+  "batchDlgDescending": "Descending",
+  "batchDlgFolderSort": "Folders come first; same names are sorted by folder.",
+  "batchDlgAddRule": "＋ Add rule",
+  "batchDlgMaxRules": "Maximum 50 rules",
+  "batchDlgPreviewWorking": "Calculating preview… You can keep editing rules or cancel.",
+  "batchDlgSearch": "Search original name, new name, or folder",
+  "batchDlgFilterAll": "All",
+  "batchDlgFilterChanged": "Changed",
+  "batchDlgFilterErrors": "Issues",
+  "batchDlgFilterUnchanged": "Unchanged",
+  "batchDlgFilterExcluded": "Excluded",
+  "batchDlgParticipants": "Choose included items",
+  "batchDlgIncludeAll": "Include all",
+  "batchDlgOnlyFiles": "Files only",
+  "batchDlgOnlyFolders": "Folders only",
+  "batchDlgExcludeAll": "Exclude all",
+  "batchDlgScope": "Included items",
+  "batchDlgCopyList": "Copy list",
+  "batchDlgConflictBlock": "Name conflict: block execution",
+  "batchDlgConflictSuffix": "Name conflict: append (2), (3)…",
+  "batchDlgNoMatches": "No items match the filter",
+  "batchDlgRoot": "Root",
+  "batchDlgFile": "File",
+  "batchDlgFolder": "Folder",
+  "batchDlgTargetFolder": "Target folder: {folder}",
+  "@batchDlgTargetFolder": {
+    "placeholders": {
+      "folder": {
+        "type": "String"
+      }
+    }
+  },
+  "batchDlgEditNameTooltip": "Edit name individually",
+  "batchDlgRestoreNameTooltip": "Restore rule-generated name",
+  "batchDlgCopied": "Full preview list copied (CSV)",
+  "batchDlgCopyFailed": "Copy failed. Try again.",
+  "batchDlgHelpTitle": "Batch rename instructions",
+  "batchDlgHelpDismiss": "Got it",
+  "batchDlgRulesTab": "Rules",
+  "batchDlgPreviewTab": "Preview ({count})",
+  "@batchDlgPreviewTab": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "batchDlgRenameCount": "Rename {count} items",
+  "@batchDlgRenameCount": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "batchDlgPresetLoadFailed": "Could not load presets. You can still edit and run rules.",
+  "batchDlgPreviewFailed": "Could not calculate preview. Adjust the rules and try again.",
+  "batchDlgSavedName": "Preset saved: {name}",
+  "@batchDlgSavedName": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "batchDlgSaveFailed": "Save failed: {error}",
+  "@batchDlgSaveFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "batchDlgPresetWriteFailed": "The preset could not be saved.",
+  "batchDlgDeleteFailed": "Delete failed: {error}",
+  "@batchDlgDeleteFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "batchDlgSavePresetFallback": "Save preset",
+  "batchDlgPreviewSummary": "Preview · {changes} changes · {conflicts} issues · {excluded} excluded",
+  "@batchDlgPreviewSummary": {
+    "placeholders": {
+      "changes": {
+        "type": "String"
+      },
+      "conflicts": {
+        "type": "String"
+      },
+      "excluded": {
+        "type": "String"
+      }
+    }
+  },
+  "batchDlgInvalidInput": "Fix invalid rule inputs. The preview does not include them yet.",
+  "batchDlgConflictError": "Conflicts or invalid names prevent applying. Adjust the rules.",
+  "batchDlgManualNameStatus": "Manual name",
+  "batchDlgPendingRename": "Ready to rename",
+  "batchDlgCsvHeader": "Original path,Original name,Target path,Status",
+  "batchDlgHelpBody": "1. Choose a preset or enable rules, then copy rules and adjust their order as needed.\n\n2. The preview shows the names that will be used. Search and filters affect display only. Unchecking an item excludes it and recalculates numbering. Edit a name individually or restore the rule result.\n\n3. Resolve all issues before running. Automatic suffixes handle duplicate names without overwriting files. Rename folders that exchange names in separate batches.\n\n4. You can stop later items during execution; the current item finishes first. The results page shows completed changes and lets you undo them. Undo is blocked if the list has changed since execution.\n\nThis changes names and folder paths only; file contents and extensions stay unchanged. Renaming a parent folder does not prevent checked children from being renamed, and renaming a parent moves its children with it.",
+  "batchDlgPreviewCount": "Preview ({count})",
+  "@batchDlgPreviewCount": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "batchBuiltinPhoto": "Photos: date and number",
+  "batchBuiltinCourse": "Courses: consistent name and number",
+  "batchBuiltinDownloads": "Downloads: clean whitespace",
+  "taskListDetail": "Details",
+  "taskListOwnershipChecking": "Confirming task ownership",
+  "taskListOwnershipFailed": "Could not read task flow record; actions are unavailable",
+  "taskListViewFlow": "View task flow",
+  "taskListPause": "Pause",
+  "taskListClear": "Clear task",
+  "taskListResume": "Resume",
+  "taskListRetry": "Retry",
+  "taskListDismissError": "Dismiss error",
+  "taskListRemove": "Remove from list",
+  "taskListSynthesisErrorTitle": "Synthesis error details",
+  "taskListClose": "Close",
+  "taskListOriginalExchange": "Original request and response",
+  "taskListOriginalRequest": "Original request body:",
+  "taskListOriginalResponse": "Original response body:",
+  "taskFlowIoTypeText": "Text",
+  "taskFlowIoTypeAudio": "Audio",
+  "taskFlowIoTypeVideo": "Video",
+  "taskFlowIoTypeImage": "Image",
+  "taskFlowIoTypeLink": "Link",
+  "taskFlowIoTypeFile": "File",
+  "taskFlowIoTypeAny": "Any",
+  "mermaidZoomOut": "Zoom out",
+  "mermaidZoomIn": "Zoom in",
+  "mermaidFullscreen": "Fullscreen",
+  "mermaidSaveButton": "Save",
+  "mermaidSourceButton": "View source",
+  "mermaidDiagramSemantic": "View diagram",
+  "taskFlowCardCatCatchDeletePersistError": "Could not save CatCatch child task deletion state. Try again.",
+  "taskFlowCardSynthesisDeletePersistError": "Could not save synthesis child task deletion state. Try again.",
+  "taskFlowCardBackgroundDeletePersistError": "Could not save background child task deletion state. Try again.",
+  "mathParseError": "Math parse error",
+  "mermaidEmptyPlaceholder": "No Mermaid code to render",
+  "mathClose": "Close",
+  "mermaidLoadTimeout": "Mermaid loading timed out. Check your network and try again.",
+  "mermaidCdnLoadFailed": "Could not reach cdn.jsdelivr.net to load Mermaid.",
+  "mermaidLoadingDiagram": "Loading diagram…",
+  "mermaidEngineInitFailed": "Could not initialize the diagram renderer. Try again.",
+  "mermaidPageTimeout": "Page load timed out. Try again.",
+  "mermaidCodeLoadFailed": "Could not load diagram code. Try again.",
+  "mermaidPageLoadFailed": "Page load failed: {description}",
+  "@mermaidPageLoadFailed": {
+    "placeholders": {
+      "description": {
+        "type": "String"
+      }
+    }
+  },
+  "mermaidLoadingEngine": "Loading rendering engine…",
+  "mermaidRenderErrorTitle": "Diagram rendering error",
+  "taskFlowOutputVideoAudioDownstream": "Video or audio (filtered by downstream)",
+  "taskFlowOutputUnknown": "Unknown",
+  "batchRunCancelledSummary": "{label} stopped: {completed} succeeded, {failed} failed, {remaining} remaining",
+  "@batchRunCancelledSummary": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      },
+      "completed": {
+        "type": "String"
+      },
+      "failed": {
+        "type": "String"
+      },
+      "remaining": {
+        "type": "String"
+      }
+    }
+  },
+  "mermaidRenderErrorPrefix": "Mermaid render error: {message}",
+  "@mermaidRenderErrorPrefix": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  "mermaidInitializeErrorPrefix": "Mermaid initialization error: {message}",
+  "@mermaidInitializeErrorPrefix": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  "mermaidResourceError": "A resource in the Mermaid diagram failed to load.",
+  "taskFlowParamRecognitionModel": "Recognition model",
+  "@taskFlowParamRecognitionModel": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowParamSynthesisModel": "Synthesis model",
+  "@taskFlowParamSynthesisModel": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowParamSaveFolder": "Save folder",
+  "@taskFlowParamSaveFolder": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowParamResourceSelection": "Resource selection",
+  "@taskFlowParamResourceSelection": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowParamOutputType": "Output type",
+  "@taskFlowParamOutputType": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowParamVideoFolder": "Video save folder",
+  "@taskFlowParamVideoFolder": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowParamAudioFolder": "Audio save folder",
+  "@taskFlowParamAudioFolder": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowParamExpectedDuration": "Expected duration",
+  "@taskFlowParamExpectedDuration": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowParamVoice": "Voice",
+  "@taskFlowParamVoice": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowParamSpeechRate": "Speech rate",
+  "@taskFlowParamSpeechRate": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowParamAssistant": "Assistant",
+  "@taskFlowParamAssistant": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowHintResourceSelection": "Manual mode lets you choose. Automatic mode follows the existing rules. Ask when ambiguous selects automatically only when there is one safe choice; otherwise it opens the resource list for confirmation.",
+  "@taskFlowHintResourceSelection": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowHintOutputType": "Choose video or audio explicitly. Follow downstream filters resources by the next block’s input type. If the next block accepts both types or there is no next block, both types are kept.",
+  "@taskFlowHintOutputType": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowHintExpectedDuration": "Filter resources by video duration. Leave blank to skip filtering.",
+  "@taskFlowHintExpectedDuration": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowHintVoice": "Choose a voice. The matching synthesis model is selected automatically.",
+  "@taskFlowHintVoice": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowUiUnsupportedBlockStep": "This block type is no longer supported. Replace it or remove this step.",
+  "@taskFlowUiUnsupportedBlockStep": {
+    "description": "TaskFlow block connection validation message."
+  },
+  "taskFlowUiDownstreamTypeMismatch": "The next block requires {requiredType}. The downloader can output video or audio. Change the next step or output policy.",
+  "@taskFlowUiDownstreamTypeMismatch": {
+    "description": "TaskFlow block connection validation message.",
+    "placeholders": {
+      "requiredType": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowUiAnyTypeMismatch": "{source} has any type, but “{block}” needs an explicit text, link, image, audio, video, or file type. Change the input type, move or replace the block, or undo the change.",
+  "@taskFlowUiAnyTypeMismatch": {
+    "description": "TaskFlow block connection validation message.",
+    "placeholders": {
+      "source": {
+        "type": "String"
+      },
+      "block": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowUiTypeMismatch": "{source} has {actualType}, but “{block}” requires {requiredType}. Change the input type, move or replace the block, or undo the change.",
+  "@taskFlowUiTypeMismatch": {
+    "description": "TaskFlow block connection validation message.",
+    "placeholders": {
+      "source": {
+        "type": "String"
+      },
+      "actualType": {
+        "type": "String"
+      },
+      "block": {
+        "type": "String"
+      },
+      "requiredType": {
+        "type": "String"
+      }
+    }
+  },
+  "fileManagerSortFieldCreated": "Created date",
+  "@fileManagerSortFieldCreated": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "fileManagerSortFieldModified": "Modified date",
+  "@fileManagerSortFieldModified": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "fileManagerSortFieldName": "Name",
+  "@fileManagerSortFieldName": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "fileManagerSortFieldSize": "Size",
+  "@fileManagerSortFieldSize": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "fileManagerSortDateNewest": "newest first",
+  "@fileManagerSortDateNewest": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "fileManagerSortDateOldest": "oldest first",
+  "@fileManagerSortDateOldest": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "fileManagerSortSizeLargest": "largest first",
+  "@fileManagerSortSizeLargest": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "fileManagerSortSizeSmallest": "smallest first",
+  "@fileManagerSortSizeSmallest": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "catcatchStatusRunning": "Running",
+  "@catcatchStatusRunning": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "catcatchStatusCompleted": "Completed",
+  "@catcatchStatusCompleted": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "catcatchStatusFailed": "Failed",
+  "@catcatchStatusFailed": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "catcatchStatusPaused": "Paused",
+  "@catcatchStatusPaused": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "catcatchStatusWaiting": "Waiting",
+  "@catcatchStatusWaiting": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "catcatchStepFetching": "Fetching webpage",
+  "@catcatchStepFetching": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "catcatchStepAnalyzing": "Analyzing media",
+  "@catcatchStepAnalyzing": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "catcatchStepParsingPlaylist": "Parsing playlist",
+  "@catcatchStepParsingPlaylist": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "catcatchStepFiltering": "Filtering by duration",
+  "@catcatchStepFiltering": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "catcatchStepUserSelecting": "Waiting for selection",
+  "@catcatchStepUserSelecting": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "catcatchStepDownloading": "Downloading",
+  "@catcatchStepDownloading": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "catcatchStepConverting": "Converting/merging",
+  "@catcatchStepConverting": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "catcatchStepSaving": "Saving locally",
+  "@catcatchStepSaving": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "bgStepConnectServer": "Connecting to server",
+  "@bgStepConnectServer": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "bgStepUploadImage": "Uploading images",
+  "@bgStepUploadImage": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "bgStepWaitRecognition": "Waiting for recognition",
+  "@bgStepWaitRecognition": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "bgStepParseResult": "Parsing result",
+  "@bgStepParseResult": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "bgStepSaveFile": "Saving file",
+  "@bgStepSaveFile": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "bgStepUploadAudio": "Uploading audio",
+  "@bgStepUploadAudio": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "bgStepTranscribing": "Transcribing",
+  "@bgStepTranscribing": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "bgStepReceiveResult": "Receiving result",
+  "@bgStepReceiveResult": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "bgStepSeparateAudio": "Separating audio",
+  "@bgStepSeparateAudio": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "bgStepSaveToFile": "Saving to file",
+  "@bgStepSaveToFile": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "bgStepSendRequest": "Sending request",
+  "@bgStepSendRequest": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "bgStepWaitReply": "Waiting for reply",
+  "@bgStepWaitReply": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "fileManagerSortNameAscending": "A to Z",
+  "@fileManagerSortNameAscending": {
+    "description": "Alphabetical file sort direction."
+  },
+  "fileManagerSortNameDescending": "Z to A",
+  "@fileManagerSortNameDescending": {
+    "description": "Alphabetical file sort direction."
+  },
+  "taskFlowValidationNoSteps": "This task flow has no steps. Add a block first.",
+  "@taskFlowValidationNoSteps": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "taskFlowValidationInputRequired": "Add at least one input to run this task flow.",
+  "@taskFlowValidationInputRequired": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "taskFlowValidationFlowRemoved": "This task flow was deleted. Select it again.",
+  "@taskFlowValidationFlowRemoved": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "taskFlowValidationInputTypeChanged": "The initial input type changed. Choose the run input again.",
+  "@taskFlowValidationInputTypeChanged": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "taskFlowValidationSnapshotMissing": "This older record has no run snapshot. Retry using the latest configuration.",
+  "@taskFlowValidationSnapshotMissing": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "taskFlowValidationAssistantModelMissing": "The assistant model is missing or unavailable. Select a model on the chat page or set a default model for the assistant.",
+  "@taskFlowValidationAssistantModelMissing": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "taskFlowValidationSavedFileUnavailable": "A saved step file is missing, empty, or unreadable. Run the task flow again.",
+  "@taskFlowValidationSavedFileUnavailable": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "taskFlowValidationUnsupportedBlock": "This block type is no longer supported. Replace or remove this step.",
+  "@taskFlowValidationUnsupportedBlock": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "taskFlowValidationDownstreamMismatch": "The next block requires {requiredType}. The downloader can output audio or video. Change the next step or output policy.",
+  "@taskFlowValidationDownstreamMismatch": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message.",
+    "placeholders": {
+      "requiredType": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationRequiredParameter": "“{parameter}” is required for “{block}”. Configure it in the block settings.",
+  "@taskFlowValidationRequiredParameter": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message.",
+    "placeholders": {
+      "parameter": {
+        "type": "String"
+      },
+      "block": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationLegacyModel": "The legacy model selection needs confirmation. Choose the model again in “{block}” settings.",
+  "@taskFlowValidationLegacyModel": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message.",
+    "placeholders": {
+      "block": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationModelUnavailable": "The model is missing or unavailable from its provider. Choose it again in “{block}” settings and check the provider URL and key.",
+  "@taskFlowValidationModelUnavailable": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message.",
+    "placeholders": {
+      "block": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationAssistantUnavailable": "The assistant is missing or was deleted. Choose it again in “{block}” settings.",
+  "@taskFlowValidationAssistantUnavailable": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message.",
+    "placeholders": {
+      "block": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationAssistantModelUnavailable": "The assistant model was deleted or its provider configuration is unavailable. Choose a model again in assistant settings.",
+  "@taskFlowValidationAssistantModelUnavailable": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "taskFlowValidationPolicyInvalid": "The resource selection policy or output type is invalid. Choose it again in “{block}” settings.",
+  "@taskFlowValidationPolicyInvalid": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message.",
+    "placeholders": {
+      "block": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationOutputInvalid": "The output type is invalid. Choose it again in “{block}” settings.",
+  "@taskFlowValidationOutputInvalid": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message.",
+    "placeholders": {
+      "block": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationResourcePolicyInvalid": "The resource selection policy is invalid. Choose it again in “{block}” settings.",
+  "@taskFlowValidationResourcePolicyInvalid": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message.",
+    "placeholders": {
+      "block": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationInputFileUnavailable": "Input {index}: The file is missing, empty, or unreadable. Choose it again.",
+  "@taskFlowValidationInputFileUnavailable": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message.",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationInputUrlInvalid": "Input {index}: Enter a valid HTTP or HTTPS link.",
+  "@taskFlowValidationInputUrlInvalid": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message.",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationInputError": "Input {index}: {error}",
+  "@taskFlowValidationInputError": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message.",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "batchRuleValidationMaxRules": "At most 50 rules are allowed.",
+  "@batchRuleValidationMaxRules": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "batchRuleValidationDigits": "The number of digits must be from 1 to 12.",
+  "@batchRuleValidationDigits": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "batchRuleValidationNumberRange": "The starting number and step must be within ±999,999,999.",
+  "@batchRuleValidationNumberRange": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "batchRuleValidationReplacementLength": "The replacement rule is too long.",
+  "@batchRuleValidationReplacementLength": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "batchRuleValidationRegex": "The regular expression is invalid.",
+  "@batchRuleValidationRegex": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "batchRuleValidationDeleteIndex": "The deletion position must start at 1.",
+  "@batchRuleValidationDeleteIndex": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "batchRuleValidationInsertLength": "The inserted text is too long.",
+  "@batchRuleValidationInsertLength": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "batchRuleValidationTemplateNumber": "Invalid template number settings: digits must be 1 to 12 and start/step within ±999,999,999.",
+  "@batchRuleValidationTemplateNumber": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "batchRuleValidationTemplateLength": "The template is too long.",
+  "@batchRuleValidationTemplateLength": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "batchRuleValidationTemplateVariable": "Unknown template variable or an unclosed brace.",
+  "@batchRuleValidationTemplateVariable": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "batchRuleTypeNumber": "Add numbering",
+  "@batchRuleTypeNumber": {
+    "description": "Visible label for a built-in batch rename operation."
+  },
+  "batchRuleTypeReplace": "Find and replace",
+  "@batchRuleTypeReplace": {
+    "description": "Visible label for a built-in batch rename operation."
+  },
+  "batchRuleTypeInsert": "Insert text",
+  "@batchRuleTypeInsert": {
+    "description": "Visible label for a built-in batch rename operation."
+  },
+  "batchRuleTypeDelete": "Delete characters",
+  "@batchRuleTypeDelete": {
+    "description": "Visible label for a built-in batch rename operation."
+  },
+  "batchRuleTypeCase": "Change case",
+  "@batchRuleTypeCase": {
+    "description": "Visible label for a built-in batch rename operation."
+  },
+  "batchRuleTypeTemplate": "Name template",
+  "@batchRuleTypeTemplate": {
+    "description": "Visible label for a built-in batch rename operation."
+  },
+  "batchRuleTypeCleanup": "Clean whitespace",
+  "@batchRuleTypeCleanup": {
+    "description": "Visible label for a built-in batch rename operation."
+  },
+  "taskFlowValidationInputEmpty": "Input {index}: Enter text or choose a file.",
+  "@taskFlowValidationInputEmpty": {
+    "description": "Localized TaskFlow input validation message.",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationImageTooLarge": "Input {index}: The image is over 20 MB. Choose a smaller image.",
+  "@taskFlowValidationImageTooLarge": {
+    "description": "Localized TaskFlow input validation message.",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationAttachmentTooLarge": "Input {index}: The attachment is over 10 MB. Choose a smaller file.",
+  "@taskFlowValidationAttachmentTooLarge": {
+    "description": "Localized TaskFlow input validation message.",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationFileTypeMismatch": "Input {index}: The file is {actualType}, but {requiredType} is required. Choose another file.",
+  "@taskFlowValidationFileTypeMismatch": {
+    "description": "Localized TaskFlow input validation message.",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      },
+      "actualType": {
+        "type": "String"
+      },
+      "requiredType": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationSvgUnsupported": "Input {index}: Assistant chat does not support SVG image attachments. Convert it to PNG or JPEG.",
+  "@taskFlowValidationSvgUnsupported": {
+    "description": "Localized TaskFlow input validation message.",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationImageMimeUnsupported": "Input {index}: Assistant chat does not support {mime} image attachments. Convert it to PNG, JPEG, GIF, or WebP.",
+  "@taskFlowValidationImageMimeUnsupported": {
+    "description": "Localized TaskFlow input validation message.",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      },
+      "mime": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationAudioMimeUnsupported": "Input {index}: Assistant chat does not support {mime} audio attachments. Convert it to MP3, WAV, or M4A.",
+  "@taskFlowValidationAudioMimeUnsupported": {
+    "description": "Localized TaskFlow input validation message.",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      },
+      "mime": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationEndpointMediaUnsupported": "Input {index}: This Anthropic chat format does not support {type} attachments. Choose an assistant that supports this media.",
+  "@taskFlowValidationEndpointMediaUnsupported": {
+    "description": "Localized TaskFlow input validation message.",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      },
+      "type": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationEndpointPdfOnly": "Input {index}: This Anthropic chat format supports only image and PDF attachments. Choose a supported file.",
+  "@taskFlowValidationEndpointPdfOnly": {
+    "description": "Localized TaskFlow input validation message.",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationImageCompressionFailed": "Input {index}: Assistant chat could not compress the image below 10 MB. Choose a smaller image.",
+  "@taskFlowValidationImageCompressionFailed": {
+    "description": "Localized TaskFlow input validation message.",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationTextEncodingFailed": "Input {index}: The text attachment is not valid UTF-8. Convert it and try again.",
+  "@taskFlowValidationTextEncodingFailed": {
+    "description": "Localized TaskFlow input validation message.",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
+  },
+  "assistantParamValueTypeString": "String",
+  "assistantParamValueTypeNumber": "Number",
+  "assistantParamValueTypeBoolean": "Boolean",
+  "assistantParamValueTypeJson": "JSON",
+  "providerRequiredFields": "Provider name, API URL, and key are required.",
+  "providerJsonSizePositive": "Request JSON size must be a positive MiB value.",
+  "providerCustomParamRequired": "Custom parameter name and value are required.",
+  "providerParamNameInvalid": "Parameter name is invalid (dot-separated segments cannot be empty): {name}",
+  "providerParamAlreadyExists": "Parameter already exists: {name}",
+  "providerParamInvalidJson": "Default value for parameter \"{name}\" is not valid JSON: {value}",
+  "providerParamOptionsRequired": "Numeric options for parameter \"{name}\" cannot be empty.",
+  "providerParamInvalidNumber": "Value for parameter \"{name}\" is not a valid number: {value}",
+  "providerReasoningIncomplete": "Complete the reasoning toggle before enabling other reasoning parameters.",
+  "providerReasoningError": "Reasoning parameter error: {error}",
+  "providerParamNameConflict": "Reasoning and custom parameters have the same name: {name}",
+  "providerMaxTokensMissing": "Maximum output tokens is enabled, but no value was entered.",
+  "providerMaxTokensPositive": "Maximum output tokens must be a positive integer.",
+  "providerSeedInteger": "Random seed must be an integer.",
+  "providerNotConfigured": "Not set",
+  "providerAudioChunkingTitle": "Audio chunking",
+  "providerAudioChunkingHint": "Smart chunking analyzes the audio and candidate cuts, preferring sentence endings. Chunks do not overlap.",
+  "providerChunkingMode": "Chunking method",
+  "providerChunkNone": "No chunking",
+  "providerChunkSmart": "Smart chunking (recommended)",
+  "providerChunkFixedDuration": "Fixed-duration chunks",
+  "providerChunkFixedSize": "Fixed-size chunks",
+  "providerCompressionTitle": "Compression encoding",
+  "providerCompressionHint": "When enabled, the general fallback first compresses the full WAV. If the encoded file or request body still exceeds the limit, the source PCM is chunked and encoded.",
+  "providerCompressionMode": "Compression method",
+  "providerCompressionNone": "None (send as is)",
+  "providerCompressionAdpcm": "ADPCM (~4x compression)",
+  "providerCompressionFlac": "FLAC (lossless, ~2x)",
+  "providerCompressionAdpcmDescription": "IMA ADPCM, lossy 4:1 compression. Pure Dart implementation; audio quality suits transcription.",
+  "providerCompressionFlacDescription": "Lossless FLAC compression, implemented in pure Dart. Reduces size by about half.",
+  "providerCompressionWavDescription": "No compression; send as a WAV file.",
+  "providerLlmParams": "LLM parameters",
+  "providerEnabledParamsHelp": "Enabled parameters are sent as defaults in API requests.",
+  "providerTemperatureLabel": "Temperature",
+  "providerTemperatureHelp": "Controls output randomness; higher values are more creative.",
+  "providerTopPHelp": "Nucleus sampling parameter that controls cumulative probability for word selection.",
+  "providerFrequencyPenaltyLabel": "Frequency penalty",
+  "providerFrequencyPenaltyHelp": "Reduces repeated words; negative values increase repetition.",
+  "providerPresencePenaltyLabel": "Presence penalty",
+  "providerPresencePenaltyHelp": "Encourages new topics; negative values encourage returning to previous topics.",
+  "providerMaxOutputTokensLabel": "Maximum output tokens",
+  "providerOptionalExample": "Optional, e.g. {example}",
+  "providerResponseTokensHelp": "Maximum number of tokens generated per response.",
+  "providerSeedLabel": "Random seed",
+  "providerSeedHelp": "Set this to make output reproducible.",
+  "providerChunkSmartDescription": "Analyzes audio and candidate cuts, preferring sentence endings or long silences without overlap. Defaults: 20s minimum / 45s target / 60s maximum. Used only by the general fallback; compression chunking supports PCM WAV only.",
+  "providerChunkDurationDescription": "Splits every N seconds (60 by default). Simple, but may cut off speech. Used only by the general fallback; compression chunking supports PCM WAV only.",
+  "providerChunkSizeDescription": "Initially splits by audio data size, then refines by encoded file and request body size. Used only by the general fallback; compression chunking supports PCM WAV only.",
+  "providerChunkNoneDescription": "No chunking. The file is rejected if it exceeds the limit after full compression.",
+  "providerNameLabel": "Provider name",
+  "providerNameHint": "Enter provider name",
+  "providerApiUrlLabel": "API URL",
+  "providerApiUrlHint": "Enter the full API endpoint URL",
+  "providerApiKeyHint": "Hint: {hint}",
+  "providerEndpointTypeLabel": "Endpoint type",
+  "providerEndpointOpenAi": "OpenAI compatible (Chat Completions)",
+  "providerEndpointAnthropic": "Anthropic format (Messages API)",
+  "providerAnthropicEndpointHelp": "Uses the official Anthropic Messages API format (x-api-key header). API URL example: https://api.anthropic.com/v1/messages",
+  "providerOpenAiEndpointHelp": "Uses the official OpenAI Chat Completions compatible format (Bearer header). API URL example: https://api.openai.com/v1/chat/completions",
+  "providerRequestJsonDefault": "Default request JSON size",
+  "providerUseAppDefault": "Leave empty to use the app default",
+  "providerModelJsonBudgetHelp": "Models can override this value. If neither the provider nor model sets it, the default is 20 MiB.",
+  "providerRequestParamsHelp": "Requests use all enabled provider and model parameters. When names overlap, the model value takes precedence.",
+  "providerUploadSettings": "Upload settings",
+  "providerUploadMethodHelp": "Audio upload methods and size limits vary by provider.",
+  "providerUploadMethod": "Upload method",
+  "providerMultipart": "Multipart (general)",
+  "providerUrlUpload": "URL",
+  "providerMaxUploadSize": "Maximum upload size",
+  "providerFallbackStrategy": "Fallback strategy",
+  "providerFallbackMethod": "Fallback method",
+  "providerPreprocessing": "Audio preprocessing",
+  "providerPreprocessingHelp": "Reduces audio file size without affecting transcription accuracy.",
+  "providerPreprocessingMethod": "Preprocessing method",
+  "@providerParamNameInvalid": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "@providerParamAlreadyExists": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "@providerParamInvalidJson": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "@providerParamOptionsRequired": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "@providerParamInvalidNumber": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "@providerReasoningError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@providerParamNameConflict": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "@providerOptionalExample": {
+    "placeholders": {
+      "example": {
+        "type": "String"
+      }
+    }
+  },
+  "providerUploadMultipartHelp": "Direct multipart/form-data upload. The request body includes audio, form fields, and multipart boundaries.",
+  "providerUploadBase64Help": "Sends Base64 in JSON, which can bypass some providers’ multipart-specific limits. Base64 expansion and JSON fields count toward the upload limit.",
+  "providerUploadUrlHelp": "Provide a public URL for the provider to download. Supports very large files (e.g. Together AI 1 GB).",
+  "providerUploadBudgetHelp": "This value triggers raw-audio fallback and limits the final request body. The app checks raw audio, encoded files, and upload size. Multipart includes form fields and boundaries; Base64 JSON includes encoding expansion and fields. The 25 MB default matches the OpenAI audio API limit.",
+  "providerFallbackTriggerHelp": "Triggered when raw audio or the complete request body exceeds its limit. Specific fallback (Base64) takes priority over general fallback (compression/chunking).",
+  "providerFallbackNone": "None (reject immediately)",
+  "providerFallbackSpecific": "Specific fallback (Base64)",
+  "providerFallbackGeneric": "General fallback (compression/chunking)",
+  "providerFallbackAll": "Try all (recommended)",
+  "providerFallbackSpecificHelp": "Try Base64 JSON. Send only if the request body, including Base64 expansion and JSON fields, fits the limit.",
+  "providerFallbackGenericHelp": "If enabled, compress the full WAV first. If it still exceeds the limit and chunking is enabled, split the source PCM and encode each chunk. PCM WAV only.",
+  "providerFallbackAllHelp": "Try Base64 within the request-body limit first. Then, if enabled, compress the full WAV; if it still exceeds the limit and chunking is enabled, split the source PCM and encode each chunk. PCM WAV only.",
+  "providerFallbackRejectHelp": "Reject the file if it exceeds the limit; do not try a fallback.",
+  "providerPreprocessNone": "None",
+  "providerPreprocessResample": "WAV optimization (16 kHz mono)",
+  "providerPreprocessResampleHelp": "Resamples to 16 kHz and mixes to mono. Reduces size by about 4–6x with little effect on transcription accuracy.",
+  "providerPreprocessNoneHelp": "No preprocessing; send as is.",
+  "assistantDefaultsScopeHelp": "Default model and tools apply only to new conversations created under this assistant. Existing conversations keep their own settings. Tool output truncation applies to all conversations.",
+  "assistantDefaultModelTitle": "Default model",
+  "assistantDefaultModelHelp": "Model used for new conversations; leave unset to let the conversation choose.",
+  "assistantNoDefault": "Not set",
+  "assistantNoModelsAvailable": "No models available. Configure an LLM provider in Settings.",
+  "assistantDefaultToolsTitle": "Default enabled tools",
+  "assistantDisabledToolsHelp": "Disabled tools will not be enabled automatically in new conversations.",
+  "assistantUnconfiguredToolsHelp": "Default tools are not configured. New conversations will enable all tools automatically.",
+  "assistantEnableAll": "Enable all",
+  "assistantDisableAll": "Disable all",
+  "assistantNoToolsAvailable": "No tools available",
+  "assistantTruncateToolOutput": "Tool output truncation",
+  "assistantTruncateToolOutputHelp": "Maximum characters in each tool result before it is sent to the model. Applies to all conversations under this assistant.",
+  "assistantEnableTruncation": "Enable truncation",
+  "assistantTruncatedTo": "Long results are truncated to {count} characters",
+  "@assistantTruncatedTo": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "assistantSendFullResult": "Send full result (subject to the 50 KB storage limit)",
+  "assistantMaxCharacters": "Maximum characters",
+  "assistantCharactersNotTokens": "Unit: characters (not tokens)",
+  "assistantDefaultCharacterCount": "Default: {count}",
+  "@assistantDefaultCharacterCount": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "assistantCharacterRange": "Valid range: {minimum}–{maximum} characters",
+  "@assistantCharacterRange": {
+    "placeholders": {
+      "minimum": {
+        "type": "String"
+      },
+      "maximum": {
+        "type": "String"
+      }
+    }
+  },
+  "assistantNewConversationPreview": "New conversation preview",
+  "assistantEnabledToolCount": "{enabled} / {total} enabled",
+  "@assistantEnabledToolCount": {
+    "placeholders": {
+      "enabled": {
+        "type": "String"
+      },
+      "total": {
+        "type": "String"
+      }
+    }
+  },
+  "assistantAllToolsAutoEnabled": "All tools are enabled automatically (not configured)",
+  "assistantMoreActions": "More actions",
+  "assistantChooseEmoji": "Choose emoji",
+  "assistantNameLabel": "Assistant name",
+  "assistantDescriptionOptional": "Description (optional)",
+  "assistantSelectionTitle": "Choose an assistant",
+  "assistantMarketTooltip": "Assistant marketplace",
+  "assistantDefaultPrompt": "You are a helpful AI assistant. Answer the user's questions clearly and helpfully.",
+  "assistantCreateNew": "Create assistant",
+  "assistantEmptyState": "No assistants yet. Create one to get started.",
+  "assistantCreate": "Create",
+  "assistantReorderHint": "Long-press and drag to reorder assistants",
+  "assistantNewNameHint": "Enter assistant name",
+  "assistantNewDescriptionHint": "Briefly describe what this assistant does",
+  "assistantDeleteTitle": "Delete assistant",
+  "assistantDeleteConfirmation": "Delete assistant “{name}”? This action cannot be undone.",
+  "@assistantDeleteConfirmation": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "assistantEditTitle": "Edit assistant",
+  "assistantBasicTab": "Basic settings",
+  "assistantParametersTab": "Parameters",
+  "assistantDefaultsTab": "Defaults",
+  "assistantAddCustomParameter": "Add custom parameter",
+  "assistantEditCustomParameter": "Edit custom parameter",
+  "assistantParameterName": "Parameter name",
+  "assistantParameterNameHint": "e.g. top_k or provider.only",
+  "assistantParameterNameInvalid": "Invalid parameter name (dot-separated segments cannot be empty)",
+  "assistantParameterType": "Type",
+  "assistantValue": "Value",
+  "assistantTrueFalseHint": "true or false",
+  "assistantNumberHint": "Enter a number",
+  "assistantJsonHint": "e.g. {example}",
+  "assistantValueHint": "Enter a value",
+  "assistantCancel": "Cancel",
+  "assistantSave": "Save",
+  "assistantParamOverrideHelp": "When enabled, assistant parameters override model parameters; when disabled, model parameters are used.",
+  "assistantTemperature": "Temperature",
+  "assistantMaxTokens": "Maximum tokens",
+  "assistantMaxToolCalls": "Maximum tool calls",
+  "assistantRounds": "{count} rounds",
+  "@assistantRounds": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "assistantUnlimited": "Unlimited",
+  "assistantStreamOutput": "Stream output",
+  "assistantFrequencyPenalty": "Frequency penalty",
+  "assistantPresencePenalty": "Presence penalty",
+  "assistantRandomSeed": "Random seed",
+  "assistantNotSet": "Not set",
+  "assistantSeedValue": "Seed value",
+  "assistantIntegerSeedHint": "Enter an integer seed",
+  "assistantWebSearch": "Web search",
+  "assistantAddParameter": "Add parameter",
+  "assistantNoCustomParameters": "No custom parameters",
+  "@assistantJsonHint": {
+    "placeholders": {
+      "example": {
+        "type": "String"
+      }
+    }
+  },
+  "assistantRoundsLabel": "Rounds",
+  "modelCreateTitle": "Add model",
+  "modelEditTitle": "Edit model",
+  "modelDiscardTitle": "Discard changes?",
+  "modelDiscardBody": "You have unsaved changes. Discard them?",
+  "modelNameLabel": "Model name",
+  "modelNameHint": "Enter a display name (optional)",
+  "modelIdLabel": "Model ID",
+  "modelIdExample": "e.g. {id}",
+  "@modelIdExample": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "modelIdRequired": "Model ID is required.",
+  "modelCustomParamRequired": "Custom parameter name and default value are required.",
+  "modelParamDuplicate": "Parameter already exists: {name}",
+  "@modelParamDuplicate": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "modelParamReserved": "Reserved OCR parameter name: {name}",
+  "@modelParamReserved": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "modelParamName": "Parameter name",
+  "modelParamDefaultValue": "Default parameter value",
+  "modelParamDelete": "Delete parameter",
+  "modelParamJsonInvalid": "Default value for parameter \"{name}\" is not valid JSON: {value}",
+  "@modelParamJsonInvalid": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "modelAddParameter": "Add parameter",
+  "modelNoCustomParams": "No custom parameters",
+  "modelBasicSettings": "Basic settings",
+  "modelDiscardCancel": "Cancel",
+  "modelSave": "Save",
+  "modelUnsavedMaxTokens": "Maximum output tokens is enabled but has no value.",
+  "modelMaxTokensPositive": "Maximum output tokens must be a positive integer.",
+  "modelSeedInteger": "Random seed must be an integer.",
+  "modelContextLengthRequired": "Context length is required.",
+  "modelContextLengthPositive": "Context length must be a positive integer.",
+  "modelAsrLanguageCode": "Language code (Language)",
+  "modelAsrLanguageHint": "e.g. zh, en, ja",
+  "modelAsrLanguageHelp": "ISO-639-1 language code; leave empty for automatic detection.",
+  "modelTemperature": "Temperature",
+  "modelTemperatureHelp": "Controls output randomness; a lower value is recommended.",
+  "modelAsrPrompt": "Prompt",
+  "modelAsrPromptHint": "Enter a context prompt (optional)",
+  "modelAsrPromptHelp": "Provide context to improve transcription accuracy, such as a list of specialist terms.",
+  "modelAsrParams": "ASR parameters",
+  "modelEnabledParamsHelp": "Enabled parameters are sent as defaults in API requests.",
+  "modelAsrResponseFormat": "Response format",
+  "modelAsrResponseHelp": "Format of the returned transcription.",
+  "modelAsrTimestampGranularity": "Timestamp granularity",
+  "modelAsrVerboseHelp": "Available only when response_format is verbose_json.",
+  "modelNoTrim": "No trimming",
+  "modelAudioTrimTitle": "Audio trimming",
+  "modelAudioTrimHelp": "Choose how to trim the audio.",
+  "modelDeleteTrimPreset": "Delete trim preset",
+  "modelDeleteTrimConfirmation": "Delete trim preset \"{name}\"?",
+  "@modelDeleteTrimConfirmation": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "modelAddTrimPreset": "Add custom trim",
+  "modelPlayTestAudio": "Play test audio",
+  "modelPlayingTestAudio": "Playing...",
+  "modelParamExists": "Parameter already exists",
+  "asrModelIdExample": "e.g. whisper-1",
+  "asrPromptLabel": "Prompt",
+  "asrResponseFormatJson": "json – JSON",
+  "asrResponseFormatText": "text – Plain text",
+  "asrResponseFormatSrt": "srt – Subtitles",
+  "asrResponseFormatVtt": "vtt – Subtitles",
+  "asrResponseFormatVerbose": "verbose_json – Detailed JSON (includes timestamps)",
+  "asrVerboseTimestampHelp": "Selecting verbose_json enables the timestamp granularity option below.",
+  "asrTimestampSegment": "segment – Segment level",
+  "asrTimestampWord": "word – Word level",
+  "asrWordTimestampHelp": "Word-level timestamps may be less accurate than segment-level timestamps.",
+  "reasoningAddOptionValue": "Add option value",
+  "reasoningEditOptionValue": "Edit option value",
+  "reasoningOptionExample": "e.g. low, medium, high",
+  "reasoningOptionSelectionHelp": "Tap a chip to select or clear it. Selected values are sent; drag to reorder. Provider values cannot be deleted, but can be hidden by clearing them.",
+  "reasoningAddOption": "Add option",
+  "reasoningCurrentProvider": "Current: provider",
+  "reasoningCurrentModel": "Current: model custom",
+  "reasoningAddEffortValue": "Add reasoning effort value",
+  "reasoningEffortExample": "e.g. max, ultra, deep",
+  "reasoningAddToggle": "Add reasoning toggle",
+  "reasoningToggle": "Reasoning toggle",
+  "reasoningResetParameter": "Reset this parameter",
+  "reasoningDisableToggle": "Disable reasoning toggle",
+  "reasoningEnableToggle": "Enable reasoning toggle",
+  "reasoningParameterNameSource": "Parameter name ({source})",
+  "@reasoningParameterNameSource": {
+    "placeholders": {
+      "source": {
+        "type": "String"
+      }
+    }
+  },
+  "reasoningNameExample": "e.g. thinking.type, reasoning",
+  "reasoningBooleanHelp": "Boolean parameters need no value; the chat panel provides an on/off switch.",
+  "reasoningOnValue": "Value when enabled",
+  "reasoningOnExample": "e.g. enabled, true",
+  "reasoningOffValue": "Value when disabled",
+  "reasoningOffExample": "e.g. disabled, false",
+  "reasoningToggleValuesHelp": "When enabled, sends “{onValue}”; when disabled, sends “{offValue}”.",
+  "@reasoningToggleValuesHelp": {
+    "placeholders": {
+      "onValue": {
+        "type": "String"
+      },
+      "offValue": {
+        "type": "String"
+      }
+    }
+  },
+  "reasoningAddEffort": "Add reasoning effort",
+  "reasoningFillToggleFirst": "Complete the reasoning toggle first",
+  "reasoningFillToggleBeforeEffort": "Complete the reasoning toggle before configuring reasoning effort.",
+  "reasoningAddValue": "Add value",
+  "reasoningJsonValue": "JSON value",
+  "reasoningJsonExample": "e.g. {example}",
+  "@reasoningJsonExample": {
+    "placeholders": {
+      "example": {
+        "type": "String"
+      }
+    }
+  },
+  "reasoningSelectedChipHelp": "Tap a chip to select or clear it. Selected values appear in the chat reasoning panel; drag to reorder. Provider values cannot be deleted, but can be hidden.",
+  "reasoningAddParameter": "Add reasoning parameter",
+  "reasoningToggleIncomplete": "Complete the reasoning toggle before configuring reasoning effort.",
+  "llmContextLength": "Context length",
+  "llmContextHint": "Enter context length",
+  "llmContextHelp": "Maximum context window size for the model (tokens).",
+  "llmReasoningParams": "Reasoning parameters",
+  "llmReasoningHelp": "Configure reasoning parameters for chat. The reasoning toggle controls its parameter name and on/off values. Add reasoning effort values, reorder them, and select which values appear in the chat panel. Provider values are synchronized when this page opens. These settings control model parameter availability; the chat panel toggle is managed separately.",
+  "llmAddReasoningParam": "Add reasoning parameter",
+  "llmCustomEndpointType": "Custom endpoint type",
+  "llmInheritEndpointType": "When disabled, use the endpoint type from provider settings.",
+  "llmEndpointType": "Endpoint type",
+  "llmEndpointOpenAi": "OpenAI compatible (Chat Completions)",
+  "llmEndpointAnthropic": "Anthropic format (Messages API)",
+  "llmEndpointHelp": "The endpoint type must match the provider API URL. Changing it affects the format used for new conversations with this model.",
+  "llmTopPHelp": "Nucleus sampling parameter; controls cumulative probability for word selection.",
+  "llmFrequencyPenaltyLabel": "Frequency penalty",
+  "llmFrequencyPenaltyHelp": "Reduces repetition; negative values increase it.",
+  "llmPresencePenaltyLabel": "Presence penalty",
+  "llmPresencePenaltyHelp": "Encourages new topics; negative values encourage repetition.",
+  "llmMaxTokensHint": "Optional, e.g. 4096",
+  "llmTokensPerResponse": "Maximum tokens generated per response.",
+  "llmSeedLabel": "Random seed (Seed)",
+  "llmSeedHint": "Optional, e.g. 42",
+  "llmSeedHelp": "Setting this makes output reproducible.",
+  "llmInheritedCustomHelp": "Provider custom parameters are shown here and synchronized whenever this page opens.",
+  "llmBooleanParamHelp": "Boolean parameters do not need a value.",
+  "modelContextReq": "Context length is required.",
+  "modelContextPositive": "Context length must be a positive integer.",
+  "modelParamNameInvalid": "Invalid parameter name (dot-separated segments cannot be empty): {name}",
+  "@modelParamNameInvalid": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "modelParamFinite": "Parameter \"{name}\" {valueLabel} must be a finite number: {value}",
+  "@modelParamFinite": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "valueLabel": {
+        "type": "String"
+      },
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "modelReasoningIncomplete": "Complete the reasoning toggle before enabling other reasoning parameters.",
+  "modelReasoningOptionsRequired": "Add at least one option value to the reasoning parameter.",
+  "modelReasoningError": "Reasoning parameter error: {error}",
+  "@modelReasoningError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "modelReasoningDuplicate": "Duplicate reasoning parameter: {name}",
+  "@modelReasoningDuplicate": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "modelReasoningCustomDuplicate": "Reasoning and custom parameters share the name: {name}",
+  "@modelReasoningCustomDuplicate": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "modelSeedRequired": "Random seed is enabled but empty.",
+  "ocrParamsTitle": "OCR parameters",
+  "ocrParamsHelp": "Uses the OpenAI-compatible vision Chat Completions format. Parameters below are optional; unset or disabled parameters are not sent. Add provider-specific parameters below if supported by its API.",
+  "ocrRequestSizeOverride": "Request JSON size override",
+  "ocrInheritProvider": "Leave empty to inherit provider settings",
+  "ocrBudgetDefault": "When empty, inherits provider settings; if the provider has no value, the default is 20 MiB.",
+  "ocrBudgetValue": "When empty, inherits provider settings ({size} MiB); if the provider has no value, the default is 20 MiB.",
+  "@ocrBudgetValue": {
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "audioTrimDirection": "Trim {direction} {seconds}s",
+  "@audioTrimDirection": {
+    "placeholders": {
+      "direction": {
+        "type": "String"
+      },
+      "seconds": {
+        "type": "String"
+      }
+    }
+  },
+  "audioTrimBeginning": "Trim the first {seconds}s",
+  "@audioTrimBeginning": {
+    "placeholders": {
+      "seconds": {
+        "type": "String"
+      }
+    }
+  },
+  "audioTrimNone": "Do not trim audio",
+  "trimNameLabel": "Trim method name *",
+  "trimNameHint": "e.g. silence trimming",
+  "trimDurationLabel": "Trim duration (seconds) *",
+  "trimDurationHint": "e.g. 0.123",
+  "trimNameAndDurationRequired": "Name and duration are required.",
+  "trimDurationInvalid": "Enter a valid positive duration.",
+  "testAudioHostMissing": "Host is not configured.",
+  "testAudioKeyMissing": "Key is not configured.",
+  "testAudioContentTypeError": "Response Content-Type is {contentType}, not audio.",
+  "@testAudioContentTypeError": {
+    "placeholders": {
+      "contentType": {
+        "type": "String"
+      }
+    }
+  },
+  "testAudioEmpty": "The server returned empty audio data.",
+  "testAudioTimeoutConnection": "Connection timed out. Check your network. {details}",
+  "@testAudioTimeoutConnection": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "testAudioTimeoutReceive": "Receive timed out; the server responded too slowly. {details}",
+  "@testAudioTimeoutReceive": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "testAudioRequestCancelled": "Request cancelled. {details}",
+  "@testAudioRequestCancelled": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "testAudioNetworkError": "Network error: {message}",
+  "@testAudioNetworkError": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  "testAudioNoBody": "No response body",
+  "testAudioCorsHelp": "Unable to connect to server. On web, this may be caused by CORS or an incorrect API URL. Check the provider API URL and whether the server allows cross-origin requests. {details}",
+  "@testAudioCorsHelp": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "trimModelNameHint": "A friendly name for display and identification, e.g. \"GPT-4o Mini TTS\". Use different names to distinguish models from the same provider.",
+  "trimModelIdHelp": "Unique identifier used in API calls, e.g. \"gpt-4o-mini-tts\". It must match the model ID provided by the vendor.",
+  "ttsVoiceRangeTitle": "Volume range",
+  "ttsMinVolume": "Minimum volume",
+  "ttsMaxVolume": "Maximum volume",
+  "ttsSpeedRangeTitle": "Speed range",
+  "ttsMinSpeed": "Minimum speed",
+  "ttsMaxSpeed": "Maximum speed",
+  "ttsMaxAudioLength": "Maximum audio length per request *",
+  "ttsAudioLengthHint": "e.g. 1000",
+  "ttsNoVoices": "No voices. Tap to edit.",
+  "ttsInstructionSupported": "Model supports the instruction parameter",
+  "ttsInstructionHelp": "When enabled, TTS requests can include instructions for tone, emotion, speaking speed, and more.",
+  "ttsStreamSupported": "Model supports streaming output",
+  "ttsStreamHelp": "Enables this model for streaming scenarios. Confirm the model supports streaming before enabling.",
+  "modelParamBooleanExpected": "Parameter “{name}” must be true or false: {value}",
+  "@modelParamBooleanExpected": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "ttsMaxAudioLengthRequired": "Maximum audio length per request is required; enter a positive integer.",
+  "asrLanguageExample": "e.g. zh, en, ja",
+  "llmReasoningFullHelp": "The reasoning toggle controls whether reasoning is sent and lets you define the parameter name and on/off values. There is one reasoning-effort parameter. Select values and drag to reorder them; selected values appear in the chat reasoning panel. Add other reasoning parameters below. Parameter names support dot notation such as thinking.type, which becomes a nested JSON object. Provider reasoning parameters synchronize when this page opens. The switches here control model parameters; the chat reasoning toggle is separate.",
+  "llmTemperatureHelp": "Controls output randomness; higher values are more creative.",
+  "llmBooleanValueHelp": "Boolean parameters do not need a value.",
+  "reasoningDisableEffort": "Disable reasoning effort",
+  "reasoningEnableEffort": "Enable reasoning effort",
+  "ocrJsonSizePositive": "Request JSON size must be a positive MiB value.",
+  "ttsRangePair": "Enter both the minimum and maximum {kind}, or leave both empty.",
+  "@ttsRangePair": {
+    "placeholders": {
+      "kind": {
+        "type": "String"
+      }
+    }
+  },
+  "ttsEditTrimTitle": "Edit custom trim",
+  "ttsVoicesCount": "Voices ({count})",
+  "@ttsVoicesCount": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "ttsRequestFormatExample": "Generated in the request format: {syntax}",
+  "@ttsRequestFormatExample": {
+    "placeholders": {
+      "syntax": {
+        "type": "String"
+      }
+    }
+  },
+  "mcpServerNameRequired": "Please enter an MCP server name.",
+  "@mcpServerNameRequired": {
+    "placeholders": {}
+  },
+  "mcpStdioCommandRequired": "stdio mode requires a command.",
+  "@mcpStdioCommandRequired": {
+    "placeholders": {}
+  },
+  "mcpSseUrlRequired": "SSE mode requires a URL.",
+  "@mcpSseUrlRequired": {
+    "placeholders": {}
+  },
+  "mcpEditServerTitle": "Edit MCP server",
+  "@mcpEditServerTitle": {
+    "placeholders": {}
+  },
+  "mcpCreateServerTitle": "New MCP server",
+  "@mcpCreateServerTitle": {
+    "placeholders": {}
+  },
+  "mcpUnsavedChangesTitle": "Unsaved changes",
+  "@mcpUnsavedChangesTitle": {
+    "placeholders": {}
+  },
+  "mcpUnsavedChangesConfirm": "You have unsaved changes. Discard them?",
+  "@mcpUnsavedChangesConfirm": {
+    "placeholders": {}
+  },
+  "mcpTransportType": "Transport type",
+  "@mcpTransportType": {
+    "placeholders": {}
+  },
+  "mcpServerName": "Server name",
+  "@mcpServerName": {
+    "placeholders": {}
+  },
+  "mcpServerNameHint": "Enter an MCP server name",
+  "@mcpServerNameHint": {
+    "placeholders": {}
+  },
+  "mcpCommand": "Command",
+  "@mcpCommand": {
+    "placeholders": {}
+  },
+  "mcpCommandExample": "Example: npx",
+  "@mcpCommandExample": {
+    "placeholders": {}
+  },
+  "mcpArguments": "Arguments",
+  "@mcpArguments": {
+    "placeholders": {}
+  },
+  "mcpArgumentsHint": "Separate arguments with commas, for example: -y, @modelcontextprotocol/server-filesystem, /tmp",
+  "@mcpArgumentsHint": {
+    "placeholders": {}
+  },
+  "mcpSseUrlExample": "Example: http://localhost:3001/sse",
+  "@mcpSseUrlExample": {
+    "placeholders": {}
+  },
+  "mcpApiKey": "API key",
+  "@mcpApiKey": {
+    "placeholders": {}
+  },
+  "mcpApiKeyHint": "Enter an API key (optional)",
+  "@mcpApiKeyHint": {
+    "placeholders": {}
+  },
+  "mcpShowKey": "Show key",
+  "@mcpShowKey": {
+    "placeholders": {}
+  },
+  "mcpHideKey": "Hide key",
+  "@mcpHideKey": {
+    "placeholders": {}
+  },
+  "mcpDescriptionHint": "Enter a description for this MCP server (optional)",
+  "@mcpDescriptionHint": {
+    "placeholders": {}
+  },
+  "mcpStdioDescription": "stdio starts a local child process as an MCP server and communicates through standard input/output. Recommended for local tools.",
+  "@mcpStdioDescription": {
+    "placeholders": {}
+  },
+  "mcpSseDescription": "SSE connects to a remote MCP server over HTTP SSE. Recommended for remote services.",
+  "@mcpSseDescription": {
+    "placeholders": {}
+  },
+  "mcpLocalStdio": "Local (stdio)",
+  "@mcpLocalStdio": {
+    "placeholders": {}
+  },
+  "mcpRemoteSse": "Remote (SSE)",
+  "@mcpRemoteSse": {
+    "placeholders": {}
+  },
+  "mcpSaving": "Saving…",
+  "@mcpSaving": {
+    "placeholders": {}
+  },
+  "providerTestSafetyNote": "This test sends a real request to the selected service. MCP only calls the read-only tools/list method; HTTP and web search run one query. Todo reads the list by default; to protect current data, omit the todos parameter or set it to null.",
+  "@providerTestSafetyNote": {
+    "placeholders": {}
+  },
+  "providerDeleteConfigTitle": "Delete configuration",
+  "@providerDeleteConfigTitle": {
+    "placeholders": {}
+  },
+  "providerDeleteConfigConfirm": "Delete this provider configuration and all of its models?",
+  "@providerDeleteConfigConfirm": {
+    "placeholders": {}
+  },
+  "providerCreateGroup": "New group",
+  "@providerCreateGroup": {
+    "placeholders": {}
+  },
+  "providerEditGroup": "Edit group",
+  "@providerEditGroup": {
+    "placeholders": {}
+  },
+  "providerGroupName": "Group name",
+  "@providerGroupName": {
+    "placeholders": {}
+  },
+  "providerGroupNameExists": "A group with this name already exists.",
+  "@providerGroupNameExists": {
+    "placeholders": {}
+  },
+  "providerDeleteGroup": "Delete group",
+  "@providerDeleteGroup": {
+    "placeholders": {}
+  },
+  "providerDeleteGroupConfirm": "Deleting “{groupName}” will move its configurations to “Other MCP services”.",
+  "@providerDeleteGroupConfirm": {
+    "placeholders": {
+      "groupName": {
+        "type": "String"
+      }
+    }
+  },
+  "providerMoveToGroup": "Move to group",
+  "@providerMoveToGroup": {
+    "placeholders": {}
+  },
+  "providerUnnamed": "(Unnamed)",
+  "@providerUnnamed": {
+    "placeholders": {}
+  },
+  "providerHttpSearch": "HTTP search",
+  "@providerHttpSearch": {
+    "placeholders": {}
+  },
+  "providerHttpToolSubtitle": "HTTP tool: {url}",
+  "@providerHttpToolSubtitle": {
+    "placeholders": {
+      "url": {
+        "type": "String"
+      }
+    }
+  },
+  "providerLocalStdioSubtitle": "Local (stdio): {command}",
+  "@providerLocalStdioSubtitle": {
+    "placeholders": {
+      "command": {
+        "type": "String"
+      }
+    }
+  },
+  "providerRemoteSseSubtitle": "Remote (SSE): {url}",
+  "@providerRemoteSseSubtitle": {
+    "placeholders": {
+      "url": {
+        "type": "String"
+      }
+    }
+  },
+  "providerServices": "Service configurations",
+  "@providerServices": {
+    "placeholders": {}
+  },
+  "providerServicesDescription": "Manage remote connections, local stdio, and HTTP search by group",
+  "@providerServicesDescription": {
+    "placeholders": {}
+  },
+  "providerCreateGroupAction": "New group",
+  "@providerCreateGroupAction": {
+    "placeholders": {}
+  },
+  "providerGroupEmpty": "This group has no configurations. Select “Add” to add an item.",
+  "@providerGroupEmpty": {
+    "placeholders": {}
+  },
+  "providerBuiltinTools": "Built-in tools",
+  "@providerBuiltinTools": {
+    "placeholders": {}
+  },
+  "providerBuiltinToolsDescription": "Stroom-provided local tool interfaces. Web search is listed in its service group.",
+  "@providerBuiltinToolsDescription": {
+    "placeholders": {}
+  },
+  "providerBuiltinToolInterface": "Built-in tool interface",
+  "@providerBuiltinToolInterface": {
+    "placeholders": {}
+  },
+  "providerViewInterface": "View interface",
+  "@providerViewInterface": {
+    "placeholders": {}
+  },
+  "providerConfigTitle": "Configuration",
+  "@providerConfigTitle": {
+    "placeholders": {}
+  },
+  "providerNotFound": "Provider not found",
+  "@providerNotFound": {
+    "placeholders": {}
+  },
+  "providerConfigurationHeading": "Provider configuration",
+  "@providerConfigurationHeading": {
+    "placeholders": {}
+  },
+  "providerBuiltinWebSearchEmpty": "Built-in web search supports Google, Bing, and Baidu. Its model tool name is web_search.",
+  "@providerBuiltinWebSearchEmpty": {
+    "placeholders": {}
+  },
+  "providerNoConfigsAdd": "No provider configurations yet. Select “Add” to create one.",
+  "@providerNoConfigsAdd": {
+    "placeholders": {}
+  },
+  "providerNoHost": "(Host not set)",
+  "@providerNoHost": {
+    "placeholders": {}
+  },
+  "providerServicesAndTools": "Services and tools",
+  "@providerServicesAndTools": {
+    "placeholders": {}
+  },
+  "providerManageServicesDescription": "Manage MCP servers, HTTP search, and Stroom built-in tools.",
+  "@providerManageServicesDescription": {
+    "placeholders": {}
+  },
+  "providerNoServices": "No service configurations yet",
+  "@providerNoServices": {
+    "placeholders": {}
+  },
+  "providerAddServiceDescription": "Add an MCP service or HTTP search interface to use it in assistants.",
+  "@providerAddServiceDescription": {
+    "placeholders": {}
+  },
+  "providerAddService": "Add service",
+  "@providerAddService": {
+    "placeholders": {}
+  },
+  "providerBuiltinBadge": "Built-in",
+  "@providerBuiltinBadge": {
+    "placeholders": {}
+  },
+  "@providerApiKeyHint": {
+    "placeholders": {
+      "hint": {
+        "type": "String"
+      }
+    }
+  },
+  "providerConnectivityTest": "Connectivity test",
+  "@providerConnectivityTest": {
+    "placeholders": {}
+  },
+  "providerMoveGroupTooltip": "Move to group",
+  "@providerMoveGroupTooltip": {
+    "placeholders": {}
+  },
+  "providerDeleteTooltip": "Delete configuration",
+  "@providerDeleteTooltip": {
+    "placeholders": {}
+  },
+  "providerGroupItemCount": "{count, plural, =0{No items} one{# item} other{# items}}",
+  "@providerGroupItemCount": {
+    "placeholders": {
+      "count": {
+        "type": "num"
+      }
+    }
+  },
+  "providerGroupActions": "Group actions",
+  "@providerGroupActions": {
+    "placeholders": {}
+  },
+  "providerEditGroupAction": "Edit group",
+  "@providerEditGroupAction": {
+    "placeholders": {}
+  },
+  "providerDeleteGroupAction": "Delete group",
+  "@providerDeleteGroupAction": {
+    "placeholders": {}
+  },
+  "providerAddItem": "Add item",
+  "@providerAddItem": {
+    "placeholders": {}
+  },
+  "providerMcpMasterLabel": "MCP servers",
+  "@providerMcpMasterLabel": {
+    "placeholders": {}
+  },
+  "providerMcpMasterDescription": "Controls whether MCP servers and built-in search tools are available in assistants and chats.",
+  "@providerMcpMasterDescription": {
+    "placeholders": {}
+  },
+  "providerEnabled": "Enabled",
+  "@providerEnabled": {
+    "placeholders": {}
+  },
+  "providerDisabled": "Disabled",
+  "@providerDisabled": {
+    "placeholders": {}
+  },
+  "providerEditSettings": "Edit provider settings",
+  "@providerEditSettings": {
+    "placeholders": {}
+  },
+  "providerModelList": "Models",
+  "@providerModelList": {
+    "placeholders": {}
+  },
+  "providerNoModels": "No models yet",
+  "@providerNoModels": {
+    "placeholders": {}
+  },
+  "providerDeleteModel": "Delete model",
+  "@providerDeleteModel": {
+    "placeholders": {}
+  },
+  "providerDeleteModelConfirm": "Are you sure you want to delete this model?",
+  "@providerDeleteModelConfirm": {
+    "placeholders": {}
+  },
+  "providerEditConfig": "Edit configuration",
+  "@providerEditConfig": {
+    "placeholders": {}
+  },
+  "providerCreateNamedConfig": "New {entryName} configuration",
+  "@providerCreateNamedConfig": {
+    "placeholders": {
+      "entryName": {
+        "type": "String"
+      }
+    }
+  },
+  "toolHttpSearchType": "Connection type: HTTP search",
+  "@toolHttpSearchType": {
+    "placeholders": {}
+  },
+  "toolInterface": "Tool interface: {name}",
+  "@toolInterface": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "toolParameterDefinitions": "Parameter definitions",
+  "@toolParameterDefinitions": {
+    "placeholders": {}
+  },
+  "toolHttpAddress": "HTTP endpoint URL",
+  "@toolHttpAddress": {
+    "placeholders": {}
+  },
+  "toolInvalidHttpUrl": "Enter a valid HTTP or HTTPS URL.",
+  "@toolInvalidHttpUrl": {
+    "placeholders": {}
+  },
+  "toolBuiltinType": "Connection type: Stroom built-in tool",
+  "@toolBuiltinType": {
+    "placeholders": {}
+  },
+  "toolBuiltinEnableHelp": "Enable this tool for an assistant in that assistant’s default tool settings.",
+  "@toolBuiltinEnableHelp": {
+    "placeholders": {}
+  },
+  "mcpSseUrlLabel": "SSE URL",
+  "@mcpSseUrlLabel": {
+    "placeholders": {}
+  },
+  "mcpUrlLabel": "URL",
+  "@mcpUrlLabel": {
+    "placeholders": {}
+  },
+  "providerModelId": "Model ID: {modelId}",
+  "@providerModelId": {
+    "placeholders": {
+      "modelId": {
+        "type": "String"
+      }
+    }
+  },
+  "providerValueNotSet": "(Not set)",
+  "@providerValueNotSet": {
+    "placeholders": {}
+  },
+  "providerApiKeyInputHint": "Enter an API key",
+  "@providerApiKeyInputHint": {
+    "placeholders": {}
+  },
+  "providerSettingsTitle": "Provider configuration",
+  "@providerSettingsTitle": {
+    "placeholders": {}
+  },
+  "providerBasicInfoTab": "Basic information",
+  "@providerBasicInfoTab": {
+    "placeholders": {}
+  },
+  "providerParameterSettingsTab": "Parameter settings",
+  "@providerParameterSettingsTab": {
+    "placeholders": {}
+  },
+  "providerOptionValuesReorderHelp": "Option values (hold the handle to drag and reorder)",
+  "@providerOptionValuesReorderHelp": {
+    "placeholders": {}
+  },
+  "providerOptionIndexLabel": "Option {index}",
+  "@providerOptionIndexLabel": {
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
+  },
+  "providerOptionExampleHint": "e.g. {example}",
+  "@providerOptionExampleHint": {
+    "placeholders": {
+      "example": {
+        "type": "String"
+      }
+    }
+  },
+  "providerDeleteOptionTooltip": "Delete option",
+  "@providerDeleteOptionTooltip": {
+    "placeholders": {}
+  },
+  "providerAddOption": "Add option",
+  "@providerAddOption": {
+    "placeholders": {}
+  },
+  "providerAddCustomParam": "Add parameter",
+  "@providerAddCustomParam": {
+    "placeholders": {}
+  },
+  "providerNoCustomParams": "No custom parameters yet",
+  "@providerNoCustomParams": {
+    "placeholders": {}
+  },
+  "providerParamNameLabel": "Parameter name",
+  "@providerParamNameLabel": {
+    "placeholders": {}
+  },
+  "providerParamDefaultValueLabel": "Default parameter value",
+  "@providerParamDefaultValueLabel": {
+    "placeholders": {}
+  },
+  "providerBooleanParamNoValue": "Boolean parameters do not need a value. The chat panel provides an on/off toggle.",
+  "@providerBooleanParamNoValue": {
+    "placeholders": {}
+  },
+  "providerReasoningParamsHeading": "Reasoning parameters",
+  "@providerReasoningParamsHeading": {
+    "placeholders": {}
+  },
+  "providerReasoningSettingsHelp": "The reasoning toggle turns reasoning on or off in chat; you choose its parameter name and on/off values. You can configure one reasoning effort parameter with a required name and optional choices. If you enter only a name, the model configuration can provide the values. Use the buttons below to add other reasoning parameters. Parameter names support dot nesting, for example {parameterName} expands to {jsonExample}.",
+  "@providerReasoningSettingsHelp": {
+    "placeholders": {
+      "parameterName": {
+        "type": "String"
+      },
+      "jsonExample": {
+        "type": "String"
+      }
+    }
+  },
+  "providerAddReasoningParam": "Add reasoning parameter",
+  "@providerAddReasoningParam": {
+    "placeholders": {}
+  },
+  "providerAddReasoningToggle": "Add reasoning toggle",
+  "@providerAddReasoningToggle": {
+    "placeholders": {}
+  },
+  "providerReasoningToggle": "Reasoning toggle",
+  "@providerReasoningToggle": {
+    "placeholders": {}
+  },
+  "providerDeleteReasoningToggle": "Delete reasoning toggle",
+  "@providerDeleteReasoningToggle": {
+    "placeholders": {}
+  },
+  "providerParamNameHint": "e.g. {examples}",
+  "@providerParamNameHint": {
+    "placeholders": {
+      "examples": {
+        "type": "String"
+      }
+    }
+  },
+  "providerReasoningBooleanHelp": "Boolean parameters do not need a value. The chat panel provides an on/off toggle.",
+  "@providerReasoningBooleanHelp": {
+    "placeholders": {}
+  },
+  "providerToggleOnValueLabel": "On value",
+  "@providerToggleOnValueLabel": {
+    "placeholders": {}
+  },
+  "providerToggleOffValueLabel": "Off value",
+  "@providerToggleOffValueLabel": {
+    "placeholders": {}
+  },
+  "providerReasoningToggleSummary": "When reasoning is on, send “{onValue}”; when it is off, send “{offValue}”.",
+  "@providerReasoningToggleSummary": {
+    "placeholders": {
+      "onValue": {
+        "type": "String"
+      },
+      "offValue": {
+        "type": "String"
+      }
+    }
+  },
+  "providerAddReasoningEffort": "Add reasoning effort",
+  "@providerAddReasoningEffort": {
+    "placeholders": {}
+  },
+  "providerDeleteReasoningEffort": "Delete reasoning effort parameter",
+  "@providerDeleteReasoningEffort": {
+    "placeholders": {}
+  },
+  "providerReasoningEffortLockedHint": "Complete the reasoning toggle before configuring reasoning effort.",
+  "@providerReasoningEffortLockedHint": {
+    "placeholders": {}
+  },
+  "providerJsonValueLabel": "JSON value",
+  "@providerJsonValueLabel": {
+    "placeholders": {}
+  },
+  "providerReasoningOptionsHelp": "Option values (optional; if only the parameter name is entered, the model configuration supplies the value). Hold the handle to drag and reorder.",
+  "@providerReasoningOptionsHelp": {
+    "placeholders": {}
+  },
+  "providerParamNameNestedLabel": "Parameter name (supports dot nesting)",
+  "@providerParamNameNestedLabel": {
+    "placeholders": {}
+  },
+  "providerToggleEffortPrerequisite": "Complete the reasoning toggle before configuring reasoning effort.",
+  "@providerToggleEffortPrerequisite": {
+    "placeholders": {}
+  },
+  "providerToggleRequiredHint": "Complete the reasoning toggle first.",
+  "@providerToggleRequiredHint": {
+    "placeholders": {}
+  },
+  "providerDeleteCustomParam": "Delete parameter",
+  "@providerDeleteCustomParam": {
+    "placeholders": {}
+  },
+  "modelSaveSuccess": "Model saved",
+  "@modelSaveSuccess": {
+    "placeholders": {}
+  },
+  "modelSaving": "Saving…",
+  "@modelSaving": {
+    "placeholders": {}
+  },
+  "modelOriginalError": "Original error: {error}",
+  "@modelOriginalError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "paramTypeStringLabel": "String",
+  "@paramTypeStringLabel": {
+    "placeholders": {}
+  },
+  "paramTypeNumberLabel": "Number",
+  "@paramTypeNumberLabel": {
+    "placeholders": {}
+  },
+  "paramTypeBooleanLabel": "Boolean",
+  "@paramTypeBooleanLabel": {
+    "placeholders": {}
+  },
+  "paramTypeJsonLabel": "JSON",
+  "@paramTypeJsonLabel": {
+    "placeholders": {}
+  },
+  "paramTypeStringHint": "e.g. cheerful",
+  "@paramTypeStringHint": {
+    "placeholders": {}
+  },
+  "paramTypeNumberHint": "e.g. 0.8",
+  "@paramTypeNumberHint": {
+    "placeholders": {}
+  },
+  "paramTypeBooleanHint": "e.g. true",
+  "@paramTypeBooleanHint": {
+    "placeholders": {}
+  },
+  "paramTypeJsonHint": "e.g. ",
+  "@paramTypeJsonHint": {
+    "placeholders": {}
+  },
+  "ankiPageTitle": "Anki flashcards",
+  "ankiStatsTooltip": "Study statistics",
+  "ankiBrowseCardsTooltip": "Browse cards",
+  "ankiStatsTotalCards": "Total cards",
+  "ankiStatsNewCards": "New cards",
+  "ankiStatsLearning": "Learning",
+  "ankiStatsDueForReview": "Due for review",
+  "ankiStatsReviewHistory": "Review history",
+  "ankiStatsLearningProgress": "Study progress",
+  "ankiStatsReviewRate": "Review rate",
+  "ankiBrowserSearchHint": "Search cards...",
+  "ankiBrowserEmpty": "No cards",
+  "ankiSyncTooltip": "AnkiWeb sync",
+  "ankiNewDeckTooltip": "New deck",
+  "ankiDeckLoadError": "Failed to load decks: {error}",
+  "@ankiDeckLoadError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "ankiEmptyDecksTitle": "No decks yet",
+  "ankiEmptyDecksDescription": "Create a deck to start studying",
+  "ankiNewDeckTitle": "New deck",
+  "ankiDeckNameHint": "Deck name",
+  "ankiCreateDeck": "Create",
+  "ankiRenameDeck": "Rename deck",
+  "ankiConfirm": "OK",
+  "ankiDeleteDeckTitle": "Delete deck",
+  "ankiDeleteDeckConfirmation": "Delete “{deckName}” and all its cards?",
+  "@ankiDeleteDeckConfirmation": {
+    "placeholders": {
+      "deckName": {
+        "type": "String"
+      }
+    }
+  },
+  "ankiAddCardTitle": "Add card",
+  "ankiNoteTypeLabel": "Note type",
+  "ankiClozeTextHint": "Text (mark deletions with {clozeSyntax})",
+  "@ankiClozeTextHint": {
+    "placeholders": {
+      "clozeSyntax": {
+        "type": "String"
+      }
+    }
+  },
+  "ankiFrontQuestionHint": "Front (question)",
+  "ankiBackExtraLabel": "Back / extra",
+  "ankiTagsLabel": "Tags (separated by spaces)",
+  "ankiTagsHint": "Example: math physics",
+  "ankiAdd": "Add",
+  "ankiStatNew": "New",
+  "ankiStatLearning": "Learning",
+  "ankiStatReview": "Review",
+  "ankiAddCardAction": "Add card",
+  "ankiRenameAction": "Rename",
+  "ankiDeleteAction": "Delete",
+  "ankiNoCardContent": "No card content",
+  "ankiStudy": "Study",
+  "ankiWhiteboardTooltip": "Whiteboard",
+  "ankiFrontLabel": "Front",
+  "ankiBackLabel": "Back",
+  "ankiShowAnswer": "Show answer",
+  "ankiRatingAgain": "Again",
+  "ankiRatingHard": "Hard",
+  "ankiRatingGood": "Good",
+  "ankiRatingEasy": "Easy",
+  "ankiNoCardsToStudy": "No cards to study right now",
+  "ankiNoCardsHint": "Add new cards or come back later",
+  "ankiBack": "Back",
+  "ankiSyncPageTitle": "Anki sync",
+  "ankiSyncChooseMode": "Choose a sync mode",
+  "ankiSyncModeHelp": "Login status is stored separately for each service. Switching modes does not merge or overwrite data.",
+  "ankiSyncSelfHostedMode": "Self-hosted server",
+  "ankiSyncServerAddress": "Server address",
+  "ankiSyncServerHelp": "Remote self-hosted servers must use HTTPS; HTTP is allowed for local addresses. The server must support Anki sync v10, and certificate verification is enabled by default.",
+  "ankiSyncCustomCaTitle": "Custom CA certificate (optional)",
+  "ankiSyncCustomCaHelp": "Only enter this when the server uses a self-signed certificate",
+  "ankiSyncOfficialHelp": "Use the official AnkiWeb sync service. Your password is sent only when logging in and is not stored in Stroom.",
+  "ankiSyncConnected": "Connected to {service}",
+  "@ankiSyncConnected": {
+    "placeholders": {
+      "service": {
+        "type": "String"
+      }
+    }
+  },
+  "ankiSyncNotConnected": "Not connected to {service}",
+  "@ankiSyncNotConnected": {
+    "placeholders": {
+      "service": {
+        "type": "String"
+      }
+    }
+  },
+  "ankiSyncLoginForService": "Log in to {service}",
+  "@ankiSyncLoginForService": {
+    "placeholders": {
+      "service": {
+        "type": "String"
+      }
+    }
+  },
+  "ankiSyncCheckServerStatus": "Check server status",
+  "ankiSyncLogout": "Log out",
+  "ankiSyncBothWays": "Two-way sync",
+  "ankiSyncOverwriteServer": "Replace server data with local data",
+  "ankiSyncReplaceLocal": "Replace local data with server data",
+  "ankiSyncHelp": "Two-way sync merges incremental collection changes and transfers media files. If the schema version differs, choose a full upload or download. A failed full download will try to restore the original collection and media directory.",
+  "ankiSyncStatusRestored": "Restored the securely saved login session",
+  "ankiSyncStatusReadSavedSessionFailed": "Could not read the saved login session. Please log in again.",
+  "ankiSyncInvalidServerUrl": "Server address must be an HTTPS URL. HTTP is allowed only for a local loopback address. User information and query parameters are not allowed.",
+  "ankiSyncStatusSettingsNotSaved": "Settings not saved: {error}",
+  "@ankiSyncStatusSettingsNotSaved": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "ankiSyncStatusServerAddressChanged": "Server address changed. Please log in again to continue.",
+  "ankiSyncStatusVerifyingLogin": "Verifying login…",
+  "ankiSyncStatusLoginSuccess": "Login successful. Your password was not saved; the sync key was encrypted and saved.",
+  "ankiSyncStatusLoginSuccessNoSave": "Login successful, but the sync key could not be stored securely. You will need to log in again after closing this page.",
+  "ankiSyncStatusLoginFailed": "Login failed: {error}",
+  "@ankiSyncStatusLoginFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "ankiSyncLoginAnkiWeb": "Log in to AnkiWeb",
+  "ankiSyncLoginSelfHosted": "Log in to self-hosted server",
+  "ankiSyncEmailOrUsername": "Email / username",
+  "ankiSyncEmailOrUsernameRequired": "Enter an email or username",
+  "ankiSyncPassword": "Password",
+  "ankiSyncPasswordRequired": "Enter a password",
+  "ankiSyncLogin": "Log in",
+  "ankiSyncStatusPreparingServerSettings": "Preparing server settings…",
+  "ankiSyncStatusReadingCollection": "Reading server collection status…",
+  "ankiSyncStatusConnectedCollectionEmpty": "Connected. The server collection is empty.",
+  "ankiSyncStatusConnectedStatusRead": "Connected. Server status was read.",
+  "ankiSyncStatusUpgradeClient": "This server requires a newer sync client.",
+  "ankiSyncStatusCheckFailed": "Status check failed: {error}",
+  "@ankiSyncStatusCheckFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "ankiSyncStatusPreparingUpload": "Preparing upload settings…",
+  "ankiSyncOverwriteServerConfirmTitle": "Replace the server collection with the local one?",
+  "ankiSyncOverwriteServerConfirmMessage": "The server collection will be fully replaced with local data. Stroom will first keep a backup of the local database.\n\nMedia files will still be synchronized in both directions according to the server media list.",
+  "ankiSyncOverwriteServerAction": "Replace server collection",
+  "ankiSyncStatusBackingUpUploading": "Backing up and uploading collection…",
+  "ankiSyncStatusUploadComplete": "The server accepted the local collection. Media sync completed: uploaded {uploaded} files, downloaded {downloaded}, deleted {deleted}.{backup} Please check server status again.",
+  "@ankiSyncStatusUploadComplete": {
+    "placeholders": {
+      "uploaded": {
+        "type": "int"
+      },
+      "downloaded": {
+        "type": "int"
+      },
+      "deleted": {
+        "type": "int"
+      },
+      "backup": {
+        "type": "String"
+      }
+    }
+  },
+  "ankiSyncStatusBackupPath": "\nLocal backup: {path}",
+  "@ankiSyncStatusBackupPath": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "ankiSyncStatusMediaSyncIncomplete": "The server collection was replaced, but media sync did not finish: ",
+  "ankiSyncStatusUploadFailed": "Upload failed: ",
+  "ankiSyncStatusPreparingDownload": "Preparing download settings…",
+  "ankiSyncReplaceLocalConfirmTitle": "Replace the local collection with the server one?",
+  "ankiSyncReplaceLocalConfirmMessage": "The local collection will be replaced with server data. Stroom will first keep a backup of the local database.\n\nServer media will replace local media and missing files will be downloaded. If any step fails or the app exits in the middle, Stroom will restore the local collection and media before opening the decks next time.",
+  "ankiSyncReplaceLocalAction": "Replace local data",
+  "ankiSyncStatusDownloadingValidating": "Downloading and validating collection…",
+  "ankiSyncStatusDownloadComplete": "The local collection was replaced and passed the SQLite check. Media sync completed: downloaded {downloaded} files, uploaded {uploaded}, deleted {deleted}.{backup} Please check server status again.",
+  "@ankiSyncStatusDownloadComplete": {
+    "placeholders": {
+      "downloaded": {
+        "type": "int"
+      },
+      "uploaded": {
+        "type": "int"
+      },
+      "deleted": {
+        "type": "int"
+      },
+      "backup": {
+        "type": "String"
+      }
+    }
+  },
+  "ankiSyncStatusDownloadFailed": "Download failed: {error}",
+  "@ankiSyncStatusDownloadFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "ankiSyncStatusPreparingSync": "Preparing sync…",
+  "ankiSyncStatusMergingChanges": "Merging collection changes…",
+  "ankiSyncStatusMergeCompleteSyncMedia": "Collection changes merged. Syncing media files…",
+  "ankiSyncStatusChangedNotes": "{notes} notes, {cards} cards, and {reviews} review records added or updated",
+  "@ankiSyncStatusChangedNotes": {
+    "placeholders": {
+      "notes": {
+        "type": "int"
+      },
+      "cards": {
+        "type": "int"
+      },
+      "reviews": {
+        "type": "int"
+      }
+    }
+  },
+  "ankiSyncStatusNoCollectionChanges": "No collection changes to merge",
+  "ankiSyncStatusTwoWayComplete": "Two-way sync complete: {collection}; media uploaded {uploaded}, downloaded {downloaded}, deleted {deleted}.",
+  "@ankiSyncStatusTwoWayComplete": {
+    "placeholders": {
+      "collection": {
+        "type": "String"
+      },
+      "uploaded": {
+        "type": "int"
+      },
+      "downloaded": {
+        "type": "int"
+      },
+      "deleted": {
+        "type": "int"
+      }
+    }
+  },
+  "ankiSyncStatusCollectionMergedMediaIncomplete": "Collection changes were merged, but media sync did not finish: ",
+  "ankiSyncStatusSyncIncomplete": "Sync did not finish: ",
+  "ankiSyncStatusClearingLogin": "Clearing login session…",
+  "ankiSyncStatusLoggedOut": "Logged out. The sync key was deleted from secure storage.",
+  "ankiSyncStatusClearLoginFailed": "Could not clear the saved login session",
+  "ankiSyncStatusOperationIncomplete": "Operation did not finish. Check secure storage, network, and server address.",
+  "ankiSyncUnknown": "Unknown",
+  "ankiSyncServerCollectionEmpty": "Server collection is empty",
+  "ankiSyncServerCollectionAvailable": "Server collection is available",
+  "ankiSyncSchemaStatus": "Schema version {schema} · USN {usn} · Modified {modified}",
+  "@ankiSyncSchemaStatus": {
+    "placeholders": {
+      "schema": {
+        "type": "int"
+      },
+      "usn": {
+        "type": "int"
+      },
+      "modified": {
+        "type": "String"
+      }
+    }
+  },
+  "asrPageTitle": "Audio Transcription",
+  "clear": "Clear",
+  "configure": "Configure",
+  "asrModel": "Recognition model",
+  "reselectModel": "Please select a model again",
+  "selectAsrModel": "Select a recognition model",
+  "enterPublicAudioUrl": "Enter a public audio URL",
+  "recordingSelection": "Recordings",
+  "audioFiles": "Audio files",
+  "noAudioSelected": "No audio files selected",
+  "supportedAudioFormats": "Supports common audio formats such as WAV, MP3, M4A, and OGG",
+  "asrSelectedAudioCount": "{count, plural, =0{No audio files selected} one{{count} audio file selected} other{{count} audio files selected}}",
+  "@asrSelectedAudioCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "asrSelectedAudioCountShort": "{count, plural, one{{count} audio file selected} other{{count} audio files selected}}",
+  "@asrSelectedAudioCountShort": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "asrReselect": "Select again",
+  "asrUrlLabel": "URL | Public link",
+  "asrErrorDetails": "View error details",
+  "asrResultSaved": "Transcription result saved",
+  "asrWorking": "Transcribing…",
+  "asrStart": "Start transcription",
+  "saveTo": "Save to",
+  "rootFolder": "Root folder",
+  "chooseSaveFolder": "Choose a folder",
+  "linkAlreadyAdded": "This link is already in the list",
+  "chooseAudioSource": "Choose an audio source",
+  "inAppRecordings": "In-app recordings",
+  "chooseGeneratedRecordings": "Choose from generated recordings",
+  "systemAudioFiles": "System audio files",
+  "chooseDeviceAudioFiles": "Choose files from your device",
+  "cannotReadAudioFile": "Could not read the audio file",
+  "chooseAudioFileFailed": "Could not select audio file: {details}",
+  "@chooseAudioFileFailed": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "chooseInAppRecording": "Choose in-app recordings",
+  "noRecordings": "No recordings",
+  "durationSeconds": "{seconds, plural, one{{seconds} sec} other{{seconds} secs}}",
+  "@durationSeconds": {
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+  "asrNeedsProvider": "Configure an audio transcription provider and model in Settings first",
+  "asrModelUnavailable": "The original recognition model is unavailable or cannot be verified. Please select a model again.",
+  "asrUrlProviderRemoveFiles": "This provider uploads audio by URL. Remove local audio files and try again.",
+  "asrFileProviderRemoveUrls": "This provider uploads audio files and does not support transcription by link. Remove links and try again.",
+  "asrTaskStartFailed": "Could not start the task: {details}",
+  "@asrTaskStartFailed": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "asrInvalidUrl": "Invalid URL. It must start with http:// or https://",
+  "asrEnterAudioUrl": "Enter an audio URL",
+  "asrUrlProviderHelp": "This provider uploads audio by URL. Enter a public audio URL (http/https).",
+  "cancel": "Cancel",
+  "add": "Add",
+  "ttsPageTitle": "Audio",
+  "ttsAudioImportedCount": "{count, plural, one{{count} audio file imported} other{{count} audio files imported}}",
+  "@ttsAudioImportedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "ttsImportFailed": "Import failed: {details}",
+  "@ttsImportFailed": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "ttsFileReadFailed": "Could not read file data",
+  "ttsExportAudioFile": "Export audio file",
+  "ttsExportedTo": "Exported to: {path}",
+  "@ttsExportedTo": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "ttsExportFailed": "Export failed: {details}",
+  "@ttsExportFailed": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "ttsConfirmRegenerate": "Confirm regeneration",
+  "ttsRegenerateConfirmFile": "Regenerate audio “{fileName}”?",
+  "@ttsRegenerateConfirmFile": {
+    "placeholders": {
+      "fileName": {
+        "type": "String"
+      }
+    }
+  },
+  "ttsRegenerateOverwrite": "The original audio file will be replaced after regeneration.",
+  "ttsRegenerate": "Regenerate audio",
+  "ttsCopiedFailed": "Could not copy: {details}",
+  "@ttsCopiedFailed": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "ttsChooseExportFolder": "Choose export folder",
+  "ttsExportAudio": "Export audio",
+  "ttsExportedCount": "{count, plural, one{{count} file exported} other{{count} files exported}}",
+  "@ttsExportedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "ttsFolderExport": "Export folder",
+  "ttsWebFolderExportHelp": "Your browser cannot choose an export folder. A ZIP file will be downloaded with the folder structure preserved.",
+  "ttsDownloadZip": "Download ZIP file",
+  "ttsExportAudioFolder": "Export audio folder",
+  "ttsRecord": "Record",
+  "ttsImport": "Import",
+  "ttsPlay": "Play",
+  "ttsExportLocal": "Export to device",
+  "ttsRegenerateQuestion": "Regenerate",
+  "ttsNeedsProvider": "Configure a speech synthesis provider and model in Settings first",
+  "ttsAddedToTasks": "Added to the task list. Generating in the background…",
+  "ttsCreateTitle": "Speech Synthesis",
+  "ttsOriginalTitle": "Recording title",
+  "ttsUseOriginalTitle": "Use original title",
+  "ttsAudioFileNameHint": "Saved audio file name (optional)",
+  "ttsTextToConvert": "Text to convert",
+  "ttsSpeechContent": "Speech content",
+  "ttsTextHint": "Enter text to convert to speech…",
+  "ttsFullscreenEdit": "Edit in full screen",
+  "ttsTextLimitWarning": "Text exceeds the limit (maximum {limit} characters)",
+  "@ttsTextLimitWarning": {
+    "placeholders": {
+      "limit": {
+        "type": "int"
+      }
+    }
+  },
+  "ttsSynthesisConfig": "Synthesis settings",
+  "ttsVoiceAndSoundHelp": "Adjust the voice and sound",
+  "ttsProviderSettingsLead": "in ",
+  "ttsProviderSettings": "TTS provider settings",
+  "ttsProviderSettingsTail": " to configure more parameters",
+  "ttsEditText": "Edit text",
+  "ttsClose": "Close",
+  "ttsVoice": "Voice",
+  "ttsSelectVoice": "Select a voice",
+  "ttsSpeed": "Speed",
+  "ttsNormal": "Normal",
+  "ttsVolume": "Volume",
+  "ttsInstruction": "Speaking style instruction",
+  "ttsInstructionHint": "For example: Speak in a cheerful and excited tone",
+  "ttsCustomParams": "Custom parameters",
+  "ttsDefaultValue": "Default: {value}",
+  "@ttsDefaultValue": {
+    "placeholders": {
+      "value": {
+        "type": "Object"
+      }
+    }
+  },
+  "ttsGenerateRecording": "Generate recording",
+  "ttsSaveAs": "Save as: {path}/{name}.{format}",
+  "@ttsSaveAs": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      },
+      "name": {
+        "type": "String"
+      },
+      "format": {
+        "type": "String"
+      }
+    }
+  },
+  "ttsChooseSaveFolder": "Choose a folder",
+  "ttsFillTextError": "Enter text to convert",
+  "voiceBatchTitle": "Add voices in bulk",
+  "voiceBatchConfirm": "Add selected voices",
+  "voiceBatchSeparator": "Separator:",
+  "voiceBatchCustomSeparatorHint": "Enter a custom separator",
+  "voiceBatchFieldOrder": "Field order:",
+  "voiceBatchNameThenId": "1st = name, 2nd = ID",
+  "voiceBatchIdThenName": "1st = ID, 2nd = name",
+  "voiceBatchColumnChoice": "{count, plural, one{Detected {count} column. Choose the starting column for the name/ID:} other{Detected {count} columns. Choose the starting column for the name/ID:}}",
+  "@voiceBatchColumnChoice": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "voiceBatchColumn": "Column {index}: {sample}",
+  "@voiceBatchColumn": {
+    "placeholders": {
+      "index": {
+        "type": "int"
+      },
+      "sample": {
+        "type": "String"
+      }
+    }
+  },
+  "voiceBatchSingleColumn": "One column detected. All values will be used as IDs (name = ID).",
+  "voiceBatchInputHint": "Separate name and ID with Tab, commas, semicolons, or vertical bars (one pair per line)",
+  "voiceBatchNoPreview": "Nothing to preview",
+  "voiceName": "Voice name",
+  "voiceId": "Voice ID",
+  "status": "Status",
+  "voiceNew": "✅ New",
+  "voiceIdExists": "⚠️ ID already exists",
+  "voiceFormatError": "❌ Format error{details}",
+  "@voiceFormatError": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "voiceDuplicateIds": "{count, plural, one{{count} duplicate ID found: {ids}} other{{count} duplicate IDs found: {ids}}}",
+  "@voiceDuplicateIds": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "ids": {
+        "type": "String"
+      }
+    }
+  },
+  "voiceInsufficientColumnData": "Not enough data in the selected columns",
+  "voiceCustomSeparator": "Custom…",
+  "voiceCommaSeparator": "Comma (,)",
+  "voiceSemicolonSeparator": "Semicolon (;)",
+  "voicePipeSeparator": "Vertical bar (|)",
+  "voiceTabSeparator": "Tab",
+  "voiceEditorTitle": "Edit voices",
+  "save": "Save",
+  "voiceAddRow": "Add row",
+  "voiceBatchAdd": "Add in bulk",
+  "voiceNoneAdd": "No voices yet. Add one to get started.",
+  "delete": "Delete",
+  "voiceDuplicateResolution": "The following voice IDs are duplicated. Choose how to handle each one:",
+  "update": "Update",
+  "skip": "Skip",
+  "voiceDuplicatesRemaining": "{count, plural, one{{count} duplicate remains} other{{count} duplicates remain}}",
+  "@voiceDuplicatesRemaining": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "continueEditing": "Continue editing",
+  "asrRetryIncomplete": "Retry audio is incomplete. Clear the list and select all audio again.",
+  "asrRetryAudioUnreadable": "Retry audio data could not be read. Select the audio again: {details}",
+  "asrLegacyRetryUnavailable": "Legacy retry audio is unavailable. Select the audio again.",
+  "asrRetryDataUnreadable": "Retry data could not be read. Select the audio again.",
+  "ttsSynthesisModel": "Synthesis model",
+  "@asrRetryAudioUnreadable": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "asrRetryUnavailable": "Retry audio is unavailable. Select the audio again.",
+  "chatRequest": "Request",
+  "chatResponse": "Response",
+  "chatNoErrorDetails": "No details available",
+  "ttsInstructionDescription": "Describe tone, emotion, speed, accent, and other qualities in natural language. The model adjusts the synthesized voice accordingly.",
+  "audioPlayerSourceTextSource": "Choose source text",
+  "audioPlayerChooseInAppText": "Choose in app text",
+  "audioPlayerChooseSavedTextSubtitle": "Choose a saved text file from the app",
+  "audioPlayerChooseSystemText": "Choose system text file",
+  "audioPlayerChooseDeviceTextSubtitle": "Choose a text file from device storage",
+  "audioPlayerSelectInAppText": "Choose in app text",
+  "audioPlayerNoTextFiles": "No text files yet",
+  "audioPlayerCharacterCount": "{count} characters",
+  "@audioPlayerCharacterCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "audioPlayerSelectTextFailure": "Failed to select text: {error}",
+  "@audioPlayerSelectTextFailure": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "audioPlayerCannotReadTextFile": "Unable to read text file",
+  "audioPlayerUploadTextFailure": "Failed to upload source text: {error}",
+  "@audioPlayerUploadTextFailure": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "audioPlayerTextContentEmpty": "Text is empty",
+  "audioPlayerSaveTextFailure": "Failed to save source text: {error}",
+  "@audioPlayerSaveTextFailure": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "audioPlayerSourceTextUploaded": "Source text uploaded",
+  "audioPlayerSourceTextUpdated": "Source text updated",
+  "audioPlayerConfigureTtsProvider": "Configure a TTS provider first",
+  "audioPlayerNoStreamingModels": "No model supports streaming playback",
+  "audioPlayerSelectStreamingModel": "Select a streaming playback model",
+  "audioPlayerProviderFallback": "Provider",
+  "audioPlayerStartStreaming": "Starting streaming playback: {model}",
+  "@audioPlayerStartStreaming": {
+    "placeholders": {
+      "model": {
+        "type": "String"
+      }
+    }
+  },
+  "audioPlayerFileNotFound": "Audio file not found: {path}",
+  "@audioPlayerFileNotFound": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "audioPlayerUnableToLoadAudio": "Unable to load audio data",
+  "audioPlayerSourceText": "Source text",
+  "audioPlayerNoSourceText": "(No source text)",
+  "audioPlayerUploadSourceText": "Upload source text",
+  "audioPlayerEditSourceText": "Edit source text",
+  "audioPlayerCompanionTextMissing": "No companion text file found",
+  "audioPlayerPlaySelection": "Play selection",
+  "audioPlayerGenerateSelection": "Generate selection",
+  "audioPlayerPlaying": "Playing...",
+  "audioPlayerPaused": "Paused",
+  "audioPlayerPlaybackSpeed": "Playback speed",
+  "audioPlayerFailed": "Playback failed",
+  "audioPlayerRetry": "Retry",
+  "audioPlayerLoading": "Loading audio...",
+  "audioPlayerClose": "Close",
+  "audioRecordingBrowserUnsupportedShort": "Recording is not supported in the browser. Use the app version.",
+  "audioRecordingMicrophonePermissionRequired": "Microphone permission is required to record",
+  "audioRecordingStartFailure": "Failed to start recording: {error}",
+  "@audioRecordingStartFailure": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "audioRecordingPauseFailure": "Failed to pause recording: {error}",
+  "@audioRecordingPauseFailure": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "audioRecordingResumeFailure": "Failed to resume recording: {error}",
+  "@audioRecordingResumeFailure": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "audioRecordingInvalidFile": "Recording file is invalid. Record again.",
+  "audioRecordingStopFailure": "Failed to stop recording: {error}",
+  "@audioRecordingStopFailure": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "audioRecordingFileNotFound": "Recording file not found",
+  "audioRecordingFileEmpty": "Recording file is empty",
+  "audioRecordingSaved": "Recording saved: {name}",
+  "@audioRecordingSaved": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "audioRecordingSaveFailure": "Failed to save recording: {error}",
+  "@audioRecordingSaveFailure": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "audioRecordingTitle": "Recording",
+  "audioRecordingBrowserUnsupported": "Recording is not supported in the browser",
+  "audioRecordingUseApp": "Use the app version to record",
+  "audioRecordingDraftRecoveryHint": "An unsaved recording draft was found. You can save it to the audio library.",
+  "audioRecordingRecording": "Recording ●",
+  "audioRecordingPaused": "Paused ||",
+  "audioRecordingPreparing": "Preparing...",
+  "audioRecordingStart": "Start recording",
+  "audioRecordingPause": "Pause",
+  "audioRecordingStopping": "Stopping...",
+  "audioRecordingStop": "Stop",
+  "audioRecordingResume": "Resume",
+  "audioRecordingSaving": "Saving...",
+  "audioRecordingSave": "Save recording",
+  "audioRecordingRecordAgain": "Record again",
+  "audioRecordingWaveformPaused": "Recording paused; waveform is frozen",
+  "audioRecordingWaveformLive": "Live audio waveform",
+  "audioSeparationTitle": "Video audio separation",
+  "audioSeparationChooseVideoSource": "Choose video source",
+  "audioSeparationChooseAppAlbum": "Choose from app library",
+  "audioSeparationChooseSavedVideoSubtitle": "Choose a saved video from the app",
+  "audioSeparationChooseSystemAlbum": "Choose from system storage",
+  "audioSeparationChooseDeviceVideoSubtitle": "Choose a video file from device storage",
+  "audioSeparationChooseVideoFailure": "Failed to choose video: {error}",
+  "@audioSeparationChooseVideoFailure": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "audioSeparationTaskFailurePrefix": "Audio extraction failed: ",
+  "audioSeparationEngineMissing": "Audio separation engine not detected",
+  "audioSeparationEngineMissingHelp": "Restart the app or check that its resources are complete.",
+  "audioSeparationNoVideoSelected": "No video selected",
+  "audioSeparationSupportedFormatsHint": "Supported formats: mp4, mov, m4v, 3gp",
+  "audioSeparationSuccess": "Audio extracted and saved to the audio library",
+  "audioSeparationView": "View",
+  "audioSeparationSelectedVideoCount": "{count, plural, one{Selected {count} video} other{Selected {count} videos}}",
+  "@audioSeparationSelectedVideoCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "audioSeparationExtracting": "Extracting...",
+  "audioSeparationExtractAudio": "Extract audio",
+  "audioSeparationSaveTo": "Save to",
+  "audioSeparationChooseSaveFolder": "Choose save folder",
+  "audioSeparationCannotReadVideoFile": "Unable to read video file",
+  "audioSeparationChooseVideoFileFailure": "Failed to select video file: {error}",
+  "@audioSeparationChooseVideoFileFailure": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "audioSeparationUnknownFormat": "Unknown",
+  "audioSeparationUnsupportedFormats": "Unsupported formats: {formats}. Supported formats: MP4, MOV, M4V, 3GP.",
+  "@audioSeparationUnsupportedFormats": {
+    "placeholders": {
+      "formats": {
+        "type": "String"
+      }
+    }
+  },
+  "audioSeparationEngineUnavailable": "Audio separation engine is unavailable.",
+  "backgroundOptimizationTitle": "Background Optimization",
+  "backgroundOptimizationEnvironment": "System Environment",
+  "backgroundOptimizationChecks": "Background Service Status",
+  "backgroundOptimizationKeepAliveStrategies": "Keep-Alive Strategies",
+  "backgroundOptimizationDetecting": "Checking…",
+  "backgroundOptimizationUnsupportedStatus": "Background services are not supported on this platform",
+  "backgroundOptimizationServiceRunning": "Background service is running",
+  "backgroundOptimizationServiceStopped": "Background service is not running",
+  "backgroundOptimizationServiceCheckFailed": "Could not check background service status",
+  "backgroundOptimizationDesktopTrayUnavailable": "The desktop tray is unavailable. Closing the window will exit the app.",
+  "backgroundOptimizationDesktopCloseExits": "The app exits when the desktop window closes",
+  "backgroundOptimizationDesktopTrayKeepsAlive": "The desktop tray keeps the app running",
+  "backgroundOptimizationStartFailed": "Could not start the service",
+  "backgroundOptimizationStopFailed": "Could not stop the service",
+  "backgroundOptimizationRestartFailed": "Could not restart the service",
+  "backgroundOptimizationStopService": "Stop Service",
+  "backgroundOptimizationRestartService": "Restart Service",
+  "backgroundOptimizationStartService": "Start Service",
+  "backgroundOptimizationRedetect": "Check Again",
+  "backgroundOptimizationUnsupportedControl": "Background service controls are not supported on this platform.",
+  "backgroundOptimizationCheckingBattery": "Checking battery optimization status…",
+  "backgroundOptimizationBatteryIgnored": "Battery optimization is disabled for this app",
+  "backgroundOptimizationBatteryMayKill": "Battery optimization is enabled — background activity may be stopped",
+  "backgroundOptimizationIgnoreBattery": "Disable Battery Optimization",
+  "backgroundOptimizationExactAlarm": "Allow Exact Alarms (more reliable background activity)",
+  "backgroundOptimizationWatchdogTitle": "AlarmManager Watchdog",
+  "backgroundOptimizationWatchdogDetail": "When enabled, Android checks the background service every 5 minutes using a native alarm. If the system kills the process, the alarm restarts it.\n\nThe alarm still works while the device is in Doze mode and is rescheduled after a reboot.\n\nRecommended for users who rely heavily on background tasks.\nBattery impact: very low; the device wakes briefly for each check.",
+  "backgroundOptimizationSaveWatchdogFailed": "Could not save the watchdog setting; it was not changed",
+  "backgroundOptimizationWatchdogActivationFailed": "Could not activate the watchdog; background service status is unconfirmed",
+  "backgroundOptimizationColdStartTitle": "Restore Service on App Launch",
+  "backgroundOptimizationColdStartDetail": "When enabled, the app checks for and restores a previously running background service each time it opens.\n\nIf the system or user stops the app process, the background service restarts the next time you open the app.\n\nRecommended for all users.\nBattery impact: none; the app checks only once at launch.",
+  "backgroundOptimizationSaveColdStartFailed": "Could not save the launch recovery setting; it was not changed",
+  "backgroundOptimizationBatteryReminderTitle": "Battery Optimization Reminder",
+  "backgroundOptimizationBatteryReminderDetail": "When enabled, this page shows the battery optimization status. If the app is not on the battery exemption list, you can open system settings to exempt it.\n\nAndroid battery optimization (Doze) limits background apps. Adding this app to the exemption list prevents the system from stopping it to save power.\n\nTurning this off only hides the reminder card; it does not change the app’s battery exemption.",
+  "backgroundOptimizationStrategyIntro": "These strategies can be enabled independently. They are all on by default for the most reliable background activity. Turning one off affects only that strategy, not the background service itself.",
+  "backgroundOptimizationIosNoteTitle": "iOS Background Tasks",
+  "backgroundOptimizationIosSupported": "This version of iOS (26 or later) supports ongoing background tasks. Tasks usually continue when you switch apps or lock the screen, though the system may stop them when resources are low. You can view progress on the Lock Screen.",
+  "backgroundOptimizationIosUnsupported": "This version of iOS (earlier than 26) does not support ongoing background tasks. While a task is running, return to the app every few minutes (about every 5–10 minutes; timing depends on iOS) to refresh its background time and prevent suspension.",
+  "backgroundOptimizationIosWarning": "On every iOS version, do not swipe Stroom away in the app switcher. Doing so immediately stops all running tasks.",
+  "backgroundOptimizationDesktopIntro": "Desktop systems do not have the mobile platforms’ process keep-alive mechanism, but the app can continue running after its window closes.",
+  "backgroundOptimizationCloseMinimizeTitle": "Minimize on Window Close",
+  "backgroundOptimizationCloseMinimizeDetail": "When enabled, clicking the window’s close button hides the app in the system tray instead of exiting. Background tasks continue running.\n\nRestore the window from the tray icon or its “Show Main Window” menu item. To exit, use the “Quit App” button below.\n\nRecommended for all desktop users.",
+  "backgroundOptimizationQuitApp": "Quit App",
+  "backgroundOptimizationGotIt": "Got it",
+  "backgroundOptimizationWebNoteTitle": "Web Background Tasks",
+  "backgroundOptimizationWebNote": "Browsers cannot keep apps running in the background. Closing or refreshing this tab, or the browser freezing an inactive background tab, immediately stops running tasks. Keep the Stroom tab open and in the foreground while tasks run.",
+  "backgroundOptimizationTutorial": "Platform Guides",
+  "backgroundOptimizationTutorialDescription": "View background optimization guides for each platform",
+  "backgroundOptimizationServiceCheckingDescription": "Checking background service status…",
+  "backgroundOptimizationServiceUnknown": "Background service status is unknown. Check again to confirm whether the service is running.",
+  "backgroundOptimizationServiceRunningDescription": "The background service is running. Tasks can continue in the background.",
+  "backgroundOptimizationWebServiceUnsupported": "Background services are not supported in web browsers. Keep this page open to continue tasks.",
+  "backgroundOptimizationLinuxTrayUnavailable": "The desktop tray is unavailable (Linux builds require libayatana-appindicator3-dev). Closing the window will exit the app.",
+  "backgroundOptimizationDesktopTrayUnavailableDescription": "The desktop tray is unavailable. Closing the window will exit the app.",
+  "backgroundOptimizationDesktopExitDescription": "The app is set to exit when the desktop window closes. It will follow the existing exit confirmation flow and will not continue running in the tray.",
+  "backgroundOptimizationLinuxTrayDescription": "The desktop tray is enabled. Closing the window hides the app in the system tray, where it continues running. Select “Show Main Window” in the tray menu to restore it. To exit completely, select “Quit Stroom” from the tray menu.",
+  "backgroundOptimizationDesktopTrayDescription": "The desktop tray is enabled. Closing the window minimizes the app to the system tray, where it continues running. Click the tray icon or select “Show Main Window” from its menu to restore the window. To exit completely, select “Quit Stroom” from the tray menu.",
+  "backgroundOptimizationServiceNotRunningDescription": "The background service is not running. Select “Start Service” below, or view the platform guides to learn how to optimize background activity.",
+  "notificationSettingsPageTitle": "Notification Permission Settings",
+  "notificationSettingsWebUnsupported": "Notifications are not supported in web browsers",
+  "notificationSettingsChecking": "Checking…",
+  "notificationSettingsPermissionGranted": "Notification permission granted",
+  "notificationSettingsPermissionDenied": "Notification permission not granted",
+  "notificationSettingsPermissionRestricted": "Notification permission restricted",
+  "notificationSettingsPermissionBlocked": "Notification permission permanently blocked",
+  "notificationSettingsPermissionProvisional": "Provisional notification permission",
+  "notificationSettingsWebGuide": "System notifications are not supported in web browsers.",
+  "notificationSettingsCheckingPermission": "Checking notification permission…",
+  "notificationSettingsPermissionGrantedGuide": "Notification permission is granted. You can enable task completion notifications to receive system alerts when a task completes or fails.",
+  "notificationSettingsPermissionDeniedGuide": "Notification permission has not been granted. Select the button below to request permission, or enable notifications for Stroom in system settings.",
+  "notificationSettingsPermissionRestrictedGuide": "Notification permission is restricted by the system, for example by parental controls. Check Stroom’s notification settings in system settings.",
+  "notificationSettingsEnvironment": "System Environment",
+  "notificationSettingsPermissionSection": "Notification Permission",
+  "notificationSettingsPlatformGuides": "Platform Guide",
+  "notificationSettingsGuideIntro": "Follow these steps for your operating system to enable notifications for Stroom.",
+  "notificationSettingsTaskCompleteTitle": "Task Completion Notifications",
+  "notificationSettingsTaskCompleteDescription": "Send a notification when a task completes or fails",
+  "notificationSettingsCheckAgain": "Check Again",
+  "notificationSettingsOpenSystemSettings": "Open System Settings",
+  "notificationSettingsRequestPermission": "Request Permission",
+  "notificationSettingsGuideUnsupported": "Notification setup guides are not available for this platform.",
+  "notificationSettingsUsageReason": "To send notifications when tasks complete",
+  "notificationSettingsAndroidEnableTitle": "Enable Notifications",
+  "notificationSettingsAndroidEnableDescription": "Go to Settings → Apps → Stroom → Notification Management and allow notifications. If you cannot find Stroom, make sure it is installed. If notifications are disabled, turn them on.",
+  "notificationSettingsAndroidDndTitle": "Check Do Not Disturb",
+  "notificationSettingsAndroidDndDescription": "Go to Settings → Sound & Vibration → Do Not Disturb. Make sure it is off or that Stroom notifications are allowed.",
+  "notificationSettingsAndroidPopupTitle": "Allow Notifications to Pop Up",
+  "notificationSettingsAndroidPopupDescription": "Some Android systems, such as MIUI, EMUI, and ColorOS, require “Allow notifications” and “Allow pop-ups” to be enabled in App Info. Also consider turning off “Notification filtering” or “Smart notifications” for the app.",
+  "notificationSettingsReturnTitle": "Return to This Page",
+  "notificationSettingsAndroidReturnDescription": "After changing these settings, select “Check Again” to confirm the permission status. When permission is granted, you can enable task completion notifications.",
+  "notificationSettingsIosEnableDescription": "Go to Settings → Notifications → Stroom and turn on “Allow Notifications”. Also enable Banners and Notification Center to stay up to date on task status.",
+  "notificationSettingsIosFocusTitle": "Turn Off Focus",
+  "notificationSettingsIosFocusDescription": "Go to Settings → Focus. Make sure Focus is off or add Stroom to the list of allowed apps. Focus can silence app notifications.",
+  "notificationSettingsIosReturnDescription": "After changing these settings, select “Check Again” to confirm the permission status. On iOS, notification permission usually must be enabled manually in system settings.",
+  "notificationSettingsWindowsEnableTitle": "Enable System Notifications",
+  "notificationSettingsWindowsEnableDescription": "Go to Settings → System → Notifications & actions and turn on “Get notifications from apps and other senders”. Find Stroom in the app list below and make sure its notifications are on.",
+  "notificationSettingsWindowsFocusTitle": "Add a Focus Assist Exception",
+  "notificationSettingsWindowsFocusDescription": "Go to Settings → System → Focus Assist. Add Stroom to “Priority only” or turn Focus Assist off; Focus Assist can silence notifications.",
+  "notificationSettingsMacEnableTitle": "Enable Notifications",
+  "notificationSettingsMacEnableDescription": "Go to System Settings → Notifications → Stroom and turn on “Allow Notifications”. Also enable Banners and Notification Center.",
+  "notificationSettingsMacFocusDescription": "Go to System Settings → Focus. Make sure Focus is off or add Stroom to the list of allowed apps.",
+  "notificationSettingsLinuxDesktopTitle": "Check Desktop Notification Settings",
+  "notificationSettingsLinuxDesktopDescription": "Depending on your desktop environment (GNOME, KDE, XFCE, etc.), go to System Settings → Notifications, find Stroom, and make sure notifications are on.",
+  "notificationSettingsLinuxDaemonTitle": "Check the Notification Daemon",
+  "notificationSettingsLinuxDaemonDescription": "Linux desktop environments need a notification daemon, such as notify-osd or dunst, to show system notifications. Make sure one is installed and running.",
+  "backupRestorePageTitle": "Backup and Restore",
+  "backupRestoreSelectBackupCategory": "Select at least one data category to back up",
+  "backupRestorePreparingData": "Preparing data…",
+  "backupRestoreExportingBackup": "Exporting backup",
+  "backupRestoreCollectingDatabase": "Collecting database records…",
+  "backupRestoreProcessingSettings": "Processing settings…",
+  "backupRestoreAddingTasks": "Adding task files…",
+  "backupRestoreAddingPictures": "Adding image files…",
+  "backupRestoreAddingAudio": "Adding audio files…",
+  "backupRestoreAddingVideo": "Adding video files…",
+  "backupRestoreAddingText": "Adding text files…",
+  "backupRestoreAddingChat": "Adding chat history and attachments…",
+  "backupRestoreCompressing": "Compressing archive…",
+  "backupRestoreCompleted": "Complete",
+  "backupRestoreSelectRestoreCategory": "Select at least one data category to restore",
+  "backupRestoreConfirmRestore": "Confirm Restore",
+  "backupRestoreSelectedCategories": "Selected data categories:",
+  "backupRestoreRestoreInfo": "Selected categories found in the backup will be restored to this device. All categories except built-in browser cookies replace the corresponding local data. Cookies are written by domain, name, and path; local cookies not included in the backup are preserved. Unselected categories and categories missing from the backup remain unchanged. Missing categories are skipped with a notice.",
+  "backupRestoreRestartNotice": "Restart the app after restoring for the changes to take effect. Make sure your current work is saved.",
+  "backupRestoreCancel": "Cancel",
+  "backupRestoreConfirmRestoreButton": "Restore",
+  "backupRestoreIncompleteTitle": "Restore Incomplete",
+  "backupRestoreIncompleteMessage": "Data could not be fully restored and some data may have been cleared. Restart the app and try again.",
+  "backupRestoreSelectClearCategory": "Select at least one data category to clear",
+  "backupRestoreClearingData": "Clearing Data",
+  "backupRestoreDeletingCategories": "Deleting selected data categories…",
+  "backupRestoreClearedTitle": "Data Cleared",
+  "backupRestorePartiallyClearedTitle": "Some Data Cleared",
+  "backupRestoreClearedMessage": "Selected data was cleared. Restart the app for the changes to take effect.",
+  "backupRestorePartialClearMessage": "Other selected data was cleared. This platform cannot fully clear built-in browser website storage (localStorage, IndexedDB, etc.), so browser data that could not be cleared remains. Restart the app for the cleared data to take effect.",
+  "backupRestoreClearFailed": "Could not clear data: {error}",
+  "backupRestoreClearIncompleteTitle": "Clear Incomplete",
+  "backupRestoreClearIncompleteMessage": "Some data could not be cleared. Restart the app and try clearing it again.",
+  "backupRestoreAnkiExportSuccess": "Anki deck exported to: {path}",
+  "backupRestoreExportFailed": "Export failed: {error}",
+  "backupRestoreApkgRequired": "Select an .apkg file",
+  "backupRestoreImportFailed": "Import failed: {error}",
+  "backupServiceExportSavedTo": "Backup saved to: {location}",
+  "backupServiceExportFailed": "Backup failed: {error}",
+  "backupServiceRestoreFailed": "Restore failed: {error}",
+  "backupServiceNoBackupFolderSelected": "No backup folder has been selected. Authorize one during startup.",
+  "backupRestoreRestoreSuccessTitle": "Data Restored",
+  "backupRestoreRestoredMessage": "Data was restored from the backup. Restart the app to use the restored data.",
+  "backupRestoreExitApp": "Quit App",
+  "backupRestoreRestartNow": "Restart Now",
+  "backupRestoreSkippedTitle": "Some Data Skipped",
+  "backupRestoreNothingRestoredTitle": "No Data Restored",
+  "backupRestoreGotIt": "Got it",
+  "backupRestoreSkippedCategories": "The backup did not confirm restorable content for these selected categories, so they were skipped and existing data was kept: {categories}.",
+  "backupRestoreSkippedTasksLegacy": "In older backups, an empty task file cannot distinguish an empty task list from tasks not exported by that platform. To avoid overwriting current tasks, the task category was skipped and existing data was kept.",
+  "backupRestoreSkippedCookies": "The backup contains no built-in browser cookies to import, so this category was skipped and existing cookies were kept.",
+  "backupRestoreSkippedWebsiteData": "The website storage directory in this older backup was skipped. Cookies can still be imported separately if the archive contains them and that category is selected.",
+  "backupRestoreApkgTitle": "Anki Deck",
+  "backupRestoreApkgInfoTitle": "Import or Export an Anki Deck",
+  "backupRestoreApkgInfoMessage": "Includes card information only, not media",
+  "backupRestoreApkgDescription": "Import or export Anki decks in .apkg format",
+  "backupRestoreExportingApkg": "Exporting…",
+  "backupRestoreExportApkg": "Export .apkg",
+  "backupRestoreImportingApkg": "Importing…",
+  "backupRestoreImportApkg": "Import .apkg",
+  "backupRestoreCategoryHeading": "Choose Data Categories to Back Up or Restore",
+  "backupRestoreExporting": "Exporting…",
+  "backupRestoreExportBackup": "Export Backup",
+  "backupRestoreRestoring": "Restoring…",
+  "backupRestoreChooseBackup": "Choose Backup File and Restore",
+  "backupRestoreClearSelected": "Clear Selected Data",
+  "backupRestoreClearDescription": "Clear the selected data categories directly without a backup file. Unselected categories will remain unchanged. This action cannot be undone.",
+  "backupRestoreClearing": "Clearing…",
+  "backupRestoreCategoryChat": "Chat History and Attachments",
+  "backupRestoreCategoryChatDescription": "Chat conversations, message content, and attachments",
+  "backupRestoreCategorySettings": "Settings",
+  "backupRestoreCategorySettingsDescription": "App configuration, provider settings, and interface preferences",
+  "backupRestoreCategoryPictures": "Images",
+  "backupRestoreCategoryPicturesDescription": "Photos and thumbnails",
+  "backupRestoreCategoryAudio": "Audio",
+  "backupRestoreCategoryAudioDescription": "Speech synthesis and recordings",
+  "backupRestoreCategoryVideos": "Videos",
+  "backupRestoreCategoryVideosDescription": "Video files",
+  "backupRestoreCategoryTexts": "Text",
+  "backupRestoreCategoryTextsDescription": "Text documents",
+  "backupRestoreCategoryTasks": "Tasks",
+  "backupRestoreCategoryTasksDescription": "Background task records",
+  "backupRestoreCategoryAnki": "Anki Flashcard Data",
+  "backupRestoreCategoryAnkiDescription": "Anki database",
+  "backupRestoreAnkiDataInfoTitle": "Anki Flashcard Data",
+  "backupRestoreAnkiDataInfoMessage": "Backing up or restoring Anki flashcard data also includes card media in the collection.media directory.",
+  "backupRestoreAnkiDataInfoTooltip": "About Anki Flashcard Data",
+  "backupRestoreCategoryBrowser": "Built-in Browser Data",
+  "backupRestoreCategoryBrowserDescription": "Backs up and restores cookies only; clearing also removes supported website storage",
+  "backupRestoreViewInfo": "View information",
+  "backupRestoreApkgInfoTooltip": "About Anki Deck Import and Export",
+  "backupRestoreConfirmClear": "Confirm Clear",
+  "backupRestoreClearCategoriesIntro": "The following data categories will be cleared without using a backup file:",
+  "backupRestoreBrowserClearUnsupported": "This platform cannot fully clear built-in browser website storage (localStorage, IndexedDB, etc.). Confirming clears the other selected data; browser data that cannot be cleared will remain.",
+  "backupRestoreUnselectedUnchanged": "Unselected categories will remain unchanged.",
+  "backupRestoreClearWarning": "This action cannot be undone. Restart the app after clearing for the changes to take effect.",
+  "backupRestoreConfirmClearCountdown": "Clear ({seconds})",
+  "@backupRestoreClearFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@backupRestoreAnkiExportSuccess": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "@backupRestoreExportFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@backupRestoreImportFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@backupServiceExportSavedTo": {
+    "placeholders": {
+      "location": { "type": "String" }
+    }
+  },
+  "@backupServiceExportFailed": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "@backupServiceRestoreFailed": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "@backupRestoreSkippedCategories": {
+    "placeholders": {
+      "categories": {
+        "type": "String"
+      }
+    }
+  },
+  "@backupRestoreConfirmClearCountdown": {
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+  "backgroundOptimizationBrowserEnvironment": "Browser environment",
+  "backupRestoreIntro": "Export selected data categories manually. During import, only selected categories found in the archive are restored. A missing category or required file is skipped with a notice, and unselected categories remain unchanged. You can also clear selected categories directly.",
+  "backupRestoreOtherSelectedRestored": "The other selected data was restored. Restart the app for the changes to take effect.",
+  "notificationSettingsPermissionBlockedGuide": "Notifications are blocked. Open system settings and allow notifications for Stroom.",
+  "notificationSettingsPermissionBlockedAndroid": "Notifications are blocked. Go to System Settings → Apps → Stroom → Notification Management and allow notifications.",
+  "notificationSettingsPermissionBlockedIos": "Notifications are blocked. Go to System Settings → Stroom → Notifications and allow notifications.",
+  "textPreviewDiscardEditsTitle": "Discard edits?",
+  "textPreviewUnsavedChangesConfirm": "You have unsaved changes. Are you sure you want to discard them?",
+  "textPreviewCancel": "Cancel",
+  "textPreviewDiscard": "Discard",
+  "textPreviewFontSize": "Adjust font size",
+  "textPreviewRestoreDefault": "Restore default",
+  "textPreviewClose": "Close",
+  "textPreviewSaveFailed": "Save failed: {error}",
+  "@textPreviewSaveFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    },
+    "description": "User-facing text for the text preview or storage interface: textPreviewSaveFailed."
+  },
+  "textPreviewUndo": "Undo",
+  "textPreviewRedo": "Redo",
+  "textPreviewSave": "Save",
+  "textPreviewEdit": "Edit",
+  "textPreviewChartEdit": "Edit chart",
+  "textStorageSkipUnsupportedFormat": "Skipped unsupported format: {format}",
+  "@textStorageSkipUnsupportedFormat": {
+    "placeholders": {
+      "format": {
+        "type": "String"
+      }
+    },
+    "description": "User-facing text for the text preview or storage interface: textStorageSkipUnsupportedFormat."
+  },
+  "textStorageImportSuccess": "Imported {count, plural, =1{# text file} other{# text files}}",
+  "@textStorageImportSuccess": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    },
+    "description": "User-facing text for the text preview or storage interface: textStorageImportSuccess."
+  },
+  "textStorageImportFailed": "Import failed: {error}",
+  "@textStorageImportFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    },
+    "description": "User-facing text for the text preview or storage interface: textStorageImportFailed."
+  },
+  "textStorageSaved": "Text saved",
+  "textStorageLoadFailed": "Unable to load text content",
+  "textStorageReadFailed": "Failed to read file data",
+  "textStorageExportTitle": "Export text",
+  "textStorageExportedTo": "Exported to: {path}",
+  "@textStorageExportedTo": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    },
+    "description": "User-facing text for the text preview or storage interface: textStorageExportedTo."
+  },
+  "textStorageExportFailed": "Export failed: {error}",
+  "@textStorageExportFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    },
+    "description": "User-facing text for the text preview or storage interface: textStorageExportFailed."
+  },
+  "textStorageChooseExportDirectory": "Choose export directory",
+  "textStorageFolderExportTitle": "Export folder",
+  "textStorageWebFolderExportInfo": "The browser cannot select an export directory. A ZIP file that preserves the folder structure will be downloaded.",
+  "textStorageCancel": "Cancel",
+  "textStorageDownloadZip": "Download ZIP file",
+  "textStorageExportedFiles": "Exported {count, plural, =1{# file} other{# files}}",
+  "@textStorageExportedFiles": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    },
+    "description": "User-facing text for the text preview or storage interface: textStorageExportedFiles."
+  },
+  "textStorageExportFolderTitle": "Export text folder",
+  "textStorageCopyFailed": "Copy failed: {error}",
+  "@textStorageCopyFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    },
+    "description": "User-facing text for the text preview or storage interface: textStorageCopyFailed."
+  },
+  "textStorageCreateNew": "New",
+  "textStorageImport": "Import",
+  "textStorageTitle": "Text",
+  "textStorageExportToLocal": "Export to local",
+  "textCreateEnterTitle": "Please enter a title",
+  "textCreateSaveFailed": "Save failed: {error}",
+  "@textCreateSaveFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    },
+    "description": "User-facing text for the text preview or storage interface: textCreateSaveFailed."
+  },
+  "textCreateNewTitle": "New",
+  "textCreateSave": "Save",
+  "textCreateTitleLabel": "Title",
+  "textCreateTitleHint": "Enter text title",
+  "textCreateFormatLabel": "Format",
+  "textCreateContentLabel": "Text content",
+  "textCreateContentHint": "Enter text content...",
+  "@textPreviewDiscardEditsTitle": {
+    "description": "User-facing text for the text preview or storage interface: textPreviewDiscardEditsTitle."
+  },
+  "@textPreviewUnsavedChangesConfirm": {
+    "description": "User-facing text for the text preview or storage interface: textPreviewUnsavedChangesConfirm."
+  },
+  "@textPreviewCancel": {
+    "description": "User-facing text for the text preview or storage interface: textPreviewCancel."
+  },
+  "@textPreviewDiscard": {
+    "description": "User-facing text for the text preview or storage interface: textPreviewDiscard."
+  },
+  "@textPreviewFontSize": {
+    "description": "User-facing text for the text preview or storage interface: textPreviewFontSize."
+  },
+  "@textPreviewRestoreDefault": {
+    "description": "User-facing text for the text preview or storage interface: textPreviewRestoreDefault."
+  },
+  "@textPreviewClose": {
+    "description": "User-facing text for the text preview or storage interface: textPreviewClose."
+  },
+  "@textPreviewUndo": {
+    "description": "User-facing text for the text preview or storage interface: textPreviewUndo."
+  },
+  "@textPreviewRedo": {
+    "description": "User-facing text for the text preview or storage interface: textPreviewRedo."
+  },
+  "@textPreviewSave": {
+    "description": "User-facing text for the text preview or storage interface: textPreviewSave."
+  },
+  "@textPreviewEdit": {
+    "description": "User-facing text for the text preview or storage interface: textPreviewEdit."
+  },
+  "@textPreviewChartEdit": {
+    "description": "User-facing text for the text preview or storage interface: textPreviewChartEdit."
+  },
+  "@textStorageSaved": {
+    "description": "User-facing text for the text preview or storage interface: textStorageSaved."
+  },
+  "@textStorageLoadFailed": {
+    "description": "User-facing text for the text preview or storage interface: textStorageLoadFailed."
+  },
+  "@textStorageReadFailed": {
+    "description": "User-facing text for the text preview or storage interface: textStorageReadFailed."
+  },
+  "@textStorageExportTitle": {
+    "description": "User-facing text for the text preview or storage interface: textStorageExportTitle."
+  },
+  "@textStorageChooseExportDirectory": {
+    "description": "User-facing text for the text preview or storage interface: textStorageChooseExportDirectory."
+  },
+  "@textStorageFolderExportTitle": {
+    "description": "User-facing text for the text preview or storage interface: textStorageFolderExportTitle."
+  },
+  "@textStorageWebFolderExportInfo": {
+    "description": "User-facing text for the text preview or storage interface: textStorageWebFolderExportInfo."
+  },
+  "@textStorageCancel": {
+    "description": "User-facing text for the text preview or storage interface: textStorageCancel."
+  },
+  "@textStorageDownloadZip": {
+    "description": "User-facing text for the text preview or storage interface: textStorageDownloadZip."
+  },
+  "@textStorageExportFolderTitle": {
+    "description": "User-facing text for the text preview or storage interface: textStorageExportFolderTitle."
+  },
+  "@textStorageCreateNew": {
+    "description": "User-facing text for the text preview or storage interface: textStorageCreateNew."
+  },
+  "@textStorageImport": {
+    "description": "User-facing text for the text preview or storage interface: textStorageImport."
+  },
+  "@textStorageTitle": {
+    "description": "User-facing text for the text preview or storage interface: textStorageTitle."
+  },
+  "@textStorageExportToLocal": {
+    "description": "User-facing text for the text preview or storage interface: textStorageExportToLocal."
+  },
+  "@textCreateEnterTitle": {
+    "description": "User-facing text for the text preview or storage interface: textCreateEnterTitle."
+  },
+  "@textCreateNewTitle": {
+    "description": "User-facing text for the text preview or storage interface: textCreateNewTitle."
+  },
+  "@textCreateSave": {
+    "description": "User-facing text for the text preview or storage interface: textCreateSave."
+  },
+  "@textCreateTitleLabel": {
+    "description": "User-facing text for the text preview or storage interface: textCreateTitleLabel."
+  },
+  "@textCreateTitleHint": {
     "description": "User-facing text for the text preview or storage interface: textCreateTitleHint."
   },
   "@textCreateFormatLabel": {

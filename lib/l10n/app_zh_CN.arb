@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 70103)
-Total output lines: 6265
-
 {
   "@@locale": "zh_CN",
   "galleryPermissionTitle": "需要访问相册",
@@ -1273,7 +1270,3459 @@ Total output lines: 6265
   "batchRunStopRemaining": "停止后续操作",
   "batchRunCopyReport": "复制报告",
   "batchRunUndoRemaining": "继续撤销剩余 {count} 项",
-  "b…35103 tokens truncated…review or storage interface: textStorageCancel."
+  "batchRunUndoCompleted": "撤销已完成改名",
+  "batchRunDone": "完成",
+  "codeEditorTitle": "编辑参数值",
+  "codeEditorFormat": "格式化",
+  "codeEditorCancel": "取消",
+  "codeEditorConfirm": "确定",
+  "codeEditorInvalidJson": "JSON 格式有误，请修正后再保存",
+  "codeEditorParamPath": "参数名路径（请求时展开为嵌套 JSON）",
+  "codeEditorErrorPosition": "第 {line} 行第 {column} 列: {message}",
+  "@codeEditorErrorPosition": {
+    "placeholders": {
+      "line": {
+        "type": "String"
+      },
+      "column": {
+        "type": "String"
+      },
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  "codeEditorJsonError": "JSON 格式错误: {message}",
+  "@codeEditorJsonError": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  "codeEditorInvalidFormat": "JSON 格式不正确",
+  "toolCallCompacted": "已压缩",
+  "mermaidSaveEmpty": "Mermaid 代码为空，无法保存",
+  "mermaidFolderLoadFailed": "获取文件夹失败: {error}",
+  "@mermaidFolderLoadFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "mermaidSaveTitle": "保存 Mermaid 图表",
+  "mermaidSaveHint": "选择或创建文件夹保存 .mmd 文件",
+  "mermaidSaveFilenameHint": "输入文件名（自动添加 .mmd 后缀）",
+  "mermaidFilenameEmpty": "文件名不能为空",
+  "mermaidSaveSuccess": "已保存到文本储存区: {folder}/{name}.mmd",
+  "@mermaidSaveSuccess": {
+    "placeholders": {
+      "folder": {
+        "type": "String"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "mermaidSaveFailed": "保存失败: {error}",
+  "@mermaidSaveFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "mermaidPrepareEngine": "正在准备渲染引擎...",
+  "mermaidRetry": "重试",
+  "batchRuleEmpty": "不能为空",
+  "batchRuleNumber": "请输入数字",
+  "batchRulePositive": "请输入大于 0 的数字",
+  "batchRuleMin": "不能小于 {min}",
+  "@batchRuleMin": {
+    "placeholders": {
+      "min": {
+        "type": "String"
+      }
+    }
+  },
+  "batchRuleMax": "不能大于 {max}",
+  "@batchRuleMax": {
+    "placeholders": {
+      "max": {
+        "type": "String"
+      }
+    }
+  },
+  "batchRulePrefix": "前缀",
+  "batchRuleSuffix": "后缀",
+  "batchRuleStart": "起始",
+  "batchRuleStep": "步长",
+  "batchRuleDigits": "位数",
+  "batchRuleSeparator": "分隔符",
+  "batchRuleRestartFolder": "每个目录重新编号",
+  "batchRuleNumberHelp": "编号按预览顺序分配；排除项不占序号。步长可为负数或 0。",
+  "batchRuleFind": "查找内容",
+  "batchRuleReplace": "替换为（留空删除）",
+  "batchRuleCaseSensitive": "区分大小写",
+  "batchRuleRegex": "正则表达式",
+  "batchRuleFirstOnly": "仅替换首次匹配",
+  "batchRuleRegexHelp": "捕获组：$1、$2；完整匹配：$0；字面 $：$$。例如 ^IMG_(\\d+)$ → 照片_$1",
+  "batchRuleFindRequired": "填写查找内容后生效。",
+  "batchRuleBeginning": "开头",
+  "batchRuleEnd": "结尾",
+  "batchRulePosition": "指定位置",
+  "batchRuleInsertText": "插入文本",
+  "batchRuleBeforeChar": "第 N 个字符前",
+  "batchRulePositionHelp": "位置从 1 开始；超过末尾时追加。组合 emoji 按一个字符计算。",
+  "batchRuleFromBeginning": "从开头",
+  "batchRuleFromEnd": "从结尾",
+  "batchRuleFromChar": "从第 N 个字符起",
+  "batchRuleCount": "数量",
+  "batchRuleDeleteHelp": "名称删空后需由后续插入规则补充，才能执行。",
+  "batchRuleUpper": "全大写",
+  "batchRuleLower": "全小写",
+  "batchRuleFirstUpper": "首字母大写",
+  "batchRuleTitleCase": "每词首字母大写",
+  "batchRuleTemplate": "新名称模板",
+  "batchRuleTemplateHint": "课程_{n}_{name}",
+  "@batchRuleTemplateHint": {
+    "placeholders": {
+      "n": {
+        "type": "String"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "batchRuleTemplateHelp": "{name} 原名 · {n} 序号 · {folder} 所在目录名\n{created} 创建日期 · {modified} 修改日期 · {ext} 原扩展名\n日期格式 YYYY-MM-DD；缺少日期时会提示。模板替换整个基础名，扩展名仍自动保留。",
+  "@batchRuleTemplateHelp": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "n": {
+        "type": "String"
+      },
+      "folder": {
+        "type": "String"
+      },
+      "created": {
+        "type": "String"
+      },
+      "modified": {
+        "type": "String"
+      },
+      "ext": {
+        "type": "String"
+      }
+    }
+  },
+  "batchRuleTrim": "去掉首尾空白",
+  "batchRuleCollapseSpaces": "连续空白合并为一个空格",
+  "batchRuleActions": "规则操作",
+  "batchRuleDuplicate": "复制规则",
+  "batchRuleRemove": "删除规则",
+  "batchRuleMoveUp": "上移规则",
+  "batchRuleMoveDown": "下移规则",
+  "batchDlgSavePreset": "保存重命名方案",
+  "batchDlgPresetName": "方案名称",
+  "batchDlgPresetHint": "保存规则及顺序，不包含排除项或手动名称",
+  "batchDlgCancel": "取消",
+  "batchDlgSave": "保存",
+  "batchDlgOverwriteTitle": "覆盖已有方案？",
+  "batchDlgOverwriteBody": "将更新“{name}”的规则。",
+  "@batchDlgOverwriteBody": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "batchDlgOverwrite": "覆盖",
+  "batchDlgManagePresets": "管理方案",
+  "batchDlgNoPresets": "尚未保存方案",
+  "batchDlgDeletePreset": "删除方案",
+  "batchDlgDone": "完成",
+  "batchDlgEditName": "单独修改名称",
+  "batchDlgBaseName": "基础名称",
+  "batchDlgOverrideHelp": "此名称覆盖规则结果",
+  "batchDlgExtensionRetained": "扩展名 .{extension} 自动保留",
+  "@batchDlgExtensionRetained": {
+    "placeholders": {
+      "extension": {
+        "type": "String"
+      }
+    }
+  },
+  "batchDlgConfirm": "确定",
+  "batchDlgHelp": "使用说明",
+  "batchDlgClose": "关闭",
+  "batchDlgLoadPreset": "加载方案（替换规则并清除手动名称）",
+  "batchDlgLoad": "加载方案",
+  "batchDlgSaving": "保存中…",
+  "batchDlgReset": "重置全部规则与参与项目",
+  "batchDlgRuleInstructions": "规则从上到下依次执行；可复制、移动或关闭。扩展名保持不变。",
+  "batchDlgSortName": "名称",
+  "batchDlgSortCreated": "创建时间",
+  "batchDlgSortModified": "修改时间",
+  "batchDlgSortSize": "大小",
+  "batchDlgAscending": "升序",
+  "batchDlgDescending": "降序",
+  "batchDlgFolderSort": "文件夹在前；同名按所在目录排序。",
+  "batchDlgAddRule": "＋ 添加规则",
+  "batchDlgMaxRules": "最多 50 条规则",
+  "batchDlgPreviewWorking": "正在计算预览，可继续修改规则或取消…",
+  "batchDlgSearch": "搜索原名、新名或所在目录",
+  "batchDlgFilterAll": "全部",
+  "batchDlgFilterChanged": "有更改",
+  "batchDlgFilterErrors": "有问题",
+  "batchDlgFilterUnchanged": "未变化",
+  "batchDlgFilterExcluded": "已排除",
+  "batchDlgParticipants": "选择参与项目",
+  "batchDlgIncludeAll": "全部参与",
+  "batchDlgOnlyFiles": "仅文件",
+  "batchDlgOnlyFolders": "仅文件夹",
+  "batchDlgExcludeAll": "全部排除",
+  "batchDlgScope": "参与范围",
+  "batchDlgCopyList": "复制清单",
+  "batchDlgConflictBlock": "同名冲突：阻止执行",
+  "batchDlgConflictSuffix": "同名冲突：追加 (2)、(3)…",
+  "batchDlgNoMatches": "没有符合筛选条件的项目",
+  "batchDlgRoot": "根目录",
+  "batchDlgFile": "文件",
+  "batchDlgFolder": "文件夹",
+  "batchDlgTargetFolder": "目标目录：{folder}",
+  "@batchDlgTargetFolder": {
+    "placeholders": {
+      "folder": {
+        "type": "String"
+      }
+    }
+  },
+  "batchDlgEditNameTooltip": "单独修改名称",
+  "batchDlgRestoreNameTooltip": "恢复规则生成的名称",
+  "batchDlgCopied": "已复制完整预览清单（CSV）",
+  "batchDlgCopyFailed": "复制失败，请重试",
+  "batchDlgHelpTitle": "批量重命名使用说明",
+  "batchDlgHelpDismiss": "知道了",
+  "batchDlgRulesTab": "规则",
+  "batchDlgPreviewTab": "预览（{count}）",
+  "@batchDlgPreviewTab": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "batchDlgRenameCount": "重命名 {count} 项",
+  "@batchDlgRenameCount": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "batchDlgPresetLoadFailed": "暂时无法读取方案，仍可编辑和执行规则",
+  "batchDlgPreviewFailed": "预览计算失败，请调整规则后重试",
+  "batchDlgSavedName": "已保存方案：{name}",
+  "@batchDlgSavedName": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "batchDlgSaveFailed": "保存失败：{error}",
+  "@batchDlgSaveFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "batchDlgPresetWriteFailed": "无法保存方案",
+  "batchDlgDeleteFailed": "删除失败：{error}",
+  "@batchDlgDeleteFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "batchDlgSavePresetFallback": "保存方案",
+  "batchDlgPreviewSummary": "预览 · {changes} 项更改 · {conflicts} 项问题 · {excluded} 项排除",
+  "@batchDlgPreviewSummary": {
+    "placeholders": {
+      "changes": {
+        "type": "String"
+      },
+      "conflicts": {
+        "type": "String"
+      },
+      "excluded": {
+        "type": "String"
+      }
+    }
+  },
+  "batchDlgInvalidInput": "请修正规则中的输入；当前预览尚未采用无效输入。",
+  "batchDlgConflictError": "存在冲突或非法名称，无法应用。请调整规则。",
+  "batchDlgManualNameStatus": "手动名称",
+  "batchDlgPendingRename": "待重命名",
+  "batchDlgCsvHeader": "原路径,原名称,目标路径,状态",
+  "batchDlgHelpBody": "1. 选择方案或启用规则，按需复制规则并调整上下顺序。\n\n2. 预览显示实际执行的名称。搜索与筛选只影响显示；取消勾选会排除该项并重新编号。可单独修改名称，或恢复为规则结果。\n\n3. 所有问题解决后才能执行。自动后缀只处理重名，不会覆盖其他文件。互换文件夹名称需要分批改名。\n\n4. 执行中可停止后续项目；当前项目会先完成。完成页显示结果，可撤销本次已完成的改名。列表发生后续变化时会阻止撤销。\n\n仅修改名称及目录路径，文件内容和扩展名保持不变。排除父目录自身的改名不会阻止已勾选子项改名；父目录改名时其内部路径仍会随之移动。",
+  "batchDlgPreviewCount": "预览（{count}）",
+  "@batchDlgPreviewCount": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "batchBuiltinPhoto": "照片：日期与编号",
+  "batchBuiltinCourse": "课程：统一名称与编号",
+  "batchBuiltinDownloads": "下载文件：清理空白",
+  "taskListDetail": "详情",
+  "taskListOwnershipChecking": "正在确认任务归属",
+  "taskListOwnershipFailed": "任务流记录读取失败，操作暂不可用",
+  "taskListViewFlow": "查看任务流",
+  "taskListPause": "暂停",
+  "taskListClear": "清除任务",
+  "taskListResume": "继续",
+  "taskListRetry": "重试",
+  "taskListDismissError": "关闭错误信息",
+  "taskListRemove": "从列表移除",
+  "taskListSynthesisErrorTitle": "合成错误详情",
+  "taskListClose": "关闭",
+  "taskListOriginalExchange": "原始请求与响应",
+  "taskListOriginalRequest": "原始请求体:",
+  "taskListOriginalResponse": "原始响应体:",
+  "taskFlowIoTypeText": "文本",
+  "taskFlowIoTypeAudio": "音频",
+  "taskFlowIoTypeVideo": "视频",
+  "taskFlowIoTypeImage": "图片",
+  "taskFlowIoTypeLink": "链接",
+  "taskFlowIoTypeFile": "文件",
+  "taskFlowIoTypeAny": "任意",
+  "mermaidZoomOut": "缩小",
+  "mermaidZoomIn": "放大",
+  "mermaidFullscreen": "全屏",
+  "mermaidSaveButton": "保存",
+  "mermaidSourceButton": "查看源码",
+  "mermaidDiagramSemantic": "查看图表",
+  "taskFlowCardCatCatchDeletePersistError": "猫抓子任务删除状态无法保存，请重试",
+  "taskFlowCardSynthesisDeletePersistError": "合成子任务删除状态无法保存，请重试",
+  "taskFlowCardBackgroundDeletePersistError": "后台子任务删除状态无法保存，请重试",
+  "mathParseError": "数学解析错误",
+  "mermaidEmptyPlaceholder": "没有可渲染的 Mermaid 代码",
+  "mathClose": "关闭",
+  "mermaidLoadTimeout": "Mermaid 加载超时：请检查网络连接后重试",
+  "mermaidCdnLoadFailed": "Mermaid 加载失败：无法访问 cdn.jsdelivr.net",
+  "mermaidLoadingDiagram": "图表加载中...",
+  "mermaidEngineInitFailed": "图表渲染引擎初始化失败，请重试",
+  "mermaidPageTimeout": "页面加载超时，请重试",
+  "mermaidCodeLoadFailed": "图表代码加载失败，请重试",
+  "mermaidPageLoadFailed": "页面加载失败: {description}",
+  "@mermaidPageLoadFailed": {
+    "placeholders": {
+      "description": {
+        "type": "String"
+      }
+    }
+  },
+  "mermaidLoadingEngine": "加载渲染引擎...",
+  "mermaidRenderErrorTitle": "渲染图表时出错",
+  "taskFlowOutputVideoAudioDownstream": "视频或音频（按下游筛选）",
+  "taskFlowOutputUnknown": "未知",
+  "batchRunCancelledSummary": "{label}已停止：成功 {completed} 项，失败 {failed} 项，未执行 {remaining} 项",
+  "@batchRunCancelledSummary": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      },
+      "completed": {
+        "type": "String"
+      },
+      "failed": {
+        "type": "String"
+      },
+      "remaining": {
+        "type": "String"
+      }
+    }
+  },
+  "mermaidRenderErrorPrefix": "Mermaid 渲染错误：{message}",
+  "@mermaidRenderErrorPrefix": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  "mermaidInitializeErrorPrefix": "Mermaid 初始化错误：{message}",
+  "@mermaidInitializeErrorPrefix": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  "mermaidResourceError": "Mermaid 图表中的资源加载失败。",
+  "taskFlowParamRecognitionModel": "识别模型",
+  "@taskFlowParamRecognitionModel": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowParamSynthesisModel": "合成模型",
+  "@taskFlowParamSynthesisModel": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowParamSaveFolder": "保存文件夹",
+  "@taskFlowParamSaveFolder": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowParamResourceSelection": "资源选择方式",
+  "@taskFlowParamResourceSelection": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowParamOutputType": "输出类型",
+  "@taskFlowParamOutputType": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowParamVideoFolder": "视频保存文件夹",
+  "@taskFlowParamVideoFolder": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowParamAudioFolder": "音频保存文件夹",
+  "@taskFlowParamAudioFolder": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowParamExpectedDuration": "预期时长",
+  "@taskFlowParamExpectedDuration": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowParamVoice": "语音",
+  "@taskFlowParamVoice": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowParamSpeechRate": "语速",
+  "@taskFlowParamSpeechRate": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowParamAssistant": "助手",
+  "@taskFlowParamAssistant": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowHintResourceSelection": "手动模式由你选择；自动模式按既有规则确定选择；自动并询问会在唯一安全资源时自动选择，否则打开资源列表让你确认。",
+  "@taskFlowHintResourceSelection": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowHintOutputType": "视频或音频可显式指定；跟随下游时按下一功能块的输入类型筛选资源。下游接受两种类型或没有下游时，两种类型都会保留。",
+  "@taskFlowHintOutputType": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowHintExpectedDuration": "按视频时长筛选，留空表示不筛选。",
+  "@taskFlowHintExpectedDuration": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowHintVoice": "选择音色（选择后自动切换到对应模型）。",
+  "@taskFlowHintVoice": {
+    "description": "Localized label or help text for the built-in TaskFlow block parameter."
+  },
+  "taskFlowUiUnsupportedBlockStep": "此功能块类型已不受支持，请替换或删除此步骤。",
+  "@taskFlowUiUnsupportedBlockStep": {
+    "description": "TaskFlow block connection validation message."
+  },
+  "taskFlowUiDownstreamTypeMismatch": "下一步需要{requiredType}。下载资源可输出视频或音频，请修改下一步或输出策略。",
+  "@taskFlowUiDownstreamTypeMismatch": {
+    "description": "TaskFlow block connection validation message.",
+    "placeholders": {
+      "requiredType": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowUiAnyTypeMismatch": "{source}为任意类型，但“{block}”需要明确的文本、链接、图片、音频、视频或文件类型。请修改输入类型、移动或替换功能块，或撤销更改。",
+  "@taskFlowUiAnyTypeMismatch": {
+    "description": "TaskFlow block connection validation message.",
+    "placeholders": {
+      "source": {
+        "type": "String"
+      },
+      "block": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowUiTypeMismatch": "{source}为{actualType}，但“{block}”需要{requiredType}。请修改输入类型、移动或替换功能块，或撤销更改。",
+  "@taskFlowUiTypeMismatch": {
+    "description": "TaskFlow block connection validation message.",
+    "placeholders": {
+      "source": {
+        "type": "String"
+      },
+      "actualType": {
+        "type": "String"
+      },
+      "block": {
+        "type": "String"
+      },
+      "requiredType": {
+        "type": "String"
+      }
+    }
+  },
+  "fileManagerSortFieldCreated": "创建时间",
+  "@fileManagerSortFieldCreated": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "fileManagerSortFieldModified": "修改时间",
+  "@fileManagerSortFieldModified": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "fileManagerSortFieldName": "文件名",
+  "@fileManagerSortFieldName": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "fileManagerSortFieldSize": "大小",
+  "@fileManagerSortFieldSize": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "fileManagerSortDateNewest": "新到旧",
+  "@fileManagerSortDateNewest": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "fileManagerSortDateOldest": "旧到新",
+  "@fileManagerSortDateOldest": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "fileManagerSortSizeLargest": "大到小",
+  "@fileManagerSortSizeLargest": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "fileManagerSortSizeSmallest": "小到大",
+  "@fileManagerSortSizeSmallest": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "catcatchStatusRunning": "运行中",
+  "@catcatchStatusRunning": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "catcatchStatusCompleted": "已完成",
+  "@catcatchStatusCompleted": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "catcatchStatusFailed": "失败",
+  "@catcatchStatusFailed": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "catcatchStatusPaused": "已暂停",
+  "@catcatchStatusPaused": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "catcatchStatusWaiting": "等待中",
+  "@catcatchStatusWaiting": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "catcatchStepFetching": "获取网页内容",
+  "@catcatchStepFetching": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "catcatchStepAnalyzing": "分析媒体资源",
+  "@catcatchStepAnalyzing": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "catcatchStepParsingPlaylist": "解析播放列表",
+  "@catcatchStepParsingPlaylist": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "catcatchStepFiltering": "按时长筛选",
+  "@catcatchStepFiltering": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "catcatchStepUserSelecting": "等待用户选择",
+  "@catcatchStepUserSelecting": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "catcatchStepDownloading": "下载",
+  "@catcatchStepDownloading": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "catcatchStepConverting": "转码/合并",
+  "@catcatchStepConverting": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "catcatchStepSaving": "保存到本地",
+  "@catcatchStepSaving": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "bgStepConnectServer": "连接服务器",
+  "@bgStepConnectServer": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "bgStepUploadImage": "上传图片",
+  "@bgStepUploadImage": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "bgStepWaitRecognition": "等待识别结果",
+  "@bgStepWaitRecognition": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "bgStepParseResult": "解析结果",
+  "@bgStepParseResult": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "bgStepSaveFile": "保存文件",
+  "@bgStepSaveFile": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "bgStepUploadAudio": "上传音频",
+  "@bgStepUploadAudio": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "bgStepTranscribing": "转写中",
+  "@bgStepTranscribing": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "bgStepReceiveResult": "接收结果",
+  "@bgStepReceiveResult": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "bgStepSeparateAudio": "分离音频",
+  "@bgStepSeparateAudio": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "bgStepSaveToFile": "保存到文件",
+  "@bgStepSaveToFile": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "bgStepSendRequest": "发送请求",
+  "@bgStepSendRequest": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "bgStepWaitReply": "等待回复",
+  "@bgStepWaitReply": {
+    "description": "Localized app-owned task state, step, or sort presentation."
+  },
+  "fileManagerSortNameAscending": "A 到 Z",
+  "@fileManagerSortNameAscending": {
+    "description": "Alphabetical file sort direction."
+  },
+  "fileManagerSortNameDescending": "Z 到 A",
+  "@fileManagerSortNameDescending": {
+    "description": "Alphabetical file sort direction."
+  },
+  "taskFlowValidationNoSteps": "任务流没有步骤，请先添加功能块。",
+  "@taskFlowValidationNoSteps": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "taskFlowValidationInputRequired": "请添加运行输入。",
+  "@taskFlowValidationInputRequired": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "taskFlowValidationFlowRemoved": "任务流已删除，请重新选择。",
+  "@taskFlowValidationFlowRemoved": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "taskFlowValidationInputTypeChanged": "初始输入类型已修改，请重新选择运行输入。",
+  "@taskFlowValidationInputTypeChanged": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "taskFlowValidationSnapshotMissing": "旧记录没有运行快照，请选择使用最新配置重试。",
+  "@taskFlowValidationSnapshotMissing": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "taskFlowValidationAssistantModelMissing": "助手模型未选择或不可用，请先在对话页选择模型或给助手设置默认模型。",
+  "@taskFlowValidationAssistantModelMissing": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "taskFlowValidationSavedFileUnavailable": "已保存的步骤文件不存在、为空或无法读取，请重新运行。",
+  "@taskFlowValidationSavedFileUnavailable": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "taskFlowValidationUnsupportedBlock": "功能块已不受支持，请替换或删除此步骤。",
+  "@taskFlowValidationUnsupportedBlock": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "taskFlowValidationDownstreamMismatch": "下一步需要{requiredType}。下载资源可输出音频或视频，请修改下一步或输出策略。",
+  "@taskFlowValidationDownstreamMismatch": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message.",
+    "placeholders": {
+      "requiredType": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationRequiredParameter": "“{parameter}”为必填项，请在“{block}”设置中配置。",
+  "@taskFlowValidationRequiredParameter": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message.",
+    "placeholders": {
+      "parameter": {
+        "type": "String"
+      },
+      "block": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationLegacyModel": "旧版模型选择需要确认，请在“{block}”设置中重新选择模型。",
+  "@taskFlowValidationLegacyModel": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message.",
+    "placeholders": {
+      "block": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationModelUnavailable": "模型未选择、已删除或供应商配置不可用，请在“{block}”设置中重新选择模型并检查供应商地址和密钥。",
+  "@taskFlowValidationModelUnavailable": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message.",
+    "placeholders": {
+      "block": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationAssistantUnavailable": "助手未选择或已删除，请在“{block}”设置中重新选择助手。",
+  "@taskFlowValidationAssistantUnavailable": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message.",
+    "placeholders": {
+      "block": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationAssistantModelUnavailable": "助手绑定的模型已删除或供应商配置不可用，请在助手设置中重新选择模型。",
+  "@taskFlowValidationAssistantModelUnavailable": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "taskFlowValidationPolicyInvalid": "资源选择策略或输出类型无效，请在“{block}”设置中重新选择。",
+  "@taskFlowValidationPolicyInvalid": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message.",
+    "placeholders": {
+      "block": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationOutputInvalid": "输出类型无效，请在“{block}”设置中重新选择。",
+  "@taskFlowValidationOutputInvalid": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message.",
+    "placeholders": {
+      "block": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationResourcePolicyInvalid": "资源选择策略无效，请在“{block}”设置中重新选择。",
+  "@taskFlowValidationResourcePolicyInvalid": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message.",
+    "placeholders": {
+      "block": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationInputFileUnavailable": "第 {index} 个输入：文件不存在、为空或无法读取，请重新选择文件。",
+  "@taskFlowValidationInputFileUnavailable": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message.",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationInputUrlInvalid": "第 {index} 个输入：请输入有效的 HTTP 或 HTTPS 链接。",
+  "@taskFlowValidationInputUrlInvalid": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message.",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationInputError": "第 {index} 个输入：{error}",
+  "@taskFlowValidationInputError": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message.",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "batchRuleValidationMaxRules": "最多支持 50 条规则。",
+  "@batchRuleValidationMaxRules": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "batchRuleValidationDigits": "编号位数应为 1–12。",
+  "@batchRuleValidationDigits": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "batchRuleValidationNumberRange": "编号起始值和步长须在 ±999999999 以内。",
+  "@batchRuleValidationNumberRange": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "batchRuleValidationReplacementLength": "替换规则过长。",
+  "@batchRuleValidationReplacementLength": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "batchRuleValidationRegex": "正则表达式无效。",
+  "@batchRuleValidationRegex": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "batchRuleValidationDeleteIndex": "删除位置必须从 1 开始。",
+  "@batchRuleValidationDeleteIndex": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "batchRuleValidationInsertLength": "插入文本过长。",
+  "@batchRuleValidationInsertLength": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "batchRuleValidationTemplateNumber": "模板编号设置无效：位数 1–12，起始和步长在 ±999999999 以内。",
+  "@batchRuleValidationTemplateNumber": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "batchRuleValidationTemplateLength": "模板过长。",
+  "@batchRuleValidationTemplateLength": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "batchRuleValidationTemplateVariable": "未知模板变量或未闭合的大括号。",
+  "@batchRuleValidationTemplateVariable": {
+    "description": "Localized user-facing TaskFlow or batch rule validation message."
+  },
+  "batchRuleTypeNumber": "编号",
+  "@batchRuleTypeNumber": {
+    "description": "Visible label for a built-in batch rename operation."
+  },
+  "batchRuleTypeReplace": "替换",
+  "@batchRuleTypeReplace": {
+    "description": "Visible label for a built-in batch rename operation."
+  },
+  "batchRuleTypeInsert": "插入文本",
+  "@batchRuleTypeInsert": {
+    "description": "Visible label for a built-in batch rename operation."
+  },
+  "batchRuleTypeDelete": "删除字符",
+  "@batchRuleTypeDelete": {
+    "description": "Visible label for a built-in batch rename operation."
+  },
+  "batchRuleTypeCase": "大小写转换",
+  "@batchRuleTypeCase": {
+    "description": "Visible label for a built-in batch rename operation."
+  },
+  "batchRuleTypeTemplate": "命名模板",
+  "@batchRuleTypeTemplate": {
+    "description": "Visible label for a built-in batch rename operation."
+  },
+  "batchRuleTypeCleanup": "清理空白",
+  "@batchRuleTypeCleanup": {
+    "description": "Visible label for a built-in batch rename operation."
+  },
+  "taskFlowValidationInputEmpty": "第 {index} 个输入：请输入文本或选择文件。",
+  "@taskFlowValidationInputEmpty": {
+    "description": "Localized TaskFlow input validation message.",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationImageTooLarge": "第 {index} 个输入：图片超过 20 MB，请选择较小的图片。",
+  "@taskFlowValidationImageTooLarge": {
+    "description": "Localized TaskFlow input validation message.",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationAttachmentTooLarge": "第 {index} 个输入：附件超过 10 MB，请选择较小的文件。",
+  "@taskFlowValidationAttachmentTooLarge": {
+    "description": "Localized TaskFlow input validation message.",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationFileTypeMismatch": "第 {index} 个输入：文件实际类型为{actualType}，需要{requiredType}，请重新选择文件。",
+  "@taskFlowValidationFileTypeMismatch": {
+    "description": "Localized TaskFlow input validation message.",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      },
+      "actualType": {
+        "type": "String"
+      },
+      "requiredType": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationSvgUnsupported": "第 {index} 个输入：助手对话不支持 SVG 图片附件，请转换为 PNG 或 JPEG。",
+  "@taskFlowValidationSvgUnsupported": {
+    "description": "Localized TaskFlow input validation message.",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationImageMimeUnsupported": "第 {index} 个输入：助手对话不支持 {mime} 图片附件，请转换为 PNG、JPEG、GIF 或 WebP。",
+  "@taskFlowValidationImageMimeUnsupported": {
+    "description": "Localized TaskFlow input validation message.",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      },
+      "mime": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationAudioMimeUnsupported": "第 {index} 个输入：助手对话不支持 {mime} 音频附件，请转换为 MP3、WAV 或 M4A。",
+  "@taskFlowValidationAudioMimeUnsupported": {
+    "description": "Localized TaskFlow input validation message.",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      },
+      "mime": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationEndpointMediaUnsupported": "第 {index} 个输入：此助手的 Anthropic 对话格式不支持{type}附件，请选择支持此媒体的助手。",
+  "@taskFlowValidationEndpointMediaUnsupported": {
+    "description": "Localized TaskFlow input validation message.",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      },
+      "type": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationEndpointPdfOnly": "第 {index} 个输入：此助手的 Anthropic 对话格式只支持图片和 PDF 附件，请选择支持此文件的助手。",
+  "@taskFlowValidationEndpointPdfOnly": {
+    "description": "Localized TaskFlow input validation message.",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationImageCompressionFailed": "第 {index} 个输入：助手对话图片无法压缩到 10 MB 以下，请选择较小图片。",
+  "@taskFlowValidationImageCompressionFailed": {
+    "description": "Localized TaskFlow input validation message.",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
+  },
+  "taskFlowValidationTextEncodingFailed": "第 {index} 个输入：文本附件不是有效的 UTF-8 编码，请转换后重试。",
+  "@taskFlowValidationTextEncodingFailed": {
+    "description": "Localized TaskFlow input validation message.",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
+  },
+  "assistantParamValueTypeString": "字符串",
+  "assistantParamValueTypeNumber": "数字",
+  "assistantParamValueTypeBoolean": "布尔值",
+  "assistantParamValueTypeJson": "JSON",
+  "providerRequiredFields": "供应商名称、API 地址和密钥均为必填项。",
+  "providerJsonSizePositive": "请求 JSON 大小必须是大于 0 的 MiB 数值。",
+  "providerCustomParamRequired": "自定义参数的名称和值不能为空。",
+  "providerParamNameInvalid": "参数名格式不正确（点号分段不能为空）：{name}",
+  "providerParamAlreadyExists": "参数已存在：{name}",
+  "providerParamInvalidJson": "参数“{name}”的默认值不是合法 JSON：{value}",
+  "providerParamOptionsRequired": "参数“{name}”的数值选项不能为空。",
+  "providerParamInvalidNumber": "参数“{name}”的值不是合法数字：{value}",
+  "providerReasoningIncomplete": "请先完整填写推理开关，其他推理参数才能生效。",
+  "providerReasoningError": "推理参数错误：{error}",
+  "providerParamNameConflict": "推理参数与自定义参数重名：{name}",
+  "providerMaxTokensMissing": "已启用最大输出 Token 数，但未填写数值。",
+  "providerMaxTokensPositive": "最大输出 Token 数必须为正整数。",
+  "providerSeedInteger": "随机种子必须为整数。",
+  "providerNotConfigured": "未设置",
+  "providerAudioChunkingTitle": "音频切块",
+  "providerAudioChunkingHint": "智能切块会分析音频和候选切点，优先在句末切分；各片段不会重叠。",
+  "providerChunkingMode": "切块方式",
+  "providerChunkNone": "不切块",
+  "providerChunkSmart": "智能切块（推荐）",
+  "providerChunkFixedDuration": "固定时长切块",
+  "providerChunkFixedSize": "固定大小切块",
+  "providerCompressionTitle": "压缩编码",
+  "providerCompressionHint": "启用后，通用兜底会先压缩完整 WAV；若编码文件或请求体仍超限，再切分源 PCM 并逐块编码。",
+  "providerCompressionMode": "压缩方式",
+  "providerCompressionNone": "无（原样发送）",
+  "providerCompressionAdpcm": "ADPCM（约 4 倍压缩）",
+  "providerCompressionFlac": "FLAC（无损，约 2 倍）",
+  "providerCompressionAdpcmDescription": "IMA ADPCM，4:1 有损压缩。纯 Dart 实现，音质适合语音转写。",
+  "providerCompressionFlacDescription": "FLAC 无损压缩，纯 Dart 实现，体积约缩小一半。",
+  "providerCompressionWavDescription": "不压缩，以 WAV 文件原样发送。",
+  "providerLlmParams": "LLM 参数",
+  "providerEnabledParamsHelp": "开启的参数将作为默认值发送到 API 请求中。",
+  "providerTemperatureLabel": "温度",
+  "providerTemperatureHelp": "控制输出的随机性，值越高越有创造性。",
+  "providerTopPHelp": "核采样参数，控制词汇选择的累积概率。",
+  "providerFrequencyPenaltyLabel": "频率惩罚",
+  "providerFrequencyPenaltyHelp": "减少重复词，负值会增加重复。",
+  "providerPresencePenaltyLabel": "存在惩罚",
+  "providerPresencePenaltyHelp": "鼓励讨论新话题，负值会鼓励重复话题。",
+  "providerMaxOutputTokensLabel": "最大输出 Token 数",
+  "providerOptionalExample": "可选，例如 {example}",
+  "providerResponseTokensHelp": "每次响应最多生成的 Token 数。",
+  "providerSeedLabel": "随机种子",
+  "providerSeedHelp": "设置后可使输出结果可复现。",
+  "providerChunkSmartDescription": "分析音频和候选切点，优先在句末或长静音处切分且不重叠。默认最短 20 秒、目标 45 秒、最长 60 秒。仅由通用兜底使用；压缩切块仅支持 PCM WAV。",
+  "providerChunkDurationDescription": "每 N 秒切分一次（默认 60 秒）。方式简单，但可能截断语句。仅由通用兜底使用；压缩切块仅支持 PCM WAV。",
+  "providerChunkSizeDescription": "先按音频数据大小初步切分，再根据编码文件和请求体大小细分。仅由通用兜底使用；压缩切块仅支持 PCM WAV。",
+  "providerChunkNoneDescription": "不切块。完整压缩后仍超出限制时，将拒绝该文件。",
+  "providerNameLabel": "供应商名称",
+  "providerNameHint": "输入供应商名称",
+  "providerApiUrlLabel": "API 地址",
+  "providerApiUrlHint": "输入完整的 API 端点地址",
+  "providerApiKeyHint": "提示：{hint}",
+  "providerEndpointTypeLabel": "端点类型",
+  "providerEndpointOpenAi": "兼容 OpenAI（Chat Completions）",
+  "providerEndpointAnthropic": "Anthropic 格式（Messages API）",
+  "providerAnthropicEndpointHelp": "使用官方 Anthropic Messages API 格式（x-api-key 请求头）。API 地址示例：https://api.anthropic.com/v1/messages",
+  "providerOpenAiEndpointHelp": "使用官方 OpenAI Chat Completions 兼容格式（Bearer 请求头）。API 地址示例：https://api.openai.com/v1/chat/completions",
+  "providerRequestJsonDefault": "请求 JSON 大小默认值",
+  "providerUseAppDefault": "留空则使用应用默认值",
+  "providerModelJsonBudgetHelp": "模型可单独设置覆盖值；此处和模型均未设置时，使用 20 MiB 默认值。",
+  "providerRequestParamsHelp": "请求会使用供应商和模型中所有已启用的参数。若参数重名，则以模型参数值为准。",
+  "providerUploadSettings": "上传设置",
+  "providerUploadMethodHelp": "不同供应商支持的音频上传方式和大小限制不同。",
+  "providerUploadMethod": "上传方式",
+  "providerMultipart": "Multipart（通用）",
+  "providerUrlUpload": "URL（链接）",
+  "providerMaxUploadSize": "最大上传大小",
+  "providerFallbackStrategy": "兜底策略",
+  "providerFallbackMethod": "兜底方式",
+  "providerPreprocessing": "音频预处理",
+  "providerPreprocessingHelp": "降低音频文件大小，不影响转写准确率。",
+  "providerPreprocessingMethod": "预处理方式",
+  "@providerParamNameInvalid": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "@providerParamAlreadyExists": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "@providerParamInvalidJson": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "@providerParamOptionsRequired": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "@providerParamInvalidNumber": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "@providerReasoningError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@providerParamNameConflict": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "@providerOptionalExample": {
+    "placeholders": {
+      "example": {
+        "type": "String"
+      }
+    }
+  },
+  "providerUploadMultipartHelp": "直接以 multipart/form-data 上传。请求体包括音频、表单字段和分段边界。",
+  "providerUploadBase64Help": "以 JSON 发送 Base64，可绕过部分供应商对 multipart 的专属限制。Base64 膨胀和 JSON 字段均计入上传上限。",
+  "providerUploadUrlHelp": "提供公网 URL，由供应商下载。支持较大的文件（例如 Together AI 的 1 GB）。",
+  "providerUploadBudgetHelp": "此值用于触发原始音频兜底并限制最终请求体。应用会分别检查原始音频、编码文件和上传大小。Multipart 计入表单字段和边界；Base64 JSON 计入编码膨胀和字段。默认 25 MB 与 OpenAI 音频 API 上限一致。",
+  "providerFallbackTriggerHelp": "原始音频或完整请求体超出上限时触发。特定兜底（Base64）优先于通用兜底（压缩/切块）。",
+  "providerFallbackNone": "无（直接拒绝）",
+  "providerFallbackSpecific": "特定兜底（Base64）",
+  "providerFallbackGeneric": "通用兜底（压缩/切块）",
+  "providerFallbackAll": "全部尝试（推荐）",
+  "providerFallbackSpecificHelp": "尝试 Base64 JSON。只有计入 Base64 膨胀和 JSON 字段后的请求体未超限时才发送。",
+  "providerFallbackGenericHelp": "若已启用压缩，则先压缩完整 WAV。仍超限且已启用切块时，再切分源 PCM 并逐块编码。仅支持 PCM WAV。",
+  "providerFallbackAllHelp": "先尝试符合请求体上限的 Base64；然后在启用压缩时压缩完整 WAV。若仍超限且已启用切块，则切分源 PCM 并逐块编码。仅支持 PCM WAV。",
+  "providerFallbackRejectHelp": "文件超出限制时直接拒绝，不尝试兜底。",
+  "providerPreprocessNone": "无",
+  "providerPreprocessResample": "WAV 优化（16 kHz 单声道）",
+  "providerPreprocessResampleHelp": "重采样至 16 kHz 并混合为单声道。文件大小约缩小 4–6 倍，基本不影响转写准确率。",
+  "providerPreprocessNoneHelp": "不进行预处理，原样发送。",
+  "assistantDefaultsScopeHelp": "默认模型和工具仅用于在此助手下新建的话题。现有话题保留各自设置。工具结果截断适用于全部话题。",
+  "assistantDefaultModelTitle": "默认模型",
+  "assistantDefaultModelHelp": "新话题使用的模型；留空则不指定默认模型。",
+  "assistantNoDefault": "暂不设置",
+  "assistantNoModelsAvailable": "暂无可用模型，请在设置中配置 LLM 供应商。",
+  "assistantDefaultToolsTitle": "默认启用工具",
+  "assistantDisabledToolsHelp": "已关闭的工具不会在新话题中自动启用。",
+  "assistantUnconfiguredToolsHelp": "尚未配置默认工具；新话题将自动启用全部工具。",
+  "assistantEnableAll": "全部启用",
+  "assistantDisableAll": "全部关闭",
+  "assistantNoToolsAvailable": "暂无可用工具",
+  "assistantTruncateToolOutput": "工具结果截断",
+  "assistantTruncateToolOutputHelp": "发送给模型前，单个工具结果的最大字符数。适用于此助手下的全部话题。",
+  "assistantEnableTruncation": "启用截断",
+  "assistantTruncatedTo": "超长结果将截断至 {count} 个字符",
+  "@assistantTruncatedTo": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "assistantSendFullResult": "完整发送（仍受 50 KB 存储上限约束）",
+  "assistantMaxCharacters": "最大字符数",
+  "assistantCharactersNotTokens": "单位：字符（不是 token）",
+  "assistantDefaultCharacterCount": "默认值：{count}",
+  "@assistantDefaultCharacterCount": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "assistantCharacterRange": "有效范围：{minimum}–{maximum} 个字符",
+  "@assistantCharacterRange": {
+    "placeholders": {
+      "minimum": {
+        "type": "String"
+      },
+      "maximum": {
+        "type": "String"
+      }
+    }
+  },
+  "assistantNewConversationPreview": "新建话题效果",
+  "assistantEnabledToolCount": "已启用 {enabled} / {total} 个",
+  "@assistantEnabledToolCount": {
+    "placeholders": {
+      "enabled": {
+        "type": "String"
+      },
+      "total": {
+        "type": "String"
+      }
+    }
+  },
+  "assistantAllToolsAutoEnabled": "全部自动启用（未配置）",
+  "assistantMoreActions": "更多操作",
+  "assistantChooseEmoji": "选择表情",
+  "assistantNameLabel": "助手名称",
+  "assistantDescriptionOptional": "描述（可选）",
+  "assistantSelectionTitle": "选择助手",
+  "assistantMarketTooltip": "助手市场",
+  "assistantDefaultPrompt": "你是一个有帮助的AI助手。请用中文回答用户的问题。",
+  "assistantCreateNew": "新建助手",
+  "assistantEmptyState": "暂无助手，请先创建。",
+  "assistantCreate": "创建",
+  "assistantReorderHint": "长按并拖动即可调整助手顺序",
+  "assistantNewNameHint": "输入助手名称",
+  "assistantNewDescriptionHint": "简要描述此助手的功能",
+  "assistantDeleteTitle": "删除助手",
+  "assistantDeleteConfirmation": "确定要删除助手“{name}”吗？此操作无法撤销。",
+  "@assistantDeleteConfirmation": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "assistantEditTitle": "编辑助手",
+  "assistantBasicTab": "基本设置",
+  "assistantParametersTab": "参数设置",
+  "assistantDefaultsTab": "默认设置",
+  "assistantAddCustomParameter": "添加自定义参数",
+  "assistantEditCustomParameter": "编辑自定义参数",
+  "assistantParameterName": "参数名",
+  "assistantParameterNameHint": "例如 top_k 或 provider.only",
+  "assistantParameterNameInvalid": "参数名格式不正确（点号分段不能为空）",
+  "assistantParameterType": "类型",
+  "assistantValue": "值",
+  "assistantTrueFalseHint": "true 或 false",
+  "assistantNumberHint": "输入数字",
+  "assistantJsonHint": "例如：{example}",
+  "assistantValueHint": "输入值",
+  "assistantCancel": "取消",
+  "assistantSave": "保存",
+  "assistantParamOverrideHelp": "启用时助手参数会覆盖模型参数；关闭时使用模型参数。",
+  "assistantTemperature": "温度 (Temperature)",
+  "assistantMaxTokens": "最大 Token 数",
+  "assistantMaxToolCalls": "工具调用上限",
+  "assistantRounds": "{count} 轮",
+  "@assistantRounds": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "assistantUnlimited": "无限制",
+  "assistantStreamOutput": "流式输出",
+  "assistantFrequencyPenalty": "频率惩罚",
+  "assistantPresencePenalty": "存在惩罚",
+  "assistantRandomSeed": "随机种子",
+  "assistantNotSet": "未设置",
+  "assistantSeedValue": "种子值",
+  "assistantIntegerSeedHint": "输入整数种子",
+  "assistantWebSearch": "联网搜索",
+  "assistantAddParameter": "添加参数",
+  "assistantNoCustomParameters": "暂无自定义参数",
+  "@assistantJsonHint": {
+    "placeholders": {
+      "example": {
+        "type": "String"
+      }
+    }
+  },
+  "assistantRoundsLabel": "轮数",
+  "modelCreateTitle": "添加模型",
+  "modelEditTitle": "编辑模型",
+  "modelDiscardTitle": "放弃修改？",
+  "modelDiscardBody": "当前有未保存的修改，确定要放弃吗？",
+  "modelNameLabel": "模型名称",
+  "modelNameHint": "输入显示名称（可选）",
+  "modelIdLabel": "模型 ID",
+  "modelIdExample": "例如 {id}",
+  "@modelIdExample": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "modelIdRequired": "模型 ID 为必填项。",
+  "modelCustomParamRequired": "自定义参数的参数名和默认值不能为空。",
+  "modelParamDuplicate": "参数已存在：{name}",
+  "@modelParamDuplicate": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "modelParamReserved": "不能使用保留的 OCR 参数名：{name}",
+  "@modelParamReserved": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "modelParamName": "参数名",
+  "modelParamDefaultValue": "默认参数值",
+  "modelParamDelete": "删除参数",
+  "modelParamJsonInvalid": "参数“{name}”的默认值不是合法 JSON：{value}",
+  "@modelParamJsonInvalid": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "modelAddParameter": "添加参数",
+  "modelNoCustomParams": "暂无自定义参数",
+  "modelBasicSettings": "基本设置",
+  "modelDiscardCancel": "取消",
+  "modelSave": "保存",
+  "modelUnsavedMaxTokens": "最大输出 Token 数已启用但未填写。",
+  "modelMaxTokensPositive": "最大输出 Token 数必须为正整数。",
+  "modelSeedInteger": "随机种子必须为整数。",
+  "modelContextLengthRequired": "上下文长度为必填项。",
+  "modelContextLengthPositive": "上下文长度必须为正整数。",
+  "modelAsrLanguageCode": "语言代码（Language）",
+  "modelAsrLanguageHint": "例如 zh、en、ja",
+  "modelAsrLanguageHelp": "ISO-639-1 语言代码；留空则由模型自动检测。",
+  "modelTemperature": "温度",
+  "modelTemperatureHelp": "控制输出的随机性，建议使用较低的值。",
+  "modelAsrPrompt": "提示词",
+  "modelAsrPromptHint": "输入上下文提示词（可选）",
+  "modelAsrPromptHelp": "提供上下文以提高转写准确性，例如专业术语列表。",
+  "modelAsrParams": "ASR 参数",
+  "modelEnabledParamsHelp": "开启的参数将作为默认值发送到 API 请求中。",
+  "modelAsrResponseFormat": "响应格式",
+  "modelAsrResponseHelp": "转写结果的返回格式。",
+  "modelAsrTimestampGranularity": "时间戳粒度",
+  "modelAsrVerboseHelp": "仅在 response_format 为 verbose_json 时生效。",
+  "modelNoTrim": "不裁切",
+  "modelAudioTrimTitle": "音频裁切",
+  "modelAudioTrimHelp": "选择音频裁切方式。",
+  "modelDeleteTrimPreset": "删除裁切预设",
+  "modelDeleteTrimConfirmation": "确定要删除裁切预设“{name}”吗？",
+  "@modelDeleteTrimConfirmation": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "modelAddTrimPreset": "添加自定义裁切",
+  "modelPlayTestAudio": "播放测试音频",
+  "modelPlayingTestAudio": "播放中...",
+  "modelParamExists": "该参数已存在",
+  "asrModelIdExample": "例如 whisper-1",
+  "asrPromptLabel": "提示词",
+  "asrResponseFormatJson": "json – JSON 格式",
+  "asrResponseFormatText": "text – 纯文本",
+  "asrResponseFormatSrt": "srt – 字幕",
+  "asrResponseFormatVtt": "vtt – 字幕",
+  "asrResponseFormatVerbose": "verbose_json – 详细 JSON（含时间戳）",
+  "asrVerboseTimestampHelp": "选择 verbose_json 后可启用下方时间戳粒度选项。",
+  "asrTimestampSegment": "segment – 段落级",
+  "asrTimestampWord": "word – 单词级",
+  "asrWordTimestampHelp": "单词级时间戳的准确性可能低于段落级。",
+  "reasoningAddOptionValue": "添加选项值",
+  "reasoningEditOptionValue": "编辑选项值",
+  "reasoningOptionExample": "例如 low、medium、high",
+  "reasoningOptionSelectionHelp": "点按选项块可选中或取消。选中的值会发送；拖动可排序。供应商提供的值不能删除，但可以取消选中来隐藏。",
+  "reasoningAddOption": "添加选项",
+  "reasoningCurrentProvider": "当前：供应商",
+  "reasoningCurrentModel": "当前：模型自定义",
+  "reasoningAddEffortValue": "添加推理力度值",
+  "reasoningEffortExample": "例如 max、ultra、deep",
+  "reasoningAddToggle": "添加推理开关",
+  "reasoningToggle": "推理开关",
+  "reasoningResetParameter": "还原此参数",
+  "reasoningDisableToggle": "停用推理开关",
+  "reasoningEnableToggle": "启用推理开关",
+  "reasoningParameterNameSource": "参数名（{source}）",
+  "@reasoningParameterNameSource": {
+    "placeholders": {
+      "source": {
+        "type": "String"
+      }
+    }
+  },
+  "reasoningNameExample": "例如 thinking.type、reasoning",
+  "reasoningBooleanHelp": "布尔参数无需配置值；聊天面板提供开关。",
+  "reasoningOnValue": "开启时的值",
+  "reasoningOnExample": "例如 enabled、true",
+  "reasoningOffValue": "关闭时的值",
+  "reasoningOffExample": "例如 disabled、false",
+  "reasoningToggleValuesHelp": "开启时发送“{onValue}”，关闭时发送“{offValue}”。",
+  "@reasoningToggleValuesHelp": {
+    "placeholders": {
+      "onValue": {
+        "type": "String"
+      },
+      "offValue": {
+        "type": "String"
+      }
+    }
+  },
+  "reasoningAddEffort": "添加推理力度",
+  "reasoningFillToggleFirst": "请先完整填写推理开关",
+  "reasoningFillToggleBeforeEffort": "请先完整填写推理开关，再配置推理力度。",
+  "reasoningAddValue": "添加值",
+  "reasoningJsonValue": "JSON 值",
+  "reasoningJsonExample": "例如 {example}",
+  "@reasoningJsonExample": {
+    "placeholders": {
+      "example": {
+        "type": "String"
+      }
+    }
+  },
+  "reasoningSelectedChipHelp": "点按选项块可选中或取消。选中的值会显示在聊天推理面板；拖动可排序。供应商提供的值不能删除，但可以隐藏。",
+  "reasoningAddParameter": "添加推理参数",
+  "reasoningToggleIncomplete": "请先完整填写推理开关，再配置推理力度。",
+  "llmContextLength": "上下文长度",
+  "llmContextHint": "输入上下文长度",
+  "llmContextHelp": "模型的最大上下文窗口大小（Token 数）。",
+  "llmReasoningParams": "推理参数",
+  "llmReasoningHelp": "配置聊天推理参数。推理开关用于设置参数名和开关值；可添加、排序推理力度选项，并选择显示在聊天面板中的值。打开本页时会同步供应商提供的值。这些设置控制模型参数；聊天面板中的推理开关独立管理。",
+  "llmAddReasoningParam": "添加推理参数",
+  "llmCustomEndpointType": "自定义端点类型",
+  "llmInheritEndpointType": "关闭时使用供应商设置的端点类型。",
+  "llmEndpointType": "端点类型",
+  "llmEndpointOpenAi": "兼容 OpenAI（Chat Completions）",
+  "llmEndpointAnthropic": "Anthropic 格式（Messages API）",
+  "llmEndpointHelp": "端点类型必须与供应商 API 地址匹配。更改后，此模型的新对话会使用相应格式。",
+  "llmTopPHelp": "核采样参数，用于控制词汇选择的累积概率。",
+  "llmFrequencyPenaltyLabel": "频率惩罚",
+  "llmFrequencyPenaltyHelp": "减少重复，负值会增加重复。",
+  "llmPresencePenaltyLabel": "存在惩罚",
+  "llmPresencePenaltyHelp": "鼓励讨论新话题，负值会鼓励重复话题。",
+  "llmMaxTokensHint": "可选，例如 4096",
+  "llmTokensPerResponse": "每次响应最多生成的 Token 数。",
+  "llmSeedLabel": "随机种子（Seed）",
+  "llmSeedHint": "可选，例如 42",
+  "llmSeedHelp": "设置后可使输出结果可复现。",
+  "llmInheritedCustomHelp": "供应商已配置的自定义参数会显示在此处，并在每次打开页面时同步。",
+  "llmBooleanParamHelp": "布尔类型无需配置参数值。",
+  "modelContextReq": "上下文长度为必填项。",
+  "modelContextPositive": "上下文长度必须为正整数。",
+  "modelParamNameInvalid": "参数名格式不正确（点号分段不能为空）：{name}",
+  "@modelParamNameInvalid": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "modelParamFinite": "参数“{name}”的{valueLabel}必须是有限数字：{value}",
+  "@modelParamFinite": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "valueLabel": {
+        "type": "String"
+      },
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "modelReasoningIncomplete": "请先完整填写推理开关，其他推理参数才能生效。",
+  "modelReasoningOptionsRequired": "推理参数必须至少添加一个选项值。",
+  "modelReasoningError": "推理参数错误：{error}",
+  "@modelReasoningError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "modelReasoningDuplicate": "推理参数重名：{name}",
+  "@modelReasoningDuplicate": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "modelReasoningCustomDuplicate": "推理参数与自定义参数重名：{name}",
+  "@modelReasoningCustomDuplicate": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "modelSeedRequired": "随机种子已启用但未填写。",
+  "ocrParamsTitle": "OCR 参数",
+  "ocrParamsHelp": "使用兼容 OpenAI 的视觉 Chat Completions 格式。以下参数均为可选；未填写或未启用的参数不会发送。供应商特有参数可在下方添加（需接口支持）。",
+  "ocrRequestSizeOverride": "请求 JSON 大小覆盖值",
+  "ocrInheritProvider": "留空则继承供应商设置",
+  "ocrBudgetDefault": "留空时继承供应商设置；供应商也未设置时使用 20 MiB 默认值。",
+  "ocrBudgetValue": "留空时继承供应商设置（{size} MiB）；供应商也未设置时使用 20 MiB 默认值。",
+  "@ocrBudgetValue": {
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "audioTrimDirection": "裁切{direction} {seconds} 秒",
+  "@audioTrimDirection": {
+    "placeholders": {
+      "direction": {
+        "type": "String"
+      },
+      "seconds": {
+        "type": "String"
+      }
+    }
+  },
+  "audioTrimBeginning": "裁切开头 {seconds} 秒",
+  "@audioTrimBeginning": {
+    "placeholders": {
+      "seconds": {
+        "type": "String"
+      }
+    }
+  },
+  "audioTrimNone": "不裁切音频",
+  "trimNameLabel": "裁切方式名称 *",
+  "trimNameHint": "例如静音裁切",
+  "trimDurationLabel": "裁切时长（秒）*",
+  "trimDurationHint": "例如 0.123",
+  "trimNameAndDurationRequired": "名称和时长为必填项。",
+  "trimDurationInvalid": "请输入有效的正数时长。",
+  "testAudioHostMissing": "尚未配置 Host。",
+  "testAudioKeyMissing": "尚未配置 Key。",
+  "testAudioContentTypeError": "响应 Content-Type 为 {contentType}，不是音频数据。",
+  "@testAudioContentTypeError": {
+    "placeholders": {
+      "contentType": {
+        "type": "String"
+      }
+    }
+  },
+  "testAudioEmpty": "服务器返回了空音频数据。",
+  "testAudioTimeoutConnection": "连接超时，请检查网络。{details}",
+  "@testAudioTimeoutConnection": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "testAudioTimeoutReceive": "接收超时，服务器响应过慢。{details}",
+  "@testAudioTimeoutReceive": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "testAudioRequestCancelled": "请求已取消。{details}",
+  "@testAudioRequestCancelled": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "testAudioNetworkError": "网络错误：{message}",
+  "@testAudioNetworkError": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  "testAudioNoBody": "无响应体",
+  "testAudioCorsHelp": "无法连接到服务器。Web 端可能因 CORS 限制或 API 地址错误导致；请检查供应商 API 地址及服务器跨域设置。{details}",
+  "@testAudioCorsHelp": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "trimModelNameHint": "用于显示和识别的易读名称，例如“GPT-4o Mini TTS”。同一供应商下的模型可用名称区分。",
+  "trimModelIdHelp": "API 调用使用的唯一标识符，例如“gpt-4o-mini-tts”。必须与供应商提供的模型 ID 一致。",
+  "ttsVoiceRangeTitle": "音量范围",
+  "ttsMinVolume": "最小音量",
+  "ttsMaxVolume": "最大音量",
+  "ttsSpeedRangeTitle": "语速范围",
+  "ttsMinSpeed": "最小语速",
+  "ttsMaxSpeed": "最大语速",
+  "ttsMaxAudioLength": "单次最长音频字数 *",
+  "ttsAudioLengthHint": "例如 1000",
+  "ttsNoVoices": "暂无音色，点击进入编辑",
+  "ttsInstructionSupported": "模型是否支持 instruction 参数",
+  "ttsInstructionHelp": "启用后可在 TTS 请求中附加语气、情绪、语速等指令描述。",
+  "ttsStreamSupported": "模型是否支持流式输出",
+  "ttsStreamHelp": "启用后此模型可用于需要流式输出的场景；请先确认模型支持流式输出。",
+  "modelParamBooleanExpected": "参数“{name}”的值必须是 true 或 false：{value}",
+  "@modelParamBooleanExpected": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "ttsMaxAudioLengthRequired": "单次最长音频字数为必填项，请输入大于 0 的整数。",
+  "asrLanguageExample": "例如 zh、en、ja",
+  "llmReasoningFullHelp": "推理开关控制是否发送推理参数，并允许设置参数名和开关值。推理力度参数只有一个，可选择值并拖动排序；选中的值会显示在聊天推理面板中。可在下方添加其他推理参数。参数名支持点号嵌套，例如 thinking.type 会转换为嵌套 JSON 对象。打开本页时会同步供应商配置的推理参数。此处开关控制模型参数；聊天中的推理开关独立控制。",
+  "llmTemperatureHelp": "控制输出的随机性，值越高越有创造性。",
+  "llmBooleanValueHelp": "布尔类型无需配置参数值。",
+  "reasoningDisableEffort": "停用推理力度",
+  "reasoningEnableEffort": "启用推理力度",
+  "ocrJsonSizePositive": "请求 JSON 大小必须是大于 0 的 MiB 数值。",
+  "ttsRangePair": "最小和最大{kind}必须同时填写，或同时留空。",
+  "@ttsRangePair": {
+    "placeholders": {
+      "kind": {
+        "type": "String"
+      }
+    }
+  },
+  "ttsEditTrimTitle": "编辑自定义裁切",
+  "ttsVoicesCount": "音色 ({count})",
+  "@ttsVoicesCount": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "ttsRequestFormatExample": "在请求格式中生成：{syntax}",
+  "@ttsRequestFormatExample": {
+    "placeholders": {
+      "syntax": {
+        "type": "String"
+      }
+    }
+  },
+  "mcpServerNameRequired": "请输入 MCP 服务器名称。",
+  "@mcpServerNameRequired": {
+    "placeholders": {}
+  },
+  "mcpStdioCommandRequired": "stdio 模式需要指定命令。",
+  "@mcpStdioCommandRequired": {
+    "placeholders": {}
+  },
+  "mcpSseUrlRequired": "SSE 模式需要指定 URL。",
+  "@mcpSseUrlRequired": {
+    "placeholders": {}
+  },
+  "mcpEditServerTitle": "编辑 MCP 服务器",
+  "@mcpEditServerTitle": {
+    "placeholders": {}
+  },
+  "mcpCreateServerTitle": "新建 MCP 服务器",
+  "@mcpCreateServerTitle": {
+    "placeholders": {}
+  },
+  "mcpUnsavedChangesTitle": "未保存的更改",
+  "@mcpUnsavedChangesTitle": {
+    "placeholders": {}
+  },
+  "mcpUnsavedChangesConfirm": "有未保存的更改，确定要放弃吗？",
+  "@mcpUnsavedChangesConfirm": {
+    "placeholders": {}
+  },
+  "mcpTransportType": "传输方式",
+  "@mcpTransportType": {
+    "placeholders": {}
+  },
+  "mcpServerName": "服务器名称",
+  "@mcpServerName": {
+    "placeholders": {}
+  },
+  "mcpServerNameHint": "输入 MCP 服务器名称",
+  "@mcpServerNameHint": {
+    "placeholders": {}
+  },
+  "mcpCommand": "命令",
+  "@mcpCommand": {
+    "placeholders": {}
+  },
+  "mcpCommandExample": "例如：npx",
+  "@mcpCommandExample": {
+    "placeholders": {}
+  },
+  "mcpArguments": "参数",
+  "@mcpArguments": {
+    "placeholders": {}
+  },
+  "mcpArgumentsHint": "用逗号分隔参数，例如：-y, @modelcontextprotocol/server-filesystem, /tmp",
+  "@mcpArgumentsHint": {
+    "placeholders": {}
+  },
+  "mcpSseUrlExample": "例如：http://localhost:3001/sse",
+  "@mcpSseUrlExample": {
+    "placeholders": {}
+  },
+  "mcpApiKey": "API 密钥",
+  "@mcpApiKey": {
+    "placeholders": {}
+  },
+  "mcpApiKeyHint": "输入 API Key（可选）",
+  "@mcpApiKeyHint": {
+    "placeholders": {}
+  },
+  "mcpShowKey": "显示密钥",
+  "@mcpShowKey": {
+    "placeholders": {}
+  },
+  "mcpHideKey": "隐藏密钥",
+  "@mcpHideKey": {
+    "placeholders": {}
+  },
+  "mcpDescriptionHint": "输入此 MCP 服务器的描述信息（可选）",
+  "@mcpDescriptionHint": {
+    "placeholders": {}
+  },
+  "mcpStdioDescription": "stdio 会在本地启动子进程作为 MCP 服务器，并通过标准输入/输出通信。适用于本地工具。",
+  "@mcpStdioDescription": {
+    "placeholders": {}
+  },
+  "mcpSseDescription": "SSE 通过 HTTP SSE 连接远程 MCP 服务器。适用于远程服务。",
+  "@mcpSseDescription": {
+    "placeholders": {}
+  },
+  "mcpLocalStdio": "本地 (stdio)",
+  "@mcpLocalStdio": {
+    "placeholders": {}
+  },
+  "mcpRemoteSse": "远程 (SSE)",
+  "@mcpRemoteSse": {
+    "placeholders": {}
+  },
+  "mcpSaving": "保存中…",
+  "@mcpSaving": {
+    "placeholders": {}
+  },
+  "providerTestSafetyNote": "此测试会向对应服务发送真实请求。MCP 仅调用只读的 tools/list；HTTP 和网页搜索会执行一次查询。Todo 默认读取清单；为保护当前数据，请省略 todos 参数或将其设为 null。",
+  "@providerTestSafetyNote": {
+    "placeholders": {}
+  },
+  "providerDeleteConfigTitle": "删除配置",
+  "@providerDeleteConfigTitle": {
+    "placeholders": {}
+  },
+  "providerDeleteConfigConfirm": "确定要删除此供应商配置及其所有模型吗？",
+  "@providerDeleteConfigConfirm": {
+    "placeholders": {}
+  },
+  "providerCreateGroup": "新建组别",
+  "@providerCreateGroup": {
+    "placeholders": {}
+  },
+  "providerEditGroup": "编辑组别",
+  "@providerEditGroup": {
+    "placeholders": {}
+  },
+  "providerGroupName": "组别名称",
+  "@providerGroupName": {
+    "placeholders": {}
+  },
+  "providerGroupNameExists": "组别名称已存在。",
+  "@providerGroupNameExists": {
+    "placeholders": {}
+  },
+  "providerDeleteGroup": "删除组别",
+  "@providerDeleteGroup": {
+    "placeholders": {}
+  },
+  "providerDeleteGroupConfirm": "删除“{groupName}”后，其中的配置会移到“其他 MCP 服务”。",
+  "@providerDeleteGroupConfirm": {
+    "placeholders": {
+      "groupName": {
+        "type": "String"
+      }
+    }
+  },
+  "providerMoveToGroup": "移动到组别",
+  "@providerMoveToGroup": {
+    "placeholders": {}
+  },
+  "providerUnnamed": "（未命名）",
+  "@providerUnnamed": {
+    "placeholders": {}
+  },
+  "providerHttpSearch": "HTTP 搜索",
+  "@providerHttpSearch": {
+    "placeholders": {}
+  },
+  "providerHttpToolSubtitle": "HTTP 工具：{url}",
+  "@providerHttpToolSubtitle": {
+    "placeholders": {
+      "url": {
+        "type": "String"
+      }
+    }
+  },
+  "providerLocalStdioSubtitle": "本地 (stdio)：{command}",
+  "@providerLocalStdioSubtitle": {
+    "placeholders": {
+      "command": {
+        "type": "String"
+      }
+    }
+  },
+  "providerRemoteSseSubtitle": "远程 (SSE)：{url}",
+  "@providerRemoteSseSubtitle": {
+    "placeholders": {
+      "url": {
+        "type": "String"
+      }
+    }
+  },
+  "providerServices": "服务配置",
+  "@providerServices": {
+    "placeholders": {}
+  },
+  "providerServicesDescription": "按组管理远程连接、本地 stdio 与 HTTP 搜索",
+  "@providerServicesDescription": {
+    "placeholders": {}
+  },
+  "providerCreateGroupAction": "新建组别",
+  "@providerCreateGroupAction": {
+    "placeholders": {}
+  },
+  "providerGroupEmpty": "此组暂无配置，点击“添加”加入内容。",
+  "@providerGroupEmpty": {
+    "placeholders": {}
+  },
+  "providerBuiltinTools": "内置工具",
+  "@providerBuiltinTools": {
+    "placeholders": {}
+  },
+  "providerBuiltinToolsDescription": "Stroom 提供的本地工具接口；网页搜索归入对应服务组。",
+  "@providerBuiltinToolsDescription": {
+    "placeholders": {}
+  },
+  "providerBuiltinToolInterface": "内置工具接口",
+  "@providerBuiltinToolInterface": {
+    "placeholders": {}
+  },
+  "providerViewInterface": "查看接口",
+  "@providerViewInterface": {
+    "placeholders": {}
+  },
+  "providerConfigTitle": "配置",
+  "@providerConfigTitle": {
+    "placeholders": {}
+  },
+  "providerNotFound": "供应商未找到",
+  "@providerNotFound": {
+    "placeholders": {}
+  },
+  "providerConfigurationHeading": "供应商配置",
+  "@providerConfigurationHeading": {
+    "placeholders": {}
+  },
+  "providerBuiltinWebSearchEmpty": "内置网络搜索支持 Google、Bing 和百度，模型调用名为 web_search。",
+  "@providerBuiltinWebSearchEmpty": {
+    "placeholders": {}
+  },
+  "providerNoConfigsAdd": "暂无供应商配置，请点击“添加”创建。",
+  "@providerNoConfigsAdd": {
+    "placeholders": {}
+  },
+  "providerNoHost": "(未设置 Host)",
+  "@providerNoHost": {
+    "placeholders": {}
+  },
+  "providerServicesAndTools": "服务与工具",
+  "@providerServicesAndTools": {
+    "placeholders": {}
+  },
+  "providerManageServicesDescription": "管理 MCP 服务器、HTTP 搜索和 Stroom 内置工具。",
+  "@providerManageServicesDescription": {
+    "placeholders": {}
+  },
+  "providerNoServices": "还没有服务配置",
+  "@providerNoServices": {
+    "placeholders": {}
+  },
+  "providerAddServiceDescription": "添加 MCP 服务或 HTTP 搜索接口，连接后即可在助手中使用。",
+  "@providerAddServiceDescription": {
+    "placeholders": {}
+  },
+  "providerAddService": "添加服务",
+  "@providerAddService": {
+    "placeholders": {}
+  },
+  "providerBuiltinBadge": "内置",
+  "@providerBuiltinBadge": {
+    "placeholders": {}
+  },
+  "@providerApiKeyHint": {
+    "placeholders": {
+      "hint": {
+        "type": "String"
+      }
+    }
+  },
+  "providerConnectivityTest": "连通性测试",
+  "@providerConnectivityTest": {
+    "placeholders": {}
+  },
+  "providerMoveGroupTooltip": "移动到组别",
+  "@providerMoveGroupTooltip": {
+    "placeholders": {}
+  },
+  "providerDeleteTooltip": "删除配置",
+  "@providerDeleteTooltip": {
+    "placeholders": {}
+  },
+  "providerGroupItemCount": "{count, plural, other{# 项内容}}",
+  "@providerGroupItemCount": {
+    "placeholders": {
+      "count": {
+        "type": "num"
+      }
+    }
+  },
+  "providerGroupActions": "组别操作",
+  "@providerGroupActions": {
+    "placeholders": {}
+  },
+  "providerEditGroupAction": "编辑组别",
+  "@providerEditGroupAction": {
+    "placeholders": {}
+  },
+  "providerDeleteGroupAction": "删除组别",
+  "@providerDeleteGroupAction": {
+    "placeholders": {}
+  },
+  "providerAddItem": "添加内容",
+  "@providerAddItem": {
+    "placeholders": {}
+  },
+  "providerMcpMasterLabel": "MCP 服务器",
+  "@providerMcpMasterLabel": {
+    "placeholders": {}
+  },
+  "providerMcpMasterDescription": "控制 MCP 服务器与内置搜索工具在助手和对话中的可用性。",
+  "@providerMcpMasterDescription": {
+    "placeholders": {}
+  },
+  "providerEnabled": "已启用",
+  "@providerEnabled": {
+    "placeholders": {}
+  },
+  "providerDisabled": "已停用",
+  "@providerDisabled": {
+    "placeholders": {}
+  },
+  "providerEditSettings": "编辑供应商设置",
+  "@providerEditSettings": {
+    "placeholders": {}
+  },
+  "providerModelList": "模型列表",
+  "@providerModelList": {
+    "placeholders": {}
+  },
+  "providerNoModels": "暂无模型",
+  "@providerNoModels": {
+    "placeholders": {}
+  },
+  "providerDeleteModel": "删除模型",
+  "@providerDeleteModel": {
+    "placeholders": {}
+  },
+  "providerDeleteModelConfirm": "确定要删除此模型吗？",
+  "@providerDeleteModelConfirm": {
+    "placeholders": {}
+  },
+  "providerEditConfig": "编辑配置",
+  "@providerEditConfig": {
+    "placeholders": {}
+  },
+  "providerCreateNamedConfig": "新建{entryName}配置",
+  "@providerCreateNamedConfig": {
+    "placeholders": {
+      "entryName": {
+        "type": "String"
+      }
+    }
+  },
+  "toolHttpSearchType": "接入类型：HTTP 搜索",
+  "@toolHttpSearchType": {
+    "placeholders": {}
+  },
+  "toolInterface": "工具接口：{name}",
+  "@toolInterface": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "toolParameterDefinitions": "参数定义",
+  "@toolParameterDefinitions": {
+    "placeholders": {}
+  },
+  "toolHttpAddress": "HTTP 接口地址",
+  "@toolHttpAddress": {
+    "placeholders": {}
+  },
+  "toolInvalidHttpUrl": "请输入有效的 HTTP 或 HTTPS 地址。",
+  "@toolInvalidHttpUrl": {
+    "placeholders": {}
+  },
+  "toolBuiltinType": "接入类型：Stroom 内置工具",
+  "@toolBuiltinType": {
+    "placeholders": {}
+  },
+  "toolBuiltinEnableHelp": "是否在助手中启用，由该助手的默认工具设置管理。",
+  "@toolBuiltinEnableHelp": {
+    "placeholders": {}
+  },
+  "mcpSseUrlLabel": "SSE URL",
+  "@mcpSseUrlLabel": {
+    "placeholders": {}
+  },
+  "mcpUrlLabel": "URL",
+  "@mcpUrlLabel": {
+    "placeholders": {}
+  },
+  "providerModelId": "模型 ID：{modelId}",
+  "@providerModelId": {
+    "placeholders": {
+      "modelId": {
+        "type": "String"
+      }
+    }
+  },
+  "providerValueNotSet": "（未设置）",
+  "@providerValueNotSet": {
+    "placeholders": {}
+  },
+  "providerApiKeyInputHint": "输入 API 密钥",
+  "@providerApiKeyInputHint": {
+    "placeholders": {}
+  },
+  "providerSettingsTitle": "供应商配置",
+  "@providerSettingsTitle": {
+    "placeholders": {}
+  },
+  "providerBasicInfoTab": "基本信息",
+  "@providerBasicInfoTab": {
+    "placeholders": {}
+  },
+  "providerParameterSettingsTab": "参数设置",
+  "@providerParameterSettingsTab": {
+    "placeholders": {}
+  },
+  "providerOptionValuesReorderHelp": "选项值（长按把手拖拽排序）",
+  "@providerOptionValuesReorderHelp": {
+    "placeholders": {}
+  },
+  "providerOptionIndexLabel": "选项 {index}",
+  "@providerOptionIndexLabel": {
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
+  },
+  "providerOptionExampleHint": "如 {example}",
+  "@providerOptionExampleHint": {
+    "placeholders": {
+      "example": {
+        "type": "String"
+      }
+    }
+  },
+  "providerDeleteOptionTooltip": "删除选项",
+  "@providerDeleteOptionTooltip": {
+    "placeholders": {}
+  },
+  "providerAddOption": "添加选项",
+  "@providerAddOption": {
+    "placeholders": {}
+  },
+  "providerAddCustomParam": "添加参数",
+  "@providerAddCustomParam": {
+    "placeholders": {}
+  },
+  "providerNoCustomParams": "暂无自定义参数",
+  "@providerNoCustomParams": {
+    "placeholders": {}
+  },
+  "providerParamNameLabel": "参数名",
+  "@providerParamNameLabel": {
+    "placeholders": {}
+  },
+  "providerParamDefaultValueLabel": "默认参数值",
+  "@providerParamDefaultValueLabel": {
+    "placeholders": {}
+  },
+  "providerBooleanParamNoValue": "布尔类型无需配置参数值，聊天面板提供开/关切换。",
+  "@providerBooleanParamNoValue": {
+    "placeholders": {}
+  },
+  "providerReasoningParamsHeading": "推理参数",
+  "@providerReasoningParamsHeading": {
+    "placeholders": {}
+  },
+  "providerReasoningSettingsHelp": "推理开关控制聊天页面中推理功能的开启和关闭，由您定义参数名和对应的开/关值。推理力度参数最多配置一个，参数名必填，选项值可选；仅填参数名时，参数值由模型配置提供。您还可以通过底部按钮添加额外的推理参数。参数名支持点号嵌套，例如 {parameterName} 会展开为 {jsonExample}。",
+  "@providerReasoningSettingsHelp": {
+    "placeholders": {
+      "parameterName": {
+        "type": "String"
+      },
+      "jsonExample": {
+        "type": "String"
+      }
+    }
+  },
+  "providerAddReasoningParam": "添加推理参数",
+  "@providerAddReasoningParam": {
+    "placeholders": {}
+  },
+  "providerAddReasoningToggle": "添加推理开关",
+  "@providerAddReasoningToggle": {
+    "placeholders": {}
+  },
+  "providerReasoningToggle": "推理开关",
+  "@providerReasoningToggle": {
+    "placeholders": {}
+  },
+  "providerDeleteReasoningToggle": "删除推理开关",
+  "@providerDeleteReasoningToggle": {
+    "placeholders": {}
+  },
+  "providerParamNameHint": "如 {examples}",
+  "@providerParamNameHint": {
+    "placeholders": {
+      "examples": {
+        "type": "String"
+      }
+    }
+  },
+  "providerReasoningBooleanHelp": "布尔类型无需配置参数值，聊天面板提供开/关切换。",
+  "@providerReasoningBooleanHelp": {
+    "placeholders": {}
+  },
+  "providerToggleOnValueLabel": "开启时值",
+  "@providerToggleOnValueLabel": {
+    "placeholders": {}
+  },
+  "providerToggleOffValueLabel": "关闭时值",
+  "@providerToggleOffValueLabel": {
+    "placeholders": {}
+  },
+  "providerReasoningToggleSummary": "推理开关打开时发送「{onValue}」，关闭时发送「{offValue}」。",
+  "@providerReasoningToggleSummary": {
+    "placeholders": {
+      "onValue": {
+        "type": "String"
+      },
+      "offValue": {
+        "type": "String"
+      }
+    }
+  },
+  "providerAddReasoningEffort": "添加推理力度",
+  "@providerAddReasoningEffort": {
+    "placeholders": {}
+  },
+  "providerDeleteReasoningEffort": "删除推理力度参数",
+  "@providerDeleteReasoningEffort": {
+    "placeholders": {}
+  },
+  "providerReasoningEffortLockedHint": "请先完整填写推理开关后再配置推理力度。",
+  "@providerReasoningEffortLockedHint": {
+    "placeholders": {}
+  },
+  "providerJsonValueLabel": "JSON 值",
+  "@providerJsonValueLabel": {
+    "placeholders": {}
+  },
+  "providerReasoningOptionsHelp": "选项值（可选，仅填参数名时参数值由模型配置提供；长按把手拖拽排序）",
+  "@providerReasoningOptionsHelp": {
+    "placeholders": {}
+  },
+  "providerParamNameNestedLabel": "参数名（支持点号嵌套）",
+  "@providerParamNameNestedLabel": {
+    "placeholders": {}
+  },
+  "providerToggleEffortPrerequisite": "请先完整填写推理开关后再配置推理力度。",
+  "@providerToggleEffortPrerequisite": {
+    "placeholders": {}
+  },
+  "providerToggleRequiredHint": "请先填写推理开关",
+  "@providerToggleRequiredHint": {
+    "placeholders": {}
+  },
+  "providerDeleteCustomParam": "删除参数",
+  "@providerDeleteCustomParam": {
+    "placeholders": {}
+  },
+  "modelSaveSuccess": "模型已保存",
+  "@modelSaveSuccess": {
+    "placeholders": {}
+  },
+  "modelSaving": "保存中…",
+  "@modelSaving": {
+    "placeholders": {}
+  },
+  "modelOriginalError": "原始错误：{error}",
+  "@modelOriginalError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "paramTypeStringLabel": "字符串",
+  "@paramTypeStringLabel": {
+    "placeholders": {}
+  },
+  "paramTypeNumberLabel": "数字",
+  "@paramTypeNumberLabel": {
+    "placeholders": {}
+  },
+  "paramTypeBooleanLabel": "布尔",
+  "@paramTypeBooleanLabel": {
+    "placeholders": {}
+  },
+  "paramTypeJsonLabel": "JSON",
+  "@paramTypeJsonLabel": {
+    "placeholders": {}
+  },
+  "paramTypeStringHint": "例如: cheerful",
+  "@paramTypeStringHint": {
+    "placeholders": {}
+  },
+  "paramTypeNumberHint": "例如: 0.8",
+  "@paramTypeNumberHint": {
+    "placeholders": {}
+  },
+  "paramTypeBooleanHint": "例如: true",
+  "@paramTypeBooleanHint": {
+    "placeholders": {}
+  },
+  "paramTypeJsonHint": "例如: ",
+  "@paramTypeJsonHint": {
+    "placeholders": {}
+  },
+  "ankiPageTitle": "Anki闪卡",
+  "ankiStatsTooltip": "学习统计",
+  "ankiBrowseCardsTooltip": "浏览卡片",
+  "ankiStatsTotalCards": "总卡片数",
+  "ankiStatsNewCards": "待学习",
+  "ankiStatsLearning": "学习中",
+  "ankiStatsDueForReview": "待复习",
+  "ankiStatsReviewHistory": "历史复习次数",
+  "ankiStatsLearningProgress": "学习进度",
+  "ankiStatsReviewRate": "复习率",
+  "ankiBrowserSearchHint": "搜索卡片...",
+  "ankiBrowserEmpty": "无卡片",
+  "ankiSyncTooltip": "AnkiWeb 同步",
+  "ankiNewDeckTooltip": "新建牌组",
+  "ankiDeckLoadError": "加载失败: {error}",
+  "@ankiDeckLoadError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "ankiEmptyDecksTitle": "还没有牌组",
+  "ankiEmptyDecksDescription": "创建一个牌组开始学习",
+  "ankiNewDeckTitle": "新建牌组",
+  "ankiDeckNameHint": "牌组名称",
+  "ankiCreateDeck": "创建",
+  "ankiRenameDeck": "重命名",
+  "ankiConfirm": "确定",
+  "ankiDeleteDeckTitle": "删除牌组",
+  "ankiDeleteDeckConfirmation": "确定删除“{deckName}”及其所有卡片吗？",
+  "@ankiDeleteDeckConfirmation": {
+    "placeholders": {
+      "deckName": {
+        "type": "String"
+      }
+    }
+  },
+  "ankiAddCardTitle": "添加卡片",
+  "ankiNoteTypeLabel": "笔记类型",
+  "ankiClozeTextHint": "正文 (用 {clozeSyntax} 标记挖空)",
+  "@ankiClozeTextHint": {
+    "placeholders": {
+      "clozeSyntax": {
+        "type": "String"
+      }
+    }
+  },
+  "ankiFrontQuestionHint": "正面 (问题)",
+  "ankiBackExtraLabel": "背面/额外",
+  "ankiTagsLabel": "标签 (空格分隔)",
+  "ankiTagsHint": "例如: 数学 物理",
+  "ankiAdd": "添加",
+  "ankiStatNew": "新",
+  "ankiStatLearning": "学",
+  "ankiStatReview": "复习",
+  "ankiAddCardAction": "添加卡片",
+  "ankiRenameAction": "重命名",
+  "ankiDeleteAction": "删除",
+  "ankiNoCardContent": "(无内容)",
+  "ankiStudy": "学习",
+  "ankiWhiteboardTooltip": "白板",
+  "ankiFrontLabel": "正面",
+  "ankiBackLabel": "背面",
+  "ankiShowAnswer": "显示答案",
+  "ankiRatingAgain": "忘记",
+  "ankiRatingHard": "困难",
+  "ankiRatingGood": "良好",
+  "ankiRatingEasy": "简单",
+  "ankiNoCardsToStudy": "当前没有待学习的卡片",
+  "ankiNoCardsHint": "你可以添加新卡片或稍后再来",
+  "ankiBack": "返回",
+  "ankiSyncPageTitle": "Anki 同步",
+  "ankiSyncChooseMode": "选择同步方式",
+  "ankiSyncModeHelp": "登录状态按服务分别保存。切换方式不会合并或覆盖数据。",
+  "ankiSyncSelfHostedMode": "自建服务器",
+  "ankiSyncServerAddress": "服务器地址",
+  "ankiSyncServerHelp": "自建远程服务器需使用 HTTPS；本机地址可使用 HTTP。服务器需支持 Anki sync v10，证书验证默认开启。",
+  "ankiSyncCustomCaTitle": "自定义 CA 证书（可选）",
+  "ankiSyncCustomCaHelp": "仅在服务器使用自签名证书时填写",
+  "ankiSyncOfficialHelp": "使用官方 AnkiWeb 同步服务。密码只在登录时发送，不会保存在 Stroom。",
+  "ankiSyncConnected": "已连接 {service}",
+  "@ankiSyncConnected": {
+    "placeholders": {
+      "service": {
+        "type": "String"
+      }
+    }
+  },
+  "ankiSyncNotConnected": "未连接 {service}",
+  "@ankiSyncNotConnected": {
+    "placeholders": {
+      "service": {
+        "type": "String"
+      }
+    }
+  },
+  "ankiSyncLoginForService": "登录{service}",
+  "@ankiSyncLoginForService": {
+    "placeholders": {
+      "service": {
+        "type": "String"
+      }
+    }
+  },
+  "ankiSyncCheckServerStatus": "检查服务器状态",
+  "ankiSyncLogout": "登出",
+  "ankiSyncBothWays": "双向同步",
+  "ankiSyncOverwriteServer": "用本地数据覆盖服务器",
+  "ankiSyncReplaceLocal": "用服务器数据替换本地",
+  "ankiSyncHelp": "双向同步会合并 collection 的增量变更并传输媒体文件；结构戳不一致时，请选择完整上传或下载。完整下载失败会尝试恢复原 collection 和媒体目录。",
+  "ankiSyncStatusRestored": "已恢复安全保存的登录状态",
+  "ankiSyncStatusReadSavedSessionFailed": "无法读取已保存的登录状态，请重新登录",
+  "ankiSyncInvalidServerUrl": "服务器地址须为 HTTPS URL；仅本机 loopback 地址可使用 HTTP，且不能包含用户名、密码或 query 参数",
+  "ankiSyncStatusSettingsNotSaved": "设置未保存：{error}",
+  "@ankiSyncStatusSettingsNotSaved": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "ankiSyncStatusServerAddressChanged": "服务器地址已更改，请重新登录后继续",
+  "ankiSyncStatusVerifyingLogin": "正在验证登录…",
+  "ankiSyncStatusLoginSuccess": "登录成功。密码未保存，同步密钥已加密保存。",
+  "ankiSyncStatusLoginSuccessNoSave": "登录成功，但无法安全保存同步密钥；关闭页面后需要重新登录。",
+  "ankiSyncStatusLoginFailed": "登录失败：{error}",
+  "@ankiSyncStatusLoginFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "ankiSyncLoginAnkiWeb": "登录 AnkiWeb",
+  "ankiSyncLoginSelfHosted": "登录自建服务器",
+  "ankiSyncEmailOrUsername": "邮箱 / 用户名",
+  "ankiSyncEmailOrUsernameRequired": "请输入邮箱或用户名",
+  "ankiSyncPassword": "密码",
+  "ankiSyncPasswordRequired": "请输入密码",
+  "ankiSyncLogin": "登录",
+  "ankiSyncStatusPreparingServerSettings": "正在准备服务器设置…",
+  "ankiSyncStatusReadingCollection": "正在读取服务器 collection 状态…",
+  "ankiSyncStatusConnectedCollectionEmpty": "连接成功，服务器 collection 为空",
+  "ankiSyncStatusConnectedStatusRead": "连接成功，服务器状态已读取",
+  "ankiSyncStatusUpgradeClient": "此服务器要求升级同步客户端",
+  "ankiSyncStatusCheckFailed": "状态检查失败：{error}",
+  "@ankiSyncStatusCheckFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "ankiSyncStatusPreparingUpload": "正在准备上传设置…",
+  "ankiSyncOverwriteServerConfirmTitle": "用本地 collection 覆盖服务器？",
+  "ankiSyncOverwriteServerConfirmMessage": "服务器上的 collection 将被本地数据完整替换。Stroom 会先保留一份本地数据库备份。\n\n随后仍会按服务器媒体清单双向同步文件。",
+  "ankiSyncOverwriteServerAction": "覆盖服务器",
+  "ankiSyncStatusBackingUpUploading": "正在备份并上传 collection…",
+  "ankiSyncStatusUploadComplete": "服务器已接受本地 collection，媒体同步完成：上传 {uploaded} 个，下载 {downloaded} 个，删除 {deleted} 个。{backup}请重新检查服务器状态。",
+  "@ankiSyncStatusUploadComplete": {
+    "placeholders": {
+      "uploaded": {
+        "type": "int"
+      },
+      "downloaded": {
+        "type": "int"
+      },
+      "deleted": {
+        "type": "int"
+      },
+      "backup": {
+        "type": "String"
+      }
+    }
+  },
+  "ankiSyncStatusBackupPath": "\n本地备份：{path}",
+  "@ankiSyncStatusBackupPath": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "ankiSyncStatusMediaSyncIncomplete": "服务器 collection 已替换，但媒体同步未完成：",
+  "ankiSyncStatusUploadFailed": "上传失败：",
+  "ankiSyncStatusPreparingDownload": "正在准备下载设置…",
+  "ankiSyncReplaceLocalConfirmTitle": "用服务器 collection 替换本地？",
+  "ankiSyncReplaceLocalConfirmMessage": "本地 collection 将被服务器数据替换。Stroom 会先保留一份本地数据库备份。\n\n随后会用服务器媒体替换本地媒体并下载缺失文件。若任一步失败或应用中途退出，Stroom 会在下次打开牌组前恢复本地 collection 和媒体。",
+  "ankiSyncReplaceLocalAction": "替换本地数据",
+  "ankiSyncStatusDownloadingValidating": "正在下载并验证 collection…",
+  "ankiSyncStatusDownloadComplete": "本地 collection 已替换，SQLite 检查通过；媒体同步完成：下载 {downloaded} 个，上传 {uploaded} 个，删除 {deleted} 个。{backup}请重新检查服务器状态。",
+  "@ankiSyncStatusDownloadComplete": {
+    "placeholders": {
+      "downloaded": {
+        "type": "int"
+      },
+      "uploaded": {
+        "type": "int"
+      },
+      "deleted": {
+        "type": "int"
+      },
+      "backup": {
+        "type": "String"
+      }
+    }
+  },
+  "ankiSyncStatusDownloadFailed": "下载失败：{error}",
+  "@ankiSyncStatusDownloadFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "ankiSyncStatusPreparingSync": "正在准备同步…",
+  "ankiSyncStatusMergingChanges": "正在合并 collection 变更…",
+  "ankiSyncStatusMergeCompleteSyncMedia": "Collection 增量合并完成，正在同步媒体文件…",
+  "ankiSyncStatusChangedNotes": "新增/更新 {notes} 个笔记、{cards} 张卡片、{reviews} 条复习记录",
+  "@ankiSyncStatusChangedNotes": {
+    "placeholders": {
+      "notes": {
+        "type": "int"
+      },
+      "cards": {
+        "type": "int"
+      },
+      "reviews": {
+        "type": "int"
+      }
+    }
+  },
+  "ankiSyncStatusNoCollectionChanges": "collection 没有待合并变更",
+  "ankiSyncStatusTwoWayComplete": "双向同步完成：{collection}；媒体上传 {uploaded} 个、下载 {downloaded} 个、删除 {deleted} 个。",
+  "@ankiSyncStatusTwoWayComplete": {
+    "placeholders": {
+      "collection": {
+        "type": "String"
+      },
+      "uploaded": {
+        "type": "int"
+      },
+      "downloaded": {
+        "type": "int"
+      },
+      "deleted": {
+        "type": "int"
+      }
+    }
+  },
+  "ankiSyncStatusCollectionMergedMediaIncomplete": "Collection 已合并，但媒体同步未完成：",
+  "ankiSyncStatusSyncIncomplete": "同步未完成：",
+  "ankiSyncStatusClearingLogin": "正在清除登录状态…",
+  "ankiSyncStatusLoggedOut": "已登出，安全存储中的同步密钥已删除",
+  "ankiSyncStatusClearLoginFailed": "无法清除已保存的登录状态",
+  "ankiSyncStatusOperationIncomplete": "操作未完成，请检查安全存储、网络和服务器地址",
+  "ankiSyncUnknown": "未知",
+  "ankiSyncServerCollectionEmpty": "服务器 collection 为空",
+  "ankiSyncServerCollectionAvailable": "服务器 collection 可用",
+  "ankiSyncSchemaStatus": "结构版本戳 {schema} · USN {usn} · 修改时间 {modified}",
+  "@ankiSyncSchemaStatus": {
+    "placeholders": {
+      "schema": {
+        "type": "int"
+      },
+      "usn": {
+        "type": "int"
+      },
+      "modified": {
+        "type": "String"
+      }
+    }
+  },
+  "asrPageTitle": "音频转写",
+  "clear": "清空",
+  "configure": "去配置",
+  "asrModel": "识别模型",
+  "reselectModel": "请重新选择模型",
+  "selectAsrModel": "选择识别模型",
+  "enterPublicAudioUrl": "输入公网音频链接",
+  "recordingSelection": "录音选择",
+  "audioFiles": "音频文件",
+  "noAudioSelected": "暂未选择音频文件",
+  "supportedAudioFormats": "支持 wav、mp3、m4a、ogg 等常见音频格式",
+  "asrSelectedAudioCount": "{count, plural, one{已选择 {count} 个音频文件} other{已选择 {count} 个音频文件}}",
+  "@asrSelectedAudioCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "asrSelectedAudioCountShort": "{count, plural, one{已选 {count} 个音频} other{已选 {count} 个音频}}",
+  "@asrSelectedAudioCountShort": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "asrReselect": "重新选择",
+  "asrUrlLabel": "URL  |  公网链接",
+  "asrErrorDetails": "查看详细错误",
+  "asrResultSaved": "识别结果已保存",
+  "asrWorking": "识别中...",
+  "asrStart": "开始识别",
+  "saveTo": "保存至",
+  "rootFolder": "根目录",
+  "chooseSaveFolder": "选择保存文件夹",
+  "linkAlreadyAdded": "该链接已在列表中",
+  "chooseAudioSource": "选择音频来源",
+  "inAppRecordings": "应用内录音",
+  "chooseGeneratedRecordings": "从已生成的录音中选择",
+  "systemAudioFiles": "系统音频文件",
+  "chooseDeviceAudioFiles": "从设备文件中选择",
+  "cannotReadAudioFile": "无法读取音频文件",
+  "chooseAudioFileFailed": "选择音频文件失败: {details}",
+  "@chooseAudioFileFailed": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "chooseInAppRecording": "选择应用内录音",
+  "noRecordings": "暂无录音",
+  "durationSeconds": "{seconds, plural, one{{seconds}秒} other{{seconds}秒}}",
+  "@durationSeconds": {
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+  "asrNeedsProvider": "请先在设置中配置音频转写供应商和模型",
+  "asrModelUnavailable": "原识别模型已失效或无法确认，请重新选择识别模型",
+  "asrUrlProviderRemoveFiles": "当前供应商使用 URL 上传方式，请移除本地音频文件后重试",
+  "asrFileProviderRemoveUrls": "当前供应商使用文件上传方式，不支持链接转写，请移除链接后重试",
+  "asrTaskStartFailed": "任务启动失败: {details}",
+  "@asrTaskStartFailed": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "asrInvalidUrl": "无效链接，必须以 http:// 或 https:// 开头",
+  "asrEnterAudioUrl": "输入音频链接",
+  "asrUrlProviderHelp": "当前供应商使用 URL 上传方式，请输入公网音频链接（http/https）。",
+  "cancel": "取消",
+  "add": "添加",
+  "ttsPageTitle": "音频",
+  "ttsAudioImportedCount": "{count, plural, one{已导入 {count} 个音频文件} other{已导入 {count} 个音频文件}}",
+  "@ttsAudioImportedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "ttsImportFailed": "导入失败: {details}",
+  "@ttsImportFailed": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "ttsFileReadFailed": "文件数据读取失败",
+  "ttsExportAudioFile": "导出音频文件",
+  "ttsExportedTo": "已导出到: {path}",
+  "@ttsExportedTo": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "ttsExportFailed": "导出失败: {details}",
+  "@ttsExportFailed": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "ttsConfirmRegenerate": "确认重新生成",
+  "ttsRegenerateConfirmFile": "确定要重新生成音频 “{fileName}” 吗？",
+  "@ttsRegenerateConfirmFile": {
+    "placeholders": {
+      "fileName": {
+        "type": "String"
+      }
+    }
+  },
+  "ttsRegenerateOverwrite": "重新生成后将覆盖原音频文件。",
+  "ttsRegenerate": "确认重新生成",
+  "ttsCopiedFailed": "复制失败: {details}",
+  "@ttsCopiedFailed": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "ttsChooseExportFolder": "选择导出目录",
+  "ttsExportAudio": "导出音频",
+  "ttsExportedCount": "{count, plural, one{已导出 {count} 个文件} other{已导出 {count} 个文件}}",
+  "@ttsExportedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "ttsFolderExport": "文件夹导出",
+  "ttsWebFolderExportHelp": "浏览器无法选择导出目录，将下载保留文件夹层级的 ZIP 文件。",
+  "ttsDownloadZip": "下载 ZIP 文件",
+  "ttsExportAudioFolder": "导出音频文件夹",
+  "ttsRecord": "录音",
+  "ttsImport": "导入",
+  "ttsPlay": "播放",
+  "ttsExportLocal": "导出到本地",
+  "ttsRegenerateQuestion": "重新生成",
+  "ttsNeedsProvider": "请先在设置中配置语音合成供应商和模型",
+  "ttsAddedToTasks": "已添加到任务列表，后台生成中…",
+  "ttsCreateTitle": "语音合成",
+  "ttsOriginalTitle": "录音标题",
+  "ttsUseOriginalTitle": "使用原标题",
+  "ttsAudioFileNameHint": "保存的音频文件名（可选）",
+  "ttsTextToConvert": "转换文本",
+  "ttsSpeechContent": "语音内容",
+  "ttsTextHint": "请输入要转换为语音的文本...",
+  "ttsFullscreenEdit": "全屏编辑",
+  "ttsTextLimitWarning": "文字超出限制（最多 {limit} 字）",
+  "@ttsTextLimitWarning": {
+    "placeholders": {
+      "limit": {
+        "type": "int"
+      }
+    }
+  },
+  "ttsSynthesisConfig": "合成配置",
+  "ttsVoiceAndSoundHelp": "调整音色与声音表现",
+  "ttsProviderSettingsLead": "在",
+  "ttsProviderSettings": "TTS供应商设置",
+  "ttsProviderSettingsTail": "页面设置更多参数",
+  "ttsEditText": "编辑文本",
+  "ttsClose": "关闭",
+  "ttsVoice": "音色",
+  "ttsSelectVoice": "选择音色",
+  "ttsSpeed": "语速",
+  "ttsNormal": "正常",
+  "ttsVolume": "音量",
+  "ttsInstruction": "语气指令（instruction）",
+  "ttsInstructionHint": "例如：请用愉快、兴奋的语气说话",
+  "ttsCustomParams": "自定义参数",
+  "ttsDefaultValue": "默认: {value}",
+  "@ttsDefaultValue": {
+    "placeholders": {
+      "value": {
+        "type": "Object"
+      }
+    }
+  },
+  "ttsGenerateRecording": "生成录音",
+  "ttsSaveAs": "将保存为: {path}/{name}.{format}",
+  "@ttsSaveAs": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      },
+      "name": {
+        "type": "String"
+      },
+      "format": {
+        "type": "String"
+      }
+    }
+  },
+  "ttsChooseSaveFolder": "选择保存文件夹",
+  "ttsFillTextError": "请输入要转换的文本",
+  "voiceBatchTitle": "批量添加音色",
+  "voiceBatchConfirm": "确认添加",
+  "voiceBatchSeparator": "分隔符：",
+  "voiceBatchCustomSeparatorHint": "请输入自定义分隔符",
+  "voiceBatchFieldOrder": "字段顺序：",
+  "voiceBatchNameThenId": "第1个=名称, 第2个=ID",
+  "voiceBatchIdThenName": "第1个=ID, 第2个=名称",
+  "voiceBatchColumnChoice": "{count, plural, one{检测到 1 列，请选择作为名称/ID的起始列：} other{检测到 {count} 列，请选择作为名称/ID的起始列：}}",
+  "@voiceBatchColumnChoice": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "voiceBatchColumn": "第{index}列：{sample}",
+  "@voiceBatchColumn": {
+    "placeholders": {
+      "index": {
+        "type": "int"
+      },
+      "sample": {
+        "type": "String"
+      }
+    }
+  },
+  "voiceBatchSingleColumn": "识别到单列数据，将全部作为ID处理（名称 = ID）",
+  "voiceBatchInputHint": "支持 Tab / 逗号 / 分号 / 竖线 作为分隔符，每行两个内容",
+  "voiceBatchNoPreview": "暂无解析结果",
+  "voiceName": "音色名称",
+  "voiceId": "音色ID",
+  "status": "状态",
+  "voiceNew": "✅ 新增",
+  "voiceIdExists": "⚠️ ID已存在",
+  "voiceFormatError": "❌ 格式错误{details}",
+  "@voiceFormatError": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "voiceDuplicateIds": "{count, plural, one{发现 {count} 个重复ID: {ids}} other{发现 {count} 个重复ID: {ids}}}",
+  "@voiceDuplicateIds": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "ids": {
+        "type": "String"
+      }
+    }
+  },
+  "voiceInsufficientColumnData": "所选列数据不足",
+  "voiceCustomSeparator": "自定义...",
+  "voiceCommaSeparator": "逗号 (,)",
+  "voiceSemicolonSeparator": "分号 (;)",
+  "voicePipeSeparator": "竖线 (|)",
+  "voiceTabSeparator": "Tab",
+  "voiceEditorTitle": "音色编辑",
+  "save": "保存",
+  "voiceAddRow": "添加一行",
+  "voiceBatchAdd": "批量添加",
+  "voiceNoneAdd": "暂无音色，请添加",
+  "delete": "删除",
+  "voiceDuplicateResolution": "发现以下重复音色ID，逐条选择处理方式：",
+  "update": "更新",
+  "skip": "跳过",
+  "voiceDuplicatesRemaining": "{count, plural, one{还有 {count} 个重复未处理} other{还有 {count} 个重复未处理}}",
+  "@voiceDuplicatesRemaining": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "continueEditing": "继续编辑",
+  "asrRetryIncomplete": "重试音频不完整，请清空后重新选择全部音频",
+  "asrRetryAudioUnreadable": "重试音频数据无法读取，请重新选择音频: {details}",
+  "asrLegacyRetryUnavailable": "旧版重试音频不可用，请重新选择音频",
+  "asrRetryDataUnreadable": "重试数据无法读取，请重新选择音频",
+  "ttsSynthesisModel": "合成模型",
+  "@asrRetryAudioUnreadable": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "asrRetryUnavailable": "重试音频不可用，请重新选择音频",
+  "chatRequest": "请求 (Request)",
+  "chatResponse": "响应 (Response)",
+  "chatNoErrorDetails": "无详细数据",
+  "ttsInstructionDescription": "通过自然语言描述语气、情绪、语速、口音等，模型将据此调整合成语音的风格",
+  "audioPlayerSourceTextSource": "选择源文本来源",
+  "audioPlayerChooseInAppText": "从应用内文本选择",
+  "audioPlayerChooseSavedTextSubtitle": "从应用内已保存的文本文件中选择",
+  "audioPlayerChooseSystemText": "从系统文本文件选择",
+  "audioPlayerChooseDeviceTextSubtitle": "从设备文件中选择文本文件",
+  "audioPlayerSelectInAppText": "选择应用内文本",
+  "audioPlayerNoTextFiles": "暂无文本文件",
+  "audioPlayerCharacterCount": "{count}字",
+  "@audioPlayerCharacterCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "audioPlayerSelectTextFailure": "选择文本失败: {error}",
+  "@audioPlayerSelectTextFailure": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "audioPlayerCannotReadTextFile": "无法读取文本文件",
+  "audioPlayerUploadTextFailure": "上传源文本失败: {error}",
+  "@audioPlayerUploadTextFailure": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "audioPlayerTextContentEmpty": "文本内容为空",
+  "audioPlayerSaveTextFailure": "保存源文本失败: {error}",
+  "@audioPlayerSaveTextFailure": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "audioPlayerSourceTextUploaded": "源文本已上传",
+  "audioPlayerSourceTextUpdated": "源文本已更新",
+  "audioPlayerConfigureTtsProvider": "请先配置TTS供应商",
+  "audioPlayerNoStreamingModels": "没有支持流式播放的模型",
+  "audioPlayerSelectStreamingModel": "选择流式播放模型",
+  "audioPlayerProviderFallback": "供应商",
+  "audioPlayerStartStreaming": "开始流式播放: {model}",
+  "@audioPlayerStartStreaming": {
+    "placeholders": {
+      "model": {
+        "type": "String"
+      }
+    }
+  },
+  "audioPlayerFileNotFound": "无法找到音频文件: {path}",
+  "@audioPlayerFileNotFound": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "audioPlayerUnableToLoadAudio": "无法加载音频数据",
+  "audioPlayerSourceText": "源文本",
+  "audioPlayerNoSourceText": "（无源文本）",
+  "audioPlayerUploadSourceText": "上传源文本",
+  "audioPlayerEditSourceText": "修改源文本",
+  "audioPlayerCompanionTextMissing": "未找到伴生文本文件",
+  "audioPlayerPlaySelection": "播放选中",
+  "audioPlayerGenerateSelection": "生成选中",
+  "audioPlayerPlaying": "正在播放...",
+  "audioPlayerPaused": "已暂停",
+  "audioPlayerPlaybackSpeed": "播放速度",
+  "audioPlayerFailed": "播放失败",
+  "audioPlayerRetry": "重试",
+  "audioPlayerLoading": "正在加载音频...",
+  "audioPlayerClose": "关闭",
+  "audioRecordingBrowserUnsupportedShort": "浏览器暂不支持录音功能，请使用 App 版本",
+  "audioRecordingMicrophonePermissionRequired": "需要麦克风权限才能录音",
+  "audioRecordingStartFailure": "开始录音失败: {error}",
+  "@audioRecordingStartFailure": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "audioRecordingPauseFailure": "暂停录音失败: {error}",
+  "@audioRecordingPauseFailure": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "audioRecordingResumeFailure": "恢复录音失败: {error}",
+  "@audioRecordingResumeFailure": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "audioRecordingInvalidFile": "录音文件无效，请重新录制",
+  "audioRecordingStopFailure": "停止录音失败: {error}",
+  "@audioRecordingStopFailure": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "audioRecordingFileNotFound": "录音文件不存在",
+  "audioRecordingFileEmpty": "录音文件为空",
+  "audioRecordingSaved": "录音已保存: {name}",
+  "@audioRecordingSaved": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "audioRecordingSaveFailure": "保存录音失败: {error}",
+  "@audioRecordingSaveFailure": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "audioRecordingTitle": "录音",
+  "audioRecordingBrowserUnsupported": "浏览器暂不支持录音功能",
+  "audioRecordingUseApp": "请使用 App 版本进行录音",
+  "audioRecordingDraftRecoveryHint": "检测到未保存的录音草稿，可保存到音频库。",
+  "audioRecordingRecording": "录制中 ●",
+  "audioRecordingPaused": "已暂停 ||",
+  "audioRecordingPreparing": "准备中...",
+  "audioRecordingStart": "开始录音",
+  "audioRecordingPause": "暂停",
+  "audioRecordingStopping": "停止中...",
+  "audioRecordingStop": "停止",
+  "audioRecordingResume": "恢复",
+  "audioRecordingSaving": "保存中...",
+  "audioRecordingSave": "保存录音",
+  "audioRecordingRecordAgain": "重新录制",
+  "audioRecordingWaveformPaused": "暂停录制，波形已冻结",
+  "audioRecordingWaveformLive": "音量波形实时显示",
+  "audioSeparationTitle": "视频音频分离",
+  "audioSeparationChooseVideoSource": "选择视频来源",
+  "audioSeparationChooseAppAlbum": "从应用相册选择",
+  "audioSeparationChooseSavedVideoSubtitle": "从应用内已保存的视频中选择",
+  "audioSeparationChooseSystemAlbum": "从系统相册选择",
+  "audioSeparationChooseDeviceVideoSubtitle": "从设备存储中选择视频文件",
+  "audioSeparationChooseVideoFailure": "选择视频失败: {error}",
+  "@audioSeparationChooseVideoFailure": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "audioSeparationTaskFailurePrefix": "音频提取失败: ",
+  "audioSeparationEngineMissing": "未检测到音频分离引擎",
+  "audioSeparationEngineMissingHelp": "请重启应用或检查应用资源完整性。",
+  "audioSeparationNoVideoSelected": "暂未选择视频文件",
+  "audioSeparationSupportedFormatsHint": "支持 mp4、mov、m4v、3gp 格式",
+  "audioSeparationSuccess": "音频已成功提取并保存到音频库",
+  "audioSeparationView": "查看",
+  "audioSeparationSelectedVideoCount": "{count, plural, one{已选 {count} 个视频} other{已选 {count} 个视频}}",
+  "@audioSeparationSelectedVideoCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "audioSeparationExtracting": "提取中...",
+  "audioSeparationExtractAudio": "提取音频",
+  "audioSeparationSaveTo": "保存至",
+  "audioSeparationChooseSaveFolder": "选择保存文件夹",
+  "audioSeparationCannotReadVideoFile": "无法读取视频文件",
+  "audioSeparationChooseVideoFileFailure": "选择视频文件失败: {error}",
+  "@audioSeparationChooseVideoFileFailure": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "audioSeparationUnknownFormat": "未知",
+  "audioSeparationUnsupportedFormats": "暂不支持 {formats} 格式，仅支持 MP4、MOV、M4V、3GP。",
+  "@audioSeparationUnsupportedFormats": {
+    "placeholders": {
+      "formats": {
+        "type": "String"
+      }
+    }
+  },
+  "audioSeparationEngineUnavailable": "音频分离引擎不可用。",
+  "backgroundOptimizationTitle": "后台运行优化",
+  "backgroundOptimizationEnvironment": "系统环境检测",
+  "backgroundOptimizationChecks": "后台优化检测",
+  "backgroundOptimizationKeepAliveStrategies": "保活策略",
+  "backgroundOptimizationDetecting": "正在检测...",
+  "backgroundOptimizationUnsupportedStatus": "当前平台不支持后台服务",
+  "backgroundOptimizationServiceRunning": "后台服务运行中",
+  "backgroundOptimizationServiceStopped": "后台服务未启动",
+  "backgroundOptimizationServiceCheckFailed": "无法检测后台服务状态",
+  "backgroundOptimizationDesktopTrayUnavailable": "桌面端托盘暂不可用，关闭窗口将直接退出",
+  "backgroundOptimizationDesktopCloseExits": "桌面端关闭窗口时退出应用",
+  "backgroundOptimizationDesktopTrayKeepsAlive": "桌面端使用托盘驻留保活",
+  "backgroundOptimizationStartFailed": "启动服务失败",
+  "backgroundOptimizationStopFailed": "停止服务失败",
+  "backgroundOptimizationRestartFailed": "重启服务失败",
+  "backgroundOptimizationStopService": "停止服务",
+  "backgroundOptimizationRestartService": "重新启动服务",
+  "backgroundOptimizationStartService": "启动服务",
+  "backgroundOptimizationRedetect": "重新检测",
+  "backgroundOptimizationUnsupportedControl": "当前平台不支持后台服务控制。",
+  "backgroundOptimizationCheckingBattery": "正在检测电池优化状态...",
+  "backgroundOptimizationBatteryIgnored": "已忽略电池优化",
+  "backgroundOptimizationBatteryMayKill": "未忽略电池优化 — 后台可能被杀",
+  "backgroundOptimizationIgnoreBattery": "忽略电池优化",
+  "backgroundOptimizationExactAlarm": "允许精确闹钟（保活更可靠）",
+  "backgroundOptimizationWatchdogTitle": "AlarmManager 看门狗",
+  "backgroundOptimizationWatchdogDetail": "启用后，Android 系统会每 5 分钟用原生闹钟检查后台服务是否还活着。如果进程被系统杀掉，闹钟会触发自动重启。\n\n闹钟在设备休眠（Doze）模式下依然生效，重启后也会自动重新调度。\n\n适用场景：对后台任务要求极高的用户。\n耗电影响：极低（每次仅短暂唤醒检查一次）。",
+  "backgroundOptimizationSaveWatchdogFailed": "保存失败，看门狗设置未更改",
+  "backgroundOptimizationWatchdogActivationFailed": "看门狗激活失败，后台服务保活状态未确认",
+  "backgroundOptimizationColdStartTitle": "冷启动自动恢复",
+  "backgroundOptimizationColdStartDetail": "启用后，每次重新打开 App 时，会自动检测并恢复之前正在运行的后台服务。\n\n如果 App 进程被系统或用户手动杀掉，下次打开 App 时后台服务会自动重启，无需手动操作。\n\n适用场景：所有用户都建议开启。\n耗电影响：无（仅在 App 启动时检查一次）。",
+  "backgroundOptimizationSaveColdStartFailed": "保存失败，冷启动恢复设置未更改",
+  "backgroundOptimizationBatteryReminderTitle": "电池优化提醒",
+  "backgroundOptimizationBatteryReminderDetail": "启用后，本页面会显示电池优化状态卡片。如果检测到 App 未被添加到省电白名单，会提供一键跳转至系统设置进行豁免。\n\n电池优化是安卓系统省电机制（Doze），会限制后台应用的运行。添加到白名单后，系统不会因省电而杀掉本 App。\n\n适用场景：关闭本开关仅隐藏提醒卡片，不影响实际的电池优化豁免状态。",
+  "backgroundOptimizationStrategyIntro": "以下策略可独立开关。默认全部启用以获得最强保活效果。关闭某项仅影响该策略，不会影响后台服务本身的运行。",
+  "backgroundOptimizationIosNoteTitle": "iOS 后台任务提示",
+  "backgroundOptimizationIosSupported": "当前系统（iOS 26 及以上）支持任务常驻后台：任务运行期间切换 App 或锁屏，任务通常会继续执行（系统资源紧张时可能终止），并可在锁屏界面查看进度。",
+  "backgroundOptimizationIosUnsupported": "当前系统（低于 iOS 26）不支持任务常驻后台。任务运行时请每隔几分钟返回一次 App（建议 5–10 分钟，具体由系统决定），刷新后台执行时间，防止任务被系统挂起。",
+  "backgroundOptimizationIosWarning": "注意：所有 iOS 版本都请勿在 App 切换器中划掉 Stroom——划掉会立即终止所有运行中的任务。",
+  "backgroundOptimizationDesktopIntro": "桌面端没有移动系统的进程保活机制，但可以让应用在关闭窗口后继续运行。",
+  "backgroundOptimizationCloseMinimizeTitle": "关闭窗口时最小化",
+  "backgroundOptimizationCloseMinimizeDetail": "启用后，点击窗口关闭按钮不会退出应用，而是隐藏到系统托盘继续运行，后台任务不受影响。\n\n可从托盘图标（或右键菜单「显示主窗口」）恢复窗口；需要真正退出时，点击下方「完全退出应用」按钮。\n\n适用场景：所有桌面用户都建议开启。",
+  "backgroundOptimizationQuitApp": "完全退出应用",
+  "backgroundOptimizationGotIt": "知道了",
+  "backgroundOptimizationWebNoteTitle": "Web 后台任务提示",
+  "backgroundOptimizationWebNote": "浏览器没有应用常驻后台的机制。关闭标签页、刷新页面，或浏览器冻结长时间不活跃的后台标签页，都会立即中断运行中的任务。任务运行时请保持 Stroom 标签页打开并处于前台。",
+  "backgroundOptimizationTutorial": "平台教程",
+  "backgroundOptimizationTutorialDescription": "查看各个平台的后台运行优化教程",
+  "backgroundOptimizationServiceCheckingDescription": "正在检测后台服务状态...",
+  "backgroundOptimizationServiceUnknown": "后台服务状态未知，请重新检测以确认服务是否运行。",
+  "backgroundOptimizationServiceRunningDescription": "后台服务正在运行，任务将在后台正常执行。",
+  "backgroundOptimizationWebServiceUnsupported": "Web 浏览器环境不支持后台服务运行。请保持页面打开以继续任务。",
+  "backgroundOptimizationLinuxTrayUnavailable": "桌面平台托盘暂不可用（Linux 构建需安装 libayatana-appindicator3-dev），关闭窗口将直接退出应用。",
+  "backgroundOptimizationDesktopTrayUnavailableDescription": "桌面平台托盘暂不可用，关闭窗口将直接退出应用。",
+  "backgroundOptimizationDesktopExitDescription": "桌面平台已设置为关闭窗口时退出：关闭窗口后应用会按现有退出确认流程处理并退出，不会在托盘继续运行。",
+  "backgroundOptimizationLinuxTrayDescription": "桌面平台已启用托盘驻留：关闭窗口后应用会隐藏到系统托盘继续运行，从托盘菜单选择「显示主窗口」即可恢复窗口。如需彻底退出，请从托盘菜单选择「退出 Stroom」。",
+  "backgroundOptimizationDesktopTrayDescription": "桌面平台已启用托盘驻留：关闭窗口后应用会最小化到系统托盘继续运行，点击托盘图标（或托盘菜单「显示主窗口」）即可恢复窗口。如需彻底退出，请从托盘菜单选择「退出 Stroom」。",
+  "backgroundOptimizationServiceNotRunningDescription": "后台服务未启动。请点击下方「启动服务」按钮启动后台服务，或查看平台教程了解如何优化后台运行设置。",
+  "notificationSettingsPageTitle": "通知权限设置",
+  "notificationSettingsWebUnsupported": "Web 环境不支持通知权限",
+  "notificationSettingsChecking": "正在检测...",
+  "notificationSettingsPermissionGranted": "通知权限已授权",
+  "notificationSettingsPermissionDenied": "通知权限未授予",
+  "notificationSettingsPermissionRestricted": "通知权限受限",
+  "notificationSettingsPermissionBlocked": "通知权限已被永久屏蔽",
+  "notificationSettingsPermissionProvisional": "通知权限为临时授权",
+  "notificationSettingsWebGuide": "当前为 Web 环境，不支持系统通知功能。",
+  "notificationSettingsCheckingPermission": "正在检测通知权限状态...",
+  "notificationSettingsPermissionGrantedGuide": "通知权限已授予，您可以开启任务完成通知，在任务完成或失败时收到系统通知。",
+  "notificationSettingsPermissionDeniedGuide": "通知权限尚未授予。您可以点击下方按钮请求权限，或在系统设置中手动开启 Stroom 的通知权限。",
+  "notificationSettingsPermissionRestrictedGuide": "通知权限受系统限制（如家长控制）。请在系统设置中检查 Stroom 的通知权限设置。",
+  "notificationSettingsEnvironment": "系统环境检测",
+  "notificationSettingsPermissionSection": "通知权限检测",
+  "notificationSettingsPlatformGuides": "平台指南",
+  "notificationSettingsGuideIntro": "根据您的操作系统，按照以下步骤开启 Stroom 的通知权限。",
+  "notificationSettingsTaskCompleteTitle": "任务完成通知",
+  "notificationSettingsTaskCompleteDescription": "任务完成或失败时发送通知",
+  "notificationSettingsCheckAgain": "重新检测",
+  "notificationSettingsOpenSystemSettings": "前往系统设置",
+  "notificationSettingsRequestPermission": "请求权限",
+  "notificationSettingsGuideUnsupported": "当前平台暂不支持通知权限设置指南。",
+  "notificationSettingsUsageReason": "用于在任务完成时发送通知",
+  "notificationSettingsAndroidEnableTitle": "开启通知权限",
+  "notificationSettingsAndroidEnableDescription": "进入「设置」→「应用」→「Stroom」→「通知管理」，确保已允许通知权限。如果找不到 Stroom，请确认应用已安装。如果权限被禁用，请手动开启。",
+  "notificationSettingsAndroidDndTitle": "检查勿扰模式",
+  "notificationSettingsAndroidDndDescription": "进入「设置」→「声音与振动」→「勿扰模式」，确认勿扰模式未开启，或已将在其中允许 Stroom 的通知。",
+  "notificationSettingsAndroidPopupTitle": "允许后台弹出通知",
+  "notificationSettingsAndroidPopupDescription": "部分 Android 系统（如 MIUI、EMUI、ColorOS 等）需要额外在应用信息中开启「允许通知」和「允许弹窗」。建议同时关闭该应用的「通知过滤」或「智能通知」功能。",
+  "notificationSettingsReturnTitle": "完成后返回此页面",
+  "notificationSettingsAndroidReturnDescription": "完成以上设置后，点击「重新检测」按钮确认通知权限状态已更新。如果权限已显示为已授权，即可开启任务完成通知开关。",
+  "notificationSettingsIosEnableDescription": "进入「设置」→「通知」→「Stroom」，开启「允许通知」。建议同时开启「横幅」和「通知中心」以便及时获知任务状态。",
+  "notificationSettingsIosFocusTitle": "关闭专注模式",
+  "notificationSettingsIosFocusDescription": "进入「设置」→「专注模式」，确保未开启或已将 Stroom 加入允许的应用列表。专注模式可能会屏蔽应用通知。",
+  "notificationSettingsIosReturnDescription": "完成以上设置后，点击「重新检测」按钮确认通知权限状态已更新。iOS 上通知权限通常需要用户手动在系统设置中开启。",
+  "notificationSettingsWindowsEnableTitle": "开启系统通知",
+  "notificationSettingsWindowsEnableDescription": "进入「设置」→「系统」→「通知和操作」，确保「获取来自应用和其他发送者的通知」已开启。在下方应用列表中找到 Stroom 并确保通知已开启。",
+  "notificationSettingsWindowsFocusTitle": "开启专注助手排除项",
+  "notificationSettingsWindowsFocusDescription": "进入「设置」→「系统」→「专注助手」，确保 Stroom 已加入「仅优先打断」或「关闭专注助手」。专注助手开启时会屏蔽通知。",
+  "notificationSettingsMacEnableTitle": "开启通知权限",
+  "notificationSettingsMacEnableDescription": "进入「系统设置」→「通知」→「Stroom」，开启「允许通知」。建议同时开启「横幅」和「通知中心」。",
+  "notificationSettingsMacFocusDescription": "进入「系统设置」→「专注模式」，确保未开启或已将 Stroom 加入允许的应用列表。",
+  "notificationSettingsLinuxDesktopTitle": "检查桌面环境通知设置",
+  "notificationSettingsLinuxDesktopDescription": "根据您使用的桌面环境（GNOME、KDE、XFCE 等），进入「系统设置」→「通知」→ 找到 Stroom 并确保通知已开启。",
+  "notificationSettingsLinuxDaemonTitle": "检查是否安装了通知守护进程",
+  "notificationSettingsLinuxDaemonDescription": "Linux 桌面环境需要安装通知守护进程（如 notify-osd 或 dunst）来显示系统通知。请确认您的系统中已安装并运行了通知守护进程。",
+  "backupRestorePageTitle": "数据备份与恢复",
+  "backupRestoreSelectBackupCategory": "请至少选择一项要备份的数据类别",
+  "backupRestorePreparingData": "正在准备数据...",
+  "backupRestoreExportingBackup": "正在导出备份",
+  "backupRestoreCollectingDatabase": "正在收集数据库记录...",
+  "backupRestoreProcessingSettings": "正在处理配置数据...",
+  "backupRestoreAddingTasks": "正在添加任务文件...",
+  "backupRestoreAddingPictures": "正在添加图片文件...",
+  "backupRestoreAddingAudio": "正在添加音频文件...",
+  "backupRestoreAddingVideo": "正在添加视频文件...",
+  "backupRestoreAddingText": "正在添加文本文件...",
+  "backupRestoreAddingChat": "正在添加聊天记录和附件...",
+  "backupRestoreCompressing": "正在压缩打包...",
+  "backupRestoreCompleted": "已完成",
+  "backupRestoreSelectRestoreCategory": "请至少选择一项要恢复的数据类别",
+  "backupRestoreConfirmRestore": "确认恢复",
+  "backupRestoreSelectedCategories": "已勾选的数据类别：",
+  "backupRestoreRestoreInfo": "备份中实际包含的已勾选类别会恢复到本机。除内置浏览器 Cookies 外，其余类别会替换本机对应数据；Cookies 按域名、名称和路径写入，备份中没有的本机 Cookies 保持原样。未勾选或备份中缺少的类别保持原样；缺少的类别会跳过并提示。",
+  "backupRestoreRestartNotice": "恢复完成后需重启应用才能生效，请确保已保存当前工作。",
+  "backupRestoreCancel": "取消",
+  "backupRestoreConfirmRestoreButton": "确定恢复",
+  "backupRestoreIncompleteTitle": "恢复未完成",
+  "backupRestoreIncompleteMessage": "数据未能完整恢复，部分数据可能已被清除。请重启应用后重试。",
+  "backupRestoreSelectClearCategory": "请至少选择一项要清除的数据类别",
+  "backupRestoreClearingData": "正在清除数据",
+  "backupRestoreDeletingCategories": "正在删除所选类别的数据...",
+  "backupRestoreClearedTitle": "数据清除完成",
+  "backupRestorePartiallyClearedTitle": "部分数据已清除",
+  "backupRestoreClearedMessage": "所选数据已清除。请重启应用以生效。",
+  "backupRestorePartialClearMessage": "其他所选数据已清除。当前平台不支持完整清除内置浏览器网站存储（localStorage、IndexedDB 等）；未能清除的浏览器数据仍会保留。请重启应用使已清除的数据生效。",
+  "backupRestoreClearFailed": "清除失败: {error}",
+  "backupRestoreClearIncompleteTitle": "清除未完成",
+  "backupRestoreClearIncompleteMessage": "部分数据未能清除。请重启应用后重试清除操作。",
+  "backupRestoreAnkiExportSuccess": "Anki闪卡片组已导出到: {path}",
+  "backupRestoreExportFailed": "导出失败: {error}",
+  "backupRestoreApkgRequired": "请选择 .apkg 格式的文件",
+  "backupRestoreImportFailed": "导入失败: {error}",
+  "backupServiceExportSavedTo": "备份已保存到: {location}",
+  "backupServiceExportFailed": "备份失败: {error}",
+  "backupServiceRestoreFailed": "恢复失败: {error}",
+  "backupServiceNoBackupFolderSelected": "尚未选择备份目录，请在启动流程中授权",
+  "backupRestoreRestoreSuccessTitle": "数据恢复成功",
+  "backupRestoreRestoredMessage": "数据已从备份中恢复。请重启应用以使用恢复的数据。",
+  "backupRestoreExitApp": "退出应用",
+  "backupRestoreRestartNow": "立即重启",
+  "backupRestoreSkippedTitle": "部分数据已跳过",
+  "backupRestoreNothingRestoredTitle": "未恢复任何数据",
+  "backupRestoreGotIt": "知道了",
+  "backupRestoreSkippedCategories": "备份中未能确认以下勾选的数据类型包含可恢复内容，已跳过；当前数据保持不变：{categories}。",
+  "backupRestoreSkippedTasksLegacy": "如果这是旧版备份，空任务文件无法区分“任务列表为空”和“该平台未导出任务”；为避免覆盖当前任务，任务类别已跳过并保留原数据。",
+  "backupRestoreSkippedCookies": "备份中没有可导入的内置浏览器 Cookies，已跳过；本机现有 Cookies 保持不变。",
+  "backupRestoreSkippedWebsiteData": "旧版备份中的网站存储目录已跳过；备份包若包含 Cookies 且该类别已勾选，仍可单独导入。",
+  "backupRestoreApkgTitle": "Anki闪卡牌组",
+  "backupRestoreApkgInfoTitle": "Anki 闪卡牌组导入/导出",
+  "backupRestoreApkgInfoMessage": "只包含卡片信息，不包含媒体内容",
+  "backupRestoreApkgDescription": "导入/导出 .apkg 格式的 Anki 牌组",
+  "backupRestoreExportingApkg": "导出中...",
+  "backupRestoreExportApkg": "导出 .apkg",
+  "backupRestoreImportingApkg": "导入中...",
+  "backupRestoreImportApkg": "导入 .apkg",
+  "backupRestoreCategoryHeading": "选择要备份或恢复的数据类别",
+  "backupRestoreExporting": "正在导出...",
+  "backupRestoreExportBackup": "导出备份",
+  "backupRestoreRestoring": "正在恢复...",
+  "backupRestoreChooseBackup": "选择备份文件并恢复",
+  "backupRestoreClearSelected": "清除所选数据",
+  "backupRestoreClearDescription": "直接清除当前勾选的数据类别（不需要备份文件）。未勾选的类别将保持原样。此操作不可撤销。",
+  "backupRestoreClearing": "正在清除...",
+  "backupRestoreCategoryChat": "聊天记录和附件",
+  "backupRestoreCategoryChatDescription": "聊天对话记录、消息内容与附件文件",
+  "backupRestoreCategorySettings": "设置",
+  "backupRestoreCategorySettingsDescription": "应用配置、提供商设置与界面偏好",
+  "backupRestoreCategoryPictures": "图片",
+  "backupRestoreCategoryPicturesDescription": "照片和缩略图",
+  "backupRestoreCategoryAudio": "音频",
+  "backupRestoreCategoryAudioDescription": "语音合成和录音",
+  "backupRestoreCategoryVideos": "视频",
+  "backupRestoreCategoryVideosDescription": "视频文件",
+  "backupRestoreCategoryTexts": "文本",
+  "backupRestoreCategoryTextsDescription": "文本文档",
+  "backupRestoreCategoryTasks": "任务",
+  "backupRestoreCategoryTasksDescription": "后台任务记录",
+  "backupRestoreCategoryAnki": "Anki闪卡数据",
+  "backupRestoreCategoryAnkiDescription": "Anki 原始数据库",
+  "backupRestoreAnkiDataInfoTitle": "Anki 闪卡数据",
+  "backupRestoreAnkiDataInfoMessage": "备份和恢复 Anki 闪卡数据时会包含 collection.media 目录中的卡片媒体内容。",
+  "backupRestoreAnkiDataInfoTooltip": "Anki 闪卡数据说明",
+  "backupRestoreCategoryBrowser": "内置浏览器数据",
+  "backupRestoreCategoryBrowserDescription": "仅备份与恢复 Cookies；清除时同时清理可支持的网站存储",
+  "backupRestoreViewInfo": "查看说明",
+  "backupRestoreApkgInfoTooltip": "Anki 牌组导入导出说明",
+  "backupRestoreConfirmClear": "确认清除",
+  "backupRestoreClearCategoriesIntro": "将清除以下数据类别（不经过备份文件）：",
+  "backupRestoreBrowserClearUnsupported": "当前平台不支持完整清除内置浏览器网站存储（localStorage、IndexedDB 等）；确认后会清除其他所选数据，无法清除的浏览器数据将保留。",
+  "backupRestoreUnselectedUnchanged": "未勾选的类别将保持原样，不会被清除。",
+  "backupRestoreClearWarning": "此操作不可撤销。清除完成后需重启应用才能生效。",
+  "backupRestoreConfirmClearCountdown": "确定清除（{seconds}）",
+  "@backupRestoreClearFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@backupRestoreAnkiExportSuccess": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "@backupRestoreExportFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@backupRestoreImportFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "@backupServiceExportSavedTo": {
+    "placeholders": {
+      "location": { "type": "String" }
+    }
+  },
+  "@backupServiceExportFailed": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "@backupServiceRestoreFailed": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "@backupRestoreSkippedCategories": {
+    "placeholders": {
+      "categories": {
+        "type": "String"
+      }
+    }
+  },
+  "@backupRestoreConfirmClearCountdown": {
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+  "backgroundOptimizationBrowserEnvironment": "浏览器环境",
+  "backupRestoreIntro": "手动导出可按数据类别选择备份内容。导入时，只恢复已勾选且备份包中包含的类别；若备份缺少某类别或其必需文件不完整，该类别会自动跳过并提示，未勾选的类别保持原样。也可直接清除所选类别的数据。",
+  "backupRestoreOtherSelectedRestored": "其余所选数据已恢复，请重启应用以生效。",
+  "notificationSettingsPermissionBlockedGuide": "通知已被系统屏蔽，请前往系统设置允许 Stroom 的通知权限。",
+  "notificationSettingsPermissionBlockedAndroid": "通知已被系统屏蔽。请前往系统设置 > 应用 > Stroom > 通知管理，允许通知权限。",
+  "notificationSettingsPermissionBlockedIos": "通知已被系统屏蔽。请前往系统设置 > Stroom > 通知，允许通知权限。",
+  "textPreviewDiscardEditsTitle": "放弃编辑？",
+  "textPreviewUnsavedChangesConfirm": "你有未保存的更改，确定要放弃吗？",
+  "textPreviewCancel": "取消",
+  "textPreviewDiscard": "放弃",
+  "textPreviewFontSize": "字号调整",
+  "textPreviewRestoreDefault": "恢复默认",
+  "textPreviewClose": "关闭",
+  "textPreviewSaveFailed": "保存失败：{error}",
+  "@textPreviewSaveFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    },
+    "description": "User-facing text for the text preview or storage interface: textPreviewSaveFailed."
+  },
+  "textPreviewUndo": "撤销",
+  "textPreviewRedo": "重做",
+  "textPreviewSave": "保存",
+  "textPreviewEdit": "编辑",
+  "textPreviewChartEdit": "图表编辑",
+  "textStorageSkipUnsupportedFormat": "跳过不支持的格式：{format}",
+  "@textStorageSkipUnsupportedFormat": {
+    "placeholders": {
+      "format": {
+        "type": "String"
+      }
+    },
+    "description": "User-facing text for the text preview or storage interface: textStorageSkipUnsupportedFormat."
+  },
+  "textStorageImportSuccess": "已导入 {count} 个文本文件",
+  "@textStorageImportSuccess": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    },
+    "description": "User-facing text for the text preview or storage interface: textStorageImportSuccess."
+  },
+  "textStorageImportFailed": "导入失败：{error}",
+  "@textStorageImportFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    },
+    "description": "User-facing text for the text preview or storage interface: textStorageImportFailed."
+  },
+  "textStorageSaved": "文本已保存",
+  "textStorageLoadFailed": "无法加载文本内容",
+  "textStorageReadFailed": "文件数据读取失败",
+  "textStorageExportTitle": "导出文本",
+  "textStorageExportedTo": "已导出到：{path}",
+  "@textStorageExportedTo": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    },
+    "description": "User-facing text for the text preview or storage interface: textStorageExportedTo."
+  },
+  "textStorageExportFailed": "导出失败：{error}",
+  "@textStorageExportFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    },
+    "description": "User-facing text for the text preview or storage interface: textStorageExportFailed."
+  },
+  "textStorageChooseExportDirectory": "选择导出目录",
+  "textStorageFolderExportTitle": "文件夹导出",
+  "textStorageWebFolderExportInfo": "浏览器无法选择导出目录，将下载保留文件夹层级的 ZIP 文件。",
+  "textStorageCancel": "取消",
+  "textStorageDownloadZip": "下载 ZIP 文件",
+  "textStorageExportedFiles": "已导出 {count} 个文件",
+  "@textStorageExportedFiles": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    },
+    "description": "User-facing text for the text preview or storage interface: textStorageExportedFiles."
+  },
+  "textStorageExportFolderTitle": "导出文本文件夹",
+  "textStorageCopyFailed": "复制失败：{error}",
+  "@textStorageCopyFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    },
+    "description": "User-facing text for the text preview or storage interface: textStorageCopyFailed."
+  },
+  "textStorageCreateNew": "新建",
+  "textStorageImport": "导入",
+  "textStorageTitle": "文本",
+  "textStorageExportToLocal": "导出到本地",
+  "textCreateEnterTitle": "请输入标题",
+  "textCreateSaveFailed": "保存失败：{error}",
+  "@textCreateSaveFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    },
+    "description": "User-facing text for the text preview or storage interface: textCreateSaveFailed."
+  },
+  "textCreateNewTitle": "新建",
+  "textCreateSave": "保存",
+  "textCreateTitleLabel": "标题",
+  "textCreateTitleHint": "输入文本标题",
+  "textCreateFormatLabel": "格式",
+  "textCreateContentLabel": "文本内容",
+  "textCreateContentHint": "输入文本内容...",
+  "@textPreviewDiscardEditsTitle": {
+    "description": "User-facing text for the text preview or storage interface: textPreviewDiscardEditsTitle."
+  },
+  "@textPreviewUnsavedChangesConfirm": {
+    "description": "User-facing text for the text preview or storage interface: textPreviewUnsavedChangesConfirm."
+  },
+  "@textPreviewCancel": {
+    "description": "User-facing text for the text preview or storage interface: textPreviewCancel."
+  },
+  "@textPreviewDiscard": {
+    "description": "User-facing text for the text preview or storage interface: textPreviewDiscard."
+  },
+  "@textPreviewFontSize": {
+    "description": "User-facing text for the text preview or storage interface: textPreviewFontSize."
+  },
+  "@textPreviewRestoreDefault": {
+    "description": "User-facing text for the text preview or storage interface: textPreviewRestoreDefault."
+  },
+  "@textPreviewClose": {
+    "description": "User-facing text for the text preview or storage interface: textPreviewClose."
+  },
+  "@textPreviewUndo": {
+    "description": "User-facing text for the text preview or storage interface: textPreviewUndo."
+  },
+  "@textPreviewRedo": {
+    "description": "User-facing text for the text preview or storage interface: textPreviewRedo."
+  },
+  "@textPreviewSave": {
+    "description": "User-facing text for the text preview or storage interface: textPreviewSave."
+  },
+  "@textPreviewEdit": {
+    "description": "User-facing text for the text preview or storage interface: textPreviewEdit."
+  },
+  "@textPreviewChartEdit": {
+    "description": "User-facing text for the text preview or storage interface: textPreviewChartEdit."
+  },
+  "@textStorageSaved": {
+    "description": "User-facing text for the text preview or storage interface: textStorageSaved."
+  },
+  "@textStorageLoadFailed": {
+    "description": "User-facing text for the text preview or storage interface: textStorageLoadFailed."
+  },
+  "@textStorageReadFailed": {
+    "description": "User-facing text for the text preview or storage interface: textStorageReadFailed."
+  },
+  "@textStorageExportTitle": {
+    "description": "User-facing text for the text preview or storage interface: textStorageExportTitle."
+  },
+  "@textStorageChooseExportDirectory": {
+    "description": "User-facing text for the text preview or storage interface: textStorageChooseExportDirectory."
+  },
+  "@textStorageFolderExportTitle": {
+    "description": "User-facing text for the text preview or storage interface: textStorageFolderExportTitle."
+  },
+  "@textStorageWebFolderExportInfo": {
+    "description": "User-facing text for the text preview or storage interface: textStorageWebFolderExportInfo."
+  },
+  "@textStorageCancel": {
+    "description": "User-facing text for the text preview or storage interface: textStorageCancel."
   },
   "@textStorageDownloadZip": {
     "description": "User-facing text for the text preview or storage interface: textStorageDownloadZip."
