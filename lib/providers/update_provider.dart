@@ -1159,8 +1159,8 @@ rm -- "\$0"
   /// Android 专用：通过 FileProvider 生成 content:// URI 并触发安装
   ///
   /// Native side ([MainActivity.kt]) returns `"ok"` on success or throws a
-  /// [PlatformException] on failure with a Chinese error message in the
-  /// exception details. The error message is displayed directly in the dialog.
+  /// [PlatformException] on failure. Its stable error code is mapped to a
+  /// localized message here; platform exception prose is never shown to users.
   ///
   /// Before launching the installer, saves a [pending_update_restart] flag in
   /// SharedPreferences AND sets the in-memory flag.  These are checked by the
@@ -1191,8 +1191,13 @@ rm -- "\$0"
       // Install failed — clear both flags to prevent false "update complete" dialog
       await _clearPendingRestartFlags();
       state = state.copyWith(
-        downloadError:
-            e.message ?? _localizations().updateApkInstallFailedNoDetails,
+        downloadError: switch (e.code) {
+          'ACTIVITY_NOT_FOUND' =>
+            _localizations().updateApkInstallerUnavailable,
+          'SECURITY_EXCEPTION' =>
+            _localizations().updateApkInstallPermissionDenied,
+          _ => _localizations().updateApkInstallFailedNoDetails,
+        },
       );
     } catch (e) {
       // Install failed — clear both flags

@@ -12,6 +12,8 @@ import 'package:stroom/pages/assistant/assistant_shared.dart'
     as assistant_shared;
 import 'package:stroom/pages/assistant_selection_page.dart';
 import 'package:stroom/providers/assistant_provider.dart';
+import 'package:stroom/utils/emojis.dart'
+    show EmojiCategories, EmojiCategoryType;
 import 'package:stroom/widgets/llm/assistant_avatar.dart';
 
 /// Creates a test app wrapped in ProviderScope with optional overrides.
@@ -59,12 +61,24 @@ BuiltInPrompt _firstLocalizedPrompt(WidgetTester tester) {
 
 void main() {
   testWidgets('emoji category tabs follow the selected locale', (tester) async {
+    expect(
+      EmojiCategories.categories.map((category) => category.type).toList(),
+      EmojiCategoryType.values,
+    );
+
     for (final locale in [
       (
         const Locale('en', 'US'),
         [
-          'Smileys', 'People', 'Animals', 'Food', 'Activities', 'Travel',
-          'Objects', 'Symbols', 'Flags',
+          'Smileys',
+          'People',
+          'Animals',
+          'Food',
+          'Activities',
+          'Travel',
+          'Objects',
+          'Symbols',
+          'Flags',
         ],
         ['表情', '人物', '动物', '食物', '活动', '旅行', '物品', '符号', '旗帜'],
       ),
@@ -72,8 +86,15 @@ void main() {
         const Locale('zh', 'CN'),
         ['表情', '人物', '动物', '食物', '活动', '旅行', '物品', '符号', '旗帜'],
         [
-          'Smileys', 'People', 'Animals', 'Food', 'Activities', 'Travel',
-          'Objects', 'Symbols', 'Flags',
+          'Smileys',
+          'People',
+          'Animals',
+          'Food',
+          'Activities',
+          'Travel',
+          'Objects',
+          'Symbols',
+          'Flags',
         ],
       ),
     ]) {

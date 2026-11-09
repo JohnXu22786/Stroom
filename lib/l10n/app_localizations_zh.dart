@@ -1086,6 +1086,14 @@ class AppLocalizationsZh extends AppLocalizations {
   String get updateApkInstallFailedNoDetails => '安装失败，请手动打开 APK 安装';
 
   @override
+  String get updateApkInstallerUnavailable =>
+      '未找到可安装 APK 的应用，请手动打开 APK 安装。';
+
+  @override
+  String get updateApkInstallPermissionDenied =>
+      '请在系统设置中允许 Stroom 安装未知来源应用。';
+
+  @override
   String get updateRestartDialogTitle => '更新检测';
 
   @override
@@ -11714,6 +11722,14 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get updateApkInstallFailedNoDetails => '安装失败，请手动打开 APK 安装';
+
+  @override
+  String get updateApkInstallerUnavailable =>
+      '未找到可安装 APK 的应用，请手动打开 APK 安装。';
+
+  @override
+  String get updateApkInstallPermissionDenied =>
+      '请在系统设置中允许 Stroom 安装未知来源应用。';
 
   @override
   String get updateRestartDialogTitle => '更新检测';
