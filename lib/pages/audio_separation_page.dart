@@ -289,12 +289,12 @@ Future<String?> saveAudioSeparationFile(
   );
 
   var skipped = false;
-  await FileManifest.withStorageFileSaveLock('$hash.$format', () async {
+  await FileManifest.withStorageFileSaveLock(record.storageFileName, () async {
     if (shouldSave != null && !shouldSave()) {
       skipped = true;
       return;
     }
-    await FileManifest.writeFile('$hash.$format', audioBytes);
+    await FileManifest.writeFile(record.storageFileName, audioBytes);
     if (shouldSave != null && !shouldSave()) {
       skipped = true;
       await _deleteUnreferencedAudioFile(record);
@@ -323,7 +323,7 @@ Future<String?> saveAudioSeparationFile(
   final resolvePath = resolveFilePath ?? FileManifest.readFilePath;
   late final String? filePath;
   try {
-    filePath = await resolvePath('$hash.$format');
+    filePath = await resolvePath(record.storageFileName);
   } catch (error, stackTrace) {
     if (shouldSave != null && !shouldSave()) {
       try {

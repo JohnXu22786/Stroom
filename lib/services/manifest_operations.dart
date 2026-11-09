@@ -9,6 +9,7 @@ import 'package:flutter/foundation.dart'
     show debugPrint, kIsWeb, visibleForTesting;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:uuid/uuid.dart';
 
 import '../utils/file_record.dart';
 import '../utils/asr_audio_stream.dart';
@@ -38,6 +39,7 @@ class ManifestOperations<T extends FileRecord> {
 
   /// Optional extra cleanup when entity files are deleted (e.g. .txt sidecar).
   final Future<void> Function(T record)? onExtraDelete;
+  final String? Function(T record)? legacyStorageNameOf;
 
   /// SQLite 表名（如 'image_records' 或 'audio_records'）
   final String tableName;
@@ -55,6 +57,7 @@ class ManifestOperations<T extends FileRecord> {
     required this.fromMap,
     this.fileExistsForTesting,
     this.onExtraDelete,
+    this.legacyStorageNameOf,
     required this.tableName,
     required this.toMap,
     this.thumbnailExtension = '.png',
@@ -223,12 +226,17 @@ class ManifestOperations<T extends FileRecord> {
 
   // ---- Storage directory ------------------------------------------------
 
-  Future<String> get _storageDir async {
+  Future<String> get _storageDirPath async {
     if (kIsWeb) return '';
     final appDir = useAppSupportDir
         ? await getApplicationSupportDirectory()
         : await getApplicationDocumentsDirectory();
-    final dir = p.join(appDir.path, storageDirName);
+    return p.join(appDir.path, storageDirName);
+  }
+
+  Future<String> get _storageDir async {
+    final dir = await _storageDirPath;
+    if (dir.isEmpty) return dir;
     final d = Directory(dir);
     if (!await d.exists()) {
       await d.create(recursive: true);
@@ -258,10 +266,13 @@ class ManifestOperations<T extends FileRecord> {
     if (fileName.isEmpty ||
         fileName == '.' ||
         fileName == '..' ||
+        fileName.length > 255 ||
         fileName.contains('/') ||
         fileName.contains('\\') ||
         fileName.contains(':') ||
-        fileName.contains('\u0000')) {
+        RegExp(r'[<>"|?*\x00-\x1F]').hasMatch(fileName) ||
+        fileName.endsWith('.') ||
+        fileName.endsWith(' ')) {
       throw ArgumentError.value(
         fileName,
         'fileName',
@@ -592,6 +603,177 @@ class ManifestOperations<T extends FileRecord> {
   Future<List<T>> loadRecordsUncached() async =>
       (await _dbGetAllRecords()).map(fromMap).toList();
 
+  String _windowsNormalizedFileName(String fileName) =>
+      fileName.toLowerCase().replaceFirst(RegExp(r'[ .]+$'), '');
+
+  Future<void> _migrateLegacyAudioStorageFiles(List<T> records) async {
+    if (!_isAudioTable || legacyStorageNameOf == null) return;
+
+    final migrations = <({
+      String legacyName,
+      String storageName,
+      File? stagedFile,
+      Uint8List? bytes,
+    })>[];
+    // Migration only reads existing legacy files, so resolving the path must
+    // not create an otherwise unused storage directory.
+    final directory = _useWebFileStore ? null : await _storageDirPath;
+    for (final record in records) {
+      final legacyName = legacyStorageNameOf!(record);
+      final storageName = storageNameOf(record);
+      if (legacyName == null ||
+          legacyName == storageName ||
+          legacyName.contains('/') ||
+          legacyName.contains('\\') ||
+          legacyName.contains('\u0000')) {
+        continue;
+      }
+      final collidingStorageNames = records
+          .where(
+            (other) =>
+                other.id != record.id &&
+                _windowsNormalizedFileName(storageNameOf(other)) ==
+                    _windowsNormalizedFileName(legacyName),
+          )
+          .map(storageNameOf);
+      if (!_useWebFileStore) {
+        final legacyFile = File(p.join(directory!, legacyName));
+        var aliasesAnotherStorageTarget = false;
+        for (final otherStorageName in collidingStorageNames) {
+          final otherTarget = File(
+            _storedFilePath(directory, otherStorageName),
+          );
+          if (await otherTarget.exists() &&
+              await FileSystemEntity.identical(
+                legacyFile.path,
+                otherTarget.path,
+              )) {
+            aliasesAnotherStorageTarget = true;
+            break;
+          }
+        }
+        if (aliasesAnotherStorageTarget) continue;
+      }
+
+      try {
+        if (_useWebFileStore) {
+          final bytes = await WebFileStore.read('$storageDirName/$legacyName');
+          if (bytes != null) {
+            migrations.add((
+              legacyName: legacyName,
+              storageName: storageName,
+              stagedFile: null,
+              bytes: bytes,
+            ));
+          }
+        } else {
+          final legacyFile = File(p.join(directory!, legacyName));
+          if (!await legacyFile.exists()) continue;
+          final stagedFile = File(
+            p.join(directory, '.audio-migration-${const Uuid().v4()}.tmp'),
+          );
+          await legacyFile.copy(stagedFile.path);
+          migrations.add((
+            legacyName: legacyName,
+            storageName: storageName,
+            stagedFile: stagedFile,
+            bytes: null,
+          ));
+        }
+      } catch (error, stackTrace) {
+        await AppLogService.error(
+          'ManifestOperations($manifestKey)',
+          'failed to stage legacy audio storage file',
+          error,
+          stackTrace,
+        );
+      }
+    }
+
+    final normalizedSources = migrations
+        .map((migration) => _windowsNormalizedFileName(migration.legacyName))
+        .toSet();
+    final migratedNames = <String>{};
+    for (final migration in migrations) {
+      try {
+        final destinationExists = _useWebFileStore
+            ? await WebFileStore.exists(_webKey(migration.storageName))
+            : await File(
+                _storedFilePath(directory!, migration.storageName),
+              ).exists();
+        final destinationIsLegacySource = normalizedSources
+            .contains(_windowsNormalizedFileName(migration.storageName));
+        if (destinationExists && !destinationIsLegacySource) {
+          migratedNames.add(migration.legacyName);
+          continue;
+        }
+
+        if (_useWebFileStore) {
+          await WebFileStore.write(
+            _webKey(migration.storageName),
+            migration.bytes!,
+          );
+        } else {
+          final destination =
+              File(_storedFilePath(directory!, migration.storageName));
+          if (await destination.exists()) await destination.delete();
+          await migration.stagedFile!.rename(destination.path);
+        }
+        migratedNames.add(migration.legacyName);
+      } catch (error, stackTrace) {
+        await AppLogService.error(
+          'ManifestOperations($manifestKey)',
+          'failed to write migrated audio storage file',
+          error,
+          stackTrace,
+        );
+      }
+    }
+
+    final normalizedTargets = records
+        .map((record) => _windowsNormalizedFileName(storageNameOf(record)))
+        .toSet();
+    for (final migration in migrations) {
+      if (!migratedNames.contains(migration.legacyName) ||
+          normalizedTargets
+              .contains(_windowsNormalizedFileName(migration.legacyName))) {
+        continue;
+      }
+      try {
+        if (_useWebFileStore) {
+          await WebFileStore.delete(
+            '$storageDirName/${migration.legacyName}',
+          );
+        } else {
+          final legacyFile = File(p.join(directory!, migration.legacyName));
+          if (await legacyFile.exists()) await legacyFile.delete();
+        }
+      } catch (error, stackTrace) {
+        await AppLogService.error(
+          'ManifestOperations($manifestKey)',
+          'failed to remove migrated legacy audio storage file',
+          error,
+          stackTrace,
+        );
+      }
+    }
+
+    for (final migration in migrations) {
+      final stagedFile = migration.stagedFile;
+      if (stagedFile == null) continue;
+      try {
+        if (await stagedFile.exists()) await stagedFile.delete();
+      } catch (error, stackTrace) {
+        await AppLogService.error(
+          'ManifestOperations($manifestKey)',
+          'failed to remove staged audio migration file',
+          error,
+          stackTrace,
+        );
+      }
+    }
+  }
+
   Future<List<T>> loadRecords({
     bool forceRefresh = false,
     bool throwOnError = false,
@@ -602,6 +784,17 @@ class ManifestOperations<T extends FileRecord> {
     try {
       final rows = await _dbGetAllRecords();
       final records = rows.map((m) => fromMap(m)).toList();
+      try {
+        await _migrateLegacyAudioStorageFiles(records);
+      } catch (error, stackTrace) {
+        // A missing or unavailable file directory must not hide manifest rows.
+        await AppLogService.error(
+          'ManifestOperations($manifestKey)',
+          'failed to migrate legacy audio storage files',
+          error,
+          stackTrace,
+        );
+      }
       await beforeFolderLoadForTesting?.call();
       final folders = (await ManifestDatabase.getAllFolders(
         recordTable: tableName,
