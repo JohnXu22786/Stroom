@@ -35,7 +35,50 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('数据详情'), findsOneWidget);
-      expect(find.text('No detail data available'), findsOneWidget);
+      expect(find.text('暂无详细信息'), findsOneWidget);
+    });
+
+    testWidgets('section labels are localized', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showDataDetailDialog(
+                context: context,
+                rawRequest: {
+                  'url': 'https://example.com',
+                  'headers': {'Accept': 'application/json'},
+                  'body': {'query': 'hello'},
+                },
+                rawResponse: {
+                  'statusCode': 200,
+                  'headers': {'Content-Type': 'application/json'},
+                  'data': {'ok': true},
+                },
+              ),
+              child: const Text('Show'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Show'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('请求 URL'), findsOneWidget);
+      expect(find.text('请求标头'), findsOneWidget);
+      expect(find.text('请求正文'), findsOneWidget);
+      expect(find.text('状态码'), findsOneWidget);
+      expect(find.text('响应标头'), findsOneWidget);
+      expect(find.text('响应正文'), findsOneWidget);
     });
 
     testWidgets('OCR diagnostics show safe summary fields only',
@@ -83,9 +126,9 @@ void main() {
       await tester.tap(find.text('Show'));
       await tester.pumpAndSettle();
 
-      expect(find.text('OCR Diagnostics'), findsOneWidget);
-      expect(find.text('Request Body'), findsNothing);
-      await tester.tap(find.text('OCR Diagnostics'));
+      expect(find.text('OCR 诊断'), findsOneWidget);
+      expect(find.text('请求正文'), findsNothing);
+      await tester.tap(find.text('OCR 诊断'));
       await tester.pumpAndSettle();
 
       final displayed =
@@ -135,7 +178,7 @@ void main() {
 
       await tester.tap(find.text('Show'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('OCR Diagnostics'));
+      await tester.tap(find.text('OCR 诊断'));
       await tester.pumpAndSettle();
 
       final displayed =
@@ -179,7 +222,7 @@ void main() {
 
       await tester.tap(find.text('Show'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('OCR Diagnostics'));
+      await tester.tap(find.text('OCR 诊断'));
       await tester.pumpAndSettle();
 
       final displayed =
@@ -223,7 +266,7 @@ void main() {
 
       await tester.tap(find.text('Show'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('OCR Diagnostics'));
+      await tester.tap(find.text('OCR 诊断'));
       await tester.pumpAndSettle();
 
       final displayed =
@@ -267,7 +310,7 @@ void main() {
 
       await tester.tap(find.text('Show'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('OCR Diagnostics'));
+      await tester.tap(find.text('OCR 诊断'));
       await tester.pumpAndSettle();
 
       final displayed =
@@ -311,7 +354,7 @@ void main() {
 
       await tester.tap(find.text('Show'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('OCR Diagnostics'));
+      await tester.tap(find.text('OCR 诊断'));
       await tester.pumpAndSettle();
 
       final displayed =
@@ -356,7 +399,7 @@ void main() {
 
       await tester.tap(find.text('Show'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('OCR Diagnostics'));
+      await tester.tap(find.text('OCR 诊断'));
       await tester.pumpAndSettle();
 
       final displayed =
@@ -400,7 +443,7 @@ void main() {
 
       await tester.tap(find.text('Show'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('OCR Diagnostics'));
+      await tester.tap(find.text('OCR 诊断'));
       await tester.pumpAndSettle();
 
       final displayed =
@@ -451,12 +494,12 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('数据详情'), findsOneWidget);
-      expect(find.text('Request URL'), findsOneWidget);
-      expect(find.text('Request Headers'), findsOneWidget);
-      expect(find.text('Request Body'), findsOneWidget);
-      expect(find.text('Status Code'), findsOneWidget);
-      expect(find.text('Response Headers'), findsOneWidget);
-      expect(find.text('Response Body'), findsOneWidget);
+      expect(find.text('请求 URL'), findsOneWidget);
+      expect(find.text('请求标头'), findsOneWidget);
+      expect(find.text('请求正文'), findsOneWidget);
+      expect(find.text('状态码'), findsOneWidget);
+      expect(find.text('响应标头'), findsOneWidget);
+      expect(find.text('响应正文'), findsOneWidget);
     });
 
     testWidgets('tapping Request URL shows detail and back button works', (
@@ -491,19 +534,19 @@ void main() {
       await tester.tap(find.text('Show'));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Request URL'));
+      await tester.tap(find.text('请求 URL'));
       await tester.pumpAndSettle();
 
       expect(find.text('https://api.example.com/chat'), findsOneWidget);
-      expect(find.text('Request URL'), findsAtLeastNWidgets(1));
+      expect(find.text('请求 URL'), findsAtLeastNWidgets(1));
 
       expect(find.byIcon(Icons.arrow_back), findsOneWidget);
 
       await tester.tap(find.byIcon(Icons.arrow_back));
       await tester.pumpAndSettle();
 
-      expect(find.text('Request URL'), findsOneWidget);
-      expect(find.text('Status Code'), findsOneWidget);
+      expect(find.text('请求 URL'), findsOneWidget);
+      expect(find.text('状态码'), findsOneWidget);
     });
 
     testWidgets('tapping Response Headers shows headers as JSON', (
@@ -542,10 +585,10 @@ void main() {
       await tester.tap(find.text('Show'));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Response Headers'));
+      await tester.tap(find.text('响应标头'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Response Headers'), findsAtLeastNWidgets(1));
+      expect(find.text('响应标头'), findsAtLeastNWidgets(1));
       expect(find.textContaining('content-type'), findsOneWidget);
       expect(find.textContaining('x-request-id'), findsOneWidget);
     });
@@ -587,10 +630,10 @@ void main() {
       await tester.tap(find.text('Show'));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Response Body'));
+      await tester.tap(find.text('响应正文'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Response Body'), findsAtLeastNWidgets(1));
+      expect(find.text('响应正文'), findsAtLeastNWidgets(1));
       expect(find.textContaining('choices'), findsOneWidget);
       expect(find.textContaining('Hello'), findsOneWidget);
     });
@@ -630,7 +673,7 @@ void main() {
       await tester.tap(find.text('Show'));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Request Headers'));
+      await tester.tap(find.text('请求标头'));
       await tester.pumpAndSettle();
 
       expect(find.textContaining('Authorization'), findsOneWidget);
@@ -672,9 +715,9 @@ void main() {
       await tester.tap(find.text('Show'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Response Body'), findsOneWidget);
+      expect(find.text('响应正文'), findsOneWidget);
 
-      await tester.tap(find.text('Response Body'));
+      await tester.tap(find.text('响应正文'));
       await tester.pumpAndSettle();
 
       expect(find.textContaining('Bad Request'), findsOneWidget);
@@ -715,9 +758,9 @@ void main() {
       await tester.tap(find.text('Show'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Response Body'), findsOneWidget);
+      expect(find.text('响应正文'), findsOneWidget);
 
-      await tester.tap(find.text('Response Body'));
+      await tester.tap(find.text('响应正文'));
       await tester.pumpAndSettle();
 
       expect(find.textContaining('bad request'), findsOneWidget);
@@ -760,7 +803,7 @@ void main() {
       await tester.tap(find.text('Show'));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Response Body'));
+      await tester.tap(find.text('响应正文'));
       await tester.pumpAndSettle();
 
       // The raw JSON string body is parsed and pretty-printed:
@@ -807,7 +850,7 @@ void main() {
       await tester.tap(find.text('Show'));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Response Body'));
+      await tester.tap(find.text('响应正文'));
       await tester.pumpAndSettle();
 
       // Full content is present, no "..." truncation suffix.
@@ -847,9 +890,9 @@ void main() {
       await tester.tap(find.text('Show'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Response Body'), findsNothing);
-      expect(find.text('Response Headers'), findsOneWidget);
-      expect(find.text('Status Code'), findsOneWidget);
+      expect(find.text('响应正文'), findsNothing);
+      expect(find.text('响应标头'), findsOneWidget);
+      expect(find.text('状态码'), findsOneWidget);
     });
 
     testWidgets('network error shows Response Body from error field', (
@@ -884,10 +927,10 @@ void main() {
       await tester.pumpAndSettle();
 
       // Network error should show as Response Body (not as Error section)
-      expect(find.text('Response Body'), findsOneWidget);
+      expect(find.text('响应正文'), findsOneWidget);
       // Status Code, Response Headers should NOT be visible (no HTTP response data)
-      expect(find.text('Status Code'), findsNothing);
-      expect(find.text('Response Headers'), findsNothing);
+      expect(find.text('状态码'), findsNothing);
+      expect(find.text('响应标头'), findsNothing);
     });
 
     testWidgets('network error detail shows error string via Response Body', (
@@ -921,7 +964,7 @@ void main() {
       await tester.tap(find.text('Show'));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Response Body'));
+      await tester.tap(find.text('响应正文'));
       await tester.pumpAndSettle();
 
       expect(find.textContaining('DioException'), findsOneWidget);
@@ -957,12 +1000,12 @@ void main() {
         await tester.tap(find.text('Show'));
         await tester.pumpAndSettle();
 
-        expect(find.text('Request URL'), findsOneWidget);
-        expect(find.text('Status Code'), findsOneWidget);
-        expect(find.text('Request Headers'), findsNothing);
-        expect(find.text('Request Body'), findsNothing);
-        expect(find.text('Response Headers'), findsNothing);
-        expect(find.text('Response Body'), findsNothing);
+        expect(find.text('请求 URL'), findsOneWidget);
+        expect(find.text('状态码'), findsOneWidget);
+        expect(find.text('请求标头'), findsNothing);
+        expect(find.text('请求正文'), findsNothing);
+        expect(find.text('响应标头'), findsNothing);
+        expect(find.text('响应正文'), findsNothing);
       },
     );
 
@@ -993,7 +1036,7 @@ void main() {
       await tester.tap(find.text('Show'));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Status Code'));
+      await tester.tap(find.text('状态码'));
       await tester.pumpAndSettle();
 
       expect(find.text('429'), findsOneWidget);
@@ -1029,7 +1072,7 @@ void main() {
       await tester.tap(find.text('Show'));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Request Body'));
+      await tester.tap(find.text('请求正文'));
       await tester.pumpAndSettle();
 
       expect(find.textContaining('gpt-4'), findsOneWidget);
@@ -1069,21 +1112,21 @@ void main() {
       await tester.tap(find.text('Show'));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Request URL'));
+      await tester.tap(find.text('请求 URL'));
       await tester.pumpAndSettle();
       expect(find.text('https://api.example.com'), findsOneWidget);
 
       await tester.tap(find.byIcon(Icons.arrow_back));
       await tester.pumpAndSettle();
-      expect(find.text('Request Headers'), findsOneWidget);
+      expect(find.text('请求标头'), findsOneWidget);
 
-      await tester.tap(find.text('Status Code'));
+      await tester.tap(find.text('状态码'));
       await tester.pumpAndSettle();
       expect(find.text('401'), findsOneWidget);
 
       await tester.tap(find.byIcon(Icons.arrow_back));
       await tester.pumpAndSettle();
-      expect(find.text('Request URL'), findsOneWidget);
+      expect(find.text('请求 URL'), findsOneWidget);
     });
 
     // ── UNIFIED PANEL TESTS ──
@@ -1222,8 +1265,8 @@ void main() {
       await tester.pumpAndSettle();
 
       // Should show Response Body from 'data' key, not 'error' key
-      expect(find.text('Response Body'), findsOneWidget);
-      expect(find.text('Status Code'), findsOneWidget);
+      expect(find.text('响应正文'), findsOneWidget);
+      expect(find.text('状态码'), findsOneWidget);
     });
 
     testWidgets(
@@ -1257,9 +1300,9 @@ void main() {
         await tester.tap(find.text('Show'));
         await tester.pumpAndSettle();
 
-        expect(find.text('Response Body'), findsOneWidget);
+        expect(find.text('响应正文'), findsOneWidget);
 
-        await tester.tap(find.text('Response Body'));
+        await tester.tap(find.text('响应正文'));
         await tester.pumpAndSettle();
 
         expect(find.textContaining('DioException'), findsOneWidget);
@@ -1314,7 +1357,7 @@ void main() {
         await openDialog(tester);
 
         // Enter level 2 (detail view).
-        await tester.tap(find.text('Request URL'));
+        await tester.tap(find.text('请求 URL'));
         await tester.pumpAndSettle();
         expect(find.text('https://api.example.com/chat'), findsOneWidget);
 
@@ -1324,8 +1367,8 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.text('数据详情'), findsOneWidget);
-        expect(find.text('Request URL'), findsOneWidget);
-        expect(find.text('Status Code'), findsOneWidget);
+        expect(find.text('请求 URL'), findsOneWidget);
+        expect(find.text('状态码'), findsOneWidget);
       },
     );
 
@@ -1348,7 +1391,7 @@ void main() {
       (tester) async {
         await openDialog(tester);
 
-        await tester.tap(find.text('Request URL'));
+        await tester.tap(find.text('请求 URL'));
         await tester.pumpAndSettle();
         expect(find.text('https://api.example.com/chat'), findsOneWidget);
 
@@ -1356,7 +1399,7 @@ void main() {
         await tester.binding.handlePopRoute();
         await tester.pumpAndSettle();
         expect(find.text('数据详情'), findsOneWidget);
-        expect(find.text('Status Code'), findsOneWidget);
+        expect(find.text('状态码'), findsOneWidget);
 
         // Second back: level 1 → close (same as X button).
         await tester.binding.handlePopRoute();
@@ -1372,7 +1415,7 @@ void main() {
         await openDialog(tester);
 
         // Enter level 2 (detail view).
-        await tester.tap(find.text('Request URL'));
+        await tester.tap(find.text('请求 URL'));
         await tester.pumpAndSettle();
         expect(find.text('https://api.example.com/chat'), findsOneWidget);
 
@@ -1382,8 +1425,8 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.text('数据详情'), findsOneWidget);
-        expect(find.text('Request URL'), findsOneWidget);
-        expect(find.text('Status Code'), findsOneWidget);
+        expect(find.text('请求 URL'), findsOneWidget);
+        expect(find.text('状态码'), findsOneWidget);
       },
     );
   });

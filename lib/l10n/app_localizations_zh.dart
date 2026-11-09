@@ -1865,6 +1865,30 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chatDataDetails => '数据详情';
 
   @override
+  String get chatErrorDetailOcrDiagnostics => 'OCR 诊断';
+
+  @override
+  String get chatErrorDetailRequestUrl => '请求 URL';
+
+  @override
+  String get chatErrorDetailRequestHeaders => '请求标头';
+
+  @override
+  String get chatErrorDetailRequestBody => '请求正文';
+
+  @override
+  String get chatErrorDetailStatusCode => '状态码';
+
+  @override
+  String get chatErrorDetailResponseHeaders => '响应标头';
+
+  @override
+  String get chatErrorDetailResponseBody => '响应正文';
+
+  @override
+  String get chatErrorDetailEmpty => '暂无详细信息';
+
+  @override
   String get chatAudioPreviewClose => '关闭';
 
   @override
@@ -12249,6 +12273,30 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get chatDataDetails => '数据详情';
+
+  @override
+  String get chatErrorDetailOcrDiagnostics => 'OCR 诊断';
+
+  @override
+  String get chatErrorDetailRequestUrl => '请求 URL';
+
+  @override
+  String get chatErrorDetailRequestHeaders => '请求标头';
+
+  @override
+  String get chatErrorDetailRequestBody => '请求正文';
+
+  @override
+  String get chatErrorDetailStatusCode => '状态码';
+
+  @override
+  String get chatErrorDetailResponseHeaders => '响应标头';
+
+  @override
+  String get chatErrorDetailResponseBody => '响应正文';
+
+  @override
+  String get chatErrorDetailEmpty => '暂无详细信息';
 
   @override
   String get chatAudioPreviewClose => '关闭';

@@ -722,6 +722,14 @@
     }
   },
   "chatDataDetails": "Data details",
+  "chatErrorDetailOcrDiagnostics": "OCR Diagnostics",
+  "chatErrorDetailRequestUrl": "Request URL",
+  "chatErrorDetailRequestHeaders": "Request Headers",
+  "chatErrorDetailRequestBody": "Request Body",
+  "chatErrorDetailStatusCode": "Status Code",
+  "chatErrorDetailResponseHeaders": "Response Headers",
+  "chatErrorDetailResponseBody": "Response Body",
+  "chatErrorDetailEmpty": "No detail data available",
   "chatAudioPreviewClose": "Close",
   "@chatSavedToPath": {
     "description": "Path of the saved Markdown file",

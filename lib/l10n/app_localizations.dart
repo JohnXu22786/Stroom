@@ -3359,6 +3359,54 @@ abstract class AppLocalizations {
   /// **'Data details'**
   String get chatDataDetails;
 
+  /// No description provided for @chatErrorDetailOcrDiagnostics.
+  ///
+  /// In en, this message translates to:
+  /// **'OCR Diagnostics'**
+  String get chatErrorDetailOcrDiagnostics;
+
+  /// No description provided for @chatErrorDetailRequestUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Request URL'**
+  String get chatErrorDetailRequestUrl;
+
+  /// No description provided for @chatErrorDetailRequestHeaders.
+  ///
+  /// In en, this message translates to:
+  /// **'Request Headers'**
+  String get chatErrorDetailRequestHeaders;
+
+  /// No description provided for @chatErrorDetailRequestBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Request Body'**
+  String get chatErrorDetailRequestBody;
+
+  /// No description provided for @chatErrorDetailStatusCode.
+  ///
+  /// In en, this message translates to:
+  /// **'Status Code'**
+  String get chatErrorDetailStatusCode;
+
+  /// No description provided for @chatErrorDetailResponseHeaders.
+  ///
+  /// In en, this message translates to:
+  /// **'Response Headers'**
+  String get chatErrorDetailResponseHeaders;
+
+  /// No description provided for @chatErrorDetailResponseBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Response Body'**
+  String get chatErrorDetailResponseBody;
+
+  /// No description provided for @chatErrorDetailEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No detail data available'**
+  String get chatErrorDetailEmpty;
+
   /// No description provided for @chatAudioPreviewClose.
   ///
   /// In en, this message translates to:
