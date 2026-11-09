@@ -145,7 +145,24 @@ class TextRecordsNotifier extends StateNotifier<List<TextRecord>> {
               currentContent,
             );
           }
-          await TextManifest.updateRecord(currentUpdated);
+          try {
+            await TextManifest.updateRecord(currentUpdated);
+          } catch (_) {
+            if (currentContent != null) {
+              // Remove the new path only when no record references it. The
+              // hash-locked check prevents a concurrent save from publishing
+              // a reference between the check and deletion.
+              try {
+                await TextManifest.deleteFileIfUnreferenced(
+                  currentUpdated.hash,
+                  currentNewStoragePath,
+                );
+              } catch (cleanupError) {
+                debugPrint('Failed to clean up renamed text file: $cleanupError');
+              }
+            }
+            rethrow;
+          }
           if (currentContent != null) {
             await TextManifest.deleteFileIfUnreferenced(
               current.hash,
