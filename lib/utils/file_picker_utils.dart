@@ -66,6 +66,11 @@ void validateUserVisibleExportPaths({
   required Iterable<String> files,
   Iterable<String> folders = const [],
 }) {
+  final reservedWindowsName = RegExp(
+    r'^(CON|CONIN\$|CONOUT\$|PRN|AUX|NUL|COM[1-9¹²³]|LPT[1-9¹²³])$',
+    caseSensitive: false,
+  );
+
   String safePath(String path) {
     final segments = path.replaceAll('\\', '/').split('/');
     if (segments.any(
@@ -74,6 +79,16 @@ void validateUserVisibleExportPaths({
       throw ArgumentError.value(path, 'path', 'Invalid export path');
     }
     if (segments.any((segment) => segment != segment.trimRight())) {
+      throw ArgumentError.value(path, 'path', 'Invalid export path');
+    }
+    if (segments.any((segment) => segment.endsWith('.'))) {
+      throw ArgumentError.value(path, 'path', 'Invalid export path');
+    }
+    if (segments.any(
+      (segment) => reservedWindowsName.hasMatch(
+        segment.split(RegExp(r'[.:]')).first,
+      ),
+    )) {
       throw ArgumentError.value(path, 'path', 'Invalid export path');
     }
     return segments.join('/');
