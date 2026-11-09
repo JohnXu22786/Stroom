@@ -1164,7 +1164,38 @@ class ManifestOperations<T extends FileRecord> {
   Future<void> moveRecord(String id, String targetFolder) =>
       _withRecordMutationLock(id, () => _moveRecord(id, targetFolder));
 
-  Future<void> _moveRecord(String id, String targetFolder) async {
+  /// Moves a record only while its folder still matches [expectedFolder].
+  /// The comparison and write share the per-record mutation lock so rollback
+  /// cannot overwrite a concurrent move that lands after its initial read.
+  /// [onMoved] runs after the row write and before folder metadata tracking.
+  Future<bool> moveRecordIfFolder(
+    String id,
+    String expectedFolder,
+    String targetFolder, {
+    void Function()? onMoved,
+  }) async {
+    var moved = false;
+    await _withRecordMutationLock(id, () async {
+      final records = await loadRecords();
+      T? current;
+      for (final record in records) {
+        if (record.id == id) {
+          current = record;
+          break;
+        }
+      }
+      if (current == null || folderOf(current) != expectedFolder) return;
+      await _moveRecord(id, targetFolder, onMoved: onMoved);
+      moved = true;
+    });
+    return moved;
+  }
+
+  Future<void> _moveRecord(
+    String id,
+    String targetFolder, {
+    void Function()? onMoved,
+  }) async {
     try {
       _validateRecordFolderPath(targetFolder);
       await loadRecords();
@@ -1172,6 +1203,7 @@ class ManifestOperations<T extends FileRecord> {
       if (index != -1) {
         final moved = copyFolder(_cache![index], targetFolder);
         await _persistCachedRecordMutation(index, moved);
+        onMoved?.call();
         await _ensureFolderPathTracked(targetFolder);
       }
     } catch (e, st) {

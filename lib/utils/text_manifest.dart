@@ -465,6 +465,20 @@ class TextManifest {
       _withRecordMutationLock(() => _ops.renameRecord(id, newName));
   static Future<void> moveRecord(String id, String targetFolder) =>
       _withRecordMutationLock(() => _ops.moveRecord(id, targetFolder));
+  static Future<bool> moveRecordIfFolder(
+    String id,
+    String expectedFolder,
+    String targetFolder, {
+    void Function()? onMoved,
+  }) =>
+      _withRecordMutationLock(
+        () => _ops.moveRecordIfFolder(
+          id,
+          expectedFolder,
+          targetFolder,
+          onMoved: onMoved,
+        ),
+      );
 
   static Future<String> writeFile(String fileName, Uint8List data) =>
       _ops.writeFile(fileName, data);
