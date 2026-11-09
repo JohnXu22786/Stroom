@@ -378,9 +378,7 @@ class ChatMessage {
     var currentUserMessage = -1;
     for (var i = 0; i < input.length; i++) {
       final item = input[i];
-      if (item is Map &&
-          item['type'] == 'message' &&
-          item['role'] == 'user') {
+      if (item is Map && item['type'] == 'message' && item['role'] == 'user') {
         currentUserMessage = i;
       }
     }
