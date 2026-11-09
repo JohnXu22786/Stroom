@@ -246,12 +246,41 @@ class BuiltinToolDetailsDialog extends StatelessWidget {
     },
   };
 
-  Map<String, dynamic> _localizedParameters(Locale locale) {
-    final translations = locale.languageCode == 'en'
-        ? _englishDescriptions[definition.name]
-        : locale.languageCode == 'zh'
-            ? _chineseDescriptions[definition.name]
-            : null;
+  Map<String, String>? _httpDescriptions(AppLocalizations strings) {
+    final description = switch (definition.name) {
+      'brave_web_search' => strings.httpToolBraveDescription,
+      'bocha_web_search' => strings.httpToolBochaDescription,
+      'querit_search' => strings.httpToolQueritDescription,
+      'searxng_search' => strings.httpToolSearxngDescription,
+      _ => null,
+    };
+    if (description == null) return null;
+    return {
+      'description': description,
+      'properties.query.description': strings.httpToolSearchQueryDescription,
+      'properties.count.description': definition.name == 'brave_web_search'
+          ? strings.httpToolSearchCountMax20Description
+          : strings.httpToolSearchCountDescription,
+    };
+  }
+
+  Map<String, String>? _localizedDescriptions(
+    Locale locale,
+    AppLocalizations strings,
+  ) {
+    return _httpDescriptions(strings) ??
+        (locale.languageCode == 'en'
+            ? _englishDescriptions[definition.name]
+            : locale.languageCode == 'zh'
+                ? _chineseDescriptions[definition.name]
+                : null);
+  }
+
+  Map<String, dynamic> _localizedParameters(
+    Locale locale,
+    AppLocalizations strings,
+  ) {
+    final translations = _localizedDescriptions(locale, strings);
     if (translations == null) return definition.parameters;
 
     dynamic localize(dynamic value, String path) {
@@ -277,18 +306,15 @@ class BuiltinToolDetailsDialog extends StatelessWidget {
     return localize(definition.parameters, '') as Map<String, dynamic>;
   }
 
-  String _localizedDescription(Locale locale) {
-    final translations = locale.languageCode == 'en'
-        ? _englishDescriptions[definition.name]
-        : locale.languageCode == 'zh'
-            ? _chineseDescriptions[definition.name]
-            : null;
+  String _localizedDescription(Locale locale, AppLocalizations strings) {
+    final translations = _localizedDescriptions(locale, strings);
     return translations?['description'] ?? definition.description;
   }
 
   @override
   Widget build(BuildContext context) {
     final locale = Localizations.localeOf(context);
+    final strings = AppLocalizations.of(context)!;
     return AlertDialog(
       title: Text(definition.name),
       content: ConstrainedBox(
@@ -298,18 +324,18 @@ class BuiltinToolDetailsDialog extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(AppLocalizations.of(context)!.toolBuiltinType),
+              Text(strings.toolBuiltinType),
               const SizedBox(height: 8),
-              Text(_localizedDescription(locale)),
+              Text(_localizedDescription(locale, strings)),
               const SizedBox(height: 12),
               Text(
-                AppLocalizations.of(context)!.toolParameterDefinitions,
+                strings.toolParameterDefinitions,
                 style: const TextStyle(fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 4),
               SelectableText(
                 const JsonEncoder.withIndent('  ')
-                    .convert(_localizedParameters(locale)),
+                    .convert(_localizedParameters(locale, strings)),
                 style: Theme.of(context)
                     .textTheme
                     .bodySmall
@@ -317,7 +343,7 @@ class BuiltinToolDetailsDialog extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               Text(
-                AppLocalizations.of(context)!.toolBuiltinEnableHelp,
+                strings.toolBuiltinEnableHelp,
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ],
@@ -327,7 +353,7 @@ class BuiltinToolDetailsDialog extends StatelessWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: Text(AppLocalizations.of(context)!.mathClose),
+          child: Text(strings.mathClose),
         ),
       ],
     );

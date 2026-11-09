@@ -3315,6 +3315,34 @@
   "@toolBuiltinEnableHelp": {
     "placeholders": {}
   },
+  "httpToolBraveDescription": "使用 Brave Search API 搜索网络。需要配置 API Key。",
+  "@httpToolBraveDescription": {
+    "placeholders": {}
+  },
+  "httpToolBochaDescription": "使用博查 AI Search API 搜索网络。需要配置 API Key。",
+  "@httpToolBochaDescription": {
+    "placeholders": {}
+  },
+  "httpToolQueritDescription": "使用 Querit Search 搜索网络。需要配置 API Key。",
+  "@httpToolQueritDescription": {
+    "placeholders": {}
+  },
+  "httpToolSearxngDescription": "注重隐私保护的自托管元搜索引擎，可聚合多种搜索源。需要配置实例 URL。",
+  "@httpToolSearxngDescription": {
+    "placeholders": {}
+  },
+  "httpToolSearchQueryDescription": "搜索关键词。",
+  "@httpToolSearchQueryDescription": {
+    "placeholders": {}
+  },
+  "httpToolSearchCountDescription": "返回结果数量。",
+  "@httpToolSearchCountDescription": {
+    "placeholders": {}
+  },
+  "httpToolSearchCountMax20Description": "返回结果数量（最大 20）。",
+  "@httpToolSearchCountMax20Description": {
+    "placeholders": {}
+  },
   "mcpSseUrlLabel": "SSE URL",
   "@mcpSseUrlLabel": {
     "placeholders": {}

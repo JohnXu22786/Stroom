@@ -3373,6 +3373,34 @@
   "@toolBuiltinEnableHelp": {
     "placeholders": {}
   },
+  "httpToolBraveDescription": "Search the web with the Brave Search API. Requires an API key.",
+  "@httpToolBraveDescription": {
+    "placeholders": {}
+  },
+  "httpToolBochaDescription": "Search the web with the Bocha AI Search API. Requires an API key.",
+  "@httpToolBochaDescription": {
+    "placeholders": {}
+  },
+  "httpToolQueritDescription": "Search the web with Querit Search. Requires an API key.",
+  "@httpToolQueritDescription": {
+    "placeholders": {}
+  },
+  "httpToolSearxngDescription": "A privacy-focused, self-hosted metasearch engine that aggregates search sources. Requires an instance URL.",
+  "@httpToolSearxngDescription": {
+    "placeholders": {}
+  },
+  "httpToolSearchQueryDescription": "Search terms.",
+  "@httpToolSearchQueryDescription": {
+    "placeholders": {}
+  },
+  "httpToolSearchCountDescription": "Number of results to return.",
+  "@httpToolSearchCountDescription": {
+    "placeholders": {}
+  },
+  "httpToolSearchCountMax20Description": "Number of results to return (maximum 20).",
+  "@httpToolSearchCountMax20Description": {
+    "placeholders": {}
+  },
   "mcpSseUrlLabel": "SSE URL",
   "@mcpSseUrlLabel": {
     "placeholders": {}
