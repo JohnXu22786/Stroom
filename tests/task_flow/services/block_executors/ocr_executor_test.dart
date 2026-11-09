@@ -13,6 +13,7 @@ import 'package:stroom/l10n/app_localizations_en.dart';
 import 'package:stroom/l10n/app_localizations_zh.dart';
 import 'package:stroom/models/tts_models.dart';
 import 'package:stroom/providers/background_task_provider.dart';
+import 'package:stroom/providers/locale_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/providers/task_provider_shared.dart';
 import 'package:stroom/services/manifest_database.dart';
@@ -242,7 +243,10 @@ void main() {
     final restoredTask = restored.taskById(failedTask.id)!;
     expect(restoredTask.result, 'partial OCR text');
     expect(restoredTask.resultIsComplete, isFalse);
-    expect(restoredTask.error, expectedError);
+    expect(
+      restoredTask.error,
+      appLocalizationsForLocale(null).bgTaskOcrResultIncomplete('length'),
+    );
   }
 
   test('OCR uses payload bytes instead of the filename suffix', () async {
