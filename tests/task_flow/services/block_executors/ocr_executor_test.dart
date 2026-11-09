@@ -192,6 +192,11 @@ void main() {
     required AppLocalizations localizations,
     required String expectedError,
   }) async {
+    expect(
+      localizations.bgTaskOcrResultIncomplete('length'),
+      expectedError,
+      reason: 'The injected localization should provide the expected locale',
+    );
     final source =
         await File('${directory.path}/partial.png').writeAsBytes(_validPng());
     final dio = Dio()..httpClientAdapter = _IncompleteOcrAdapter();
