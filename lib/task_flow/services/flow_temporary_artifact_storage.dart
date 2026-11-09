@@ -198,6 +198,68 @@ class FlowTemporaryArtifactStorage {
     if (await directory.exists()) await directory.delete(recursive: true);
   }
 
+  /// Removes files in a retained execution namespace that are not referenced
+  /// by its persisted step results. This repairs outputs left behind when a
+  /// producer wrote a file but the app stopped before checkpointing the step.
+  static Future<void> cleanupUnreferencedArtifacts({
+    required String executionId,
+    required Iterable<FlowTemporaryArtifact> retainedArtifacts,
+    bool Function()? shouldDelete,
+  }) async {
+    if (shouldDelete != null && !shouldDelete()) return;
+    final retained = <String>{};
+    for (final artifact in retainedArtifacts) {
+      if (artifact.executionId != executionId ||
+          !await ownsReference(
+            executionId: executionId,
+            blockId: artifact.blockId,
+            reference: artifact.reference,
+          )) {
+        // An invalid persisted owner is ambiguous. Preserve the entire
+        // namespace rather than risk deleting a file a completed step needs.
+        return;
+      }
+      retained.add(
+        _useWebStore
+            ? artifact.reference
+            : p.normalize(p.absolute(artifact.reference)),
+      );
+    }
+
+    if (shouldDelete != null && !shouldDelete()) return;
+    if (_useWebStore) {
+      final prefix = _webExecutionPrefix(executionId);
+      final keys = await WebFileStore.keysWithPrefix(prefix);
+      for (final key in keys) {
+        if (shouldDelete != null && !shouldDelete()) return;
+        if (!retained.contains(key)) await WebFileStore.delete(key);
+      }
+      return;
+    }
+
+    final directory = Directory(await _nativeExecutionDirectory(executionId));
+    if (!await directory.exists()) return;
+    final directories = <Directory>[];
+    await for (final entity
+        in directory.list(recursive: true, followLinks: false)) {
+      if (entity is Directory) {
+        directories.add(entity);
+        continue;
+      }
+      if (shouldDelete != null && !shouldDelete()) return;
+      if (entity is File && !retained.contains(p.normalize(entity.path))) {
+        await entity.delete();
+      }
+    }
+    directories.sort((a, b) => b.path.length.compareTo(a.path.length));
+    for (final child in directories) {
+      if (shouldDelete != null && !shouldDelete()) return;
+      if (await child.list(followLinks: false).isEmpty) {
+        await child.delete();
+      }
+    }
+  }
+
   /// Repairs an interrupted execution deletion on the next app restore.
   /// Names are hashes, so this can remove only directories/keys in this
   /// private namespace that have no durable execution record.

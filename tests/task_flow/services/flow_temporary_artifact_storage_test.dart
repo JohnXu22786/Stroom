@@ -143,6 +143,37 @@ void main() {
     expect(await File(second).readAsBytes(), [2]);
   });
 
+  test(
+      'native cleanup preserves referenced files and removes uncheckpointed files',
+      () async {
+    final retained = await FlowTemporaryArtifactStorage.writeBytes(
+      executionId: 'execution-1',
+      blockId: 'completed-block',
+      fileName: 'retained.wav',
+      bytes: Uint8List.fromList([1]),
+    );
+    final orphan = await FlowTemporaryArtifactStorage.writeBytes(
+      executionId: 'execution-1',
+      blockId: 'interrupted-block',
+      fileName: 'orphan.wav',
+      bytes: Uint8List.fromList([2]),
+    );
+
+    await FlowTemporaryArtifactStorage.cleanupUnreferencedArtifacts(
+      executionId: 'execution-1',
+      retainedArtifacts: [
+        FlowTemporaryArtifact(
+          executionId: 'execution-1',
+          blockId: 'completed-block',
+          reference: retained,
+        ),
+      ],
+    );
+
+    expect(await File(retained).readAsBytes(), [1]);
+    expect(await File(orphan).exists(), isFalse);
+  });
+
   test('deletion guard is rechecked after async ownership validation',
       () async {
     final reference = await FlowTemporaryArtifactStorage.writeBytes(
@@ -219,5 +250,37 @@ void main() {
     expect(await WebFileStore.read(ownReference), isNull);
     expect(await WebFileStore.read(otherExecutionReference), [4]);
     expect(await WebFileStore.read(unrelatedKey), [9]);
+  });
+
+  test(
+      'web cleanup preserves referenced files and removes uncheckpointed files',
+      () async {
+    WebFileStore.enableTestMode();
+    final retained = await FlowTemporaryArtifactStorage.writeBytes(
+      executionId: 'execution-1',
+      blockId: 'completed-block',
+      fileName: 'retained.wav',
+      bytes: Uint8List.fromList([1]),
+    );
+    final orphan = await FlowTemporaryArtifactStorage.writeBytes(
+      executionId: 'execution-1',
+      blockId: 'interrupted-block',
+      fileName: 'orphan.wav',
+      bytes: Uint8List.fromList([2]),
+    );
+
+    await FlowTemporaryArtifactStorage.cleanupUnreferencedArtifacts(
+      executionId: 'execution-1',
+      retainedArtifacts: [
+        FlowTemporaryArtifact(
+          executionId: 'execution-1',
+          blockId: 'completed-block',
+          reference: retained,
+        ),
+      ],
+    );
+
+    expect(await WebFileStore.read(retained), [1]);
+    expect(await WebFileStore.read(orphan), isNull);
   });
 }

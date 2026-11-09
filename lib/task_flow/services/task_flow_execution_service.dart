@@ -547,6 +547,7 @@ class TaskFlowExecutionService {
     if (!e.isTerminal) {
       throw StateError('执行仍在运行，请先暂停或取消');
     }
+    await _cleanupUnreferencedTemporaryArtifacts(id);
     final inputs = [
       FlowRunInput(
           text: e.inputText,
@@ -972,6 +973,31 @@ class TaskFlowExecutionService {
     }
   }
 
+  Future<void> _cleanupUnreferencedTemporaryArtifacts(
+    String executionId, {
+    bool Function()? shouldDelete,
+  }) async {
+    final execution = _execution(executionId);
+    if (execution == null) return;
+    final retainedArtifacts = execution.subTasks
+        .where((step) =>
+            step.outcome == FlowStepOutcome.succeeded &&
+            step.artifactCleanupStatus != FlowArtifactCleanupStatus.cleaned)
+        .map((step) => step.result?.temporaryArtifact)
+        .whereType<FlowTemporaryArtifact>();
+    try {
+      await FlowTemporaryArtifactStorage.cleanupUnreferencedArtifacts(
+        executionId: executionId,
+        retainedArtifacts: retainedArtifacts,
+        shouldDelete: shouldDelete ?? () => _execution(executionId) != null,
+      );
+    } catch (error) {
+      debugPrint(
+        '[TaskFlow] Failed to clean unreferenced temporary files: $error',
+      );
+    }
+  }
+
   Future<void> _cleanupTemporaryArtifact(
     String executionId,
     String expectedBlockId,
@@ -1077,6 +1103,10 @@ class TaskFlowExecutionService {
     String? activeStepId;
     try {
       await _reconcileTemporaryArtifacts(id, flow);
+      await _cleanupUnreferencedTemporaryArtifacts(
+        id,
+        shouldDelete: () => _live(id),
+      );
       if (!_live(id)) return;
       for (var i = 0; i < flow.blocks.length; i++) {
         await _waitUnpaused(id);
