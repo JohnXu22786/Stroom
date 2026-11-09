@@ -6411,6 +6411,32 @@ class AppLocalizationsEn extends AppLocalizations {
       'Enable this tool for an assistant in that assistant’s default tool settings.';
 
   @override
+  String get httpToolBraveDescription =>
+      'Search the web with the Brave Search API. Requires an API key.';
+
+  @override
+  String get httpToolBochaDescription =>
+      'Search the web with the Bocha AI Search API. Requires an API key.';
+
+  @override
+  String get httpToolQueritDescription =>
+      'Search the web with Querit Search. Requires an API key.';
+
+  @override
+  String get httpToolSearxngDescription =>
+      'A privacy-focused, self-hosted metasearch engine that aggregates search sources. Requires an instance URL.';
+
+  @override
+  String get httpToolSearchQueryDescription => 'Search terms.';
+
+  @override
+  String get httpToolSearchCountDescription => 'Number of results to return.';
+
+  @override
+  String get httpToolSearchCountMax20Description =>
+      'Number of results to return (maximum 20).';
+
+  @override
   String get mcpSseUrlLabel => 'SSE URL';
 
   @override
@@ -17607,6 +17633,32 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   @override
   String get toolBuiltinEnableHelp =>
       'Enable this tool for an assistant in that assistant’s default tool settings.';
+
+  @override
+  String get httpToolBraveDescription =>
+      'Search the web with the Brave Search API. Requires an API key.';
+
+  @override
+  String get httpToolBochaDescription =>
+      'Search the web with the Bocha AI Search API. Requires an API key.';
+
+  @override
+  String get httpToolQueritDescription =>
+      'Search the web with Querit Search. Requires an API key.';
+
+  @override
+  String get httpToolSearxngDescription =>
+      'A privacy-focused, self-hosted metasearch engine that aggregates search sources. Requires an instance URL.';
+
+  @override
+  String get httpToolSearchQueryDescription => 'Search terms.';
+
+  @override
+  String get httpToolSearchCountDescription => 'Number of results to return.';
+
+  @override
+  String get httpToolSearchCountMax20Description =>
+      'Number of results to return (maximum 20).';
 
   @override
   String get mcpSseUrlLabel => 'SSE URL';
