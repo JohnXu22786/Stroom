@@ -555,7 +555,8 @@ extension ChatServiceStreamingExt on ChatService {
 
   void _releaseResponseBuffers() {
     _contentBuffer.clear();
-    _reasoningBuffer.clear();
+    // Preserve the completed reasoning for direct callers until the next
+    // request starts, matching the public `reasoningContent` getter contract.
     _lastReasoningLength = 0;
     _thinkingSignature = '';
   }
