@@ -365,11 +365,10 @@ extension _ChatPageModelsExt on _ChatPageState {
       ref.read(reasoningEnabledProvider.notifier).state =
           reasoningToggle?.enabled ?? reasoningValues.isNotEmpty;
       ref.read(reasoningEffortEnabledProvider.notifier).state = effortEnabled;
-      ref.read(reasoningEffortProvider.notifier).state =
-          effortParam != null &&
-                  (reasoningValues[effortParam.paramName]?.isNotEmpty ?? false)
-              ? reasoningValues[effortParam.paramName]!
-              : 'medium';
+      ref.read(reasoningEffortProvider.notifier).state = effortParam != null &&
+              (reasoningValues[effortParam.paramName]?.isNotEmpty ?? false)
+          ? reasoningValues[effortParam.paramName]!
+          : 'medium';
       ref.read(reasoningParamValuesProvider.notifier).state = reasoningValues;
     }
     final savedCustomValues =
@@ -390,10 +389,10 @@ extension _ChatPageModelsExt on _ChatPageState {
                           ? param.options.first
                           : param.optionOrder.isEmpty &&
                                   param.defaultValue.trim().isNotEmpty
-                                  ? param.defaultValue
-                                  : param.type == 'boolean'
-                                      ? 'true'
-                                      : '';
+                              ? param.defaultValue
+                              : param.type == 'boolean'
+                                  ? 'true'
+                                  : '';
                   if (value.isNotEmpty) values[name] = value;
                   return values;
                 },
