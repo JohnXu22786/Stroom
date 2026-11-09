@@ -210,23 +210,27 @@ void main() {
 
     await tester.tap(find.byType(FlowBlockCard).first);
     await tester.pumpAndSettle();
-    expect(find.text('Assistant: (Not set)'), findsOneWidget);
+    expect(find.text('Assistant: '), findsOneWidget);
+    expect(find.text('(Not set)'), findsOneWidget);
     await tester.tap(find.text('Close'));
     await tester.pumpAndSettle();
 
     await tester.tap(find.byType(FlowBlockCard).last);
     await tester.pumpAndSettle();
+    expect(find.text('Synthesis model: '), findsOneWidget);
     expect(
       find.text(
-        'Synthesis model: No model is selected or the model is unavailable. Select another model.',
+        'No model is selected or the model is unavailable. Select another model.',
       ),
       findsOneWidget,
     );
+    expect(find.text('Voice: '), findsOneWidget);
     expect(
-      find.text('Voice: Voice is unavailable. Select another voice.'),
+      find.text('Voice is unavailable. Select another voice.'),
       findsOneWidget,
     );
-    expect(find.text('Save folder: Root folder'), findsOneWidget);
+    expect(find.text('Save folder: '), findsOneWidget);
+    expect(find.text('Root folder'), findsOneWidget);
   });
 
   testWidgets('an initial template stays an independent unsaved draft',
