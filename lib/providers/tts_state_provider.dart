@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../l10n/app_localizations.dart';
 import 'locale_provider.dart';
 
+import '../utils/folder_operation_rollback.dart';
 import '../utils/file_manifest.dart';
 import 'provider_config.dart';
 import 'tts_provider.dart' as tts_provider_base;
@@ -228,33 +229,63 @@ class AudioRecordsNotifier extends StateNotifier<List<AudioRecord>> {
     if (existing.any((f) => f == newPath || f.startsWith('$newPath/'))) return;
 
     final records = await FileManifest.loadRecords();
-
-    // 更新 oldName 本身的记录
-    for (final r in records) {
-      if (r.folder == oldName) {
-        await FileManifest.moveRecord(r.id, newPath);
-      }
-    }
-
-    // 更新所有后代文件夹的记录
-    final oldDescendants =
-        await FileManifest.getAllDescendantFolderPaths(oldName);
-    for (final desc in oldDescendants) {
-      final suffix = desc.substring(oldName.length); // e.g., "/sub"
-      final newDescPath = '$newPath$suffix';
-      for (final r in records) {
-        if (r.folder == desc) {
-          await FileManifest.moveRecord(r.id, newDescPath);
+    final originalFolders = await FileManifest.getAllFolders();
+    final recordsToRestore = List<AudioRecord>.unmodifiable(records.where(
+        (record) =>
+            record.folder == oldName ||
+            record.folder.startsWith('${oldName}/')));
+    final rollbackFolderAncestors = <String>{};
+    await runFolderOperationWithRollback<AudioRecord>(
+      originalRecords: recordsToRestore,
+      rollbackFolderSubtrees: {oldName, newPath},
+      rollbackFolderPaths: rollbackFolderAncestors,
+      createdFolderPaths: folderOperationDestinationPaths(
+        sourceFolder: oldName,
+        destinationFolder: newPath,
+        originalFolders: originalFolders,
+        originalRecords: recordsToRestore,
+        recordFolder: (record) => record.folder,
+      ).union(rollbackFolderAncestors),
+      originalFolders: originalFolders,
+      recordId: (record) => record.id,
+      recordFolder: (record) => record.folder,
+      loadRecords: FileManifest.loadRecords,
+      getFolders: FileManifest.getAllFolders,
+      moveRecord: FileManifest.moveRecord,
+      addFolder: FileManifest.addFolder,
+      removeFolder: FileManifest.removeFolderFromCache,
+      operation: () async {
+        // 更新 oldName 本身的记录
+        for (final r in records) {
+          if (r.folder == oldName) {
+            await FileManifest.moveRecord(r.id, newPath);
+          }
         }
-      }
-      // Empty subfolders (no records) must stay in the folder cache; otherwise the old-path cleanup would drop their paths.
-      await FileManifest.addFolderPath(newDescPath);
-    }
 
-    await FileManifest.addFolderPath(newPath);
-    // 记录已全部移出，仅清理旧目录缓存（不删除任何记录/文件）
-    await FileManifest.removeFolderFromCache(oldName);
-    await loadRecords();
+        // 更新所有后代文件夹的记录
+        final oldDescendants =
+            await FileManifest.getAllDescendantFolderPaths(oldName);
+        for (final desc in oldDescendants) {
+          final suffix = desc.substring(oldName.length); // e.g., "/sub"
+          final newDescPath = '$newPath$suffix';
+          for (final r in records) {
+            if (r.folder == desc) {
+              await FileManifest.moveRecord(r.id, newDescPath);
+            }
+          }
+          // Empty subfolders (no records) must stay in the folder cache; otherwise the old-path cleanup would drop their paths.
+          await FileManifest.addFolderPath(newDescPath);
+        }
+
+        await FileManifest.addFolderPath(newPath);
+        // 记录已全部移出，仅清理旧目录缓存（不删除任何记录/文件）
+        await FileManifest.removeFolderMetadataFromCache(oldName);
+        for (final desc in oldDescendants) {
+          await FileManifest.removeFolderMetadataFromCache(desc);
+        }
+        await loadRecords();
+      },
+    );
   }
 
   /// 移动文件夹（保持层级结构，整体搬入目标文件夹）
@@ -281,43 +312,80 @@ class AudioRecordsNotifier extends StateNotifier<List<AudioRecord>> {
     if (existing.any((f) => f == newPath || f.startsWith('$newPath/'))) return;
 
     final records = await FileManifest.loadRecords();
-
-    // 移动 oldName 本身的记录到 newPath
-    for (final r in records) {
-      if (r.folder == oldName) {
-        await FileManifest.moveRecord(r.id, newPath);
-      }
-    }
-
-    // 移动所有后代文件夹的记录
-    final oldDescendants =
-        await FileManifest.getAllDescendantFolderPaths(oldName);
-    for (final desc in oldDescendants) {
-      final suffix = desc.substring(oldName.length); // e.g., "/sub"
-      final newDescPath = '$newPath$suffix';
-      for (final r in records) {
-        if (r.folder == desc) {
-          await FileManifest.moveRecord(r.id, newDescPath);
-        }
-      }
-      // Empty subfolders (no records) must stay in the folder cache; otherwise the old-path cleanup would drop their paths.
-      await FileManifest.addFolderPath(newDescPath);
-    }
-
-    // 更新文件夹缓存
-    await FileManifest.addFolderPath(newPath);
+    final originalFolders = await FileManifest.getAllFolders();
+    final recordsToRestore = List<AudioRecord>.unmodifiable(records.where(
+        (record) =>
+            record.folder == oldName ||
+            record.folder.startsWith('${oldName}/')));
+    final rollbackFolderAncestors = <String>{};
     if (targetFolderClean.isNotEmpty) {
-      await FileManifest.addFolder(targetFolderClean); // 确保目标存在
-      // 空文件夹移动不经过 moveRecord，祖先目录不会被自动跟踪，需逐级补齐
-      var ancestor = FileManifest.getParentFolderPath(targetFolderClean);
+      var ancestor = targetFolderClean;
       while (ancestor.isNotEmpty) {
-        await FileManifest.addFolder(ancestor);
+        rollbackFolderAncestors.add(ancestor);
         ancestor = FileManifest.getParentFolderPath(ancestor);
       }
     }
-    // 记录已全部移出，仅清理旧目录缓存（不删除任何记录/文件）
-    await FileManifest.removeFolderFromCache(oldName);
-    await loadRecords();
+    await runFolderOperationWithRollback<AudioRecord>(
+      originalRecords: recordsToRestore,
+      rollbackFolderSubtrees: {oldName, newPath},
+      rollbackFolderPaths: rollbackFolderAncestors,
+      createdFolderPaths: folderOperationDestinationPaths(
+        sourceFolder: oldName,
+        destinationFolder: newPath,
+        originalFolders: originalFolders,
+        originalRecords: recordsToRestore,
+        recordFolder: (record) => record.folder,
+      ).union(rollbackFolderAncestors),
+      originalFolders: originalFolders,
+      recordId: (record) => record.id,
+      recordFolder: (record) => record.folder,
+      loadRecords: FileManifest.loadRecords,
+      getFolders: FileManifest.getAllFolders,
+      moveRecord: FileManifest.moveRecord,
+      addFolder: FileManifest.addFolder,
+      removeFolder: FileManifest.removeFolderFromCache,
+      operation: () async {
+        // 移动 oldName 本身的记录到 newPath
+        for (final r in records) {
+          if (r.folder == oldName) {
+            await FileManifest.moveRecord(r.id, newPath);
+          }
+        }
+
+        // 移动所有后代文件夹的记录
+        final oldDescendants =
+            await FileManifest.getAllDescendantFolderPaths(oldName);
+        for (final desc in oldDescendants) {
+          final suffix = desc.substring(oldName.length); // e.g., "/sub"
+          final newDescPath = '$newPath$suffix';
+          for (final r in records) {
+            if (r.folder == desc) {
+              await FileManifest.moveRecord(r.id, newDescPath);
+            }
+          }
+          // Empty subfolders (no records) must stay in the folder cache; otherwise the old-path cleanup would drop their paths.
+          await FileManifest.addFolderPath(newDescPath);
+        }
+
+        // 更新文件夹缓存
+        await FileManifest.addFolderPath(newPath);
+        if (targetFolderClean.isNotEmpty) {
+          await FileManifest.addFolder(targetFolderClean); // 确保目标存在
+          // 空文件夹移动不经过 moveRecord，祖先目录不会被自动跟踪，需逐级补齐
+          var ancestor = FileManifest.getParentFolderPath(targetFolderClean);
+          while (ancestor.isNotEmpty) {
+            await FileManifest.addFolder(ancestor);
+            ancestor = FileManifest.getParentFolderPath(ancestor);
+          }
+        }
+        // 记录已全部移出，仅清理旧目录缓存（不删除任何记录/文件）
+        await FileManifest.removeFolderMetadataFromCache(oldName);
+        for (final desc in oldDescendants) {
+          await FileManifest.removeFolderMetadataFromCache(desc);
+        }
+        await loadRecords();
+      },
+    );
   }
 
   /// 复制文件夹（保持层级结构，整体复制到目标文件夹）

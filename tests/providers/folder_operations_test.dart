@@ -19,10 +19,293 @@ void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     ManifestDatabase.enableTestMode();
+    ManifestDatabase.beforeFolderInsertForTesting = null;
     FileManifest.invalidateCache();
     ImageManifest.invalidateCache();
     TextManifest.invalidateCache();
     VideoManifest.invalidateCache();
+  });
+
+  testWidgets(
+      'folder rename rolls back partial manifest failures for all types',
+      (WidgetTester t) async {
+    final now = DateTime.now();
+    await TextManifest.addRecord(TextRecord(
+        id: 'rollback_text',
+        name: 'doc',
+        hash: 'rollback_text_hash',
+        createdAt: now,
+        size: 1,
+        folder: 'old_text'));
+    await TextManifest.addRecord(TextRecord(
+        id: 'rollback_text_child',
+        name: 'child',
+        hash: 'rollback_text_child_hash',
+        createdAt: now,
+        size: 1,
+        folder: 'old_text/sub'));
+    await ImageManifest.addRecord(ImageRecord(
+        id: 'rollback_image',
+        name: 'img',
+        hash: 'rollback_image_hash',
+        format: 'png',
+        createdAt: now,
+        size: 1,
+        folder: 'old_image'));
+    await ImageManifest.addRecord(ImageRecord(
+        id: 'rollback_image_child',
+        name: 'child',
+        hash: 'rollback_image_child_hash',
+        format: 'png',
+        createdAt: now,
+        size: 1,
+        folder: 'old_image/sub'));
+    await VideoManifest.addRecord(VideoRecord(
+        id: 'rollback_video',
+        name: 'vid',
+        hash: 'rollback_video_hash',
+        format: 'mp4',
+        createdAt: now,
+        size: 1,
+        folder: 'old_video'));
+    await VideoManifest.addRecord(VideoRecord(
+        id: 'rollback_video_child',
+        name: 'child',
+        hash: 'rollback_video_child_hash',
+        format: 'mp4',
+        createdAt: now,
+        size: 1,
+        folder: 'old_video/sub'));
+    await FileManifest.addRecord(AudioRecord(
+        id: 'rollback_audio',
+        name: 'aud',
+        hash: 'rollback_audio_hash',
+        format: 'wav',
+        createdAt: now,
+        size: 1,
+        folder: 'old_audio'));
+    await FileManifest.addRecord(AudioRecord(
+        id: 'rollback_audio_child',
+        name: 'child',
+        hash: 'rollback_audio_child_hash',
+        format: 'wav',
+        createdAt: now,
+        size: 1,
+        folder: 'old_audio/sub'));
+
+    final operations = <Future<void> Function()>[
+      () => TextRecordsNotifier().renameFolder('old_text', 'new_text'),
+      () => ImageRecordsNotifier().renameFolder('old_image', 'new_image'),
+      () => VideoRecordsNotifier().renameFolder('old_video', 'new_video'),
+      () => AudioRecordsNotifier().renameFolder('old_audio', 'new_audio'),
+    ];
+    final records = <Future<List<String>> Function()>[
+      () async =>
+          (await TextManifest.loadRecords()).map((r) => r.folder).toList(),
+      () async =>
+          (await ImageManifest.loadRecords()).map((r) => r.folder).toList(),
+      () async =>
+          (await VideoManifest.loadRecords()).map((r) => r.folder).toList(),
+      () async =>
+          (await FileManifest.loadRecords()).map((r) => r.folder).toList(),
+    ];
+    final folderSets = <Future<Set<String>> Function()>[
+      TextManifest.getAllFolders,
+      ImageManifest.getAllFolders,
+      VideoManifest.getAllFolders,
+      FileManifest.getAllFolders,
+    ];
+
+    for (var i = 0; i < operations.length; i++) {
+      var injected = false;
+      ManifestDatabase.beforeFolderInsertForTesting = (path) {
+        if (!injected && path.startsWith('new_') && path.endsWith('/sub')) {
+          injected = true;
+          throw StateError('injected folder persistence failure');
+        }
+      };
+      await expectLater(operations[i](), throwsStateError);
+      ManifestDatabase.beforeFolderInsertForTesting = null;
+      expect(injected, isTrue);
+      expect(
+          (await records[i]()).toSet(),
+          containsAll([
+            'old_${['text', 'image', 'video', 'audio'][i]}',
+            'old_${['text', 'image', 'video', 'audio'][i]}/sub'
+          ]));
+      expect((await folderSets[i]()).any((folder) => folder.startsWith('new_')),
+          isFalse);
+    }
+  });
+
+  testWidgets('folder move rolls back partial manifest failures for all types',
+      (WidgetTester t) async {
+    final now = DateTime.now();
+    await TextManifest.addRecord(TextRecord(
+        id: 'move_rollback_text',
+        name: 'doc',
+        hash: 'move_rollback_text_hash',
+        createdAt: now,
+        size: 1,
+        folder: 'old_text'));
+    await TextManifest.addRecord(TextRecord(
+        id: 'move_rollback_text_child',
+        name: 'child',
+        hash: 'move_rollback_text_child_hash',
+        createdAt: now,
+        size: 1,
+        folder: 'old_text/sub'));
+    await ImageManifest.addRecord(ImageRecord(
+        id: 'move_rollback_image',
+        name: 'img',
+        hash: 'move_rollback_image_hash',
+        format: 'png',
+        createdAt: now,
+        size: 1,
+        folder: 'old_image'));
+    await ImageManifest.addRecord(ImageRecord(
+        id: 'move_rollback_image_child',
+        name: 'child',
+        hash: 'move_rollback_image_child_hash',
+        format: 'png',
+        createdAt: now,
+        size: 1,
+        folder: 'old_image/sub'));
+    await VideoManifest.addRecord(VideoRecord(
+        id: 'move_rollback_video',
+        name: 'vid',
+        hash: 'move_rollback_video_hash',
+        format: 'mp4',
+        createdAt: now,
+        size: 1,
+        folder: 'old_video'));
+    await VideoManifest.addRecord(VideoRecord(
+        id: 'move_rollback_video_child',
+        name: 'child',
+        hash: 'move_rollback_video_child_hash',
+        format: 'mp4',
+        createdAt: now,
+        size: 1,
+        folder: 'old_video/sub'));
+    await FileManifest.addRecord(AudioRecord(
+        id: 'move_rollback_audio',
+        name: 'aud',
+        hash: 'move_rollback_audio_hash',
+        format: 'wav',
+        createdAt: now,
+        size: 1,
+        folder: 'old_audio'));
+    await FileManifest.addRecord(AudioRecord(
+        id: 'move_rollback_audio_child',
+        name: 'child',
+        hash: 'move_rollback_audio_child_hash',
+        format: 'wav',
+        createdAt: now,
+        size: 1,
+        folder: 'old_audio/sub'));
+
+    final operations = <Future<void> Function()>[
+      () => TextRecordsNotifier().moveFolder('old_text', 'new_text_parent'),
+      () => ImageRecordsNotifier().moveFolder('old_image', 'new_image_parent'),
+      () => VideoRecordsNotifier().moveFolder('old_video', 'new_video_parent'),
+      () => AudioRecordsNotifier().moveFolder('old_audio', 'new_audio_parent'),
+    ];
+    final records = <Future<List<String>> Function()>[
+      () async =>
+          (await TextManifest.loadRecords()).map((r) => r.folder).toList(),
+      () async =>
+          (await ImageManifest.loadRecords()).map((r) => r.folder).toList(),
+      () async =>
+          (await VideoManifest.loadRecords()).map((r) => r.folder).toList(),
+      () async =>
+          (await FileManifest.loadRecords()).map((r) => r.folder).toList(),
+    ];
+    final folderSets = <Future<Set<String>> Function()>[
+      TextManifest.getAllFolders,
+      ImageManifest.getAllFolders,
+      VideoManifest.getAllFolders,
+      FileManifest.getAllFolders,
+    ];
+
+    for (var i = 0; i < operations.length; i++) {
+      final source = ['text', 'image', 'video', 'audio'][i];
+      var injected = false;
+      ManifestDatabase.beforeFolderInsertForTesting = (path) {
+        if (!injected && path.startsWith('new_') && path.endsWith('/sub')) {
+          injected = true;
+          throw StateError('injected folder persistence failure');
+        }
+      };
+      await expectLater(operations[i](), throwsStateError);
+      ManifestDatabase.beforeFolderInsertForTesting = null;
+      expect(injected, isTrue);
+      expect((await records[i]()).toSet(),
+          containsAll(['old_$source', 'old_$source/sub']));
+      expect((await folderSets[i]()).any((folder) => folder.startsWith('new_')),
+          isFalse);
+    }
+  });
+
+  test('metadata-only folder cleanup preserves concurrent record paths',
+      () async {
+    final now = DateTime.now();
+    await TextManifest.addRecord(TextRecord(
+      id: 'metadata_cleanup_text',
+      name: 'doc',
+      hash: 'metadata_cleanup_text_hash',
+      createdAt: now,
+      size: 1,
+      folder: 'shared/text',
+    ));
+    await ImageManifest.addRecord(ImageRecord(
+      id: 'metadata_cleanup_image',
+      name: 'img',
+      hash: 'metadata_cleanup_image_hash',
+      format: 'png',
+      createdAt: now,
+      size: 1,
+      folder: 'shared/image',
+    ));
+    await VideoManifest.addRecord(VideoRecord(
+      id: 'metadata_cleanup_video',
+      name: 'vid',
+      hash: 'metadata_cleanup_video_hash',
+      format: 'mp4',
+      createdAt: now,
+      size: 1,
+      folder: 'shared/video',
+    ));
+    await FileManifest.addRecord(AudioRecord(
+      id: 'metadata_cleanup_audio',
+      name: 'aud',
+      hash: 'metadata_cleanup_audio_hash',
+      format: 'wav',
+      createdAt: now,
+      size: 1,
+      folder: 'shared/audio',
+    ));
+    await TextManifest.addFolder('shared/concurrent_empty');
+    await ImageManifest.addFolder('shared/concurrent_empty');
+    await VideoManifest.addFolder('shared/concurrent_empty');
+    await FileManifest.addFolder('shared/concurrent_empty');
+
+    await TextManifest.removeFolderMetadataFromCache('shared');
+    await ImageManifest.removeFolderMetadataFromCache('shared');
+    await VideoManifest.removeFolderMetadataFromCache('shared');
+    await FileManifest.removeFolderMetadataFromCache('shared');
+
+    expect((await TextManifest.loadRecords()).single.folder, 'shared/text');
+    expect((await ImageManifest.loadRecords()).single.folder, 'shared/image');
+    expect((await VideoManifest.loadRecords()).single.folder, 'shared/video');
+    expect((await FileManifest.loadRecords()).single.folder, 'shared/audio');
+    expect(await TextManifest.getAllFolders(),
+        contains('shared/concurrent_empty'));
+    expect(await ImageManifest.getAllFolders(),
+        contains('shared/concurrent_empty'));
+    expect(await VideoManifest.getAllFolders(),
+        contains('shared/concurrent_empty'));
+    expect(await FileManifest.getAllFolders(),
+        contains('shared/concurrent_empty'));
   });
 
   // ====================================================================
