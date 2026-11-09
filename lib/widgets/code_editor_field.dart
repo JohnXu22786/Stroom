@@ -363,6 +363,7 @@ class _CodeEditorFieldState extends State<CodeEditorField> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     final lineCount = widget.controller.text.split('\n').length;
     final digitCount = lineCount.toString().length;
     final lineNumWidth = (digitCount * 8.0 + 20.0).clamp(36.0, 80.0);
@@ -400,7 +401,7 @@ class _CodeEditorFieldState extends State<CodeEditorField> {
                             style: TextStyle(
                               fontFamily: 'monospace',
                               fontSize: 12,
-                              color: Colors.grey.shade500,
+                              color: colorScheme.onSurfaceVariant,
                               height: 1.3,
                             ),
                           ),
@@ -413,7 +414,7 @@ class _CodeEditorFieldState extends State<CodeEditorField> {
             ),
             SizedBox(
               height: height,
-              child: Container(width: 1, color: Colors.grey.shade300),
+              child: Container(width: 1, color: colorScheme.outlineVariant),
             ),
             // 可编辑文本区
             Expanded(
@@ -435,7 +436,7 @@ class _CodeEditorFieldState extends State<CodeEditorField> {
                   hintStyle: TextStyle(
                     fontFamily: 'monospace',
                     fontSize: 13,
-                    color: Colors.grey.shade400,
+                    color: colorScheme.onSurfaceVariant,
                   ),
                   border: InputBorder.none,
                   contentPadding: const EdgeInsets.fromLTRB(8, 11, 8, 12),
@@ -580,8 +581,10 @@ Future<void> showJsonValueEditorDialog(
                 Expanded(
                   child: Container(
                     decoration: BoxDecoration(
-                      color: const Color(0xfff5f5f5),
-                      border: Border.all(color: Colors.grey.shade300),
+                      color: Theme.of(ctx).colorScheme.surfaceContainerHigh,
+                      border: Border.all(
+                        color: Theme.of(ctx).colorScheme.outlineVariant,
+                      ),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     clipBehavior: Clip.antiAlias,
@@ -604,16 +607,21 @@ Future<void> showJsonValueEditorDialog(
                         vertical: 8,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.red.shade50,
+                        color: Theme.of(ctx).colorScheme.errorContainer,
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.red.shade200),
+                        border: Border.all(
+                          color: Theme.of(ctx)
+                              .colorScheme
+                              .error
+                              .withValues(alpha: 0.35),
+                        ),
                       ),
                       child: Row(
                         children: [
                           Icon(
                             Icons.error_outline,
                             size: 16,
-                            color: Colors.red.shade700,
+                            color: Theme.of(ctx).colorScheme.onErrorContainer,
                           ),
                           const SizedBox(width: 8),
                           Expanded(
@@ -621,7 +629,7 @@ Future<void> showJsonValueEditorDialog(
                               liveError!,
                               style: TextStyle(
                                 fontSize: 12,
-                                color: Colors.red.shade800,
+                                color: Theme.of(ctx).colorScheme.onErrorContainer,
                                 fontFamily: 'monospace',
                               ),
                             ),
@@ -639,7 +647,7 @@ Future<void> showJsonValueEditorDialog(
                         AppLocalizations.of(ctx)!.codeEditorInvalidJson,
                         style: TextStyle(
                           fontSize: 11,
-                          color: Colors.red.shade400,
+                          color: Theme.of(ctx).colorScheme.error,
                         ),
                       ),
                     const Spacer(),

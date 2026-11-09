@@ -332,7 +332,7 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
                 child: Text(
                   AppLocalizations.of(context)!
                       .appMediaClearSelection(_selectedItems.length),
-                  style: const TextStyle(color: Colors.red),
+                  style: TextStyle(color: cs.primary),
                 ),
               ),
           ],
@@ -489,7 +489,7 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
           child: Row(
             children: [
-              const Icon(Icons.arrow_back, size: 20, color: Colors.blue),
+              Icon(Icons.arrow_back, size: 20, color: cs.primary),
               const SizedBox(width: 12),
               Text(
                 parent.isEmpty
@@ -497,12 +497,12 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
                     : AppLocalizations.of(context)!.appMediaParentFolder(
                         FolderPathUtils.getFolderBaseName(parent),
                       ),
-                style: const TextStyle(fontSize: 15, color: Colors.blue),
+                style: TextStyle(fontSize: 15, color: cs.primary),
               ),
               const Spacer(),
               Text(
                 FolderPathUtils.getFolderBaseName(_currentFolder),
-                style: TextStyle(fontSize: 13, color: Colors.grey[500]),
+                style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
               ),
             ],
           ),
@@ -548,7 +548,7 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              const Icon(Icons.chevron_right, color: Colors.grey),
+              Icon(Icons.chevron_right, color: cs.onSurfaceVariant),
             ],
           ),
         ),
@@ -625,7 +625,7 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
                 ),
               ),
               if (!showCheckbox)
-                const Icon(Icons.chevron_right, color: Colors.grey),
+                Icon(Icons.chevron_right, color: cs.onSurfaceVariant),
             ],
           ),
         ),

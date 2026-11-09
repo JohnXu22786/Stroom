@@ -312,14 +312,14 @@ class TaskFlowListPage extends ConsumerWidget {
               },
             ),
             ListTile(
-              leading: const Icon(
+              leading: Icon(
                 Icons.delete_outline,
                 size: 22,
-                color: Colors.red,
+                color: Theme.of(context).colorScheme.error,
               ),
               title: Text(
                 AppLocalizations.of(context)!.taskFlowDelete,
-                style: const TextStyle(color: Colors.red),
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
               ),
               onTap: () {
                 Navigator.pop(ctx);
@@ -349,7 +349,9 @@ class TaskFlowListPage extends ConsumerWidget {
                         },
                         child: Text(
                           AppLocalizations.of(context)!.taskFlowDelete,
-                          style: TextStyle(color: Colors.red),
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.error,
+                          ),
                         ),
                       ),
                     ],

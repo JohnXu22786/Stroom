@@ -239,7 +239,7 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
                 onPressed: _clearSelection,
                 child: Text(
                   l10n.appMediaClearSelection(_selectedItems.length),
-                  style: const TextStyle(color: Colors.red),
+                  style: TextStyle(color: cs.primary),
                 ),
               ),
           ],
@@ -435,7 +435,7 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
           child: Row(
             children: [
-              const Icon(Icons.arrow_back, size: 20, color: Colors.blue),
+              Icon(Icons.arrow_back, size: 20, color: cs.primary),
               const SizedBox(width: 12),
               Text(
                 parentFolder.isEmpty
@@ -443,12 +443,12 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
                     : AppLocalizations.of(context)!.appMediaParentFolder(
                         FolderPathUtils.getFolderBaseName(parentFolder),
                       ),
-                style: TextStyle(fontSize: 15, color: Colors.blue[700]),
+                style: TextStyle(fontSize: 15, color: cs.primary),
               ),
               const Spacer(),
               Text(
                 FolderPathUtils.getFolderBaseName(currentFolder),
-                style: TextStyle(fontSize: 13, color: Colors.grey[500]),
+                style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
               ),
             ],
           ),
@@ -494,7 +494,7 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              const Icon(Icons.chevron_right, color: Colors.grey),
+              Icon(Icons.chevron_right, color: cs.onSurfaceVariant),
             ],
           ),
         ),
@@ -566,13 +566,19 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
                     Row(
                       children: [
                         if (record.folder.isNotEmpty) ...[
-                          Icon(Icons.folder, size: 12, color: Colors.grey[400]),
+                          Icon(
+                            Icons.folder,
+                            size: 12,
+                            color: cs.onSurfaceVariant,
+                          ),
                           const SizedBox(width: 3),
                           Flexible(
                             child: Text(
                               record.folder,
                               style: TextStyle(
-                                  fontSize: 12, color: Colors.grey[400]),
+                                fontSize: 12,
+                                color: cs.onSurfaceVariant,
+                              ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -582,15 +588,17 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
                             width: 3,
                             height: 3,
                             decoration: BoxDecoration(
-                                color: Colors.grey[400]!,
+                                color: cs.onSurfaceVariant,
                                 shape: BoxShape.circle),
                           ),
                           const SizedBox(width: 6),
                         ],
                         Text(
                           formatFileSize(record.size),
-                          style:
-                              TextStyle(fontSize: 12, color: Colors.grey[600]),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: cs.onSurfaceVariant,
+                          ),
                         ),
                       ],
                     ),
@@ -693,6 +701,7 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
   }
 
   Widget _buildFileIcon(FileRecord record) {
+    final cs = Theme.of(context).colorScheme;
     IconData icon;
     Color color;
 
@@ -708,7 +717,7 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
         color = Colors.green;
       default:
         icon = Icons.insert_drive_file_outlined;
-        color = Colors.grey;
+        color = cs.onSurfaceVariant;
     }
 
     return Center(
@@ -717,8 +726,9 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
   }
 
   Widget _defaultIcon() {
+    final cs = Theme.of(context).colorScheme;
     return Center(
-      child: Icon(Icons.image, color: Colors.grey[400], size: 22),
+      child: Icon(Icons.image, color: cs.onSurfaceVariant, size: 22),
     );
   }
 
