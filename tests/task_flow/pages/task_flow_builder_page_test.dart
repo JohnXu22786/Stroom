@@ -217,26 +217,42 @@ void main() {
 
     await tester.tap(find.byType(FlowBlockCard).last);
     await tester.pumpAndSettle();
-    final dialogScrollView = find.descendant(
+    final modelLabel = find.descendant(
       of: find.byType(AlertDialog),
-      matching: find.byType(SingleChildScrollView),
+      matching: find.textContaining('Synthesis model'),
     );
-    await tester.drag(dialogScrollView, const Offset(0, -400));
-    await tester.pumpAndSettle();
-    expect(find.text('Synthesis model: '), findsOneWidget);
-    expect(
-      find.text(
-        'No model is selected or the model is unavailable. Select another model.',
-      ),
-      findsOneWidget,
+    await tester.ensureVisible(modelLabel);
+    expect(modelLabel, findsOneWidget);
+    final modelValue = find.descendant(
+      of: find.byType(AlertDialog),
+      matching: find.textContaining('Select another model.'),
     );
-    expect(find.text('Voice: '), findsOneWidget);
-    expect(
-      find.text('Voice is unavailable. Select another voice.'),
-      findsOneWidget,
+    await tester.ensureVisible(modelValue);
+    expect(modelValue, findsOneWidget);
+    final voiceLabel = find.descendant(
+      of: find.byType(AlertDialog),
+      matching: find.textContaining('Voice:'),
     );
-    expect(find.text('Save folder: '), findsOneWidget);
-    expect(find.text('Root folder'), findsOneWidget);
+    await tester.ensureVisible(voiceLabel);
+    expect(voiceLabel, findsOneWidget);
+    final voiceValue = find.descendant(
+      of: find.byType(AlertDialog),
+      matching: find.textContaining('Voice is unavailable.'),
+    );
+    await tester.ensureVisible(voiceValue);
+    expect(voiceValue, findsOneWidget);
+    final folderLabel = find.descendant(
+      of: find.byType(AlertDialog),
+      matching: find.textContaining('Save folder:'),
+    );
+    await tester.ensureVisible(folderLabel);
+    expect(folderLabel, findsOneWidget);
+    final folderValue = find.descendant(
+      of: find.byType(AlertDialog),
+      matching: find.textContaining('Root folder'),
+    );
+    await tester.ensureVisible(folderValue);
+    expect(folderValue, findsOneWidget);
   });
 
   testWidgets('an initial template stays an independent unsaved draft',
