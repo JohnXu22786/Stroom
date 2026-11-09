@@ -138,6 +138,7 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
   List<T> _records = [];
   Set<String> _folders = {};
   bool _loading = true;
+  String? _loadError;
   String _currentFolder = '';
 
   // Multi-selection state: key = recordId, value = (fileName, bytes)
@@ -158,6 +159,12 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
   }
 
   Future<void> _loadData() async {
+    if (mounted) {
+      setState(() {
+        _loading = true;
+        _loadError = null;
+      });
+    }
     try {
       final records = await widget.config.loadRecords();
       final folders = await widget.config.loadFolders();
@@ -166,11 +173,15 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
           _records = List<T>.from(records);
           _folders = Set<String>.from(folders);
           _loading = false;
+          _loadError = null;
         });
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _loading = false);
+        setState(() {
+          _loading = false;
+          _loadError = e.toString();
+        });
       }
     }
   }
@@ -435,6 +446,31 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
   Widget _buildContent(ColorScheme cs) {
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_loadError case final error?) {
+      final l10n = AppLocalizations.of(context)!;
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                l10n.appMediaLoadError(error),
+                textAlign: TextAlign.center,
+                style: TextStyle(color: cs.error),
+              ),
+              const SizedBox(height: 12),
+              TextButton.icon(
+                onPressed: _loadData,
+                icon: const Icon(Icons.refresh),
+                label: Text(l10n.actionRetry),
+              ),
+            ],
+          ),
+        ),
+      );
     }
 
     final subFolders = _subFolders;
