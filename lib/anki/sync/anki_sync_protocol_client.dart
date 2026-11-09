@@ -7,6 +7,7 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
+
 import '../../l10n/app_localizations.dart';
 
 /// Anki's supported legacy multipart protocol. Version 10 remains accepted by
@@ -43,28 +44,27 @@ class AnkiSyncProtocolClient {
     required Duration requestTimeout,
     required bool allowAnkiWebMetaRedirect,
     String? hostKey,
-  })  : _configuredSyncRoot = syncRoot,
-        _client = client,
-        _ownsClient = ownsClient,
-        _allowAnkiWebMetaRedirect = allowAnkiWebMetaRedirect,
-        _sessionKey = sessionKey,
-        _requestTimeout = requestTimeout,
-        _hostKey = hostKey;
+  }) : _configuredSyncRoot = syncRoot,
+       _client = client,
+       _ownsClient = ownsClient,
+       _allowAnkiWebMetaRedirect = allowAnkiWebMetaRedirect,
+       _sessionKey = sessionKey,
+       _requestTimeout = requestTimeout,
+       _hostKey = hostKey;
 
   factory AnkiSyncProtocolClient.ankiWeb({
     http.Client? client,
     String? hostKey,
     Duration requestTimeout = _timeout,
-  }) =>
-      AnkiSyncProtocolClient._(
-        syncRoot: ankiWebSyncRoot,
-        client: client ?? http.Client(),
-        ownsClient: client == null,
-        sessionKey: _newSessionKey(),
-        requestTimeout: requestTimeout,
-        allowAnkiWebMetaRedirect: true,
-        hostKey: hostKey,
-      );
+  }) => AnkiSyncProtocolClient._(
+    syncRoot: ankiWebSyncRoot,
+    client: client ?? http.Client(),
+    ownsClient: client == null,
+    sessionKey: _newSessionKey(),
+    requestTimeout: requestTimeout,
+    allowAnkiWebMetaRedirect: true,
+    hostKey: hostKey,
+  );
 
   factory AnkiSyncProtocolClient.selfHosted({
     required String endpoint,
@@ -123,7 +123,10 @@ class AnkiSyncProtocolClient {
     final decoded = _decodeJson(response, '登录响应无法解析');
     final key = decoded['key'];
     if (key is! String || key.isEmpty) {
-      throw const AnkiSyncException('服务器响应中没有同步密钥');
+      throw const AnkiSyncException.appGenerated(
+        '服务器响应中没有同步密钥',
+        failureCode: AnkiSyncFailureCode.protocolFailure,
+      );
     }
     _hostKey = key;
     return key;
@@ -162,18 +165,29 @@ class AnkiSyncProtocolClient {
         precompressedPayloadFile: compressedFile,
       );
       if (utf8.decode(response, allowMalformed: true).trim() != 'OK') {
-        throw const AnkiSyncException('服务器没有接受 collection 上传');
+        throw const AnkiSyncException.appGenerated(
+          '服务器没有接受 collection 上传',
+          failureCode: AnkiSyncFailureCode.protocolFailure,
+        );
       }
     } on AnkiSyncException {
       rethrow;
     } catch (_) {
-      throw const AnkiSyncException('无法读取本地 collection 上传文件');
+      throw const AnkiSyncException.appGenerated(
+        '无法读取本地 collection 上传文件',
+        failureCode: AnkiSyncFailureCode.localFileFailure,
+      );
     } finally {
-      if (stagingDirectory != null && await stagingDirectory.exists()) {
+      if (stagingDirectory != null) {
         try {
-          await stagingDirectory.delete(recursive: true);
+          if (await stagingDirectory.exists()) {
+            await stagingDirectory.delete(recursive: true);
+          }
         } catch (_) {
-          throw const AnkiSyncException('无法清理 collection 上传暂存文件');
+          throw const AnkiSyncException.appGenerated(
+            '无法清理 collection 上传暂存文件',
+            failureCode: AnkiSyncFailureCode.localFileFailure,
+          );
         }
       }
     }
@@ -214,21 +228,34 @@ class AnkiSyncProtocolClient {
     try {
       return jsonDecode(utf8.decode(bytes));
     } catch (_) {
-      throw const AnkiSyncException('同步服务器响应无法解析');
+      throw const AnkiSyncException.appGenerated(
+        '同步服务器响应无法解析',
+        failureCode: AnkiSyncFailureCode.protocolFailure,
+      );
     }
   }
 
   Future<dynamic> requestMediaJson(String method, Object payload) async {
     final envelope = await requestJson('../msync/$method', payload);
     if (envelope is! Map<String, dynamic>) {
-      throw const AnkiSyncException('媒体同步服务器响应无法解析');
+      throw const AnkiSyncException.appGenerated(
+        '媒体同步服务器响应无法解析',
+        failureCode: AnkiSyncFailureCode.protocolFailure,
+      );
     }
     final error = envelope['err'];
     if (error is String && error.isNotEmpty) {
-      throw const AnkiSyncException('媒体同步服务器拒绝了请求');
+      throw const AnkiSyncException.appGenerated(
+        '媒体同步服务器拒绝了请求',
+        failureCode: AnkiSyncFailureCode.protocolFailure,
+      );
     }
     final data = envelope['data'];
-    if (data == null) throw const AnkiSyncException('媒体同步服务器响应无法解析');
+    if (data == null)
+      throw const AnkiSyncException.appGenerated(
+        '媒体同步服务器响应无法解析',
+        failureCode: AnkiSyncFailureCode.protocolFailure,
+      );
     return data;
   }
 
@@ -257,7 +284,10 @@ class AnkiSyncProtocolClient {
     final envelope = _decodeJson(bytes, '媒体上传响应无法解析');
     final error = envelope['err'];
     if (error is String && error.isNotEmpty) {
-      throw const AnkiSyncException('媒体同步服务器拒绝了上传');
+      throw const AnkiSyncException.appGenerated(
+        '媒体同步服务器拒绝了上传',
+        failureCode: AnkiSyncFailureCode.protocolFailure,
+      );
     }
     final data = envelope['data'];
     if (data is Map<String, dynamic>) return data;
@@ -268,16 +298,16 @@ class AnkiSyncProtocolClient {
         'currentUsn': (data[1] as num).toInt(),
       };
     }
-    throw const AnkiSyncException('媒体上传响应无法解析');
+    throw const AnkiSyncException.appGenerated(
+      '媒体上传响应无法解析',
+      failureCode: AnkiSyncFailureCode.protocolFailure,
+    );
   }
 
   Future<List<int>> downloadMediaZip(List<String> filenames) async {
-    return requestMediaData(
-        'downloadFiles',
-        {
-          'files': filenames,
-        },
-        maxResponseBytes: maxMediaArchiveBytes);
+    return requestMediaData('downloadFiles', {
+      'files': filenames,
+    }, maxResponseBytes: maxMediaArchiveBytes);
   }
 
   Future<List<int>> _send(
@@ -291,7 +321,11 @@ class AnkiSyncProtocolClient {
     File? responseFile,
     String maxResponseExceededMessage = '媒体 ZIP 压缩数据超过 128 MB',
   }) async {
-    if (_closed) throw const AnkiSyncException('同步连接已关闭');
+    if (_closed)
+      throw const AnkiSyncException.appGenerated(
+        '同步连接已关闭',
+        failureCode: AnkiSyncFailureCode.requestFailure,
+      );
     final abortRequest = Completer<void>();
     var requestTimedOut = false;
     Timer? requestTimer;
@@ -303,15 +337,16 @@ class AnkiSyncProtocolClient {
       });
     }
 
-    final request = _ProgressAwareMultipartRequest(
-      _endpointFor(method),
-      abortTrigger: abortRequest.future,
-      onProgress: resetRequestTimer,
-    )
-      ..followRedirects = false
-      ..fields['c'] = compress ? '1' : '0'
-      ..fields['k'] = hostKey ?? _hostKey ?? ''
-      ..fields['s'] = _sessionKey;
+    final request =
+        _ProgressAwareMultipartRequest(
+            _endpointFor(method),
+            abortTrigger: abortRequest.future,
+            onProgress: resetRequestTimer,
+          )
+          ..followRedirects = false
+          ..fields['c'] = compress ? '1' : '0'
+          ..fields['k'] = hostKey ?? _hostKey ?? ''
+          ..fields['s'] = _sessionKey;
     final requestBytes = precompressedPayloadFile == null
         ? (compress ? gzip.encode(payload) : payload)
         : null;
@@ -346,7 +381,10 @@ class AnkiSyncProtocolClient {
             streamed.headers['location'],
           );
           if (redirectedRoot == null) {
-            throw const AnkiSyncException('AnkiWeb 同步重定向地址无效');
+            throw const AnkiSyncException.appGenerated(
+              'AnkiWeb 同步重定向地址无效',
+              failureCode: AnkiSyncFailureCode.protocolFailure,
+            );
           }
           _redirectedSyncRoot = redirectedRoot;
           return await _send(
@@ -361,7 +399,11 @@ class AnkiSyncProtocolClient {
             maxResponseExceededMessage: maxResponseExceededMessage,
           );
         }
-        throw AnkiSyncException(_safeHttpError(streamed.statusCode));
+        throw AnkiSyncException.appGenerated(
+          _safeHttpError(streamed.statusCode),
+          failureCode: AnkiSyncFailureCode.serverHttpError,
+          diagnosticValue: streamed.statusCode,
+        );
       }
       return await _readResponse(
         streamed,
@@ -372,20 +414,43 @@ class AnkiSyncProtocolClient {
     } on AnkiSyncException {
       rethrow;
     } on TimeoutException {
-      throw const AnkiSyncException('连接超时，请检查网络和服务器地址');
+      throw const AnkiSyncException.appGenerated(
+        '连接超时，请检查网络和服务器地址',
+        failureCode: AnkiSyncFailureCode.connectionTimeout,
+      );
     } on http.RequestAbortedException {
       if (requestTimedOut) {
-        throw const AnkiSyncException('连接超时，请检查网络和服务器地址');
+        throw const AnkiSyncException.appGenerated(
+          '连接超时，请检查网络和服务器地址',
+          failureCode: AnkiSyncFailureCode.connectionTimeout,
+        );
       }
-      throw const AnkiSyncException('同步请求失败，请检查服务器和网络');
+      throw const AnkiSyncException.appGenerated(
+        '同步请求失败，请检查服务器和网络',
+        failureCode: AnkiSyncFailureCode.requestFailure,
+      );
     } on HandshakeException {
-      throw const AnkiSyncException('TLS 证书验证失败');
+      throw const AnkiSyncException.appGenerated(
+        'TLS 证书验证失败',
+        failureCode: AnkiSyncFailureCode.tlsFailure,
+      );
     } on SocketException {
-      throw const AnkiSyncException('无法连接到同步服务器');
+      throw const AnkiSyncException.appGenerated(
+        '无法连接到同步服务器',
+        failureCode: AnkiSyncFailureCode.connectionFailure,
+      );
+    } on FileSystemException {
+      throw const AnkiSyncException.appGenerated(
+        '无法读取或写入本地同步文件',
+        failureCode: AnkiSyncFailureCode.localFileFailure,
+      );
     } catch (_) {
       // Never include request/response bodies here; authentication responses
       // may contain information that should not be placed in logs or UI.
-      throw const AnkiSyncException('同步请求失败，请检查服务器和网络');
+      throw const AnkiSyncException.appGenerated(
+        '同步请求失败，请检查服务器和网络',
+        failureCode: AnkiSyncFailureCode.requestFailure,
+      );
     } finally {
       requestTimer?.cancel();
     }
@@ -410,7 +475,11 @@ class AnkiSyncProtocolClient {
         declaredLength != null &&
         declaredLength > maxBytes) {
       await response.stream.listen((_) {}).cancel();
-      throw AnkiSyncException(maxBytesExceededMessage);
+      throw AnkiSyncException.appGenerated(
+        maxBytesExceededMessage,
+        failureCode: AnkiSyncFailureCode.responseTooLarge,
+        diagnosticValue: _responseLimitMb(maxBytesExceededMessage),
+      );
     }
 
     final output = outputFile == null ? BytesBuilder(copy: false) : null;
@@ -439,7 +508,13 @@ class AnkiSyncProtocolClient {
         (chunk) {
           if (completed.isCompleted) return;
           if (maxBytes != null && chunk.length > maxBytes - length) {
-            completed.completeError(AnkiSyncException(maxBytesExceededMessage));
+            completed.completeError(
+              AnkiSyncException.appGenerated(
+                maxBytesExceededMessage,
+                failureCode: AnkiSyncFailureCode.responseTooLarge,
+                diagnosticValue: _responseLimitMb(maxBytesExceededMessage),
+              ),
+            );
             return;
           }
           length += chunk.length;
@@ -474,18 +549,26 @@ class AnkiSyncProtocolClient {
 
   Uri _endpointFor(String method) {
     final isMediaEndpoint = method.startsWith('../msync/');
-    final endpointName =
-        isMediaEndpoint ? method.substring('../msync/'.length) : method;
+    final endpointName = isMediaEndpoint
+        ? method.substring('../msync/'.length)
+        : method;
     if (!RegExp(r'^[A-Za-z][A-Za-z0-9]*$').hasMatch(endpointName)) {
-      throw const AnkiSyncException('同步请求路径无效');
+      throw const AnkiSyncException.appGenerated(
+        '同步请求路径无效',
+        failureCode: AnkiSyncFailureCode.protocolFailure,
+      );
     }
 
     final endpoint = syncRoot.resolve(method);
-    final endpointRoot =
-        isMediaEndpoint ? syncRoot.resolve('../msync/') : syncRoot;
+    final endpointRoot = isMediaEndpoint
+        ? syncRoot.resolve('../msync/')
+        : syncRoot;
     if (endpoint.origin != syncRoot.origin ||
         !endpoint.path.startsWith(endpointRoot.path)) {
-      throw const AnkiSyncException('同步请求路径无效');
+      throw const AnkiSyncException.appGenerated(
+        '同步请求路径无效',
+        failureCode: AnkiSyncFailureCode.protocolFailure,
+      );
     }
     return endpoint;
   }
@@ -515,11 +598,18 @@ class AnkiSyncProtocolClient {
     } catch (_) {
       // Return a generic message instead of rendering raw server content.
     }
-    throw AnkiSyncException(message);
+    throw AnkiSyncException.appGenerated(
+      message,
+      failureCode: AnkiSyncFailureCode.protocolFailure,
+    );
   }
 
   void _requireAuthenticated() {
-    if (!isAuthenticated) throw const AnkiSyncException('请先登录同步账户');
+    if (!isAuthenticated)
+      throw const AnkiSyncException.appGenerated(
+        '请先登录同步账户',
+        failureCode: AnkiSyncFailureCode.loginRequired,
+      );
   }
 
   void close() {
@@ -532,15 +622,22 @@ class AnkiSyncProtocolClient {
     if (uri == null ||
         !uri.hasAuthority ||
         (uri.scheme != 'http' && uri.scheme != 'https')) {
-      throw const AnkiSyncException('请输入有效的 HTTP 或 HTTPS 服务器地址');
+      throw const AnkiSyncException.appGenerated(
+        '请输入有效的 HTTP 或 HTTPS 服务器地址',
+        failureCode: AnkiSyncFailureCode.invalidServerAddress,
+      );
     }
     final host = uri.host.toLowerCase();
     final address = InternetAddress.tryParse(host);
-    final isLoopback = host == 'localhost' ||
+    final isLoopback =
+        host == 'localhost' ||
         host.endsWith('.localhost') ||
         address?.isLoopback == true;
     if (uri.scheme == 'http' && !isLoopback) {
-      throw const AnkiSyncException('自建远程服务器必须使用 HTTPS');
+      throw const AnkiSyncException.appGenerated(
+        '自建远程服务器必须使用 HTTPS',
+        failureCode: AnkiSyncFailureCode.httpsRequired,
+      );
     }
     var path = uri.path;
     if (path.endsWith('/sync/')) {
@@ -580,6 +677,11 @@ class AnkiSyncProtocolClient {
       List.generate(20, (_) => chars.codeUnitAt(random.nextInt(chars.length))),
     );
   }
+}
+
+int _responseLimitMb(String message) {
+  final match = RegExp(r'(\d+)\s*MB').firstMatch(message);
+  return int.tryParse(match?.group(1) ?? '') ?? 0;
 }
 
 class AnkiRemoteMeta {
@@ -623,44 +725,75 @@ class AnkiRemoteMeta {
 int _requiredInt(Map<String, dynamic> json, String field) {
   final value = json[field];
   if (value is int) return value;
-  throw const AnkiSyncException('同步状态响应无效');
+  throw const AnkiSyncException.appGenerated(
+    '同步状态响应无效',
+    failureCode: AnkiSyncFailureCode.protocolFailure,
+  );
 }
 
 String _requiredString(Map<String, dynamic> json, String field) {
   final value = json[field];
   if (value is String) return value;
-  throw const AnkiSyncException('同步状态响应无效');
+  throw const AnkiSyncException.appGenerated(
+    '同步状态响应无效',
+    failureCode: AnkiSyncFailureCode.protocolFailure,
+  );
 }
 
 bool _requiredBool(Map<String, dynamic> json, String field) {
   final value = json[field];
   if (value is bool) return value;
-  throw const AnkiSyncException('同步状态响应无效');
+  throw const AnkiSyncException.appGenerated(
+    '同步状态响应无效',
+    failureCode: AnkiSyncFailureCode.protocolFailure,
+  );
 }
 
 class AnkiSyncException implements Exception {
   final String message;
   final AnkiSyncFailureCode? failureCode;
+  final int? diagnosticValue;
 
-  const AnkiSyncException(this.message) : failureCode = null;
+  const AnkiSyncException(this.message)
+    : failureCode = null,
+      diagnosticValue = null;
   const AnkiSyncException.appGenerated(
     this.message, {
     this.failureCode = AnkiSyncFailureCode.incrementalSync,
+    this.diagnosticValue,
   });
 
   String localizedMessage(AppLocalizations l10n) => switch (failureCode) {
-        AnkiSyncFailureCode.incrementalSync =>
-          l10n.ankiSyncStatusIncrementalSyncFailed,
-        AnkiSyncFailureCode.deviceClockMismatch =>
-          l10n.ankiSyncStatusDeviceClockMismatch,
-        AnkiSyncFailureCode.fullTransferRequired =>
-          l10n.ankiSyncStatusFullTransferRequired,
-        AnkiSyncFailureCode.fullDownloadRequired =>
-          l10n.ankiSyncStatusFullDownloadRequired,
-        AnkiSyncFailureCode.upgradeClientRequired =>
-          l10n.ankiSyncStatusUpgradeClient,
-        null => message,
-      };
+    AnkiSyncFailureCode.incrementalSync =>
+      l10n.ankiSyncStatusIncrementalSyncFailed,
+    AnkiSyncFailureCode.deviceClockMismatch =>
+      l10n.ankiSyncStatusDeviceClockMismatch,
+    AnkiSyncFailureCode.fullTransferRequired =>
+      l10n.ankiSyncStatusFullTransferRequired,
+    AnkiSyncFailureCode.fullDownloadRequired =>
+      l10n.ankiSyncStatusFullDownloadRequired,
+    AnkiSyncFailureCode.upgradeClientRequired =>
+      l10n.ankiSyncStatusUpgradeClient,
+    AnkiSyncFailureCode.protocolFailure => l10n.ankiSyncStatusProtocolFailed,
+    AnkiSyncFailureCode.loginRequired => l10n.ankiSyncStatusLoginRequired,
+    AnkiSyncFailureCode.invalidServerAddress =>
+      l10n.ankiSyncStatusInvalidServerUrl,
+    AnkiSyncFailureCode.httpsRequired => l10n.ankiSyncStatusHttpsRequired,
+    AnkiSyncFailureCode.connectionTimeout =>
+      l10n.ankiSyncStatusConnectionTimeout,
+    AnkiSyncFailureCode.tlsFailure => l10n.ankiSyncStatusTlsFailure,
+    AnkiSyncFailureCode.connectionFailure =>
+      l10n.ankiSyncStatusConnectionFailure,
+    AnkiSyncFailureCode.requestFailure => l10n.ankiSyncStatusRequestFailure,
+    AnkiSyncFailureCode.serverHttpError => l10n.ankiSyncStatusServerHttpError(
+      diagnosticValue ?? 0,
+    ),
+    AnkiSyncFailureCode.responseTooLarge => l10n.ankiSyncStatusResponseTooLarge(
+      diagnosticValue ?? 0,
+    ),
+    AnkiSyncFailureCode.localFileFailure => l10n.ankiSyncStatusLocalFileFailure,
+    null => message,
+  };
 
   @override
   String toString() => message;
@@ -672,6 +805,17 @@ enum AnkiSyncFailureCode {
   fullTransferRequired,
   fullDownloadRequired,
   upgradeClientRequired,
+  protocolFailure,
+  loginRequired,
+  invalidServerAddress,
+  httpsRequired,
+  connectionTimeout,
+  tlsFailure,
+  connectionFailure,
+  requestFailure,
+  serverHttpError,
+  responseTooLarge,
+  localFileFailure,
 }
 
 class _ProgressAwareMultipartRequest extends http.MultipartRequest

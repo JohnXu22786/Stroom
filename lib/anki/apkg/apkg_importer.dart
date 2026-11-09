@@ -54,10 +54,16 @@ class AnkiApkgImporter {
     }
 
     // 4. Open both databases
-    final importDb = await openDatabase(tmpDbPath, readOnly: true);
-    final targetDb = await openDatabase(targetDbPath);
-
+    Database? importDb;
+    Database? targetDb;
     try {
+      try {
+        importDb = await openDatabase(tmpDbPath, readOnly: true);
+      } catch (_) {
+        throw const AnkiApkgException(AnkiApkgErrorCode.databaseCorrupt);
+      }
+      targetDb = await openDatabase(targetDbPath);
+
       // Generate unique IDs using timestamp
       final now = DateTime.now().millisecondsSinceEpoch;
       final nowSec = now ~/ 1000;
@@ -67,8 +73,18 @@ class AnkiApkgImporter {
       int decksImported = 0, notesImported = 0, cardsImported = 0;
 
       // ── Import decks (merge JSON blobs in col row) ──────
-      final srcCol = await importDb.query('col', where: 'id = 1');
-      final tgtCol = await targetDb.query('col', where: 'id = 1');
+      List<Map<String, Object?>> srcCol;
+      try {
+        srcCol = await importDb.query('col', where: 'id = 1');
+      } catch (_) {
+        throw const AnkiApkgException(AnkiApkgErrorCode.databaseCorrupt);
+      }
+      List<Map<String, Object?>> tgtCol;
+      try {
+        tgtCol = await targetDb.query('col', where: 'id = 1');
+      } catch (_) {
+        throw const AnkiApkgException(AnkiApkgErrorCode.databaseCorrupt);
+      }
       if (srcCol.isEmpty || tgtCol.isEmpty) {
         throw const AnkiApkgException(AnkiApkgErrorCode.databaseCorrupt);
       }
@@ -116,12 +132,25 @@ class AnkiApkgImporter {
       // but for simplicity, we'll just merge and leave the active deck as-is
 
       // ── Import notes ────────────────────────────────────
-      final srcNotes = await importDb.rawQuery('SELECT * FROM notes');
+      List<Map<String, Object?>> srcNotes;
+      try {
+        srcNotes = await importDb.rawQuery('SELECT * FROM notes');
+      } catch (_) {
+        throw const AnkiApkgException(AnkiApkgErrorCode.databaseCorrupt);
+      }
       for (final note in srcNotes) {
         final guid = note['guid'] as String;
         // Check duplicate by GUID
-        final dup =
-            await targetDb.query('notes', where: 'guid = ?', whereArgs: [guid]);
+        List<Map<String, Object?>> dup;
+        try {
+          dup = await targetDb.query(
+            'notes',
+            where: 'guid = ?',
+            whereArgs: [guid],
+          );
+        } catch (_) {
+          throw const AnkiApkgException(AnkiApkgErrorCode.databaseCorrupt);
+        }
         if (dup.isNotEmpty) continue;
 
         final id = ++newId;
@@ -142,7 +171,12 @@ class AnkiApkgImporter {
       }
 
       // ── Import cards ────────────────────────────────────
-      final srcCards = await importDb.rawQuery('SELECT * FROM cards');
+      List<Map<String, Object?>> srcCards;
+      try {
+        srcCards = await importDb.rawQuery('SELECT * FROM cards');
+      } catch (_) {
+        throw const AnkiApkgException(AnkiApkgErrorCode.databaseCorrupt);
+      }
       for (final card in srcCards) {
         final id = ++newId;
         final oldDid = card['did'] as int;
@@ -177,9 +211,15 @@ class AnkiApkgImporter {
         cardsImported: cardsImported,
       );
     } finally {
-      await targetDb.close();
-      await importDb.close();
-      if (File(tmpDbPath).existsSync()) await File(tmpDbPath).delete();
+      try {
+        if (targetDb != null) await targetDb.close();
+      } finally {
+        try {
+          if (importDb != null) await importDb.close();
+        } finally {
+          if (File(tmpDbPath).existsSync()) await File(tmpDbPath).delete();
+        }
+      }
     }
   }
 }

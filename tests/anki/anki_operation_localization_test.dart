@@ -66,6 +66,34 @@ void main() {
       '增量同步未能完成。请检查服务器和网络连接后重试。',
     );
     expect(
+      const AnkiSyncException.appGenerated(
+        '无法连接到同步服务器',
+        failureCode: AnkiSyncFailureCode.connectionFailure,
+      ).localizedMessage(AppLocalizationsEn()),
+      'Could not connect to the sync server. Check the address and network.',
+    );
+    expect(
+      const AnkiSyncException.appGenerated(
+        '同步服务器返回 HTTP 404',
+        failureCode: AnkiSyncFailureCode.serverHttpError,
+        diagnosticValue: 404,
+      ).localizedMessage(AppLocalizationsEn()),
+      'The sync server returned HTTP 404.',
+    );
+    expect(
+      const AnkiSyncException.appGenerated(
+        'collection 下载超过 512 MB',
+        failureCode: AnkiSyncFailureCode.responseTooLarge,
+        diagnosticValue: 512,
+      ).localizedMessage(AppLocalizationsEn()),
+      'The sync response exceeded the 512 MB limit.',
+    );
+    expect(
+      const AnkiSyncException('remote diagnostic')
+          .localizedMessage(AppLocalizationsEn()),
+      'remote diagnostic',
+    );
+    expect(
       AppLocalizationsEn().ankiWebSyncUnsupportedPlatform,
       'Sign in to AnkiWeb to sync on web. Open Anki settings with the cloud icon to log in.',
     );
@@ -99,11 +127,6 @@ void main() {
       ).localizedMessage(AppLocalizationsEn()),
       'This server requires a newer sync client.',
     );
-    expect(
-      const AnkiSyncException('remote diagnostic')
-          .localizedMessage(AppLocalizationsEn()),
-      'remote diagnostic',
-    );
   });
 
   testWidgets('shows localized unsupported statistics state on web', (
@@ -125,7 +148,7 @@ void main() {
           ),
         ),
       );
-      await tester.pump();
+      await tester.pumpAndSettle();
 
       expect(
         find.text(
@@ -158,7 +181,7 @@ void main() {
           ),
         ),
       );
-      await tester.pump();
+      await tester.pumpAndSettle();
 
       expect(
         find.text(
