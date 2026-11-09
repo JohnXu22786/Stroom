@@ -627,11 +627,14 @@ void main() {
           );
           if (HttpToolService.toolDefinitions.contains(definition)) {
             final expectedDescription = switch (definition.name) {
-              'brave_web_search' => 'Search the web with the Brave Search API. Requires an API key.',
-              'bocha_web_search' => 'Search the web with the Bocha AI Search API. Requires an API key.',
+              'brave_web_search' =>
+                'Search the web with the Brave Search API. Requires an API key.',
+              'bocha_web_search' =>
+                'Search the web with the Bocha AI Search API. Requires an API key.',
               'querit_search' =>
                 'Search the web with Querit Search. Requires an API key.',
-              'searxng_search' => 'A privacy-focused, self-hosted metasearch engine that aggregates search sources. Requires an instance URL.',
+              'searxng_search' =>
+                'A privacy-focused, self-hosted metasearch engine that aggregates search sources. Requires an instance URL.',
               _ => fail('Unexpected HTTP tool: ${definition.name}'),
             };
             expect(find.text(expectedDescription), findsOneWidget);
