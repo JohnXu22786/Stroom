@@ -655,6 +655,7 @@ class FileManifest {
     );
   }
 
+  static Future<bool> fileExists(String fileName) => _ops.fileExists(fileName);
   static Future<Uint8List?> readFile(String fileName) =>
       _ops.readFile(fileName);
   static Future<Uint8List?> readFileCancellable(
