@@ -100,8 +100,10 @@ void main() {
     await tester.tap(find.text('重试'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, '重试'));
+    // Retry checks the native temporary-artifact namespace before routing.
+    // Let that real filesystem work finish outside the widget test's fake clock.
     await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 100)),
+      () => Future<void>.delayed(const Duration(seconds: 1)),
     );
     await tester.pumpAndSettle();
     expect(find.text('助手对话 设置'), findsOneWidget);
