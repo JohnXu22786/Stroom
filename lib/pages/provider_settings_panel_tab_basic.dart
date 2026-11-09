@@ -282,7 +282,7 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
                       decimal: true,
                     ),
                     textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.bodyMedium,
+                    style: const TextStyle(fontSize: 13),
                     decoration: const InputDecoration(
                       isDense: true,
                       contentPadding: EdgeInsets.symmetric(
