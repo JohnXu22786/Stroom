@@ -38,6 +38,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Validate macOS native menu localizations
+        run: python3 tools/ci/validate_macos_menu_localization.py
       - name: Verify OCR benchmark fixtures
         run: python3 tools/ocr_benchmark/evaluate.py --verify-fixtures
       - name: Test OCR benchmark evaluator
