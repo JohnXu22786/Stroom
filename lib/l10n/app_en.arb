@@ -3182,6 +3182,13 @@
     "placeholders": {}
   },
   "providerBuiltinBadge": "Built-in",
+  "providerBuiltinTtsName": "TTS Provider",
+  "providerBuiltinLlmName": "LLM Provider",
+  "providerBuiltinOcrName": "OCR Provider",
+  "providerBuiltinAsrName": "Speech Recognition Provider",
+  "providerBuiltinMcpName": "MCP Provider",
+  "providerBuiltinSearchGroupName": "Search",
+  "providerBuiltinMcpServicesGroupName": "Other MCP Services",
   "@providerBuiltinBadge": {
     "placeholders": {}
   },
