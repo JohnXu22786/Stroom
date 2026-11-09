@@ -5,6 +5,7 @@ import '../providers/anki_actions.dart';
 import '../models/card.dart';
 import '../models/note.dart';
 import '../models/deck.dart';
+import '../../l10n/app_localizations.dart';
 
 /// Simple card browser / search page.
 class AnkiCardBrowser extends ConsumerStatefulWidget {
@@ -63,10 +64,11 @@ class _AnkiCardBrowserState extends ConsumerState<AnkiCardBrowser> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final cs = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('卡片浏览'),
+        title: Text(l10n.ankiBrowseCardsTooltip),
         centerTitle: true,
       ),
       body: Column(
@@ -76,7 +78,7 @@ class _AnkiCardBrowserState extends ConsumerState<AnkiCardBrowser> {
             child: TextField(
               controller: _searchCtl,
               decoration: InputDecoration(
-                hintText: '搜索卡片...',
+                hintText: l10n.ankiBrowserSearchHint,
                 prefixIcon: const Icon(Icons.search),
                 border:
                     OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
@@ -97,7 +99,7 @@ class _AnkiCardBrowserState extends ConsumerState<AnkiCardBrowser> {
                 ? const Center(child: CircularProgressIndicator())
                 : _filtered.isEmpty
                     ? Center(
-                        child: Text('无卡片',
+                        child: Text(l10n.ankiBrowserEmpty,
                             style: TextStyle(color: cs.onSurfaceVariant)))
                     : ListView.builder(
                         itemCount: _filtered.length,
@@ -109,7 +111,7 @@ class _AnkiCardBrowserState extends ConsumerState<AnkiCardBrowser> {
                               final note = snap.data;
                               final front = note?.fields.isNotEmpty == true
                                   ? note!.fields[0]
-                                  : '(无内容)';
+                                  : l10n.ankiNoCardContent;
                               return ListTile(
                                 leading: _queueIcon(card.queue.value),
                                 title: Text(front,

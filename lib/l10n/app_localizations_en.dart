@@ -6449,6 +6449,33 @@ class AppLocalizationsEn extends AppLocalizations {
   String get ankiBrowseCardsTooltip => 'Browse cards';
 
   @override
+  String get ankiStatsTotalCards => 'Total cards';
+
+  @override
+  String get ankiStatsNewCards => 'New cards';
+
+  @override
+  String get ankiStatsLearning => 'Learning';
+
+  @override
+  String get ankiStatsDueForReview => 'Due for review';
+
+  @override
+  String get ankiStatsReviewHistory => 'Review history';
+
+  @override
+  String get ankiStatsLearningProgress => 'Study progress';
+
+  @override
+  String get ankiStatsReviewRate => 'Review rate';
+
+  @override
+  String get ankiBrowserSearchHint => 'Search cards...';
+
+  @override
+  String get ankiBrowserEmpty => 'No cards';
+
+  @override
   String get ankiSyncTooltip => 'AnkiWeb sync';
 
   @override
@@ -17401,6 +17428,33 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get ankiBrowseCardsTooltip => 'Browse cards';
+
+  @override
+  String get ankiStatsTotalCards => 'Total cards';
+
+  @override
+  String get ankiStatsNewCards => 'New cards';
+
+  @override
+  String get ankiStatsLearning => 'Learning';
+
+  @override
+  String get ankiStatsDueForReview => 'Due for review';
+
+  @override
+  String get ankiStatsReviewHistory => 'Review history';
+
+  @override
+  String get ankiStatsLearningProgress => 'Study progress';
+
+  @override
+  String get ankiStatsReviewRate => 'Review rate';
+
+  @override
+  String get ankiBrowserSearchHint => 'Search cards...';
+
+  @override
+  String get ankiBrowserEmpty => 'No cards';
 
   @override
   String get ankiSyncTooltip => 'AnkiWeb sync';

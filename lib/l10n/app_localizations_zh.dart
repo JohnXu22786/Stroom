@@ -6142,6 +6142,33 @@ class AppLocalizationsZh extends AppLocalizations {
   String get ankiBrowseCardsTooltip => '浏览卡片';
 
   @override
+  String get ankiStatsTotalCards => '总卡片数';
+
+  @override
+  String get ankiStatsNewCards => '待学习';
+
+  @override
+  String get ankiStatsLearning => '学习中';
+
+  @override
+  String get ankiStatsDueForReview => '待复习';
+
+  @override
+  String get ankiStatsReviewHistory => '历史复习次数';
+
+  @override
+  String get ankiStatsLearningProgress => '学习进度';
+
+  @override
+  String get ankiStatsReviewRate => '复习率';
+
+  @override
+  String get ankiBrowserSearchHint => '搜索卡片...';
+
+  @override
+  String get ankiBrowserEmpty => '无卡片';
+
+  @override
   String get ankiSyncTooltip => 'AnkiWeb 同步';
 
   @override
@@ -16526,6 +16553,33 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get ankiBrowseCardsTooltip => '浏览卡片';
+
+  @override
+  String get ankiStatsTotalCards => '总卡片数';
+
+  @override
+  String get ankiStatsNewCards => '待学习';
+
+  @override
+  String get ankiStatsLearning => '学习中';
+
+  @override
+  String get ankiStatsDueForReview => '待复习';
+
+  @override
+  String get ankiStatsReviewHistory => '历史复习次数';
+
+  @override
+  String get ankiStatsLearningProgress => '学习进度';
+
+  @override
+  String get ankiStatsReviewRate => '复习率';
+
+  @override
+  String get ankiBrowserSearchHint => '搜索卡片...';
+
+  @override
+  String get ankiBrowserEmpty => '无卡片';
 
   @override
   String get ankiSyncTooltip => 'AnkiWeb 同步';

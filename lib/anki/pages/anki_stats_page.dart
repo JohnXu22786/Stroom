@@ -4,6 +4,7 @@ import '../providers/anki_provider.dart';
 import '../database/anki_database.dart';
 import '../database/col_dao.dart';
 import '../database/card_dao.dart';
+import '../../l10n/app_localizations.dart';
 
 /// Statistics page — queries SQLite directly for aggregate numbers.
 class AnkiStatsPage extends ConsumerWidget {
@@ -11,9 +12,10 @@ class AnkiStatsPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context)!;
     final dbAsync = ref.watch(ankiDatabaseProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('学习统计'), centerTitle: true),
+      appBar: AppBar(title: Text(l10n.ankiStatsTooltip), centerTitle: true),
       body: dbAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('$e')),
@@ -23,6 +25,7 @@ class AnkiStatsPage extends ConsumerWidget {
   }
 
   Widget _buildStats(BuildContext context, AnkiDatabase db) {
+    final l10n = AppLocalizations.of(context)!;
     final now = DateTime.now();
     final todayStart =
         DateTime(now.year, now.month, now.day).millisecondsSinceEpoch ~/ 1000;
@@ -52,43 +55,43 @@ class AnkiStatsPage extends ConsumerWidget {
             _StatCard(
                 icon: Icons.auto_stories,
                 color: Colors.teal,
-                title: '总卡片数',
+                title: l10n.ankiStatsTotalCards,
                 value: '$total'),
             const SizedBox(height: 12),
             _StatCard(
                 icon: Icons.fiber_new,
                 color: Colors.blue,
-                title: '待学习',
+                title: l10n.ankiStatsNewCards,
                 value: '$newCount'),
             const SizedBox(height: 12),
             _StatCard(
                 icon: Icons.timelapse,
                 color: Colors.orange,
-                title: '学习中',
+                title: l10n.ankiStatsLearning,
                 value: '$learning'),
             const SizedBox(height: 12),
             _StatCard(
                 icon: Icons.replay,
                 color: Colors.green,
-                title: '待复习',
+                title: l10n.ankiStatsDueForReview,
                 value: '$review'),
             const SizedBox(height: 12),
             _StatCard(
                 icon: Icons.history,
                 color: Colors.purple,
-                title: '历史复习次数',
+                title: l10n.ankiStatsReviewHistory,
                 value: '$revlogCount'),
             const SizedBox(height: 12),
             if (total > 0)
               _ProgressBar(
-                label: '学习进度',
+                label: l10n.ankiStatsLearningProgress,
                 value: (review + learning) / total,
                 color: Colors.teal,
               ),
             const SizedBox(height: 12),
             if (total > 0)
               _ProgressBar(
-                label: '复习率',
+                label: l10n.ankiStatsReviewRate,
                 value: revlogCount > 0
                     ? (revlogCount / (revlogCount + total)).clamp(0, 1)
                     : 0,
