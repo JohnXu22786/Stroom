@@ -10,6 +10,7 @@ import 'locale_provider.dart';
 
 import '../utils/folder_operation_rollback.dart';
 import '../utils/file_manifest.dart';
+import '../utils/tts_audio_saver.dart';
 import 'provider_config.dart';
 import 'tts_provider.dart' as tts_provider_base;
 import 'tts_state_shared.dart';
@@ -729,20 +730,12 @@ class TTSStateNotifier extends StateNotifier<TTSState> {
       sourceText: text,
     );
 
-    return FileManifest.withStorageFileSaveLock(record.storageFileName,
-        () async {
-      // Save audio file using hash as filename.
-      await FileManifest.writeFile(record.storageFileName, audioData);
-
-      // Save source text companion file.
-      if (text.isNotEmpty) {
-        final textBytes = Uint8List.fromList(utf8.encode(text));
-        await FileManifest.writeFile('$hash.txt', textBytes);
-      }
-
-      await FileManifest.addRecord(record);
-      return record;
-    });
+    final textBytes =
+        text.isEmpty ? null : Uint8List.fromList(utf8.encode(text));
+    return FileManifest.withStorageFileSaveLock(
+      record.storageFileName,
+      () => writeTtsAudioAndPublish(record, audioData, textBytes),
+    );
   }
 
   /// Parse JSON-type custom param values from string to actual JSON
