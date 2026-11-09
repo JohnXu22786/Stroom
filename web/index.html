@@ -31,7 +31,16 @@
   <link rel="icon" type="image/png" href="favicon.png"/>
 
   <title>Stroom — 你的学习助理</title>
-  <link rel="manifest" href="manifest.json">
+  <script src="manifest_locale.js"></script>
+  <script>
+    const manifestLink = document.createElement('link');
+    manifestLink.rel = 'manifest';
+    const browserLanguages = navigator.languages?.length
+      ? navigator.languages
+      : [navigator.language];
+    manifestLink.href = selectStroomManifest(browserLanguages);
+    document.head.appendChild(manifestLink);
+  </script>
 
   <!-- media_kit Audio Extraction Bridge (Web Audio API) -->
   <script src="media_kit_audio_extraction.js"></script>
