@@ -117,13 +117,27 @@ Future<void> _pumpThroughStartup(WidgetTester tester,
     prefs.addAll(extraPrefs);
   }
   SharedPreferences.setMockInitialValues(prefs);
-  // 测试中直接泵 Application（无 StartupApp 驱动启动页渐出）：
-  // 手动置位启动就绪标记，触发启动后任务。
-  startupReadyNotifier.value = true;
+  final expectedLocale = localeFromCode(prefs[localePreferenceKey] as String);
 
+  // Let Application load its saved locale before startup dialogs are allowed
+  // to run, so their labels are deterministic in tests.
+  startupReadyNotifier.value = false;
   await tester.pumpWidget(_buildTestApp(dio: dio));
-  // Process post-frame callback → _performStartupChecks starts
+  var localeLoaded = false;
+  for (int i = 0; i < 20 && !localeLoaded; i++) {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 25)),
+    );
+    await tester.pump();
+    localeLoaded =
+        tester.widget<MaterialApp>(find.byType(MaterialApp)).locale ==
+            expectedLocale;
+  }
+  expect(localeLoaded, isTrue, reason: 'saved app locale should load');
+
+  startupReadyNotifier.value = true;
   await tester.pump();
+  // Process post-frame callback → _performStartupChecks starts
   await tester.pump(const Duration(milliseconds: 100));
   await tester.pump();
 
@@ -138,9 +152,61 @@ void main() {
     // 每个测试用例需要复位以获得完整的启动后流程。
     resetPostStartupTasksFlag();
     startupReadyNotifier.value = false;
+    setPendingRestartInMemory(false);
   });
 
   group('Application - Startup Update Check', () {
+    testWidgets('post-update restart dialog follows the saved app locale',
+        (tester) async {
+      addTearDown(() {
+        setPendingRestartInMemory(false);
+        startupReadyNotifier.value = false;
+      });
+
+      final dio = _createMockDio(_githubRelease('v0.2.13'));
+
+      await _pumpThroughStartup(tester, dio: dio, extraPrefs: {
+        localePreferenceKey: 'en_US',
+      });
+
+      // Set the installer marker after Application is mounted so an earlier
+      // lifecycle notification cannot consume the warm-resume state.
+      setPendingRestartInMemory(true);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(pendingUpdateRestartKey, true);
+      expect(isPendingRestartInMemory, isTrue);
+      expect(await hasPendingUpdateRestart(), isTrue);
+
+      // The test binding starts in the resumed state; transition through
+      // paused so the resumed observer callback is delivered.
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+
+      var dialogShown = false;
+      for (int i = 0; i < 20 && !dialogShown; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 50)),
+        );
+        await tester.pump(const Duration(milliseconds: 50));
+        dialogShown = tester.any(find.text('App updated'));
+      }
+
+      expect(
+        dialogShown,
+        isTrue,
+        reason: 'warm resume should show restart dialog',
+      );
+      expect(find.text('App updated'), findsOneWidget);
+      expect(
+        find.text(
+          'The app has been updated. Restart the app to ensure stability.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Restart Later'), findsOneWidget);
+      expect(find.text('Restart Now'), findsOneWidget);
+    });
+
     testWidgets('shows update dialog on startup when new version available',
         (tester) async {
       final dio = _createMockDio(
