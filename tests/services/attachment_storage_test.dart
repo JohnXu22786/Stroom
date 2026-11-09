@@ -276,6 +276,32 @@ void main() {
           reason: '缓存操作不能覆盖或删除缓存根目录外的文件');
     });
 
+    test('路径遍历 hash 不能保存、读取或删除对话缓存目录外文件', () async {
+      final outsideDir = Directory(p.join(tmpRoot.path, 'attachments'));
+      await outsideDir.create(recursive: true);
+      final outsideFile = File(p.join(outsideDir.path, 'outside.jpg'));
+      final originalBytes = Uint8List.fromList([0xFF, 0xD8, 0xFF, 0xE0]);
+      await outsideFile.writeAsBytes(originalBytes);
+      const traversalHash = '../../outside';
+
+      final savedPath = await AttachmentStorage.saveCompressedImage(
+        conversationId: 'conv-1',
+        hash: traversalHash,
+        bytes: Uint8List.fromList([0xFF, 0xD8, 0xFF, 0xE1]),
+        mimeType: 'image/jpeg',
+      );
+      final read = await AttachmentStorage.readCompressedImage(
+          conversationId: 'conv-1', hash: traversalHash);
+      final deleted = await AttachmentStorage.deleteCompressedImage(
+          conversationId: 'conv-1', hash: traversalHash);
+
+      expect(savedPath, isNull);
+      expect(read, isNull);
+      expect(deleted, isFalse);
+      expect(await outsideFile.readAsBytes(), originalBytes,
+          reason: 'hash 不能覆盖或删除对话缓存目录外的文件');
+    });
+
     test('路径遍历 conversationId 不能递归删除缓存根目录外目录', () async {
       final outsideDir = Directory(p.join(tmpRoot.path, 'outside'));
       await outsideDir.create(recursive: true);
