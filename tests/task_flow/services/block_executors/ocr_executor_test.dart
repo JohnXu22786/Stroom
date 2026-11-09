@@ -8,6 +8,9 @@ import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/l10n/app_localizations.dart';
+import 'package:stroom/l10n/app_localizations_en.dart';
+import 'package:stroom/l10n/app_localizations_zh.dart';
 import 'package:stroom/models/tts_models.dart';
 import 'package:stroom/providers/background_task_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
@@ -185,6 +188,58 @@ void main() {
         },
       );
 
+  Future<void> expectIncompleteOcrLocalization({
+    required AppLocalizations localizations,
+    required String expectedError,
+  }) async {
+    final source =
+        await File('${directory.path}/partial.png').writeAsBytes(_validPng());
+    final dio = Dio()..httpClientAdapter = _IncompleteOcrAdapter();
+
+    try {
+      await expectLater(
+        executeOcrBlock(
+          block: ocrBlock(),
+          def: BlockTypeDefinition.ocr,
+          input: source.path,
+          execId: execId,
+          execNotifier: executions,
+          flowSubTask: subTask,
+          bgNotifier: background,
+          providerEntries: providerForOcr(),
+          localizations: localizations,
+          ocrDio: dio,
+        ),
+        throwsA(isA<BlockExecutionException>().having(
+          (error) => error.message,
+          'message',
+          expectedError,
+        )),
+      );
+    } finally {
+      dio.close(force: true);
+    }
+
+    final failedTask = background.state.single;
+    expect(failedTask.status, TaskStatus.failed);
+    expect(failedTask.result, 'partial OCR text');
+    expect(failedTask.resultIsComplete, isFalse);
+    expect(failedTask.error, expectedError);
+    expect(
+      executions.execution(execId)?.subTasks.single.status,
+      TaskStatus.failed,
+    );
+
+    await background.pendingPersistence;
+    final restored = BackgroundTaskNotifier();
+    addTearDown(restored.dispose);
+    expect(await restored.restoreFromPersistence(), isTrue);
+    final restoredTask = restored.taskById(failedTask.id)!;
+    expect(restoredTask.result, 'partial OCR text');
+    expect(restoredTask.resultIsComplete, isFalse);
+    expect(restoredTask.error, expectedError);
+  }
+
   test('OCR uses payload bytes instead of the filename suffix', () async {
     final bytes = _validPng();
     final source =
@@ -283,55 +338,19 @@ void main() {
     }
   });
 
-  test(
-    'incomplete OCR keeps partial text marked incomplete after restore',
-    () async {
-      final source =
-          await File('${directory.path}/partial.png').writeAsBytes(_validPng());
-      final dio = Dio()..httpClientAdapter = _IncompleteOcrAdapter();
+  test('incomplete OCR failure is localized in English', () async {
+    await expectIncompleteOcrLocalization(
+      localizations: AppLocalizationsEnUs(),
+      expectedError: 'OCR returned an incomplete result (finish_reason=length)',
+    );
+  });
 
-      try {
-        await expectLater(
-          executeOcrBlock(
-            block: ocrBlock(),
-            def: BlockTypeDefinition.ocr,
-            input: source.path,
-            execId: execId,
-            execNotifier: executions,
-            flowSubTask: subTask,
-            bgNotifier: background,
-            providerEntries: providerForOcr(),
-            ocrDio: dio,
-          ),
-          throwsA(isA<BlockExecutionException>().having(
-            (error) => error.message,
-            'message',
-            contains('不完整结果（finish_reason=length）'),
-          )),
-        );
-      } finally {
-        dio.close(force: true);
-      }
-
-      final failedTask = background.state.single;
-      expect(failedTask.status, TaskStatus.failed);
-      expect(failedTask.result, 'partial OCR text');
-      expect(failedTask.resultIsComplete, isFalse);
-      expect(failedTask.error, contains('不完整结果（finish_reason=length）'));
-      expect(
-        executions.execution(execId)?.subTasks.single.status,
-        TaskStatus.failed,
-      );
-
-      await background.pendingPersistence;
-      final restored = BackgroundTaskNotifier();
-      addTearDown(restored.dispose);
-      expect(await restored.restoreFromPersistence(), isTrue);
-      final restoredTask = restored.taskById(failedTask.id)!;
-      expect(restoredTask.result, 'partial OCR text');
-      expect(restoredTask.resultIsComplete, isFalse);
-    },
-  );
+  test('incomplete OCR failure is localized in Chinese', () async {
+    await expectIncompleteOcrLocalization(
+      localizations: AppLocalizationsZhCn(),
+      expectedError: 'OCR 返回了不完整结果（finish_reason=length）',
+    );
+  });
 
   test('OCR rejects oversized WebFileStore input before request dispatch',
       () async {
