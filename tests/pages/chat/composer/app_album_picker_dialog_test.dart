@@ -440,8 +440,7 @@ void main() {
         expect(
           find.text('应用内相册'),
           findsOneWidget,
-          reason:
-              'clearing the pending selection must cancel its confirmation',
+          reason: 'clearing the pending selection must cancel its confirmation',
         );
         expect(picker.result(), isNull);
 
