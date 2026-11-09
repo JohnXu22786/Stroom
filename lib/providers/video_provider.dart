@@ -319,10 +319,13 @@ class VideoRecordsNotifier extends StateNotifier<List<VideoRecord>> {
   Future<void> copyFolder(String sourceName, String targetParent) async {
     final baseName = VideoManifest.getFolderBaseName(sourceName);
     // 规范化目标父路径（去首尾空白与尾部斜杠），'' 表示根目录
-    final targetParentClean =
-        targetParent.trim().replaceAll(RegExp(r'/+$'), '');
-    final newPath =
-        targetParentClean.isEmpty ? baseName : '$targetParentClean/$baseName';
+    final targetParentClean = targetParent.trim().replaceAll(
+      RegExp(r'/+$'),
+      '',
+    );
+    final newPath = targetParentClean.isEmpty
+        ? baseName
+        : '$targetParentClean/$baseName';
 
     // 防止空源 / 纯空白目标 / 复制到自身/子文件夹（或原地复制），
     // 避免文件夹内出现重复记录与自我嵌套
@@ -342,55 +345,96 @@ class VideoRecordsNotifier extends StateNotifier<List<VideoRecord>> {
     // ConcurrentModificationError.
     final records = List<VideoRecord>.from(await VideoManifest.loadRecords());
 
-    for (final r in records) {
-      if (r.folder == sourceName) {
-        await VideoManifest.addRecord(VideoRecord(
-          name: r.name,
-          hash: r.hash,
-          format: r.format,
-          createdAt: DateTime.now(),
-          size: r.size,
-          folder: newPath,
-          duration: r.duration,
-        ));
-      }
-    }
-
-    final descendants = await _getDescendantFolders(sourceName);
-    for (final desc in descendants) {
-      final suffix = desc.substring(sourceName.length);
-      final newDescPath = '$newPath$suffix';
-      for (final r in records) {
-        if (r.folder == desc) {
-          await VideoManifest.addRecord(VideoRecord(
-            name: r.name,
-            hash: r.hash,
-            format: r.format,
-            createdAt: DateTime.now(),
-            size: r.size,
-            folder: newDescPath,
-            duration: r.duration,
-          ));
-        }
-      }
-      // Empty subfolders (no records) must stay in the folder cache;
-      // otherwise the old-path cleanup would drop their paths.
-      await VideoManifest.addFolder(newDescPath);
-    }
-
-    await VideoManifest.addFolder(newPath);
+    final rollbackFolderAncestors = <String>{};
     if (targetParentClean.isNotEmpty) {
-      await VideoManifest.addFolder(targetParentClean);
-      // 空文件夹移动/复制不经过 moveRecord/addRecord，
-      // 祖先目录不会被自动跟踪，需逐级补齐
-      var ancestor = VideoManifest.getParentFolderPath(targetParentClean);
+      var ancestor = targetParentClean;
       while (ancestor.isNotEmpty) {
-        await VideoManifest.addFolder(ancestor);
+        rollbackFolderAncestors.add(ancestor);
         ancestor = VideoManifest.getParentFolderPath(ancestor);
       }
     }
+    final rollbackRecordIds = <String>{};
+    Future<void> addCopiedRecord(VideoRecord record) async {
+      rollbackRecordIds.add(record.id);
+      await VideoManifest.addRecord(record);
+    }
+    await runFolderOperationWithRollback<VideoRecord>(
+      originalRecords: const [],
+      originalFolders: existing,
+      rollbackFolderSubtrees: {newPath},
+      rollbackRecordIds: rollbackRecordIds,
+      rollbackFolderPaths: rollbackFolderAncestors,
+      createdFolderPaths: folderOperationDestinationPaths(
+        sourceFolder: sourceName,
+        destinationFolder: newPath,
+        originalFolders: existing,
+        originalRecords: records,
+        recordFolder: (record) => record.folder,
+      ).union(rollbackFolderAncestors),
+      recordId: (record) => record.id,
+      recordFolder: (record) => record.folder,
+      loadRecords: VideoManifest.loadRecords,
+      getFolders: VideoManifest.getAllFolders,
+      moveRecord: VideoManifest.moveRecord,
+      addFolder: VideoManifest.addFolder,
+      removeFolder: VideoManifest.removeFolderFromCache,
+      deleteRecords: VideoManifest.deleteRecords,
+      operation: () async {
+        for (final r in records) {
+          if (r.folder == sourceName) {
+            await addCopiedRecord(
+              VideoRecord(
+                name: r.name,
+                hash: r.hash,
+                format: r.format,
+                createdAt: DateTime.now(),
+                size: r.size,
+                folder: newPath,
+                duration: r.duration,
+              ),
+            );
+          }
+        }
 
-    await loadRecords();
+        final descendants = await _getDescendantFolders(sourceName);
+        for (final desc in descendants) {
+          final suffix = desc.substring(sourceName.length);
+          final newDescPath = '$newPath$suffix';
+          for (final r in records) {
+            if (r.folder == desc) {
+              await addCopiedRecord(
+                VideoRecord(
+                  name: r.name,
+                  hash: r.hash,
+                  format: r.format,
+                  createdAt: DateTime.now(),
+                  size: r.size,
+                  folder: newDescPath,
+                  duration: r.duration,
+                ),
+              );
+            }
+          }
+          // Empty subfolders (no records) must stay in the folder cache;
+          // otherwise the old-path cleanup would drop their paths.
+          await VideoManifest.addFolder(newDescPath);
+        }
+
+        await VideoManifest.addFolder(newPath);
+        if (targetParentClean.isNotEmpty) {
+          await VideoManifest.addFolder(targetParentClean);
+          // 空文件夹移动/复制不经过 moveRecord/addRecord，
+          // 祖先目录不会被自动跟踪，需逐级补齐
+          var ancestor = VideoManifest.getParentFolderPath(targetParentClean);
+          while (ancestor.isNotEmpty) {
+            await VideoManifest.addFolder(ancestor);
+            ancestor = VideoManifest.getParentFolderPath(ancestor);
+          }
+        }
+
+        await loadRecords();
+      },
+    );
   }
 }
 

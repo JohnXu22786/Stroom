@@ -392,11 +392,12 @@ class TextRecordsNotifier extends StateNotifier<List<TextRecord>> {
     final baseName = TextManifest.getFolderBaseName(sourceName);
     // 规范化目标父路径（去首尾空白与尾部斜杠），'' 表示根目录
     final targetParentClean = targetParent.trim().replaceAll(
-          RegExp(r'/+$'),
-          '',
-        );
-    final newPath =
-        targetParentClean.isEmpty ? baseName : '$targetParentClean/$baseName';
+      RegExp(r'/+$'),
+      '',
+    );
+    final newPath = targetParentClean.isEmpty
+        ? baseName
+        : '$targetParentClean/$baseName';
 
     // 防止空源 / 纯空白目标 / 复制到自身/子文件夹（或原地复制），
     // 避免文件夹内出现重复记录与自我嵌套
@@ -416,58 +417,95 @@ class TextRecordsNotifier extends StateNotifier<List<TextRecord>> {
     // ConcurrentModificationError.
     final records = List<TextRecord>.from(await TextManifest.loadRecords());
 
-    for (final r in records) {
-      if (r.folder == sourceName) {
-        await TextManifest.addRecord(
-          TextRecord(
-            name: r.name,
-            hash: r.hash,
-            format: r.format,
-            createdAt: DateTime.now(),
-            size: r.size,
-            folder: newPath,
-            textLength: r.textLength,
-          ),
-        );
-      }
-    }
-
-    final descendants = await _getDescendantFolders(sourceName);
-    for (final desc in descendants) {
-      final suffix = desc.substring(sourceName.length);
-      final newDescPath = '$newPath$suffix';
-      for (final r in records) {
-        if (r.folder == desc) {
-          await TextManifest.addRecord(
-            TextRecord(
-              name: r.name,
-              hash: r.hash,
-              format: r.format,
-              createdAt: DateTime.now(),
-              size: r.size,
-              folder: newDescPath,
-              textLength: r.textLength,
-            ),
-          );
-        }
-      }
-      // Empty subfolders (no records) must stay in the folder cache;
-      // otherwise the old-path cleanup would drop their paths.
-      await TextManifest.addFolder(newDescPath);
-    }
-
-    await TextManifest.addFolder(newPath);
+    final rollbackFolderAncestors = <String>{};
     if (targetParentClean.isNotEmpty) {
-      await TextManifest.addFolder(targetParentClean);
-      // 空文件夹复制不经过 addRecord，祖先目录不会被自动跟踪，需逐级补齐
-      var ancestor = TextManifest.getParentFolderPath(targetParentClean);
+      var ancestor = targetParentClean;
       while (ancestor.isNotEmpty) {
-        await TextManifest.addFolder(ancestor);
+        rollbackFolderAncestors.add(ancestor);
         ancestor = TextManifest.getParentFolderPath(ancestor);
       }
     }
+    final rollbackRecordIds = <String>{};
+    Future<void> addCopiedRecord(TextRecord record) async {
+      rollbackRecordIds.add(record.id);
+      await TextManifest.addRecord(record);
+    }
+    await runFolderOperationWithRollback<TextRecord>(
+      originalRecords: const [],
+      originalFolders: existing,
+      rollbackFolderSubtrees: {newPath},
+      rollbackRecordIds: rollbackRecordIds,
+      rollbackFolderPaths: rollbackFolderAncestors,
+      createdFolderPaths: folderOperationDestinationPaths(
+        sourceFolder: sourceName,
+        destinationFolder: newPath,
+        originalFolders: existing,
+        originalRecords: records,
+        recordFolder: (record) => record.folder,
+      ).union(rollbackFolderAncestors),
+      recordId: (record) => record.id,
+      recordFolder: (record) => record.folder,
+      loadRecords: TextManifest.loadRecords,
+      getFolders: TextManifest.getAllFolders,
+      moveRecord: TextManifest.moveRecord,
+      addFolder: TextManifest.addFolder,
+      removeFolder: TextManifest.removeFolderFromCache,
+      deleteRecords: TextManifest.deleteRecords,
+      operation: () async {
+        for (final r in records) {
+          if (r.folder == sourceName) {
+            await addCopiedRecord(
+              TextRecord(
+                name: r.name,
+                hash: r.hash,
+                format: r.format,
+                createdAt: DateTime.now(),
+                size: r.size,
+                folder: newPath,
+                textLength: r.textLength,
+              ),
+            );
+          }
+        }
 
-    await loadRecords();
+        final descendants = await _getDescendantFolders(sourceName);
+        for (final desc in descendants) {
+          final suffix = desc.substring(sourceName.length);
+          final newDescPath = '$newPath$suffix';
+          for (final r in records) {
+            if (r.folder == desc) {
+              await addCopiedRecord(
+                TextRecord(
+                  name: r.name,
+                  hash: r.hash,
+                  format: r.format,
+                  createdAt: DateTime.now(),
+                  size: r.size,
+                  folder: newDescPath,
+                  textLength: r.textLength,
+                ),
+              );
+            }
+          }
+          // Empty subfolders (no records) must stay in the folder cache;
+          // otherwise the old-path cleanup would drop their paths.
+          await TextManifest.addFolder(newDescPath);
+        }
+
+        await TextManifest.addFolder(newPath);
+        if (targetParentClean.isNotEmpty) {
+          await TextManifest.addFolder(targetParentClean);
+          // 空文件夹复制不经过 addRecord，祖先目录不会被自动跟踪，需逐级补齐
+          var ancestor = TextManifest.getParentFolderPath(targetParentClean);
+          while (ancestor.isNotEmpty) {
+            await TextManifest.addFolder(ancestor);
+            ancestor = TextManifest.getParentFolderPath(ancestor);
+          }
+        }
+
+        await loadRecords();
+      },
+    );
   }
 }
 

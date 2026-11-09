@@ -246,6 +246,164 @@ void main() {
     }
   });
 
+  testWidgets(
+    'folder copy rolls back partial writes and can be retried for all types',
+    (WidgetTester t) async {
+      final now = DateTime.now();
+      await TextManifest.addRecord(
+        TextRecord(
+          id: 'copy_rollback_text',
+          name: 'doc',
+          hash: 'copy_text',
+          createdAt: now,
+          size: 1,
+          folder: 'copy_text',
+        ),
+      );
+      await TextManifest.addRecord(
+        TextRecord(
+          id: 'copy_rollback_text_child',
+          name: 'child',
+          hash: 'copy_text_child',
+          createdAt: now,
+          size: 1,
+          folder: 'copy_text/sub',
+        ),
+      );
+      await ImageManifest.addRecord(
+        ImageRecord(
+          id: 'copy_rollback_image',
+          name: 'img',
+          hash: 'copy_image',
+          format: 'png',
+          createdAt: now,
+          size: 1,
+          folder: 'copy_image',
+        ),
+      );
+      await ImageManifest.addRecord(
+        ImageRecord(
+          id: 'copy_rollback_image_child',
+          name: 'child',
+          hash: 'copy_image_child',
+          format: 'png',
+          createdAt: now,
+          size: 1,
+          folder: 'copy_image/sub',
+        ),
+      );
+      await VideoManifest.addRecord(
+        VideoRecord(
+          id: 'copy_rollback_video',
+          name: 'vid',
+          hash: 'copy_video',
+          format: 'mp4',
+          createdAt: now,
+          size: 1,
+          folder: 'copy_video',
+        ),
+      );
+      await VideoManifest.addRecord(
+        VideoRecord(
+          id: 'copy_rollback_video_child',
+          name: 'child',
+          hash: 'copy_video_child',
+          format: 'mp4',
+          createdAt: now,
+          size: 1,
+          folder: 'copy_video/sub',
+        ),
+      );
+      await FileManifest.addRecord(
+        AudioRecord(
+          id: 'copy_rollback_audio',
+          name: 'aud',
+          hash: 'copy_audio',
+          format: 'wav',
+          createdAt: now,
+          size: 1,
+          folder: 'copy_audio',
+        ),
+      );
+      await FileManifest.addRecord(
+        AudioRecord(
+          id: 'copy_rollback_audio_child',
+          name: 'child',
+          hash: 'copy_audio_child',
+          format: 'wav',
+          createdAt: now,
+          size: 1,
+          folder: 'copy_audio/sub',
+        ),
+      );
+
+      final operations = <Future<void> Function()>[
+        () => TextRecordsNotifier().copyFolder('copy_text', 'target'),
+        () => ImageRecordsNotifier().copyFolder('copy_image', 'target'),
+        () => VideoRecordsNotifier().copyFolder('copy_video', 'target'),
+        () => AudioRecordsNotifier().copyFolder('copy_audio', 'target'),
+      ];
+      final records = <Future<List<dynamic>> Function()>[
+        TextManifest.loadRecords,
+        ImageManifest.loadRecords,
+        VideoManifest.loadRecords,
+        FileManifest.loadRecords,
+      ];
+      final folders = <Future<Set<String>> Function()>[
+        TextManifest.getAllFolders,
+        ImageManifest.getAllFolders,
+        VideoManifest.getAllFolders,
+        FileManifest.getAllFolders,
+      ];
+      final sourceNames = [
+        'copy_text',
+        'copy_image',
+        'copy_video',
+        'copy_audio',
+      ];
+
+      for (var i = 0; i < operations.length; i++) {
+        var injected = false;
+        ManifestDatabase.beforeFolderInsertForTesting = (path) {
+          if (!injected && path == 'target/${sourceNames[i]}/sub') {
+            injected = true;
+            throw StateError('injected copy persistence failure');
+          }
+        };
+        await expectLater(operations[i](), throwsStateError);
+        ManifestDatabase.beforeFolderInsertForTesting = null;
+        expect(injected, isTrue);
+        expect(
+          (await records[i]()).every(
+            (record) => !record.folder.startsWith('target/${sourceNames[i]}'),
+          ),
+          isTrue,
+        );
+        expect(
+          (await folders[i]()).any(
+            (path) => path.startsWith('target/${sourceNames[i]}'),
+          ),
+          isFalse,
+        );
+
+        await operations[i]();
+        expect(
+          (await records[i]())
+              .where(
+                (record) =>
+                    record.folder.startsWith('target/${sourceNames[i]}'),
+              )
+              .length,
+          2,
+        );
+        expect(
+          (await folders[i]()).contains('target/${sourceNames[i]}/sub'),
+          isTrue,
+        );
+      }
+    },
+  );
+
   test('metadata-only folder cleanup preserves concurrent record paths',
       () async {
     final now = DateTime.now();
