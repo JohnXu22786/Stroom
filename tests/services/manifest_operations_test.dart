@@ -422,6 +422,521 @@ void main() {
   // ====================================================================
 
   group('entity file lifecycle (test mode)', () {
+    test('image publication waits for same-hash record deletion', () async {
+      final original = ImageRecord(
+        id: 'img_race_original',
+        name: 'original',
+        hash: 'hash_image_save_delete_race',
+        format: 'png',
+        createdAt: DateTime.now(),
+        size: 1,
+      );
+      final imported = ImageRecord(
+        id: 'img_race_imported',
+        name: 'imported',
+        hash: original.hash,
+        format: original.format,
+        createdAt: DateTime.now(),
+        size: 1,
+      );
+      final bytes = Uint8List.fromList([7]);
+      await ImageManifest.writeFile(original.storagePath, bytes);
+      await ImageManifest.addRecord(original);
+
+      final fileWritten = Completer<void>();
+      final resumePublication = Completer<void>();
+      final publish = ImageManifest.withFilePublicationLock(
+          original.hash, original.folder, () async {
+        await ImageManifest.writeFile(imported.storagePath, bytes);
+        fileWritten.complete();
+        await resumePublication.future; // models thumbnail generation
+        await ImageManifest.addRecord(imported);
+      });
+      await fileWritten.future;
+
+      var deleteCompleted = false;
+      final delete = ImageManifest.deleteRecord(original.id);
+      unawaited(delete.then((_) => deleteCompleted = true));
+      await Future<void>.delayed(Duration.zero);
+      expect(deleteCompleted, isFalse);
+      resumePublication.complete();
+      await Future.wait([publish, delete]);
+
+      expect(
+        (await ImageManifest.loadRecords()).map((record) => record.id),
+        contains(imported.id),
+      );
+      expect(
+        await WebFileStore.exists('pictures/${imported.storagePath}'),
+        isTrue,
+        reason: 'a published image record must keep its bytes available',
+      );
+    });
+
+    test('image overwrite preserves bytes published for a shared old hash',
+        () async {
+      final original = ImageRecord(
+        id: 'img_overwrite_original',
+        name: 'original',
+        hash: 'hash_image_overwrite_race',
+        format: 'png',
+        createdAt: DateTime.now(),
+        size: 1,
+      );
+      final imported = ImageRecord(
+        id: 'img_overwrite_imported',
+        name: 'imported',
+        hash: original.hash,
+        format: original.format,
+        createdAt: DateTime.now(),
+        size: 1,
+      );
+      final edited = ImageRecord(
+        id: 'img_overwrite_edited',
+        name: 'edited',
+        hash: 'hash_image_overwrite_result',
+        format: original.format,
+        createdAt: DateTime.now(),
+        size: 1,
+      );
+      final bytes = Uint8List.fromList([9]);
+      await ImageManifest.writeFile(original.storagePath, bytes);
+      await ImageManifest.addRecord(original);
+
+      final fileWritten = Completer<void>();
+      final resumePublication = Completer<void>();
+      final publish = ImageManifest.withFilePublicationLock(
+          original.hash, original.folder, () async {
+        await ImageManifest.writeFile(imported.storagePath, bytes);
+        fileWritten.complete();
+        await resumePublication.future;
+        await ImageManifest.addRecord(imported);
+      });
+      await fileWritten.future;
+
+      final overwrite = ImageManifest.withFolderReadLock(
+        original.folder,
+        () => ImageManifest.withSaveLocks(
+          [edited.hash, original.hash],
+          () async {
+            await ImageManifest.writeFile(edited.storagePath, bytes);
+            await ImageManifest.deleteRecord(original.id);
+            await ImageManifest.addRecord(edited);
+          },
+        ),
+      );
+      resumePublication.complete();
+      await Future.wait([publish, overwrite]);
+
+      expect(
+        (await ImageManifest.loadRecords()).map((record) => record.id),
+        containsAll([imported.id, edited.id]),
+      );
+      expect(
+        await WebFileStore.exists('pictures/${imported.storagePath}'),
+        isTrue,
+        reason: 'overwriting one reference must retain the shared old bytes',
+      );
+    });
+
+    test('saving unchanged image bytes keeps the replacement record usable',
+        () async {
+      final original = ImageRecord(
+        id: 'img_unchanged_original',
+        name: 'original',
+        hash: 'hash_unchanged_image_save',
+        format: 'png',
+        createdAt: DateTime.now(),
+        size: 1,
+      );
+      final replacement = ImageRecord(
+        id: 'img_unchanged_replacement',
+        name: 'replacement',
+        hash: original.hash,
+        format: original.format,
+        createdAt: DateTime.now(),
+        size: 1,
+      );
+      final bytes = Uint8List.fromList([10]);
+      await ImageManifest.writeFile(original.storagePath, bytes);
+      await ImageManifest.addRecord(original);
+
+      await ImageManifest.withFolderReadLock(
+        original.folder,
+        () => ImageManifest.withSaveLocks([original.hash], () async {
+          await ImageManifest.writeFile(replacement.storagePath, bytes);
+          await ImageManifest.addRecord(replacement);
+          await ImageManifest.deleteRecord(original.id);
+        }),
+      );
+
+      expect(
+        (await ImageManifest.loadRecords()).map((record) => record.id),
+        [replacement.id],
+      );
+      expect(
+        await WebFileStore.exists('pictures/${replacement.storagePath}'),
+        isTrue,
+        reason: 'the replacement record must retain the same-hash image file',
+      );
+    });
+
+    test('video publication waits for same-hash record deletion', () async {
+      final original = VideoRecord(
+        id: 'video_race_original',
+        name: 'original',
+        hash: 'hash_video_save_delete_race',
+        format: 'mp4',
+        createdAt: DateTime.now(),
+        size: 1,
+        duration: 1,
+      );
+      final imported = VideoRecord(
+        id: 'video_race_imported',
+        name: 'imported',
+        hash: original.hash,
+        format: original.format,
+        createdAt: DateTime.now(),
+        size: 1,
+        duration: 1,
+      );
+      final bytes = Uint8List.fromList([8]);
+      await VideoManifest.writeFile(original.storagePath, bytes);
+      await VideoManifest.addRecord(original);
+
+      final fileWritten = Completer<void>();
+      final resumePublication = Completer<void>();
+      final publish = VideoManifest.withFilePublicationLock(
+          original.hash, original.folder, () async {
+        await VideoManifest.writeFile(imported.storagePath, bytes);
+        fileWritten.complete();
+        await resumePublication.future; // models thumbnail generation
+        await VideoManifest.addRecord(imported);
+      });
+      await fileWritten.future;
+
+      var deleteCompleted = false;
+      final delete = VideoManifest.deleteRecord(original.id);
+      unawaited(delete.then((_) => deleteCompleted = true));
+      await Future<void>.delayed(Duration.zero);
+      expect(deleteCompleted, isFalse);
+      resumePublication.complete();
+      await Future.wait([publish, delete]);
+
+      expect(
+        (await VideoManifest.loadRecords()).map((record) => record.id),
+        contains(imported.id),
+      );
+      expect(
+        await WebFileStore.exists('videos/${imported.storagePath}'),
+        isTrue,
+        reason: 'a published video record must keep its bytes available',
+      );
+    });
+
+    test('image deletion retries after a record hash changes', () async {
+      const originalHash = 'hash_image_delete_snapshot';
+      const updatedHash = 'hash_image_delete_updated';
+      const originalId = 'image_delete_hash_update';
+      final original = ImageRecord(
+        id: originalId,
+        name: 'original',
+        hash: originalHash,
+        format: 'png',
+        createdAt: DateTime.now(),
+        size: 1,
+      );
+      final updated = ImageRecord(
+        id: originalId,
+        name: 'updated',
+        hash: updatedHash,
+        format: original.format,
+        createdAt: original.createdAt,
+        size: original.size,
+      );
+      final bytes = Uint8List.fromList([12]);
+      await ImageManifest.writeFile(original.storagePath, bytes);
+      await ImageManifest.addRecord(original);
+
+      final originalHashHeld = Completer<void>();
+      final releaseOriginalHash = Completer<void>();
+      final updateEnteredSave = Completer<void>();
+      final releaseUpdate = Completer<void>();
+      final publicationEntered = Completer<void>();
+      final releasePublication = Completer<void>();
+      ManifestDatabase.beforeWebDataSaveForTesting = () async {
+        if (!updateEnteredSave.isCompleted) {
+          updateEnteredSave.complete();
+          await releaseUpdate.future;
+        }
+      };
+      var deletionCompleted = false;
+      try {
+        final holdOriginalHash = ImageManifest.withSaveLock(
+          originalHash,
+          () async {
+            originalHashHeld.complete();
+            await releaseOriginalHash.future;
+          },
+        );
+        await originalHashHeld.future;
+
+        final update = ImageManifest.updateRecord(updated);
+        await Future<void>.delayed(Duration.zero);
+        final deletion = ImageManifest.deleteRecord(originalId).then((_) {
+          deletionCompleted = true;
+        });
+        await Future<void>.delayed(Duration.zero);
+        releaseOriginalHash.complete();
+        await updateEnteredSave.future.timeout(const Duration(seconds: 5));
+
+        final publication = ImageManifest.withSaveLock(updatedHash, () async {
+          await ImageManifest.writeFile(updated.storagePath, bytes);
+          publicationEntered.complete();
+          await releasePublication.future;
+        });
+        releaseUpdate.complete();
+        await publicationEntered.future.timeout(const Duration(seconds: 5));
+        await Future<void>.delayed(Duration.zero);
+        expect(deletionCompleted, isFalse);
+        expect(await ImageManifest.readFile(updated.storagePath), bytes);
+
+        releasePublication.complete();
+        await Future.wait([holdOriginalHash, update, deletion, publication]);
+      } finally {
+        if (!releaseOriginalHash.isCompleted) releaseOriginalHash.complete();
+        if (!releaseUpdate.isCompleted) releaseUpdate.complete();
+        if (!releasePublication.isCompleted) releasePublication.complete();
+        ManifestDatabase.beforeWebDataSaveForTesting = null;
+      }
+      expect(await ImageManifest.loadRecords(), isEmpty);
+      expect(await ImageManifest.readFile(updated.storagePath), isNull);
+    });
+
+    test('video deletion retries after a record hash changes', () async {
+      const originalHash = 'hash_video_delete_snapshot';
+      const updatedHash = 'hash_video_delete_updated';
+      const originalId = 'video_delete_hash_update';
+      final original = VideoRecord(
+        id: originalId,
+        name: 'original',
+        hash: originalHash,
+        format: 'mp4',
+        createdAt: DateTime.now(),
+        size: 1,
+        duration: 1,
+      );
+      final updated = VideoRecord(
+        id: originalId,
+        name: 'updated',
+        hash: updatedHash,
+        format: 'mp4',
+        createdAt: original.createdAt,
+        size: 1,
+        duration: 1,
+      );
+      final bytes = Uint8List.fromList([13]);
+      await VideoManifest.writeFile(original.storagePath, bytes);
+      await VideoManifest.addRecord(original);
+
+      final originalHashHeld = Completer<void>();
+      final releaseOriginalHash = Completer<void>();
+      final updateEnteredSave = Completer<void>();
+      final releaseUpdate = Completer<void>();
+      final publicationEntered = Completer<void>();
+      final releasePublication = Completer<void>();
+      ManifestDatabase.beforeWebDataSaveForTesting = () async {
+        if (!updateEnteredSave.isCompleted) {
+          updateEnteredSave.complete();
+          await releaseUpdate.future;
+        }
+      };
+      var deletionCompleted = false;
+      try {
+        final holdOriginalHash = VideoManifest.withSaveLock(
+          originalHash,
+          () async {
+            originalHashHeld.complete();
+            await releaseOriginalHash.future;
+          },
+        );
+        await originalHashHeld.future;
+
+        final update = VideoManifest.updateRecord(updated);
+        await Future<void>.delayed(Duration.zero);
+        final deletion = VideoManifest.deleteRecord(originalId).then((_) {
+          deletionCompleted = true;
+        });
+        await Future<void>.delayed(Duration.zero);
+        releaseOriginalHash.complete();
+        await updateEnteredSave.future.timeout(const Duration(seconds: 5));
+
+        final publication = VideoManifest.withSaveLock(updatedHash, () async {
+          await VideoManifest.writeFile(updated.storagePath, bytes);
+          publicationEntered.complete();
+          await releasePublication.future;
+        });
+        releaseUpdate.complete();
+        await publicationEntered.future.timeout(const Duration(seconds: 5));
+        await Future<void>.delayed(Duration.zero);
+        expect(deletionCompleted, isFalse);
+        expect(await VideoManifest.readFile(updated.storagePath), bytes);
+
+        releasePublication.complete();
+        await Future.wait([holdOriginalHash, update, deletion, publication]);
+      } finally {
+        if (!releaseOriginalHash.isCompleted) releaseOriginalHash.complete();
+        if (!releaseUpdate.isCompleted) releaseUpdate.complete();
+        if (!releasePublication.isCompleted) releasePublication.complete();
+        ManifestDatabase.beforeWebDataSaveForTesting = null;
+      }
+      expect(await VideoManifest.loadRecords(), isEmpty);
+      expect(await VideoManifest.readFile(updated.storagePath), isNull);
+    });
+
+    test('video folder removal waits for a record move into that folder',
+        () async {
+      const hash = 'hash_video_folder_move_delete_race';
+      final original = VideoRecord(
+        id: 'video_folder_move_delete',
+        name: 'moving',
+        hash: hash,
+        format: 'mp4',
+        createdAt: DateTime.now(),
+        size: 1,
+        duration: 1,
+      );
+      await VideoManifest.writeFile(
+        original.storagePath,
+        Uint8List.fromList([11]),
+      );
+      await VideoManifest.addRecord(original);
+      await VideoManifest.addFolder('race-folder');
+
+      final moveEntered = Completer<void>();
+      final resumeMove = Completer<void>();
+      ManifestDatabase.beforeWebDataSaveForTesting = () async {
+        if (!moveEntered.isCompleted) {
+          moveEntered.complete();
+          await resumeMove.future;
+        }
+      };
+      final move = VideoManifest.moveRecord(original.id, 'race-folder');
+      await moveEntered.future.timeout(const Duration(seconds: 5));
+
+      var deletionCompleted = false;
+      final deletion = VideoManifest.removeFolder('race-folder').then((_) {
+        deletionCompleted = true;
+      });
+      await Future<void>.delayed(Duration.zero);
+      expect(deletionCompleted, isFalse);
+      resumeMove.complete();
+      await Future.wait([move, deletion]);
+      ManifestDatabase.beforeWebDataSaveForTesting = null;
+
+      expect(await VideoManifest.loadRecords(), isEmpty);
+      expect(
+          await WebFileStore.exists('videos/${original.storagePath}'), isFalse);
+    });
+
+    test('video parent-folder removal waits for descendant folder creation',
+        () async {
+      await VideoManifest.addFolder('Trips');
+      final insertEntered = Completer<void>();
+      final resumeInsert = Completer<void>();
+      var pauseNextSave = true;
+      ManifestDatabase.beforeWebDataSaveForTesting = () async {
+        if (pauseNextSave) {
+          pauseNextSave = false;
+          insertEntered.complete();
+          await resumeInsert.future;
+        }
+      };
+
+      final creation = VideoManifest.addFolder('Trips/New');
+      await insertEntered.future.timeout(const Duration(seconds: 5));
+      var deletionCompleted = false;
+      final deletion = VideoManifest.removeFolder('Trips').then((_) {
+        deletionCompleted = true;
+      });
+      await Future<void>.delayed(Duration.zero);
+      expect(deletionCompleted, isFalse);
+      resumeInsert.complete();
+      await Future.wait([creation, deletion]);
+      ManifestDatabase.beforeWebDataSaveForTesting = null;
+
+      expect(await VideoManifest.getAllFolders(), isEmpty);
+    });
+
+    test('different video hashes publish concurrently within folder paths',
+        () async {
+      final firstEntered = Completer<void>();
+      final releaseFirst = Completer<void>();
+      final secondEntered = Completer<void>();
+      final releaseSecond = Completer<void>();
+      final siblingEntered = Completer<void>();
+      final releaseSibling = Completer<void>();
+      final first = VideoManifest.withFilePublicationLock(
+        'first_hash',
+        'Trips/2024',
+        () async {
+          firstEntered.complete();
+          await releaseFirst.future;
+        },
+      );
+      await firstEntered.future.timeout(const Duration(seconds: 5));
+
+      final second = VideoManifest.withFilePublicationLock(
+        'second_hash',
+        'Trips/2024',
+        () async {
+          secondEntered.complete();
+          await releaseSecond.future;
+        },
+      );
+      final sibling = VideoManifest.withFilePublicationLock(
+        'sibling_hash',
+        'Trips/2025',
+        () async {
+          siblingEntered.complete();
+          await releaseSibling.future;
+        },
+      );
+      try {
+        await secondEntered.future.timeout(const Duration(seconds: 5));
+        await siblingEntered.future.timeout(const Duration(seconds: 5));
+      } finally {
+        if (!releaseFirst.isCompleted) releaseFirst.complete();
+        if (!releaseSecond.isCompleted) releaseSecond.complete();
+        if (!releaseSibling.isCompleted) releaseSibling.complete();
+      }
+      await Future.wait([first, second, sibling]);
+    });
+
+    test('video moves between a folder and its child do not upgrade a lock',
+        () async {
+      final record = VideoRecord(
+        id: 'video_parent_child_move',
+        name: 'moving',
+        hash: 'hash_video_parent_child_move',
+        format: 'mp4',
+        createdAt: DateTime.now(),
+        size: 1,
+        duration: 1,
+        folder: 'parent',
+      );
+      await VideoManifest.writeFile(
+        record.storagePath,
+        Uint8List.fromList([12]),
+      );
+      await VideoManifest.addRecord(record);
+
+      await VideoManifest.moveRecord(record.id, 'parent/child');
+      expect((await VideoManifest.loadRecords()).single.folder, 'parent/child');
+      await VideoManifest.moveRecord(record.id, 'parent');
+      expect((await VideoManifest.loadRecords()).single.folder, 'parent');
+    });
+
     testWidgets('write/read/exists/delete roundtrip', (WidgetTester t) async {
       final data = Uint8List.fromList([1, 2, 3, 4]);
 

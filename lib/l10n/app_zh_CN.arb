@@ -1,5 +1,9 @@
 {
   "@@locale": "zh_CN",
+  "galleryPermissionTitle": "需要访问相册",
+  "galleryPermissionMessage": "请在系统设置中允许 Stroom 访问照片和视频。",
+  "galleryPermissionCancel": "取消",
+  "galleryPermissionOpenSettings": "打开设置",
   "languageSettingsTitle": "语言",
   "followSystemLanguage": "跟随系统",
   "themeDisplaySettingsTitle": "主题与显示",
