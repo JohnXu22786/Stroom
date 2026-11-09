@@ -41,6 +41,12 @@ Map<String, String> get openRouterAppHeaders => {
 const _bufferedStreamErrorBodyExtraKey = 'stroom.chat.bufferedStreamErrorBody';
 
 Future<Map<String, dynamic>?> parseStreamErrorBody(DioException e) async {
+  final bufferedBody = e.requestOptions.extra[_bufferedStreamErrorBodyExtraKey];
+  if (bufferedBody is Map) {
+    return Map<String, dynamic>.from(bufferedBody);
+  }
+  if (bufferedBody is String) return {'raw': bufferedBody};
+
   if (e.response?.data is ResponseBody) {
     try {
       final responseBody = e.response!.data as ResponseBody;

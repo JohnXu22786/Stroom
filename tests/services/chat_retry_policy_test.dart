@@ -249,6 +249,36 @@ void main() {
       expect(failure.response!.data, contains('insufficient_quota'));
     });
 
+    test('keeps buffered diagnostics when typed response rejects replacement',
+        () async {
+      const responseText = '{"error":{"type":"insufficient_quota"}}';
+      final requestOptions = RequestOptions(path: '/chat');
+      final failure = DioException(
+        requestOptions: requestOptions,
+        response: Response<ResponseBody>(
+          requestOptions: requestOptions,
+          statusCode: 429,
+          data: ResponseBody(
+            Stream.value(Uint8List.fromList(utf8.encode(responseText))),
+            429,
+          ),
+        ),
+        type: DioExceptionType.badResponse,
+      );
+
+      await expectLater(
+        retryRateLimitedStream<String>(
+          () => Stream.error(failure),
+          delay: (_) async {},
+        ),
+        emitsError(same(failure)),
+      );
+
+      expect(failure.response!.data, isA<ResponseBody>());
+      final diagnostics = await parseStreamErrorBody(failure);
+      expect(diagnostics?['raw'], responseText);
+    });
+
     test('cancellation interrupts a pending retry delay', () async {
       final cancelSignal = Completer<void>();
       final delayStarted = Completer<void>();
