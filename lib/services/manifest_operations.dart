@@ -761,7 +761,17 @@ class ManifestOperations<T extends FileRecord> {
     try {
       final rows = await _dbGetAllRecords();
       final records = rows.map((m) => fromMap(m)).toList();
-      await _migrateLegacyAudioStorageFiles(records);
+      try {
+        await _migrateLegacyAudioStorageFiles(records);
+      } catch (error, stackTrace) {
+        // A missing or unavailable file directory must not hide manifest rows.
+        await AppLogService.error(
+          'ManifestOperations($manifestKey)',
+          'failed to migrate legacy audio storage files',
+          error,
+          stackTrace,
+        );
+      }
       await beforeFolderLoadForTesting?.call();
       final folders = (await ManifestDatabase.getAllFolders(
         recordTable: tableName,

@@ -105,6 +105,47 @@ void main() {
     expect(await FileManifest.readFile(record.storagePath), bytes);
   });
 
+  test('audio manifest rows remain available if migration setup fails',
+      () async {
+    final originalPathProvider = PathProviderPlatform.instance;
+    final directory = await Directory.systemTemp.createTemp(
+      'manifest-audio-migration-test-',
+    );
+    PathProviderPlatform.instance = _DocumentsDirectory(directory.path);
+    WebFileStore.disableTestMode();
+    addTearDown(() async {
+      PathProviderPlatform.instance = originalPathProvider;
+      WebFileStore.enableTestMode();
+      await directory.delete(recursive: true);
+    });
+
+    final operations = ManifestOperations<AudioRecord>(
+      manifestKey: 'audio_manifest',
+      storageDirName: 'audio',
+      fromMap: AudioRecord.fromMap,
+      tableName: 'audio_records',
+      toMap: (record) => record.toMap(),
+      legacyStorageNameOf: (record) => '${record.hash}.${record.format}',
+    );
+    final record = AudioRecord(
+      id: 'audio_migration_dir_failure',
+      name: 'imported',
+      hash: 'migration_dir_hash',
+      format: 'wa?v',
+      createdAt: DateTime(2024, 1, 1),
+      size: 1,
+    );
+    await operations.addRecord(record);
+
+    final blocker = File('${directory.path}/not-a-directory');
+    await blocker.writeAsString('block directory creation');
+    PathProviderPlatform.instance = _DocumentsDirectory(blocker.path);
+
+    final records = await operations.loadRecords(forceRefresh: true);
+
+    expect(records.map((record) => record.id), contains(record.id));
+  });
+
   test('legacy migration preserves a Windows-normalized sibling file',
       () async {
     final wav = AudioRecord(
