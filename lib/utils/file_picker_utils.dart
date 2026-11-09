@@ -116,11 +116,19 @@ void validateUserVisibleExportPaths({
 
   final filePaths = <String>{};
   final directoryPaths = <String>{};
+  final directoryNamesByComparisonPath = <String, String>{};
 
   void addDirectoryAndAncestors(String path) {
     final segments = path.split('/');
     for (var i = 1; i <= segments.length; i++) {
-      directoryPaths.add(comparisonPath(segments.take(i).join('/')));
+      final directoryPath = segments.take(i).join('/');
+      final comparison = comparisonPath(directoryPath);
+      final existingPath = directoryNamesByComparisonPath[comparison];
+      if (existingPath != null && existingPath != directoryPath) {
+        throw StateError('Duplicate export folder path: $directoryPath');
+      }
+      directoryNamesByComparisonPath[comparison] = directoryPath;
+      directoryPaths.add(comparison);
     }
   }
 
