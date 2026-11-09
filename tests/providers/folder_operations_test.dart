@@ -653,6 +653,30 @@ void main() {
           reason: 'BUG: copied audio records must keep their duration');
     });
 
+    testWidgets('copied descendant records preserve duration',
+        (WidgetTester t) async {
+      final notifier = AudioRecordsNotifier();
+      await notifier.loadRecords();
+      await FileManifest.addRecord(AudioRecord(
+        id: 'audio_cp_desc_dur_1',
+        name: 'tts',
+        hash: 'hash_audio_cp_desc_dur_1',
+        format: 'wav',
+        createdAt: DateTime.now(),
+        size: 4,
+        folder: 'a/sub',
+        duration: 3700,
+      ));
+
+      await notifier.copyFolder('a', 'x');
+
+      await notifier.loadRecords();
+      final copies = notifier.state.where((r) => r.folder == 'x/a/sub');
+      expect(copies, hasLength(1));
+      expect(copies.first.duration, equals(3700),
+          reason: 'copied descendant audio records must keep their duration');
+    });
+
     testWidgets('copyFolder normalizes a trailing-slash target parent',
         (WidgetTester t) async {
       final notifier = AudioRecordsNotifier();
