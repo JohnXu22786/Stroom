@@ -58,8 +58,11 @@ class AnkiDroidPage extends ConsumerWidget {
       ),
       body: decksAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) =>
-            Center(child: Text(l10n.ankiDeckLoadError(e.toString()))),
+        error: (e, _) => Center(
+          child: Text(e is AnkiStatsUnsupportedException
+              ? l10n.ankiWebDecksUnsupportedPlatform
+              : l10n.ankiDeckLoadError(e.toString())),
+        ),
         data: (decks) => decks.isEmpty
             ? _buildEmptyState(context, ref)
             : _buildDeckList(context, ref, decks),
