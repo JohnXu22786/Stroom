@@ -320,12 +320,11 @@ class VideoRecordsNotifier extends StateNotifier<List<VideoRecord>> {
     final baseName = VideoManifest.getFolderBaseName(sourceName);
     // 规范化目标父路径（去首尾空白与尾部斜杠），'' 表示根目录
     final targetParentClean = targetParent.trim().replaceAll(
-      RegExp(r'/+$'),
-      '',
-    );
-    final newPath = targetParentClean.isEmpty
-        ? baseName
-        : '$targetParentClean/$baseName';
+          RegExp(r'/+$'),
+          '',
+        );
+    final newPath =
+        targetParentClean.isEmpty ? baseName : '$targetParentClean/$baseName';
 
     // 防止空源 / 纯空白目标 / 复制到自身/子文件夹（或原地复制），
     // 避免文件夹内出现重复记录与自我嵌套
@@ -358,6 +357,7 @@ class VideoRecordsNotifier extends StateNotifier<List<VideoRecord>> {
       rollbackRecordIds.add(record.id);
       await VideoManifest.addRecord(record);
     }
+
     await runFolderOperationWithRollback<VideoRecord>(
       originalRecords: const [],
       originalFolders: existing,

@@ -88,16 +88,14 @@ Future<void> runFolderOperationWithRollback<T>({
     final foldersToRemove = addedFolders.toList()
       ..sort((a, b) => b.length.compareTo(a.length));
     for (final folder in foldersToRemove) {
-      final hasUnrelatedFolders =
-          currentFolderSnapshot?.any(
+      final hasUnrelatedFolders = currentFolderSnapshot?.any(
             (path) =>
                 path.startsWith('$folder/') &&
                 !originalFolders.contains(path) &&
                 !createdFolderPaths.contains(path),
           ) ??
           true;
-      final hasUnrelatedRecords =
-          currentRecords?.any((record) {
+      final hasUnrelatedRecords = currentRecords?.any((record) {
             final recordPath = recordFolder(record);
             return !originalRecordIds.contains(recordId(record)) &&
                 (recordPath == folder || recordPath.startsWith('$folder/'));

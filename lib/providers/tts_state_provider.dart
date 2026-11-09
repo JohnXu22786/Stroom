@@ -393,12 +393,11 @@ class AudioRecordsNotifier extends StateNotifier<List<AudioRecord>> {
     final baseName = FileManifest.getFolderBaseName(sourceFolder);
     // 规范化目标父路径（去首尾空白与尾部斜杠），'' 表示根目录
     final targetFolderClean = targetFolder.trim().replaceAll(
-      RegExp(r'/+$'),
-      '',
-    );
-    final newPath = targetFolderClean.isEmpty
-        ? baseName
-        : '$targetFolderClean/$baseName';
+          RegExp(r'/+$'),
+          '',
+        );
+    final newPath =
+        targetFolderClean.isEmpty ? baseName : '$targetFolderClean/$baseName';
 
     // 防止空源 / 纯空白目标 / 复制到自身/子文件夹（或原地复制），
     // 避免文件夹内出现重复记录与自我嵌套
@@ -431,6 +430,7 @@ class AudioRecordsNotifier extends StateNotifier<List<AudioRecord>> {
       rollbackRecordIds.add(record.id);
       await FileManifest.addRecord(record);
     }
+
     await runFolderOperationWithRollback<AudioRecord>(
       originalRecords: const [],
       originalFolders: existing,

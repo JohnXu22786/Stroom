@@ -330,12 +330,11 @@ class ImageRecordsNotifier extends StateNotifier<List<ImageRecord>> {
     final baseName = ImageManifest.getFolderBaseName(sourceName);
     // 规范化目标父路径（去首尾空白与尾部斜杠），'' 表示根目录
     final targetParentClean = targetParent.trim().replaceAll(
-      RegExp(r'/+$'),
-      '',
-    );
-    final newPath = targetParentClean.isEmpty
-        ? baseName
-        : '$targetParentClean/$baseName';
+          RegExp(r'/+$'),
+          '',
+        );
+    final newPath =
+        targetParentClean.isEmpty ? baseName : '$targetParentClean/$baseName';
 
     // 防止空源 / 纯空白目标 / 复制到自身/子文件夹（或原地复制），
     // 避免文件夹内出现重复记录与自我嵌套
@@ -367,6 +366,7 @@ class ImageRecordsNotifier extends StateNotifier<List<ImageRecord>> {
       rollbackRecordIds.add(record.id);
       await ImageManifest.addRecord(record);
     }
+
     await runFolderOperationWithRollback<ImageRecord>(
       originalRecords: const [],
       originalFolders: existing,
