@@ -70,6 +70,7 @@ void validateUserVisibleExportPaths({
     r'^(CON|CONIN\$|CONOUT\$|PRN|AUX|NUL|COM[1-9¹²³]|LPT[1-9¹²³])$',
     caseSensitive: false,
   );
+  final invalidWindowsCharacter = RegExp(r'[<>:"|?*\x00-\x1F]');
 
   String safePath(String path) {
     final segments = path.replaceAll('\\', '/').split('/');
@@ -82,6 +83,9 @@ void validateUserVisibleExportPaths({
       throw ArgumentError.value(path, 'path', 'Invalid export path');
     }
     if (segments.any((segment) => segment.endsWith('.'))) {
+      throw ArgumentError.value(path, 'path', 'Invalid export path');
+    }
+    if (segments.any(invalidWindowsCharacter.hasMatch)) {
       throw ArgumentError.value(path, 'path', 'Invalid export path');
     }
     if (segments.any(

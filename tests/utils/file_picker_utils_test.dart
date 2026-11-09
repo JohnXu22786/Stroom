@@ -205,6 +205,47 @@ void main() {
     }
   });
 
+  test('rejects Windows forbidden characters in file and folder components',
+      () {
+    for (final file in const [
+      'bad?.txt',
+      'bad*.txt',
+      'bad".txt',
+      'bad<.txt',
+      'bad>.txt',
+      'bad|.txt',
+      'bad:.txt',
+      'bad\u0001.txt',
+    ]) {
+      expect(
+        () => validateUserVisibleExportPaths(files: [file]),
+        throwsArgumentError,
+        reason:
+            'File path component "$file" contains a Windows-forbidden character',
+      );
+    }
+    for (final folder in const [
+      'nested/bad?',
+      'nested/bad*',
+      'nested/bad"',
+      'nested/bad<',
+      'nested/bad>',
+      'nested/bad|',
+      'nested/bad:',
+      'nested/bad\u0001',
+    ]) {
+      expect(
+        () => validateUserVisibleExportPaths(
+          files: const [],
+          folders: [folder],
+        ),
+        throwsArgumentError,
+        reason:
+            'Folder path component "$folder" contains a Windows-forbidden character',
+      );
+    }
+  });
+
   test('allows distinct Unicode export names without case expansion', () {
     expect(
       () => validateUserVisibleExportPaths(
