@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/tool_call.dart';
 import '../providers/provider_config.dart';
+import '../providers/provider_config_display_names.dart';
 import '../providers/provider_preset_localizations.dart';
 import '../services/connectivity_test_service.dart';
 import '../services/http_tool_service.dart';
@@ -489,7 +490,9 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
           for (final group in groups.where((g) => g.id != currentGroupId))
             SimpleDialogOption(
               onPressed: () => Navigator.pop(ctx, group.id),
-              child: Text(group.name),
+              child: Text(
+                mcpGroupDisplayName(group, AppLocalizations.of(context)!),
+              ),
             ),
         ],
       ),
@@ -635,7 +638,12 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
         }).toList(),
     };
     return Scaffold(
-      appBar: AppBar(title: Text(entry.name), centerTitle: true),
+      appBar: AppBar(
+        title: Text(
+          providerEntryDisplayName(entry, AppLocalizations.of(context)!),
+        ),
+        centerTitle: true,
+      ),
       body: CustomScrollView(
         slivers: [
           SliverPadding(
@@ -820,7 +828,12 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
     final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
-      appBar: AppBar(title: Text(entry.name), centerTitle: true),
+      appBar: AppBar(
+        title: Text(
+          providerEntryDisplayName(entry, AppLocalizations.of(context)!),
+        ),
+        centerTitle: true,
+      ),
       body: CustomScrollView(
         slivers: [
           SliverPadding(
@@ -1338,7 +1351,10 @@ class _McpGroupHeaderCard extends StatelessWidget {
                     children: [
                       Flexible(
                         child: Text(
-                          group.name,
+                          mcpGroupDisplayName(
+                            group,
+                            AppLocalizations.of(context)!,
+                          ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(

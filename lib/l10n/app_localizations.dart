@@ -10580,6 +10580,14 @@ abstract class AppLocalizations {
   /// **'Built-in'**
   String get providerBuiltinBadge;
 
+  String get providerBuiltinTtsName;
+  String get providerBuiltinLlmName;
+  String get providerBuiltinOcrName;
+  String get providerBuiltinAsrName;
+  String get providerBuiltinMcpName;
+  String get providerBuiltinSearchGroupName;
+  String get providerBuiltinMcpServicesGroupName;
+
   /// No description provided for @providerConnectivityTest.
   ///
   /// In en, this message translates to:
