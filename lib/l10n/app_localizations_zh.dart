@@ -2941,6 +2941,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get appMediaUnreadable => '无法读取文件';
 
   @override
+  String appMediaLoadError(Object error) {
+    return '加载文件失败：$error';
+  }
+
+  @override
   String appMediaClearSelection(Object count) {
     return '清除 ($count)';
   }
@@ -13325,6 +13330,11 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get appMediaUnreadable => '无法读取文件';
+
+  @override
+  String appMediaLoadError(Object error) {
+    return '加载文件失败：$error';
+  }
 
   @override
   String appMediaClearSelection(Object count) {
