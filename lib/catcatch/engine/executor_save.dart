@@ -206,8 +206,8 @@ class _RegisteredVideo {
   _RegisteredVideo(this.record);
   final VideoRecord record;
 
-  Future<void> rollback() => _withStorageLock('video:${record.storageFileName}',
-      () => VideoManifest.deleteRecord(record.id, preserveFiles: true));
+  Future<void> rollback() =>
+      VideoManifest.deleteRecord(record.id, preserveFiles: true);
 }
 
 class _RegisteredAudio {
@@ -347,61 +347,65 @@ Future<_RegisteredVideo?> _registerCompletedVideo(
   final size = await file.length();
   _throwIfCancelled(cancelled);
   final storageName = '$hash.$ext';
-  return _withStorageLock('video:$storageName', () async {
-    _throwIfCancelled(cancelled);
-    final records = await VideoManifest.loadRecords();
-    _throwIfCancelled(cancelled);
-    final hadRecordOwner =
-        records.any((record) => record.storageFileName == storageName);
-    if (skipIfRegistered && hadRecordOwner) {
-      return null;
-    }
-    final folder = task.metadata['videoFolder'] ?? '';
-    final recordName = _uniqueRecordName(filePath, folder,
-        records.map((record) => (record.name, record.folder)));
-    final record = VideoRecord(
-      name: recordName,
-      hash: hash,
-      format: ext,
-      createdAt: DateTime.now(),
-      size: size,
-      duration: task.expectedDurationSec * 1000,
-      folder: folder,
-    );
-    try {
-      final storageDir = await VideoManifest.videoDir;
+  final folder = task.metadata['videoFolder'] ?? '';
+  return VideoManifest.withFilePublicationLock(
+    hash,
+    folder,
+    () => _withStorageLock('video:$storageName', () async {
       _throwIfCancelled(cancelled);
-      if (!await _storageBlobMatches(storageName, storageDir, hash,
-          readTestFile: VideoManifest.readFile)) {
+      final records = await VideoManifest.loadRecords();
+      _throwIfCancelled(cancelled);
+      final hadRecordOwner =
+          records.any((record) => record.storageFileName == storageName);
+      if (skipIfRegistered && hadRecordOwner) {
+        return null;
+      }
+      final recordName = _uniqueRecordName(filePath, folder,
+          records.map((record) => (record.name, record.folder)));
+      final record = VideoRecord(
+        name: recordName,
+        hash: hash,
+        format: ext,
+        createdAt: DateTime.now(),
+        size: size,
+        duration: task.expectedDurationSec * 1000,
+        folder: folder,
+      );
+      try {
+        final storageDir = await VideoManifest.videoDir;
         _throwIfCancelled(cancelled);
-        await _copyToStorage(file, storageName, storageDir, hash,
-            writeTestFile: VideoManifest.writeFile, cancelled: cancelled);
+        if (!await _storageBlobMatches(storageName, storageDir, hash,
+            readTestFile: VideoManifest.readFile)) {
+          _throwIfCancelled(cancelled);
+          await _copyToStorage(file, storageName, storageDir, hash,
+              writeTestFile: VideoManifest.writeFile, cancelled: cancelled);
+        }
+        _throwIfCancelled(cancelled);
+        await beforeRecordAdded?.call();
+        _throwIfCancelled(cancelled);
+        await VideoManifest.addRecord(record);
+        await afterRecordAdded?.call();
+        _throwIfCancelled(cancelled);
+        // A gallery delete can remove the last previous owner and its blob
+        // between our lookup and insert. Repair it now that our record owns it.
+        if (!await _storageBlobMatches(storageName, storageDir, hash,
+            readTestFile: VideoManifest.readFile)) {
+          await _copyToStorage(file, storageName, storageDir, hash,
+              writeTestFile: VideoManifest.writeFile, cancelled: cancelled);
+          await _verifyStorageBlob(storageName, storageDir, hash,
+              readTestFile: VideoManifest.readFile);
+        }
+        _throwIfCancelled(cancelled);
+        AppLogService.info('CatCatch', '视频已保存: $recordName.$ext ($size bytes)');
+        debugPrint('[TaskExecutor] Registered video to gallery: '
+            '$recordName.$ext (folder: $folder)');
+        return _RegisteredVideo(record);
+      } catch (_) {
+        await VideoManifest.deleteRecord(record.id, preserveFiles: true);
+        rethrow;
       }
-      _throwIfCancelled(cancelled);
-      await beforeRecordAdded?.call();
-      _throwIfCancelled(cancelled);
-      await VideoManifest.addRecord(record);
-      await afterRecordAdded?.call();
-      _throwIfCancelled(cancelled);
-      // A gallery delete can remove the last previous owner and its blob
-      // between our lookup and insert. Repair it now that our record owns it.
-      if (!await _storageBlobMatches(storageName, storageDir, hash,
-          readTestFile: VideoManifest.readFile)) {
-        await _copyToStorage(file, storageName, storageDir, hash,
-            writeTestFile: VideoManifest.writeFile, cancelled: cancelled);
-        await _verifyStorageBlob(storageName, storageDir, hash,
-            readTestFile: VideoManifest.readFile);
-      }
-      _throwIfCancelled(cancelled);
-      AppLogService.info('CatCatch', '视频已保存: $recordName.$ext ($size bytes)');
-      debugPrint('[TaskExecutor] Registered video to gallery: '
-          '$recordName.$ext (folder: $folder)');
-      return _RegisteredVideo(record);
-    } catch (_) {
-      await VideoManifest.deleteRecord(record.id, preserveFiles: true);
-      rethrow;
-    }
-  });
+    }),
+  );
 }
 
 Future<_RegisteredAudio?> _registerCompletedAudio(
