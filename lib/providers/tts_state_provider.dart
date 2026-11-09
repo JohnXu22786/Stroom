@@ -379,6 +379,7 @@ class AudioRecordsNotifier extends StateNotifier<List<AudioRecord>> {
             size: r.size,
             folder: newDescPath,
             sourceText: r.sourceText,
+            duration: r.duration,
           ));
         }
       }
