@@ -80,7 +80,13 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Assistant update check failed: $error')),
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context)!.topicAssistantUpdateCheckFailed(
+                error.toString(),
+              ),
+            ),
+          ),
         );
       }
     }

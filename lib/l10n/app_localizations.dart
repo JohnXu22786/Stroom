@@ -1594,6 +1594,9 @@ abstract class AppLocalizations {
   /// **'The update check failed. Please try again.'**
   String get aboutUpdateCheckFailed;
 
+  /// Assistant update check failure shown on the topic selection page.
+  String topicAssistantUpdateCheckFailed(Object error);
+
   /// No description provided for @aboutPrivacyContent.
   ///
   /// In en, this message translates to:

@@ -855,6 +855,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aboutUpdateCheckFailed => '检查更新失败，请重试。';
 
   @override
+  String topicAssistantUpdateCheckFailed(Object error) =>
+      '检查助手更新失败：$error';
+
+  @override
   String get aboutPrivacyContent =>
       'Stroom 尊重并保护所有使用服务用户的个人隐私权。\n\n1. 相机权限：仅用于拍摄照片，不会收集或上传任何图像数据。\n\n2. 相册权限：仅用于选择照片和保存照片，所有照片都保存在本地设备。\n\n3. 数据安全：所有拍摄的照片都保存在您的设备本地，我们不会访问或上传任何数据。\n\n4. 第三方服务：本应用不包含任何第三方分析或广告服务。\n\n如果您有任何疑问，请联系我们。';
 
