@@ -27,6 +27,113 @@ void main() {
   });
 
   testWidgets(
+    'concurrent folder copies to the same destination publish one copy for all types',
+    (WidgetTester t) async {
+      final now = DateTime.now();
+      await TextManifest.addRecord(TextRecord(
+          id: 'copy_race_text',
+          name: 'doc',
+          hash: 'copy_race_text_hash',
+          createdAt: now,
+          size: 1,
+          folder: 'copy_race_text'));
+      await TextManifest.addRecord(TextRecord(
+          id: 'copy_race_text_child',
+          name: 'child',
+          hash: 'copy_race_text_child_hash',
+          createdAt: now,
+          size: 1,
+          folder: 'copy_race_text/sub'));
+      await ImageManifest.addRecord(ImageRecord(
+          id: 'copy_race_image',
+          name: 'img',
+          hash: 'copy_race_image_hash',
+          format: 'png',
+          createdAt: now,
+          size: 1,
+          folder: 'copy_race_image'));
+      await ImageManifest.addRecord(ImageRecord(
+          id: 'copy_race_image_child',
+          name: 'child',
+          hash: 'copy_race_image_child_hash',
+          format: 'png',
+          createdAt: now,
+          size: 1,
+          folder: 'copy_race_image/sub'));
+      await VideoManifest.addRecord(VideoRecord(
+          id: 'copy_race_video',
+          name: 'vid',
+          hash: 'copy_race_video_hash',
+          format: 'mp4',
+          createdAt: now,
+          size: 1,
+          folder: 'copy_race_video'));
+      await VideoManifest.addRecord(VideoRecord(
+          id: 'copy_race_video_child',
+          name: 'child',
+          hash: 'copy_race_video_child_hash',
+          format: 'mp4',
+          createdAt: now,
+          size: 1,
+          folder: 'copy_race_video/sub'));
+      await FileManifest.addRecord(AudioRecord(
+          id: 'copy_race_audio',
+          name: 'aud',
+          hash: 'copy_race_audio_hash',
+          format: 'wav',
+          createdAt: now,
+          size: 1,
+          folder: 'copy_race_audio'));
+      await FileManifest.addRecord(AudioRecord(
+          id: 'copy_race_audio_child',
+          name: 'child',
+          hash: 'copy_race_audio_child_hash',
+          format: 'wav',
+          createdAt: now,
+          size: 1,
+          folder: 'copy_race_audio/sub'));
+
+      final operations = <Future<void> Function()>[
+        () => TextRecordsNotifier().copyFolder('copy_race_text', 'target'),
+        () => ImageRecordsNotifier().copyFolder('copy_race_image', 'target'),
+        () => VideoRecordsNotifier().copyFolder('copy_race_video', 'target'),
+        () => AudioRecordsNotifier().copyFolder('copy_race_audio', 'target'),
+      ];
+      final records = <Future<List<dynamic>> Function()>[
+        TextManifest.loadRecords,
+        ImageManifest.loadRecords,
+        VideoManifest.loadRecords,
+        FileManifest.loadRecords,
+      ];
+      final folders = <Future<Set<String>> Function()>[
+        TextManifest.getAllFolders,
+        ImageManifest.getAllFolders,
+        VideoManifest.getAllFolders,
+        FileManifest.getAllFolders,
+      ];
+      final names = [
+        'copy_race_text',
+        'copy_race_image',
+        'copy_race_video',
+        'copy_race_audio',
+      ];
+
+      for (var i = 0; i < operations.length; i++) {
+        await Future.wait([operations[i](), operations[i]()]);
+
+        final copiedRecords = (await records[i]())
+            .where((record) => record.folder.startsWith('target/${names[i]}'));
+        expect(copiedRecords, hasLength(2),
+            reason: 'concurrent copies must publish records only once');
+        final copiedFolders = (await folders[i]())
+            .where((path) => path.startsWith('target/${names[i]}'))
+            .toSet();
+        expect(copiedFolders, {'target/${names[i]}', 'target/${names[i]}/sub'});
+      }
+    },
+  );
+
+  testWidgets(
       'folder rename rolls back partial manifest failures for all types',
       (WidgetTester t) async {
     final now = DateTime.now();
