@@ -22,9 +22,9 @@ extension _ProviderSettingsPanelTabAsrExt on _ProviderSettingsPanelState {
       Text(
         AppLocalizations.of(context)!.providerAudioChunkingHint,
         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-          color: cs.onSurfaceVariant,
-          height: 1.4,
-        ),
+              color: cs.onSurfaceVariant,
+              height: 1.4,
+            ),
       ),
       const SizedBox(height: 16),
       Row(
@@ -63,8 +63,8 @@ extension _ProviderSettingsPanelTabAsrExt on _ProviderSettingsPanelState {
                     child: Text(
                       AppLocalizations.of(context)!.providerChunkSmart,
                       style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
+                            fontWeight: FontWeight.w600,
+                          ),
                     ),
                   ),
                   DropdownMenuItem(
@@ -117,9 +117,9 @@ extension _ProviderSettingsPanelTabAsrExt on _ProviderSettingsPanelState {
       Text(
         AppLocalizations.of(context)!.providerCompressionHint,
         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-          color: cs.onSurfaceVariant,
-          height: 1.4,
-        ),
+              color: cs.onSurfaceVariant,
+              height: 1.4,
+            ),
       ),
       const SizedBox(height: 16),
       Row(

@@ -258,9 +258,10 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                     children: [
                       Text(
                         strings.taskFlowUiBlockSettings(blockLabel),
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
+                        style:
+                            Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
                       ),
                       Text(
                         strings.taskFlowUiInputOutput(
@@ -335,8 +336,8 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                         AppLocalizations.of(context)!
                             .taskFlowUiNoExtraParameters,
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: cs.onSurfaceVariant,
-                        ),
+                              color: cs.onSurfaceVariant,
+                            ),
                       ),
                     ),
                   )
@@ -417,9 +418,9 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
           Text(
             '${label}${param.required ? ' *' : ''}',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w500,
-              color: cs.onSurface,
-            ),
+                  fontWeight: FontWeight.w500,
+                  color: cs.onSurface,
+                ),
           ),
           const SizedBox(height: 4),
           _buildInputField(param, value, cs),
@@ -525,8 +526,8 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                 ),
               ),
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: cs.onSurface,
-              ),
+                    color: cs.onSurface,
+                  ),
               items: List.generate(models.length, (i) {
                 final dynamic m = models[i].model;
                 final dynamic c = models[i].config;
@@ -698,8 +699,8 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                 ? AppLocalizations.of(context)!.taskFlowUiVoiceUnavailable
                 : AppLocalizations.of(context)!.taskFlowUiSelectVoice,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: cs.onSurfaceVariant,
-            ),
+                  color: cs.onSurfaceVariant,
+                ),
           ),
           items: voiceOptions.map((o) {
             return DropdownMenuItem<String>(
@@ -759,10 +760,10 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                                     .taskFlowUiAssistantUnavailable)
                             : '${display.$1} ${display.$2}',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: display == null
-                              ? cs.onSurfaceVariant
-                              : cs.onSurface,
-                        ),
+                              color: display == null
+                                  ? cs.onSurfaceVariant
+                                  : cs.onSurface,
+                            ),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -819,8 +820,8 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
               child: Text(
                 '${display.toStringAsFixed(1)}x',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: cs.onSurface,
-                ),
+                      color: cs.onSurface,
+                    ),
                 textAlign: TextAlign.right,
               ),
             ),
@@ -938,8 +939,8 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                 ? AppLocalizations.of(context)!.taskFlowUiYes
                 : AppLocalizations.of(context)!.taskFlowUiNo,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: cs.onSurfaceVariant,
-            ),
+                  color: cs.onSurfaceVariant,
+                ),
           ),
         );
 
@@ -960,10 +961,10 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                       ? value.toString()
                       : AppLocalizations.of(context)!.taskFlowUiDefaultRoot,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: value?.toString().isNotEmpty == true
-                        ? cs.onSurface
-                        : cs.onSurfaceVariant,
-                  ),
+                        color: value?.toString().isNotEmpty == true
+                            ? cs.onSurface
+                            : cs.onSurfaceVariant,
+                      ),
                   overflow: TextOverflow.ellipsis,
                   maxLines: 1,
                 ),

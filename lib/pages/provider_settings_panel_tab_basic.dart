@@ -186,9 +186,9 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
       Text(
         AppLocalizations.of(context)!.providerUploadMethodHelp,
         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-          color: cs.onSurfaceVariant,
-          height: 1.4,
-        ),
+              color: cs.onSurfaceVariant,
+              height: 1.4,
+            ),
       ),
       const SizedBox(height: 16),
       Row(
@@ -331,9 +331,9 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
       Text(
         AppLocalizations.of(context)!.providerFallbackTriggerHelp,
         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-          color: cs.onSurfaceVariant,
-          height: 1.4,
-        ),
+              color: cs.onSurfaceVariant,
+              height: 1.4,
+            ),
       ),
       const SizedBox(height: 16),
       Row(
@@ -386,8 +386,8 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
                     child: Text(
                       AppLocalizations.of(context)!.providerFallbackAll,
                       style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
+                            fontWeight: FontWeight.w600,
+                          ),
                     ),
                   ),
                 ],
@@ -432,9 +432,9 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
       Text(
         AppLocalizations.of(context)!.providerPreprocessingHelp,
         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-          color: cs.onSurfaceVariant,
-          height: 1.4,
-        ),
+              color: cs.onSurfaceVariant,
+              height: 1.4,
+            ),
       ),
       const SizedBox(height: 16),
       Row(

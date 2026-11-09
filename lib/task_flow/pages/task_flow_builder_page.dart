@@ -493,8 +493,8 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
             maxLines: 2,
             minLines: 1,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: cs.onSurfaceVariant,
-            ),
+                  color: cs.onSurfaceVariant,
+                ),
           ),
         ],
       ),
@@ -756,8 +756,8 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
             Text(
               _descController.text.trim(),
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: cs.onSurfaceVariant,
-              ),
+                    color: cs.onSurfaceVariant,
+                  ),
             ),
           ],
         ],
@@ -878,8 +878,8 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
               child: Text(
                 AppLocalizations.of(context)!.taskFlowUiNoInput,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: cs.onSurfaceVariant.withValues(alpha: 0.6),
-                ),
+                      color: cs.onSurfaceVariant.withValues(alpha: 0.6),
+                    ),
               ),
             ),
           ),
@@ -1041,8 +1041,8 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                   Text(
                     AppLocalizations.of(context)!.taskFlowUiPreview,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: cs.onSurfaceVariant,
-                    ),
+                          color: cs.onSurfaceVariant,
+                        ),
                   ),
                   Text(
                     preview,
@@ -1383,9 +1383,10 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                       children: [
                         Text(
                           '${paramDef == null ? e.key : localizedBlockParamLabel(def!, paramDef, strings)}: ',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: cs.primary,
-                          ),
+                          style:
+                              Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    color: cs.primary,
+                                  ),
                         ),
                         Expanded(
                           // Friendly display — raw ids (assistant uuids,
@@ -1397,9 +1398,12 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                               ref,
                               params: block.params,
                             ),
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: cs.onSurfaceVariant,
-                            ),
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(
+                                  color: cs.onSurfaceVariant,
+                                ),
                           ),
                         ),
                       ],
