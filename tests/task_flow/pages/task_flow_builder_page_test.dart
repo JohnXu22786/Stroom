@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/l10n/app_localizations.dart';
+import 'package:stroom/providers/assistant_provider.dart';
+import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/task_flow/models/block_type_definition.dart';
 import 'package:stroom/task_flow/models/io_type.dart';
 import 'package:stroom/task_flow/models/task_flow_definition.dart';
@@ -16,6 +18,18 @@ class _Flows extends TaskFlowNotifier {
   Future<bool> persist() async {
     writes++;
     return true;
+  }
+}
+
+class _Entries extends ProviderEntriesNotifier {
+  _Entries() {
+    state = const ProviderEntriesState();
+  }
+}
+
+class _Assistants extends AssistantsNotifier {
+  _Assistants() {
+    state = const [];
   }
 }
 
@@ -156,6 +170,63 @@ void main() {
     await tester.tap(find.text('保存'));
     await tester.pumpAndSettle();
     expect(flows.getFlow(flow.id)!.inputType, IOType.file);
+  });
+
+  testWidgets('run-mode parameter labels follow the selected locale',
+      (tester) async {
+    final flows = _Flows();
+    final flow = TaskFlowDefinition(
+      name: 'Localized parameters',
+      blocks: [
+        TaskFlowBlock(
+          typeKey: BlockType.chat,
+          params: {'assistantId': ''},
+        ),
+        TaskFlowBlock(
+          typeKey: BlockType.tts,
+          params: {
+            'modelRef': 'deleted-model',
+            'voice': 'deleted-voice',
+            'saveFolder': '',
+          },
+        ),
+      ],
+    );
+    await flows.saveFlow(flow);
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        taskFlowListProvider.overrideWith((_) => flows),
+        providerEntriesProvider.overrideWith((_) => _Entries()),
+        assistantProvider.overrideWith((_) => _Assistants()),
+      ],
+      child: MaterialApp(
+        locale: const Locale('en', 'US'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: TaskFlowBuilderPage(flowId: flow.id, startInRunMode: true),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(FlowBlockCard).first);
+    await tester.pumpAndSettle();
+    expect(find.text('Assistant: (Not set)'), findsOneWidget);
+    await tester.tap(find.text('Close'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(FlowBlockCard).last);
+    await tester.pumpAndSettle();
+    expect(
+      find.text(
+        'Synthesis model: No model is selected or the model is unavailable. Select another model.',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.text('Voice: Voice is unavailable. Select another voice.'),
+      findsOneWidget,
+    );
+    expect(find.text('Save folder: Root folder'), findsOneWidget);
   });
 
   testWidgets('an initial template stays an independent unsaved draft',

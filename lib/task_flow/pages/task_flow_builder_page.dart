@@ -1396,6 +1396,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                               paramDef,
                               e.value,
                               ref,
+                              strings: strings,
                               params: block.params,
                             ),
                             style: Theme.of(context)

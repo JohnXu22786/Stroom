@@ -281,7 +281,13 @@ class FlowBlockCard extends ConsumerWidget {
                                   strings,
                                 );
                           return Text(
-                            '$label: ${friendlyParamValue(paramDef, e.value, ref, params: block.params)}',
+                            '$label: ${friendlyParamValue(
+                              paramDef,
+                              e.value,
+                              ref,
+                              strings: strings,
+                              params: block.params,
+                            )}',
                             style: TextStyle(
                               fontSize: 10,
                               color: cs.onSurfaceVariant,
