@@ -110,6 +110,7 @@ class AtomicFile {
         try {
           // rename 自身替换已有文件，不能先删除目标或回退到直接覆盖。
           beforeCommit?.call();
+          await atomic_file_platform.preservePermissions(file, tmpFile);
           await tmpFile.rename(file.path);
           return;
         } on FileSystemException {
