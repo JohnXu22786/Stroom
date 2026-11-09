@@ -2451,7 +2451,12 @@ def verify_fixtures(
         digest = fixture.get("sha256")
         if not isinstance(image, str) or not isinstance(digest, str):
             raise EvaluationError(f"{fixture_id}: image and sha256 are required")
-        image_path = (root / image).resolve()
+        try:
+            image_path = (root / image).resolve()
+        except (OSError, RuntimeError) as error:
+            raise EvaluationError(
+                f"{fixture_id}: cannot resolve image path {image}: {error}"
+            ) from error
         if not image_path.is_relative_to(root):
             raise EvaluationError(f"{fixture_id}: image path escapes fixture root")
         _reject_output_input_collision(
