@@ -141,6 +141,10 @@ class ImageManifest {
   );
 
   static Future<List<ImageRecord>> loadRecords() => _ops.loadRecords();
+
+  /// Loads records while preserving read failures for callers that display them.
+  static Future<List<ImageRecord>> loadRecordsStrict() =>
+      _ops.loadRecords(forceRefresh: true, throwOnError: true);
   static Future<void> addRecord(ImageRecord record) => _ops.addRecord(record);
   static Future<void> deleteRecord(String id) => _ops.deleteRecord(id);
   static Future<void> deleteRecords(List<String> ids) =>
