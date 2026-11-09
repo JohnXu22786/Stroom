@@ -10,6 +10,19 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
+  String get galleryPermissionTitle => 'Photo library access required';
+
+  @override
+  String get galleryPermissionMessage =>
+      'Allow Stroom to access photos and videos in system settings.';
+
+  @override
+  String get galleryPermissionCancel => 'Cancel';
+
+  @override
+  String get galleryPermissionOpenSettings => 'Open settings';
+
+  @override
   String get languageSettingsTitle => 'Language';
 
   @override
@@ -11022,6 +11035,19 @@ class AppLocalizationsEn extends AppLocalizations {
 /// The translations for English, as used in the United States (`en_US`).
 class AppLocalizationsEnUs extends AppLocalizationsEn {
   AppLocalizationsEnUs() : super('en_US');
+
+  @override
+  String get galleryPermissionTitle => 'Photo library access required';
+
+  @override
+  String get galleryPermissionMessage =>
+      'Allow Stroom to access photos and videos in system settings.';
+
+  @override
+  String get galleryPermissionCancel => 'Cancel';
+
+  @override
+  String get galleryPermissionOpenSettings => 'Open settings';
 
   @override
   String get languageSettingsTitle => 'Language';

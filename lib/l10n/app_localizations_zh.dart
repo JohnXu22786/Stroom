@@ -10,6 +10,18 @@ class AppLocalizationsZh extends AppLocalizations {
   AppLocalizationsZh([String locale = 'zh']) : super(locale);
 
   @override
+  String get galleryPermissionTitle => '需要访问相册';
+
+  @override
+  String get galleryPermissionMessage => '请在系统设置中允许 Stroom 访问照片和视频。';
+
+  @override
+  String get galleryPermissionCancel => '取消';
+
+  @override
+  String get galleryPermissionOpenSettings => '打开设置';
+
+  @override
   String get languageSettingsTitle => '语言';
 
   @override
@@ -855,8 +867,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aboutUpdateCheckFailed => '检查更新失败，请重试。';
 
   @override
-  String topicAssistantUpdateCheckFailed(Object error) =>
-      '检查助手更新失败：$error';
+  String topicAssistantUpdateCheckFailed(Object error) => '检查助手更新失败：$error';
 
   @override
   String get aboutPrivacyContent =>
@@ -10454,6 +10465,18 @@ class AppLocalizationsZh extends AppLocalizations {
 /// The translations for Chinese, as used in China (`zh_CN`).
 class AppLocalizationsZhCn extends AppLocalizationsZh {
   AppLocalizationsZhCn() : super('zh_CN');
+
+  @override
+  String get galleryPermissionTitle => '需要访问相册';
+
+  @override
+  String get galleryPermissionMessage => '请在系统设置中允许 Stroom 访问照片和视频。';
+
+  @override
+  String get galleryPermissionCancel => '取消';
+
+  @override
+  String get galleryPermissionOpenSettings => '打开设置';
 
   @override
   String get languageSettingsTitle => '语言';
