@@ -6232,6 +6232,27 @@ class AppLocalizationsEn extends AppLocalizations {
   String get providerBuiltinBadge => 'Built-in';
 
   @override
+  String get providerBuiltinTtsName => 'TTS Provider';
+
+  @override
+  String get providerBuiltinLlmName => 'LLM Provider';
+
+  @override
+  String get providerBuiltinOcrName => 'OCR Provider';
+
+  @override
+  String get providerBuiltinAsrName => 'Speech Recognition Provider';
+
+  @override
+  String get providerBuiltinMcpName => 'MCP Provider';
+
+  @override
+  String get providerBuiltinSearchGroupName => 'Search';
+
+  @override
+  String get providerBuiltinMcpServicesGroupName => 'Other MCP Services';
+
+  @override
   String get providerConnectivityTest => 'Connectivity test';
 
   @override
@@ -17281,6 +17302,27 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get providerBuiltinBadge => 'Built-in';
+
+  @override
+  String get providerBuiltinTtsName => 'TTS Provider';
+
+  @override
+  String get providerBuiltinLlmName => 'LLM Provider';
+
+  @override
+  String get providerBuiltinOcrName => 'OCR Provider';
+
+  @override
+  String get providerBuiltinAsrName => 'Speech Recognition Provider';
+
+  @override
+  String get providerBuiltinMcpName => 'MCP Provider';
+
+  @override
+  String get providerBuiltinSearchGroupName => 'Search';
+
+  @override
+  String get providerBuiltinMcpServicesGroupName => 'Other MCP Services';
 
   @override
   String get providerConnectivityTest => 'Connectivity test';
