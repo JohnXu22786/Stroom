@@ -1256,6 +1256,8 @@ class ManifestOperations<T extends FileRecord> {
     }
   }
 
+  Future<bool> fileExists(String fileName) => _storedFileExists(fileName);
+
   Future<Uint8List?> readFile(String fileName) async {
     try {
       if (_useWebFileStore) {
