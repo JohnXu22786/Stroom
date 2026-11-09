@@ -80,8 +80,19 @@ void validateUserVisibleExportPaths({
   }
 
   // Normalize canonical Unicode equivalents and case variants to one key.
-  String comparisonPath(String path) =>
-      unorm.nfc(path).toUpperCase().toLowerCase();
+  // Avoid collisions caused by uppercase expansions such as ß → SS and
+  // ﬃ → FFI, while retaining Greek case aliases whose mappings expand.
+  String comparisonPath(String path) => unorm.nfc(
+        path.runes.map((rune) {
+          final character = String.fromCharCode(rune);
+          final uppercase = character.toUpperCase();
+          final expands = uppercase.runes.length > 1;
+          final isGreek = rune >= 0x1F00 && rune <= 0x1FFF;
+          return expands && !isGreek
+              ? character.toLowerCase()
+              : uppercase.toLowerCase();
+        }).join(),
+      );
 
   final filePaths = <String>{};
   final directoryPaths = <String>{};
