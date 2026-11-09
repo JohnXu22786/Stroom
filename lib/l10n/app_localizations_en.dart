@@ -1990,6 +1990,30 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatDataDetails => 'Data details';
 
   @override
+  String get chatErrorDetailOcrDiagnostics => 'OCR Diagnostics';
+
+  @override
+  String get chatErrorDetailRequestUrl => 'Request URL';
+
+  @override
+  String get chatErrorDetailRequestHeaders => 'Request Headers';
+
+  @override
+  String get chatErrorDetailRequestBody => 'Request Body';
+
+  @override
+  String get chatErrorDetailStatusCode => 'Status Code';
+
+  @override
+  String get chatErrorDetailResponseHeaders => 'Response Headers';
+
+  @override
+  String get chatErrorDetailResponseBody => 'Response Body';
+
+  @override
+  String get chatErrorDetailEmpty => 'No detail data available';
+
+  @override
   String get chatAudioPreviewClose => 'Close';
 
   @override
@@ -12974,6 +12998,30 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get chatDataDetails => 'Data details';
+
+  @override
+  String get chatErrorDetailOcrDiagnostics => 'OCR Diagnostics';
+
+  @override
+  String get chatErrorDetailRequestUrl => 'Request URL';
+
+  @override
+  String get chatErrorDetailRequestHeaders => 'Request Headers';
+
+  @override
+  String get chatErrorDetailRequestBody => 'Request Body';
+
+  @override
+  String get chatErrorDetailStatusCode => 'Status Code';
+
+  @override
+  String get chatErrorDetailResponseHeaders => 'Response Headers';
+
+  @override
+  String get chatErrorDetailResponseBody => 'Response Body';
+
+  @override
+  String get chatErrorDetailEmpty => 'No detail data available';
 
   @override
   String get chatAudioPreviewClose => 'Close';

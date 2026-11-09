@@ -949,7 +949,7 @@ void main() {
       await tester.tap(find.text('查看错误详情'));
       await tester.pumpAndSettle();
 
-      expect(find.text('OCR Diagnostics'), findsOneWidget);
+      expect(find.text('OCR 诊断'), findsOneWidget);
     });
   });
 

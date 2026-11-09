@@ -728,6 +728,14 @@
     }
   },
   "chatDataDetails": "数据详情",
+  "chatErrorDetailOcrDiagnostics": "OCR 诊断",
+  "chatErrorDetailRequestUrl": "请求 URL",
+  "chatErrorDetailRequestHeaders": "请求标头",
+  "chatErrorDetailRequestBody": "请求正文",
+  "chatErrorDetailStatusCode": "状态码",
+  "chatErrorDetailResponseHeaders": "响应标头",
+  "chatErrorDetailResponseBody": "响应正文",
+  "chatErrorDetailEmpty": "暂无详细信息",
   "chatAudioPreviewClose": "关闭",
   "@chatSavedToPath": {
     "description": "Path of the saved Markdown file",
