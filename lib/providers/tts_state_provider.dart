@@ -392,8 +392,10 @@ class AudioRecordsNotifier extends StateNotifier<List<AudioRecord>> {
   Future<void> copyFolder(String sourceFolder, String targetFolder) async {
     final baseName = FileManifest.getFolderBaseName(sourceFolder);
     // 规范化目标父路径（去首尾空白与尾部斜杠），'' 表示根目录
-    final targetFolderClean =
-        targetFolder.trim().replaceAll(RegExp(r'/+$'), '');
+    final targetFolderClean = targetFolder.trim().replaceAll(
+          RegExp(r'/+$'),
+          '',
+        );
     final newPath =
         targetFolderClean.isEmpty ? baseName : '$targetFolderClean/$baseName';
 
@@ -415,57 +417,100 @@ class AudioRecordsNotifier extends StateNotifier<List<AudioRecord>> {
     // ConcurrentModificationError.
     final records = List<AudioRecord>.from(await FileManifest.loadRecords());
 
-    // 复制 sourceFolder 本身的记录
-    for (final r in records) {
-      if (r.folder == sourceFolder) {
-        await FileManifest.addRecord(AudioRecord(
-          name: r.name,
-          hash: r.hash,
-          format: r.format,
-          createdAt: DateTime.now(),
-          size: r.size,
-          folder: newPath,
-          sourceText: r.sourceText,
-          duration: r.duration,
-        ));
-      }
-    }
-
-    // 复制所有后代文件夹的记录
-    final descendants =
-        await FileManifest.getAllDescendantFolderPaths(sourceFolder);
-    for (final desc in descendants) {
-      final suffix = desc.substring(sourceFolder.length);
-      final newDescPath = '$newPath$suffix';
-      for (final r in records) {
-        if (r.folder == desc) {
-          await FileManifest.addRecord(AudioRecord(
-            name: r.name,
-            hash: r.hash,
-            format: r.format,
-            createdAt: DateTime.now(),
-            size: r.size,
-            folder: newDescPath,
-            sourceText: r.sourceText,
-            duration: r.duration,
-          ));
-        }
-      }
-      // 空子文件夹（无记录）也需要保留在缓存中
-      await FileManifest.addFolderPath(newDescPath);
-    }
-
-    await FileManifest.addFolderPath(newPath);
+    final rollbackFolderAncestors = <String>{};
     if (targetFolderClean.isNotEmpty) {
-      await FileManifest.addFolder(targetFolderClean);
-      // 空文件夹复制不经过 addRecord，祖先目录不会被自动跟踪，需逐级补齐
-      var ancestor = FileManifest.getParentFolderPath(targetFolderClean);
+      var ancestor = targetFolderClean;
       while (ancestor.isNotEmpty) {
-        await FileManifest.addFolder(ancestor);
+        rollbackFolderAncestors.add(ancestor);
         ancestor = FileManifest.getParentFolderPath(ancestor);
       }
     }
-    await loadRecords();
+    final rollbackRecordIds = <String>{};
+    Future<void> addCopiedRecord(AudioRecord record) async {
+      rollbackRecordIds.add(record.id);
+      await FileManifest.addRecord(record);
+    }
+
+    await runFolderOperationWithRollback<AudioRecord>(
+      originalRecords: const [],
+      originalFolders: existing,
+      rollbackFolderSubtrees: {newPath},
+      rollbackRecordIds: rollbackRecordIds,
+      rollbackFolderPaths: rollbackFolderAncestors,
+      createdFolderPaths: folderOperationDestinationPaths(
+        sourceFolder: sourceFolder,
+        destinationFolder: newPath,
+        originalFolders: existing,
+        originalRecords: records,
+        recordFolder: (record) => record.folder,
+      ).union(rollbackFolderAncestors),
+      recordId: (record) => record.id,
+      recordFolder: (record) => record.folder,
+      loadRecords: FileManifest.loadRecords,
+      getFolders: FileManifest.getAllFolders,
+      moveRecord: FileManifest.moveRecord,
+      addFolder: FileManifest.addFolder,
+      removeFolder: FileManifest.removeFolderFromCache,
+      deleteRecords: FileManifest.deleteRecords,
+      operation: () async {
+        // 复制 sourceFolder 本身的记录
+        for (final r in records) {
+          if (r.folder == sourceFolder) {
+            await addCopiedRecord(
+              AudioRecord(
+                name: r.name,
+                hash: r.hash,
+                format: r.format,
+                createdAt: DateTime.now(),
+                size: r.size,
+                folder: newPath,
+                sourceText: r.sourceText,
+                duration: r.duration,
+              ),
+            );
+          }
+        }
+
+        // 复制所有后代文件夹的记录
+        final descendants = await FileManifest.getAllDescendantFolderPaths(
+          sourceFolder,
+        );
+        for (final desc in descendants) {
+          final suffix = desc.substring(sourceFolder.length);
+          final newDescPath = '$newPath$suffix';
+          for (final r in records) {
+            if (r.folder == desc) {
+              await addCopiedRecord(
+                AudioRecord(
+                  name: r.name,
+                  hash: r.hash,
+                  format: r.format,
+                  createdAt: DateTime.now(),
+                  size: r.size,
+                  folder: newDescPath,
+                  sourceText: r.sourceText,
+                  duration: r.duration,
+                ),
+              );
+            }
+          }
+          // 空子文件夹（无记录）也需要保留在缓存中
+          await FileManifest.addFolderPath(newDescPath);
+        }
+
+        await FileManifest.addFolderPath(newPath);
+        if (targetFolderClean.isNotEmpty) {
+          await FileManifest.addFolder(targetFolderClean);
+          // 空文件夹复制不经过 addRecord，祖先目录不会被自动跟踪，需逐级补齐
+          var ancestor = FileManifest.getParentFolderPath(targetFolderClean);
+          while (ancestor.isNotEmpty) {
+            await FileManifest.addFolder(ancestor);
+            ancestor = FileManifest.getParentFolderPath(ancestor);
+          }
+        }
+        await loadRecords();
+      },
+    );
   }
 }
 
