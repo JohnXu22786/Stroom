@@ -1,12 +1,18 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/l10n/app_localizations.dart';
+import 'package:stroom/models/tool_call.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/models/mcp.dart';
 import 'package:stroom/pages/provider_config_tool_dialogs.dart';
 import 'package:stroom/pages/provider_config_page.dart';
 import 'package:stroom/providers/provider_config.dart';
+import 'package:stroom/services/todo_tool_service.dart';
+import 'package:stroom/services/web_search_service.dart';
 
 /// Regression test for the MCP config page card style:
 ///
@@ -18,6 +24,18 @@ import 'package:stroom/providers/provider_config.dart';
 /// FIX: every MCP card uses the same neutral theme-adaptive background and
 /// simplified icon/text treatment, regardless of vendor or transport.
 void main() {
+  dynamic schemaContract(dynamic value) {
+    if (value is Map) {
+      return <String, dynamic>{
+        for (final entry in value.entries)
+          if (entry.key != 'description')
+            entry.key as String: schemaContract(entry.value),
+      };
+    }
+    if (value is List) return value.map(schemaContract).toList();
+    return value;
+  }
+
   ProviderEntriesState mixedState() {
     return ProviderEntriesState(
       entries: [
@@ -110,8 +128,9 @@ void main() {
               brightness: Brightness.dark,
             ),
           ),
-          themeMode:
-              brightness == Brightness.dark ? ThemeMode.dark : ThemeMode.light,
+          themeMode: brightness == Brightness.dark
+              ? ThemeMode.dark
+              : ThemeMode.light,
           home: ProviderConfigPage(entryId: entryId),
         ),
       ),
@@ -157,8 +176,8 @@ void main() {
     tester,
   ) async {
     await pumpPage(tester, Brightness.light);
-    final cs =
-        Theme.of(tester.element(find.byType(ProviderConfigPage))).colorScheme;
+    final cs = Theme.of(tester.element(find.byType(ProviderConfigPage)))
+        .colorScheme;
 
     final expectedBg = cs.surfaceContainerLow;
     for (var i = 0; i < 3; i++) {
@@ -166,7 +185,8 @@ void main() {
       expect(
         d.color,
         expectedBg,
-        reason: 'vendor and user-added cards must use the same background '
+        reason:
+            'vendor and user-added cards must use the same background '
             '(matching the LLM provider page) — no primaryContainer tint',
       );
       expect(
@@ -181,8 +201,8 @@ void main() {
     tester,
   ) async {
     await pumpPage(tester, Brightness.dark);
-    final cs =
-        Theme.of(tester.element(find.byType(ProviderConfigPage))).colorScheme;
+    final cs = Theme.of(tester.element(find.byType(ProviderConfigPage)))
+        .colorScheme;
 
     final expectedBg = cs.surfaceContainerHigh;
     for (var i = 0; i < 3; i++) {
@@ -190,7 +210,8 @@ void main() {
       expect(
         d.color,
         expectedBg,
-        reason: 'dark mode must use the same adaptive background for every '
+        reason:
+            'dark mode must use the same adaptive background for every '
             'card, no vendor tint',
       );
       expect(
@@ -303,14 +324,15 @@ void main() {
     await tester.tap(find.text('保存'));
     await tester.pumpAndSettle();
 
-    final updated = ProviderScope.containerOf(
-      tester.element(find.byType(ProviderConfigPage)),
-    )
-        .read(providerEntriesProvider)
-        .entries
-        .single
-        .configs
-        .singleWhere((item) => item.providerName == 'My Files');
+    final updated =
+        ProviderScope.containerOf(
+              tester.element(find.byType(ProviderConfigPage)),
+            )
+            .read(providerEntriesProvider)
+            .entries
+            .single
+            .configs
+            .singleWhere((item) => item.providerName == 'My Files');
     expect(updated.id, configId);
     expect(updated.groupId, builtinMcpServicesGroupId);
     expect(updated.models[0].typeConfig['connectivityTest'], savedTest);
@@ -342,8 +364,8 @@ void main() {
     await tester.pumpAndSettle();
 
     final container = tester.element(switchFinder);
-    final entries =
-        ProviderScope.containerOf(container).read(providerEntriesProvider);
+    final entries = ProviderScope.containerOf(container)
+        .read(providerEntriesProvider);
     final mcpEntry = entries.entries.firstWhere((e) => e.type == 'mcp');
     expect(mcpEntry.enabled, isFalse);
   });
@@ -480,15 +502,16 @@ void main() {
     await tester.tap(find.text('保存'));
     await tester.pumpAndSettle();
 
-    final updatedTypeConfig = ProviderScope.containerOf(
-      tester.element(find.byType(ProviderConfigPage)),
-    )
-        .read(providerEntriesProvider)
-        .entries
-        .single
-        .configs[1]
-        .models[0]
-        .typeConfig;
+    final updatedTypeConfig =
+        ProviderScope.containerOf(
+              tester.element(find.byType(ProviderConfigPage)),
+            )
+            .read(providerEntriesProvider)
+            .entries
+            .single
+            .configs[1]
+            .models[0]
+            .typeConfig;
     expect(updatedTypeConfig['headers'], {
       'X-Subscription-Token': 'replacement-key',
       'X-Custom-Optional': '',
@@ -525,5 +548,105 @@ void main() {
       'http://localhost:8080',
       reason: 'invalid URLs are not saved to the provider config',
     );
+  });
+
+  testWidgets('built-in tool details are localized without changing schemas', (
+    tester,
+  ) async {
+    Future<void> showTool(Locale locale, ToolDefinition definition) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: locale,
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: TextButton(
+                onPressed: () => showDialog<void>(
+                  context: context,
+                  builder: (_) =>
+                      BuiltinToolDetailsDialog(definition: definition),
+                ),
+                child: const Text('Open'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+    }
+
+    for (final locale in AppLocalizations.supportedLocales) {
+      for (final definition in [
+        TodoToolService.toolDefinitions.single,
+        WebSearchService.toolDefinitions.single,
+      ]) {
+        final schemaBefore = jsonEncode(definition.parameters);
+        await showTool(locale, definition);
+
+        final description = tester
+            .widgetList<Text>(find.byType(Text))
+            .map((widget) => widget.data ?? '')
+            .join('\n');
+        final renderedParameters = tester
+            .widget<SelectableText>(find.byType(SelectableText))
+            .data!;
+        final parameters =
+            jsonDecode(renderedParameters) as Map<String, dynamic>;
+
+        expect(parameters['type'], 'object');
+        final properties = parameters['properties'] as Map<String, dynamic>;
+        expect(
+          properties,
+          contains(definition.name == 'todowrite' ? 'todos' : 'query'),
+        );
+        if (locale.languageCode == 'en') {
+          expect(description, isNot(contains('通过网络搜索')));
+          expect(description, isNot(contains('创建、读取并管理')));
+          expect(
+            description,
+            contains(
+              definition.name == 'todowrite'
+                  ? 'Create, read, and manage a to-do list.'
+                  : 'Search the web for current information.',
+            ),
+          );
+          expect(
+            renderedParameters,
+            contains(
+              definition.name == 'todowrite'
+                  ? 'Complete replacement of the to-do list'
+                  : 'Search terms',
+            ),
+          );
+        } else {
+          expect(
+            description,
+            contains(
+              definition.name == 'todowrite'
+                  ? '创建、读取并管理待办事项列表。'
+                  : '通过网络搜索获取实时信息。',
+            ),
+          );
+          expect(
+            renderedParameters,
+            contains(definition.name == 'todowrite' ? '待办事项列表（全量替换）' : '搜索关键词'),
+          );
+        }
+
+        expect(jsonEncode(definition.parameters), schemaBefore);
+        expect(
+          schemaContract(parameters),
+          schemaContract(definition.parameters),
+        );
+        await tester.pumpWidget(const SizedBox.shrink());
+      }
+    }
   });
 }

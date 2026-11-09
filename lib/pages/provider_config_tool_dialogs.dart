@@ -77,8 +77,8 @@ class _HttpToolConfigDialogState extends State<HttpToolConfigDialog> {
   ) {
     final credentialHeaderNames =
         HttpToolService.credentialHeaderNamesForProvider(
-      widget.config.providerName,
-    );
+          widget.config.providerName,
+        );
     final rawHeaders = typeConfig['headers'];
     if (rawHeaders is! Map) return;
 
@@ -140,9 +140,7 @@ class _HttpToolConfigDialogState extends State<HttpToolConfigDialog> {
                 SelectableText(
                   const JsonEncoder.withIndent('  ')
                       .convert(definition.parameters),
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodySmall
+                  style: Theme.of(context).textTheme.bodySmall
                       ?.copyWith(fontFamily: 'monospace'),
                 ),
               ],
@@ -305,9 +303,7 @@ class BuiltinToolDetailsDialog extends StatelessWidget {
               SelectableText(
                 const JsonEncoder.withIndent('  ')
                     .convert(_localizedParameters(locale)),
-                style: Theme.of(context)
-                    .textTheme
-                    .bodySmall
+                style: Theme.of(context).textTheme.bodySmall
                     ?.copyWith(fontFamily: 'monospace'),
               ),
               const SizedBox(height: 12),
