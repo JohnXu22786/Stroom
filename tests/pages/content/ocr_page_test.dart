@@ -988,8 +988,8 @@ void main() {
       // Both taps land inside the pending-restore window (load takes 2s)
       // — the second must not start a duplicate OCR.
       await tester.tap(find.text('开始识别'));
-      await tester.pump(const Duration(milliseconds: 50));
       await tester.tap(find.text('开始识别'));
+      await tester.pump(const Duration(milliseconds: 50));
       await tester.pump(const Duration(seconds: 3));
       await tester.pumpAndSettle();
 

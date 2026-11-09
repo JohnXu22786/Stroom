@@ -258,7 +258,10 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
   void _clearSelection() {
     _cleanupTempFiles();
     setState(() {
-      _confirmingSelection = false;
+      // A failed read cancels confirmation once the remaining reads settle.
+      // If another read is still pending, preserve the existing behavior that
+      // clearing the selection completes that confirmation with an empty list.
+      if (!_confirmationFailedRead) _confirmingSelection = false;
       _selectedItems.clear();
       _editAttempts.clear();
       _selectionOrder.clear();
