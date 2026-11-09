@@ -2223,8 +2223,8 @@ void main() {
     testWidgets('selected effort values keep the provider order on reopen', (
       tester,
     ) async {
-      // 勾选 low + high（跳过 medium）保存 → 重开后块顺序保持供应商
-      // 顺序 [low, medium, high]，而不是选中前置的 [low, high, medium]。
+      // 供应商值默认全部勾选，取消 medium 后保存 low + high → 重开后块
+      // 顺序保持供应商顺序 [low, medium, high]，而不是选中前置。
       final provider = _providerWithEffortOptions(['low', 'medium', 'high']);
       final saved = await _pumpAndSave(
         tester,
@@ -2235,8 +2235,7 @@ void main() {
         ),
         provider: provider,
         beforeSave: (tester) async {
-          await _tapBlock(tester, 'low');
-          await _tapBlock(tester, 'high');
+          await _tapBlock(tester, 'medium');
         },
       );
       expect(saved, isNotNull);
@@ -2257,8 +2256,8 @@ void main() {
     });
 
     testWidgets('dragged block order persists across reopen', (tester) async {
-      // 用户拖动过的块顺序保存到 optionOrder：重开后按拖动顺序恢复，
-      // 而不是退回供应商顺序。
+      // 供应商值默认全部勾选。用户拖动过的块顺序保存到 optionOrder：
+      // 重开后按拖动顺序恢复，而不是退回供应商顺序。
       final provider = _providerWithEffortOptions(['low', 'medium', 'high']);
       final saved = await _pumpAndSave(
         tester,
@@ -2269,9 +2268,6 @@ void main() {
         ),
         provider: provider,
         beforeSave: (tester) async {
-          await _tapBlock(tester, 'low');
-          await _tapBlock(tester, 'medium');
-          await _tapBlock(tester, 'high');
           // 长按 low 拖到末尾
           await _scrollToReasoning(tester, find.text('medium'));
           await _longPressDrag(tester, find.text('low'), const Offset(250, 0));
