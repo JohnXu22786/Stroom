@@ -139,8 +139,6 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
       var count = 0;
       for (final file in files) {
         final bytes = await file.readAsBytes();
-        if (bytes.isEmpty) continue;
-
         final content = utf8.decode(bytes);
         final hash = computeTextHash(bytes);
         final rawName = sanitizeFileName(file.name);
@@ -286,7 +284,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
       final file = records.firstWhere((r) => r.id == id);
 
       final content = await TextManifest.readText(file.storagePath);
-      if (content == null || content.isEmpty) {
+      if (content == null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(content: Text(l10n.textStorageReadFailed)));
