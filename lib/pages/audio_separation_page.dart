@@ -289,8 +289,7 @@ Future<String?> saveAudioSeparationFile(
   );
 
   var skipped = false;
-  await FileManifest.withStorageFileSaveLock(
-      record.storageFileName, () async {
+  await FileManifest.withStorageFileSaveLock(record.storageFileName, () async {
     if (shouldSave != null && !shouldSave()) {
       skipped = true;
       return;

@@ -161,8 +161,8 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
           size: bytes.length,
           folder: _currentFolder,
         );
-        await FileManifest.withStorageFileSaveLock(
-            record.storageFileName, () async {
+        await FileManifest.withStorageFileSaveLock(record.storageFileName,
+            () async {
           await FileManifest.writeFile(record.storageFileName, bytes);
           await FileManifest.addRecord(record);
         });

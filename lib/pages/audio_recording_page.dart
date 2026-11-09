@@ -328,8 +328,8 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
         folder: '',
         duration: _recordDurationSeconds,
       );
-      await FileManifest.withStorageFileSaveLock(
-          record.storageFileName, () async {
+      await FileManifest.withStorageFileSaveLock(record.storageFileName,
+          () async {
         await FileManifest.writeFile(record.storageFileName, bytes);
         await FileManifest.addRecord(record);
       });

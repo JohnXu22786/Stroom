@@ -615,8 +615,8 @@ class TTSStateNotifier extends StateNotifier<TTSState> {
       sourceText: text,
     );
 
-    return FileManifest.withStorageFileSaveLock(
-        record.storageFileName, () async {
+    return FileManifest.withStorageFileSaveLock(record.storageFileName,
+        () async {
       // Save audio file using hash as filename.
       await FileManifest.writeFile(record.storageFileName, audioData);
 

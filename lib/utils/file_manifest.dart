@@ -32,8 +32,7 @@ String _safeAudioFormat(String format, {required int maxLength}) {
   for (var i = 0; i < codeUnits.length; i++) {
     final codeUnit = codeUnits[i];
     final character = String.fromCharCode(codeUnit);
-    final needsEscape =
-        codeUnit < 0x20 ||
+    final needsEscape = codeUnit < 0x20 ||
         character == '%' ||
         windowsInvalidCharacters.contains(character) ||
         i >= trailingDotOrSpaceStart;
@@ -100,11 +99,11 @@ class AudioRecord
   static String storageFileNameFor({
     required String hash,
     required String format,
-  }) => '$hash.${_safeAudioFormat(format, maxLength: 254 - hash.length)}';
+  }) =>
+      '$hash.${_safeAudioFormat(format, maxLength: 254 - hash.length)}';
 
   /// 音频文件的存储文件名（基于哈希）
-  String get storageFileName =>
-      storageFileNameFor(hash: hash, format: format);
+  String get storageFileName => storageFileNameFor(hash: hash, format: format);
 
   /// 音频文件的实际存储路径（相对于 tts_audio 目录）
   @override

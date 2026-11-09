@@ -622,7 +622,8 @@ class ManifestOperations<T extends FileRecord> {
         continue;
       }
       final legacyNameIsAnotherStorageTarget = records.any(
-        (other) => other.id != record.id &&
+        (other) =>
+            other.id != record.id &&
             _windowsNormalizedFileName(storageNameOf(other)) ==
                 _windowsNormalizedFileName(legacyName),
       );
