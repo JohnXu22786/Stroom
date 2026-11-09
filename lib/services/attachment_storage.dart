@@ -177,6 +177,14 @@ class AttachmentStorage {
       !conversationId.contains('/') &&
       !conversationId.contains('\\');
 
+  static bool _isSafeCompressedCacheHash(String hash) =>
+      hash.isNotEmpty &&
+      hash != '.' &&
+      hash != '..' &&
+      !hash.contains('/') &&
+      !hash.contains('\\') &&
+      !hash.contains('\u0000');
+
   /// 图片压缩缓存目录：`<附件目录>/temp_compressed/<conversationId>/`
   static Future<Directory> _compressedCacheDir(String conversationId) async {
     final base = await _storageDir;
@@ -199,7 +207,7 @@ class AttachmentStorage {
     required String mimeType,
   }) async {
     if (!_isSafeConversationId(conversationId) ||
-        hash.isEmpty ||
+        !_isSafeCompressedCacheHash(hash) ||
         bytes.isEmpty) {
       return null;
     }
@@ -227,7 +235,8 @@ class AttachmentStorage {
     required String? conversationId,
     required String hash,
   }) async {
-    if (!_isSafeConversationId(conversationId) || hash.isEmpty) {
+    if (!_isSafeConversationId(conversationId) ||
+        !_isSafeCompressedCacheHash(hash)) {
       return null;
     }
     final safeConversationId = conversationId!;
@@ -274,7 +283,8 @@ class AttachmentStorage {
     required String? conversationId,
     required String hash,
   }) async {
-    if (!_isSafeConversationId(conversationId) || hash.isEmpty) {
+    if (!_isSafeConversationId(conversationId) ||
+        !_isSafeCompressedCacheHash(hash)) {
       return false;
     }
     final safeConversationId = conversationId!;
