@@ -1521,6 +1521,105 @@ void main() {
         );
 
     testWidgets(
+      'single-file move allows same name with a different format',
+      (tester) async {
+        final moved = <String>[];
+        await tester.pumpWidget(
+          _buildTestApp(
+            buildBatchFM(
+              records: [
+                _TestFileRecord(id: 'source', name: 'report', format: 'txt'),
+                _TestFileRecord(
+                  id: 'existing',
+                  name: 'report',
+                  format: 'md',
+                  folder: 'destination',
+                ),
+              ],
+              folders: {'destination'},
+              onMoveFile: (id, folder) async => moved.add('$id->$folder'),
+            ),
+          ),
+        );
+
+        await tester.tap(find.byKey(const Key('fm_file_popup_source')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('移动'));
+        await tester.pumpAndSettle();
+        await tester.tap(inPicker(find.text('destination')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('确定'));
+        await tester.pumpAndSettle();
+
+        expect(moved, ['source->destination']);
+      },
+    );
+
+    testWidgets(
+      'batch move allows same-name files with different formats',
+      (tester) async {
+        final moved = <String>[];
+        await tester.pumpWidget(
+          _buildTestApp(
+            buildBatchFM(
+              records: [
+                _TestFileRecord(id: 'txt', name: 'report', format: 'txt'),
+                _TestFileRecord(id: 'md', name: 'report', format: 'md'),
+              ],
+              folders: {'destination'},
+              onMoveFiles: (ids, folder) async => moved.addAll(ids),
+            ),
+          ),
+        );
+
+        await tester.longPress(find.byKey(const Key('fm_file_txt')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('fm_file_md')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('fm_selection_move_btn')));
+        await tester.pumpAndSettle();
+        await tester.tap(inPicker(find.text('destination')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('确定'));
+        await tester.pumpAndSettle();
+
+        expect(moved, unorderedEquals(['txt', 'md']));
+      },
+    );
+
+    testWidgets(
+      'batch copy allows same-name files with different formats',
+      (tester) async {
+        final copied = <String>[];
+        await tester.pumpWidget(
+          _buildTestApp(
+            buildBatchFM(
+              records: [
+                _TestFileRecord(id: 'txt', name: 'report', format: 'txt'),
+                _TestFileRecord(id: 'md', name: 'report', format: 'md'),
+              ],
+              folders: {'destination'},
+              onCopyFile: (id, folder) async => copied.add(id),
+            ),
+          ),
+        );
+
+        await tester.longPress(find.byKey(const Key('fm_file_txt')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('fm_file_md')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('fm_selection_copy_btn')));
+        await tester.pumpAndSettle();
+        await tester.tap(inPicker(find.text('destination')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('确定'));
+        await tester.pumpAndSettle();
+
+        expect(copied, unorderedEquals(['txt', 'md']));
+      },
+    );
+
+    testWidgets(
       'batch move picker excludes the selected folder and its descendants',
       (tester) async {
         await tester.pumpWidget(
