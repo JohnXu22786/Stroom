@@ -1,5 +1,9 @@
 {
   "@@locale": "en",
+  "galleryPermissionTitle": "Photo library access required",
+  "galleryPermissionMessage": "Allow Stroom to access photos and videos in system settings.",
+  "galleryPermissionCancel": "Cancel",
+  "galleryPermissionOpenSettings": "Open settings",
   "languageSettingsTitle": "Language",
   "followSystemLanguage": "Follow system",
   "themeDisplaySettingsTitle": "Theme & Display",
