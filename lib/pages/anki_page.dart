@@ -556,9 +556,10 @@ class _AnkiStudyPageState extends ConsumerState<AnkiStudyPage> {
               child: Center(
                   child: SingleChildScrollView(
             child: Card(
-              elevation: 2,
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16)),
+                borderRadius: BorderRadius.circular(16),
+                side: BorderSide(color: cs.outlineVariant, width: 0.5),
+              ),
               child: Container(
                 width: double.infinity,
                 constraints: const BoxConstraints(minHeight: 300),

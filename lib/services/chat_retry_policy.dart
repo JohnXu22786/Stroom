@@ -195,7 +195,8 @@ Future<bool> _isRateLimit(Object error) async {
     'too many requests',
     'throttl',
   ];
-  return throttleMarkers.any(details.contains);
+  return throttleMarkers.any(details.contains) ||
+      _retryAfter(error, maximum: const Duration(minutes: 15)) != null;
 }
 
 Future<String> _readResponseBody(ResponseBody body) async {

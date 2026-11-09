@@ -137,6 +137,9 @@ void main() {
         response: Response(
           requestOptions: RequestOptions(path: '/chat'),
           statusCode: 429,
+          headers: Headers.fromMap({
+            'retry-after': ['5'],
+          }),
           data: {
             'error': {
               'type': 'server_error',
@@ -325,6 +328,37 @@ void main() {
         emitsError(isA<DioException>()),
       );
       expect(calls, 3);
+    });
+
+    test('uses Retry-After as evidence for an opaque throttled 429', () async {
+      var calls = 0;
+      final delays = <Duration>[];
+      final failure = DioException(
+        requestOptions: RequestOptions(path: '/chat'),
+        response: Response(
+          requestOptions: RequestOptions(path: '/chat'),
+          statusCode: 429,
+          statusMessage: 'request rejected',
+          headers: Headers.fromMap({
+            'retry-after': ['5'],
+          }),
+          data: {'message': 'provider rejected request'},
+        ),
+        type: DioExceptionType.badResponse,
+      );
+
+      final events = await retryRateLimitedStream<String>(
+        () {
+          calls++;
+          return calls == 1 ? Stream.error(failure) : Stream.value('ok');
+        },
+        policy: const RateLimitRetryPolicy(jitter: false),
+        delay: (duration) async => delays.add(duration),
+      ).toList();
+
+      expect(events, ['ok']);
+      expect(calls, 2);
+      expect(delays, [const Duration(seconds: 5)]);
     });
 
     test('honors an HTTP-date Retry-After header', () async {
