@@ -226,12 +226,17 @@ class ManifestOperations<T extends FileRecord> {
 
   // ---- Storage directory ------------------------------------------------
 
-  Future<String> get _storageDir async {
+  Future<String> get _storageDirPath async {
     if (kIsWeb) return '';
     final appDir = useAppSupportDir
         ? await getApplicationSupportDirectory()
         : await getApplicationDocumentsDirectory();
-    final dir = p.join(appDir.path, storageDirName);
+    return p.join(appDir.path, storageDirName);
+  }
+
+  Future<String> get _storageDir async {
+    final dir = await _storageDirPath;
+    if (dir.isEmpty) return dir;
     final d = Directory(dir);
     if (!await d.exists()) {
       await d.create(recursive: true);
@@ -610,7 +615,9 @@ class ManifestOperations<T extends FileRecord> {
       File? stagedFile,
       Uint8List? bytes,
     })>[];
-    final directory = _useWebFileStore ? null : await _storageDir;
+    // Migration only reads existing legacy files, so resolving the path must
+    // not create an otherwise unused storage directory.
+    final directory = _useWebFileStore ? null : await _storageDirPath;
     for (final record in records) {
       final legacyName = legacyStorageNameOf!(record);
       final storageName = storageNameOf(record);
