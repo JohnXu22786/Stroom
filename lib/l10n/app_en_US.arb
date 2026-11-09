@@ -6347,5 +6347,18 @@
   "backupRestoreApkgImportSummary": "Imported {decks} decks, {notes} notes, and {cards} cards",
   "backupRestoreApkgOperationFailed": "The .apkg operation failed because the file or database could not be read.",
   "backupRestoreApkgTargetMissing": "Open Anki flashcards before importing or exporting a deck: {path}",
-  "backupRestoreApkgUnexpectedError": "The .apkg operation failed while accessing this path: {path}"
+  "backupRestoreApkgUnexpectedError": "The .apkg operation failed while accessing this path: {path}",
+  "ankiSyncStatusConnectionFailure": "Could not connect to the sync server. Check the address and network.",
+  "ankiSyncStatusConnectionTimeout": "The sync request timed out. Check the server address and network, then retry.",
+  "ankiSyncStatusHttpsRequired": "Remote self-hosted sync servers must use HTTPS.",
+  "ankiSyncStatusInvalidServerUrl": "Enter a valid HTTP or HTTPS sync server address.",
+  "ankiSyncStatusLoginRequired": "Log in to Anki sync before continuing.",
+  "ankiSyncStatusProtocolFailed": "The sync server response is invalid or incomplete. Check that the server supports Anki sync v10.",
+  "ankiSyncStatusRequestFailure": "The sync request failed. Check the server and network, then retry.",
+  "ankiSyncStatusServerHttpError": "The sync server returned HTTP {statusCode}.",
+  "@ankiSyncStatusServerHttpError": {"placeholders":{"statusCode":{"type":"int"}}},
+  "ankiSyncStatusResponseTooLarge": "The sync response exceeded the {limitMb} MB limit.",
+  "@ankiSyncStatusResponseTooLarge": {"placeholders":{"limitMb":{"type":"int"}}},
+  "ankiSyncStatusTlsFailure": "The server certificate could not be verified. Check the certificate or configure a custom CA.",
+  "ankiSyncStatusLocalFileFailure": "A local sync file could not be read or cleaned up. Check disk access and retry."
 }
