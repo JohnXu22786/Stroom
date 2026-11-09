@@ -28,9 +28,14 @@ Future<void> _waitForSignalOrOperationFailure(
   return Future.any([signal.future, operationFinished]);
 }
 
-Future<void> _drainOperations(Iterable<Future<void>> operations) async {
+Future<void> _drainOperations(
+  Iterable<Future<void>> operations, {
+  Future<void>? second,
+}) async {
+  final pending = operations.toList();
+  if (second != null) pending.add(second);
   try {
-    await Future.wait(operations);
+    await Future.wait(pending);
   } catch (_) {
     // The originating assertion or barrier wait reports the test failure.
   }
@@ -187,7 +192,7 @@ void main() {
           );
           var deleted = false;
           deletion = item.delete().then((_) => deleted = true);
-          await Future<void>.delayed(Duration.zero);
+          await t.pump();
           expect(
             deleted,
             isFalse,
@@ -210,8 +215,7 @@ void main() {
           if (!resume.isCompleted) resume.complete();
           await _drainOperations([
             copy,
-            if (deletion != null) deletion,
-          ]);
+          ], second: deletion);
         }
       }
     },
@@ -251,7 +255,7 @@ void main() {
       deletion = ImageManifest.deleteRecord('delete_race').then((_) {
         deleted = true;
       });
-      await Future<void>.delayed(Duration.zero);
+      await t.pump();
       expect(deleted, isFalse);
       resume.complete();
       await Future.wait([copy, deletion]);
@@ -263,7 +267,7 @@ void main() {
       expect(await ImageManifest.readFile('hash_delete_race.png'), isNotNull);
     } finally {
       if (!resume.isCompleted) resume.complete();
-      await _drainOperations([copy, if (deletion != null) deletion]);
+      await _drainOperations([copy], second: deletion);
     }
   });
 
@@ -294,7 +298,7 @@ void main() {
       add = ImageManifest.addFolder('copy_empty_source/late').then((_) {
         added = true;
       });
-      await Future<void>.delayed(Duration.zero);
+      await t.pump();
       expect(added, isFalse);
 
       resume.complete();
@@ -305,7 +309,7 @@ void main() {
       expect(folders, isNot(contains('target/copy_empty_source/late')));
     } finally {
       if (!resume.isCompleted) resume.complete();
-      await _drainOperations([copy, if (add != null) add]);
+      await _drainOperations([copy], second: add);
     }
   });
 
@@ -527,7 +531,7 @@ void main() {
         );
         var added = false;
         add = item.addSecond().then((_) => added = true);
-        await Future<void>.delayed(Duration.zero);
+        await t.pump();
         expect(added, isFalse, reason: item.provider);
         resume.complete();
         await Future.wait([copy, add]);
@@ -541,7 +545,7 @@ void main() {
         expect(await item.read(item.secondFile), isNotNull);
       } finally {
         if (!resume.isCompleted) resume.complete();
-        await _drainOperations([copy, if (add != null) add]);
+        await _drainOperations([copy], second: add);
       }
     }
   });
@@ -574,7 +578,7 @@ void main() {
       donorCopy = ImageRecordsNotifier()
           .copyFolder('copy_donor', 'copy_parent')
           .then((_) => donorCopyFinished = true);
-      await Future<void>.delayed(Duration.zero);
+      await t.pump();
       expect(donorCopyFinished, isFalse);
 
       resume.complete();
@@ -585,7 +589,7 @@ void main() {
       expect(folders, isNot(contains('target/copy_parent/copy_donor')));
     } finally {
       if (!resume.isCompleted) resume.complete();
-      await _drainOperations([parentCopy, if (donorCopy != null) donorCopy]);
+      await _drainOperations([parentCopy], second: donorCopy);
     }
   });
 

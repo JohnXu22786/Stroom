@@ -1981,6 +1981,18 @@ abstract class AppLocalizations {
   /// **'Installation failed. Open the APK manually.'**
   String get updateApkInstallFailedNoDetails;
 
+  /// No description provided for @updateApkInstallerUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not find an app to install this APK. Open it manually.'**
+  String get updateApkInstallerUnavailable;
+
+  /// No description provided for @updateApkInstallPermissionDenied.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow Stroom to install unknown apps in system settings.'**
+  String get updateApkInstallPermissionDenied;
+
   /// No description provided for @updateRestartDialogTitle.
   ///
   /// In en, this message translates to:

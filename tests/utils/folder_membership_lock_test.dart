@@ -16,9 +16,16 @@ Future<void> _waitForSignalOrOperationFailure(
   return Future.any([signal.future, operationFinished]);
 }
 
-Future<void> _drainOperations(Iterable<Future<void>> operations) async {
+Future<void> _drainOperations(
+  Iterable<Future<void>> operations, {
+  Future<void>? second,
+  Future<void>? third,
+}) async {
+  final pending = operations.toList();
+  if (second != null) pending.add(second);
+  if (third != null) pending.add(third);
   try {
-    await Future.wait(operations);
+    await Future.wait(pending);
   } catch (_) {
     // The originating assertion or barrier wait reports the test failure.
   }
@@ -79,11 +86,7 @@ void main() {
       } finally {
         if (!releaseFirst.isCompleted) releaseFirst.complete();
         if (!releaseSecond.isCompleted) releaseSecond.complete();
-        await _drainOperations([
-          first,
-          if (second != null) second,
-          if (deletion != null) deletion,
-        ]);
+        await _drainOperations([first], second: second, third: deletion);
       }
 
       final parentSnapshot = Completer<void>();
@@ -116,10 +119,7 @@ void main() {
         expect(childDeleted, isTrue);
       } finally {
         if (!releaseParentCopy.isCompleted) releaseParentCopy.complete();
-        await _drainOperations([
-          parentCopy,
-          if (childDeletion != null) childDeletion,
-        ]);
+        await _drainOperations([parentCopy], second: childDeletion);
       }
     },
   );
@@ -162,7 +162,7 @@ void main() {
       expect(externalFolderAdded, isTrue);
     } finally {
       if (!resume.isCompleted) resume.complete();
-      await _drainOperations([copy, if (add != null) add]);
+      await _drainOperations([copy], second: add);
     }
   });
 }
