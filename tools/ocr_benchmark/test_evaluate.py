@@ -4763,6 +4763,47 @@ class EvaluateTests(unittest.TestCase):
             }.issubset(summary["categories"])
         )
 
+    def test_fixture_verification_reports_self_referential_symlink_as_evaluation_error(self):
+        with TemporaryDirectory() as directory:
+            fixture_root = Path(directory)
+            shutil.copytree(ROOT / "fixtures", fixture_root / "fixtures")
+            manifest = json.loads((ROOT / "manifest.json").read_text())
+            fixture = manifest["fixtures"][0]
+            fixture["image"] = "fixtures/self-loop.png"
+            (fixture_root / fixture["image"]).symlink_to("self-loop.png")
+            manifest_path = fixture_root / "manifest.json"
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "evaluate.py"),
+                    "--manifest",
+                    str(manifest_path),
+                    "--verify-fixtures",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+        self.assertEqual(result.returncode, 2)
+        self.assertRegex(result.stderr, r"^evaluation error: .*cannot resolve")
+        self.assertNotIn("Traceback", result.stderr)
+
+    def test_fixture_verification_rejects_image_path_outside_fixture_root(self):
+        with TemporaryDirectory() as directory:
+            fixture_root = Path(directory)
+            shutil.copytree(ROOT / "fixtures", fixture_root / "fixtures")
+            manifest = json.loads((ROOT / "manifest.json").read_text())
+            fixture = manifest["fixtures"][0]
+            fixture["image"] = "../outside.png"
+            manifest_path = fixture_root / "manifest.json"
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            with self.assertRaisesRegex(EvaluationError, "image path escapes fixture root"):
+                verify_fixtures(manifest_path)
+
     def test_fixture_verification_rejects_truncated_png_with_matching_digest(self):
         image_bytes = (ROOT / "fixtures" / "mixed-zh-en-01.png").read_bytes()[:24]
         self._assert_fixture_png_rejected(image_bytes)
