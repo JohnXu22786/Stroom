@@ -3182,6 +3182,13 @@
     "placeholders": {}
   },
   "providerBuiltinBadge": "内置",
+  "providerBuiltinTtsName": "TTS供应商",
+  "providerBuiltinLlmName": "LLM供应商",
+  "providerBuiltinOcrName": "OCR供应商",
+  "providerBuiltinAsrName": "音频转写供应商",
+  "providerBuiltinMcpName": "MCP供应商",
+  "providerBuiltinSearchGroupName": "搜索",
+  "providerBuiltinMcpServicesGroupName": "其他 MCP 服务",
   "@providerBuiltinBadge": {
     "placeholders": {}
   },
