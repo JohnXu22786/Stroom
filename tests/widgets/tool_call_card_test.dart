@@ -161,17 +161,21 @@ void main() {
         _wrap(_tc(name: 'web_search', status: ToolCallStatus.error)),
       );
 
-      // Collapsed: name visible in red, details hidden.
+      final errorColor =
+          Theme.of(tester.element(find.byType(ToolCallCard))).colorScheme.error;
+
+      // Collapsed: name uses the theme error color, details hidden.
       final collapsedName = tester.widget<Text>(find.text('web_search'));
-      expect(collapsedName.style?.color, Colors.red,
+      expect(collapsedName.style?.color, errorColor,
           reason: '失败的调用收起后工具名称应为红色');
       expect(find.text('query: 天气'), findsNothing);
 
-      // Expand: name stays red.
+      // Expand: name keeps the theme error color.
       await tester.tap(find.byType(ToolCallCard));
       await tester.pump();
       final expandedName = tester.widget<Text>(find.text('web_search'));
-      expect(expandedName.style?.color, Colors.red, reason: '失败调用展开后工具名称仍应为红色');
+      expect(expandedName.style?.color, errorColor,
+          reason: '失败调用展开后工具名称仍应为主题错误色');
 
       // Tap again → collapsed (same as completed 卡片).
       await tester.tap(find.byType(ToolCallCard));
