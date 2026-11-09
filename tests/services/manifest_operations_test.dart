@@ -48,45 +48,47 @@ void main() {
     ManifestDatabase.beforeWebDataReadForTesting = null;
   });
 
-  test('cancellable native read reports cancellation after file existence wait',
-      () async {
-    final originalPathProvider = PathProviderPlatform.instance;
-    final directory = await Directory.systemTemp.createTemp(
-      'manifest-cancel-test-',
-    );
-    PathProviderPlatform.instance = _DocumentsDirectory(directory.path);
-    WebFileStore.disableTestMode();
-    addTearDown(() async {
-      PathProviderPlatform.instance = originalPathProvider;
-      WebFileStore.enableTestMode();
-      await directory.delete(recursive: true);
-    });
+  test(
+    'cancellable native read reports cancellation after file existence wait',
+    () async {
+      final originalPathProvider = PathProviderPlatform.instance;
+      final directory = await Directory.systemTemp.createTemp(
+        'manifest-cancel-test-',
+      );
+      PathProviderPlatform.instance = _DocumentsDirectory(directory.path);
+      WebFileStore.disableTestMode();
+      addTearDown(() async {
+        PathProviderPlatform.instance = originalPathProvider;
+        WebFileStore.enableTestMode();
+        await directory.delete(recursive: true);
+      });
 
-    final existenceStarted = Completer<void>();
-    final existenceResult = Completer<bool>();
-    final operations = ManifestOperations<AudioRecord>(
-      manifestKey: 'audio_manifest',
-      storageDirName: 'audio',
-      fromMap: AudioRecord.fromMap,
-      tableName: 'audio_records',
-      toMap: (record) => record.toMap(),
-      fileExistsForTesting: (_) {
-        existenceStarted.complete();
-        return existenceResult.future;
-      },
-    );
-    final cancelToken = CancelToken();
-    final read = operations.readFileCancellable(
-      'missing.wav',
-      cancelToken: cancelToken,
-    );
+      final existenceStarted = Completer<void>();
+      final existenceResult = Completer<bool>();
+      final operations = ManifestOperations<AudioRecord>(
+        manifestKey: 'audio_manifest',
+        storageDirName: 'audio',
+        fromMap: AudioRecord.fromMap,
+        tableName: 'audio_records',
+        toMap: (record) => record.toMap(),
+        fileExistsForTesting: (_) {
+          existenceStarted.complete();
+          return existenceResult.future;
+        },
+      );
+      final cancelToken = CancelToken();
+      final read = operations.readFileCancellable(
+        'missing.wav',
+        cancelToken: cancelToken,
+      );
 
-    await existenceStarted.future;
-    cancelToken.cancel('cancel while checking existence');
-    existenceResult.complete(false);
+      await existenceStarted.future;
+      cancelToken.cancel('cancel while checking existence');
+      existenceResult.complete(false);
 
-    await expectLater(read, throwsA(same(cancelToken.cancelError)));
-  });
+      await expectLater(read, throwsA(same(cancelToken.cancelError)));
+    },
+  );
 
   // ====================================================================
   // File lifecycle in test mode (WebFileStore in-memory store).
@@ -111,67 +113,83 @@ void main() {
     });
 
     testWidgets(
-        'deleteRecord deletes entity file when it is the last reference',
-        (WidgetTester t) async {
-      final record = ImageRecord(
-        id: 'img_del_1',
-        name: 'pic',
-        hash: 'hash_unique_1',
-        format: 'jpg',
-        createdAt: DateTime.now(),
-        size: 4,
-      );
-      await ImageManifest.writeFile(
-          record.storagePath, Uint8List.fromList([1]));
-      await ImageManifest.addRecord(record);
+      'deleteRecord deletes entity file when it is the last reference',
+      (WidgetTester t) async {
+        final record = ImageRecord(
+          id: 'img_del_1',
+          name: 'pic',
+          hash: 'hash_unique_1',
+          format: 'jpg',
+          createdAt: DateTime.now(),
+          size: 4,
+        );
+        await ImageManifest.writeFile(
+          record.storagePath,
+          Uint8List.fromList([1]),
+        );
+        await ImageManifest.addRecord(record);
 
-      expect(
-          await WebFileStore.exists('pictures/${record.storagePath}'), isTrue);
+        expect(
+          await WebFileStore.exists('pictures/${record.storagePath}'),
+          isTrue,
+        );
 
-      await ImageManifest.deleteRecord(record.id);
+        await ImageManifest.deleteRecord(record.id);
 
-      expect(await ImageManifest.loadRecords(), isEmpty,
-          reason: 'record must be removed from cache and DB');
-      expect(
-          await WebFileStore.exists('pictures/${record.storagePath}'), isFalse,
-          reason: 'entity file must be deleted when refcount reaches 0');
-    });
+        expect(
+          await ImageManifest.loadRecords(),
+          isEmpty,
+          reason: 'record must be removed from cache and DB',
+        );
+        expect(
+          await WebFileStore.exists('pictures/${record.storagePath}'),
+          isFalse,
+          reason: 'entity file must be deleted when refcount reaches 0',
+        );
+      },
+    );
 
     testWidgets(
-        'deleteRecord keeps entity file when storage name is shared by another record',
-        (WidgetTester t) async {
-      final shared = ImageRecord(
-        id: 'img_shared_a',
-        name: 'pic_a',
-        hash: 'hash_shared',
-        format: 'jpg',
-        createdAt: DateTime.now(),
-        size: 4,
-      );
-      final other = ImageRecord(
-        id: 'img_shared_b',
-        name: 'pic_b',
-        hash: 'hash_shared',
-        format: 'jpg',
-        createdAt: DateTime.now(),
-        size: 4,
-      );
-      await ImageManifest.writeFile(
-          shared.storagePath, Uint8List.fromList([1]));
-      await ImageManifest.addRecord(shared);
-      await ImageManifest.addRecord(other);
+      'deleteRecord keeps entity file when storage name is shared by another record',
+      (WidgetTester t) async {
+        final shared = ImageRecord(
+          id: 'img_shared_a',
+          name: 'pic_a',
+          hash: 'hash_shared',
+          format: 'jpg',
+          createdAt: DateTime.now(),
+          size: 4,
+        );
+        final other = ImageRecord(
+          id: 'img_shared_b',
+          name: 'pic_b',
+          hash: 'hash_shared',
+          format: 'jpg',
+          createdAt: DateTime.now(),
+          size: 4,
+        );
+        await ImageManifest.writeFile(
+          shared.storagePath,
+          Uint8List.fromList([1]),
+        );
+        await ImageManifest.addRecord(shared);
+        await ImageManifest.addRecord(other);
 
-      await ImageManifest.deleteRecord(shared.id);
+        await ImageManifest.deleteRecord(shared.id);
 
-      final remaining = await ImageManifest.loadRecords();
-      expect(remaining.length, equals(1));
-      expect(
-          await WebFileStore.exists('pictures/${shared.storagePath}'), isTrue,
-          reason: 'file shared with a remaining record must not be deleted');
-    });
+        final remaining = await ImageManifest.loadRecords();
+        expect(remaining.length, equals(1));
+        expect(
+          await WebFileStore.exists('pictures/${shared.storagePath}'),
+          isTrue,
+          reason: 'file shared with a remaining record must not be deleted',
+        );
+      },
+    );
 
-    testWidgets('deleteRecord deletes thumbnail only when hash is unique',
-        (WidgetTester t) async {
+    testWidgets('deleteRecord deletes thumbnail only when hash is unique', (
+      WidgetTester t,
+    ) async {
       final record = ImageRecord(
         id: 'img_thumb_1',
         name: 'pic',
@@ -181,158 +199,202 @@ void main() {
         size: 4,
       );
       await ImageManifest.writeFile(
-          record.storagePath, Uint8List.fromList([1]));
+        record.storagePath,
+        Uint8List.fromList([1]),
+      );
       await ImageManifest.writeFile(
-          imageThumbFileName('hash_thumb_only'), Uint8List.fromList([2]));
+        imageThumbFileName('hash_thumb_only'),
+        Uint8List.fromList([2]),
+      );
       // 旧版（变形）命名残留文件：删除记录时必须一并清理
       await ImageManifest.writeFile(
-          'hash_thumb_only_thumb.png', Uint8List.fromList([5]));
+        'hash_thumb_only_thumb.png',
+        Uint8List.fromList([5]),
+      );
       await ImageManifest.addRecord(record);
 
       await ImageManifest.deleteRecord(record.id);
 
       expect(
-          await WebFileStore.exists(
-              'pictures/${imageThumbFileName('hash_thumb_only')}'),
-          isFalse,
-          reason: 'thumbnail must be deleted when its hash is no longer used');
-      expect(await WebFileStore.exists('pictures/hash_thumb_only_thumb.png'),
-          isFalse,
-          reason:
-              'legacy distorted thumbnail must also be cleaned up on delete');
+        await WebFileStore.exists(
+          'pictures/${imageThumbFileName('hash_thumb_only')}',
+        ),
+        isFalse,
+        reason: 'thumbnail must be deleted when its hash is no longer used',
+      );
+      expect(
+        await WebFileStore.exists('pictures/hash_thumb_only_thumb.png'),
+        isFalse,
+        reason: 'legacy distorted thumbnail must also be cleaned up on delete',
+      );
     });
 
     testWidgets(
-        'deleteRecord keeps thumbnail while another record shares the hash',
-        (WidgetTester t) async {
-      final record = ImageRecord(
-        id: 'img_thumb_2',
-        name: 'pic',
-        hash: 'hash_thumb_shared',
-        format: 'png',
-        createdAt: DateTime.now(),
-        size: 4,
-      );
-      final twin = ImageRecord(
-        id: 'img_thumb_3',
-        name: 'pic2',
-        hash: 'hash_thumb_shared',
-        format: 'jpg', // different storage name, same hash → shared thumbnail
-        createdAt: DateTime.now(),
-        size: 4,
-      );
-      await ImageManifest.writeFile(
-          imageThumbFileName('hash_thumb_shared'), Uint8List.fromList([2]));
-      // 旧版命名残留：hash 仍有记录引用时不得清理
-      await ImageManifest.writeFile(
-          'hash_thumb_shared_thumb.png', Uint8List.fromList([5]));
-      await ImageManifest.addRecord(record);
-      await ImageManifest.addRecord(twin);
+      'deleteRecord keeps thumbnail while another record shares the hash',
+      (WidgetTester t) async {
+        final record = ImageRecord(
+          id: 'img_thumb_2',
+          name: 'pic',
+          hash: 'hash_thumb_shared',
+          format: 'png',
+          createdAt: DateTime.now(),
+          size: 4,
+        );
+        final twin = ImageRecord(
+          id: 'img_thumb_3',
+          name: 'pic2',
+          hash: 'hash_thumb_shared',
+          format: 'jpg', // different storage name, same hash → shared thumbnail
+          createdAt: DateTime.now(),
+          size: 4,
+        );
+        await ImageManifest.writeFile(
+          imageThumbFileName('hash_thumb_shared'),
+          Uint8List.fromList([2]),
+        );
+        // 旧版命名残留：hash 仍有记录引用时不得清理
+        await ImageManifest.writeFile(
+          'hash_thumb_shared_thumb.png',
+          Uint8List.fromList([5]),
+        );
+        await ImageManifest.addRecord(record);
+        await ImageManifest.addRecord(twin);
 
-      await ImageManifest.deleteRecord(record.id);
+        await ImageManifest.deleteRecord(record.id);
 
-      expect(
+        expect(
           await WebFileStore.exists(
-              'pictures/${imageThumbFileName('hash_thumb_shared')}'),
+            'pictures/${imageThumbFileName('hash_thumb_shared')}',
+          ),
           isTrue,
-          reason: 'thumbnail must stay while the twin record still uses it');
-      expect(await WebFileStore.exists('pictures/hash_thumb_shared_thumb.png'),
+          reason: 'thumbnail must stay while the twin record still uses it',
+        );
+        expect(
+          await WebFileStore.exists('pictures/hash_thumb_shared_thumb.png'),
           isTrue,
           reason:
-              'legacy thumbnail must stay while the twin record still uses it');
-    });
+              'legacy thumbnail must stay while the twin record still uses it',
+        );
+      },
+    );
 
     testWidgets(
-        'deleteRecords removes entity file only after the last reference is deleted',
-        (WidgetTester t) async {
-      final shared1 = ImageRecord(
-        id: 'img_batch_1',
-        name: 'a',
-        hash: 'hash_batch_shared',
-        format: 'jpg',
-        createdAt: DateTime.now(),
-        size: 4,
-      );
-      final shared2 = ImageRecord(
-        id: 'img_batch_2',
-        name: 'b',
-        hash: 'hash_batch_shared',
-        format: 'jpg',
-        createdAt: DateTime.now(),
-        size: 4,
-      );
-      final unique = ImageRecord(
-        id: 'img_batch_3',
-        name: 'c',
-        hash: 'hash_batch_unique',
-        format: 'jpg',
-        createdAt: DateTime.now(),
-        size: 4,
-      );
-      await ImageManifest.writeFile(
-          shared1.storagePath, Uint8List.fromList([1]));
-      await ImageManifest.writeFile(
-          unique.storagePath, Uint8List.fromList([2]));
-      await ImageManifest.writeFile(
-          imageThumbFileName('hash_batch_shared'), Uint8List.fromList([3]));
-      await ImageManifest.writeFile(
-          imageThumbFileName('hash_batch_unique'), Uint8List.fromList([4]));
-      await ImageManifest.addRecord(shared1);
-      await ImageManifest.addRecord(shared2);
-      await ImageManifest.addRecord(unique);
+      'deleteRecords removes entity file only after the last reference is deleted',
+      (WidgetTester t) async {
+        final shared1 = ImageRecord(
+          id: 'img_batch_1',
+          name: 'a',
+          hash: 'hash_batch_shared',
+          format: 'jpg',
+          createdAt: DateTime.now(),
+          size: 4,
+        );
+        final shared2 = ImageRecord(
+          id: 'img_batch_2',
+          name: 'b',
+          hash: 'hash_batch_shared',
+          format: 'jpg',
+          createdAt: DateTime.now(),
+          size: 4,
+        );
+        final unique = ImageRecord(
+          id: 'img_batch_3',
+          name: 'c',
+          hash: 'hash_batch_unique',
+          format: 'jpg',
+          createdAt: DateTime.now(),
+          size: 4,
+        );
+        await ImageManifest.writeFile(
+          shared1.storagePath,
+          Uint8List.fromList([1]),
+        );
+        await ImageManifest.writeFile(
+          unique.storagePath,
+          Uint8List.fromList([2]),
+        );
+        await ImageManifest.writeFile(
+          imageThumbFileName('hash_batch_shared'),
+          Uint8List.fromList([3]),
+        );
+        await ImageManifest.writeFile(
+          imageThumbFileName('hash_batch_unique'),
+          Uint8List.fromList([4]),
+        );
+        await ImageManifest.addRecord(shared1);
+        await ImageManifest.addRecord(shared2);
+        await ImageManifest.addRecord(unique);
 
-      // Delete shared1 + unique: shared file must survive (shared2 remains),
-      // unique file must be removed.
-      await ImageManifest.deleteRecords([shared1.id, unique.id]);
+        // Delete shared1 + unique: shared file must survive (shared2 remains),
+        // unique file must be removed.
+        await ImageManifest.deleteRecords([shared1.id, unique.id]);
 
-      final remaining = await ImageManifest.loadRecords();
-      expect(remaining.length, equals(1));
-      expect(remaining.first.id, equals(shared2.id));
-      expect(
-          await WebFileStore.exists('pictures/${shared1.storagePath}'), isTrue,
-          reason: 'shared entity file must survive while one record remains');
-      expect(
-          await WebFileStore.exists('pictures/${unique.storagePath}'), isFalse,
-          reason: 'unique entity file must be deleted');
-      expect(
-          await WebFileStore.exists(
-              'pictures/${imageThumbFileName('hash_batch_shared')}'),
+        final remaining = await ImageManifest.loadRecords();
+        expect(remaining.length, equals(1));
+        expect(remaining.first.id, equals(shared2.id));
+        expect(
+          await WebFileStore.exists('pictures/${shared1.storagePath}'),
           isTrue,
-          reason: 'shared thumbnail must survive while one record remains');
-      expect(
-          await WebFileStore.exists(
-              'pictures/${imageThumbFileName('hash_batch_unique')}'),
+          reason: 'shared entity file must survive while one record remains',
+        );
+        expect(
+          await WebFileStore.exists('pictures/${unique.storagePath}'),
           isFalse,
-          reason: 'unique thumbnail must be deleted');
-    });
+          reason: 'unique entity file must be deleted',
+        );
+        expect(
+          await WebFileStore.exists(
+            'pictures/${imageThumbFileName('hash_batch_shared')}',
+          ),
+          isTrue,
+          reason: 'shared thumbnail must survive while one record remains',
+        );
+        expect(
+          await WebFileStore.exists(
+            'pictures/${imageThumbFileName('hash_batch_unique')}',
+          ),
+          isFalse,
+          reason: 'unique thumbnail must be deleted',
+        );
+      },
+    );
 
-    testWidgets('audio deleteRecord removes the .txt sidecar via onExtraDelete',
-        (WidgetTester t) async {
-      final hash = 'hash_sidecar';
-      await FileManifest.writeFile('$hash.wav', Uint8List.fromList([1, 2]));
-      await FileManifest.writeFile('$hash.txt', Uint8List.fromList([97]));
+    testWidgets(
+      'audio deleteRecord removes the .txt sidecar via onExtraDelete',
+      (WidgetTester t) async {
+        final hash = 'hash_sidecar';
+        await FileManifest.writeFile('$hash.wav', Uint8List.fromList([1, 2]));
+        await FileManifest.writeFile('$hash.txt', Uint8List.fromList([97]));
 
-      final record = AudioRecord(
-        id: 'audio_sidecar_1',
-        name: 'tts',
-        hash: hash,
-        format: 'wav',
-        createdAt: DateTime.now(),
-        size: 2,
-        sourceText: 'a',
-      );
-      await FileManifest.addRecord(record);
+        final record = AudioRecord(
+          id: 'audio_sidecar_1',
+          name: 'tts',
+          hash: hash,
+          format: 'wav',
+          createdAt: DateTime.now(),
+          size: 2,
+          sourceText: 'a',
+        );
+        await FileManifest.addRecord(record);
 
-      await FileManifest.deleteRecord(record.id);
+        await FileManifest.deleteRecord(record.id);
 
-      expect(await WebFileStore.exists('tts_audio/$hash.wav'), isFalse,
-          reason: 'audio entity file must be deleted');
-      expect(await WebFileStore.exists('tts_audio/$hash.txt'), isFalse,
-          reason: 'audio .txt sidecar must be deleted via onExtraDelete');
-    });
+        expect(
+          await WebFileStore.exists('tts_audio/$hash.wav'),
+          isFalse,
+          reason: 'audio entity file must be deleted',
+        );
+        expect(
+          await WebFileStore.exists('tts_audio/$hash.txt'),
+          isFalse,
+          reason: 'audio .txt sidecar must be deleted via onExtraDelete',
+        );
+      },
+    );
 
-    testWidgets('deleteRecord with unknown id is a no-op',
-        (WidgetTester t) async {
+    testWidgets('deleteRecord with unknown id is a no-op', (
+      WidgetTester t,
+    ) async {
       final record = ImageRecord(
         id: 'img_keep_1',
         name: 'keep',
@@ -343,122 +405,154 @@ void main() {
       );
       // The file exists on disk — deleting an unknown id must not touch it.
       await ImageManifest.writeFile(
-          record.storagePath, Uint8List.fromList([1]));
+        record.storagePath,
+        Uint8List.fromList([1]),
+      );
       await ImageManifest.addRecord(record);
 
       await ImageManifest.deleteRecord('does_not_exist');
 
       expect(await ImageManifest.loadRecords(), hasLength(1));
-      expect(await WebFileStore.exists('pictures/hash_keep.jpg'), isTrue,
-          reason: 'unknown-id delete must not remove the physical file');
+      expect(
+        await WebFileStore.exists('pictures/hash_keep.jpg'),
+        isTrue,
+        reason: 'unknown-id delete must not remove the physical file',
+      );
     });
 
-    testWidgets('deleteRecords with empty id list is a no-op',
-        (WidgetTester t) async {
-      await ImageManifest.addRecord(ImageRecord(
-        id: 'img_keep_2',
-        name: 'keep',
-        hash: 'hash_keep_2',
-        format: 'jpg',
-        createdAt: DateTime.now(),
-        size: 4,
-      ));
+    testWidgets('deleteRecords with empty id list is a no-op', (
+      WidgetTester t,
+    ) async {
+      await ImageManifest.addRecord(
+        ImageRecord(
+          id: 'img_keep_2',
+          name: 'keep',
+          hash: 'hash_keep_2',
+          format: 'jpg',
+          createdAt: DateTime.now(),
+          size: 4,
+        ),
+      );
 
       await ImageManifest.deleteRecords(const []);
 
       expect(await ImageManifest.loadRecords(), hasLength(1));
     });
 
-    testWidgets('video deleteRecord removes .jpg thumbnail when hash is unique',
-        (WidgetTester t) async {
-      final record = VideoRecord(
-        id: 'vid_thumb_1',
-        name: 'clip',
-        hash: 'hash_vid_thumb',
-        format: 'mp4',
-        createdAt: DateTime.now(),
-        size: 4,
-      );
-      await VideoManifest.writeFile(
-          record.storagePath, Uint8List.fromList([1]));
-      await VideoManifest.writeFile(
-          'hash_vid_thumb_thumb.jpg', Uint8List.fromList([2]));
-      await VideoManifest.addRecord(record);
+    testWidgets(
+      'video deleteRecord removes .jpg thumbnail when hash is unique',
+      (WidgetTester t) async {
+        final record = VideoRecord(
+          id: 'vid_thumb_1',
+          name: 'clip',
+          hash: 'hash_vid_thumb',
+          format: 'mp4',
+          createdAt: DateTime.now(),
+          size: 4,
+        );
+        await VideoManifest.writeFile(
+          record.storagePath,
+          Uint8List.fromList([1]),
+        );
+        await VideoManifest.writeFile(
+          'hash_vid_thumb_thumb.jpg',
+          Uint8List.fromList([2]),
+        );
+        await VideoManifest.addRecord(record);
 
-      await VideoManifest.deleteRecord(record.id);
+        await VideoManifest.deleteRecord(record.id);
 
-      expect(
-          await WebFileStore.exists('videos/hash_vid_thumb_thumb.jpg'), isFalse,
-          reason: 'video thumbnail (.jpg) must be deleted with its record');
-    });
-
-    testWidgets('video deleteRecords keeps .jpg thumbnail while hash is shared',
-        (WidgetTester t) async {
-      final a = VideoRecord(
-        id: 'vid_thumb_2',
-        name: 'a',
-        hash: 'hash_vid_thumb_shared',
-        format: 'mp4',
-        createdAt: DateTime.now(),
-        size: 4,
-      );
-      final b = VideoRecord(
-        id: 'vid_thumb_3',
-        name: 'b',
-        hash: 'hash_vid_thumb_shared',
-        format: 'mov',
-        createdAt: DateTime.now(),
-        size: 4,
-      );
-      await VideoManifest.writeFile(
-          'hash_vid_thumb_shared_thumb.jpg', Uint8List.fromList([2]));
-      await VideoManifest.addRecord(a);
-      await VideoManifest.addRecord(b);
-
-      await VideoManifest.deleteRecords([a.id]);
-
-      expect(
-          await WebFileStore.exists('videos/hash_vid_thumb_shared_thumb.jpg'),
-          isTrue,
-          reason: 'thumbnail must stay while one record still uses it');
-    });
+        expect(
+          await WebFileStore.exists('videos/hash_vid_thumb_thumb.jpg'),
+          isFalse,
+          reason: 'video thumbnail (.jpg) must be deleted with its record',
+        );
+      },
+    );
 
     testWidgets(
-        'audio deleteRecords removes the .txt sidecar via onExtraDelete',
-        (WidgetTester t) async {
-      final hash = 'hash_sidecar_batch';
-      await FileManifest.writeFile('$hash.wav', Uint8List.fromList([1, 2]));
-      await FileManifest.writeFile('$hash.txt', Uint8List.fromList([97]));
-      await FileManifest.addRecord(AudioRecord(
-        id: 'audio_sidecar_b1',
-        name: 'a',
-        hash: hash,
-        format: 'wav',
-        createdAt: DateTime.now(),
-        size: 2,
-        sourceText: 'a',
-      ));
-      await FileManifest.addRecord(AudioRecord(
-        id: 'audio_sidecar_b2',
-        name: 'b',
-        hash: hash,
-        format: 'wav',
-        createdAt: DateTime.now(),
-        size: 2,
-        sourceText: 'b',
-      ));
+      'video deleteRecords keeps .jpg thumbnail while hash is shared',
+      (WidgetTester t) async {
+        final a = VideoRecord(
+          id: 'vid_thumb_2',
+          name: 'a',
+          hash: 'hash_vid_thumb_shared',
+          format: 'mp4',
+          createdAt: DateTime.now(),
+          size: 4,
+        );
+        final b = VideoRecord(
+          id: 'vid_thumb_3',
+          name: 'b',
+          hash: 'hash_vid_thumb_shared',
+          format: 'mov',
+          createdAt: DateTime.now(),
+          size: 4,
+        );
+        await VideoManifest.writeFile(
+          'hash_vid_thumb_shared_thumb.jpg',
+          Uint8List.fromList([2]),
+        );
+        await VideoManifest.addRecord(a);
+        await VideoManifest.addRecord(b);
 
-      // Delete one of the two sharing records — sidecar must survive.
-      await FileManifest.deleteRecords(['audio_sidecar_b1']);
-      expect(await WebFileStore.exists('tts_audio/$hash.txt'), isTrue,
-          reason: 'sidecar must survive while one record remains');
+        await VideoManifest.deleteRecords([a.id]);
 
-      // Delete the last reference — sidecar must be removed.
-      await FileManifest.deleteRecords(['audio_sidecar_b2']);
-      expect(await WebFileStore.exists('tts_audio/$hash.txt'), isFalse,
-          reason: 'sidecar must be deleted when the last record is removed');
-      expect(await WebFileStore.exists('tts_audio/$hash.wav'), isFalse);
-    });
+        expect(
+          await WebFileStore.exists('videos/hash_vid_thumb_shared_thumb.jpg'),
+          isTrue,
+          reason: 'thumbnail must stay while one record still uses it',
+        );
+      },
+    );
+
+    testWidgets(
+      'audio deleteRecords removes the .txt sidecar via onExtraDelete',
+      (WidgetTester t) async {
+        final hash = 'hash_sidecar_batch';
+        await FileManifest.writeFile('$hash.wav', Uint8List.fromList([1, 2]));
+        await FileManifest.writeFile('$hash.txt', Uint8List.fromList([97]));
+        await FileManifest.addRecord(
+          AudioRecord(
+            id: 'audio_sidecar_b1',
+            name: 'a',
+            hash: hash,
+            format: 'wav',
+            createdAt: DateTime.now(),
+            size: 2,
+            sourceText: 'a',
+          ),
+        );
+        await FileManifest.addRecord(
+          AudioRecord(
+            id: 'audio_sidecar_b2',
+            name: 'b',
+            hash: hash,
+            format: 'wav',
+            createdAt: DateTime.now(),
+            size: 2,
+            sourceText: 'b',
+          ),
+        );
+
+        // Delete one of the two sharing records — sidecar must survive.
+        await FileManifest.deleteRecords(['audio_sidecar_b1']);
+        expect(
+          await WebFileStore.exists('tts_audio/$hash.txt'),
+          isTrue,
+          reason: 'sidecar must survive while one record remains',
+        );
+
+        // Delete the last reference — sidecar must be removed.
+        await FileManifest.deleteRecords(['audio_sidecar_b2']);
+        expect(
+          await WebFileStore.exists('tts_audio/$hash.txt'),
+          isFalse,
+          reason: 'sidecar must be deleted when the last record is removed',
+        );
+        expect(await WebFileStore.exists('tts_audio/$hash.wav'), isFalse);
+      },
+    );
 
     testWidgets(
       'single audio deletion keeps the sidecar while another format shares its hash',
@@ -493,9 +587,13 @@ void main() {
         await FileManifest.deleteRecord(wav.id);
 
         expect(
-            await WebFileStore.exists('tts_audio/${wav.storagePath}'), isFalse);
+          await WebFileStore.exists('tts_audio/${wav.storagePath}'),
+          isFalse,
+        );
         expect(
-            await WebFileStore.exists('tts_audio/${mp3.storagePath}'), isTrue);
+          await WebFileStore.exists('tts_audio/${mp3.storagePath}'),
+          isTrue,
+        );
         expect(
           await WebFileStore.exists('tts_audio/${wav.textStoragePath}'),
           isTrue,
@@ -505,7 +603,9 @@ void main() {
         await FileManifest.deleteRecord(mp3.id);
 
         expect(
-            await WebFileStore.exists('tts_audio/${mp3.storagePath}'), isFalse);
+          await WebFileStore.exists('tts_audio/${mp3.storagePath}'),
+          isFalse,
+        );
         expect(
           await WebFileStore.exists('tts_audio/${mp3.textStoragePath}'),
           isFalse,
@@ -547,9 +647,13 @@ void main() {
         await FileManifest.deleteRecords([wav.id]);
 
         expect(
-            await WebFileStore.exists('tts_audio/${wav.storagePath}'), isFalse);
+          await WebFileStore.exists('tts_audio/${wav.storagePath}'),
+          isFalse,
+        );
         expect(
-            await WebFileStore.exists('tts_audio/${mp3.storagePath}'), isTrue);
+          await WebFileStore.exists('tts_audio/${mp3.storagePath}'),
+          isTrue,
+        );
         expect(
           await WebFileStore.exists('tts_audio/${wav.textStoragePath}'),
           isTrue,
@@ -559,7 +663,9 @@ void main() {
         await FileManifest.deleteRecords([mp3.id]);
 
         expect(
-            await WebFileStore.exists('tts_audio/${mp3.storagePath}'), isFalse);
+          await WebFileStore.exists('tts_audio/${mp3.storagePath}'),
+          isFalse,
+        );
         expect(
           await WebFileStore.exists('tts_audio/${mp3.textStoragePath}'),
           isFalse,
@@ -569,15 +675,17 @@ void main() {
     );
 
     testWidgets('moveRecord to root clears the folder', (WidgetTester t) async {
-      await VideoManifest.addRecord(VideoRecord(
-        id: 'vid_root_1',
-        name: 'v',
-        hash: 'hash_root_move',
-        format: 'mp4',
-        createdAt: DateTime.now(),
-        size: 4,
-        folder: 'a',
-      ));
+      await VideoManifest.addRecord(
+        VideoRecord(
+          id: 'vid_root_1',
+          name: 'v',
+          hash: 'hash_root_move',
+          format: 'mp4',
+          createdAt: DateTime.now(),
+          size: 4,
+          folder: 'a',
+        ),
+      );
 
       await VideoManifest.moveRecord('vid_root_1', '');
 
@@ -585,8 +693,9 @@ void main() {
       expect(records.first.folder, isEmpty);
     });
 
-    testWidgets('readFile/fileExists return null/false after deletion',
-        (WidgetTester t) async {
+    testWidgets('readFile/fileExists return null/false after deletion', (
+      WidgetTester t,
+    ) async {
       final record = ImageRecord(
         id: 'img_after_1',
         name: 'pic',
@@ -596,42 +705,52 @@ void main() {
         size: 4,
       );
       await ImageManifest.writeFile(
-          record.storagePath, Uint8List.fromList([9]));
+        record.storagePath,
+        Uint8List.fromList([9]),
+      );
       await ImageManifest.addRecord(record);
       await ImageManifest.deleteRecord(record.id);
 
       expect(await ImageManifest.readFile(record.storagePath), isNull);
       expect(
-          await WebFileStore.exists('pictures/${record.storagePath}'), isFalse);
+        await WebFileStore.exists('pictures/${record.storagePath}'),
+        isFalse,
+      );
     });
   });
 
   group('JSON record insertion duplicate IDs', () {
-    testWidgets('replaces the existing row and keeps folder entries',
-        (WidgetTester t) async {
+    testWidgets('replaces the existing row and keeps folder entries', (
+      WidgetTester t,
+    ) async {
       const id = 'duplicate_image_id';
-      final firstInsert = ImageManifest.addRecord(ImageRecord(
-        id: id,
-        name: 'before',
-        hash: 'duplicate-before',
-        format: 'png',
-        createdAt: DateTime(2024),
-        size: 1,
-        folder: 'first',
-      ));
-      final replacementInsert = ImageManifest.addRecord(ImageRecord(
-        id: id,
-        name: 'after',
-        hash: 'duplicate-after',
-        format: 'png',
-        createdAt: DateTime(2024),
-        size: 2,
-        folder: 'second',
-      ));
+      final firstInsert = ImageManifest.addRecord(
+        ImageRecord(
+          id: id,
+          name: 'before',
+          hash: 'duplicate-before',
+          format: 'png',
+          createdAt: DateTime(2024),
+          size: 1,
+          folder: 'first',
+        ),
+      );
+      final replacementInsert = ImageManifest.addRecord(
+        ImageRecord(
+          id: id,
+          name: 'after',
+          hash: 'duplicate-after',
+          format: 'png',
+          createdAt: DateTime(2024),
+          size: 2,
+          folder: 'second',
+        ),
+      );
       await Future.wait([firstInsert, replacementInsert]);
 
-      expect((await ImageManifest.loadRecords()).map((record) => record.name),
-          ['after']);
+      expect((await ImageManifest.loadRecords()).map((record) => record.name), [
+        'after',
+      ]);
       expect(
         (await ManifestDatabase.getAllImageRecords()).map((row) => row['id']),
         [id],
@@ -644,8 +763,9 @@ void main() {
       );
     });
 
-    testWidgets('failed replacement restores the previous row and folders',
-        (WidgetTester t) async {
+    testWidgets('failed replacement restores the previous row and folders', (
+      WidgetTester t,
+    ) async {
       const id = 'duplicate_image_id_rollback';
       await ManifestDatabase.insertRecordWithFolders(
         recordTable: ManifestTables.imageRecords,
@@ -715,53 +835,55 @@ void main() {
   });
 
   group('Web manifest read failures', () {
-    test('a failed initial read can be retried without losing the manifest',
-        () async {
-      final seededManifest = emptyWebData()
-        ..[ManifestTables.audioRecords] = [
-          <String, dynamic>{
-            'id': 'read-failure-audio',
-            'name': 'kept audio',
-            'hash': 'read-failure-hash',
-            'format': 'wav',
-            'createdAt': '2024-01-01T00:00:00.000Z',
-            'modifiedAt': '2024-01-01T00:00:00.000Z',
-            'size': 3,
-            'folder': '',
-            'sourceText': 'kept metadata',
-            'duration': 1,
-          },
-        ]
-        ..['retained_metadata'] = {'source': 'existing manifest'};
-      final originalBytes = Uint8List.fromList(
-        utf8.encode(jsonEncode(seededManifest)),
-      );
-      await WebFileStore.write('manifest_database_data', originalBytes);
+    test(
+      'a failed initial read can be retried without losing the manifest',
+      () async {
+        final seededManifest = emptyWebData()
+          ..[ManifestTables.audioRecords] = [
+            <String, dynamic>{
+              'id': 'read-failure-audio',
+              'name': 'kept audio',
+              'hash': 'read-failure-hash',
+              'format': 'wav',
+              'createdAt': '2024-01-01T00:00:00.000Z',
+              'modifiedAt': '2024-01-01T00:00:00.000Z',
+              'size': 3,
+              'folder': '',
+              'sourceText': 'kept metadata',
+              'duration': 1,
+            },
+          ]
+          ..['retained_metadata'] = {'source': 'existing manifest'};
+        final originalBytes = Uint8List.fromList(
+          utf8.encode(jsonEncode(seededManifest)),
+        );
+        await WebFileStore.write('manifest_database_data', originalBytes);
 
-      final failure = StateError('injected Web manifest read failure');
-      var failureInjected = false;
-      ManifestDatabase.beforeWebDataReadForTesting = () async {
-        failureInjected = true;
-        ManifestDatabase.beforeWebDataReadForTesting = null;
-        throw failure;
-      };
+        final failure = StateError('injected Web manifest read failure');
+        var failureInjected = false;
+        ManifestDatabase.beforeWebDataReadForTesting = () async {
+          failureInjected = true;
+          ManifestDatabase.beforeWebDataReadForTesting = null;
+          throw failure;
+        };
 
-      await expectLater(
-        ManifestDatabase.getAllAudioRecords(),
-        throwsA(same(failure)),
-      );
-      expect(failureInjected, isTrue);
+        await expectLater(
+          ManifestDatabase.getAllAudioRecords(),
+          throwsA(same(failure)),
+        );
+        expect(failureInjected, isTrue);
 
-      final records = await ManifestDatabase.getAllAudioRecords();
-      expect(records.map((record) => record['id']), ['read-failure-audio']);
-      expect(
-        await WebFileStore.read('manifest_database_data'),
-        orderedEquals(originalBytes),
-      );
+        final records = await ManifestDatabase.getAllAudioRecords();
+        expect(records.map((record) => record['id']), ['read-failure-audio']);
+        expect(
+          await WebFileStore.read('manifest_database_data'),
+          orderedEquals(originalBytes),
+        );
 
-      await ManifestDatabase.clearAllData();
-      expect(await ManifestDatabase.getAllAudioRecords(), isEmpty);
-    });
+        await ManifestDatabase.clearAllData();
+        expect(await ManifestDatabase.getAllAudioRecords(), isEmpty);
+      },
+    );
   });
 
   group('audio deletion persistence failures', () {
@@ -904,10 +1026,7 @@ void main() {
       for (final record in recordsToDelete) {
         await addRecordWithFiles(record);
       }
-      final concurrentRecord = audioRecord(
-        concurrentId,
-        'hash_$concurrentId',
-      );
+      final concurrentRecord = audioRecord(concurrentId, 'hash_$concurrentId');
       await FileManifest.writeFile(concurrentRecord.storagePath, audioBytes);
       await FileManifest.writeFile(
         concurrentRecord.textStoragePath,
@@ -992,9 +1111,11 @@ void main() {
       );
       expect(
         (await FileManifest.loadRecords()).map((record) => record.id),
-        equals(concurrentRegistrationInFileManifest
-            ? [concurrentRecord.id]
-            : <String>[]),
+        equals(
+          concurrentRegistrationInFileManifest
+              ? [concurrentRecord.id]
+              : <String>[],
+        ),
       );
       expect(await persistedAudioIds(), equals([concurrentRecord.id]));
       for (final record in recordsToDelete) {
@@ -1504,10 +1625,7 @@ void main() {
               .timeout(const Duration(seconds: 5));
         } on TimeoutException {
           cancelRegistration.complete();
-          await expectLater(
-            registrationFuture,
-            throwsA(isA<StateError>()),
-          );
+          await expectLater(registrationFuture, throwsA(isA<StateError>()));
           await deleteFuture;
           fail('batch deletion deadlocked with a concurrent same-hash save');
         } finally {
@@ -1581,8 +1699,9 @@ void main() {
         final deleteWriteStarted = Completer<void>();
         final updateWriteStarted = Completer<void>();
         final releaseDeleteWrite = Completer<void>();
-        final failure =
-            StateError('injected audio deletion persistence failure');
+        final failure = StateError(
+          'injected audio deletion persistence failure',
+        );
         var saveCount = 0;
         ManifestDatabase.beforeWebDataSaveForTesting = () async {
           saveCount++;
@@ -1596,10 +1715,9 @@ void main() {
 
         final deleteFuture = FileManifest.deleteRecord(target.id);
         await deleteWriteStarted.future;
-        final updateFuture = ManifestDatabase.updateAudioRecord(
-          survivor.id,
-          {'name': 'updated survivor'},
-        );
+        final updateFuture = ManifestDatabase.updateAudioRecord(survivor.id, {
+          'name': 'updated survivor',
+        });
         await t.pump();
         final updateWroteBeforeDeleteFailed = updateWriteStarted.isCompleted;
         releaseDeleteWrite.complete();
@@ -1623,8 +1741,9 @@ void main() {
           unorderedEquals([target.id, survivor.id]),
         );
         expect(
-          databaseRecords
-              .singleWhere((row) => row['id'] == survivor.id)['name'],
+          databaseRecords.singleWhere(
+            (row) => row['id'] == survivor.id,
+          )['name'],
           'updated survivor',
         );
         expect(
@@ -1662,200 +1781,191 @@ void main() {
       },
     );
 
-    testWidgets(
-      'audio table clear waits for a failed delete rollback',
-      (WidgetTester t) async {
-        final target = audioRecord(
-          'audio_concurrent_clear_delete_target',
-          'hash_concurrent_clear_delete_target',
-        );
-        final survivor = audioRecord(
-          'audio_concurrent_clear_delete_survivor',
-          'hash_concurrent_clear_delete_survivor',
-        );
-        await addRecordWithFiles(target);
-        await addRecordWithFiles(survivor);
-        await ManifestDatabase.getAllAudioRecords();
-        await FileManifest.loadRecords();
-        expect(
-          await persistedAudioIds(),
-          unorderedEquals([target.id, survivor.id]),
-        );
+    testWidgets('audio table clear waits for a failed delete rollback', (
+      WidgetTester t,
+    ) async {
+      final target = audioRecord(
+        'audio_concurrent_clear_delete_target',
+        'hash_concurrent_clear_delete_target',
+      );
+      final survivor = audioRecord(
+        'audio_concurrent_clear_delete_survivor',
+        'hash_concurrent_clear_delete_survivor',
+      );
+      await addRecordWithFiles(target);
+      await addRecordWithFiles(survivor);
+      await ManifestDatabase.getAllAudioRecords();
+      await FileManifest.loadRecords();
+      expect(
+        await persistedAudioIds(),
+        unorderedEquals([target.id, survivor.id]),
+      );
 
-        final deleteWriteStarted = Completer<void>();
-        final clearWriteStarted = Completer<void>();
-        final releaseDeleteWrite = Completer<void>();
-        final failure =
-            StateError('injected audio deletion persistence failure');
-        var saveCount = 0;
-        ManifestDatabase.beforeWebDataSaveForTesting = () async {
-          saveCount++;
-          if (saveCount == 1) {
-            deleteWriteStarted.complete();
-            await releaseDeleteWrite.future;
-            throw failure;
-          }
-          if (saveCount == 2) clearWriteStarted.complete();
-        };
+      final deleteWriteStarted = Completer<void>();
+      final clearWriteStarted = Completer<void>();
+      final releaseDeleteWrite = Completer<void>();
+      final failure = StateError('injected audio deletion persistence failure');
+      var saveCount = 0;
+      ManifestDatabase.beforeWebDataSaveForTesting = () async {
+        saveCount++;
+        if (saveCount == 1) {
+          deleteWriteStarted.complete();
+          await releaseDeleteWrite.future;
+          throw failure;
+        }
+        if (saveCount == 2) clearWriteStarted.complete();
+      };
 
-        final deleteFuture = FileManifest.deleteRecord(target.id);
-        await deleteWriteStarted.future;
-        final clearFuture =
-            ManifestDatabase.clearRecords(ManifestTables.audioRecords);
-        await t.pump();
-        final clearWroteBeforeDeleteFailed = clearWriteStarted.isCompleted;
-        releaseDeleteWrite.complete();
+      final deleteFuture = FileManifest.deleteRecord(target.id);
+      await deleteWriteStarted.future;
+      final clearFuture = ManifestDatabase.clearRecords(
+        ManifestTables.audioRecords,
+      );
+      await t.pump();
+      final clearWroteBeforeDeleteFailed = clearWriteStarted.isCompleted;
+      releaseDeleteWrite.complete();
 
+      await expectLater(deleteFuture, throwsA(same(failure)));
+      await clearFuture;
+      ManifestDatabase.beforeWebDataSaveForTesting = null;
+
+      expect(
+        clearWroteBeforeDeleteFailed,
+        isFalse,
+        reason: 'audio table clear must wait for delete rollback to finish',
+      );
+      expect(await ManifestDatabase.getAllAudioRecords(), isEmpty);
+      expect(await persistedAudioIds(), isEmpty);
+    });
+
+    testWidgets('audio table clear waits for file cleanup failure rollback', (
+      WidgetTester t,
+    ) async {
+      final target = audioRecord(
+        'audio_clear_after_cleanup_failure_target',
+        'hash_clear_after_cleanup_failure_target',
+      );
+      await addRecordWithFiles(target);
+      await ManifestDatabase.getAllAudioRecords();
+      await FileManifest.loadRecords();
+      expect(await persistedAudioIds(), equals([target.id]));
+
+      final cleanupStarted = Completer<void>();
+      final releaseCleanupFailure = Completer<void>();
+      final clearCompleted = Completer<void>();
+      final failure = StateError('injected audio file cleanup failure');
+      FileManifest.beforeAudioPrimaryDeleteForTesting = (_) async {
+        cleanupStarted.complete();
+        await releaseCleanupFailure.future;
+        throw failure;
+      };
+
+      final deleteFuture = FileManifest.deleteRecord(target.id);
+      await cleanupStarted.future;
+      final clearFuture = () async {
+        await ManifestDatabase.clearRecords(ManifestTables.audioRecords);
+        clearCompleted.complete();
+      }();
+      await t.pump();
+      final clearCompletedBeforeCleanup = clearCompleted.isCompleted;
+      releaseCleanupFailure.complete();
+
+      try {
         await expectLater(deleteFuture, throwsA(same(failure)));
         await clearFuture;
+      } finally {
+        FileManifest.beforeAudioPrimaryDeleteForTesting = null;
         ManifestDatabase.beforeWebDataSaveForTesting = null;
+      }
 
-        expect(
-          clearWroteBeforeDeleteFailed,
-          isFalse,
-          reason: 'audio table clear must wait for delete rollback to finish',
-        );
-        expect(await ManifestDatabase.getAllAudioRecords(), isEmpty);
-        expect(await persistedAudioIds(), isEmpty);
-      },
-    );
+      expect(
+        clearCompletedBeforeCleanup,
+        isFalse,
+        reason: 'clear must wait until file cleanup rollback finishes',
+      );
+      expect(await ManifestDatabase.getAllAudioRecords(), isEmpty);
+      expect(await persistedAudioIds(), isEmpty);
+      expect(
+        await WebFileStore.read('tts_audio/${target.storagePath}'),
+        equals(audioBytes),
+        reason: 'failed cleanup leaves the audio file available',
+      );
+      expect(
+        await WebFileStore.read('tts_audio/${target.textStoragePath}'),
+        equals(sidecarBytes),
+        reason: 'failed cleanup restores the sidecar',
+      );
+    });
 
-    testWidgets(
-      'audio table clear waits for file cleanup failure rollback',
-      (WidgetTester t) async {
-        final target = audioRecord(
-          'audio_clear_after_cleanup_failure_target',
-          'hash_clear_after_cleanup_failure_target',
-        );
-        await addRecordWithFiles(target);
-        await ManifestDatabase.getAllAudioRecords();
-        await FileManifest.loadRecords();
-        expect(await persistedAudioIds(), equals([target.id]));
+    testWidgets('failed audio cleanup preserves a concurrent record update', (
+      WidgetTester t,
+    ) async {
+      final target = audioRecord(
+        'audio_update_after_cleanup_failure_target',
+        'hash_update_after_cleanup_failure_target',
+      );
+      await addRecordWithFiles(target);
+      await ManifestDatabase.getAllAudioRecords();
+      await FileManifest.loadRecords();
 
-        final cleanupStarted = Completer<void>();
-        final releaseCleanupFailure = Completer<void>();
-        final clearCompleted = Completer<void>();
-        final failure = StateError('injected audio file cleanup failure');
-        FileManifest.beforeAudioPrimaryDeleteForTesting = (_) async {
-          cleanupStarted.complete();
-          await releaseCleanupFailure.future;
-          throw failure;
-        };
+      final cleanupStarted = Completer<void>();
+      final releaseCleanupFailure = Completer<void>();
+      final updateCompleted = Completer<void>();
+      final failure = StateError('injected audio file cleanup failure');
+      FileManifest.beforeAudioPrimaryDeleteForTesting = (_) async {
+        cleanupStarted.complete();
+        await releaseCleanupFailure.future;
+        throw failure;
+      };
 
-        final deleteFuture = FileManifest.deleteRecord(target.id);
-        await cleanupStarted.future;
-        final clearFuture = () async {
-          await ManifestDatabase.clearRecords(ManifestTables.audioRecords);
-          clearCompleted.complete();
-        }();
-        await t.pump();
-        final clearCompletedBeforeCleanup = clearCompleted.isCompleted;
-        releaseCleanupFailure.complete();
+      final deleteFuture = FileManifest.deleteRecord(target.id);
+      await cleanupStarted.future;
+      final updateFuture = () async {
+        await FileManifest.updateRecord(target.copyWith(name: 'updated'));
+        updateCompleted.complete();
+      }();
+      await t.pump();
+      final updateCompletedBeforeCleanup = updateCompleted.isCompleted;
+      releaseCleanupFailure.complete();
 
-        try {
-          await expectLater(deleteFuture, throwsA(same(failure)));
-          await clearFuture;
-        } finally {
-          FileManifest.beforeAudioPrimaryDeleteForTesting = null;
-          ManifestDatabase.beforeWebDataSaveForTesting = null;
-        }
+      try {
+        await expectLater(deleteFuture, throwsA(same(failure)));
+        await updateFuture;
+      } finally {
+        FileManifest.beforeAudioPrimaryDeleteForTesting = null;
+      }
 
-        expect(
-          clearCompletedBeforeCleanup,
-          isFalse,
-          reason: 'clear must wait until file cleanup rollback finishes',
-        );
-        expect(await ManifestDatabase.getAllAudioRecords(), isEmpty);
-        expect(await persistedAudioIds(), isEmpty);
-        expect(
-          await WebFileStore.read('tts_audio/${target.storagePath}'),
-          equals(audioBytes),
-          reason: 'failed cleanup leaves the audio file available',
-        );
-        expect(
-          await WebFileStore.read('tts_audio/${target.textStoragePath}'),
-          equals(sidecarBytes),
-          reason: 'failed cleanup restores the sidecar',
-        );
-      },
-    );
+      expect(
+        updateCompletedBeforeCleanup,
+        isFalse,
+        reason: 'record updates must wait for failed deletion rollback',
+      );
+      expect(
+        (await ManifestDatabase.getAllAudioRecords()).single['name'],
+        'updated',
+      );
+      expect((await FileManifest.loadRecords()).single.name, 'updated');
+      expect((await persistedAudioRecord(target.id))['name'], 'updated');
+      expect(
+        await WebFileStore.read('tts_audio/${target.storagePath}'),
+        equals(audioBytes),
+      );
+      expect(
+        await WebFileStore.read('tts_audio/${target.textStoragePath}'),
+        equals(sidecarBytes),
+      );
 
-    testWidgets(
-      'failed audio cleanup preserves a concurrent record update',
-      (WidgetTester t) async {
-        final target = audioRecord(
-          'audio_update_after_cleanup_failure_target',
-          'hash_update_after_cleanup_failure_target',
-        );
-        await addRecordWithFiles(target);
-        await ManifestDatabase.getAllAudioRecords();
-        await FileManifest.loadRecords();
-
-        final cleanupStarted = Completer<void>();
-        final releaseCleanupFailure = Completer<void>();
-        final updateCompleted = Completer<void>();
-        final failure = StateError('injected audio file cleanup failure');
-        FileManifest.beforeAudioPrimaryDeleteForTesting = (_) async {
-          cleanupStarted.complete();
-          await releaseCleanupFailure.future;
-          throw failure;
-        };
-
-        final deleteFuture = FileManifest.deleteRecord(target.id);
-        await cleanupStarted.future;
-        final updateFuture = () async {
-          await FileManifest.updateRecord(target.copyWith(name: 'updated'));
-          updateCompleted.complete();
-        }();
-        await t.pump();
-        final updateCompletedBeforeCleanup = updateCompleted.isCompleted;
-        releaseCleanupFailure.complete();
-
-        try {
-          await expectLater(deleteFuture, throwsA(same(failure)));
-          await updateFuture;
-        } finally {
-          FileManifest.beforeAudioPrimaryDeleteForTesting = null;
-        }
-
-        expect(
-          updateCompletedBeforeCleanup,
-          isFalse,
-          reason: 'record updates must wait for failed deletion rollback',
-        );
-        expect(
-          (await ManifestDatabase.getAllAudioRecords()).single['name'],
-          'updated',
-        );
-        expect(
-          (await FileManifest.loadRecords()).single.name,
-          'updated',
-        );
-        expect(
-          (await persistedAudioRecord(target.id))['name'],
-          'updated',
-        );
-        expect(
-          await WebFileStore.read('tts_audio/${target.storagePath}'),
-          equals(audioBytes),
-        );
-        expect(
-          await WebFileStore.read('tts_audio/${target.textStoragePath}'),
-          equals(sidecarBytes),
-        );
-
-        await FileManifest.deleteRecord(target.id);
-        expect(await persistedAudioIds(), isEmpty);
-        expect(
-          await WebFileStore.exists('tts_audio/${target.storagePath}'),
-          isFalse,
-        );
-        expect(
-          await WebFileStore.exists('tts_audio/${target.textStoragePath}'),
-          isFalse,
-        );
-      },
-    );
+      await FileManifest.deleteRecord(target.id);
+      expect(await persistedAudioIds(), isEmpty);
+      expect(
+        await WebFileStore.exists('tts_audio/${target.storagePath}'),
+        isFalse,
+      );
+      expect(
+        await WebFileStore.exists('tts_audio/${target.textStoragePath}'),
+        isFalse,
+      );
+    });
 
     testWidgets(
       'batch audio deletion preserves an update to a surviving record',
@@ -1959,8 +2069,9 @@ void main() {
         final deleteWriteStarted = Completer<void>();
         final imageWriteStarted = Completer<void>();
         final releaseDeleteWrite = Completer<void>();
-        final failure =
-            StateError('injected audio deletion persistence failure');
+        final failure = StateError(
+          'injected audio deletion persistence failure',
+        );
         var saveCount = 0;
         ManifestDatabase.beforeWebDataSaveForTesting = () async {
           saveCount++;
@@ -2033,168 +2144,300 @@ void main() {
   });
 
   // ====================================================================
+  // non-audio deletion cleanup errors
+  group('non-audio cleanup failure', () {
+    testWidgets('single deletion keeps row and file for retry', (t) async {
+      final op = ManifestOperations<ImageRecord>(
+        manifestKey: 'single_cleanup_failure',
+        storageDirName: 'pictures',
+        fromMap: ImageRecord.fromMap,
+        tableName: ManifestTables.imageRecords,
+        toMap: (r) => r.toMap(),
+      );
+      final r = ImageRecord(
+        id: 'single_cleanup_failure',
+        name: 'x',
+        hash: 'single_cleanup_failure_hash',
+        format: 'jpg',
+        createdAt: DateTime(2024),
+        size: 2,
+      );
+      await op.writeFile(r.storagePath, Uint8List.fromList([1, 2]));
+      await op.addRecord(r);
+      final failure = StateError('injected');
+      op.beforeNonAudioFileDeleteForTesting = (_) async => throw failure;
+      await expectLater(op.deleteRecord(r.id), throwsA(same(failure)));
+      expect((await op.loadRecords()).map((x) => x.id), [r.id]);
+      expect(await op.readFile(r.storagePath), [1, 2]);
+      op.beforeNonAudioFileDeleteForTesting = null;
+      await op.deleteRecord(r.id);
+      expect(await op.loadRecords(), isEmpty);
+    });
+
+    testWidgets('partial batch deletion restores removed bytes for retry', (
+      t,
+    ) async {
+      final op = ManifestOperations<ImageRecord>(
+        manifestKey: 'batch_cleanup_failure',
+        storageDirName: 'pictures',
+        fromMap: ImageRecord.fromMap,
+        tableName: ManifestTables.imageRecords,
+        toMap: (r) => r.toMap(),
+      );
+      final records = [
+        for (var i = 0; i < 2; i++)
+          ImageRecord(
+            id: 'batch_cleanup_$i',
+            name: 'x$i',
+            hash: 'batch_cleanup_hash_$i',
+            format: 'jpg',
+            createdAt: DateTime(2024),
+            size: 1,
+          ),
+      ];
+      for (var i = 0; i < records.length; i++) {
+        await op.writeFile(records[i].storagePath, Uint8List.fromList([i + 1]));
+        await op.addRecord(records[i]);
+      }
+      var count = 0;
+      final failure = StateError('injected second delete');
+      op.beforeNonAudioFileDeleteForTesting = (_) async {
+        if (++count == 2) throw failure;
+      };
+      final ids = records.map((r) => r.id).toList();
+      await expectLater(op.deleteRecords(ids), throwsA(same(failure)));
+      expect((await op.loadRecords()).map((r) => r.id), unorderedEquals(ids));
+      for (var i = 0; i < records.length; i++) {
+        expect(await op.readFile(records[i].storagePath), [i + 1]);
+      }
+      op.beforeNonAudioFileDeleteForTesting = null;
+      await op.deleteRecords(ids);
+      expect(await op.loadRecords(), isEmpty);
+    });
+
+    testWidgets(
+      'folder cleanup failure keeps row, folder and bytes retryable',
+      (t) async {
+        final op = ManifestOperations<ImageRecord>(
+          manifestKey: 'folder_cleanup_failure',
+          storageDirName: 'pictures',
+          fromMap: ImageRecord.fromMap,
+          tableName: ManifestTables.imageRecords,
+          toMap: (r) => r.toMap(),
+        );
+        final r = ImageRecord(
+          id: 'folder_cleanup_failure',
+          name: 'x',
+          hash: 'folder_cleanup_failure_hash',
+          format: 'jpg',
+          createdAt: DateTime(2024),
+          size: 1,
+          folder: 'retry_folder',
+        );
+        await op.addFolder(r.folder);
+        await op.writeFile(r.storagePath, Uint8List.fromList([7]));
+        await op.addRecord(r);
+        final failure = StateError('injected folder file failure');
+        op.beforeNonAudioFileDeleteForTesting = (_) async => throw failure;
+        await expectLater(op.removeFolder(r.folder), throwsA(same(failure)));
+        expect((await op.loadRecords()).map((x) => x.id), [r.id]);
+        expect(await op.getAllFolders(), contains(r.folder));
+        expect(await op.readFile(r.storagePath), [7]);
+        op.beforeNonAudioFileDeleteForTesting = null;
+        await op.removeFolder(r.folder);
+        expect(await op.loadRecords(), isEmpty);
+      },
+    );
+  });
+
   // removeFolder — records, folder entries and ref-counted files
   // ====================================================================
 
   group('removeFolder', () {
     testWidgets(
-        'failed non-audio record deletion preserves cache and files for retry',
-        (WidgetTester t) async {
-      const fileBytes = [1, 2, 3];
-      const thumbnailBytes = [4, 5];
-      final operations = ManifestOperations<ImageRecord>(
-        manifestKey: 'test_image_folder_delete_failure',
-        storageDirName: 'pictures',
-        fromMap: ImageRecord.fromMap,
-        tableName: ManifestTables.imageRecords,
-        toMap: (record) => record.toMap(),
-      );
-      final record = ImageRecord(
-        id: 'image_folder_delete_failure',
-        name: 'keep after failed deletion',
-        hash: 'hash_image_folder_delete_failure',
-        format: 'jpg',
-        createdAt: DateTime(2024),
-        size: fileBytes.length,
-        folder: 'image_folder_delete_failure',
-      );
-      await operations.addFolder(record.folder);
-      const emptyDescendant = 'image_folder_delete_failure/empty';
-      await operations.addFolder(emptyDescendant);
-      await operations.writeFile(
-        record.storagePath,
-        Uint8List.fromList(fileBytes),
-      );
-      await operations.writeFile(
-        '${record.hash}_thumb.png',
-        Uint8List.fromList(thumbnailBytes),
-      );
-      await operations.addRecord(record);
+      'failed non-audio record deletion preserves cache and files for retry',
+      (WidgetTester t) async {
+        const fileBytes = [1, 2, 3];
+        const thumbnailBytes = [4, 5];
+        final operations = ManifestOperations<ImageRecord>(
+          manifestKey: 'test_image_folder_delete_failure',
+          storageDirName: 'pictures',
+          fromMap: ImageRecord.fromMap,
+          tableName: ManifestTables.imageRecords,
+          toMap: (record) => record.toMap(),
+        );
+        final record = ImageRecord(
+          id: 'image_folder_delete_failure',
+          name: 'keep after failed deletion',
+          hash: 'hash_image_folder_delete_failure',
+          format: 'jpg',
+          createdAt: DateTime(2024),
+          size: fileBytes.length,
+          folder: 'image_folder_delete_failure',
+        );
+        await operations.addFolder(record.folder);
+        const emptyDescendant = 'image_folder_delete_failure/empty';
+        await operations.addFolder(emptyDescendant);
+        await operations.writeFile(
+          record.storagePath,
+          Uint8List.fromList(fileBytes),
+        );
+        await operations.writeFile(
+          '${record.hash}_thumb.png',
+          Uint8List.fromList(thumbnailBytes),
+        );
+        await operations.addRecord(record);
 
-      final failure = StateError('injected image folder record delete failure');
-      operations.beforeNonAudioFolderRecordDeleteForTesting = () async {
-        ManifestDatabase.beforeWebDataSaveForTesting = () async {
-          ManifestDatabase.beforeWebDataSaveForTesting = null;
-          throw failure;
+        final failure = StateError(
+          'injected image folder record delete failure',
+        );
+        operations.beforeNonAudioFolderRecordDeleteForTesting = () async {
+          ManifestDatabase.beforeWebDataSaveForTesting = () async {
+            ManifestDatabase.beforeWebDataSaveForTesting = null;
+            throw failure;
+          };
         };
-      };
 
-      try {
-        await expectLater(
-          operations.removeFolder(record.folder),
-          throwsA(same(failure)),
+        try {
+          await expectLater(
+            operations.removeFolder(record.folder),
+            throwsA(same(failure)),
+          );
+          expect(
+            (await ManifestDatabase.getAllImageRecords()).map(
+              (row) => row['id'],
+            ),
+            contains(record.id),
+            reason: 'a failed deletion must leave its database row intact',
+          );
+          expect(
+            (await operations.loadRecords()).map((cached) => cached.id),
+            contains(record.id),
+            reason: 'a failed deletion must leave the cached record available',
+          );
+          expect(
+            await ManifestDatabase.getAllFolders(
+              recordTable: ManifestTables.imageRecords,
+            ),
+            unorderedEquals([record.folder, emptyDescendant]),
+            reason: 'a failed deletion must preserve explicit folder rows',
+          );
+          expect(
+            await operations.getAllFolders(),
+            unorderedEquals([record.folder, emptyDescendant]),
+            reason: 'a failed deletion must preserve explicit folders in cache',
+          );
+          expect(
+            await operations.readFile(record.storagePath),
+            equals(fileBytes),
+            reason: 'a failed deletion must leave the primary file available',
+          );
+          expect(
+            await operations.readFile('${record.hash}_thumb.png'),
+            equals(thumbnailBytes),
+            reason: 'a failed deletion must leave the thumbnail available',
+          );
+        } finally {
+          operations.beforeNonAudioFolderRecordDeleteForTesting = null;
+          ManifestDatabase.beforeWebDataSaveForTesting = null;
+        }
+
+        await operations.removeFolder(record.folder);
+
+        expect(
+          await ManifestDatabase.getAllImageRecords(),
+          isEmpty,
+          reason: 'retry must remove the persisted record',
         );
         expect(
-          (await ManifestDatabase.getAllImageRecords()).map((row) => row['id']),
-          contains(record.id),
-          reason: 'a failed deletion must leave its database row intact',
-        );
-        expect(
-          (await operations.loadRecords()).map((cached) => cached.id),
-          contains(record.id),
-          reason: 'a failed deletion must leave the cached record available',
+          await operations.loadRecords(),
+          isEmpty,
+          reason: 'retry must remove the record from cache',
         );
         expect(
           await ManifestDatabase.getAllFolders(
             recordTable: ManifestTables.imageRecords,
           ),
-          unorderedEquals([record.folder, emptyDescendant]),
-          reason: 'a failed deletion must preserve explicit folder rows',
+          isEmpty,
+          reason:
+              'retry must remove the persisted parent and descendant folders',
         );
         expect(
           await operations.getAllFolders(),
-          unorderedEquals([record.folder, emptyDescendant]),
-          reason: 'a failed deletion must preserve explicit folders in cache',
+          isEmpty,
+          reason: 'retry must remove parent and descendant folders from cache',
         );
         expect(
           await operations.readFile(record.storagePath),
-          equals(fileBytes),
-          reason: 'a failed deletion must leave the primary file available',
+          isNull,
+          reason: 'successful retry must remove the primary file',
         );
         expect(
           await operations.readFile('${record.hash}_thumb.png'),
-          equals(thumbnailBytes),
-          reason: 'a failed deletion must leave the thumbnail available',
+          isNull,
+          reason: 'successful retry must remove the thumbnail',
         );
-      } finally {
-        operations.beforeNonAudioFolderRecordDeleteForTesting = null;
-        ManifestDatabase.beforeWebDataSaveForTesting = null;
-      }
-
-      await operations.removeFolder(record.folder);
-
-      expect(await ManifestDatabase.getAllImageRecords(), isEmpty,
-          reason: 'retry must remove the persisted record');
-      expect(await operations.loadRecords(), isEmpty,
-          reason: 'retry must remove the record from cache');
-      expect(
-        await ManifestDatabase.getAllFolders(
-          recordTable: ManifestTables.imageRecords,
-        ),
-        isEmpty,
-        reason: 'retry must remove the persisted parent and descendant folders',
-      );
-      expect(
-        await operations.getAllFolders(),
-        isEmpty,
-        reason: 'retry must remove parent and descendant folders from cache',
-      );
-      expect(await operations.readFile(record.storagePath), isNull,
-          reason: 'successful retry must remove the primary file');
-      expect(await operations.readFile('${record.hash}_thumb.png'), isNull,
-          reason: 'successful retry must remove the thumbnail');
-    });
+      },
+    );
 
     testWidgets(
-        'deletes records in folder + nested descendants, folder entries and files',
-        (WidgetTester t) async {
-      final inFolder = ImageRecord(
-        id: 'img_folder_1',
-        name: 'in_folder',
-        hash: 'hash_in_folder',
-        format: 'jpg',
-        createdAt: DateTime.now(),
-        size: 4,
-        folder: 'f',
-      );
-      final inSub = ImageRecord(
-        id: 'img_folder_2',
-        name: 'in_sub',
-        hash: 'hash_in_sub',
-        format: 'jpg',
-        createdAt: DateTime.now(),
-        size: 4,
-        folder: 'f/sub',
-      );
-      final root = ImageRecord(
-        id: 'img_folder_3',
-        name: 'root',
-        hash: 'hash_root',
-        format: 'jpg',
-        createdAt: DateTime.now(),
-        size: 4,
-      );
-      await ImageManifest.addFolder('f/sub');
-      for (final r in [inFolder, inSub, root]) {
-        await ImageManifest.writeFile(r.storagePath, Uint8List.fromList([1]));
-        await ImageManifest.addRecord(r);
-      }
+      'deletes records in folder + nested descendants, folder entries and files',
+      (WidgetTester t) async {
+        final inFolder = ImageRecord(
+          id: 'img_folder_1',
+          name: 'in_folder',
+          hash: 'hash_in_folder',
+          format: 'jpg',
+          createdAt: DateTime.now(),
+          size: 4,
+          folder: 'f',
+        );
+        final inSub = ImageRecord(
+          id: 'img_folder_2',
+          name: 'in_sub',
+          hash: 'hash_in_sub',
+          format: 'jpg',
+          createdAt: DateTime.now(),
+          size: 4,
+          folder: 'f/sub',
+        );
+        final root = ImageRecord(
+          id: 'img_folder_3',
+          name: 'root',
+          hash: 'hash_root',
+          format: 'jpg',
+          createdAt: DateTime.now(),
+          size: 4,
+        );
+        await ImageManifest.addFolder('f/sub');
+        for (final r in [inFolder, inSub, root]) {
+          await ImageManifest.writeFile(r.storagePath, Uint8List.fromList([1]));
+          await ImageManifest.addRecord(r);
+        }
 
-      await ImageManifest.removeFolder('f');
+        await ImageManifest.removeFolder('f');
 
-      final remaining = await ImageManifest.loadRecords();
-      expect(remaining.map((r) => r.id), equals(['img_folder_3']));
-      final folders = await ImageManifest.getAllFolders();
-      expect(folders, isNot(contains('f')));
-      expect(folders, isNot(contains('f/sub')));
-      expect(await WebFileStore.exists('pictures/hash_in_folder.jpg'), isFalse);
-      expect(await WebFileStore.exists('pictures/hash_in_sub.jpg'), isFalse);
-      expect(await WebFileStore.exists('pictures/hash_root.jpg'), isTrue,
-          reason: 'root record file must survive');
-    });
+        final remaining = await ImageManifest.loadRecords();
+        expect(remaining.map((r) => r.id), equals(['img_folder_3']));
+        final folders = await ImageManifest.getAllFolders();
+        expect(folders, isNot(contains('f')));
+        expect(folders, isNot(contains('f/sub')));
+        expect(
+          await WebFileStore.exists('pictures/hash_in_folder.jpg'),
+          isFalse,
+        );
+        expect(await WebFileStore.exists('pictures/hash_in_sub.jpg'), isFalse);
+        expect(
+          await WebFileStore.exists('pictures/hash_root.jpg'),
+          isTrue,
+          reason: 'root record file must survive',
+        );
+      },
+    );
 
-    testWidgets('keeps files referenced from records outside the folder',
-        (WidgetTester t) async {
+    testWidgets('keeps files referenced from records outside the folder', (
+      WidgetTester t,
+    ) async {
       final inside = ImageRecord(
         id: 'img_ref_1',
         name: 'inside',
@@ -2214,29 +2457,37 @@ void main() {
       );
       await ImageManifest.addFolder('f');
       await ImageManifest.writeFile(
-          inside.storagePath, Uint8List.fromList([1]));
+        inside.storagePath,
+        Uint8List.fromList([1]),
+      );
       await ImageManifest.addRecord(inside);
       await ImageManifest.addRecord(outside);
 
       await ImageManifest.removeFolder('f');
 
-      expect(await WebFileStore.exists('pictures/hash_ref_shared.jpg'), isTrue,
-          reason: 'file referenced by the surviving record must stay');
+      expect(
+        await WebFileStore.exists('pictures/hash_ref_shared.jpg'),
+        isTrue,
+        reason: 'file referenced by the surviving record must stay',
+      );
       expect(await ImageManifest.loadRecords(), hasLength(1));
     });
 
-    testWidgets('on an empty folder removes only the folder entry',
-        (WidgetTester t) async {
+    testWidgets('on an empty folder removes only the folder entry', (
+      WidgetTester t,
+    ) async {
       await TextManifest.addFolder('empty_folder');
-      await TextManifest.addRecord(TextRecord(
-        id: 'txt_keep',
-        name: 'keep',
-        hash: 'hash_keep_txt',
-        format: 'txt',
-        createdAt: DateTime.now(),
-        size: 4,
-        folder: 'other',
-      ));
+      await TextManifest.addRecord(
+        TextRecord(
+          id: 'txt_keep',
+          name: 'keep',
+          hash: 'hash_keep_txt',
+          format: 'txt',
+          createdAt: DateTime.now(),
+          size: 4,
+          folder: 'other',
+        ),
+      );
 
       await TextManifest.removeFolder('empty_folder');
 
@@ -2246,8 +2497,9 @@ void main() {
       expect(await TextManifest.loadRecords(), hasLength(1));
     });
 
-    testWidgets('removeFolder with an empty name is a no-op (no data loss)',
-        (WidgetTester t) async {
+    testWidgets('removeFolder with an empty name is a no-op (no data loss)', (
+      WidgetTester t,
+    ) async {
       final root = ImageRecord(
         id: 'img_rf_empty_1',
         name: 'root_pic',
@@ -2268,130 +2520,176 @@ void main() {
       );
       await ImageManifest.writeFile(root.storagePath, Uint8List.fromList([1]));
       await ImageManifest.writeFile(
-          nested.storagePath, Uint8List.fromList([2]));
+        nested.storagePath,
+        Uint8List.fromList([2]),
+      );
       await ImageManifest.addRecord(root);
       await ImageManifest.addRecord(nested);
 
       await ImageManifest.removeFolder('');
 
-      expect(await ImageManifest.loadRecords(), hasLength(2),
-          reason: 'BUG: removeFolder("") must not wipe all records');
-      expect(await WebFileStore.exists('pictures/hash_rf_empty_1.jpg'), isTrue,
-          reason: 'BUG: removeFolder("") must not delete physical files');
+      expect(
+        await ImageManifest.loadRecords(),
+        hasLength(2),
+        reason: 'BUG: removeFolder("") must not wipe all records',
+      );
+      expect(
+        await WebFileStore.exists('pictures/hash_rf_empty_1.jpg'),
+        isTrue,
+        reason: 'BUG: removeFolder("") must not delete physical files',
+      );
       expect(await ImageManifest.getAllFolders(), contains('f'));
     });
 
-    testWidgets('removes video .jpg thumbnail when folder records are deleted',
-        (WidgetTester t) async {
-      final record = VideoRecord(
-        id: 'vid_rf_1',
-        name: 'clip',
-        hash: 'hash_vid_rf',
-        format: 'mp4',
-        createdAt: DateTime.now(),
-        size: 4,
-        folder: 'videos_folder',
-      );
-      await VideoManifest.addFolder('videos_folder');
-      await VideoManifest.writeFile(
-          record.storagePath, Uint8List.fromList([1]));
-      await VideoManifest.writeFile(
-          'hash_vid_rf_thumb.jpg', Uint8List.fromList([2]));
-      await VideoManifest.addRecord(record);
+    testWidgets(
+      'removes video .jpg thumbnail when folder records are deleted',
+      (WidgetTester t) async {
+        final record = VideoRecord(
+          id: 'vid_rf_1',
+          name: 'clip',
+          hash: 'hash_vid_rf',
+          format: 'mp4',
+          createdAt: DateTime.now(),
+          size: 4,
+          folder: 'videos_folder',
+        );
+        await VideoManifest.addFolder('videos_folder');
+        await VideoManifest.writeFile(
+          record.storagePath,
+          Uint8List.fromList([1]),
+        );
+        await VideoManifest.writeFile(
+          'hash_vid_rf_thumb.jpg',
+          Uint8List.fromList([2]),
+        );
+        await VideoManifest.addRecord(record);
 
-      await VideoManifest.removeFolder('videos_folder');
+        await VideoManifest.removeFolder('videos_folder');
 
-      expect(await VideoManifest.loadRecords(), isEmpty);
-      expect(await WebFileStore.exists('videos/hash_vid_rf_thumb.jpg'), isFalse,
-          reason: 'video .jpg thumbnail must be deleted with its folder');
-    });
-
-    test('removes audio .txt sidecar when folder records are deleted',
-        () async {
-      final hash = 'hash_sidecar_folder';
-      await FileManifest.writeFile('$hash.wav', Uint8List.fromList([1, 2]));
-      await FileManifest.writeFile('$hash.txt', Uint8List.fromList([97]));
-      await FileManifest.addFolder('audio_folder');
-      await FileManifest.addRecord(AudioRecord(
-        id: 'audio_rf_1',
-        name: 'tts',
-        hash: hash,
-        format: 'wav',
-        createdAt: DateTime.now(),
-        size: 2,
-        folder: 'audio_folder',
-        sourceText: 'a',
-      ));
-
-      await FileManifest.removeFolder('audio_folder');
-
-      expect(await FileManifest.loadRecords(), isEmpty);
-      expect(await WebFileStore.exists('tts_audio/$hash.txt'), isFalse,
-          reason: 'audio .txt sidecar must be deleted with its folder');
-      expect(await WebFileStore.exists('tts_audio/$hash.wav'), isFalse);
-    });
+        expect(await VideoManifest.loadRecords(), isEmpty);
+        expect(
+          await WebFileStore.exists('videos/hash_vid_rf_thumb.jpg'),
+          isFalse,
+          reason: 'video .jpg thumbnail must be deleted with its folder',
+        );
+      },
+    );
 
     test(
-        'keeps a shared audio sidecar until the last folder reference is removed',
-        () async {
-      const hash = 'hash_shared_sidecar_formats_in_folders';
-      final wav = AudioRecord(
-        id: 'audio_shared_sidecar_folder_wav',
-        name: 'wav',
-        hash: hash,
-        format: 'wav',
-        createdAt: DateTime(2024),
-        size: 2,
-        folder: 'wav_folder',
-        sourceText: 'shared text',
-      );
-      final mp3 = AudioRecord(
-        id: 'audio_shared_sidecar_folder_mp3',
-        name: 'mp3',
-        hash: hash,
-        format: 'mp3',
-        createdAt: DateTime(2024),
-        size: 3,
-        folder: 'mp3_folder',
-        sourceText: 'shared text',
-      );
-      final sidecarBytes = Uint8List.fromList([97, 98]);
-      await FileManifest.writeFile(wav.storagePath, Uint8List.fromList([1, 2]));
-      await FileManifest.writeFile(
-          mp3.storagePath, Uint8List.fromList([3, 4, 5]));
-      await FileManifest.writeFile(wav.textStoragePath, sidecarBytes);
-      await FileManifest.addFolder(wav.folder);
-      await FileManifest.addFolder(mp3.folder);
-      await FileManifest.addRecord(wav);
-      await FileManifest.addRecord(mp3);
+      'removes audio .txt sidecar when folder records are deleted',
+      () async {
+        final hash = 'hash_sidecar_folder';
+        await FileManifest.writeFile('$hash.wav', Uint8List.fromList([1, 2]));
+        await FileManifest.writeFile('$hash.txt', Uint8List.fromList([97]));
+        await FileManifest.addFolder('audio_folder');
+        await FileManifest.addRecord(
+          AudioRecord(
+            id: 'audio_rf_1',
+            name: 'tts',
+            hash: hash,
+            format: 'wav',
+            createdAt: DateTime.now(),
+            size: 2,
+            folder: 'audio_folder',
+            sourceText: 'a',
+          ),
+        );
 
-      await FileManifest.removeFolder(wav.folder);
+        await FileManifest.removeFolder('audio_folder');
 
-      final recordsAfterFirstRemoval = await FileManifest.loadRecords();
-      final sidecarAfterFirstRemoval =
-          await FileManifest.readFile(wav.textStoragePath);
-      final wavFileAfterFirstRemoval =
-          await WebFileStore.exists('tts_audio/${wav.storagePath}');
-      final mp3FileAfterFirstRemoval =
-          await WebFileStore.exists('tts_audio/${mp3.storagePath}');
-
-      await FileManifest.removeFolder(mp3.folder);
-
-      expect(recordsAfterFirstRemoval.map((record) => record.id), [mp3.id]);
-      expect(wavFileAfterFirstRemoval, isFalse,
-          reason: 'the deleted folder primary file must be removed');
-      expect(mp3FileAfterFirstRemoval, isTrue,
-          reason: 'the surviving folder primary file must remain');
-      expect(sidecarAfterFirstRemoval, equals(sidecarBytes),
-          reason:
-              'the shared sidecar must remain while its hash is referenced');
-      expect(await FileManifest.loadRecords(), isEmpty);
-      expect(await WebFileStore.exists('tts_audio/${mp3.storagePath}'), isFalse,
-          reason: 'the final folder primary file must be removed');
-      expect(await WebFileStore.exists('tts_audio/${wav.textStoragePath}'),
+        expect(await FileManifest.loadRecords(), isEmpty);
+        expect(
+          await WebFileStore.exists('tts_audio/$hash.txt'),
           isFalse,
-          reason: 'the sidecar must be removed after its final hash reference');
-    });
+          reason: 'audio .txt sidecar must be deleted with its folder',
+        );
+        expect(await WebFileStore.exists('tts_audio/$hash.wav'), isFalse);
+      },
+    );
+
+    test(
+      'keeps a shared audio sidecar until the last folder reference is removed',
+      () async {
+        const hash = 'hash_shared_sidecar_formats_in_folders';
+        final wav = AudioRecord(
+          id: 'audio_shared_sidecar_folder_wav',
+          name: 'wav',
+          hash: hash,
+          format: 'wav',
+          createdAt: DateTime(2024),
+          size: 2,
+          folder: 'wav_folder',
+          sourceText: 'shared text',
+        );
+        final mp3 = AudioRecord(
+          id: 'audio_shared_sidecar_folder_mp3',
+          name: 'mp3',
+          hash: hash,
+          format: 'mp3',
+          createdAt: DateTime(2024),
+          size: 3,
+          folder: 'mp3_folder',
+          sourceText: 'shared text',
+        );
+        final sidecarBytes = Uint8List.fromList([97, 98]);
+        await FileManifest.writeFile(
+          wav.storagePath,
+          Uint8List.fromList([1, 2]),
+        );
+        await FileManifest.writeFile(
+          mp3.storagePath,
+          Uint8List.fromList([3, 4, 5]),
+        );
+        await FileManifest.writeFile(wav.textStoragePath, sidecarBytes);
+        await FileManifest.addFolder(wav.folder);
+        await FileManifest.addFolder(mp3.folder);
+        await FileManifest.addRecord(wav);
+        await FileManifest.addRecord(mp3);
+
+        await FileManifest.removeFolder(wav.folder);
+
+        final recordsAfterFirstRemoval = await FileManifest.loadRecords();
+        final sidecarAfterFirstRemoval = await FileManifest.readFile(
+          wav.textStoragePath,
+        );
+        final wavFileAfterFirstRemoval = await WebFileStore.exists(
+          'tts_audio/${wav.storagePath}',
+        );
+        final mp3FileAfterFirstRemoval = await WebFileStore.exists(
+          'tts_audio/${mp3.storagePath}',
+        );
+
+        await FileManifest.removeFolder(mp3.folder);
+
+        expect(recordsAfterFirstRemoval.map((record) => record.id), [mp3.id]);
+        expect(
+          wavFileAfterFirstRemoval,
+          isFalse,
+          reason: 'the deleted folder primary file must be removed',
+        );
+        expect(
+          mp3FileAfterFirstRemoval,
+          isTrue,
+          reason: 'the surviving folder primary file must remain',
+        );
+        expect(
+          sidecarAfterFirstRemoval,
+          equals(sidecarBytes),
+          reason: 'the shared sidecar must remain while its hash is referenced',
+        );
+        expect(await FileManifest.loadRecords(), isEmpty);
+        expect(
+          await WebFileStore.exists('tts_audio/${mp3.storagePath}'),
+          isFalse,
+          reason: 'the final folder primary file must be removed',
+        );
+        expect(
+          await WebFileStore.exists('tts_audio/${wav.textStoragePath}'),
+          isFalse,
+          reason: 'the sidecar must be removed after its final hash reference',
+        );
+      },
+    );
   });
 
   // ====================================================================
@@ -2406,8 +2704,9 @@ void main() {
       };
     }
 
-    testWidgets('updateRecord restores the cached record after write failure',
-        (WidgetTester t) async {
+    testWidgets('updateRecord restores the cached record after write failure', (
+      WidgetTester t,
+    ) async {
       final original = AudioRecord(
         id: 'audio_update_write_failure',
         name: 'before',
@@ -2425,15 +2724,21 @@ void main() {
         throwsA(same(failure)),
       );
 
-      expect((await FileManifest.loadRecords()).single.name, 'before',
-          reason: 'a failed update must not remain visible through the cache');
-      expect((await ManifestDatabase.getAllAudioRecords()).single['name'],
-          'before',
-          reason: 'the failed update must leave persisted data unchanged');
+      expect(
+        (await FileManifest.loadRecords()).single.name,
+        'before',
+        reason: 'a failed update must not remain visible through the cache',
+      );
+      expect(
+        (await ManifestDatabase.getAllAudioRecords()).single['name'],
+        'before',
+        reason: 'the failed update must leave persisted data unchanged',
+      );
     });
 
-    testWidgets('renameRecord restores the cached record after write failure',
-        (WidgetTester t) async {
+    testWidgets('renameRecord restores the cached record after write failure', (
+      WidgetTester t,
+    ) async {
       final original = AudioRecord(
         id: 'audio_rename_write_failure',
         name: 'before',
@@ -2451,15 +2756,21 @@ void main() {
         throwsA(same(failure)),
       );
 
-      expect((await FileManifest.loadRecords()).single.name, 'before',
-          reason: 'a failed rename must not remain visible through the cache');
-      expect((await ManifestDatabase.getAllAudioRecords()).single['name'],
-          'before',
-          reason: 'the failed rename must leave persisted data unchanged');
+      expect(
+        (await FileManifest.loadRecords()).single.name,
+        'before',
+        reason: 'a failed rename must not remain visible through the cache',
+      );
+      expect(
+        (await ManifestDatabase.getAllAudioRecords()).single['name'],
+        'before',
+        reason: 'the failed rename must leave persisted data unchanged',
+      );
     });
 
-    testWidgets('moveRecord restores the cached record after write failure',
-        (WidgetTester t) async {
+    testWidgets('moveRecord restores the cached record after write failure', (
+      WidgetTester t,
+    ) async {
       final original = AudioRecord(
         id: 'audio_move_write_failure',
         name: 'record',
@@ -2477,20 +2788,28 @@ void main() {
         throwsA(same(failure)),
       );
 
-      expect((await FileManifest.loadRecords()).single.folder, '',
-          reason: 'a failed move must not remain visible through the cache');
-      expect((await ManifestDatabase.getAllAudioRecords()).single['folder'], '',
-          reason: 'the failed move must leave persisted data unchanged');
+      expect(
+        (await FileManifest.loadRecords()).single.folder,
+        '',
+        reason: 'a failed move must not remain visible through the cache',
+      );
+      expect(
+        (await ManifestDatabase.getAllAudioRecords()).single['folder'],
+        '',
+        reason: 'the failed move must leave persisted data unchanged',
+      );
       expect(
         await ManifestDatabase.getAllFolders(
-            recordTable: ManifestTables.audioRecords),
+          recordTable: ManifestTables.audioRecords,
+        ),
         isEmpty,
         reason: 'a failed record write must not track its target folder',
       );
     });
 
-    testWidgets('removeFolderFromCache restores records after a failed write',
-        (WidgetTester t) async {
+    testWidgets('removeFolderFromCache restores records after a failed write', (
+      WidgetTester t,
+    ) async {
       final operations = ManifestOperations<AudioRecord>(
         manifestKey: 'test_audio_remove_folder_write_failure',
         storageDirName: 'tts_audio',
@@ -2527,8 +2846,10 @@ void main() {
         refreshSnapshotReady.complete();
         await releaseRefresh.future;
       };
-      final refresh =
-          operations.loadRecords(forceRefresh: true, throwOnError: true);
+      final refresh = operations.loadRecords(
+        forceRefresh: true,
+        throwOnError: true,
+      );
 
       try {
         await refreshSnapshotReady.future;
@@ -2536,16 +2857,24 @@ void main() {
         await expectLater(removal, throwsA(same(failure)));
         releaseRefresh.complete();
 
-        expect((await refresh).single.folder, original.folder,
-            reason:
-                'a stale forced refresh must not replace the rolled-back cache');
-        expect((await operations.loadRecords()).single.folder, original.folder,
-            reason:
-                'a failed folder removal must not remain visible through the cache');
-        expect((await ManifestDatabase.getAllAudioRecords()).single['folder'],
-            original.folder,
-            reason:
-                'a failed record write must leave the persisted folder unchanged');
+        expect(
+          (await refresh).single.folder,
+          original.folder,
+          reason:
+              'a stale forced refresh must not replace the rolled-back cache',
+        );
+        expect(
+          (await operations.loadRecords()).single.folder,
+          original.folder,
+          reason:
+              'a failed folder removal must not remain visible through the cache',
+        );
+        expect(
+          (await ManifestDatabase.getAllAudioRecords()).single['folder'],
+          original.folder,
+          reason:
+              'a failed record write must leave the persisted folder unchanged',
+        );
       } finally {
         if (!releaseWrite.isCompleted) releaseWrite.complete();
         if (!releaseRefresh.isCompleted) releaseRefresh.complete();
@@ -2555,60 +2884,66 @@ void main() {
     });
 
     testWidgets(
-        'removeFolderFromCache includes records added during a pending write',
-        (WidgetTester t) async {
-      final operations = ManifestOperations<AudioRecord>(
-        manifestKey: 'test_audio_remove_folder_concurrent_add',
-        storageDirName: 'tts_audio',
-        fromMap: AudioRecord.fromMap,
-        tableName: ManifestTables.audioRecords,
-        toMap: (record) => record.toMap(),
-      );
-      AudioRecord folderRecord(String id) => AudioRecord(
-            id: id,
-            name: 'record',
-            hash: 'hash_$id',
-            format: 'wav',
-            createdAt: DateTime(2024),
-            size: 4,
-            folder: 'remove_me/child',
-          );
-      await operations.addRecord(folderRecord('audio_before_pending_write'));
+      'removeFolderFromCache includes records added during a pending write',
+      (WidgetTester t) async {
+        final operations = ManifestOperations<AudioRecord>(
+          manifestKey: 'test_audio_remove_folder_concurrent_add',
+          storageDirName: 'tts_audio',
+          fromMap: AudioRecord.fromMap,
+          tableName: ManifestTables.audioRecords,
+          toMap: (record) => record.toMap(),
+        );
+        AudioRecord folderRecord(String id) => AudioRecord(
+              id: id,
+              name: 'record',
+              hash: 'hash_$id',
+              format: 'wav',
+              createdAt: DateTime(2024),
+              size: 4,
+              folder: 'remove_me/child',
+            );
+        await operations.addRecord(folderRecord('audio_before_pending_write'));
 
-      final writeStarted = Completer<void>();
-      final releaseWrite = Completer<void>();
-      var pauseFirstWrite = true;
-      operations.beforeRecordMutationPersistForTesting = () async {
-        if (!pauseFirstWrite) return;
-        pauseFirstWrite = false;
-        writeStarted.complete();
-        await releaseWrite.future;
-      };
+        final writeStarted = Completer<void>();
+        final releaseWrite = Completer<void>();
+        var pauseFirstWrite = true;
+        operations.beforeRecordMutationPersistForTesting = () async {
+          if (!pauseFirstWrite) return;
+          pauseFirstWrite = false;
+          writeStarted.complete();
+          await releaseWrite.future;
+        };
 
-      final removal = operations.removeFolderFromCache('remove_me');
-      try {
-        await writeStarted.future;
-        await operations.addRecord(folderRecord('audio_added_during_write'));
-        releaseWrite.complete();
-        await removal;
-      } finally {
-        if (!releaseWrite.isCompleted) releaseWrite.complete();
-        operations.beforeRecordMutationPersistForTesting = null;
-      }
+        final removal = operations.removeFolderFromCache('remove_me');
+        try {
+          await writeStarted.future;
+          await operations.addRecord(folderRecord('audio_added_during_write'));
+          releaseWrite.complete();
+          await removal;
+        } finally {
+          if (!releaseWrite.isCompleted) releaseWrite.complete();
+          operations.beforeRecordMutationPersistForTesting = null;
+        }
 
-      final records = await operations.loadRecords();
-      expect(records.map((record) => record.folder), everyElement(isEmpty),
+        final records = await operations.loadRecords();
+        expect(
+          records.map((record) => record.folder),
+          everyElement(isEmpty),
           reason:
-              'records added while a folder removal persists another record must also move to root');
-      expect(
-        (await ManifestDatabase.getAllAudioRecords())
-            .map((record) => record['folder']),
-        everyElement(isEmpty),
-      );
-    });
+              'records added while a folder removal persists another record must also move to root',
+        );
+        expect(
+          (await ManifestDatabase.getAllAudioRecords()).map(
+            (record) => record['folder'],
+          ),
+          everyElement(isEmpty),
+        );
+      },
+    );
 
-    testWidgets('same-record mutations serialize across a failed write',
-        (WidgetTester t) async {
+    testWidgets('same-record mutations serialize across a failed write', (
+      WidgetTester t,
+    ) async {
       final original = VideoRecord(
         id: 'video_overlapping_write_failure',
         name: 'before',
@@ -2643,9 +2978,13 @@ void main() {
       await followingRename;
 
       expect(
-          (await VideoManifest.loadRecords()).single.name, 'successful rename');
-      expect((await ManifestDatabase.getAllVideoRecords()).single['name'],
-          'successful rename');
+        (await VideoManifest.loadRecords()).single.name,
+        'successful rename',
+      );
+      expect(
+        (await ManifestDatabase.getAllVideoRecords()).single['name'],
+        'successful rename',
+      );
     });
   });
 
@@ -2657,9 +2996,11 @@ void main() {
       await FileManifest.loadRecords();
       await FileManifest.getAllFolders();
       expect(
-          await ManifestDatabase.getAllFolders(
-              recordTable: ManifestTables.audioRecords),
-          isNot(contains(path)));
+        await ManifestDatabase.getAllFolders(
+          recordTable: ManifestTables.audioRecords,
+        ),
+        isNot(contains(path)),
+      );
 
       final failure = StateError('injected Web manifest save failure');
       var failureInjected = false;
@@ -2672,18 +3013,22 @@ void main() {
       await expectLater(addFolder(path), throwsA(same(failure)));
       expect(failureInjected, isTrue);
       expect(
-          await ManifestDatabase.getAllFolders(
-              recordTable: ManifestTables.audioRecords),
-          isNot(contains(path)),
-          reason: 'a failed Web save must roll back the in-memory folder path');
+        await ManifestDatabase.getAllFolders(
+          recordTable: ManifestTables.audioRecords,
+        ),
+        isNot(contains(path)),
+        reason: 'a failed Web save must roll back the in-memory folder path',
+      );
 
       await addFolder(path);
 
       expect(
-          await ManifestDatabase.getAllFolders(
-              recordTable: ManifestTables.audioRecords),
-          contains(path),
-          reason: 'retry must persist the folder after the Web save fails');
+        await ManifestDatabase.getAllFolders(
+          recordTable: ManifestTables.audioRecords,
+        ),
+        contains(path),
+        reason: 'retry must persist the folder after the Web save fails',
+      );
     }
 
     Future<void> expectFailedFolderInsertCanRetry(
@@ -2701,46 +3046,54 @@ void main() {
 
       await expectLater(addFolder(path), throwsA(same(failure)));
       expect(
-          await ManifestDatabase.getAllFolders(
-              recordTable: ManifestTables.audioRecords),
-          isNot(contains(path)),
-          reason: 'the injected failure must leave the folder unpersisted');
+        await ManifestDatabase.getAllFolders(
+          recordTable: ManifestTables.audioRecords,
+        ),
+        isNot(contains(path)),
+        reason: 'the injected failure must leave the folder unpersisted',
+      );
 
       await addFolder(path);
 
       expect(
-          await ManifestDatabase.getAllFolders(
-              recordTable: ManifestTables.audioRecords),
-          contains(path),
-          reason: 'retry must persist the folder after the first insert fails');
+        await ManifestDatabase.getAllFolders(
+          recordTable: ManifestTables.audioRecords,
+        ),
+        contains(path),
+        reason: 'retry must persist the folder after the first insert fails',
+      );
     }
 
-    testWidgets('addFolder retries after folder persistence failure',
-        (WidgetTester t) async {
+    testWidgets('addFolder retries after folder persistence failure', (
+      WidgetTester t,
+    ) async {
       await expectFailedFolderInsertCanRetry(
         'audio-folder-retry',
         FileManifest.addFolder,
       );
     });
 
-    testWidgets('addFolderPath retries after folder persistence failure',
-        (WidgetTester t) async {
+    testWidgets('addFolderPath retries after folder persistence failure', (
+      WidgetTester t,
+    ) async {
       await expectFailedFolderInsertCanRetry(
         'audio-path-retry',
         FileManifest.addFolderPath,
       );
     });
 
-    testWidgets('addFolder retries after Web manifest save failure',
-        (WidgetTester t) async {
+    testWidgets('addFolder retries after Web manifest save failure', (
+      WidgetTester t,
+    ) async {
       await expectWebFolderSaveFailureCanRetry(
         'audio-web-folder-save-retry',
         FileManifest.addFolder,
       );
     });
 
-    testWidgets('addFolderPath retries after Web manifest save failure',
-        (WidgetTester t) async {
+    testWidgets('addFolderPath retries after Web manifest save failure', (
+      WidgetTester t,
+    ) async {
       await expectWebFolderSaveFailureCanRetry(
         'audio-web-path-save-retry',
         FileManifest.addFolderPath,
@@ -2748,161 +3101,189 @@ void main() {
     });
 
     testWidgets(
-        'forced refresh keeps a record registered after its record snapshot',
-        (WidgetTester t) async {
-      final operations = ManifestOperations<AudioRecord>(
-        manifestKey: 'test_audio_manifest',
-        storageDirName: 'tts_audio',
-        fromMap: AudioRecord.fromMap,
-        tableName: ManifestTables.audioRecords,
-        toMap: (record) => record.toMap(),
-      );
-      await operations.loadRecords();
+      'forced refresh keeps a record registered after its record snapshot',
+      (WidgetTester t) async {
+        final operations = ManifestOperations<AudioRecord>(
+          manifestKey: 'test_audio_manifest',
+          storageDirName: 'tts_audio',
+          fromMap: AudioRecord.fromMap,
+          tableName: ManifestTables.audioRecords,
+          toMap: (record) => record.toMap(),
+        );
+        await operations.loadRecords();
 
-      final recordSnapshotReady = Completer<void>();
-      final releaseFolderRead = Completer<void>();
-      operations.beforeFolderLoadForTesting = () async {
-        recordSnapshotReady.complete();
-        await releaseFolderRead.future;
-      };
+        final recordSnapshotReady = Completer<void>();
+        final releaseFolderRead = Completer<void>();
+        operations.beforeFolderLoadForTesting = () async {
+          recordSnapshotReady.complete();
+          await releaseFolderRead.future;
+        };
 
-      final refresh = operations.loadRecords(forceRefresh: true);
-      await recordSnapshotReady.future;
-
-      final record = AudioRecord(
-        id: 'audio_registered_during_refresh',
-        name: 'registered',
-        hash: 'hash_registered_during_refresh',
-        format: 'wav',
-        createdAt: DateTime(2024),
-        size: 4,
-        folder: 'refresh/child',
-      );
-      await operations.addRecord(record);
-      releaseFolderRead.complete();
-
-      expect((await refresh).map((item) => item.id), contains(record.id),
-          reason:
-              'a refresh based on an older record snapshot must not overwrite a successful registration');
-      expect((await operations.loadRecords()).map((item) => item.id),
-          contains(record.id));
-      expect(
-          await ManifestDatabase.getAllFolders(
-              recordTable: ManifestTables.audioRecords),
-          containsAll(['refresh', 'refresh/child']));
-    });
-
-    testWidgets(
-        'forced refresh keeps a record mutation made after its snapshot',
-        (WidgetTester t) async {
-      final operations = ManifestOperations<AudioRecord>(
-        manifestKey: 'test_audio_mutation_during_refresh',
-        storageDirName: 'tts_audio',
-        fromMap: AudioRecord.fromMap,
-        tableName: ManifestTables.audioRecords,
-        toMap: (record) => record.toMap(),
-      );
-      final original = AudioRecord(
-        id: 'audio_mutated_during_refresh',
-        name: 'before',
-        hash: 'hash_mutated_during_refresh',
-        format: 'wav',
-        createdAt: DateTime(2024),
-        size: 4,
-      );
-      await operations.addRecord(original);
-
-      final recordSnapshotReady = Completer<void>();
-      final releaseFolderRead = Completer<void>();
-      operations.beforeFolderLoadForTesting = () async {
-        recordSnapshotReady.complete();
-        await releaseFolderRead.future;
-      };
-
-      final refresh =
-          operations.loadRecords(forceRefresh: true, throwOnError: true);
-      await recordSnapshotReady.future;
-      try {
-        await operations.renameRecord(original.id, 'after');
-      } finally {
-        releaseFolderRead.complete();
-        operations.beforeFolderLoadForTesting = null;
-      }
-
-      expect((await refresh).single.name, 'after',
-          reason:
-              'a forced refresh must not replace an optimistic record mutation with its older snapshot');
-      expect((await operations.loadRecords()).single.name, 'after');
-      expect((await ManifestDatabase.getAllAudioRecords()).single['name'],
-          'after');
-    });
-
-    testWidgets(
-        'forced refresh during a record write keeps the committed mutation',
-        (WidgetTester t) async {
-      final operations = ManifestOperations<AudioRecord>(
-        manifestKey: 'test_audio_mutation_during_refresh_write',
-        storageDirName: 'tts_audio',
-        fromMap: AudioRecord.fromMap,
-        tableName: ManifestTables.audioRecords,
-        toMap: (record) => record.toMap(),
-      );
-      final original = AudioRecord(
-        id: 'audio_mutated_during_refresh_write',
-        name: 'before',
-        hash: 'hash_mutated_during_refresh_write',
-        format: 'wav',
-        createdAt: DateTime(2024),
-        size: 4,
-      );
-      await operations.addRecord(original);
-
-      final writeStarted = Completer<void>();
-      final releaseWrite = Completer<void>();
-      operations.beforeRecordMutationPersistForTesting = () async {
-        writeStarted.complete();
-        await releaseWrite.future;
-      };
-      final mutation = operations.renameRecord(original.id, 'after');
-      final recordSnapshotReady = Completer<void>();
-      final releaseFolderRead = Completer<void>();
-      operations.beforeFolderLoadForTesting = () async {
-        recordSnapshotReady.complete();
-        await releaseFolderRead.future;
-      };
-
-      try {
-        await writeStarted.future;
-        final refresh =
-            operations.loadRecords(forceRefresh: true, throwOnError: true);
+        final refresh = operations.loadRecords(forceRefresh: true);
         await recordSnapshotReady.future;
 
+        final record = AudioRecord(
+          id: 'audio_registered_during_refresh',
+          name: 'registered',
+          hash: 'hash_registered_during_refresh',
+          format: 'wav',
+          createdAt: DateTime(2024),
+          size: 4,
+          folder: 'refresh/child',
+        );
+        await operations.addRecord(record);
         releaseFolderRead.complete();
 
-        expect((await refresh).single.name, 'before',
+        expect(
+          (await refresh).map((item) => item.id),
+          contains(record.id),
+          reason:
+              'a refresh based on an older record snapshot must not overwrite a successful registration',
+        );
+        expect(
+          (await operations.loadRecords()).map((item) => item.id),
+          contains(record.id),
+        );
+        expect(
+          await ManifestDatabase.getAllFolders(
+            recordTable: ManifestTables.audioRecords,
+          ),
+          containsAll(['refresh', 'refresh/child']),
+        );
+      },
+    );
+
+    testWidgets(
+      'forced refresh keeps a record mutation made after its snapshot',
+      (WidgetTester t) async {
+        final operations = ManifestOperations<AudioRecord>(
+          manifestKey: 'test_audio_mutation_during_refresh',
+          storageDirName: 'tts_audio',
+          fromMap: AudioRecord.fromMap,
+          tableName: ManifestTables.audioRecords,
+          toMap: (record) => record.toMap(),
+        );
+        final original = AudioRecord(
+          id: 'audio_mutated_during_refresh',
+          name: 'before',
+          hash: 'hash_mutated_during_refresh',
+          format: 'wav',
+          createdAt: DateTime(2024),
+          size: 4,
+        );
+        await operations.addRecord(original);
+
+        final recordSnapshotReady = Completer<void>();
+        final releaseFolderRead = Completer<void>();
+        operations.beforeFolderLoadForTesting = () async {
+          recordSnapshotReady.complete();
+          await releaseFolderRead.future;
+        };
+
+        final refresh = operations.loadRecords(
+          forceRefresh: true,
+          throwOnError: true,
+        );
+        await recordSnapshotReady.future;
+        try {
+          await operations.renameRecord(original.id, 'after');
+        } finally {
+          releaseFolderRead.complete();
+          operations.beforeFolderLoadForTesting = null;
+        }
+
+        expect(
+          (await refresh).single.name,
+          'after',
+          reason:
+              'a forced refresh must not replace an optimistic record mutation with its older snapshot',
+        );
+        expect((await operations.loadRecords()).single.name, 'after');
+        expect(
+          (await ManifestDatabase.getAllAudioRecords()).single['name'],
+          'after',
+        );
+      },
+    );
+
+    testWidgets(
+      'forced refresh during a record write keeps the committed mutation',
+      (WidgetTester t) async {
+        final operations = ManifestOperations<AudioRecord>(
+          manifestKey: 'test_audio_mutation_during_refresh_write',
+          storageDirName: 'tts_audio',
+          fromMap: AudioRecord.fromMap,
+          tableName: ManifestTables.audioRecords,
+          toMap: (record) => record.toMap(),
+        );
+        final original = AudioRecord(
+          id: 'audio_mutated_during_refresh_write',
+          name: 'before',
+          hash: 'hash_mutated_during_refresh_write',
+          format: 'wav',
+          createdAt: DateTime(2024),
+          size: 4,
+        );
+        await operations.addRecord(original);
+
+        final writeStarted = Completer<void>();
+        final releaseWrite = Completer<void>();
+        operations.beforeRecordMutationPersistForTesting = () async {
+          writeStarted.complete();
+          await releaseWrite.future;
+        };
+        final mutation = operations.renameRecord(original.id, 'after');
+        final recordSnapshotReady = Completer<void>();
+        final releaseFolderRead = Completer<void>();
+        operations.beforeFolderLoadForTesting = () async {
+          recordSnapshotReady.complete();
+          await releaseFolderRead.future;
+        };
+
+        try {
+          await writeStarted.future;
+          final refresh = operations.loadRecords(
+            forceRefresh: true,
+            throwOnError: true,
+          );
+          await recordSnapshotReady.future;
+
+          releaseFolderRead.complete();
+
+          expect(
+            (await refresh).single.name,
+            'before',
             reason:
-                'the refresh snapshot is stale while the record write is paused');
+                'the refresh snapshot is stale while the record write is paused',
+          );
 
-        releaseWrite.complete();
-        await mutation;
+          releaseWrite.complete();
+          await mutation;
 
-        expect((await operations.loadRecords()).single.name, 'after',
+          expect(
+            (await operations.loadRecords()).single.name,
+            'after',
             reason:
-                'a successful mutation must remain visible if a stale refresh installed while its write was pending');
-      } finally {
-        if (!releaseWrite.isCompleted) releaseWrite.complete();
-        if (!releaseFolderRead.isCompleted) releaseFolderRead.complete();
-        operations.beforeFolderLoadForTesting = null;
-        operations.beforeRecordMutationPersistForTesting = null;
-      }
+                'a successful mutation must remain visible if a stale refresh installed while its write was pending',
+          );
+        } finally {
+          if (!releaseWrite.isCompleted) releaseWrite.complete();
+          if (!releaseFolderRead.isCompleted) releaseFolderRead.complete();
+          operations.beforeFolderLoadForTesting = null;
+          operations.beforeRecordMutationPersistForTesting = null;
+        }
 
-      expect((await operations.loadRecords()).single.name, 'after');
-      expect((await ManifestDatabase.getAllAudioRecords()).single['name'],
-          'after');
-    });
+        expect((await operations.loadRecords()).single.name, 'after');
+        expect(
+          (await ManifestDatabase.getAllAudioRecords()).single['name'],
+          'after',
+        );
+      },
+    );
 
-    testWidgets('forced refresh keeps a single audio deletion absent',
-        (WidgetTester t) async {
+    testWidgets('forced refresh keeps a single audio deletion absent', (
+      WidgetTester t,
+    ) async {
       final operations = ManifestOperations<AudioRecord>(
         manifestKey: 'test_audio_single_delete_refresh',
         storageDirName: 'tts_audio',
@@ -2936,37 +3317,47 @@ void main() {
         await releaseFolderRead.future;
       };
 
-      final refresh =
-          operations.loadRecords(forceRefresh: true, throwOnError: true);
+      final refresh = operations.loadRecords(
+        forceRefresh: true,
+        throwOnError: true,
+      );
       await recordSnapshotReady.future;
       try {
         await operations.deleteRecord(deleted.id, preserveFiles: true);
 
         expect(
-            (await ManifestDatabase.getAllAudioRecords())
-                .map((row) => row['id']),
-            unorderedEquals([survivor.id]),
-            reason: 'single deletion must be authoritative in the database');
-        expect((await operations.loadRecords()).map((record) => record.id),
-            unorderedEquals([survivor.id]),
-            reason: 'the current cache must already reflect the deletion');
+          (await ManifestDatabase.getAllAudioRecords()).map((row) => row['id']),
+          unorderedEquals([survivor.id]),
+          reason: 'single deletion must be authoritative in the database',
+        );
+        expect(
+          (await operations.loadRecords()).map((record) => record.id),
+          unorderedEquals([survivor.id]),
+          reason: 'the current cache must already reflect the deletion',
+        );
       } finally {
         releaseFolderRead.complete();
         operations.beforeFolderLoadForTesting = null;
       }
 
-      expect((await refresh).map((record) => record.id),
-          unorderedEquals([survivor.id]),
-          reason: 'stale refresh must not republish a single delete');
       expect(
-          (await ManifestDatabase.getAllAudioRecords()).map((row) => row['id']),
-          unorderedEquals([survivor.id]));
-      expect((await operations.loadRecords()).map((record) => record.id),
-          unorderedEquals([survivor.id]));
+        (await refresh).map((record) => record.id),
+        unorderedEquals([survivor.id]),
+        reason: 'stale refresh must not republish a single delete',
+      );
+      expect(
+        (await ManifestDatabase.getAllAudioRecords()).map((row) => row['id']),
+        unorderedEquals([survivor.id]),
+      );
+      expect(
+        (await operations.loadRecords()).map((record) => record.id),
+        unorderedEquals([survivor.id]),
+      );
     });
 
-    testWidgets('forced refresh keeps batch audio deletions absent',
-        (WidgetTester t) async {
+    testWidgets('forced refresh keeps batch audio deletions absent', (
+      WidgetTester t,
+    ) async {
       final operations = ManifestOperations<AudioRecord>(
         manifestKey: 'test_audio_batch_delete_refresh',
         storageDirName: 'tts_audio',
@@ -3011,39 +3402,49 @@ void main() {
         await releaseFolderRead.future;
       };
 
-      final refresh =
-          operations.loadRecords(forceRefresh: true, throwOnError: true);
+      final refresh = operations.loadRecords(
+        forceRefresh: true,
+        throwOnError: true,
+      );
       await recordSnapshotReady.future;
       try {
-        await operations
-            .deleteRecords(deleted.map((record) => record.id).toList());
+        await operations.deleteRecords(
+          deleted.map((record) => record.id).toList(),
+        );
 
         expect(
-            (await ManifestDatabase.getAllAudioRecords())
-                .map((row) => row['id']),
-            unorderedEquals([survivor.id]),
-            reason: 'the batch deletion must be authoritative in the database');
-        expect((await operations.loadRecords()).map((record) => record.id),
-            unorderedEquals([survivor.id]),
-            reason:
-                'the current cache must already reflect the batch deletion');
+          (await ManifestDatabase.getAllAudioRecords()).map((row) => row['id']),
+          unorderedEquals([survivor.id]),
+          reason: 'the batch deletion must be authoritative in the database',
+        );
+        expect(
+          (await operations.loadRecords()).map((record) => record.id),
+          unorderedEquals([survivor.id]),
+          reason: 'the current cache must already reflect the batch deletion',
+        );
       } finally {
         releaseFolderRead.complete();
         operations.beforeFolderLoadForTesting = null;
       }
 
-      expect((await refresh).map((record) => record.id),
-          unorderedEquals([survivor.id]),
-          reason: 'stale refresh must not republish batch deletes');
       expect(
-          (await ManifestDatabase.getAllAudioRecords()).map((row) => row['id']),
-          unorderedEquals([survivor.id]));
-      expect((await operations.loadRecords()).map((record) => record.id),
-          unorderedEquals([survivor.id]));
+        (await refresh).map((record) => record.id),
+        unorderedEquals([survivor.id]),
+        reason: 'stale refresh must not republish batch deletes',
+      );
+      expect(
+        (await ManifestDatabase.getAllAudioRecords()).map((row) => row['id']),
+        unorderedEquals([survivor.id]),
+      );
+      expect(
+        (await operations.loadRecords()).map((record) => record.id),
+        unorderedEquals([survivor.id]),
+      );
     });
 
-    testWidgets('forced refresh keeps audio folder deletions absent',
-        (WidgetTester t) async {
+    testWidgets('forced refresh keeps audio folder deletions absent', (
+      WidgetTester t,
+    ) async {
       final operations = ManifestOperations<AudioRecord>(
         manifestKey: 'test_audio_folder_delete_refresh',
         storageDirName: 'tts_audio',
@@ -3093,28 +3494,36 @@ void main() {
         }
       };
 
-      final refreshBeforeDelete =
-          operations.loadRecords(forceRefresh: true, throwOnError: true);
+      final refreshBeforeDelete = operations.loadRecords(
+        forceRefresh: true,
+        throwOnError: true,
+      );
       await recordSnapshotReady.future;
-      final folderRemoval =
-          operations.removeFolder('audio_folder_delete_during_refresh');
+      final folderRemoval = operations.removeFolder(
+        'audio_folder_delete_during_refresh',
+      );
       Future<List<AudioRecord>>? refreshDuringDelete;
       try {
         await folderRecordDeleteStarted.future;
-        refreshDuringDelete =
-            operations.loadRecords(forceRefresh: true, throwOnError: true);
+        refreshDuringDelete = operations.loadRecords(
+          forceRefresh: true,
+          throwOnError: true,
+        );
         await secondRecordSnapshotReady.future;
         releaseFolderRecordDelete.complete();
         await folderRemoval;
         releaseFolderRead.complete();
-        expect((await refreshBeforeDelete).map((record) => record.id),
-            unorderedEquals([survivor.id]),
-            reason: 'a pre-delete refresh must not restore folder records');
+        expect(
+          (await refreshBeforeDelete).map((record) => record.id),
+          unorderedEquals([survivor.id]),
+          reason: 'a pre-delete refresh must not restore folder records',
+        );
         releaseSecondFolderRead.complete();
-        expect((await refreshDuringDelete).map((record) => record.id),
-            unorderedEquals([survivor.id]),
-            reason:
-                'an in-flight folder refresh must not restore deleted rows');
+        expect(
+          (await refreshDuringDelete).map((record) => record.id),
+          unorderedEquals([survivor.id]),
+          reason: 'an in-flight folder refresh must not restore deleted rows',
+        );
       } finally {
         if (!releaseFolderRead.isCompleted) releaseFolderRead.complete();
         if (!releaseFolderRecordDelete.isCompleted) {
@@ -3130,114 +3539,135 @@ void main() {
       }
 
       expect(
-          (await ManifestDatabase.getAllAudioRecords()).map((row) => row['id']),
-          unorderedEquals([survivor.id]),
-          reason: 'folder deletion must be authoritative in the database');
-      expect((await operations.loadRecords()).map((record) => record.id),
-          unorderedEquals([survivor.id]),
-          reason: 'the current cache must reflect the folder deletion');
+        (await ManifestDatabase.getAllAudioRecords()).map((row) => row['id']),
+        unorderedEquals([survivor.id]),
+        reason: 'folder deletion must be authoritative in the database',
+      );
+      expect(
+        (await operations.loadRecords()).map((record) => record.id),
+        unorderedEquals([survivor.id]),
+        reason: 'the current cache must reflect the folder deletion',
+      );
     });
 
     testWidgets(
-        'failed audio folder record deletion preserves files and can retry',
-        (WidgetTester t) async {
-      final audioBytes = Uint8List.fromList([1, 2, 3]);
-      final sidecarBytes = Uint8List.fromList([97, 98]);
-      final operations = ManifestOperations<AudioRecord>(
-        manifestKey: 'test_audio_folder_delete_failure_refresh',
-        storageDirName: 'tts_audio',
-        fromMap: AudioRecord.fromMap,
-        onExtraDelete: (record) async {
-          await WebFileStore.delete('tts_audio/${record.textStoragePath}');
-        },
-        tableName: ManifestTables.audioRecords,
-        toMap: (record) => record.toMap(),
-      );
-      final existing = AudioRecord(
-        id: 'audio_folder_delete_failure',
-        name: 'keep after failed deletion',
-        hash: 'hash_folder_delete_failure',
-        format: 'wav',
-        createdAt: DateTime(2024),
-        size: audioBytes.length,
-        folder: 'audio_folder_delete_failure',
-      );
-      await FileManifest.writeFile(existing.storagePath, audioBytes);
-      await FileManifest.writeFile(existing.textStoragePath, sidecarBytes);
-      await operations.addRecord(existing);
+      'failed audio folder record deletion preserves files and can retry',
+      (WidgetTester t) async {
+        final audioBytes = Uint8List.fromList([1, 2, 3]);
+        final sidecarBytes = Uint8List.fromList([97, 98]);
+        final operations = ManifestOperations<AudioRecord>(
+          manifestKey: 'test_audio_folder_delete_failure_refresh',
+          storageDirName: 'tts_audio',
+          fromMap: AudioRecord.fromMap,
+          onExtraDelete: (record) async {
+            await WebFileStore.delete('tts_audio/${record.textStoragePath}');
+          },
+          tableName: ManifestTables.audioRecords,
+          toMap: (record) => record.toMap(),
+        );
+        final existing = AudioRecord(
+          id: 'audio_folder_delete_failure',
+          name: 'keep after failed deletion',
+          hash: 'hash_folder_delete_failure',
+          format: 'wav',
+          createdAt: DateTime(2024),
+          size: audioBytes.length,
+          folder: 'audio_folder_delete_failure',
+        );
+        await FileManifest.writeFile(existing.storagePath, audioBytes);
+        await FileManifest.writeFile(existing.textStoragePath, sidecarBytes);
+        await operations.addRecord(existing);
 
-      final recordSnapshotReady = Completer<void>();
-      final releaseFolderRead = Completer<void>();
-      final failure = StateError('injected audio folder record delete failure');
-      operations.beforeFolderLoadForTesting = () async {
-        recordSnapshotReady.complete();
-        await releaseFolderRead.future;
-      };
-      operations.beforeAudioFolderRecordDeleteForTesting = () async {
-        ManifestDatabase.beforeWebDataSaveForTesting = () async {
-          ManifestDatabase.beforeWebDataSaveForTesting = null;
-          throw failure;
+        final recordSnapshotReady = Completer<void>();
+        final releaseFolderRead = Completer<void>();
+        final failure = StateError(
+          'injected audio folder record delete failure',
+        );
+        operations.beforeFolderLoadForTesting = () async {
+          recordSnapshotReady.complete();
+          await releaseFolderRead.future;
         };
-      };
+        operations.beforeAudioFolderRecordDeleteForTesting = () async {
+          ManifestDatabase.beforeWebDataSaveForTesting = () async {
+            ManifestDatabase.beforeWebDataSaveForTesting = null;
+            throw failure;
+          };
+        };
 
-      final refresh =
-          operations.loadRecords(forceRefresh: true, throwOnError: true);
-      await recordSnapshotReady.future;
-      try {
-        await expectLater(
-          operations.removeFolder('audio_folder_delete_failure'),
-          throwsA(same(failure)),
+        final refresh = operations.loadRecords(
+          forceRefresh: true,
+          throwOnError: true,
         );
-        expect(
-            (await ManifestDatabase.getAllAudioRecords())
-                .map((row) => row['id']),
+        await recordSnapshotReady.future;
+        try {
+          await expectLater(
+            operations.removeFolder('audio_folder_delete_failure'),
+            throwsA(same(failure)),
+          );
+          expect(
+            (await ManifestDatabase.getAllAudioRecords()).map(
+              (row) => row['id'],
+            ),
             unorderedEquals([existing.id]),
-            reason: 'a failed deletion must leave its database row intact');
+            reason: 'a failed deletion must leave its database row intact',
+          );
+          expect(
+            await WebFileStore.read('tts_audio/${existing.storagePath}'),
+            equals(audioBytes),
+            reason:
+                'failed deletion must keep the primary audio bytes playable',
+          );
+          expect(
+            await WebFileStore.read('tts_audio/${existing.textStoragePath}'),
+            equals(sidecarBytes),
+            reason: 'failed deletion must keep the audio text sidecar',
+          );
+          expect(
+            (await operations.loadRecords()).map((record) => record.id),
+            unorderedEquals([existing.id]),
+            reason: 'failed deletion must keep the cached audio row available',
+          );
+        } finally {
+          releaseFolderRead.complete();
+          operations.beforeFolderLoadForTesting = null;
+          operations.beforeAudioFolderRecordDeleteForTesting = null;
+          ManifestDatabase.beforeWebDataSaveForTesting = null;
+        }
+
         expect(
-          await WebFileStore.read('tts_audio/${existing.storagePath}'),
-          equals(audioBytes),
-          reason: 'failed deletion must keep the primary audio bytes playable',
-        );
-        expect(
-          await WebFileStore.read('tts_audio/${existing.textStoragePath}'),
-          equals(sidecarBytes),
-          reason: 'failed deletion must keep the audio text sidecar',
+          (await refresh).map((record) => record.id),
+          unorderedEquals([existing.id]),
+          reason: 'failed deletion must not make a paused refresh lose rows',
         );
         expect(
           (await operations.loadRecords()).map((record) => record.id),
           unorderedEquals([existing.id]),
-          reason: 'failed deletion must keep the cached audio row available',
         );
-      } finally {
-        releaseFolderRead.complete();
-        operations.beforeFolderLoadForTesting = null;
-        operations.beforeAudioFolderRecordDeleteForTesting = null;
-        ManifestDatabase.beforeWebDataSaveForTesting = null;
-      }
 
-      expect((await refresh).map((record) => record.id),
-          unorderedEquals([existing.id]),
-          reason: 'failed deletion must not make a paused refresh lose rows');
-      expect((await operations.loadRecords()).map((record) => record.id),
-          unorderedEquals([existing.id]));
+        await operations.removeFolder('audio_folder_delete_failure');
 
-      await operations.removeFolder('audio_folder_delete_failure');
-
-      expect(await ManifestDatabase.getAllAudioRecords(), isEmpty,
-          reason: 'retry must remove the persisted audio row');
-      expect(await operations.loadRecords(), isEmpty,
-          reason: 'retry must remove the audio row from cache');
-      expect(
-        await WebFileStore.exists('tts_audio/${existing.storagePath}'),
-        isFalse,
-        reason: 'successful retry must remove the audio file',
-      );
-      expect(
-        await WebFileStore.exists('tts_audio/${existing.textStoragePath}'),
-        isFalse,
-        reason: 'successful retry must remove the sidecar',
-      );
-    });
+        expect(
+          await ManifestDatabase.getAllAudioRecords(),
+          isEmpty,
+          reason: 'retry must remove the persisted audio row',
+        );
+        expect(
+          await operations.loadRecords(),
+          isEmpty,
+          reason: 'retry must remove the audio row from cache',
+        );
+        expect(
+          await WebFileStore.exists('tts_audio/${existing.storagePath}'),
+          isFalse,
+          reason: 'successful retry must remove the audio file',
+        );
+        expect(
+          await WebFileStore.exists('tts_audio/${existing.textStoragePath}'),
+          isFalse,
+          reason: 'successful retry must remove the sidecar',
+        );
+      },
+    );
 
     test('restores audio files after partial folder cleanup failure', () async {
       final firstAudioBytes = Uint8List.fromList([1, 2, 3]);
@@ -3311,282 +3741,331 @@ void main() {
     });
 
     testWidgets(
-        'failed JSON registration preserves folders used by a concurrent registration',
-        (WidgetTester t) async {
-      final firstWriteStarted = Completer<void>();
-      final secondRegistrationStarted = Completer<void>();
-      final releaseFirstWrite = Completer<void>();
-      final failure = StateError('injected first registration failure');
-      var registrationCount = 0;
-      var writeCount = 0;
-      ManifestDatabase.beforeJsonRecordRegistrationForTesting = () {
-        registrationCount++;
-        if (registrationCount == 2) secondRegistrationStarted.complete();
-      };
-      ManifestDatabase.beforeWebDataSaveForTesting = () async {
-        writeCount++;
-        if (writeCount == 1) {
-          firstWriteStarted.complete();
-          await releaseFirstWrite.future;
-          throw failure;
-        }
-      };
+      'failed JSON registration preserves folders used by a concurrent registration',
+      (WidgetTester t) async {
+        final firstWriteStarted = Completer<void>();
+        final secondRegistrationStarted = Completer<void>();
+        final releaseFirstWrite = Completer<void>();
+        final failure = StateError('injected first registration failure');
+        var registrationCount = 0;
+        var writeCount = 0;
+        ManifestDatabase.beforeJsonRecordRegistrationForTesting = () {
+          registrationCount++;
+          if (registrationCount == 2) secondRegistrationStarted.complete();
+        };
+        ManifestDatabase.beforeWebDataSaveForTesting = () async {
+          writeCount++;
+          if (writeCount == 1) {
+            firstWriteStarted.complete();
+            await releaseFirstWrite.future;
+            throw failure;
+          }
+        };
 
-      final firstRecord = AudioRecord(
-        id: 'audio_concurrent_failed_registration',
-        name: 'first',
-        hash: 'hash_concurrent_failed_registration',
-        format: 'wav',
-        createdAt: DateTime(2024),
-        size: 4,
-        folder: 'concurrent/shared/child',
-      );
-      final secondRecord = AudioRecord(
-        id: 'audio_concurrent_successful_registration',
-        name: 'second',
-        hash: 'hash_concurrent_successful_registration',
-        format: 'wav',
-        createdAt: DateTime(2024),
-        size: 4,
-        folder: 'concurrent/shared/child',
-      );
-      const folderPaths = [
-        'concurrent',
-        'concurrent/shared',
-        'concurrent/shared/child',
-      ];
-      Future<void> insertRecord(AudioRecord record) =>
-          ManifestDatabase.insertRecordWithFolders(
-            recordTable: ManifestTables.audioRecords,
-            record: record.toMap(),
-            folderPaths: folderPaths,
-          );
+        final firstRecord = AudioRecord(
+          id: 'audio_concurrent_failed_registration',
+          name: 'first',
+          hash: 'hash_concurrent_failed_registration',
+          format: 'wav',
+          createdAt: DateTime(2024),
+          size: 4,
+          folder: 'concurrent/shared/child',
+        );
+        final secondRecord = AudioRecord(
+          id: 'audio_concurrent_successful_registration',
+          name: 'second',
+          hash: 'hash_concurrent_successful_registration',
+          format: 'wav',
+          createdAt: DateTime(2024),
+          size: 4,
+          folder: 'concurrent/shared/child',
+        );
+        const folderPaths = [
+          'concurrent',
+          'concurrent/shared',
+          'concurrent/shared/child',
+        ];
+        Future<void> insertRecord(AudioRecord record) =>
+            ManifestDatabase.insertRecordWithFolders(
+              recordTable: ManifestTables.audioRecords,
+              record: record.toMap(),
+              folderPaths: folderPaths,
+            );
 
-      final firstInsert = insertRecord(firstRecord);
-      await firstWriteStarted.future;
-      final secondInsert = insertRecord(secondRecord);
-      await secondRegistrationStarted.future;
-      await t.pump();
-      releaseFirstWrite.complete();
+        final firstInsert = insertRecord(firstRecord);
+        await firstWriteStarted.future;
+        final secondInsert = insertRecord(secondRecord);
+        await secondRegistrationStarted.future;
+        await t.pump();
+        releaseFirstWrite.complete();
 
-      await expectLater(firstInsert, throwsA(same(failure)));
-      await secondInsert;
+        await expectLater(firstInsert, throwsA(same(failure)));
+        await secondInsert;
 
-      expect(
+        expect(
           (await ManifestDatabase.getAllAudioRecords()).map((row) => row['id']),
-          equals([secondRecord.id]));
-      expect(
+          equals([secondRecord.id]),
+        );
+        expect(
           await ManifestDatabase.getAllFolders(
-              recordTable: ManifestTables.audioRecords),
+            recordTable: ManifestTables.audioRecords,
+          ),
           containsAll(folderPaths),
           reason:
-              'rollback must not remove paths required by a concurrent successful registration');
-    });
+              'rollback must not remove paths required by a concurrent successful registration',
+        );
+      },
+    );
 
     testWidgets(
-        'failed JSON registration is not cached by a concurrent forced refresh',
-        (WidgetTester t) async {
-      final firstWriteStarted = Completer<void>();
-      final releaseFirstWrite = Completer<void>();
-      final failure = StateError('injected registration failure');
-      var writeCount = 0;
-      ManifestDatabase.beforeWebDataSaveForTesting = () async {
-        writeCount++;
-        if (writeCount == 1) {
-          firstWriteStarted.complete();
-          await releaseFirstWrite.future;
-          throw failure;
-        }
-      };
-      final record = AudioRecord(
-        id: 'audio_uncommitted_refresh',
-        name: 'pending',
-        hash: 'hash_uncommitted_refresh',
-        format: 'wav',
-        createdAt: DateTime(2024),
-        size: 4,
-        folder: 'pending/child',
-      );
+      'failed JSON registration is not cached by a concurrent forced refresh',
+      (WidgetTester t) async {
+        final firstWriteStarted = Completer<void>();
+        final releaseFirstWrite = Completer<void>();
+        final failure = StateError('injected registration failure');
+        var writeCount = 0;
+        ManifestDatabase.beforeWebDataSaveForTesting = () async {
+          writeCount++;
+          if (writeCount == 1) {
+            firstWriteStarted.complete();
+            await releaseFirstWrite.future;
+            throw failure;
+          }
+        };
+        final record = AudioRecord(
+          id: 'audio_uncommitted_refresh',
+          name: 'pending',
+          hash: 'hash_uncommitted_refresh',
+          format: 'wav',
+          createdAt: DateTime(2024),
+          size: 4,
+          folder: 'pending/child',
+        );
 
-      final registration = FileManifest.addRecord(record);
-      await firstWriteStarted.future;
-      final refreshed = FileManifest.loadRecordsStrict();
-      await t.pump();
-      releaseFirstWrite.complete();
+        final registration = FileManifest.addRecord(record);
+        await firstWriteStarted.future;
+        final refreshed = FileManifest.loadRecordsStrict();
+        await t.pump();
+        releaseFirstWrite.complete();
 
-      await expectLater(registration, throwsA(same(failure)));
-      expect(await refreshed, isEmpty,
-          reason: 'a forced refresh must not expose an uncommitted row');
-      expect(await FileManifest.loadRecords(), isEmpty,
-          reason: 'rollback must not leave the failed row in the record cache');
-    });
+        await expectLater(registration, throwsA(same(failure)));
+        expect(
+          await refreshed,
+          isEmpty,
+          reason: 'a forced refresh must not expose an uncommitted row',
+        );
+        expect(
+          await FileManifest.loadRecords(),
+          isEmpty,
+          reason: 'rollback must not leave the failed row in the record cache',
+        );
+      },
+    );
 
     testWidgets(
-        'failed JSON registration preserves a concurrent folder registration',
-        (WidgetTester t) async {
-      final firstWriteStarted = Completer<void>();
-      final releaseFirstWrite = Completer<void>();
-      final failure = StateError('injected registration failure');
-      var writeCount = 0;
-      ManifestDatabase.beforeWebDataSaveForTesting = () async {
-        writeCount++;
-        if (writeCount == 1) {
-          firstWriteStarted.complete();
-          await releaseFirstWrite.future;
-          throw failure;
-        }
-      };
-      final record = AudioRecord(
-        id: 'audio_concurrent_folder_registration',
-        name: 'pending',
-        hash: 'hash_concurrent_folder_registration',
-        format: 'wav',
-        createdAt: DateTime(2024),
-        size: 4,
-        folder: 'concurrent-folder/shared',
-      );
+      'failed JSON registration preserves a concurrent folder registration',
+      (WidgetTester t) async {
+        final firstWriteStarted = Completer<void>();
+        final releaseFirstWrite = Completer<void>();
+        final failure = StateError('injected registration failure');
+        var writeCount = 0;
+        ManifestDatabase.beforeWebDataSaveForTesting = () async {
+          writeCount++;
+          if (writeCount == 1) {
+            firstWriteStarted.complete();
+            await releaseFirstWrite.future;
+            throw failure;
+          }
+        };
+        final record = AudioRecord(
+          id: 'audio_concurrent_folder_registration',
+          name: 'pending',
+          hash: 'hash_concurrent_folder_registration',
+          format: 'wav',
+          createdAt: DateTime(2024),
+          size: 4,
+          folder: 'concurrent-folder/shared',
+        );
 
-      final registration = FileManifest.addRecord(record);
-      await firstWriteStarted.future;
-      final folderRegistration = FileManifest.addFolder(record.folder);
-      await t.pump();
-      releaseFirstWrite.complete();
+        final registration = FileManifest.addRecord(record);
+        await firstWriteStarted.future;
+        final folderRegistration = FileManifest.addFolder(record.folder);
+        await t.pump();
+        releaseFirstWrite.complete();
 
-      await expectLater(registration, throwsA(same(failure)));
-      await folderRegistration;
-      expect(
+        await expectLater(registration, throwsA(same(failure)));
+        await folderRegistration;
+        expect(
           await ManifestDatabase.getAllFolders(
-              recordTable: ManifestTables.audioRecords),
+            recordTable: ManifestTables.audioRecords,
+          ),
           equals([record.folder]),
           reason:
-              'rollback must not remove a folder registered by a concurrent successful operation');
-    });
+              'rollback must not remove a folder registered by a concurrent successful operation',
+        );
+      },
+    );
 
     testWidgets(
-        'text addRecord rolls back record and folders when canceled during persistence',
-        (WidgetTester t) async {
-      var cancelled = false;
-      final cancellation = StateError('cancelled during manifest persistence');
-      ManifestDatabase.beforeWebDataSaveForTesting = () async {
-        cancelled = true;
-      };
+      'text addRecord rolls back record and folders when canceled during persistence',
+      (WidgetTester t) async {
+        var cancelled = false;
+        final cancellation = StateError(
+          'cancelled during manifest persistence',
+        );
+        ManifestDatabase.beforeWebDataSaveForTesting = () async {
+          cancelled = true;
+        };
 
-      await expectLater(
-        TextManifest.addRecord(
-          TextRecord(
-            id: 'text_cancel_folder_save',
-            name: 'cancelled',
-            hash: 'hash_cancel_folder_save',
-            createdAt: DateTime(2024),
-            size: 4,
-            folder: 'cancelled/child',
+        await expectLater(
+          TextManifest.addRecord(
+            TextRecord(
+              id: 'text_cancel_folder_save',
+              name: 'cancelled',
+              hash: 'hash_cancel_folder_save',
+              createdAt: DateTime(2024),
+              size: 4,
+              folder: 'cancelled/child',
+            ),
+            beforeCommit: () {
+              if (cancelled) throw cancellation;
+            },
           ),
-          beforeCommit: () {
-            if (cancelled) throw cancellation;
-          },
-        ),
-        throwsA(same(cancellation)),
-      );
+          throwsA(same(cancellation)),
+        );
 
-      expect(await ManifestDatabase.getAllTextRecords(), isEmpty);
-      expect(
+        expect(await ManifestDatabase.getAllTextRecords(), isEmpty);
+        expect(
           await ManifestDatabase.getAllFolders(
-              recordTable: ManifestTables.textRecords),
-          isEmpty);
-      expect(await TextManifest.loadRecords(), isEmpty);
-    });
+            recordTable: ManifestTables.textRecords,
+          ),
+          isEmpty,
+        );
+        expect(await TextManifest.loadRecords(), isEmpty);
+      },
+    );
 
     testWidgets(
-        'addRecord rolls back folder persistence failure and retry completes it',
-        (WidgetTester t) async {
-      final existingRecord = AudioRecord(
-        id: 'audio_existing_folder_retry',
-        name: 'existing',
-        hash: 'hash_existing_folder_retry',
-        format: 'wav',
-        createdAt: DateTime(2024),
-        size: 4,
-      );
-      await FileManifest.addRecord(existingRecord);
-      await FileManifest.addFolder('existing');
-      final record = AudioRecord(
-        id: 'audio_folder_retry',
-        name: 'tts',
-        hash: 'hash_folder_retry',
-        format: 'wav',
-        createdAt: DateTime(2024),
-        size: 4,
-        folder: 'existing/child/grandchild',
-      );
-      final failure = StateError('injected folder persistence failure');
-      var shouldFail = true;
-      ManifestDatabase.beforeFolderInsertForTesting = (path) {
-        if (shouldFail && path == 'existing/child') {
-          shouldFail = false;
-          throw failure;
-        }
-      };
+      'addRecord rolls back folder persistence failure and retry completes it',
+      (WidgetTester t) async {
+        final existingRecord = AudioRecord(
+          id: 'audio_existing_folder_retry',
+          name: 'existing',
+          hash: 'hash_existing_folder_retry',
+          format: 'wav',
+          createdAt: DateTime(2024),
+          size: 4,
+        );
+        await FileManifest.addRecord(existingRecord);
+        await FileManifest.addFolder('existing');
+        final record = AudioRecord(
+          id: 'audio_folder_retry',
+          name: 'tts',
+          hash: 'hash_folder_retry',
+          format: 'wav',
+          createdAt: DateTime(2024),
+          size: 4,
+          folder: 'existing/child/grandchild',
+        );
+        final failure = StateError('injected folder persistence failure');
+        var shouldFail = true;
+        ManifestDatabase.beforeFolderInsertForTesting = (path) {
+          if (shouldFail && path == 'existing/child') {
+            shouldFail = false;
+            throw failure;
+          }
+        };
 
-      await expectLater(FileManifest.addRecord(record), throwsA(same(failure)));
+        await expectLater(
+          FileManifest.addRecord(record),
+          throwsA(same(failure)),
+        );
 
-      expect((await FileManifest.loadRecords()).map((row) => row.id),
+        expect(
+          (await FileManifest.loadRecords()).map((row) => row.id),
           equals([existingRecord.id]),
           reason:
-              'a failed add must not remain visible through the record cache');
-      final failedRows = await ManifestDatabase.getAllAudioRecords();
-      expect(failedRows.any((row) => row['id'] == record.id), isFalse,
-          reason: 'a failed add must not remain persisted as a record');
-      expect(failedRows.map((row) => row['id']), equals([existingRecord.id]),
-          reason: 'a failed add must preserve pre-existing records');
-      expect(
+              'a failed add must not remain visible through the record cache',
+        );
+        final failedRows = await ManifestDatabase.getAllAudioRecords();
+        expect(
+          failedRows.any((row) => row['id'] == record.id),
+          isFalse,
+          reason: 'a failed add must not remain persisted as a record',
+        );
+        expect(
+          failedRows.map((row) => row['id']),
+          equals([existingRecord.id]),
+          reason: 'a failed add must preserve pre-existing records',
+        );
+        expect(
           await ManifestDatabase.getAllFolders(
-              recordTable: ManifestTables.audioRecords),
+            recordTable: ManifestTables.audioRecords,
+          ),
           equals(['existing']),
-          reason: 'a failed add must retain pre-existing folders only');
+          reason: 'a failed add must retain pre-existing folders only',
+        );
 
-      await FileManifest.addRecord(record);
+        await FileManifest.addRecord(record);
 
-      expect(
-          (await ManifestDatabase.getAllAudioRecords())
-              .any((row) => row['id'] == record.id),
+        expect(
+          (await ManifestDatabase.getAllAudioRecords()).any(
+            (row) => row['id'] == record.id,
+          ),
           isTrue,
-          reason: 'retry must persist the audio record');
-      expect(
+          reason: 'retry must persist the audio record',
+        );
+        expect(
           await ManifestDatabase.getAllFolders(
-              recordTable: ManifestTables.audioRecords),
+            recordTable: ManifestTables.audioRecords,
+          ),
           containsAll([
             'existing',
             'existing/child',
             'existing/child/grandchild',
           ]),
-          reason: 'retry must persist the complete folder path');
-    });
+          reason: 'retry must persist the complete folder path',
+        );
+      },
+    );
 
-    testWidgets('ordinary audio folder registration persists the folder',
-        (WidgetTester t) async {
+    testWidgets('ordinary audio folder registration persists the folder', (
+      WidgetTester t,
+    ) async {
       await FileManifest.addFolder('ordinary/audio');
 
       expect(
-          await ManifestDatabase.getAllFolders(
-              recordTable: ManifestTables.audioRecords),
-          contains('ordinary/audio'));
+        await ManifestDatabase.getAllFolders(
+          recordTable: ManifestTables.audioRecords,
+        ),
+        contains('ordinary/audio'),
+      );
     });
 
-    testWidgets('folder registration rejects trailing-space parent segments',
-        (WidgetTester t) async {
+    testWidgets('folder registration rejects trailing-space parent segments', (
+      WidgetTester t,
+    ) async {
       await FileManifest.addFolder('foo /bar');
       await FileManifest.addFolderPath('baz /qux');
 
       final folders = await ManifestDatabase.getAllFolders(
-          recordTable: ManifestTables.audioRecords);
-      expect(folders, isNot(contains('foo /bar')),
-          reason: 'addFolder must reject invalid parent segments');
-      expect(folders, isNot(contains('baz /qux')),
-          reason: 'addFolderPath must reject invalid parent segments');
+        recordTable: ManifestTables.audioRecords,
+      );
+      expect(
+        folders,
+        isNot(contains('foo /bar')),
+        reason: 'addFolder must reject invalid parent segments',
+      );
+      expect(
+        folders,
+        isNot(contains('baz /qux')),
+        reason: 'addFolderPath must reject invalid parent segments',
+      );
     });
 
-    testWidgets('record writes reject trailing-space parent segments',
-        (WidgetTester t) async {
+    testWidgets('record writes reject trailing-space parent segments', (
+      WidgetTester t,
+    ) async {
       final record = AudioRecord(
         id: 'audio_safe_folder_path',
         name: 'audio',
@@ -3599,15 +4078,17 @@ void main() {
       await FileManifest.addRecord(record);
 
       await expectLater(
-        FileManifest.addRecord(AudioRecord(
-          id: 'audio_invalid_folder_path',
-          name: 'audio',
-          hash: 'hash_invalid_folder_path',
-          format: 'wav',
-          createdAt: DateTime(2024),
-          size: 4,
-          folder: 'foo /bar',
-        )),
+        FileManifest.addRecord(
+          AudioRecord(
+            id: 'audio_invalid_folder_path',
+            name: 'audio',
+            hash: 'hash_invalid_folder_path',
+            format: 'wav',
+            createdAt: DateTime(2024),
+            size: 4,
+            folder: 'foo /bar',
+          ),
+        ),
         throwsArgumentError,
       );
       await expectLater(
@@ -3615,53 +4096,65 @@ void main() {
         throwsArgumentError,
       );
       await expectLater(
-        FileManifest.updateRecord(AudioRecord(
-          id: record.id,
-          name: record.name,
-          hash: record.hash,
-          format: record.format,
-          createdAt: record.createdAt,
-          size: record.size,
-          folder: 'foo /bar',
-        )),
+        FileManifest.updateRecord(
+          AudioRecord(
+            id: record.id,
+            name: record.name,
+            hash: record.hash,
+            format: record.format,
+            createdAt: record.createdAt,
+            size: record.size,
+            folder: 'foo /bar',
+          ),
+        ),
         throwsArgumentError,
       );
 
       final records = await FileManifest.loadRecords();
       expect(records.map((entry) => entry.id), contains(record.id));
-      expect(records.map((entry) => entry.id),
-          isNot(contains('audio_invalid_folder_path')));
-      expect(records.firstWhere((entry) => entry.id == record.id).folder,
-          equals('safe'));
+      expect(
+        records.map((entry) => entry.id),
+        isNot(contains('audio_invalid_folder_path')),
+      );
+      expect(
+        records.firstWhere((entry) => entry.id == record.id).folder,
+        equals('safe'),
+      );
     });
 
-    testWidgets('addRecord tracks folder and all ancestors',
-        (WidgetTester t) async {
-      await VideoManifest.addRecord(VideoRecord(
-        id: 'vid_track_1',
-        name: 'v',
-        hash: 'hash_track_v',
-        format: 'mp4',
-        createdAt: DateTime.now(),
-        size: 4,
-        folder: 'a/b/c',
-      ));
+    testWidgets('addRecord tracks folder and all ancestors', (
+      WidgetTester t,
+    ) async {
+      await VideoManifest.addRecord(
+        VideoRecord(
+          id: 'vid_track_1',
+          name: 'v',
+          hash: 'hash_track_v',
+          format: 'mp4',
+          createdAt: DateTime.now(),
+          size: 4,
+          folder: 'a/b/c',
+        ),
+      );
 
       final folders = await VideoManifest.getAllFolders();
       expect(folders, containsAll(['a', 'a/b', 'a/b/c']));
     });
 
-    testWidgets('moveRecord to nested folder tracks all ancestors',
-        (WidgetTester t) async {
-      await VideoManifest.addRecord(VideoRecord(
-        id: 'vid_track_2',
-        name: 'v',
-        hash: 'hash_track_v2',
-        format: 'mp4',
-        createdAt: DateTime.now(),
-        size: 4,
-        folder: '',
-      ));
+    testWidgets('moveRecord to nested folder tracks all ancestors', (
+      WidgetTester t,
+    ) async {
+      await VideoManifest.addRecord(
+        VideoRecord(
+          id: 'vid_track_2',
+          name: 'v',
+          hash: 'hash_track_v2',
+          format: 'mp4',
+          createdAt: DateTime.now(),
+          size: 4,
+          folder: '',
+        ),
+      );
 
       await VideoManifest.moveRecord('vid_track_2', 'x/y/z');
 
@@ -3671,8 +4164,9 @@ void main() {
       expect(records.first.folder, equals('x/y/z'));
     });
 
-    testWidgets('moveRecord retries folder persistence after insert failure',
-        (WidgetTester t) async {
+    testWidgets('moveRecord retries folder persistence after insert failure', (
+      WidgetTester t,
+    ) async {
       final record = AudioRecord(
         id: 'audio_move_folder_retry',
         name: 'tts',
@@ -3700,7 +4194,8 @@ void main() {
       );
       expect(
         await ManifestDatabase.getAllFolders(
-            recordTable: ManifestTables.audioRecords),
+          recordTable: ManifestTables.audioRecords,
+        ),
         isNot(contains(failedPath)),
         reason: 'the failed folder insert must be absent from durable storage',
       );
@@ -3709,18 +4204,16 @@ void main() {
 
       expect(
         await ManifestDatabase.getAllFolders(
-            recordTable: ManifestTables.audioRecords),
-        containsAll([
-          'audio_move_retry',
-          failedPath,
-          targetFolder,
-        ]),
+          recordTable: ManifestTables.audioRecords,
+        ),
+        containsAll(['audio_move_retry', failedPath, targetFolder]),
         reason: 'retry must persist every target ancestor',
       );
     });
 
-    testWidgets('addFolder ignores empty and whitespace names',
-        (WidgetTester t) async {
+    testWidgets('addFolder ignores empty and whitespace names', (
+      WidgetTester t,
+    ) async {
       await TextManifest.addFolder('');
       await TextManifest.addFolder('   ');
 
@@ -3728,42 +4221,46 @@ void main() {
     });
 
     testWidgets(
-        'removeFolderFromCache moves records to root and clears entries',
-        (WidgetTester t) async {
-      final top = ImageRecord(
-        id: 'img_rfc_1',
-        name: 'top',
-        hash: 'hash_rfc_1',
-        format: 'jpg',
-        createdAt: DateTime.now(),
-        size: 4,
-        folder: 'a',
-      );
-      final sub = ImageRecord(
-        id: 'img_rfc_2',
-        name: 'sub',
-        hash: 'hash_rfc_2',
-        format: 'jpg',
-        createdAt: DateTime.now(),
-        size: 4,
-        folder: 'a/sub',
-      );
-      await ImageManifest.addFolder('a/sub');
-      await ImageManifest.addRecord(top);
-      await ImageManifest.addRecord(sub);
+      'removeFolderFromCache moves records to root and clears entries',
+      (WidgetTester t) async {
+        final top = ImageRecord(
+          id: 'img_rfc_1',
+          name: 'top',
+          hash: 'hash_rfc_1',
+          format: 'jpg',
+          createdAt: DateTime.now(),
+          size: 4,
+          folder: 'a',
+        );
+        final sub = ImageRecord(
+          id: 'img_rfc_2',
+          name: 'sub',
+          hash: 'hash_rfc_2',
+          format: 'jpg',
+          createdAt: DateTime.now(),
+          size: 4,
+          folder: 'a/sub',
+        );
+        await ImageManifest.addFolder('a/sub');
+        await ImageManifest.addRecord(top);
+        await ImageManifest.addRecord(sub);
 
-      await ImageManifest.removeFolderFromCache('a');
+        await ImageManifest.removeFolderFromCache('a');
 
-      // Reload from the store to prove the DB rows were updated too.
-      ImageManifest.invalidateCache();
-      final records = await ImageManifest.loadRecords();
-      for (final r in records) {
-        expect(r.folder, isEmpty,
-            reason: 'records under a removed folder path must move to root');
-      }
-      final folders = await ImageManifest.getAllFolders();
-      expect(folders, isNot(contains('a')));
-      expect(folders, isNot(contains('a/sub')));
-    });
+        // Reload from the store to prove the DB rows were updated too.
+        ImageManifest.invalidateCache();
+        final records = await ImageManifest.loadRecords();
+        for (final r in records) {
+          expect(
+            r.folder,
+            isEmpty,
+            reason: 'records under a removed folder path must move to root',
+          );
+        }
+        final folders = await ImageManifest.getAllFolders();
+        expect(folders, isNot(contains('a')));
+        expect(folders, isNot(contains('a/sub')));
+      },
+    );
   });
 }
