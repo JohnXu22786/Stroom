@@ -1056,7 +1056,7 @@
   "@catCatchDetailChooseResource": { "placeholders": { "count": {} } },
   "catCatchDetailAutoSelectFirst": "Automatically selected result 1 and started downloading",
   "catCatchDetailAutoSelectRemaining": "1 result remains; started downloading automatically",
-  "catCatchDetailSkipFormat": "Conversion skipped for {extension}; this format needs no conversion",
+  "catCatchDetailSkipFormat": "Conversion skipped for .{extension}; this format needs no conversion",
   "@catCatchDetailSkipFormat": { "placeholders": { "extension": {} } },
   "catCatchDetailSkipNoExtension": "Conversion skipped; this format needs no conversion",
   "catCatchDetailDurationFiltered": "After filtering for {duration}, {remaining} results remain ({removed} unmatched resources excluded)",

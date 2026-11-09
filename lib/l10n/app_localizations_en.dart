@@ -2959,7 +2959,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String catCatchDetailSkipFormat(Object extension) =>
-      'Conversion skipped for $extension; this format needs no conversion';
+      'Conversion skipped for .$extension; this format needs no conversion';
 
   @override
   String get catCatchDetailSkipNoExtension =>
