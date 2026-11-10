@@ -5,7 +5,6 @@ import 'package:flutter/foundation.dart'
 import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:window_manager/window_manager.dart';
 
 import '../l10n/app_localizations.dart';
 import '../services/background_service.dart';
@@ -972,7 +971,7 @@ class _BackgroundOptimizationPageState
       return;
     }
     try {
-      await windowManager.setPreventClose(true);
+      await DesktopAppService.instance.ensureWindowCloseInterception();
     } catch (e) {
       debugPrint('[BackgroundOptimizationPage] setPreventClose failed: $e');
     }
