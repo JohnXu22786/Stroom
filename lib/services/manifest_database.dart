@@ -426,10 +426,6 @@ class ManifestDatabase {
           _webData![ManifestTables.audioRecords] as List<dynamic>? ?? [];
       final videoList =
           _webData![ManifestTables.videoRecords] as List<dynamic>? ?? [];
-      if (videoList.isNotEmpty) {
-        await StartupPreferences.setBool('migrated_video_records', true);
-        return;
-      }
       final videoFormats = {
         'mp4',
         'mov',

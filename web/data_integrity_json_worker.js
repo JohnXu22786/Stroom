@@ -104,59 +104,55 @@ function migrateWebManifestData(
         },
       };
     }
-    if (videoRecords.length > 0) {
-      setVideoFlag = true;
-    } else {
-      const videoFormats = new Set([
-        'mp4',
-        'mov',
-        'avi',
-        'mkv',
-        'webm',
-        'flv',
-        'wmv',
-        'm4v',
-        '3gp',
-        'gif',
-      ]);
-      const toMigrate = [];
-      const remaining = [];
-      for (const item of audioRecords) {
-        if (!isRecord(item) ||
-            (item.format != null && typeof item.format !== 'string')) {
-          return {
-            metadata: {
-              status: 'videoError',
-              error: 'Audio record has an invalid shape.',
-            },
-          };
-        }
-        if (videoFormats.has(item.format)) {
-          toMigrate.push(item);
-        } else {
-          remaining.push(item);
-        }
+    const videoFormats = new Set([
+      'mp4',
+      'mov',
+      'avi',
+      'mkv',
+      'webm',
+      'flv',
+      'wmv',
+      'm4v',
+      '3gp',
+      'gif',
+    ]);
+    const toMigrate = [];
+    const remaining = [];
+    for (const item of audioRecords) {
+      if (!isRecord(item) ||
+          (item.format != null && typeof item.format !== 'string')) {
+        return {
+          metadata: {
+            status: 'videoError',
+            error: 'Audio record has an invalid shape.',
+          },
+        };
       }
-      if (toMigrate.length > 0) {
-        data.audio_records = remaining;
-        for (const record of toMigrate) {
-          videoRecords.push({
-            id: record.id,
-            name: record.name,
-            hash: record.hash,
-            format: record.format,
-            createdAt: record.createdAt,
-            size: record.size,
-            folder: record.folder,
-            duration: record.duration,
-          });
-        }
-        data.video_records = videoRecords;
-        changed = true;
-        videoChanged = true;
+      if (videoFormats.has(item.format)) {
+        toMigrate.push(item);
+      } else {
+        remaining.push(item);
       }
-      setVideoFlag = true;
     }
+    if (toMigrate.length > 0) {
+      data.audio_records = remaining;
+      for (const record of toMigrate) {
+        videoRecords.push({
+          id: record.id,
+          name: record.name,
+          hash: record.hash,
+          format: record.format,
+          createdAt: record.createdAt,
+          size: record.size,
+          folder: record.folder,
+          duration: record.duration,
+        });
+      }
+      data.video_records = videoRecords;
+      changed = true;
+      videoChanged = true;
+    }
+    setVideoFlag = true;
   }
 
   const videoPayload = videoChanged ? JSON.stringify(data) : null;
