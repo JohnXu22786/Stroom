@@ -246,14 +246,30 @@ class AnkiApkgImporter {
       } catch (_) {
         throw AnkiApkgException.unexpectedError(tmpDbPath);
       }
+      final existingCardKeys = <(int, int)>{};
+      List<Map<String, Object?>> existingCards;
+      try {
+        existingCards = await targetDb.query('cards', columns: ['nid', 'ord']);
+      } on DatabaseException catch (error) {
+        throw _databaseException(error, targetDbPath);
+      } catch (_) {
+        throw AnkiApkgException.unexpectedError(targetDbPath);
+      }
+      for (final card in existingCards) {
+        existingCardKeys.add((card['nid'] as int, card['ord'] as int));
+      }
       for (final card in srcCards) {
+        final targetNoteId = noteMap[card['nid'] as int] ?? card['nid'] as int;
+        final cardKey = (targetNoteId, card['ord'] as int);
+        if (existingCardKeys.contains(cardKey)) continue;
+
         final id = ++newId;
         final oldDid = card['did'] as int;
         final newDid = deckMap[oldDid] ?? oldDid;
 
         await targetDb.insert('cards', {
           'id': id,
-          'nid': noteMap[card['nid'] as int] ?? card['nid'],
+          'nid': targetNoteId,
           'did': newDid,
           'ord': card['ord'],
           'mod': nowSec,
@@ -271,6 +287,7 @@ class AnkiApkgImporter {
           'flags': card['flags'] ?? 0,
           'data': card['data'] ?? '',
         });
+        existingCardKeys.add(cardKey);
         cardsImported++;
       }
 
