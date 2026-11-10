@@ -915,13 +915,18 @@ String? _sanitizeOcrTaskError(
         var safeDetails = sanitizedDetails;
         final candidateDetails = safeDetails;
         if (candidateDetails != null) {
+          String safeLocalizedLabel(String preferred) =>
+              _legacyOcrTextContainsCredential(preferred, credentialValues)
+                  ? _localizedOcrHiddenTaskError(strings, credentialValues)
+                  : preferred;
+
           final hiddenDetailsLabels = <String, String>{
             for (final locale in AppLocalizations.supportedLocales)
               lookupAppLocalizations(locale).bgTaskOcrErrorDetailsHidden:
-                  strings.bgTaskOcrErrorDetailsHidden,
+                  safeLocalizedLabel(strings.bgTaskOcrErrorDetailsHidden),
             for (final locale in AppLocalizations.supportedLocales)
               lookupAppLocalizations(locale).bgTaskErrorDetailsHidden:
-                  strings.bgTaskErrorDetailsHidden,
+                  safeLocalizedLabel(strings.bgTaskErrorDetailsHidden),
           };
           for (final entry in hiddenDetailsLabels.entries) {
             final hiddenDetailsPrefix = entry.key;
