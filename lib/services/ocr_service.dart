@@ -341,7 +341,9 @@ class OcrService {
   }
 
   /// Close the underlying client when this service owns its lifetime.
-  void close({bool force = false}) => _dio.close(force: force);
+  void close({bool force = false}) {
+    if (!_usesInjectedDio) _dio.close(force: force);
+  }
 
   /// The chat completions endpoint URL.
   /// The user provides the full endpoint URL including the path,
