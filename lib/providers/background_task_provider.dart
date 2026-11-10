@@ -878,13 +878,16 @@ String? _sanitizeOcrTaskError(
           return _localizedOcrHiddenTaskError(strings, credentialValues);
         }
         final details = error.substring(prefix.length);
-        final sanitizedDetails = OcrDiagnosticSnapshot.sanitizeStoredTaskError(
-          details,
-          excludedValues: credentialValues,
-        );
-        const hiddenDetailsPrefix = 'OCR 错误详情已隐藏';
         final localizedHiddenDetails =
             _localizedOcrHiddenTaskError(strings, credentialValues);
+        final sanitizedDetails =
+            prefix == taskFlowFailurePrefix && details == localizedHiddenDetails
+                ? details
+                : OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+                    details,
+                    excludedValues: credentialValues,
+                  );
+        const hiddenDetailsPrefix = 'OCR 错误详情已隐藏';
         final safeDetails = prefix == taskFlowFailurePrefix
             ? sanitizedDetails
             : sanitizedDetails?.startsWith(hiddenDetailsPrefix) == true
