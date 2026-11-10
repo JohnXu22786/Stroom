@@ -1161,6 +1161,21 @@ void main() {
     );
 
     expect(lowercaseStatus, 'OCR error details were hidden（http 429）');
+
+    expect(
+      OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+        'Los detalles del error de OCR estaban ocultos（HTTP 429）',
+        excludedValues: ['429'],
+      ),
+      'Los detalles del error de OCR estaban ocultos（HTTP 429）',
+    );
+    expect(
+      OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+        'OCR エラーの詳細は非表示になりました（HTTP 429）',
+        excludedValues: ['429'],
+      ),
+      'OCR エラーの詳細は非表示になりました（HTTP 429）',
+    );
   });
 
   test('safe hidden summaries still exclude credentials in the hidden label',

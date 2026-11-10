@@ -523,10 +523,11 @@ String? _localizeStoredBackgroundError(
 ) {
   if (error == null) return null;
   if (error == '已取消' || error == 'Canceled') return strings.bgTaskCancelled;
-  for (final hiddenDetailsPrefix in [
-    'OCR 错误详情已隐藏',
-    'OCR error details were hidden',
-  ]) {
+  final hiddenDetailsPrefixes = {
+    for (final locale in AppLocalizations.supportedLocales)
+      lookupAppLocalizations(locale).bgTaskOcrErrorDetailsHidden,
+  };
+  for (final hiddenDetailsPrefix in hiddenDetailsPrefixes) {
     if (error == hiddenDetailsPrefix) {
       return strings.bgTaskOcrErrorDetailsHidden;
     }
@@ -897,10 +898,10 @@ String? _sanitizeOcrTaskError(
                     details,
                     excludedValues: credentialValues,
                   );
-        const hiddenDetailsPrefixes = [
-          'OCR 错误详情已隐藏',
-          'OCR error details were hidden',
-        ];
+        final hiddenDetailsPrefixes = {
+          for (final locale in AppLocalizations.supportedLocales)
+            lookupAppLocalizations(locale).bgTaskOcrErrorDetailsHidden,
+        };
         var safeDetails = sanitizedDetails;
         final candidateDetails = safeDetails;
         if (candidateDetails != null) {

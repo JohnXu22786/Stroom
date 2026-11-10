@@ -579,6 +579,8 @@ class OcrDiagnosticSnapshot {
     const prefixes = [
       'OCR 错误详情已隐藏',
       'OCR error details were hidden',
+      'Los detalles del error de OCR estaban ocultos',
+      'OCR エラーの詳細は非表示になりました',
       '错误详情已隐藏',
       '请求失败',
       '请重试',
@@ -616,6 +618,8 @@ class OcrDiagnosticSnapshot {
     const prefixes = [
       'OCR 错误详情已隐藏',
       'OCR error details were hidden',
+      'Los detalles del error de OCR estaban ocultos',
+      'OCR エラーの詳細は非表示になりました',
     ];
     for (final prefix in prefixes) {
       if (containsCredential(prefix, excludedValues: excludedValues)) {

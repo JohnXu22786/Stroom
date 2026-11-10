@@ -11,6 +11,8 @@ import 'package:image/image.dart' as img;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/l10n/app_localizations_en.dart';
+import 'package:stroom/l10n/app_localizations_es.dart';
+import 'package:stroom/l10n/app_localizations_ja.dart';
 import 'package:stroom/l10n/app_localizations_zh.dart';
 import 'package:stroom/models/tts_models.dart';
 import 'package:stroom/providers/background_task_provider.dart';
@@ -278,10 +280,11 @@ void main() {
         : AppLocalizationsEn();
 
     String localizeHiddenDetails(String detail, AppLocalizations target) {
-      for (final hiddenDetailsPrefix in [
-        'OCR 错误详情已隐藏',
-        'OCR error details were hidden',
-      ]) {
+      final hiddenDetailsPrefixes = {
+        for (final locale in AppLocalizations.supportedLocales)
+          lookupAppLocalizations(locale).bgTaskOcrErrorDetailsHidden,
+      };
+      for (final hiddenDetailsPrefix in hiddenDetailsPrefixes) {
         if (detail == hiddenDetailsPrefix) {
           return target.bgTaskOcrErrorDetailsHidden;
         }
@@ -519,6 +522,14 @@ void main() {
   test('OCR failure summaries are localized in Chinese', () async {
     await expectLocalizedFailureSummaries(
         localizations: AppLocalizationsZhCn());
+  });
+
+  test('OCR failure summaries are localized in Spanish', () async {
+    await expectLocalizedFailureSummaries(localizations: AppLocalizationsEs());
+  });
+
+  test('OCR failure summaries are localized in Japanese', () async {
+    await expectLocalizedFailureSummaries(localizations: AppLocalizationsJa());
   });
 
   test('OCR rejects oversized WebFileStore input before request dispatch',
