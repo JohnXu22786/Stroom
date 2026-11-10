@@ -2617,7 +2617,15 @@ def main(argv: list[str] | None = None) -> int:
             except OSError as error:
                 raise EvaluationError(f"cannot write {args.output}: {error}") from error
         else:
-            print(output)
+            encoding = getattr(sys.stdout, "encoding", None)
+            if encoding and encoding.lower().replace("_", "-") != "utf-8":
+                stdout_buffer = getattr(sys.stdout, "buffer", None)
+            else:
+                stdout_buffer = None
+            if stdout_buffer is not None:
+                stdout_buffer.write((output + "\n").encode("utf-8"))
+            else:
+                print(output)
         return 0
     except EvaluationError as error:
         print(f"evaluation error: {error}", file=sys.stderr)
