@@ -265,9 +265,14 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
       final param = _customParams[i];
       final name = param.paramName.trim();
       // OCR requests use the first option for non-JSON parameters.
-      final value = param.type != 'json' && param.options.isNotEmpty
-          ? param.options.first.trim()
-          : param.defaultValue.trim();
+      final rawValue = param.type != 'json' && param.options.isNotEmpty
+          ? param.options.first
+          : param.defaultValue;
+      final value = rawValue.trim();
+      final hasRequiredValue =
+          param.type == 'string' && param.options.isNotEmpty
+              ? rawValue.isNotEmpty
+              : value.isNotEmpty;
       final hasImplicitTrueBoolean = param.type == 'boolean' &&
           param.options.isEmpty &&
           param.defaultValue.trim().isEmpty;
@@ -313,7 +318,7 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
         );
         return;
       }
-      if (name.isEmpty || (value.isEmpty && !hasImplicitTrueBoolean)) {
+      if (name.isEmpty || (!hasRequiredValue && !hasImplicitTrueBoolean)) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
