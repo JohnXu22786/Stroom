@@ -1575,6 +1575,44 @@ void main() {
     // ==================================================================
 
     test(
+      'setRawDiagnostics sanitizes supplied OCR credentials in memory and persistence',
+      () async {
+        const requestCredential = 'request-only-ocr-secret-4721';
+        const responseCredential = 'response-only-ocr-secret-4721';
+        final notifier = BackgroundTaskNotifier();
+        final id = notifier.addTask(
+          type: BackgroundTaskType.ocr,
+          title: 'OCR diagnostics',
+        );
+
+        notifier.setRawDiagnostics(
+          id,
+          rawRequest: {
+            'headers': {'Authorization': 'Bearer $requestCredential'},
+          },
+          rawResponse: {'requestId': responseCredential},
+          ocrCredentialValuesForSanitization: const [responseCredential],
+        );
+
+        final task = notifier.taskById(id)!;
+        expect(
+          jsonEncode(task.rawRequest),
+          isNot(contains(requestCredential)),
+        );
+        expect(
+          jsonEncode(task.rawResponse),
+          isNot(contains(responseCredential)),
+        );
+        await notifier.pendingPersistence;
+        final persisted = await _tasksFileIn(testDir.path).readAsString();
+        expect(persisted, isNot(contains(requestCredential)));
+        expect(persisted, isNot(contains(responseCredential)));
+        notifier.dispose();
+        await notifier.pendingPersistence;
+      },
+    );
+
+    test(
       'legacy OCR request bodies retain only the unavailable image count',
       () {
         final encodedImage = base64Encode(List<int>.filled(128 * 1024, 0x5a));

@@ -5114,7 +5114,11 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   }) {
     state = state.map((t) {
       if (t.id != taskId) return t;
-      return t.copyWith(rawRequest: rawRequest, rawResponse: rawResponse);
+      return t.copyWith(
+        rawRequest: rawRequest,
+        rawResponse: rawResponse,
+        ocrCredentialValuesForSanitization: ocrCredentialValuesForSanitization,
+      );
     }).toList();
     _persistTasks();
   }
