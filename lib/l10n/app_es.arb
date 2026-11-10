@@ -2583,7 +2583,7 @@
   "browserCookiesEmptyTitle": "Sin datos persistentes",
   "browserCookiesEmptyDescription": "Utilice el navegador integrado y habilite la persistencia de cookies para ver los datos guardados aquí.",
   "browserCookiesStoredCount": "Cookies almacenadas ({count})",
-  "browserCookiesDomainCount": "{count, plural, one{{count} dato del sitio} other{{count} datos del sitio}}",
+  "browserCookiesDomainCount": "{count, plural, one{{count} cookie} other{{count} cookies}}",
   "browserCookiesClearDomainTooltip": "Borrar todas las cookies para este dominio",
   "browserCookiesDeleteOneTooltip": "Eliminar esta cookie",
   "browserCookiesDeletedOne": "Cookie eliminada",

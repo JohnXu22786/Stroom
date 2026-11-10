@@ -9497,8 +9497,8 @@ class AppLocalizationsEs extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count datos del sitio',
-      one: '$count dato del sitio',
+      other: '$count cookies',
+      one: '$count cookie',
     );
     return '$_temp0';
   }
@@ -21477,8 +21477,8 @@ class AppLocalizationsEsEs extends AppLocalizationsEs {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count datos del sitio',
-      one: '$count dato del sitio',
+      other: '$count cookies',
+      one: '$count cookie',
     );
     return '$_temp0';
   }
