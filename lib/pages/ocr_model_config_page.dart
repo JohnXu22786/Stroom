@@ -268,8 +268,6 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
       final value = param.type != 'json' && param.options.isNotEmpty
           ? param.options.first.trim()
           : param.defaultValue.trim();
-      final hasEffectiveOption =
-          param.type != 'json' && param.options.isNotEmpty && value.isNotEmpty;
       final hasImplicitTrueBoolean = param.type == 'boolean' &&
           param.options.isEmpty &&
           param.defaultValue.trim().isEmpty;
@@ -315,10 +313,7 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
         );
         return;
       }
-      if (name.isEmpty ||
-          (param.defaultValue.trim().isEmpty &&
-              !hasEffectiveOption &&
-              !hasImplicitTrueBoolean)) {
+      if (name.isEmpty || (value.isEmpty && !hasImplicitTrueBoolean)) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
