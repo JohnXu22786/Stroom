@@ -26,6 +26,7 @@ Future<List<VideoPickerResult>?> showAppVideoPickerDialog(
   bool multiSelect = true,
 }) async {
   final l10n = AppLocalizations.of(context)!;
+  final selectedRecords = <VideoRecord>[];
   final result = await showMediaPickerDialog<VideoRecord>(
     context,
     MediaPickerConfig<VideoRecord>(
@@ -42,6 +43,16 @@ Future<List<VideoPickerResult>?> showAppVideoPickerDialog(
       loadFolders: () => VideoManifest.getAllFolders(),
       readFile: (record) => VideoManifest.readFile(record.storagePath),
       displayName: (record) => record.name,
+      onRecordPicked: (record) async {
+        selectedRecords
+          ..clear()
+          ..add(record);
+      },
+      onRecordsPicked: (records) async {
+        selectedRecords
+          ..clear()
+          ..addAll(records);
+      },
       subtitleBuilder: (record) => Row(
         children: [
           Text(
@@ -108,35 +119,10 @@ Future<List<VideoPickerResult>?> showAppVideoPickerDialog(
 
   if (result == null || result.isEmpty) return null;
 
-  // Look up matching VideoRecords for all selected entries
-  final records = await VideoManifest.loadRecords();
-  final results = <VideoPickerResult>[];
-
-  for (final entry in result) {
-    VideoRecord? matchedRecord;
-    for (final r in records) {
-      if (r.name == entry.key || '${r.name}.${r.format}' == entry.key) {
-        matchedRecord = r;
-        break;
-      }
-    }
-
-    results.add(
-      VideoPickerResult(
-        record: matchedRecord ??
-            VideoRecord(
-              name: entry.key,
-              hash: '',
-              format: 'mp4',
-              createdAt: DateTime.now(),
-              size: entry.value.length,
-            ),
-        bytes: entry.value,
-      ),
-    );
-  }
-
-  return results;
+  return [
+    for (var i = 0; i < result.length; i++)
+      VideoPickerResult(record: selectedRecords[i], bytes: result[i].value),
+  ];
 }
 
 String _formatSize(int bytes) {
