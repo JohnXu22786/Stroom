@@ -5117,8 +5117,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       return t.copyWith(
         rawRequest: rawRequest,
         rawResponse: rawResponse,
-        ocrCredentialValuesForSanitization:
-            ocrCredentialValuesForSanitization,
+        ocrCredentialValuesForSanitization: ocrCredentialValuesForSanitization,
       );
     }).toList();
     _persistTasks();
