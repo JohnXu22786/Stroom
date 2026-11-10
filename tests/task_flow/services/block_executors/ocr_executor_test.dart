@@ -268,6 +268,75 @@ void main() {
     expect(restoredTask.error, expectedError);
   }
 
+  Future<void> expectLocalizedFailureSummaries({
+    required AppLocalizations localizations,
+  }) async {
+    final source =
+        await File('${directory.path}/localized_failure.png').writeAsBytes(
+      _validPng(),
+    );
+    const estimatorDetail = 'OCR 处理失败（TypeError）';
+
+    await expectLater(
+      executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: source.path,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(
+          modelTypeConfig: {'userInstruction': 42},
+        ),
+        localizations: localizations,
+      ),
+      throwsA(isA<BlockExecutionException>().having(
+        (error) => error.message,
+        'message',
+        estimatorDetail,
+      )),
+    );
+    expect(
+      background.state.last.error,
+      '${localizations.unifiedTaskOcrFailed}: $estimatorDetail',
+    );
+    expect(background.state.last.status, TaskStatus.failed);
+    expect(
+      executions.execution(execId)?.subTasks.single.status,
+      TaskStatus.failed,
+    );
+
+    await expectLater(
+      executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: source.path,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(),
+        localizations: localizations,
+        requestOcr: (_, _) async => throw StateError('synthetic OCR failure'),
+      ),
+      throwsA(isA<BlockExecutionException>().having(
+        (error) => error.message,
+        'message',
+        'OCR 处理失败（StateError）',
+      )),
+    );
+    expect(
+      background.state.last.error,
+      '${localizations.unifiedTaskOcrFailed}: OCR 处理失败（StateError）',
+    );
+    expect(background.state.last.status, TaskStatus.failed);
+    expect(
+      executions.execution(execId)?.subTasks.single.status,
+      TaskStatus.failed,
+    );
+  }
+
   test('OCR uses payload bytes instead of the filename suffix', () async {
     final bytes = _validPng();
     final source =
@@ -378,6 +447,14 @@ void main() {
       localizations: AppLocalizationsZhCn(),
       expectedError: 'OCR 返回了不完整结果（finish_reason=length）',
     );
+  });
+
+  test('OCR failure summaries are localized in English', () async {
+    await expectLocalizedFailureSummaries(localizations: AppLocalizationsEn());
+  });
+
+  test('OCR failure summaries are localized in Chinese', () async {
+    await expectLocalizedFailureSummaries(localizations: AppLocalizationsZhCn());
   });
 
   test('OCR rejects oversized WebFileStore input before request dispatch',

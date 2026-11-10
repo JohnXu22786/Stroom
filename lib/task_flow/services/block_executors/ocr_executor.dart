@@ -171,7 +171,7 @@ Future<String> executeOcrBlock({
       execNotifier,
       execId,
       flowSubTask.id,
-      '识别失败: $safeError',
+      '${strings.unifiedTaskOcrFailed}: $safeError',
     );
     throw BlockExecutionException(
       safeError,
@@ -412,7 +412,7 @@ Future<String> executeOcrBlock({
       execNotifier,
       execId,
       flowSubTask.id,
-      '识别失败: $safeError',
+      '${strings.unifiedTaskOcrFailed}: $safeError',
     );
     throw BlockExecutionException(
       safeError,
