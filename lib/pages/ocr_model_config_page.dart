@@ -265,14 +265,21 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
       final param = _customParams[i];
       final name = param.paramName.trim();
       // OCR requests use the first option for non-JSON parameters.
-      final value = param.type != 'json' && param.options.isNotEmpty
-          ? param.options.first.trim()
-          : param.defaultValue.trim();
-      final hasEffectiveOption =
-          param.type != 'json' && param.options.isNotEmpty && value.isNotEmpty;
+      final rawValue = param.type != 'json' && param.options.isNotEmpty
+          ? param.options.first
+          : param.defaultValue;
+      final value = rawValue.trim();
+      final hasRequiredValue =
+          param.type == 'string' && param.options.isNotEmpty
+              ? rawValue.isNotEmpty
+              : value.isNotEmpty;
       final hasImplicitTrueBoolean = param.type == 'boolean' &&
           param.options.isEmpty &&
           param.defaultValue.trim().isEmpty;
+      final hasStoredValue = param.defaultValue.trim().isNotEmpty ||
+          param.options.any((option) => option.trim().isNotEmpty);
+      final hasUnsupportedStoredType = hasStoredValue &&
+          ParamType.values.every((type) => type.value != param.type);
       if (name == 'stream') {
         var isNonStreaming = false;
         if (param.type == 'boolean') {
@@ -316,9 +323,9 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
         return;
       }
       if (name.isEmpty ||
-          (param.defaultValue.trim().isEmpty &&
-              !hasEffectiveOption &&
-              !hasImplicitTrueBoolean)) {
+          (!hasRequiredValue &&
+              !hasImplicitTrueBoolean &&
+              !hasUnsupportedStoredType)) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -340,10 +347,7 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
         );
         return;
       }
-      final hasStoredValue = param.defaultValue.trim().isNotEmpty ||
-          param.options.any((option) => option.trim().isNotEmpty);
-      if (hasStoredValue &&
-          ParamType.values.every((type) => type.value != param.type)) {
+      if (hasUnsupportedStoredType) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(

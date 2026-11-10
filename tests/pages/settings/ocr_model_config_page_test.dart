@@ -440,6 +440,81 @@ void main() {
       expect(saved!.customParams.single.paramName, 'scale');
     });
 
+    testWidgets('rejects an empty effective option despite a nonempty fallback',
+        (
+      tester,
+    ) async {
+      ModelConfig? saved;
+      final model = ModelConfig(
+        name: 'OCR模型',
+        modelId: 'qwen-vl-ocr',
+        customParams: [
+          CustomParam(
+            paramName: 'scale',
+            type: 'number',
+            defaultValue: '0.5',
+            options: [''],
+          ),
+        ],
+      );
+
+      await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      expect(saved, isNull);
+      expect(find.text('自定义参数的参数名和默认值不能为空。'), findsOneWidget);
+    });
+
+    testWidgets('saves a whitespace-only effective string option', (
+      tester,
+    ) async {
+      ModelConfig? saved;
+      final model = ModelConfig(
+        name: 'OCR模型',
+        modelId: 'qwen-vl-ocr',
+        customParams: [
+          CustomParam(
+            paramName: 'label',
+            type: 'string',
+            defaultValue: 'fallback',
+            options: ['   '],
+          ),
+        ],
+      );
+
+      await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      expect(saved, isNotNull);
+      expect(saved!.customParams.single.options, ['   ']);
+    });
+
+    testWidgets('rejects a whitespace-only optionless string fallback', (
+      tester,
+    ) async {
+      ModelConfig? saved;
+      final model = ModelConfig(
+        name: 'OCR模型',
+        modelId: 'qwen-vl-ocr',
+        customParams: [
+          CustomParam(
+            paramName: 'label',
+            type: 'string',
+            defaultValue: '   ',
+          ),
+        ],
+      );
+
+      await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      expect(saved, isNull);
+      expect(find.text('自定义参数的参数名和默认值不能为空。'), findsOneWidget);
+    });
+
     testWidgets('rejects stream=true when saving', (tester) async {
       ModelConfig? saved;
       final model = ModelConfig(
