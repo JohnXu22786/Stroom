@@ -857,10 +857,12 @@ String? _sanitizeOcrTaskError(
   if (error != null) {
     for (final locale in [const Locale('en', 'US'), const Locale('zh', 'CN')]) {
       final strings = lookupAppLocalizations(locale);
+      final taskFlowFailurePrefix = '${strings.unifiedTaskOcrFailed}: ';
       for (final prefix in [
         strings.bgTaskOcrError(''),
         strings.bgTaskOcrSaveError(''),
         strings.bgTaskOcrIncompleteError(''),
+        taskFlowFailurePrefix,
       ]) {
         if (!error.startsWith(prefix)) continue;
         if (_legacyOcrTextContainsCredential(prefix, credentialValues)) {
@@ -874,8 +876,9 @@ String? _sanitizeOcrTaskError(
         const hiddenDetailsPrefix = 'OCR 错误详情已隐藏';
         final localizedHiddenDetails =
             _localizedOcrHiddenTaskError(strings, credentialValues);
-        final safeDetails =
-            sanitizedDetails?.startsWith(hiddenDetailsPrefix) == true
+        final safeDetails = prefix == taskFlowFailurePrefix
+            ? sanitizedDetails
+            : sanitizedDetails?.startsWith(hiddenDetailsPrefix) == true
                 ? sanitizedDetails!.replaceFirst(
                     hiddenDetailsPrefix,
                     localizedHiddenDetails,
