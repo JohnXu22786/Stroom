@@ -675,20 +675,12 @@ void main() {
           }
         } else {
           // Spanish and Japanese use generated app strings for HTTP tools;
-          // Todo and built-in web search descriptions still fall back to their
-          // schema text until dedicated translations are added.
+          // Todo and built-in web search still use their source schema text.
           final strings = await AppLocalizations.delegate.load(locale);
           if (definition.name == 'todowrite' ||
               definition.name == 'web_search') {
             expect(description, contains(definitionDescriptionBefore));
-            expect(
-              renderedParameters,
-              contains(
-                definition.name == 'todowrite'
-                    ? 'Complete replacement of the to-do list'
-                    : 'Search terms',
-              ),
-            );
+            expect(parameters, equals(jsonDecode(schemaBefore)));
           }
           if (HttpToolService.toolDefinitions.contains(definition)) {
             final expectedDescription = switch (definition.name) {
