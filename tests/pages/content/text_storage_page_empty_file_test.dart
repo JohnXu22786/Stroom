@@ -52,6 +52,28 @@ class _EmptyTextPicker extends FilePickerPlatform {
   }
 }
 
+class _TextFilesPicker extends FilePickerPlatform {
+  _TextFilesPicker(this.inputs);
+
+  final List<PlatformFile> inputs;
+
+  @override
+  Future<List<PlatformFile>> pickFiles({
+    String? dialogTitle,
+    String? initialDirectory,
+    FileType type = FileType.any,
+    List<String>? allowedExtensions,
+    Function(FilePickerStatus)? onFileLoading,
+    int compressionQuality = 0,
+    AndroidOptions androidOptions = const AndroidOptions(),
+    DarwinOptions darwinOptions = const DarwinOptions(),
+    WindowsOptions windowsOptions = const WindowsOptions(),
+    LinuxOptions linuxOptions = const LinuxOptions(),
+    WebOptions webOptions = const WebOptions(),
+  }) async =>
+      inputs;
+}
+
 Widget _buildApp() => const ProviderScope(
       child: MaterialApp(
         locale: Locale('zh', 'CN'),
@@ -95,6 +117,28 @@ void main() {
     expect(records.single.size, 0);
     expect(records.single.textLength, 0);
     expect(await TextManifest.readText(records.single.storagePath), '');
+  });
+
+  testWidgets('shows saved files after a later import item fails',
+      (tester) async {
+    final picker = _TextFilesPicker([
+      FakePlatformFile(name: 'first.txt', bytes: Uint8List.fromList([65])),
+      FakePlatformFile(name: 'invalid.txt', bytes: Uint8List.fromList([0xff])),
+    ]);
+    FilePickerPlatform.instance = picker;
+    await tester.pumpWidget(_buildApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('导入'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('导入失败：'), findsOneWidget);
+    expect(find.text('first.txt'), findsOneWidget);
+    final records = await TextManifest.loadRecords();
+    expect(records, hasLength(1));
+    expect(await TextManifest.readText(records.single.storagePath), 'A');
   });
 
   testWidgets('exports an empty text record as zero bytes', (tester) async {
