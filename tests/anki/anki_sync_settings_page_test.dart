@@ -105,7 +105,11 @@ void main() {
     );
     await tester.enterText(find.byType(TextFormField).at(1), 'password');
     await tester.tap(find.text('登录').last);
-    await tester.pumpAndSettle();
+    for (var frame = 0;
+        frame < 10 && find.text('双向同步').evaluate().isEmpty;
+        frame++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
 
     expect(requests.map((uri) => uri.pathSegments.last), ['hostKey', 'meta']);
     expect(find.text('检查服务器状态'), findsOneWidget);
