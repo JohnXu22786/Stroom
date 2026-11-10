@@ -2482,6 +2482,10 @@ def verify_fixtures(
 ) -> dict[str, Any]:
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except RecursionError as error:
+        raise EvaluationError(
+            "cannot read fixture manifest: JSON nesting exceeds parser limit"
+        ) from error
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise EvaluationError(f"cannot read fixture manifest: {error}") from error
     if not isinstance(manifest, dict):
