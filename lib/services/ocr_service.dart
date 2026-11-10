@@ -267,6 +267,7 @@ class OcrService {
   OcrService({
     required this.config,
     Dio? dio,
+
     /// Set true only when an injected client is dedicated to this service.
     /// A Dio client created internally by the service is always owned.
     bool ownsDio = false,
