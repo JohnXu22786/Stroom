@@ -3371,6 +3371,7 @@ class EvaluateTests(unittest.TestCase):
 
     def test_latex_indexed_roots_match_unicode_root_symbols(self):
         for fixture_id, formula, prediction in (
+            ("square-root", "√x", r"$\sqrt[2]{x}$"),
             ("cube-root", "∛(x+1)", r"$\sqrt[3]{x+1}$"),
             ("fourth-root", "∜x", r"$\sqrt[4]{x}$"),
         ):

@@ -1059,7 +1059,7 @@ def _strip_latex_markup(value: str) -> str:
     )
     fraction_command = re.compile(r"\\(?:dfrac|tfrac|frac)(?![A-Za-z])\s*")
     root_command = re.compile(r"\\sqrt\s*(?:\[(\d+)\])?\s*")
-    indexed_root_symbols = {"3": "∛", "4": "∜"}
+    indexed_root_symbols = {"2": "√", "3": "∛", "4": "∜"}
 
     def has_binary_operator(operand: str) -> bool:
         return re.search(r"\S\s*[-−+*/·×=<>≤≥]\s*\S", operand) is not None
