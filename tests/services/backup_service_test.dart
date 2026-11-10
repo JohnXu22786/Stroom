@@ -225,11 +225,15 @@ void main() {
       await tempRoot.delete(recursive: true);
     });
 
-    await expectLater(
-      BackupService.buildBackupBytesForTest(
-          selection: _taskOnlyBackupSelection),
-      throwsA(isA<DataManagementPreflightException>()),
-    );
+    Object? backupError;
+    try {
+      await BackupService.buildBackupBytesForTest(
+        selection: _taskOnlyBackupSelection,
+      );
+    } catch (error) {
+      backupError = error;
+    }
+    expect(backupError, isA<DataManagementPreflightException>());
   });
 
   testWidgets(
