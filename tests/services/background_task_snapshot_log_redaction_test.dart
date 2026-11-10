@@ -41,7 +41,8 @@ void main() {
         loggedMessages.single,
         '[BackgroundTaskNotifier] Failed to decode task list.',
       );
-      expect(loggedMessages.join('\n'), isNot(contains('OCR-SECRET-DO-NOT-LOG')));
+      expect(
+          loggedMessages.join('\n'), isNot(contains('OCR-SECRET-DO-NOT-LOG')));
       expect(loggedMessages.join('\n'), isNot(contains('private prompt')));
     } finally {
       debugPrint = originalDebugPrint;
