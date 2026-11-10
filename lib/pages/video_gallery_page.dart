@@ -857,32 +857,34 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
 
     /// Internal — performs the actual thumbnail generation.
     Future<Uint8List?> generateThumbnailForFile(VideoRecord file) async {
-      try {
-        final videoPath = await VideoManifest.readFilePath(file.storagePath);
-        if (kIsWeb || videoPath == null || videoPath.isEmpty) {
-          // Web 没有真实文件路径（readFilePath 返回虚拟 key），
-          // 直接从存储读回视频字节并生成缩略图。
-          final videoBytes = await VideoManifest.readFile(file.storagePath);
-          if (videoBytes != null) {
-            final thumbBytes = await _generateThumbnailFromBytes(videoBytes);
-            if (thumbBytes != null) {
-              await VideoManifest.writeThumbnail(file.hash, thumbBytes);
-              return thumbBytes;
+      return VideoManifest.withSaveLock(file.hash, () async {
+        try {
+          final videoPath = await VideoManifest.readFilePath(file.storagePath);
+          if (kIsWeb || videoPath == null || videoPath.isEmpty) {
+            // Web 没有真实文件路径（readFilePath 返回虚拟 key），
+            // 直接从存储读回视频字节并生成缩略图。
+            final videoBytes = await VideoManifest.readFile(file.storagePath);
+            if (videoBytes != null) {
+              final thumbBytes = await _generateThumbnailFromBytes(videoBytes);
+              if (thumbBytes != null) {
+                await VideoManifest.writeThumbnail(file.hash, thumbBytes);
+                return thumbBytes;
+              }
             }
+            return null;
           }
-          return null;
-        }
 
-        final thumbBytes = await _generateThumbnailFromPath(videoPath);
-        if (thumbBytes != null && thumbBytes.isNotEmpty) {
-          await VideoManifest.writeThumbnail(file.hash, thumbBytes);
-          return thumbBytes;
+          final thumbBytes = await _generateThumbnailFromPath(videoPath);
+          if (thumbBytes != null && thumbBytes.isNotEmpty) {
+            await VideoManifest.writeThumbnail(file.hash, thumbBytes);
+            return thumbBytes;
+          }
+        } catch (e) {
+          debugPrint('generateThumbnailForFile error for ${file.hash}: $e');
+          // Silently fail — fallback to icon will be shown
         }
-      } catch (e) {
-        debugPrint('generateThumbnailForFile error for ${file.hash}: $e');
-        // Silently fail — fallback to icon will be shown
-      }
-      return null;
+        return null;
+      });
     }
 
     /// Try to read the cached thumbnail; if missing, generate it on demand.

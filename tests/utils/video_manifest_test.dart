@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/services/manifest_database.dart';
@@ -117,6 +120,27 @@ void main() {
   // ====== VideoManifest record CRUD (DB-only methods, no file I/O) ======
 
   group('VideoManifest DB operations', () {
+    test('thumbnail writes wait for the hash lock used by deletion', () async {
+      const hash = 'thumbnail-delete-race';
+      final bytes = Uint8List.fromList([1, 2, 3]);
+      final unlockedZone = Zone.current;
+      var writeFinished = false;
+
+      late Future<void> write;
+      await VideoManifest.withSaveLock(hash, () async {
+        write = unlockedZone.run(
+          () => VideoManifest.writeThumbnail(hash, bytes).whenComplete(() {
+            writeFinished = true;
+          }),
+        );
+        await Future<void>.delayed(Duration.zero);
+        expect(writeFinished, isFalse);
+      });
+
+      await write;
+      expect(await VideoManifest.readThumbnail(hash), bytes);
+    });
+
     testWidgets('add and load records', (WidgetTester t) async {
       await VideoManifest.addRecord(VideoRecord(
         name: 'test_video',
