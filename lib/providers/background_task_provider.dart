@@ -7180,8 +7180,8 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       Object? decoded;
       try {
         decoded = jsonDecode(content);
-      } on FormatException catch (e) {
-        debugPrint('[BackgroundTaskNotifier] Failed to decode task list: $e');
+      } on FormatException {
+        debugPrint('[BackgroundTaskNotifier] Failed to decode task list.');
         return (
           tasks: <BackgroundTask>[],
           isComplete: false,
