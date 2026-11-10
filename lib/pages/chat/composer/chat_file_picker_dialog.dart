@@ -122,7 +122,6 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
         // Non-critical cleanup
       }
     }
-    _tempEditFiles.clear();
   }
 
   Future<void> _loadTabData(_FileTabType type) async {

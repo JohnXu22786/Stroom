@@ -121,6 +121,20 @@ void main() {
   // edited bytes once it pops.
   // ====================================================================
   group('AppFilePickerDialog quick-edit flow', () {
+    Future<void> editSelectedImage(WidgetTester tester) async {
+      await tester.tap(find.byType(PreviewChip));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.crop));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await _pumpUntil(
+          tester, () => find.byType(ExtendedImageEditor).evaluate().isNotEmpty);
+      await tester.tap(find.text('保存'));
+      await tester.pump();
+      await _pumpUntil(tester,
+          () => find.byType(ExtendedImageEditorPage).evaluate().isEmpty);
+    }
+
     Future<Uint8List> openEditor(
       WidgetTester tester, {
       required Future<void> Function(String path, Uint8List bytes)?
@@ -169,17 +183,7 @@ void main() {
           tester, () => find.byType(PreviewChip).evaluate().isNotEmpty);
       final originalBytes =
           tester.widget<PreviewChip>(find.byType(PreviewChip)).bytes;
-      await tester.tap(find.byType(PreviewChip));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byIcon(Icons.crop));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
-      await _pumpUntil(
-          tester, () => find.byType(ExtendedImageEditor).evaluate().isNotEmpty);
-      await tester.tap(find.text('保存'));
-      await tester.pump();
-      await _pumpUntil(tester,
-          () => find.byType(ExtendedImageEditorPage).evaluate().isEmpty);
+      await editSelectedImage(tester);
       return originalBytes;
     }
 
@@ -345,6 +349,51 @@ void main() {
       expect(tester.widget<PreviewChip>(find.byType(PreviewChip)).bytes,
           isNot(same(originalBytes)),
           reason: 'cache failure must leave edited bytes available in memory');
+    });
+
+    testWidgets('clear cleanup preserves paths from newer edits',
+        (tester) async {
+      final firstWriteStarted = Completer<void>();
+      final releaseFirstWrite = Completer<void>();
+      final secondWriteFinished = Completer<void>();
+      final writtenPaths = <String>[];
+      var writeCount = 0;
+
+      await openEditor(tester, tempFileWriter: (path, bytes) async {
+        writtenPaths.add(path);
+        writeCount++;
+        if (writeCount == 1) {
+          firstWriteStarted.complete();
+          await releaseFirstWrite.future;
+        }
+        await File(path).writeAsBytes(bytes);
+        if (writeCount == 2) secondWriteFinished.complete();
+      });
+      await _pumpUntil(tester, () => firstWriteStarted.isCompleted);
+
+      await tester.tap(find.byKey(const Key('file_picker_clear_btn')));
+      await tester.pump();
+      await tester.tap(find.byType(Checkbox), warnIfMissed: false);
+      await tester.pump();
+      await _pumpUntil(
+          tester, () => find.byType(PreviewChip).evaluate().isNotEmpty);
+      await editSelectedImage(tester);
+      await _pumpUntil(tester, () => secondWriteFinished.isCompleted);
+
+      releaseFirstWrite.complete();
+      await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 100)));
+      await tester.pump();
+      await tester.tap(find.byIcon(Icons.close));
+      await tester.pumpAndSettle();
+      await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 100)));
+
+      final remaining = await tester.runAsync(() async =>
+          Future.wait(writtenPaths.map((path) => File(path).exists())));
+      expect(remaining, everyElement(isFalse),
+          reason: 'a clear operation must not untrack a file written by a '
+              'newer live edit');
     });
   });
 
