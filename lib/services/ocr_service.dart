@@ -148,6 +148,7 @@ class OcrService {
   final OcrConfig config;
   final Dio _dio;
   final bool _usesInjectedDio;
+  final bool _ownsDio;
   final Duration? _sendTimeoutOverride;
 
   // ── Diagnostic capture (mirrors chat_api_provider pattern) ───────────
@@ -266,11 +267,16 @@ class OcrService {
   OcrService({
     required this.config,
     Dio? dio,
+
+    /// Set true only when an injected client is dedicated to this service.
+    /// A Dio client created internally by the service is always owned.
+    bool ownsDio = false,
     Duration? connectTimeout,
     Duration? sendTimeout,
     Duration? receiveTimeout,
   })  : _sendTimeoutOverride = sendTimeout,
         _usesInjectedDio = dio != null,
+        _ownsDio = dio == null || ownsDio,
         _dio = dio ??
             Dio(
               BaseOptions(
@@ -341,7 +347,13 @@ class OcrService {
   }
 
   /// Close the underlying client when this service owns its lifetime.
-  void close({bool force = false}) => _dio.close(force: force);
+  ///
+  /// Clients created by this service are always closed. For an injected
+  /// client, set the constructor's `ownsDio` option to true only when it is
+  /// dedicated to this service.
+  void close({bool force = false}) {
+    if (_ownsDio) _dio.close(force: force);
+  }
 
   /// The chat completions endpoint URL.
   /// The user provides the full endpoint URL including the path,

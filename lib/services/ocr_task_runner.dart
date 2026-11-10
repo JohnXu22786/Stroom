@@ -69,6 +69,9 @@ class OcrTaskRunner {
     required this.title,
     required this.folder,
     required this.onSaved,
+
+    /// Builds a task-scoped service. Mark a dedicated injected Dio as owned
+    /// on the returned service so runner completion can close it.
     OcrService Function(OcrConfig)? serviceFactory,
     Future<String> Function(String, String, {void Function()? beforeCommit})?
         writeText,

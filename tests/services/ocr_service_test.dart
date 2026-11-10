@@ -63,6 +63,7 @@ class _InterceptorWithCallback extends Interceptor {
 
 class _CountingAdapter implements HttpClientAdapter {
   int requestCount = 0;
+  int closeCount = 0;
 
   @override
   Future<ResponseBody> fetch(
@@ -75,7 +76,9 @@ class _CountingAdapter implements HttpClientAdapter {
   }
 
   @override
-  void close({bool force = false}) {}
+  void close({bool force = false}) {
+    closeCount++;
+  }
 }
 
 const _testOcrConfig = OcrConfig(
@@ -212,6 +215,21 @@ void main() {
           expect(requests.single.headers['X-Client-Option'], 'kept');
         },
       );
+
+      test('close leaves an injected Dio usable by its caller', () async {
+        final adapter = _CountingAdapter();
+        final dio = Dio()..httpClientAdapter = adapter;
+        final service = OcrService(config: _testOcrConfig, dio: dio);
+
+        service.close();
+
+        expect(adapter.closeCount, 0);
+        await dio.get<void>('https://example.test');
+        expect(adapter.requestCount, 1);
+
+        dio.close();
+        expect(adapter.closeCount, 1);
+      });
 
       test('injected Dio request uses its configured send timeout', () async {
         final requests = <RequestOptions>[];
