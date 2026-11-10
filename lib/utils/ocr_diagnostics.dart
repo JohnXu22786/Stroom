@@ -571,7 +571,13 @@ class OcrDiagnosticSnapshot {
     String value, {
     Iterable<String> excludedValues = const [],
   }) {
-    const prefixes = ['OCR 错误详情已隐藏', '错误详情已隐藏', '请求失败', '请重试'];
+    const prefixes = [
+      'OCR 错误详情已隐藏',
+      'OCR error details were hidden',
+      '错误详情已隐藏',
+      '请求失败',
+      '请重试',
+    ];
     for (final prefix in prefixes) {
       if (value == prefix) return true;
       if (!value.startsWith('$prefix（') || !value.endsWith('）')) continue;

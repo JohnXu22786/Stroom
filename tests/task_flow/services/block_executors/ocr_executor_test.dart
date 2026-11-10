@@ -277,10 +277,21 @@ void main() {
         : AppLocalizationsEn();
 
     String reLocalizedSummary(String detail) {
-      final localizedDetail =
-          detail == 'OCR 错误详情已隐藏' || detail == 'OCR error details were hidden'
-              ? restoredLocalizations.bgTaskOcrErrorDetailsHidden
-              : detail;
+      var localizedDetail = detail;
+      for (final hiddenDetailsPrefix in [
+        'OCR 错误详情已隐藏',
+        'OCR error details were hidden',
+      ]) {
+        if (detail == hiddenDetailsPrefix) {
+          localizedDetail = restoredLocalizations.bgTaskOcrErrorDetailsHidden;
+          break;
+        }
+        if (detail.startsWith('$hiddenDetailsPrefix（')) {
+          localizedDetail =
+              '${restoredLocalizations.bgTaskOcrErrorDetailsHidden}${detail.substring(hiddenDetailsPrefix.length)}';
+          break;
+        }
+      }
       return '${restoredLocalizations.unifiedTaskOcrFailed}: $localizedDetail';
     }
 
@@ -344,7 +355,8 @@ void main() {
         bgNotifier: background,
         providerEntries: providerForOcr(),
         localizations: localizations,
-        requestOcr: (_, _) async => throw StateError('synthetic OCR failure'),
+        requestOcr: (_, _) async =>
+            throw StateError('HTTP 429 finish_reason=test-key'),
       );
     } on BlockExecutionException catch (error) {
       requestFailure = error;
@@ -352,6 +364,8 @@ void main() {
     expect(requestFailure, isNotNull);
     final requestDetail = requestFailure!.message;
     expect(requestDetail, isNotEmpty);
+    expect(requestDetail, contains('HTTP 429'));
+    expect(requestDetail, isNot(contains('test-key')));
     final requestTask = background.state.last;
     final requestSummary =
         '${localizations.unifiedTaskOcrFailed}: $requestDetail';

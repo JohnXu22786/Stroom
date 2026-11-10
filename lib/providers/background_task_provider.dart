@@ -523,8 +523,18 @@ String? _localizeStoredBackgroundError(
 ) {
   if (error == null) return null;
   if (error == '已取消' || error == 'Canceled') return strings.bgTaskCancelled;
-  if (error == 'OCR 错误详情已隐藏' || error == 'OCR error details were hidden') {
-    return strings.bgTaskOcrErrorDetailsHidden;
+  for (final hiddenDetailsPrefix in [
+    'OCR 错误详情已隐藏',
+    'OCR error details were hidden',
+  ]) {
+    if (error == hiddenDetailsPrefix) {
+      return strings.bgTaskOcrErrorDetailsHidden;
+    }
+    if (error.startsWith('$hiddenDetailsPrefix（') &&
+        error.endsWith('）') &&
+        OcrDiagnosticSnapshot.sanitizeStoredTaskError(error) == error) {
+      return '${strings.bgTaskOcrErrorDetailsHidden}${error.substring(hiddenDetailsPrefix.length)}';
+    }
   }
   if (error == '错误详情已隐藏' || error == 'Error details were hidden') {
     return strings.bgTaskErrorDetailsHidden;
