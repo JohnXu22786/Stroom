@@ -118,184 +118,191 @@ class AnkiApkgImporter {
         throw AnkiApkgException.unexpectedError(targetDbPath);
       }
 
-      // Generate unique IDs using timestamp
-      final now = DateTime.now().millisecondsSinceEpoch;
-      final nowSec = now ~/ 1000;
-      int newId = now + DateTime.now().microsecondsSinceEpoch;
+      final sourceDb = importDb;
+      return await targetDb.transaction((txn) async {
+        // Generate unique IDs using timestamp
+        final now = DateTime.now().millisecondsSinceEpoch;
+        final nowSec = now ~/ 1000;
+        int newId = now + DateTime.now().microsecondsSinceEpoch;
 
-      // Track counts
-      int decksImported = 0, notesImported = 0, cardsImported = 0;
+        // Track counts
+        int decksImported = 0, notesImported = 0, cardsImported = 0;
 
-      // ── Import decks (merge JSON blobs in col row) ──────
-      List<Map<String, Object?>> srcCol;
-      try {
-        srcCol = await importDb.query('col', where: 'id = 1');
-      } on DatabaseException catch (error) {
-        throw _databaseException(error, tmpDbPath);
-      } catch (_) {
-        throw AnkiApkgException.unexpectedError(tmpDbPath);
-      }
-      List<Map<String, Object?>> tgtCol;
-      try {
-        tgtCol = await targetDb.query('col', where: 'id = 1');
-      } on DatabaseException catch (error) {
-        throw _databaseException(error, targetDbPath);
-      } catch (_) {
-        throw AnkiApkgException.unexpectedError(targetDbPath);
-      }
-      if (srcCol.isEmpty) throw AnkiApkgException.unexpectedError(tmpDbPath);
-      if (tgtCol.isEmpty) throw AnkiApkgException.unexpectedError(targetDbPath);
-
-      final srcDecks =
-          jsonDecode(srcCol.first['decks'] as String) as Map<String, dynamic>;
-      final tgtDecks =
-          jsonDecode(tgtCol.first['decks'] as String) as Map<String, dynamic>;
-
-      final deckMap = <int, int>{}; // old ID → new ID
-      for (final entry in srcDecks.entries) {
-        final oldId = int.parse(entry.key);
-        final deckData = entry.value as Map<String, dynamic>;
-        final name = deckData['name'] as String;
-
-        // Duplicate by name?
-        final existing =
-            tgtDecks.entries.where((e) => (e.value as Map)['name'] == name);
-        if (existing.isNotEmpty) {
-          deckMap[oldId] = int.parse(existing.first.key);
-          continue;
-        }
-
-        // New deck
-        final id = ++newId;
-        deckMap[oldId] = id;
-        deckData['id'] = id;
-        deckData['mod'] = nowSec;
-        deckData['usn'] = -1;
-        tgtDecks[id.toString()] = deckData;
-        decksImported++;
-      }
-
-      // Write back merged decks
-      await targetDb.update(
-          'col',
-          {
-            'decks': jsonEncode(tgtDecks),
-            'mod': now,
-            'dty': 1,
-          },
-          where: 'id = 1');
-
-      // We also need to update the decks in the col row's conf activeDecks list
-      // but for simplicity, we'll just merge and leave the active deck as-is
-
-      // ── Import notes ────────────────────────────────────
-      final noteMap = <int, int>{}; // source note ID → target note ID
-      List<Map<String, Object?>> srcNotes;
-      try {
-        srcNotes = await importDb.rawQuery('SELECT * FROM notes');
-      } on DatabaseException catch (error) {
-        throw _databaseException(error, tmpDbPath);
-      } catch (_) {
-        throw AnkiApkgException.unexpectedError(tmpDbPath);
-      }
-      for (final note in srcNotes) {
-        final guid = note['guid'] as String;
-        // Check duplicate by GUID
-        List<Map<String, Object?>> dup;
+        // ── Import decks (merge JSON blobs in col row) ──────
+        List<Map<String, Object?>> srcCol;
         try {
-          dup = await targetDb.query(
-            'notes',
-            where: 'guid = ?',
-            whereArgs: [guid],
-          );
+          srcCol = await sourceDb.query('col', where: 'id = 1');
+        } on DatabaseException catch (error) {
+          throw _databaseException(error, tmpDbPath);
+        } catch (_) {
+          throw AnkiApkgException.unexpectedError(tmpDbPath);
+        }
+        List<Map<String, Object?>> tgtCol;
+        try {
+          tgtCol = await txn.query('col', where: 'id = 1');
         } on DatabaseException catch (error) {
           throw _databaseException(error, targetDbPath);
         } catch (_) {
           throw AnkiApkgException.unexpectedError(targetDbPath);
         }
-        final sourceId = note['id'] as int;
-        if (dup.isNotEmpty) {
-          noteMap[sourceId] = dup.first['id'] as int;
-          continue;
+        if (srcCol.isEmpty) throw AnkiApkgException.unexpectedError(tmpDbPath);
+        if (tgtCol.isEmpty) {
+          throw AnkiApkgException.unexpectedError(targetDbPath);
         }
 
-        final id = ++newId;
-        noteMap[sourceId] = id;
-        await targetDb.insert('notes', {
-          'id': id,
-          'guid': guid,
-          'mid': note['mid'],
-          'mod': nowSec,
-          'usn': -1,
-          'tags': note['tags'] ?? '',
-          'flds': note['flds'] ?? '',
-          'sfld': note['sfld'] ?? '',
-          'csum': note['csum'] ?? 0,
-          'flags': note['flags'] ?? 0,
-          'data': note['data'] ?? '',
-        });
-        notesImported++;
-      }
+        final srcDecks =
+            jsonDecode(srcCol.first['decks'] as String) as Map<String, dynamic>;
+        final tgtDecks =
+            jsonDecode(tgtCol.first['decks'] as String) as Map<String, dynamic>;
 
-      // ── Import cards ────────────────────────────────────
-      List<Map<String, Object?>> srcCards;
-      try {
-        srcCards = await importDb.rawQuery('SELECT * FROM cards');
-      } on DatabaseException catch (error) {
-        throw _databaseException(error, tmpDbPath);
-      } catch (_) {
-        throw AnkiApkgException.unexpectedError(tmpDbPath);
-      }
-      final existingCardKeys = <(int, int)>{};
-      List<Map<String, Object?>> existingCards;
-      try {
-        existingCards = await targetDb.query('cards', columns: ['nid', 'ord']);
-      } on DatabaseException catch (error) {
-        throw _databaseException(error, targetDbPath);
-      } catch (_) {
-        throw AnkiApkgException.unexpectedError(targetDbPath);
-      }
-      for (final card in existingCards) {
-        existingCardKeys.add((card['nid'] as int, card['ord'] as int));
-      }
-      for (final card in srcCards) {
-        final targetNoteId = noteMap[card['nid'] as int] ?? card['nid'] as int;
-        final cardKey = (targetNoteId, card['ord'] as int);
-        if (existingCardKeys.contains(cardKey)) continue;
+        final deckMap = <int, int>{}; // old ID → new ID
+        for (final entry in srcDecks.entries) {
+          final oldId = int.parse(entry.key);
+          final deckData = entry.value as Map<String, dynamic>;
+          final name = deckData['name'] as String;
 
-        final id = ++newId;
-        final oldDid = card['did'] as int;
-        final newDid = deckMap[oldDid] ?? oldDid;
+          // Duplicate by name?
+          final existing = tgtDecks.entries.where(
+            (e) => (e.value as Map)['name'] == name,
+          );
+          if (existing.isNotEmpty) {
+            deckMap[oldId] = int.parse(existing.first.key);
+            continue;
+          }
 
-        await targetDb.insert('cards', {
-          'id': id,
-          'nid': targetNoteId,
-          'did': newDid,
-          'ord': card['ord'],
-          'mod': nowSec,
-          'usn': -1,
-          'type': card['type'],
-          'queue': card['queue'],
-          'due': card['due'],
-          'ivl': card['ivl'] ?? 0,
-          'factor': card['factor'] ?? 2500,
-          'reps': card['reps'] ?? 0,
-          'lapses': card['lapses'] ?? 0,
-          'left': card['left'] ?? 0,
-          'odue': 0,
-          'odid': 0,
-          'flags': card['flags'] ?? 0,
-          'data': card['data'] ?? '',
-        });
-        existingCardKeys.add(cardKey);
-        cardsImported++;
-      }
+          // New deck
+          final id = ++newId;
+          deckMap[oldId] = id;
+          deckData['id'] = id;
+          deckData['mod'] = nowSec;
+          deckData['usn'] = -1;
+          tgtDecks[id.toString()] = deckData;
+          decksImported++;
+        }
 
-      return AnkiApkgImportSummary(
-        decksImported: decksImported,
-        notesImported: notesImported,
-        cardsImported: cardsImported,
-      );
+        // Write back merged decks
+        await txn.update(
+            'col',
+            {
+              'decks': jsonEncode(tgtDecks),
+              'mod': now,
+              'dty': 1,
+            },
+            where: 'id = 1');
+
+        // We also need to update the decks in the col row's conf activeDecks list
+        // but for simplicity, we'll just merge and leave the active deck as-is
+
+        // ── Import notes ────────────────────────────────────
+        final noteMap = <int, int>{}; // source note ID → target note ID
+        List<Map<String, Object?>> srcNotes;
+        try {
+          srcNotes = await sourceDb.rawQuery('SELECT * FROM notes');
+        } on DatabaseException catch (error) {
+          throw _databaseException(error, tmpDbPath);
+        } catch (_) {
+          throw AnkiApkgException.unexpectedError(tmpDbPath);
+        }
+        for (final note in srcNotes) {
+          final guid = note['guid'] as String;
+          // Check duplicate by GUID
+          List<Map<String, Object?>> dup;
+          try {
+            dup = await txn.query(
+              'notes',
+              where: 'guid = ?',
+              whereArgs: [guid],
+            );
+          } on DatabaseException catch (error) {
+            throw _databaseException(error, targetDbPath);
+          } catch (_) {
+            throw AnkiApkgException.unexpectedError(targetDbPath);
+          }
+          final sourceId = note['id'] as int;
+          if (dup.isNotEmpty) {
+            noteMap[sourceId] = dup.first['id'] as int;
+            continue;
+          }
+
+          final id = ++newId;
+          noteMap[sourceId] = id;
+          await txn.insert('notes', {
+            'id': id,
+            'guid': guid,
+            'mid': note['mid'],
+            'mod': nowSec,
+            'usn': -1,
+            'tags': note['tags'] ?? '',
+            'flds': note['flds'] ?? '',
+            'sfld': note['sfld'] ?? '',
+            'csum': note['csum'] ?? 0,
+            'flags': note['flags'] ?? 0,
+            'data': note['data'] ?? '',
+          });
+          notesImported++;
+        }
+
+        // ── Import cards ────────────────────────────────────
+        List<Map<String, Object?>> srcCards;
+        try {
+          srcCards = await sourceDb.rawQuery('SELECT * FROM cards');
+        } on DatabaseException catch (error) {
+          throw _databaseException(error, tmpDbPath);
+        } catch (_) {
+          throw AnkiApkgException.unexpectedError(tmpDbPath);
+        }
+        final existingCardKeys = <(int, int)>{};
+        List<Map<String, Object?>> existingCards;
+        try {
+          existingCards = await txn.query('cards', columns: ['nid', 'ord']);
+        } on DatabaseException catch (error) {
+          throw _databaseException(error, targetDbPath);
+        } catch (_) {
+          throw AnkiApkgException.unexpectedError(targetDbPath);
+        }
+        for (final card in existingCards) {
+          existingCardKeys.add((card['nid'] as int, card['ord'] as int));
+        }
+        for (final card in srcCards) {
+          final targetNoteId =
+              noteMap[card['nid'] as int] ?? card['nid'] as int;
+          final cardKey = (targetNoteId, card['ord'] as int);
+          if (existingCardKeys.contains(cardKey)) continue;
+
+          final id = ++newId;
+          final oldDid = card['did'] as int;
+          final newDid = deckMap[oldDid] ?? oldDid;
+
+          await txn.insert('cards', {
+            'id': id,
+            'nid': targetNoteId,
+            'did': newDid,
+            'ord': card['ord'],
+            'mod': nowSec,
+            'usn': -1,
+            'type': card['type'],
+            'queue': card['queue'],
+            'due': card['due'],
+            'ivl': card['ivl'] ?? 0,
+            'factor': card['factor'] ?? 2500,
+            'reps': card['reps'] ?? 0,
+            'lapses': card['lapses'] ?? 0,
+            'left': card['left'] ?? 0,
+            'odue': 0,
+            'odid': 0,
+            'flags': card['flags'] ?? 0,
+            'data': card['data'] ?? '',
+          });
+          existingCardKeys.add(cardKey);
+          cardsImported++;
+        }
+
+        return AnkiApkgImportSummary(
+          decksImported: decksImported,
+          notesImported: notesImported,
+          cardsImported: cardsImported,
+        );
+      });
     } on DatabaseException catch (error) {
       throw _databaseException(error, targetDbPath);
     } finally {

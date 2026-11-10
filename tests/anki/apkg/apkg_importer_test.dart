@@ -282,7 +282,10 @@ void main() {
       final sourcePath = '${documents.path}/source.anki2';
       final targetPath = '${documents.path}/collection.anki2';
 
-      Future<void> createCollectionWithoutNotesOrCards(String path) async {
+      Future<void> createCollectionWithoutNotesOrCards(
+        String path, {
+        String decks = '{}',
+      }) async {
         final db = await sqflite.openDatabase(
           path,
           version: 1,
@@ -290,14 +293,22 @@ void main() {
             await db.execute(
               'CREATE TABLE col (id INTEGER PRIMARY KEY, decks TEXT, mod INTEGER, dty INTEGER)',
             );
-            await db.insert('col', {'id': 1, 'decks': '{}'});
+            await db.insert('col', {
+              'id': 1,
+              'decks': decks,
+              'mod': 10,
+              'dty': 0,
+            });
           },
         );
         await db.close();
       }
 
       try {
-        await createCollectionWithoutNotesOrCards(sourcePath);
+        await createCollectionWithoutNotesOrCards(
+          sourcePath,
+          decks: '{"2":{"name":"Imported deck"}}',
+        );
         await createCollectionWithoutNotesOrCards(targetPath);
         final archive = Archive()
           ..addFile(
@@ -320,6 +331,15 @@ void main() {
             ),
           ),
         );
+        final target = await sqflite.openDatabase(targetPath, readOnly: true);
+        try {
+          final collection = (await target.query('col')).single;
+          expect(collection['decks'], '{}');
+          expect(collection['mod'], 10);
+          expect(collection['dty'], 0);
+        } finally {
+          await target.close();
+        }
         expect(
           documents.listSync().where(
                 (entry) =>
