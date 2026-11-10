@@ -112,6 +112,50 @@ class EvaluateTests(unittest.TestCase):
 
                 self.assertEqual(report["metrics"]["table_fidelity"]["value"], 1)
 
+    def test_markdown_formula_annotation_scores_exact_prediction(self):
+        input_data = predictions(
+            [{"fixture_id": "markdown-formula", "text": "The formula is **x**."}]
+        )
+        input_data["run"]["output_format"] = "markdown"
+
+        report = evaluate_predictions(
+            {
+                "fixtures": [
+                    {
+                        "id": "markdown-formula",
+                        "gold_text": "The formula is **x**.",
+                        "formula_text": "**x**",
+                        "categories": ["english", "formula"],
+                    }
+                ]
+            },
+            input_data,
+        )
+
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 1)
+
+    def test_markdown_formula_annotation_rejects_mismatched_prediction(self):
+        input_data = predictions(
+            [{"fixture_id": "markdown-formula", "text": "The formula is **y**."}]
+        )
+        input_data["run"]["output_format"] = "markdown"
+
+        report = evaluate_predictions(
+            {
+                "fixtures": [
+                    {
+                        "id": "markdown-formula",
+                        "gold_text": "The formula is **x**.",
+                        "formula_text": "**x**",
+                        "categories": ["english", "formula"],
+                    }
+                ]
+            },
+            input_data,
+        )
+
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 0)
+
     def _run_cli_with_output(self, directory, output_path):
         directory_path = Path(directory)
         manifest_path = directory_path / "manifest.json"
