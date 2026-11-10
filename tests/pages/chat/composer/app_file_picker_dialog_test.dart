@@ -313,6 +313,7 @@ void main() {
         (tester) async {
       final writeStarted = Completer<void>();
       final allowWrite = Completer<void>();
+      final cleanupFinished = Completer<void>();
       String? writtenPath;
       final (_, tempDir) =
           await openEditor(tester, tempFileWriter: (path, bytes) async {
@@ -320,15 +321,15 @@ void main() {
         writeStarted.complete();
         await allowWrite.future;
         await File(path).writeAsBytes(bytes);
+      }, onTempFileCleanupComplete: () {
+        if (!cleanupFinished.isCompleted) cleanupFinished.complete();
       });
       await _pumpUntil(tester, () => writeStarted.isCompleted);
 
       await tester.tap(find.byIcon(Icons.close));
       await tester.pumpAndSettle();
       allowWrite.complete();
-      await tester.runAsync(
-          () => Future<void>.delayed(const Duration(milliseconds: 100)));
-      await tester.pump();
+      await tester.runAsync(() => cleanupFinished.future);
 
       final exists = await tester.runAsync(() => File(writtenPath!).exists());
       expect(exists, isFalse,
@@ -369,8 +370,10 @@ void main() {
       final releaseFirstWrite = Completer<void>();
       final secondWriteFinished = Completer<void>();
       final clearCleanupFinished = Completer<void>();
+      final closeCleanupFinished = Completer<void>();
       final writtenPaths = <String>[];
       var writeCount = 0;
+      var cleanupCount = 0;
 
       final (_, tempDir) =
           await openEditor(tester, tempFileWriter: (path, bytes) async {
@@ -383,7 +386,9 @@ void main() {
         await File(path).writeAsBytes(bytes);
         if (writeCount == 2) secondWriteFinished.complete();
       }, onTempFileCleanupComplete: () {
-        if (!clearCleanupFinished.isCompleted) clearCleanupFinished.complete();
+        cleanupCount++;
+        if (cleanupCount == 1) clearCleanupFinished.complete();
+        if (cleanupCount == 2) closeCleanupFinished.complete();
       });
       await _pumpUntil(tester, () => firstWriteStarted.isCompleted);
 
@@ -410,8 +415,7 @@ void main() {
               'while the picker remains open');
       await tester.tap(find.byIcon(Icons.close));
       await tester.pumpAndSettle();
-      await tester.runAsync(
-          () => Future<void>.delayed(const Duration(milliseconds: 100)));
+      await tester.runAsync(() => closeCleanupFinished.future);
 
       final remaining = await tester.runAsync(() async =>
           Future.wait(writtenPaths.map((path) => File(path).exists())));
