@@ -980,6 +980,7 @@ class EvaluateTests(unittest.TestCase):
             "APIKey",
             "password",
             "passwd",
+            "pwd",
             "passphrase",
             "passcode",
             "bearer",
