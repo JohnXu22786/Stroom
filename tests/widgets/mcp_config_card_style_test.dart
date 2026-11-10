@@ -646,7 +646,7 @@ void main() {
                   : 'Number of results to return.',
             );
           }
-        } else {
+        } else if (locale.languageCode == 'zh') {
           if (definition.name == 'todowrite') {
             expect(description, contains('创建、读取并管理待办事项列表。'));
           } else if (definition.name == 'web_search') {
@@ -671,6 +671,43 @@ void main() {
               definition.name == 'brave_web_search'
                   ? '返回结果数量（最大 20）。'
                   : '返回结果数量。',
+            );
+          }
+        } else {
+          // Spanish and Japanese use generated app strings for HTTP tools;
+          // Todo and built-in web search descriptions still fall back to their
+          // schema text until dedicated translations are added.
+          final strings = await AppLocalizations.delegate.load(locale);
+          if (definition.name == 'todowrite' ||
+              definition.name == 'web_search') {
+            expect(description, contains(definitionDescriptionBefore));
+            expect(
+              renderedParameters,
+              contains(
+                definition.name == 'todowrite'
+                    ? 'Complete replacement of the to-do list'
+                    : 'Search terms',
+              ),
+            );
+          }
+          if (HttpToolService.toolDefinitions.contains(definition)) {
+            final expectedDescription = switch (definition.name) {
+              'brave_web_search' => strings.httpToolBraveDescription,
+              'bocha_web_search' => strings.httpToolBochaDescription,
+              'querit_search' => strings.httpToolQueritDescription,
+              'searxng_search' => strings.httpToolSearxngDescription,
+              _ => fail('Unexpected HTTP tool: ${definition.name}'),
+            };
+            expect(find.text(expectedDescription), findsOneWidget);
+            expect(
+              properties['query']['description'],
+              strings.httpToolSearchQueryDescription,
+            );
+            expect(
+              properties['count']['description'],
+              definition.name == 'brave_web_search'
+                  ? strings.httpToolSearchCountMax20Description
+                  : strings.httpToolSearchCountDescription,
             );
           }
         }
