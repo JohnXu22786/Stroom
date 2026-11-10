@@ -103,6 +103,7 @@ SECRET_SETTING_KEYS = {
     "authorization",
     "secret",
     "password",
+    "pwd",
     "credential",
     "credentials",
 }
