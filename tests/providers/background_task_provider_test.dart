@@ -26049,6 +26049,72 @@ void main() {
     );
 
     test(
+      'partial restore does not preserve skipped OCR errors echoing retry credentials',
+      () async {
+        const credential = 'violetRiverWindow';
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        for (final errorLocation in ['task', 'step']) {
+          final skippedRow = <String, dynamic>{
+            // This malformed row stays skipped. Its credential extension
+            // coexists with valid retry data so only the matching error check
+            // decides whether a partial snapshot may preserve it.
+            'type': 'ocr',
+            'title':
+                'Malformed OCR row with credential-bearing $errorLocation error',
+            'status': 'not-a-task-status',
+            'createdAt': DateTime.utc(2026).toIso8601String(),
+            'apiKey': credential,
+            'steps': errorLocation == 'step'
+                ? [
+                    {
+                      'label': 'Submit OCR request',
+                      'status': 'failed',
+                      'error': 'Request failed with $credential',
+                    },
+                  ]
+                : <dynamic>[],
+            'retryData': {
+              'type': 'ocr',
+              'version': OcrRetrySnapshot.currentVersion,
+              'images': <dynamic>[],
+              'batchMode': 'joint',
+              'perImageConcurrency': 1,
+              'requestSizeBudgetBytes': 1024,
+            },
+            'ocrPageOutcomes': <dynamic>[],
+            if (errorLocation == 'task')
+              'error': 'Provider rejected $credential',
+          };
+          final originalContent = jsonEncode([skippedRow]);
+          await file.writeAsString(originalContent);
+          var writeAttempts = 0;
+          BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = () async {
+            writeAttempts++;
+          };
+
+          final notifier = BackgroundTaskNotifier();
+          try {
+            expect(await notifier.restoreFromPersistence(), isFalse);
+            notifier.addTask(
+              type: BackgroundTaskType.asr,
+              title: 'Do not rewrite unsafe partial OCR snapshot',
+              startImmediately: false,
+              taskId: 'unsafe-partial-ocr-$errorLocation-error-trigger',
+            );
+            await notifier.pendingPersistence;
+
+            expect(writeAttempts, 0, reason: '$errorLocation error is unsafe');
+            expect(await file.readAsString(), originalContent);
+          } finally {
+            notifier.dispose();
+            await notifier.pendingPersistence;
+          }
+        }
+      },
+    );
+
+    test(
       'malformed ASR rows release ownership after durable sanitization',
       () async {
         WebFileStore.enableTestMode();

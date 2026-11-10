@@ -6203,9 +6203,19 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
           entry.containsKey('rawResponse')) {
         return false;
       }
+      final entryType = entry['type'];
+      final entryCredentialValues = entryType == BackgroundTaskType.ocr.name
+          ? _credentialValuesFromOcrRetryData(entry)
+          : const <String>[];
       final error = entry['error'];
       if (error != null &&
-          (error is! String || _sanitizeOcrTaskError(error, null) != error)) {
+          (error is! String ||
+              _sanitizeOcrTaskError(
+                    error,
+                    null,
+                    additionalCredentialValues: entryCredentialValues,
+                  ) !=
+                  error)) {
         return false;
       }
       final rawSteps = entry['steps'];
@@ -6216,7 +6226,12 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
           final stepError = rawStep['error'];
           if (stepError != null &&
               (stepError is! String ||
-                  _sanitizeOcrTaskError(stepError, null) != stepError)) {
+                  _sanitizeOcrTaskError(
+                        stepError,
+                        null,
+                        additionalCredentialValues: entryCredentialValues,
+                      ) !=
+                      stepError)) {
             return false;
           }
         }
@@ -6224,8 +6239,6 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       final rawPageOutcomes = entry['ocrPageOutcomes'];
       if (rawPageOutcomes != null) {
         if (rawPageOutcomes is! List) return false;
-        final pageOutcomeCredentialValues =
-            _credentialValuesFromOcrRetryData(entry);
         for (final rawOutcome in rawPageOutcomes) {
           if (rawOutcome is! Map) continue;
           if (rawOutcome.keys.any((key) => key is! String)) return false;
@@ -6235,14 +6248,13 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
                   _sanitizeOcrTaskError(
                         outcomeError,
                         null,
-                        additionalCredentialValues: pageOutcomeCredentialValues,
+                        additionalCredentialValues: entryCredentialValues,
                       ) !=
                       outcomeError)) {
             return false;
           }
         }
       }
-      final entryType = entry['type'];
       if (entryType == BackgroundTaskType.asr.name) {
         if (!_canSafelyPreserveSkippedAsrEntry(entry)) return false;
         continue;
