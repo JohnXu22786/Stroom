@@ -353,41 +353,29 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
   // Copy-file helper (used by onCopyFile callback)
   // ====================================================================
   Future<void> _copyFile(String id, String selectedFolder) async {
-    final l10n = AppLocalizations.of(context)!;
     final records = ref.read(audioRecordsProvider);
-    try {
-      final source = records.firstWhere((r) => r.id == id);
-      String copyName = '${source.name}_副本';
-      int copyIdx = 2;
-      while (records.any(
-        (r) => r.name == copyName && r.folder == selectedFolder,
-      )) {
-        copyName = '${source.name}_副本 ($copyIdx)';
-        copyIdx++;
-      }
-      await FileManifest.addRecord(
-        AudioRecord(
-          name: copyName,
-          hash: source.hash,
-          format: source.format,
-          createdAt: DateTime.now(),
-          size: source.size,
-          folder: selectedFolder,
-          sourceText: source.sourceText,
-        ),
-      );
-      await ref.read(audioRecordsProvider.notifier).loadRecords();
-      await ref.read(folderListProvider.notifier).loadFolders();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(l10n.ttsCopiedFailed(e.toString())),
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
+    final source = records.firstWhere((r) => r.id == id);
+    String copyName = '${source.name}_副本';
+    int copyIdx = 2;
+    while (records.any(
+      (r) => r.name == copyName && r.folder == selectedFolder,
+    )) {
+      copyName = '${source.name}_副本 ($copyIdx)';
+      copyIdx++;
     }
+    await FileManifest.addRecord(
+      AudioRecord(
+        name: copyName,
+        hash: source.hash,
+        format: source.format,
+        createdAt: DateTime.now(),
+        size: source.size,
+        folder: selectedFolder,
+        sourceText: source.sourceText,
+      ),
+    );
+    await ref.read(audioRecordsProvider.notifier).loadRecords();
+    await ref.read(folderListProvider.notifier).loadFolders();
   }
 
   /// 批量导出文件。返回用户最终使用的导出目录

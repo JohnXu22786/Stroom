@@ -591,40 +591,28 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
   // ====================================================================
 
   Future<void> _copyFile(String id, String selectedFolder) async {
-    final l10n = AppLocalizations.of(context)!;
     final records = ref.read(textRecordsProvider);
-    try {
-      final source = records.firstWhere((r) => r.id == id);
-      final copyName = uniqueTextRecordName(
-        '${source.name}_副本',
-        source.format,
-        selectedFolder,
-        records,
-        {},
-      );
-      await TextManifest.addRecord(
-        TextRecord(
-          name: copyName,
-          hash: source.hash,
-          format: source.format,
-          createdAt: DateTime.now(),
-          size: source.size,
-          folder: selectedFolder,
-          textLength: source.textLength,
-        ),
-      );
-      await ref.read(textRecordsProvider.notifier).loadRecords();
-      await ref.read(textFolderListProvider.notifier).loadFolders();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(l10n.textStorageCopyFailed(e.toString())),
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
-    }
+    final source = records.firstWhere((r) => r.id == id);
+    final copyName = uniqueTextRecordName(
+      '${source.name}_副本',
+      source.format,
+      selectedFolder,
+      records,
+      {},
+    );
+    await TextManifest.addRecord(
+      TextRecord(
+        name: copyName,
+        hash: source.hash,
+        format: source.format,
+        createdAt: DateTime.now(),
+        size: source.size,
+        folder: selectedFolder,
+        textLength: source.textLength,
+      ),
+    );
+    await ref.read(textRecordsProvider.notifier).loadRecords();
+    await ref.read(textFolderListProvider.notifier).loadFolders();
   }
 
   // ====================================================================

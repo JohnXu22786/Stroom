@@ -1037,40 +1037,27 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
         await ref.read(videoFolderListProvider.notifier).loadFolders();
       },
       onCopyFile: (id, selectedFolder) async {
-        try {
-          final source = records.firstWhere((r) => r.id == id);
-          String copyName = '${source.name}_副本';
-          int copyIdx = 2;
-          while (records.any(
-            (r) => r.name == copyName && r.folder == selectedFolder,
-          )) {
-            copyName = '${source.name}_副本 ($copyIdx)';
-            copyIdx++;
-          }
-          await VideoManifest.addRecord(
-            VideoRecord(
-              name: copyName,
-              hash: source.hash,
-              format: source.format,
-              createdAt: DateTime.now(),
-              size: source.size,
-              folder: selectedFolder,
-            ),
-          );
-          await ref.read(videoRecordsProvider.notifier).loadRecords();
-          await ref.read(videoFolderListProvider.notifier).loadFolders();
-        } catch (e) {
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  AppLocalizations.of(context)!.galleryCopyFailed(e.toString()),
-                ),
-                duration: const Duration(seconds: 2),
-              ),
-            );
-          }
+        final source = records.firstWhere((r) => r.id == id);
+        String copyName = '${source.name}_副本';
+        int copyIdx = 2;
+        while (records.any(
+          (r) => r.name == copyName && r.folder == selectedFolder,
+        )) {
+          copyName = '${source.name}_副本 ($copyIdx)';
+          copyIdx++;
         }
+        await VideoManifest.addRecord(
+          VideoRecord(
+            name: copyName,
+            hash: source.hash,
+            format: source.format,
+            createdAt: DateTime.now(),
+            size: source.size,
+            folder: selectedFolder,
+          ),
+        );
+        await ref.read(videoRecordsProvider.notifier).loadRecords();
+        await ref.read(videoFolderListProvider.notifier).loadFolders();
       },
       onDeleteFile: (id) async {
         await ref.read(videoRecordsProvider.notifier).deleteRecord(id);
