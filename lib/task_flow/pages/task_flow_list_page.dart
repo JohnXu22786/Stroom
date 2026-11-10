@@ -389,11 +389,12 @@ class TaskFlowListPage extends ConsumerWidget {
         final templates = localizedTaskFlowTemplates(strings);
 
         return SafeArea(
-          child: SizedBox(
-            height: height * 0.86,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: height * 0.86),
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
               child: Column(
+                mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Center(
@@ -447,8 +448,9 @@ class TaskFlowListPage extends ConsumerWidget {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  Expanded(
+                  Flexible(
                     child: ListView.separated(
+                      shrinkWrap: true,
                       padding: const EdgeInsets.symmetric(vertical: 4),
                       itemCount: templates.length,
                       separatorBuilder: (_, __) => const SizedBox(height: 12),
