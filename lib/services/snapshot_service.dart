@@ -36,13 +36,19 @@ class SnapshotEntry {
         'partVersions': partVersions,
       };
 
-  static SnapshotEntry fromJson(Map<String, dynamic> json) => SnapshotEntry(
-        file: json['file'] as String,
-        sha256: json['sha256'] as String,
-        createdAt: json['createdAt'] as String,
-        partVersions: (json['partVersions'] as Map<String, dynamic>? ?? {})
-            .map((k, v) => MapEntry(k, (v as num).toInt())),
-      );
+  static SnapshotEntry fromJson(Map<String, dynamic> json) {
+    final file = json['file'] as String;
+    if (SnapshotService._extractTimestamp(file) == null) {
+      throw const FormatException('Invalid snapshot filename in index');
+    }
+    return SnapshotEntry(
+      file: file,
+      sha256: json['sha256'] as String,
+      createdAt: json['createdAt'] as String,
+      partVersions: (json['partVersions'] as Map<String, dynamic>? ?? {})
+          .map((k, v) => MapEntry(k, (v as num).toInt())),
+    );
+  }
 }
 
 /// 私有目录结构化数据快照服务。
