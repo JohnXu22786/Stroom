@@ -18681,6 +18681,19 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
       'Login successful. Your password was not saved; the sync key was encrypted and saved.';
 
   @override
+  String get ankiSyncLoginSuccessPromptTitle => 'Login successful';
+
+  @override
+  String get ankiSyncLoginSuccessPromptMessage =>
+      'Would you like to sync your collection now?';
+
+  @override
+  String get ankiSyncLoginSuccessPromptSync => 'Sync now';
+
+  @override
+  String get ankiSyncLoginSuccessPromptLater => 'Continue';
+
+  @override
   String get ankiSyncStatusLoginSuccessNoSave =>
       'Login successful, but the sync key could not be stored securely. You will need to log in again after closing this page.';
 

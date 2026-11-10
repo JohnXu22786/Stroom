@@ -3753,6 +3753,10 @@
   "ankiSyncStatusServerAddressChanged": "Server address changed. Please log in again to continue.",
   "ankiSyncStatusVerifyingLogin": "Verifying login…",
   "ankiSyncStatusLoginSuccess": "Login successful. Your password was not saved; the sync key was encrypted and saved.",
+  "ankiSyncLoginSuccessPromptTitle": "Login successful",
+  "ankiSyncLoginSuccessPromptMessage": "Would you like to sync your collection now?",
+  "ankiSyncLoginSuccessPromptSync": "Sync now",
+  "ankiSyncLoginSuccessPromptLater": "Continue",
   "ankiSyncStatusLoginSuccessNoSave": "Login successful, but the sync key could not be stored securely. You will need to log in again after closing this page.",
   "ankiSyncStatusLoginFailed": "Login failed: {error}",
   "@ankiSyncStatusLoginFailed": {
