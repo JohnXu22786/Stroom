@@ -153,6 +153,94 @@ void chatStreamManagerGroup2() {
 
       manager.dispose();
     });
+
+    test('failed retry replaces the previous failed assistant response', () async {
+      final manager = ChatStreamManager();
+      final oldUser = _userMsg('Question', 'u1');
+      final oldFailure = ChatMessage(
+        role: 'assistant',
+        content: 'Earlier error',
+        id: 'a1',
+        isError: true,
+      );
+      final provider = _MockProvider([
+        [AIStreamEvent('Retry attempt')],
+      ])..throwAfterYield = true;
+      manager.adapter.forceService(_makeChatService(provider));
+
+      final result = await manager.startStreaming(
+        text: oldUser.content,
+        convId: 'conv-retry-error',
+        history: [oldUser, oldFailure],
+        requestHistoryOverride: [oldUser],
+        historyOnSuccess: [oldUser],
+        replaceHistoryOnError: true,
+      );
+
+      expect(result.history.map((message) => message.id), [
+        'u1',
+        result.assistantMessage!.id,
+      ]);
+      expect(result.history.last.isError, isTrue);
+      expect(result.history.last.content, 'Retry attempt');
+
+      final editedUser = _userMsg('Edited question', 'u2');
+      manager.adapter.forceService(
+        _makeChatService(
+          _MockProvider([
+            [AIStreamEvent('Edit attempt')],
+          ])..throwAfterYield = true,
+        ),
+      );
+      final editResult = await manager.startStreaming(
+        text: editedUser.content,
+        convId: 'conv-edit-error',
+        history: [oldUser, oldFailure, editedUser],
+        requestHistoryOverride: [editedUser],
+        historyOnSuccess: [editedUser],
+      );
+      expect(editResult.history.map((message) => message.id), [
+        'u1',
+        'a1',
+        'u2',
+        editResult.assistantMessage!.id,
+      ]);
+      expect(editResult.history[1].content, 'Earlier error');
+
+      manager.dispose();
+    });
+
+    test('ordinary send retains previous failed assistant response', () async {
+      final manager = ChatStreamManager();
+      final oldUser = _userMsg('Question', 'u1');
+      final oldFailure = ChatMessage(
+        role: 'assistant',
+        content: 'Earlier error',
+        id: 'a1',
+        isError: true,
+      );
+      final newUser = _userMsg('Follow-up', 'u2');
+      manager.adapter.forceService(_makeChatService(_MockProvider([
+        [AIStreamEvent('Follow-up answer')],
+      ])));
+
+      final result = await manager.startStreaming(
+        text: newUser.content,
+        convId: 'conv-follow-up-after-error',
+        history: [oldUser, oldFailure, newUser],
+      );
+
+      expect(result.history.map((message) => message.id), [
+        'u1',
+        'a1',
+        'u2',
+        result.assistantMessage!.id,
+      ]);
+      expect(result.history[1].content, 'Earlier error');
+      expect(result.history[1].isError, isTrue);
+
+      manager.dispose();
+    });
   });
 
   group('ChatStreamManager - cleanup', () {

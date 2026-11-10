@@ -859,6 +859,7 @@ class _ConversationStreamState {
   List<ToolCallData> toolCalls = [];
   List<ChatMessage> history = [];
   List<ChatMessage>? historyOnSuccess;
+  bool replaceHistoryOnError = false;
   bool hasReceivedFirstToken = false;
   bool hasSyntheticErrorReply = false;
   bool isComplete = false;

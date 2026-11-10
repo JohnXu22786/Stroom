@@ -166,6 +166,7 @@ extension _ChatPageEditingExt on _ChatPageState {
         historyOverride: historyBeforeAttempt,
         requestHistoryOverride: historyForSuccess,
         historyOnSuccess: historyForSuccess,
+        replaceHistoryOnError: true,
       );
     } finally {
       _isModifyingHistory = false;
