@@ -28,12 +28,19 @@ import 'file_picker_shared.dart';
 /// Returns a list of (fileName, bytes) for selected files, or null if
 /// the user cancels.
 Future<List<MapEntry<String, Uint8List>>?> showAppFilePickerDialog(
-  BuildContext context,
-) {
+  BuildContext context, {
+  Future<void> Function(String path, Uint8List bytes)? tempFileWriter,
+  Future<Directory> Function()? tempDirectoryProvider,
+  VoidCallback? onTempFileCleanupComplete,
+}) {
   return showDialog<List<MapEntry<String, Uint8List>>?>(
     context: context,
     useSafeArea: false,
-    builder: (ctx) => const _AppFilePickerDialog(),
+    builder: (ctx) => _AppFilePickerDialog(
+      tempFileWriter: tempFileWriter,
+      tempDirectoryProvider: tempDirectoryProvider,
+      onTempFileCleanupComplete: onTempFileCleanupComplete,
+    ),
   );
 }
 
@@ -42,7 +49,15 @@ Future<List<MapEntry<String, Uint8List>>?> showAppFilePickerDialog(
 // ====================================================================
 
 class _AppFilePickerDialog extends StatefulWidget {
-  const _AppFilePickerDialog();
+  const _AppFilePickerDialog({
+    this.tempFileWriter,
+    this.tempDirectoryProvider,
+    this.onTempFileCleanupComplete,
+  });
+
+  final Future<void> Function(String path, Uint8List bytes)? tempFileWriter;
+  final Future<Directory> Function()? tempDirectoryProvider;
+  final VoidCallback? onTempFileCleanupComplete;
 
   @override
   State<_AppFilePickerDialog> createState() => _AppFilePickerDialogState();
@@ -64,6 +79,7 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
 
   /// Track temp file paths created during edit for cleanup on dialog close.
   final List<String> _tempEditFiles = [];
+  final Set<Future<void>> _pendingTempFileWrites = {};
 
   // Tab data (loaded asynchronously)
   final Map<_FileTabType, _TabData> _tabData = {};
@@ -104,17 +120,22 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
 
   /// Clean up any temp edit files written to the cache directory.
   Future<void> _cleanupTempFiles() async {
-    for (final path in _tempEditFiles) {
+    final onCleanupComplete = widget.onTempFileCleanupComplete;
+    final writesToFinish = List<Future<void>>.of(_pendingTempFileWrites);
+    final filesToDelete = List<String>.of(_tempEditFiles);
+    await Future.wait(writesToFinish);
+    for (final path in filesToDelete) {
       try {
         final file = File(path);
         if (await file.exists()) {
           await file.delete();
         }
+        _tempEditFiles.remove(path);
       } catch (_) {
-        // Non-critical cleanup
+        // Keep failed paths tracked so a later cleanup can retry them.
       }
     }
-    _tempEditFiles.clear();
+    onCleanupComplete?.call();
   }
 
   Future<void> _loadTabData(_FileTabType type) async {
@@ -840,6 +861,7 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
   /// [entry] is the exact [MapEntry] instance stored in [_selectedItems]
   /// (identity is used to locate the item after editing).
   Future<void> _onPreviewImageTap(MapEntry<String, Uint8List> entry) async {
+    final editGeneration = _selectionGeneration;
     final fileName = entry.key;
     final imageBytes = entry.value;
     final shouldEdit = await showDialog<bool>(
@@ -866,12 +888,27 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
 
     // Save edited bytes to temp cache directory (do NOT overwrite original)
     try {
-      final tempDir = await getTemporaryDirectory();
+      final directoryProvider = widget.tempDirectoryProvider;
+      final tempDir = directoryProvider == null
+          ? await getTemporaryDirectory()
+          : await directoryProvider();
+      if (!mounted ||
+          editGeneration != _selectionGeneration ||
+          !_selectedItems.values
+              .any((selected) => identical(selected, entry))) {
+        return;
+      }
       final tempFileName =
-          'edited_${DateTime.now().millisecondsSinceEpoch}_$fileName';
+          'edited_${DateTime.now().microsecondsSinceEpoch}_$fileName';
       final tempFile = File('${tempDir.path}/$tempFileName');
-      await tempFile.writeAsBytes(editedBytes);
       _tempEditFiles.add(tempFile.path);
+      final write = _writeTempEditFile(tempFile, editedBytes);
+      _pendingTempFileWrites.add(write);
+      try {
+        await write;
+      } finally {
+        _pendingTempFileWrites.remove(write);
+      }
     } catch (_) {
       // Temp file save is best-effort; keep bytes in memory
     }
@@ -887,6 +924,24 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
       }
     } catch (_) {
       // Item was removed while editor was open — silently ignore
+    }
+  }
+
+  Future<void> _writeTempEditFile(File file, Uint8List bytes) async {
+    try {
+      final writer = widget.tempFileWriter;
+      if (writer == null) {
+        await file.writeAsBytes(bytes);
+      } else {
+        await writer(file.path, bytes);
+      }
+    } catch (_) {
+      try {
+        if (await file.exists()) await file.delete();
+        _tempEditFiles.remove(file.path);
+      } catch (_) {
+        // Keep the path tracked so the picker cleanup can retry it.
+      }
     }
   }
 }
