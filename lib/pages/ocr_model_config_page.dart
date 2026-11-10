@@ -737,6 +737,7 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
                                   borderRadius: StroomMenuStyle.borderRadius,
                                   value: param.type,
                                   isDense: true,
+                                  isExpanded: true,
                                   items: [
                                     if (isUnsupportedType)
                                       DropdownMenuItem(
