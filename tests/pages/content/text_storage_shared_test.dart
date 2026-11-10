@@ -159,6 +159,21 @@ void main() {
       expect(find.text('请输入标题'), findsOneWidget);
     });
 
+    testWidgets('rejects invalid filename without saving', (tester) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pump();
+
+      await tester.enterText(
+        find.widgetWithText(TextField, '标题').first,
+        'invalid/name',
+      );
+      await tester.tap(find.text('保存'));
+      await tester.pump();
+
+      expect(find.text('文件名不能包含 Windows 非法字符'), findsOneWidget);
+      expect(await TextManifest.loadRecords(), isEmpty);
+    });
+
     testWidgets('allows saving with empty content', (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pump();
