@@ -897,15 +897,30 @@ String? _sanitizeOcrTaskError(
                     details,
                     excludedValues: credentialValues,
                   );
-        const hiddenDetailsPrefix = 'OCR 错误详情已隐藏';
-        final safeDetails = prefix == taskFlowFailurePrefix
-            ? sanitizedDetails
-            : sanitizedDetails?.startsWith(hiddenDetailsPrefix) == true
-                ? sanitizedDetails!.replaceFirst(
-                    hiddenDetailsPrefix,
-                    localizedHiddenDetails,
-                  )
-                : sanitizedDetails;
+        const hiddenDetailsPrefixes = [
+          'OCR 错误详情已隐藏',
+          'OCR error details were hidden',
+        ];
+        var safeDetails = sanitizedDetails;
+        if (safeDetails != null) {
+          for (final hiddenDetailsPrefix in hiddenDetailsPrefixes) {
+            if (safeDetails == hiddenDetailsPrefix) {
+              safeDetails = localizedHiddenDetails;
+              break;
+            }
+            if (safeDetails.startsWith('$hiddenDetailsPrefix（') &&
+                safeDetails.endsWith('）') &&
+                OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+                      safeDetails,
+                      excludedValues: credentialValues,
+                    ) ==
+                    safeDetails) {
+              safeDetails =
+                  '$localizedHiddenDetails${safeDetails.substring(hiddenDetailsPrefix.length)}';
+              break;
+            }
+          }
+        }
         return '$prefix${safeDetails ?? ''}';
       }
     }

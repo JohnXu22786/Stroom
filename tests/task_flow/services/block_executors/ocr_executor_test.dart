@@ -276,24 +276,24 @@ void main() {
         ? AppLocalizationsZhCn()
         : AppLocalizationsEn();
 
-    String reLocalizedSummary(String detail) {
-      var localizedDetail = detail;
+    String localizeHiddenDetails(String detail, AppLocalizations target) {
       for (final hiddenDetailsPrefix in [
         'OCR 错误详情已隐藏',
         'OCR error details were hidden',
       ]) {
         if (detail == hiddenDetailsPrefix) {
-          localizedDetail = restoredLocalizations.bgTaskOcrErrorDetailsHidden;
-          break;
+          return target.bgTaskOcrErrorDetailsHidden;
         }
-        if (detail.startsWith('$hiddenDetailsPrefix（')) {
-          localizedDetail =
-              '${restoredLocalizations.bgTaskOcrErrorDetailsHidden}${detail.substring(hiddenDetailsPrefix.length)}';
-          break;
+        if (detail.startsWith('$hiddenDetailsPrefix（') &&
+            detail.endsWith('）')) {
+          return '${target.bgTaskOcrErrorDetailsHidden}${detail.substring(hiddenDetailsPrefix.length)}';
         }
       }
-      return '${restoredLocalizations.unifiedTaskOcrFailed}: $localizedDetail';
+      return detail;
     }
+
+    String localizedSummary(String detail, AppLocalizations target) =>
+        '${target.unifiedTaskOcrFailed}: ${localizeHiddenDetails(detail, target)}';
 
     final source =
         await File('${directory.path}/localized_failure.png').writeAsBytes(
@@ -321,8 +321,7 @@ void main() {
     final estimatorDetail = estimatorFailure!.message;
     expect(estimatorDetail, isNotEmpty);
     final estimatorTask = background.state.last;
-    final estimatorSummary =
-        '${localizations.unifiedTaskOcrFailed}: $estimatorDetail';
+    final estimatorSummary = localizedSummary(estimatorDetail, localizations);
     expect(
       estimatorTask.error,
       estimatorSummary,
@@ -340,7 +339,7 @@ void main() {
     expect(await restoredEstimator.restoreFromPersistence(), isTrue);
     expect(
       restoredEstimator.taskById(estimatorTask.id)?.error,
-      reLocalizedSummary(estimatorDetail),
+      localizedSummary(estimatorDetail, restoredLocalizations),
     );
 
     BlockExecutionException? requestFailure;
@@ -367,8 +366,7 @@ void main() {
     expect(requestDetail, contains('HTTP 429'));
     expect(requestDetail, isNot(contains('test-key')));
     final requestTask = background.state.last;
-    final requestSummary =
-        '${localizations.unifiedTaskOcrFailed}: $requestDetail';
+    final requestSummary = localizedSummary(requestDetail, localizations);
     expect(
       requestTask.error,
       requestSummary,
@@ -386,7 +384,7 @@ void main() {
     expect(await restoredRequest.restoreFromPersistence(), isTrue);
     expect(
       restoredRequest.taskById(requestTask.id)?.error,
-      reLocalizedSummary(requestDetail),
+      localizedSummary(requestDetail, restoredLocalizations),
     );
   }
 
