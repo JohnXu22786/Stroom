@@ -691,7 +691,7 @@ class EvaluateTests(unittest.TestCase):
 
         self.assertEqual(report["metrics"]["reading_order_score"]["value"], 1 / 3)
 
-    def test_reading_order_uses_first_occurrence_for_repeated_anchors(self):
+    def test_reading_order_uses_later_occurrence_when_first_is_out_of_order(self):
         manifest = {
             "fixtures": [
                 {
@@ -710,7 +710,49 @@ class EvaluateTests(unittest.TestCase):
             ),
         )
 
-        self.assertEqual(report["metrics"]["reading_order_score"]["value"], 0)
+        self.assertEqual(report["metrics"]["reading_order_score"]["value"], 1)
+
+    def test_reading_order_matches_distinct_repeated_anchor_occurrence(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "repeated-substring-anchor",
+                    "gold_text": "B AB B",
+                    "reading_order": ["AB", "B"],
+                    "categories": ["english"],
+                }
+            ]
+        }
+
+        report = evaluate_predictions(
+            manifest,
+            predictions(
+                [{"fixture_id": "repeated-substring-anchor", "text": "B AB B"}]
+            ),
+        )
+
+        self.assertEqual(report["metrics"]["reading_order_score"]["value"], 1)
+
+    def test_reading_order_matches_ordered_overlapping_anchor_spans(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "overlapping-anchor-spans",
+                    "gold_text": "B AB",
+                    "reading_order": ["AB", "B"],
+                    "categories": ["english"],
+                }
+            ]
+        }
+
+        report = evaluate_predictions(
+            manifest,
+            predictions(
+                [{"fixture_id": "overlapping-anchor-spans", "text": "B AB"}]
+            ),
+        )
+
+        self.assertEqual(report["metrics"]["reading_order_score"]["value"], 1)
 
     def test_reading_order_rejects_repeated_anchors_in_genuinely_reversed_order(self):
         manifest = {
