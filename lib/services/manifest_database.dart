@@ -355,7 +355,8 @@ class ManifestDatabase {
 
   static Future<void> _migrateOldVideoRecords(Database db) async {
     try {
-      if (await StartupPreferences.getBool('migrated_video_records_v2') == true) {
+      if (await StartupPreferences.getBool('migrated_video_records_v2') ==
+          true) {
         return;
       }
       final videoFormats = [
@@ -419,7 +420,8 @@ class ManifestDatabase {
 
   static Future<void> _migrateOldVideoRecordsJson() async {
     await _withJsonRecordRegistrationLock(() async {
-      if (await StartupPreferences.getBool('migrated_video_records_v2') == true) {
+      if (await StartupPreferences.getBool('migrated_video_records_v2') ==
+          true) {
         return;
       }
       final audioList =
