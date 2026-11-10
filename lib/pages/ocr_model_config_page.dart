@@ -270,8 +270,7 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
           : param.defaultValue.trim();
       final hasEffectiveOption =
           param.type != 'json' && param.options.isNotEmpty && value.isNotEmpty;
-      final hasImplicitTrueBoolean =
-          param.type == 'boolean' &&
+      final hasImplicitTrueBoolean = param.type == 'boolean' &&
           param.options.isEmpty &&
           param.defaultValue.trim().isEmpty;
       if (name == 'stream') {
