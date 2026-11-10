@@ -487,6 +487,30 @@ void main() {
       expect(saved!.customParams.single.defaultValue, 'false');
     });
 
+    testWidgets(
+      'implicit-true boolean param does not block saving unrelated edits',
+      (tester) async {
+        ModelConfig? saved;
+        final model = ModelConfig(
+          name: 'OCR模型',
+          modelId: 'qwen-vl-ocr',
+          customParams: [CustomParam(paramName: 'enabled', type: 'boolean')],
+        );
+
+        await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
+        await _enterField(tester, 0, 'Edited OCR模型');
+        await tester.tap(find.text('保存'));
+        await tester.pumpAndSettle();
+
+        expect(saved, isNotNull);
+        expect(saved!.name, 'Edited OCR模型');
+        expect(saved!.customParams.single.paramName, 'enabled');
+        expect(saved!.customParams.single.type, 'boolean');
+        expect(saved!.customParams.single.defaultValue, '');
+        expect(saved!.customParams.single.options, isEmpty);
+      },
+    );
+
     testWidgets('rejects an invalid numeric default when saving', (
       tester,
     ) async {

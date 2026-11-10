@@ -1957,6 +1957,30 @@ class EvaluateTests(unittest.TestCase):
 
         self.assertEqual(report["metrics"]["table_fidelity"]["value"], 1)
 
+    def test_plain_text_tsv_annotation_requires_table_structure(self):
+        expected = "A\tB\nx\ty"
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "table",
+                    "gold_text": expected,
+                    "table_text": expected,
+                    "categories": ["english", "table"],
+                }
+            ]
+        }
+
+        def report_for(actual):
+            input_data = predictions([{"fixture_id": "table", "text": actual}])
+            input_data["run"]["output_format"] = "plain_text"
+            return evaluate_predictions(manifest, input_data)
+
+        flattened = report_for("A B x y")
+        structured = report_for(expected)
+
+        self.assertEqual(flattened["metrics"]["table_fidelity"]["value"], 0)
+        self.assertEqual(structured["metrics"]["table_fidelity"]["value"], 1)
+
     def test_plain_text_tsv_table_scores_table_fidelity(self):
         expected = "Code | Count\nP-12 | 3"
         manifest = {
