@@ -1920,12 +1920,7 @@ def _reading_order_metric(
             pending_pages += 1
             continue
         normalized_prediction = normalize_text(text)
-        # Choose one canonical occurrence per anchor so every pair is evaluated
-        # from the same assignment, even when the prediction repeats anchors.
-        positions = [
-            normalized_prediction.find(anchor)
-            for anchor in anchors
-        ]
+        positions = _reading_order_anchor_positions(normalized_prediction, anchors)
         for left_index, left_position in enumerate(positions):
             for right_position in positions[left_index + 1 :]:
                 if left_position >= 0 and right_position >= 0:
@@ -1949,6 +1944,23 @@ def _reading_order_metric(
         "pending_pages": pending_pages,
         "status": status,
     }
+
+
+def _reading_order_anchor_positions(text: str, anchors: list[str]) -> list[int]:
+    """Use a distinct ordered occurrence when the prediction contains one."""
+    first_positions = [text.find(anchor) for anchor in anchors]
+    ordered_positions = []
+    search_from = 0
+    for anchor in anchors:
+        position = text.find(anchor, search_from)
+        if position < 0:
+            # Keep the established first-occurrence scoring for genuinely
+            # out-of-order text; a later occurrence only resolves ambiguity
+            # when all anchors can be matched in their annotated sequence.
+            return first_positions
+        ordered_positions.append(position)
+        search_from = position + 1
+    return ordered_positions
 
 
 def _usage_metric(
