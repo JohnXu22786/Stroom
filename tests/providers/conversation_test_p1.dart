@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 3984)
-Total output lines: 409
-
 part of 'conversation_test.dart';
 
 void conversationGroup1() {
@@ -155,7 +152,105 @@ void conversationGroup1() {
       notifier.createConversation();
       expect(notifier.state.length, 2);
 
-      // CLIENT REQUIREMENT: New conversations should…984 tokens truncated…'
+      // CLIENT REQUIREMENT: New conversations should be at the top
+      // Currently: appended to end -> this test FAILS until we prepend
+      expect(notifier.state[0].id, isNot(firstId));
+      expect(notifier.state[1].id, firstId);
+    });
+
+    testWidgets(
+        'conversations maintain reverse-chronological order from prepend',
+        (tester) async {
+      final container = _createContainer(initialState: []);
+      final notifier = container.read(conversationsProvider.notifier);
+
+      notifier.createConversation();
+      final id1 = notifier.state[0].id;
+      notifier.createConversation();
+      final id2 = notifier.state[0].id;
+      notifier.createConversation();
+      final id3 = notifier.state[0].id;
+
+      // CLIENT REQUIREMENT: newest at top (prepended)
+      // Currently: appended -> this test FAILS
+      expect(notifier.state[0].id, id3);
+      expect(notifier.state[1].id, id2);
+      expect(notifier.state[2].id, id1);
+    });
+  });
+
+  // ===================================================================
+  // 3b. ConversationsNotifier - createConversation applies assistant
+  //     defaults (default model + default enabled tools) to new topics
+  // ===================================================================
+  group('ConversationsNotifier - createConversation applies assistant defaults',
+      () {
+    /// Container with both conversations and assistants providers overridden,
+    /// seeded with the given assistants.
+    ProviderContainer _containerWithAssistants(List<Assistant> assistants) {
+      SharedPreferences.setMockInitialValues({});
+      return ProviderContainer(
+        overrides: [
+          conversationsProvider.overrideWith((ref) {
+            final notifier = ConversationsNotifier(ref);
+            notifier.state = [];
+            return notifier;
+          }),
+          assistantProvider.overrideWith((ref) {
+            final notifier = AssistantsNotifier();
+            notifier.state = [...assistants];
+            return notifier;
+          }),
+        ],
+      );
+    }
+
+    testWidgets(
+        'new topic under assistant inherits default tools and default model',
+        (tester) async {
+      final assistant = Assistant(
+        name: '助手',
+        prompt: '你好',
+        defaultModelName: 'gpt-4o | OpenAI',
+        defaultModelId: 'gpt-4o',
+        defaultProviderName: 'OpenAI',
+        defaultToolNames: {'web_search', 'todowrite'},
+      );
+      final container = _containerWithAssistants([assistant]);
+      final notifier = container.read(conversationsProvider.notifier);
+
+      notifier.createConversation(assistantId: assistant.id);
+
+      final conv = notifier.state.single;
+      expect(conv.assistantId, assistant.id);
+      expect(conv.enabledMcpToolNames, {'web_search', 'todowrite'});
+      expect(conv.hasExplicitEnabledMcpTools, isTrue,
+          reason:
+              'assistant defaults are explicit prefs so an empty default set '
+              'keeps every tool OFF instead of auto-enabling all');
+      // 播种的默认模型带绝对身份（供应商 + 模型ID），显示名重命名后
+      // 仍可解析。
+      expect(conv.lastUsedModelName, 'gpt-4o | OpenAI');
+      expect(conv.lastUsedModelId, 'gpt-4o');
+      expect(conv.lastUsedProviderName, 'OpenAI');
+    });
+    testWidgets(
+        'new topic under assistant with configured-empty defaults keeps '
+        'all tools OFF', (tester) async {
+      final assistant = Assistant(
+        name: '助手',
+        prompt: '你好',
+        defaultToolNames: {},
+      );
+      final container = _containerWithAssistants([assistant]);
+      final notifier = container.read(conversationsProvider.notifier);
+
+      notifier.createConversation(assistantId: assistant.id);
+
+      final conv = notifier.state.single;
+      expect(conv.enabledMcpToolNames, isEmpty);
+      expect(conv.hasExplicitEnabledMcpTools, isTrue,
+          reason: '配置过但全关（空集合）在新话题中必须保持显式状态，'
               '未添加的工具保持关闭，不能退回自动启用全部');
       expect(conv.lastUsedModelName, isNull);
     });
