@@ -1,7 +1,12 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:stroom/services/manifest_database.dart';
+import 'package:stroom/utils/web_file_store.dart';
 
 class _MigrationDatabase extends Fake implements Database {
   final legacyPaths = ['audio/root', 'audio/child'];
@@ -120,6 +125,52 @@ void main() {
 
       expect(database.legacyFoldersDropped, isFalse);
       expect(database.perTypeFolders, isEmpty);
+    },
+  );
+
+  test(
+    'JSON video migration moves legacy rows into an existing video list',
+    () async {
+      SharedPreferences.setMockInitialValues({'migrated_video_records': true});
+      ManifestDatabase.enableTestMode();
+      await WebFileStore.write(
+        'manifest_database_data',
+        Uint8List.fromList(utf8.encode(jsonEncode({
+          'audio_records': [
+            {'id': 'audio-1', 'name': 'voice', 'format': 'mp3'},
+            {
+              'id': 'duplicate-video',
+              'name': 'migrated clip',
+              'format': 'mp4',
+              'createdAt': '2025-01-01T03:04:05.000Z',
+              'modifiedAt': '2025-01-02T03:04:05.000Z',
+            },
+            {
+              'id': 'legacy-video',
+              'name': 'new clip',
+              'format': 'mov',
+              'createdAt': '2025-01-03T03:04:05.000Z',
+              'modifiedAt': '2025-01-04T03:04:05.000Z',
+            },
+          ],
+          'video_records': [
+            {'id': 'existing-video', 'name': 'existing', 'format': 'mov'},
+            {'id': 'duplicate-video', 'name': 'stale clip', 'format': 'avi'},
+          ],
+        }))),
+      );
+
+      final videos = await ManifestDatabase.getAllVideoRecords();
+      final audios = await ManifestDatabase.getAllAudioRecords();
+
+      expect(
+        videos.map((record) => record['id']),
+        ['existing-video', 'duplicate-video', 'legacy-video'],
+      );
+      expect(videos[1]['name'], 'migrated clip');
+      expect(videos[1]['modifiedAt'], '2025-01-02T03:04:05.000Z');
+      expect(videos[2]['modifiedAt'], '2025-01-04T03:04:05.000Z');
+      expect(audios.map((record) => record['id']), ['audio-1']);
     },
   );
 }
