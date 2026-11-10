@@ -800,6 +800,31 @@ class EvaluateTests(unittest.TestCase):
         self.assertIn("evaluation error: cannot read", stderr.getvalue())
         self.assertNotIn("Traceback", stderr.getvalue())
 
+    def test_cli_reports_excessive_json_nesting_without_traceback(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest_path = root / "manifest.json"
+            predictions_path = root / "predictions.json"
+            manifest_path.write_text(json.dumps(small_manifest()), encoding="utf-8")
+            predictions_path.write_text(
+                "[" * 10000 + "0" + "]" * 10000, encoding="utf-8"
+            )
+
+            stderr = StringIO()
+            with redirect_stderr(stderr):
+                exit_code = main(
+                    [
+                        "--manifest",
+                        str(manifest_path),
+                        "--predictions",
+                        str(predictions_path),
+                    ]
+                )
+
+        self.assertEqual(exit_code, 2)
+        self.assertIn("JSON nesting exceeds parser limit", stderr.getvalue())
+        self.assertNotIn("Traceback", stderr.getvalue())
+
     def test_cli_reports_invalid_utf8_fixture_manifest_without_traceback(self):
         with TemporaryDirectory() as directory:
             manifest_path = Path(directory) / "manifest.json"
@@ -972,6 +997,18 @@ class EvaluateTests(unittest.TestCase):
         report = evaluate_predictions(small_manifest(), input_data)
 
         self.assertEqual(report["run"]["settings"], input_data["run"]["settings"])
+
+    def test_excessively_nested_run_settings_are_rejected(self):
+        input_data = predictions([])
+        nested_setting = "leaf"
+        for _ in range(65):
+            nested_setting = [nested_setting]
+        input_data["run"]["settings"] = {"nested": nested_setting}
+
+        with self.assertRaisesRegex(
+            EvaluationError, "settings exceeds maximum nesting depth"
+        ):
+            evaluate_predictions(small_manifest(), input_data)
 
     def test_double_encoded_credential_like_query_key_is_rejected(self):
         input_data = predictions([])
