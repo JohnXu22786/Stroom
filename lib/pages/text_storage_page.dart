@@ -86,6 +86,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
     // 相册抛错）或成功弹出之后（如 loadRecords 抛错）时，catch 中的
     // pop 会误弹下层路由（应用根路由），因此必须带条件执行
     var dialogShown = false;
+    var importedCount = 0;
     try {
       final files = await FilePicker.pickFiles(
         type: FileType.custom,
@@ -120,7 +121,6 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
 
       final records = ref.read(textRecordsProvider);
       final usedInBatch = <String>{};
-      var count = 0;
       for (final file in files) {
         final bytes = await file.readAsBytes();
         final content = utf8.decode(bytes);
@@ -156,7 +156,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
           ),
           content,
         );
-        count++;
+        importedCount++;
       }
 
       if (mounted) {
@@ -167,10 +167,10 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
       await ref.read(textRecordsProvider.notifier).loadRecords();
       await ref.read(textFolderListProvider.notifier).loadFolders();
       // 没有任何文件被导入（如全部跳过）时不显示成功提示
-      if (mounted && count > 0) {
+      if (mounted && importedCount > 0) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(l10n.textStorageImportSuccess(count)),
+            content: Text(l10n.textStorageImportSuccess(importedCount)),
             duration: const Duration(seconds: 2),
           ),
         );
@@ -180,6 +180,16 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
         try {
           Navigator.of(context, rootNavigator: true).pop();
         } catch (_) {}
+      }
+      // 保存是逐文件完成的；如果后续文件读取或保存失败，刷新已经成功
+      // 写入的记录，避免它们直到用户手动刷新才出现在列表中。
+      if (importedCount > 0) {
+        try {
+          await ref.read(textRecordsProvider.notifier).loadRecords();
+          await ref.read(textFolderListProvider.notifier).loadFolders();
+        } catch (_) {
+          // Keep showing the original import error even if refreshing fails.
+        }
       }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
