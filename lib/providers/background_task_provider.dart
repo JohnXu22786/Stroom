@@ -7180,8 +7180,8 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       Object? decoded;
       try {
         decoded = jsonDecode(content);
-      } on FormatException catch (e) {
-        debugPrint('[BackgroundTaskNotifier] Failed to decode task list: $e');
+      } on FormatException {
+        debugPrint('[BackgroundTaskNotifier] Failed to decode task list.');
         return (
           tasks: <BackgroundTask>[],
           isComplete: false,
@@ -7421,7 +7421,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
             }
           }
           tasks.add(task);
-        } catch (e) {
+        } catch (_) {
           // 单个损坏条目不应导致整个恢复失败：跳过并继续，
           // 保证其余有效任务仍能恢复。
           isComplete = false;
@@ -7483,7 +7483,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
             );
           }
           debugPrint(
-            '[BackgroundTaskNotifier] Skipping corrupt task entry: $e',
+            '[BackgroundTaskNotifier] Skipping corrupt task entry.',
           );
         }
       }
