@@ -797,15 +797,17 @@ class BackupService {
     if (selection.chatRecordsAndAttachments && selection.includeMediaFiles) {
       final attachmentPaths = await collectAttachmentPaths();
       for (final storagePath in attachmentPaths) {
-        final parts = storagePath.split('/');
-        if (parts.length < 2) continue;
-        final subDir = parts[0];
-        final fileName = parts.sublist(1).join('/');
+        if (!storagePath.startsWith('attachments/')) continue;
+        final sourcePath = await resolveSafeAttachmentSourcePath(
+          appDir,
+          storagePath,
+        );
+        if (sourcePath == null) continue;
         await _addPlanFile(
           diskFiles,
           memoryFiles,
           storagePath,
-          p.join(appDir, subDir, fileName),
+          sourcePath,
           useStreaming,
         );
       }
@@ -1329,7 +1331,11 @@ class BackupService {
       return;
     }
 
-    final directory = Directory(sourcePath);
+    final nativeSourcePath = archivePrefix == 'attachments'
+        ? await resolveSafeAttachmentDirectoryPath(p.dirname(sourcePath))
+        : sourcePath;
+    if (nativeSourcePath == null) return;
+    final directory = Directory(nativeSourcePath);
     if (!await directory.exists()) return;
     var count = 0;
     await for (final entity in directory.list(
@@ -1443,7 +1449,11 @@ class BackupService {
       return;
     }
 
-    final directory = Directory(sourcePath);
+    final nativeSourcePath = archivePrefix == 'attachments'
+        ? await resolveSafeAttachmentDirectoryPath(p.dirname(sourcePath))
+        : sourcePath;
+    if (nativeSourcePath == null) return;
+    final directory = Directory(nativeSourcePath);
     if (!await directory.exists()) return;
     var count = 0;
     await for (final entity in directory.list(

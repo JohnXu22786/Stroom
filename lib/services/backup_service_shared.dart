@@ -73,7 +73,14 @@ Future<Uint8List?> readBackupFile(String subDir, String fileName) async {
       return await WebFileStore.read('temp_edited/$fileName');
     } else {
       final appDir = await AppStorage.directory;
-      final file = File(p.join(appDir, subDir, fileName));
+      final sourcePath = subDir == 'attachments'
+          ? await resolveSafeAttachmentSourcePath(
+              appDir,
+              '$subDir/$fileName',
+            )
+          : p.join(appDir, subDir, fileName);
+      if (sourcePath == null) return null;
+      final file = File(sourcePath);
       if (await file.exists()) {
         return await file.readAsBytes();
       }
@@ -214,9 +221,10 @@ String? _canonicalAttachmentPath(Object? value) {
   // tampered references cannot escape the attachments directory when joined
   // to the app directory during export.
   final normalized = p.posix.normalize(value.replaceAll('\\', '/'));
-  if (normalized
-      .split('/')
-      .any((part) => RegExp(r'^[a-zA-Z]:').hasMatch(part))) {
+  if (normalized.split('/').any((part) {
+    return RegExp(r'^[a-zA-Z]:').hasMatch(part) ||
+        RegExp(r'^\.+[ .]*$').hasMatch(part);
+  })) {
     return null;
   }
   if (normalized.startsWith('temp_edited/')) {
@@ -233,4 +241,45 @@ String? _canonicalAttachmentPath(Object? value) {
     return null;
   }
   return normalized;
+}
+
+/// Returns a native attachment source only when resolving symlinks keeps it
+/// inside the app's attachment directory. Missing files are returned unchanged
+/// so the caller can preserve its existing missing-file behavior.
+Future<String?> resolveSafeAttachmentSourcePath(
+  String appDir,
+  String storagePath,
+) async {
+  if (_canonicalAttachmentPath(storagePath) != storagePath) return null;
+
+  final sourcePath = p.join(appDir, storagePath);
+  final sourceFile = File(sourcePath);
+  if (!await sourceFile.exists()) return sourcePath;
+
+  try {
+    final attachmentRoot = await resolveSafeAttachmentDirectoryPath(appDir);
+    if (attachmentRoot == null) return null;
+    final resolvedSource = await sourceFile.resolveSymbolicLinks();
+    return p.isWithin(attachmentRoot, resolvedSource) ? resolvedSource : null;
+  } on FileSystemException {
+    return null;
+  }
+}
+
+/// Returns the app's canonical attachment directory only when it resolves
+/// inside the app data directory.
+Future<String?> resolveSafeAttachmentDirectoryPath(String appDir) async {
+  try {
+    final attachmentPath = p.join(appDir, 'attachments');
+    if (await FileSystemEntity.type(attachmentPath, followLinks: false) ==
+        FileSystemEntityType.link) {
+      return null;
+    }
+    final appRoot = await Directory(appDir).resolveSymbolicLinks();
+    final attachmentRoot =
+        await Directory(attachmentPath).resolveSymbolicLinks();
+    return p.isWithin(appRoot, attachmentRoot) ? attachmentRoot : null;
+  } on FileSystemException {
+    return null;
+  }
 }
