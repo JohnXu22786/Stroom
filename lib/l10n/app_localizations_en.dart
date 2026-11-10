@@ -6604,6 +6604,11 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String ocrConfigUnsupportedParamSaveError(String name, String type) {
+    return 'Parameter “$name” uses unsupported type “$type”. Replace it with a supported type or remove the parameter before saving.';
+  }
+
+  @override
   String get paramTypeStringHint => 'e.g. cheerful';
 
   @override
@@ -18249,6 +18254,11 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   @override
   String ocrConfigUnsupportedParamType(String type) {
     return 'Unsupported type: $type';
+  }
+
+  @override
+  String ocrConfigUnsupportedParamSaveError(String name, String type) {
+    return 'Parameter “$name” uses unsupported type “$type”. Replace it with a supported type or remove the parameter before saving.';
   }
 
   @override

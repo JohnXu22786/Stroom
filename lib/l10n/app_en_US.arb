@@ -3595,6 +3595,17 @@
       }
     }
   },
+  "ocrConfigUnsupportedParamSaveError": "Parameter “{name}” uses unsupported type “{type}”. Replace it with a supported type or remove the parameter before saving.",
+  "@ocrConfigUnsupportedParamSaveError": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "type": {
+        "type": "String"
+      }
+    }
+  },
   "paramTypeStringHint": "e.g. cheerful",
   "@paramTypeStringHint": {
     "placeholders": {}
