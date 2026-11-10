@@ -573,7 +573,9 @@ void main() {
                         statusCode: 200,
                         data: {
                           'choices': [
-                            {'message': {'content': 'recognized'}},
+                            {
+                              'message': {'content': 'recognized'}
+                            },
                           ],
                         },
                       ),
@@ -592,7 +594,8 @@ void main() {
         },
       );
 
-      test('recognize rejects over-budget bytes before base64 encoding', () async {
+      test('recognize rejects over-budget bytes before base64 encoding',
+          () async {
         var encodings = 0;
         final adapter = _CountingAdapter();
         final service = OcrService(
