@@ -139,6 +139,7 @@ void main() {
       WidgetTester tester, {
       required Future<void> Function(String path, Uint8List bytes)?
           tempFileWriter,
+      VoidCallback? onTempFileCleanupComplete,
     }) async {
       await tester.binding.setSurfaceSize(const Size(1200, 2000));
       addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -170,6 +171,7 @@ void main() {
               context,
               tempFileWriter: tempFileWriter,
               tempDirectoryProvider: () async => tempDir,
+              onTempFileCleanupComplete: onTempFileCleanupComplete,
             ),
             child: const Text('Open Picker'),
           ),
@@ -366,6 +368,7 @@ void main() {
       final firstWriteStarted = Completer<void>();
       final releaseFirstWrite = Completer<void>();
       final secondWriteFinished = Completer<void>();
+      final clearCleanupFinished = Completer<void>();
       final writtenPaths = <String>[];
       var writeCount = 0;
 
@@ -379,6 +382,8 @@ void main() {
         }
         await File(path).writeAsBytes(bytes);
         if (writeCount == 2) secondWriteFinished.complete();
+      }, onTempFileCleanupComplete: () {
+        if (!clearCleanupFinished.isCompleted) clearCleanupFinished.complete();
       });
       await _pumpUntil(tester, () => firstWriteStarted.isCompleted);
 
@@ -392,9 +397,12 @@ void main() {
       await _pumpUntil(tester, () => secondWriteFinished.isCompleted);
 
       releaseFirstWrite.complete();
-      await tester.runAsync(
-          () => Future<void>.delayed(const Duration(milliseconds: 100)));
+      await tester.runAsync(() => clearCleanupFinished.future);
       await tester.pump();
+      final originalEditExists =
+          await tester.runAsync(() => File(writtenPaths[0]).exists());
+      expect(originalEditExists, isFalse,
+          reason: 'the clear cleanup must remove the file it started with');
       final newerEditStillExists =
           await tester.runAsync(() => File(writtenPaths[1]).exists());
       expect(newerEditStillExists, isTrue,

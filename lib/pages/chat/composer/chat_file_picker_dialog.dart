@@ -31,6 +31,7 @@ Future<List<MapEntry<String, Uint8List>>?> showAppFilePickerDialog(
   BuildContext context, {
   Future<void> Function(String path, Uint8List bytes)? tempFileWriter,
   Future<Directory> Function()? tempDirectoryProvider,
+  VoidCallback? onTempFileCleanupComplete,
 }) {
   return showDialog<List<MapEntry<String, Uint8List>>?>(
     context: context,
@@ -38,6 +39,7 @@ Future<List<MapEntry<String, Uint8List>>?> showAppFilePickerDialog(
     builder: (ctx) => _AppFilePickerDialog(
       tempFileWriter: tempFileWriter,
       tempDirectoryProvider: tempDirectoryProvider,
+      onTempFileCleanupComplete: onTempFileCleanupComplete,
     ),
   );
 }
@@ -50,10 +52,12 @@ class _AppFilePickerDialog extends StatefulWidget {
   const _AppFilePickerDialog({
     this.tempFileWriter,
     this.tempDirectoryProvider,
+    this.onTempFileCleanupComplete,
   });
 
   final Future<void> Function(String path, Uint8List bytes)? tempFileWriter;
   final Future<Directory> Function()? tempDirectoryProvider;
+  final VoidCallback? onTempFileCleanupComplete;
 
   @override
   State<_AppFilePickerDialog> createState() => _AppFilePickerDialogState();
@@ -130,6 +134,7 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
         // Non-critical cleanup
       }
     }
+    widget.onTempFileCleanupComplete?.call();
   }
 
   Future<void> _loadTabData(_FileTabType type) async {
