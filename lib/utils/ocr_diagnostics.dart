@@ -619,6 +619,9 @@ class OcrDiagnosticSnapshot {
       'OCR error details were hidden',
     ];
     for (final prefix in prefixes) {
+      if (containsCredential(prefix, excludedValues: excludedValues)) {
+        continue;
+      }
       if (value == prefix) return value;
       if (!value.startsWith('$prefix（') || !value.endsWith('）')) continue;
 

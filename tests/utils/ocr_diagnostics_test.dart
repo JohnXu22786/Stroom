@@ -1156,6 +1156,16 @@ void main() {
     expect(sanitized, 'OCR 错误详情已隐藏（HTTP 429）');
   });
 
+  test('safe hidden summaries still exclude credentials in the hidden label',
+      () {
+    final sanitized = OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+      'OCR error details were hidden',
+      excludedValues: ['OCR'],
+    );
+
+    expect(sanitized, isNot(contains('OCR')));
+  });
+
   test('safe Dio error types still honor recovered credential exclusions', () {
     const credential = 'connectionTimeout';
     final sanitized = OcrDiagnosticSnapshot.sanitizeStoredTaskError(
