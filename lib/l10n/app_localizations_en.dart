@@ -406,6 +406,33 @@ class AppLocalizationsEn extends AppLocalizations {
   String get taskFlowUseTemplate => 'Use';
 
   @override
+  String get taskFlowOcrInputMissing =>
+      'The image file could not be found. Select the image again.';
+
+  @override
+  String get taskFlowOcrInputReadFailed =>
+      'The image file could not be read. Check file access and try again.';
+
+  @override
+  String get taskFlowOcrModelUnavailable =>
+      'No usable OCR model is configured. Choose an OCR provider and model in flow settings.';
+
+  @override
+  String taskFlowOcrRequestSizeLimit(Object size) {
+    return 'OCR request size budget ($size MiB)';
+  }
+
+  @override
+  String taskFlowImageInputSizeLimit(Object size) {
+    return 'the task flow image input limit ($size MiB)';
+  }
+
+  @override
+  String taskFlowOcrInputTooLarge(Object limit) {
+    return 'The image exceeds $limit. Choose a smaller image and try again.';
+  }
+
+  @override
   String get ocrTemplatePlainTextLabel => 'Plain Text';
 
   @override
@@ -2940,23 +2967,29 @@ class AppLocalizationsEn extends AppLocalizations {
   String get catcatchSkipped => 'Skipped (nothing to process)';
 
   @override
-  String catCatchDetailMediaResources(Object count) =>
-      'Found $count media resources';
+  String catCatchDetailMediaResources(Object count) {
+    return 'Found $count media resources';
+  }
 
   @override
-  String catCatchDetailResources(Object count) => 'Found $count resources';
+  String catCatchDetailResources(Object count) {
+    return 'Found $count resources';
+  }
 
   @override
-  String catCatchDetailBrowserResources(Object count) =>
-      'Browser found $count resources';
+  String catCatchDetailBrowserResources(Object count) {
+    return 'Browser found $count resources';
+  }
 
   @override
-  String catCatchDetailPlaylistResources(Object total, Object segments) =>
-      'Found $total resources ($segments playlist segments)';
+  String catCatchDetailPlaylistResources(Object total, Object segments) {
+    return 'Found $total resources ($segments playlist segments)';
+  }
 
   @override
-  String catCatchDetailChooseResource(Object count) =>
-      '$count resources found. Choose one.';
+  String catCatchDetailChooseResource(Object count) {
+    return '$count resources found. Choose one.';
+  }
 
   @override
   String get catCatchDetailAutoSelectFirst =>
@@ -2967,8 +3000,9 @@ class AppLocalizationsEn extends AppLocalizations {
       '1 result remains; started downloading automatically';
 
   @override
-  String catCatchDetailSkipFormat(Object extension) =>
-      'Conversion skipped for .$extension; this format needs no conversion';
+  String catCatchDetailSkipFormat(Object extension) {
+    return 'Conversion skipped for .$extension; this format needs no conversion';
+  }
 
   @override
   String get catCatchDetailSkipNoExtension =>
@@ -2979,21 +3013,29 @@ class AppLocalizationsEn extends AppLocalizations {
     Object duration,
     Object remaining,
     Object removed,
-  ) =>
-      'After filtering for $duration, $remaining results remain ($removed unmatched resources excluded)';
+  ) {
+    return 'After filtering for $duration, $remaining results remain ($removed unmatched resources excluded)';
+  }
 
   @override
-  String catCatchDetailDurationAllMatch(Object count, Object duration) =>
-      'All $count resources match the $duration duration filter';
+  String catCatchDetailDurationAllMatch(Object count, Object duration) {
+    return 'All $count resources match the $duration duration filter';
+  }
 
   @override
-  String catCatchDurationHours(Object count) => '${count}h';
+  String catCatchDurationHours(Object count) {
+    return '${count}h';
+  }
 
   @override
-  String catCatchDurationMinutes(Object count) => '${count}m';
+  String catCatchDurationMinutes(Object count) {
+    return '${count}m';
+  }
 
   @override
-  String catCatchDurationSeconds(Object count) => '${count}s';
+  String catCatchDurationSeconds(Object count) {
+    return '${count}s';
+  }
 
   @override
   String get catcatchRetryStep => 'Retry this step';
@@ -6412,32 +6454,6 @@ class AppLocalizationsEn extends AppLocalizations {
       'Enable this tool for an assistant in that assistant’s default tool settings.';
 
   @override
-  String get httpToolBraveDescription =>
-      'Search the web with the Brave Search API. Requires an API key.';
-
-  @override
-  String get httpToolBochaDescription =>
-      'Search the web with the Bocha AI Search API. Requires an API key.';
-
-  @override
-  String get httpToolQueritDescription =>
-      'Search the web with Querit Search. Requires an API key.';
-
-  @override
-  String get httpToolSearxngDescription =>
-      'A privacy-focused, self-hosted metasearch engine that aggregates search sources. Requires an instance URL.';
-
-  @override
-  String get httpToolSearchQueryDescription => 'Search terms.';
-
-  @override
-  String get httpToolSearchCountDescription => 'Number of results to return.';
-
-  @override
-  String get httpToolSearchCountMax20Description =>
-      'Number of results to return (maximum 20).';
-
-  @override
   String get mcpSseUrlLabel => 'SSE URL';
 
   @override
@@ -9698,37 +9714,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get connectivityTestRun => 'Run Test';
 
   @override
-  String get connectivityTestHttpSuccess => "HTTP tool request succeeded";
-  String get connectivityTestHttpFailure => "HTTP tool request failed";
-  String get connectivityTestInvalidMcpConfig => "Invalid MCP configuration";
-  String get connectivityTestMissingTransport => "A valid transport type configuration is missing.";
-  String get connectivityTestStdioUnsupported => "stdio is not supported on this platform";
-  String get connectivityTestStdioDesktopOnly => "stdio MCP requires starting a local process. Test it in the Stroom desktop app.";
-  String get connectivityTestInvalidContent => "Invalid test content";
-  String get connectivityTestMethodMustBeString => "method must be a string.";
-  String get connectivityTestUnsupportedMethod => "Unsupported test method";
-  String get connectivityTestReadOnlyMethodOnly => "To avoid writing remote business data, MCP connectivity tests only allow the read-only tools/list method.";
-  String get connectivityTestParamsMustBeObject => "params must be a JSON object.";
-  String get connectivityTestMcpConnectionFailed => "Could not connect to the MCP service";
-  String get connectivityTestCheckConnectionSettings => "Check the address, authentication, and network, or view the app log for connection details.";
-  String get connectivityTestRemainingToolsOmitted => "; remaining tools omitted";
-  String get connectivityTestMcpSuccess => "MCP connectivity test succeeded";
-  String get connectivityTestTodoMutationBlocked => "Test parameters would modify todo data";
-  String get connectivityTestTodoReadOnly => "To protect the current session todo list, omit todos or set it to null in connectivity tests.";
-  String get connectivityTestUnknownBuiltin => "Unknown built-in tool";
-  String get connectivityTestBuiltinSuccess => "Built-in tool test succeeded";
-  String get connectivityTestBuiltinFailure => "Built-in tool test failed";
-  String get connectivityTestResultTruncated => "… (result truncated)";
-  String get connectivityTestTopLevelObjectRequired => "Test content must be a top-level JSON object.";
-  String connectivityTestMcpRequestTimeout(String method) =>
-      'MCP request timed out: $method';
-  String get connectivityTestRequestTimeout => "Request timed out. Check the service response and network.";
-  String connectivityTestToolNames(String names) => ": $names";
-  String connectivityTestMcpSuccessDetails(int count, String names, String suffix) =>
-      "Connection and tools/list request succeeded; found $count tools$names$suffix.";
-  String connectivityTestBuiltinExecutorMissing(String toolName) =>
-      "No test executor found for tool \"$toolName\".";
-
   String get connectivityTestFailedSummary => 'Test could not be completed';
 
   @override
@@ -11215,130 +11200,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get renderErrorRestartMessage => 'Please try restarting the app.';
 
   @override
-  String backupRestoreApkgImportSummary(int decks, int notes, int cards) {
-    return 'Imported $decks decks, $notes notes, and $cards cards';
-  }
-
-  @override
-  String backupRestoreApkgFileNotFound(String path) {
-    return 'The selected .apkg file could not be found: $path';
-  }
-
-  @override
-  String get backupRestoreApkgInvalidArchive =>
-      'The selected .apkg file is damaged or is not a valid archive.';
-
-  @override
-  String get backupRestoreApkgCollectionMissing =>
-      'The .apkg file does not contain collection.anki2.';
-
-  @override
-  String backupRestoreApkgTargetMissing(String path) {
-    return 'Open Anki flashcards before importing or exporting a deck: $path';
-  }
-
-  @override
-  String get backupRestoreApkgDatabaseCorrupt =>
-      'The Anki collection database is damaged.';
-
-  @override
-  String backupRestoreApkgLocalFileFailure(String path) {
-    return 'Could not access the local Anki file: $path';
-  }
-
-  @override
-  String backupRestoreApkgUnexpectedError(String path) {
-    return 'The .apkg operation failed while accessing this path: $path';
-  }
-
-  @override
-  String get backupRestoreApkgOperationFailed =>
-      'The .apkg operation failed because the file or database could not be read.';
-
-  @override
-  String backupRestoreApkgExportFailed(String path) {
-    return 'The Anki deck could not be packaged from this database: $path';
-  }
-
-  @override
-  String ankiSyncStatusServerAuthRejected(int statusCode) {
-    return 'The sync server rejected the request (HTTP $statusCode). Check the login credentials and server permissions.';
-  }
-
-  @override
-  String ankiSyncStatusServerEndpointNotFound(int statusCode) {
-    return 'The sync endpoint could not be found (HTTP $statusCode). Check the server address.';
-  }
-
-  @override
-  String get ankiSyncStatusMediaProtocolFailed =>
-      'The media sync server returned an invalid response. Check that it supports Anki media sync and try again.';
-
-  @override
-  String get ankiSyncStatusMediaIndexCorrupt =>
-      'The local media sync index is corrupted. Reset media sync data and try again.';
-
-  @override
-  String get ankiSyncStatusMediaIndexFailure =>
-      'The local media sync index could not be read or updated.';
-
-  @override
-  String get ankiSyncStatusMediaChecksumMismatch =>
-      'A downloaded media file failed checksum validation. Retry media sync.';
-
-  @override
-  String ankiSyncStatusMediaFilenameConflict(String filename) {
-    return 'The media file “$filename” has conflicting local and server changes. Back it up and resolve the name conflict before retrying.';
-  }
-
-  @override
-  String ankiSyncStatusMediaInvalidFilename(String filename) {
-    return 'The media filename “$filename” cannot be synchronized. Rename it to a valid Anki filename and retry.';
-  }
-
-  @override
-  String ankiSyncStatusMediaFileSizeLimit(int limitMb) {
-    return 'A media file is empty or exceeds the $limitMb MB limit.';
-  }
-
-  @override
-  String ankiSyncStatusMediaBatchLimitExceeded(int count, int limit) {
-    return 'The media archive contains $count entries; the maximum is $limit including its manifest.';
-  }
-
-  @override
-  String get ankiSyncStatusMediaSanityCheckFailed =>
-      'Media sync verification failed. Retry the sync.';
-
-  @override
-  String get ankiWebSyncUnsupportedPlatform =>
-      'Sign in to AnkiWeb to sync on web. Open Anki settings with the cloud icon to log in.';
-
-  @override
-  String get ankiWebDecksUnsupportedPlatform =>
-      'To browse or manage decks on web, sign in to AnkiWeb using the cloud icon.';
-
-  @override
-  String get ankiStatsUnsupportedPlatform =>
-      'Anki statistics are unavailable on this platform.';
-
-  @override
-  String get ankiSyncStatusDeviceClockMismatch =>
-      'The device clock differs from the sync server by more than 5 minutes. Correct the clock and try again.';
-
-  @override
-  String get ankiSyncStatusFullDownloadRequired =>
-      'The sync sanity check failed and local changes were rolled back. Download the server collection in full, then try again.';
-
-  @override
-  String get ankiSyncStatusFullTransferRequired =>
-      'This collection cannot be synchronized incrementally. Choose a full upload or download to continue.';
-
-  @override
-  String get ankiSyncStatusIncrementalSyncFailed =>
-      'Incremental sync could not complete. Check the server and connection, then try again.';
-
-  @override
   String get batchDlgFileName => 'File name';
 
   @override
@@ -11365,8 +11226,43 @@ class AppLocalizationsEn extends AppLocalizations {
       'Name cannot begin or end with whitespace; use the whitespace cleanup rule';
 
   @override
+  String batchDlgNameEmpty(String kind) {
+    return '$kind cannot be empty';
+  }
+
+  @override
+  String batchDlgNameTrailingWhitespace(String kind) {
+    return '$kind cannot end with whitespace';
+  }
+
+  @override
+  String batchDlgNameTooLong(String kind, String count) {
+    return '$kind cannot exceed $count characters';
+  }
+
+  @override
+  String batchDlgNameIllegalCharacters(String kind) {
+    return '$kind cannot contain Windows-invalid characters';
+  }
+
+  @override
+  String batchDlgNameTrailingDot(String kind) {
+    return '$kind cannot end with a period';
+  }
+
+  @override
+  String batchDlgNameReserved(String kind) {
+    return '$kind cannot use a reserved Windows name';
+  }
+
+  @override
   String get batchDlgIntermediateNameTooLong =>
       'An intermediate name is too long; adjust the rules';
+
+  @override
+  String batchDlgTemplateMissingDate(String date) {
+    return 'This item has no $date date; adjust the template';
+  }
 
   @override
   String get batchDlgCreatedDate => 'creation';
@@ -11375,58 +11271,109 @@ class AppLocalizationsEn extends AppLocalizations {
   String get batchDlgModifiedDate => 'modification';
 
   @override
-  String get emojiCategorySmileys => 'Smileys';
+  String get connectivityTestHttpSuccess => 'HTTP tool request succeeded';
 
   @override
-  String get emojiCategoryPeople => 'People';
+  String get connectivityTestHttpFailure => 'HTTP tool request failed';
 
   @override
-  String get emojiCategoryAnimals => 'Animals';
+  String get connectivityTestInvalidMcpConfig => 'Invalid MCP configuration';
 
   @override
-  String get emojiCategoryFood => 'Food';
+  String get connectivityTestMissingTransport =>
+      'A valid transport type configuration is missing.';
 
   @override
-  String get emojiCategoryActivities => 'Activities';
+  String get connectivityTestStdioUnsupported =>
+      'stdio is not supported on this platform';
 
   @override
-  String get emojiCategoryTravel => 'Travel';
+  String get connectivityTestStdioDesktopOnly =>
+      'stdio MCP requires starting a local process. Test it in the Stroom desktop app.';
 
   @override
-  String get emojiCategoryObjects => 'Objects';
+  String get connectivityTestInvalidContent => 'Invalid test content';
 
   @override
-  String get emojiCategorySymbols => 'Symbols';
+  String get connectivityTestMethodMustBeString => 'method must be a string.';
 
   @override
-  String get emojiCategoryFlags => 'Flags';
+  String get connectivityTestUnsupportedMethod => 'Unsupported test method';
 
   @override
-  String batchDlgNameEmpty(String kind) => '$kind cannot be empty';
+  String get connectivityTestReadOnlyMethodOnly =>
+      'To avoid writing remote business data, MCP connectivity tests only allow the read-only tools/list method.';
 
   @override
-  String batchDlgNameTrailingWhitespace(String kind) =>
-      '$kind cannot end with whitespace';
+  String get connectivityTestParamsMustBeObject =>
+      'params must be a JSON object.';
 
   @override
-  String batchDlgNameTooLong(String kind, String count) =>
-      '$kind cannot exceed $count characters';
+  String get connectivityTestMcpConnectionFailed =>
+      'Could not connect to the MCP service';
 
   @override
-  String batchDlgNameIllegalCharacters(String kind) =>
-      '$kind cannot contain Windows-invalid characters';
+  String get connectivityTestCheckConnectionSettings =>
+      'Check the address, authentication, and network, or view the app log for connection details.';
 
   @override
-  String batchDlgNameTrailingDot(String kind) =>
-      '$kind cannot end with a period';
+  String get connectivityTestRemainingToolsOmitted =>
+      '; remaining tools omitted';
 
   @override
-  String batchDlgNameReserved(String kind) =>
-      '$kind cannot use a reserved Windows name';
+  String get connectivityTestMcpSuccess => 'MCP connectivity test succeeded';
 
   @override
-  String batchDlgTemplateMissingDate(String date) =>
-      'This item has no $date date; adjust the template';
+  String connectivityTestToolNames(Object names) {
+    return ': $names';
+  }
+
+  @override
+  String connectivityTestMcpSuccessDetails(
+    int count,
+    String names,
+    String suffix,
+  ) {
+    return 'Connection and tools/list request succeeded; found $count tools$names$suffix.';
+  }
+
+  @override
+  String get connectivityTestTodoMutationBlocked =>
+      'Test parameters would modify todo data';
+
+  @override
+  String get connectivityTestTodoReadOnly =>
+      'To protect the current session todo list, omit todos or set it to null in connectivity tests.';
+
+  @override
+  String get connectivityTestUnknownBuiltin => 'Unknown built-in tool';
+
+  @override
+  String connectivityTestBuiltinExecutorMissing(String toolName) {
+    return 'No test executor found for tool \"$toolName\".';
+  }
+
+  @override
+  String get connectivityTestBuiltinSuccess => 'Built-in tool test succeeded';
+
+  @override
+  String get connectivityTestBuiltinFailure => 'Built-in tool test failed';
+
+  @override
+  String get connectivityTestTopLevelObjectRequired =>
+      'Test content must be a top-level JSON object.';
+
+  @override
+  String get connectivityTestRequestTimeout =>
+      'Request timed out. Check the service response and network.';
+
+  @override
+  String connectivityTestMcpRequestTimeout(String method) {
+    return 'MCP request timed out: $method';
+  }
+
+  @override
+  String get connectivityTestResultTruncated => '… (result truncated)';
 
   @override
   String get toolResultWebSearchEmptyQuery =>
@@ -11610,6 +11557,78 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get httpToolBraveDescription =>
+      'Search the web with the Brave Search API. Requires an API key.';
+
+  @override
+  String get httpToolBochaDescription =>
+      'Search the web with the Bocha AI Search API. Requires an API key.';
+
+  @override
+  String get httpToolQueritDescription =>
+      'Search the web with Querit Search. Requires an API key.';
+
+  @override
+  String get httpToolSearxngDescription =>
+      'A privacy-focused, self-hosted metasearch engine that aggregates search sources. Requires an instance URL.';
+
+  @override
+  String get httpToolSearchQueryDescription => 'Search terms.';
+
+  @override
+  String get httpToolSearchCountDescription => 'Number of results to return.';
+
+  @override
+  String get httpToolSearchCountMax20Description =>
+      'Number of results to return (maximum 20).';
+
+  @override
+  String backupRestoreApkgImportSummary(int decks, int notes, int cards) {
+    return 'Imported $decks decks, $notes notes, and $cards cards';
+  }
+
+  @override
+  String backupRestoreApkgFileNotFound(String path) {
+    return 'The selected .apkg file could not be found: $path';
+  }
+
+  @override
+  String get backupRestoreApkgInvalidArchive =>
+      'The selected .apkg file is damaged or is not a valid archive.';
+
+  @override
+  String get backupRestoreApkgCollectionMissing =>
+      'The .apkg file does not contain collection.anki2.';
+
+  @override
+  String backupRestoreApkgTargetMissing(String path) {
+    return 'Open Anki flashcards before importing or exporting a deck: $path';
+  }
+
+  @override
+  String get backupRestoreApkgDatabaseCorrupt =>
+      'The Anki collection database is damaged.';
+
+  @override
+  String backupRestoreApkgLocalFileFailure(String path) {
+    return 'Could not access the local Anki file: $path';
+  }
+
+  @override
+  String backupRestoreApkgUnexpectedError(String path) {
+    return 'The .apkg operation failed while accessing this path: $path';
+  }
+
+  @override
+  String get backupRestoreApkgOperationFailed =>
+      'The .apkg operation failed because the file or database could not be read.';
+
+  @override
+  String backupRestoreApkgExportFailed(String path) {
+    return 'The Anki deck could not be packaged from this database: $path';
+  }
+
+  @override
   String get ankiSyncStatusProtocolFailed =>
       'The sync server response is invalid or incomplete. Check that the server supports Anki sync v10.';
 
@@ -11642,12 +11661,14 @@ class AppLocalizationsEn extends AppLocalizations {
       'The sync request failed. Check the server and network, then retry.';
 
   @override
-  String ankiSyncStatusServerHttpError(int statusCode) =>
-      'The sync server returned HTTP $statusCode.';
+  String ankiSyncStatusServerHttpError(int statusCode) {
+    return 'The sync server returned HTTP $statusCode.';
+  }
 
   @override
-  String ankiSyncStatusResponseTooLarge(int limitMb) =>
-      'The sync response exceeded the $limitMb MB limit.';
+  String ankiSyncStatusResponseTooLarge(int limitMb) {
+    return 'The sync response exceeded the $limitMb MB limit.';
+  }
 
   @override
   String get ankiSyncStatusLocalFileFailure =>
@@ -11656,6 +11677,111 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get ankiSyncStatusCollectionInvalid =>
       'The collection could not be opened, updated, or passed SQLite/schema validation. Restore a valid collection or download it again.';
+
+  @override
+  String ankiSyncStatusServerAuthRejected(int statusCode) {
+    return 'The sync server rejected the request (HTTP $statusCode). Check the login credentials and server permissions.';
+  }
+
+  @override
+  String ankiSyncStatusServerEndpointNotFound(int statusCode) {
+    return 'The sync endpoint could not be found (HTTP $statusCode). Check the server address.';
+  }
+
+  @override
+  String get ankiSyncStatusMediaProtocolFailed =>
+      'The media sync server returned an invalid response. Check that it supports Anki media sync and try again.';
+
+  @override
+  String get ankiSyncStatusMediaIndexCorrupt =>
+      'The local media sync index is corrupted. Reset media sync data and try again.';
+
+  @override
+  String get ankiSyncStatusMediaIndexFailure =>
+      'The local media sync index could not be read or updated.';
+
+  @override
+  String get ankiSyncStatusMediaChecksumMismatch =>
+      'A downloaded media file failed checksum validation. Retry media sync.';
+
+  @override
+  String ankiSyncStatusMediaFilenameConflict(String filename) {
+    return 'The media file “$filename” has conflicting local and server changes. Back it up and resolve the name conflict before retrying.';
+  }
+
+  @override
+  String ankiSyncStatusMediaInvalidFilename(String filename) {
+    return 'The media filename “$filename” cannot be synchronized. Rename it to a valid Anki filename and retry.';
+  }
+
+  @override
+  String ankiSyncStatusMediaFileSizeLimit(int limitMb) {
+    return 'A media file is empty or exceeds the $limitMb MB limit.';
+  }
+
+  @override
+  String ankiSyncStatusMediaBatchLimitExceeded(int count, int limit) {
+    return 'The media archive contains $count entries; the maximum is $limit including its manifest.';
+  }
+
+  @override
+  String get ankiSyncStatusMediaSanityCheckFailed =>
+      'Media sync verification failed. Retry the sync.';
+
+  @override
+  String get ankiWebSyncUnsupportedPlatform =>
+      'Sign in to AnkiWeb to sync on web. Open Anki settings with the cloud icon to log in.';
+
+  @override
+  String get ankiWebDecksUnsupportedPlatform =>
+      'To browse or manage decks on web, sign in to AnkiWeb using the cloud icon.';
+
+  @override
+  String get ankiStatsUnsupportedPlatform =>
+      'Anki statistics are unavailable on this platform.';
+
+  @override
+  String get ankiSyncStatusDeviceClockMismatch =>
+      'The device clock differs from the sync server by more than 5 minutes. Correct the clock and try again.';
+
+  @override
+  String get ankiSyncStatusFullDownloadRequired =>
+      'The sync sanity check failed and local changes were rolled back. Download the server collection in full, then try again.';
+
+  @override
+  String get ankiSyncStatusFullTransferRequired =>
+      'This collection cannot be synchronized incrementally. Choose a full upload or download to continue.';
+
+  @override
+  String get ankiSyncStatusIncrementalSyncFailed =>
+      'Incremental sync could not complete. Check the server and connection, then try again.';
+
+  @override
+  String get emojiCategorySmileys => 'Smileys';
+
+  @override
+  String get emojiCategoryPeople => 'People';
+
+  @override
+  String get emojiCategoryAnimals => 'Animals';
+
+  @override
+  String get emojiCategoryFood => 'Food';
+
+  @override
+  String get emojiCategoryActivities => 'Activities';
+
+  @override
+  String get emojiCategoryTravel => 'Travel';
+
+  @override
+  String get emojiCategoryObjects => 'Objects';
+
+  @override
+  String get emojiCategorySymbols => 'Symbols';
+
+  @override
+  String get emojiCategoryFlags => 'Flags';
 }
 
 /// The translations for English, as used in the United States (`en_US`).
@@ -12059,6 +12185,33 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String get taskFlowUseTemplate => 'Use';
 
   @override
+  String get taskFlowOcrInputMissing =>
+      'The image file could not be found. Select the image again.';
+
+  @override
+  String get taskFlowOcrInputReadFailed =>
+      'The image file could not be read. Check file access and try again.';
+
+  @override
+  String get taskFlowOcrModelUnavailable =>
+      'No usable OCR model is configured. Choose an OCR provider and model in flow settings.';
+
+  @override
+  String taskFlowOcrRequestSizeLimit(Object size) {
+    return 'OCR request size budget ($size MiB)';
+  }
+
+  @override
+  String taskFlowImageInputSizeLimit(Object size) {
+    return 'the task flow image input limit ($size MiB)';
+  }
+
+  @override
+  String taskFlowOcrInputTooLarge(Object limit) {
+    return 'The image exceeds $limit. Choose a smaller image and try again.';
+  }
+
+  @override
   String get ocrTemplatePlainTextLabel => 'Plain Text';
 
   @override
@@ -14593,23 +14746,29 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String get catcatchSkipped => 'Skipped (nothing to process)';
 
   @override
-  String catCatchDetailMediaResources(Object count) =>
-      'Found $count media resources';
+  String catCatchDetailMediaResources(Object count) {
+    return 'Found $count media resources';
+  }
 
   @override
-  String catCatchDetailResources(Object count) => 'Found $count resources';
+  String catCatchDetailResources(Object count) {
+    return 'Found $count resources';
+  }
 
   @override
-  String catCatchDetailBrowserResources(Object count) =>
-      'Browser found $count resources';
+  String catCatchDetailBrowserResources(Object count) {
+    return 'Browser found $count resources';
+  }
 
   @override
-  String catCatchDetailPlaylistResources(Object total, Object segments) =>
-      'Found $total resources ($segments playlist segments)';
+  String catCatchDetailPlaylistResources(Object total, Object segments) {
+    return 'Found $total resources ($segments playlist segments)';
+  }
 
   @override
-  String catCatchDetailChooseResource(Object count) =>
-      '$count resources found. Choose one.';
+  String catCatchDetailChooseResource(Object count) {
+    return '$count resources found. Choose one.';
+  }
 
   @override
   String get catCatchDetailAutoSelectFirst =>
@@ -14620,8 +14779,9 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
       '1 result remains; started downloading automatically';
 
   @override
-  String catCatchDetailSkipFormat(Object extension) =>
-      'Conversion skipped for .$extension; this format needs no conversion';
+  String catCatchDetailSkipFormat(Object extension) {
+    return 'Conversion skipped for .$extension; this format needs no conversion';
+  }
 
   @override
   String get catCatchDetailSkipNoExtension =>
@@ -14632,21 +14792,29 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
     Object duration,
     Object remaining,
     Object removed,
-  ) =>
-      'After filtering for $duration, $remaining results remain ($removed unmatched resources excluded)';
+  ) {
+    return 'After filtering for $duration, $remaining results remain ($removed unmatched resources excluded)';
+  }
 
   @override
-  String catCatchDetailDurationAllMatch(Object count, Object duration) =>
-      'All $count resources match the $duration duration filter';
+  String catCatchDetailDurationAllMatch(Object count, Object duration) {
+    return 'All $count resources match the $duration duration filter';
+  }
 
   @override
-  String catCatchDurationHours(Object count) => '${count}h';
+  String catCatchDurationHours(Object count) {
+    return '${count}h';
+  }
 
   @override
-  String catCatchDurationMinutes(Object count) => '${count}m';
+  String catCatchDurationMinutes(Object count) {
+    return '${count}m';
+  }
 
   @override
-  String catCatchDurationSeconds(Object count) => '${count}s';
+  String catCatchDurationSeconds(Object count) {
+    return '${count}s';
+  }
 
   @override
   String get catcatchRetryStep => 'Retry this step';
@@ -18063,32 +18231,6 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   @override
   String get toolBuiltinEnableHelp =>
       'Enable this tool for an assistant in that assistant’s default tool settings.';
-
-  @override
-  String get httpToolBraveDescription =>
-      'Search the web with the Brave Search API. Requires an API key.';
-
-  @override
-  String get httpToolBochaDescription =>
-      'Search the web with the Bocha AI Search API. Requires an API key.';
-
-  @override
-  String get httpToolQueritDescription =>
-      'Search the web with Querit Search. Requires an API key.';
-
-  @override
-  String get httpToolSearxngDescription =>
-      'A privacy-focused, self-hosted metasearch engine that aggregates search sources. Requires an instance URL.';
-
-  @override
-  String get httpToolSearchQueryDescription => 'Search terms.';
-
-  @override
-  String get httpToolSearchCountDescription => 'Number of results to return.';
-
-  @override
-  String get httpToolSearchCountMax20Description =>
-      'Number of results to return (maximum 20).';
 
   @override
   String get mcpSseUrlLabel => 'SSE URL';
@@ -22837,6 +22979,485 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String get renderErrorRestartMessage => 'Please try restarting the app.';
 
   @override
+  String get batchDlgFileName => 'File name';
+
+  @override
+  String get batchDlgFolderName => 'Folder name';
+
+  @override
+  String get batchDlgFileNameConflict =>
+      'Another file in this folder has the same name';
+
+  @override
+  String get batchDlgFolderNameConflict =>
+      'A folder with the same name already exists at the target location';
+
+  @override
+  String get batchDlgFolderNameSwapConflict =>
+      'Folder names cannot be exchanged in the same batch';
+
+  @override
+  String get batchDlgControlCharacterError =>
+      'Name cannot contain control characters';
+
+  @override
+  String get batchDlgNameWhitespaceError =>
+      'Name cannot begin or end with whitespace; use the whitespace cleanup rule';
+
+  @override
+  String batchDlgNameEmpty(String kind) {
+    return '$kind cannot be empty';
+  }
+
+  @override
+  String batchDlgNameTrailingWhitespace(String kind) {
+    return '$kind cannot end with whitespace';
+  }
+
+  @override
+  String batchDlgNameTooLong(String kind, String count) {
+    return '$kind cannot exceed $count characters';
+  }
+
+  @override
+  String batchDlgNameIllegalCharacters(String kind) {
+    return '$kind cannot contain Windows-invalid characters';
+  }
+
+  @override
+  String batchDlgNameTrailingDot(String kind) {
+    return '$kind cannot end with a period';
+  }
+
+  @override
+  String batchDlgNameReserved(String kind) {
+    return '$kind cannot use a reserved Windows name';
+  }
+
+  @override
+  String get batchDlgIntermediateNameTooLong =>
+      'An intermediate name is too long; adjust the rules';
+
+  @override
+  String batchDlgTemplateMissingDate(String date) {
+    return 'This item has no $date date; adjust the template';
+  }
+
+  @override
+  String get batchDlgCreatedDate => 'creation';
+
+  @override
+  String get batchDlgModifiedDate => 'modification';
+
+  @override
+  String get connectivityTestHttpSuccess => 'HTTP tool request succeeded';
+
+  @override
+  String get connectivityTestHttpFailure => 'HTTP tool request failed';
+
+  @override
+  String get connectivityTestInvalidMcpConfig => 'Invalid MCP configuration';
+
+  @override
+  String get connectivityTestMissingTransport =>
+      'A valid transport type configuration is missing.';
+
+  @override
+  String get connectivityTestStdioUnsupported =>
+      'stdio is not supported on this platform';
+
+  @override
+  String get connectivityTestStdioDesktopOnly =>
+      'stdio MCP requires starting a local process. Test it in the Stroom desktop app.';
+
+  @override
+  String get connectivityTestInvalidContent => 'Invalid test content';
+
+  @override
+  String get connectivityTestMethodMustBeString => 'method must be a string.';
+
+  @override
+  String get connectivityTestUnsupportedMethod => 'Unsupported test method';
+
+  @override
+  String get connectivityTestReadOnlyMethodOnly =>
+      'To avoid writing remote business data, MCP connectivity tests only allow the read-only tools/list method.';
+
+  @override
+  String get connectivityTestParamsMustBeObject =>
+      'params must be a JSON object.';
+
+  @override
+  String get connectivityTestMcpConnectionFailed =>
+      'Could not connect to the MCP service';
+
+  @override
+  String get connectivityTestCheckConnectionSettings =>
+      'Check the address, authentication, and network, or view the app log for connection details.';
+
+  @override
+  String get connectivityTestRemainingToolsOmitted =>
+      '; remaining tools omitted';
+
+  @override
+  String get connectivityTestMcpSuccess => 'MCP connectivity test succeeded';
+
+  @override
+  String connectivityTestToolNames(Object names) {
+    return ': $names';
+  }
+
+  @override
+  String connectivityTestMcpSuccessDetails(
+    int count,
+    String names,
+    String suffix,
+  ) {
+    return 'Connection and tools/list request succeeded; found $count tools$names$suffix.';
+  }
+
+  @override
+  String get connectivityTestTodoMutationBlocked =>
+      'Test parameters would modify todo data';
+
+  @override
+  String get connectivityTestTodoReadOnly =>
+      'To protect the current session todo list, omit todos or set it to null in connectivity tests.';
+
+  @override
+  String get connectivityTestUnknownBuiltin => 'Unknown built-in tool';
+
+  @override
+  String connectivityTestBuiltinExecutorMissing(String toolName) {
+    return 'No test executor found for tool \"$toolName\".';
+  }
+
+  @override
+  String get connectivityTestBuiltinSuccess => 'Built-in tool test succeeded';
+
+  @override
+  String get connectivityTestBuiltinFailure => 'Built-in tool test failed';
+
+  @override
+  String get connectivityTestTopLevelObjectRequired =>
+      'Test content must be a top-level JSON object.';
+
+  @override
+  String get connectivityTestRequestTimeout =>
+      'Request timed out. Check the service response and network.';
+
+  @override
+  String connectivityTestMcpRequestTimeout(String method) {
+    return 'MCP request timed out: $method';
+  }
+
+  @override
+  String get connectivityTestResultTruncated => '… (result truncated)';
+
+  @override
+  String get toolResultWebSearchEmptyQuery =>
+      'Error: The search query cannot be empty.';
+
+  @override
+  String toolResultWebSearchInvalidSource(Object source) {
+    return 'Error: Unsupported search engine \"$source\". Supported values: google, bing, baidu.';
+  }
+
+  @override
+  String toolResultWebSearchFallback(
+    Object preferred,
+    Object reason,
+    Object fallback,
+  ) {
+    return 'The preferred engine $preferred $reason; switched to $fallback.';
+  }
+
+  @override
+  String get toolResultWebSearchNotFound =>
+      'No relevant search results were found.';
+
+  @override
+  String toolResultWebSearchNotFoundFrom(Object sources) {
+    return 'No relevant search results were found ($sources explicitly returned no results).';
+  }
+
+  @override
+  String toolResultWebSearchIncomplete(Object sources, Object failures) {
+    return 'Search incomplete: $sources explicitly returned no results; other engines were unavailable or returned pages that could not be parsed: $failures';
+  }
+
+  @override
+  String toolResultWebSearchUnavailable(Object failures) {
+    return 'Error: All search engines are unavailable. $failures';
+  }
+
+  @override
+  String toolResultWebSearchResultsHeader(Object source) {
+    return 'Search results from $source:';
+  }
+
+  @override
+  String get toolResultWebSearchLinkLabel => 'Link';
+
+  @override
+  String get toolResultWebSearchSummaryLabel => 'Summary';
+
+  @override
+  String get toolResultWebSearchEmptyResults =>
+      'No relevant search results were found.';
+
+  @override
+  String get toolResultTodoInvalid =>
+      'Error: The todos parameter must be an array (omit it or pass null to read the todo list).';
+
+  @override
+  String get toolResultTodoEmpty => 'There are no todo items yet.';
+
+  @override
+  String toolResultTodoCount(Object count) {
+    return 'Active todo items: $count';
+  }
+
+  @override
+  String toolResultMcpReconnectFailed(Object server) {
+    return 'Error: Could not reconnect to MCP server \"$server\".';
+  }
+
+  @override
+  String toolResultMcpUnavailable(Object server) {
+    return 'Error: MCP server \"$server\" is currently unavailable.';
+  }
+
+  @override
+  String toolResultMcpNoTools(Object server) {
+    return 'Error: MCP server \"$server\" failed to connect or returned no tools. Check the server configuration.';
+  }
+
+  @override
+  String toolResultMcpAliasedName(Object tool, Object alias) {
+    return 'Real tool \"$tool\" is published under the call name \"$alias\" on this server.';
+  }
+
+  @override
+  String toolResultMcpDuplicateNames(Object tool, Object routes) {
+    return 'Tool \"$tool\" is provided by multiple MCP servers; use the matching call name: $routes.';
+  }
+
+  @override
+  String toolResultMcpAliasedConflict(Object tool) {
+    return 'Error: Real tool \"$tool\" has a name conflict. Use one of the call names listed above.';
+  }
+
+  @override
+  String toolResultMcpMissingTool(Object server, Object tool) {
+    return 'Error: MCP server \"$server\" has no tool named \"$tool\".';
+  }
+
+  @override
+  String toolResultMcpAvailableTools(Object tools) {
+    return 'Tools available on this server: $tools. Use these names instead.';
+  }
+
+  @override
+  String toolResultMcpAliasConflict(Object tool, Object routes) {
+    return 'Error: MCP tool \"$tool\" currently has a conflicting alias. Use the matching call name: $routes.';
+  }
+
+  @override
+  String toolResultToolDisabled(Object tool) {
+    return 'Error: Tool \"$tool\" is disabled.';
+  }
+
+  @override
+  String toolResultToolUnknown(Object tool) {
+    return 'Error: Unknown tool \"$tool\"';
+  }
+
+  @override
+  String get toolResultWebSearchFallbackNoResults => 'returned no results';
+
+  @override
+  String get toolResultWebSearchFallbackUnavailable =>
+      'is temporarily unavailable';
+
+  @override
+  String toolResultMcpServerRoute(Object server) {
+    return '(MCP server $server)';
+  }
+
+  @override
+  String get toolResultWebSearchUnparsedResults =>
+      'returned a page that could not be parsed';
+
+  @override
+  String get toolResultSearchTitleLabel => 'Title';
+
+  @override
+  String get toolResultSearchContentLabel => 'Content';
+
+  @override
+  String toolResultHttpApiKeyMissing(Object provider) {
+    return 'Error: $provider API key is not configured. Configure it in settings.';
+  }
+
+  @override
+  String toolResultHttpUrlMissing(Object provider) {
+    return 'Error: $provider instance URL is not configured. Configure it in settings.';
+  }
+
+  @override
+  String toolResultHttpRequestFailedStatus(Object provider, Object statusCode) {
+    return 'Error: $provider request failed (HTTP $statusCode)';
+  }
+
+  @override
+  String toolResultHttpRequestFailed(Object provider, Object detail) {
+    return 'Error: $provider request failed: $detail';
+  }
+
+  @override
+  String toolResultHttpUnknownTool(Object provider) {
+    return 'Error: Unknown HTTP tool \"$provider\"';
+  }
+
+  @override
+  String toolResultMcpNotConnected(Object server) {
+    return 'Error: MCP server \"$server\" is not connected.';
+  }
+
+  @override
+  String toolResultMcpNoResponse(Object tool) {
+    return 'Error: No response from MCP tool \"$tool\".';
+  }
+
+  @override
+  String toolResultMcpCallFailed(Object detail) {
+    return 'Error: $detail';
+  }
+
+  @override
+  String get httpToolBraveDescription =>
+      'Search the web with the Brave Search API. Requires an API key.';
+
+  @override
+  String get httpToolBochaDescription =>
+      'Search the web with the Bocha AI Search API. Requires an API key.';
+
+  @override
+  String get httpToolQueritDescription =>
+      'Search the web with Querit Search. Requires an API key.';
+
+  @override
+  String get httpToolSearxngDescription =>
+      'A privacy-focused, self-hosted metasearch engine that aggregates search sources. Requires an instance URL.';
+
+  @override
+  String get httpToolSearchQueryDescription => 'Search terms.';
+
+  @override
+  String get httpToolSearchCountDescription => 'Number of results to return.';
+
+  @override
+  String get httpToolSearchCountMax20Description =>
+      'Number of results to return (maximum 20).';
+
+  @override
+  String backupRestoreApkgImportSummary(int decks, int notes, int cards) {
+    return 'Imported $decks decks, $notes notes, and $cards cards';
+  }
+
+  @override
+  String backupRestoreApkgFileNotFound(String path) {
+    return 'The selected .apkg file could not be found: $path';
+  }
+
+  @override
+  String get backupRestoreApkgInvalidArchive =>
+      'The selected .apkg file is damaged or is not a valid archive.';
+
+  @override
+  String get backupRestoreApkgCollectionMissing =>
+      'The .apkg file does not contain collection.anki2.';
+
+  @override
+  String backupRestoreApkgTargetMissing(String path) {
+    return 'Open Anki flashcards before importing or exporting a deck: $path';
+  }
+
+  @override
+  String get backupRestoreApkgDatabaseCorrupt =>
+      'The Anki collection database is damaged.';
+
+  @override
+  String backupRestoreApkgLocalFileFailure(String path) {
+    return 'Could not access the local Anki file: $path';
+  }
+
+  @override
+  String backupRestoreApkgUnexpectedError(String path) {
+    return 'The .apkg operation failed while accessing this path: $path';
+  }
+
+  @override
+  String get backupRestoreApkgOperationFailed =>
+      'The .apkg operation failed because the file or database could not be read.';
+
+  @override
+  String backupRestoreApkgExportFailed(String path) {
+    return 'The Anki deck could not be packaged from this database: $path';
+  }
+
+  @override
+  String get ankiSyncStatusProtocolFailed =>
+      'The sync server response is invalid or incomplete. Check that the server supports Anki sync v10.';
+
+  @override
+  String get ankiSyncStatusLoginRequired =>
+      'Log in to Anki sync before continuing.';
+
+  @override
+  String get ankiSyncStatusInvalidServerUrl =>
+      'Enter a valid HTTP or HTTPS sync server address.';
+
+  @override
+  String get ankiSyncStatusHttpsRequired =>
+      'Remote self-hosted sync servers must use HTTPS.';
+
+  @override
+  String get ankiSyncStatusConnectionTimeout =>
+      'The sync request timed out. Check the server address and network, then retry.';
+
+  @override
+  String get ankiSyncStatusTlsFailure =>
+      'The server certificate could not be verified. Check the certificate or configure a custom CA.';
+
+  @override
+  String get ankiSyncStatusConnectionFailure =>
+      'Could not connect to the sync server. Check the address and network.';
+
+  @override
+  String get ankiSyncStatusRequestFailure =>
+      'The sync request failed. Check the server and network, then retry.';
+
+  @override
+  String ankiSyncStatusServerHttpError(int statusCode) {
+    return 'The sync server returned HTTP $statusCode.';
+  }
+
+  @override
+  String ankiSyncStatusResponseTooLarge(int limitMb) {
+    return 'The sync response exceeded the $limitMb MB limit.';
+  }
+
+  @override
+  String get ankiSyncStatusLocalFileFailure =>
+      'A local sync file could not be read or cleaned up. Check disk access and retry.';
+
+  @override
+  String get ankiSyncStatusCollectionInvalid =>
+      'The collection could not be opened, updated, or passed SQLite/schema validation. Restore a valid collection or download it again.';
+
+  @override
   String ankiSyncStatusServerAuthRejected(int statusCode) {
     return 'The sync server rejected the request (HTTP $statusCode). Check the login credentials and server permissions.';
   }
@@ -22849,6 +23470,14 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   @override
   String get ankiSyncStatusMediaProtocolFailed =>
       'The media sync server returned an invalid response. Check that it supports Anki media sync and try again.';
+
+  @override
+  String get ankiSyncStatusMediaIndexCorrupt =>
+      'The local media sync index is corrupted. Reset media sync data and try again.';
+
+  @override
+  String get ankiSyncStatusMediaIndexFailure =>
+      'The local media sync index could not be read or updated.';
 
   @override
   String get ankiSyncStatusMediaChecksumMismatch =>
@@ -22879,12 +23508,57 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
       'Media sync verification failed. Retry the sync.';
 
   @override
-  String backupRestoreApkgLocalFileFailure(String path) {
-    return 'Could not access the local Anki file: $path';
-  }
+  String get ankiWebSyncUnsupportedPlatform =>
+      'Sign in to AnkiWeb to sync on web. Open Anki settings with the cloud icon to log in.';
 
   @override
-  String get ankiSyncStatusCollectionInvalid =>
-      'The collection could not be opened, updated, or passed SQLite/schema validation. Restore a valid collection or download it again.';
+  String get ankiWebDecksUnsupportedPlatform =>
+      'To browse or manage decks on web, sign in to AnkiWeb using the cloud icon.';
 
+  @override
+  String get ankiStatsUnsupportedPlatform =>
+      'Anki statistics are unavailable on this platform.';
+
+  @override
+  String get ankiSyncStatusDeviceClockMismatch =>
+      'The device clock differs from the sync server by more than 5 minutes. Correct the clock and try again.';
+
+  @override
+  String get ankiSyncStatusFullDownloadRequired =>
+      'The sync sanity check failed and local changes were rolled back. Download the server collection in full, then try again.';
+
+  @override
+  String get ankiSyncStatusFullTransferRequired =>
+      'This collection cannot be synchronized incrementally. Choose a full upload or download to continue.';
+
+  @override
+  String get ankiSyncStatusIncrementalSyncFailed =>
+      'Incremental sync could not complete. Check the server and connection, then try again.';
+
+  @override
+  String get emojiCategorySmileys => 'Smileys';
+
+  @override
+  String get emojiCategoryPeople => 'People';
+
+  @override
+  String get emojiCategoryAnimals => 'Animals';
+
+  @override
+  String get emojiCategoryFood => 'Food';
+
+  @override
+  String get emojiCategoryActivities => 'Activities';
+
+  @override
+  String get emojiCategoryTravel => 'Travel';
+
+  @override
+  String get emojiCategoryObjects => 'Objects';
+
+  @override
+  String get emojiCategorySymbols => 'Symbols';
+
+  @override
+  String get emojiCategoryFlags => 'Flags';
 }

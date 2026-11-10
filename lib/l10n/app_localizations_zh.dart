@@ -376,6 +376,31 @@ class AppLocalizationsZh extends AppLocalizations {
   String get taskFlowUseTemplate => '使用';
 
   @override
+  String get taskFlowOcrInputMissing => '找不到图片文件，请重新选择图片。';
+
+  @override
+  String get taskFlowOcrInputReadFailed => '无法读取图片文件，请检查文件访问权限后重试。';
+
+  @override
+  String get taskFlowOcrModelUnavailable =>
+      '未配置可用的 OCR 模型，请在流程设置中选择 OCR 服务和模型。';
+
+  @override
+  String taskFlowOcrRequestSizeLimit(Object size) {
+    return 'OCR 请求大小预算（$size MiB）';
+  }
+
+  @override
+  String taskFlowImageInputSizeLimit(Object size) {
+    return '任务流图片输入上限（$size MiB）';
+  }
+
+  @override
+  String taskFlowOcrInputTooLarge(Object limit) {
+    return '图片超过$limit，请缩小图片后重试。';
+  }
+
+  @override
   String get ocrTemplatePlainTextLabel => '纯文本模板';
 
   @override
@@ -1088,12 +1113,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get updateApkInstallFailedNoDetails => '安装失败，请手动打开 APK 安装';
 
   @override
-  String get updateApkInstallerUnavailable =>
-      '未找到可安装 APK 的应用，请手动打开 APK 安装。';
+  String get updateApkInstallerUnavailable => '未找到可安装 APK 的应用，请手动打开 APK 安装。';
 
   @override
-  String get updateApkInstallPermissionDenied =>
-      '请在系统设置中允许 Stroom 安装未知来源应用。';
+  String get updateApkInstallPermissionDenied => '请在系统设置中允许 Stroom 安装未知来源应用。';
 
   @override
   String get updateRestartDialogTitle => '更新检测';
@@ -2783,21 +2806,29 @@ class AppLocalizationsZh extends AppLocalizations {
   String get catcatchSkipped => '已跳过（无需处理）';
 
   @override
-  String catCatchDetailMediaResources(Object count) => '获取到$count个媒体资源';
+  String catCatchDetailMediaResources(Object count) {
+    return '获取到$count个媒体资源';
+  }
 
   @override
-  String catCatchDetailResources(Object count) => '获取到$count个资源';
+  String catCatchDetailResources(Object count) {
+    return '获取到$count个资源';
+  }
 
   @override
-  String catCatchDetailBrowserResources(Object count) =>
-      '浏览器中获取到$count个资源';
+  String catCatchDetailBrowserResources(Object count) {
+    return '浏览器中获取到$count个资源';
+  }
 
   @override
-  String catCatchDetailPlaylistResources(Object total, Object segments) =>
-      '获取到$total个资源（播放列表$segments个分段）';
+  String catCatchDetailPlaylistResources(Object total, Object segments) {
+    return '获取到$total个资源（播放列表$segments个分段）';
+  }
 
   @override
-  String catCatchDetailChooseResource(Object count) => '共$count个资源，请用户选择';
+  String catCatchDetailChooseResource(Object count) {
+    return '共$count个资源，请用户选择';
+  }
 
   @override
   String get catCatchDetailAutoSelectFirst => '自动选择第1个结果，进入下载';
@@ -2806,8 +2837,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get catCatchDetailAutoSelectRemaining => '剩余1个结果，自动进入下载';
 
   @override
-  String catCatchDetailSkipFormat(Object extension) =>
-      '.$extension 格式无需转换，已跳过';
+  String catCatchDetailSkipFormat(Object extension) {
+    return '.$extension 格式无需转换，已跳过';
+  }
 
   @override
   String get catCatchDetailSkipNoExtension => '. 格式无需转换，已跳过';
@@ -2817,21 +2849,29 @@ class AppLocalizationsZh extends AppLocalizations {
     Object duration,
     Object remaining,
     Object removed,
-  ) =>
-      '按照$duration时长筛选后剩余$remaining个结果（已排除$removed个不匹配的资源）';
+  ) {
+    return '按照$duration时长筛选后剩余$remaining个结果（已排除$removed个不匹配的资源）';
+  }
 
   @override
-  String catCatchDetailDurationAllMatch(Object count, Object duration) =>
-      '按时长$duration筛选，$count个资源全部匹配';
+  String catCatchDetailDurationAllMatch(Object count, Object duration) {
+    return '按时长$duration筛选，$count个资源全部匹配';
+  }
 
   @override
-  String catCatchDurationHours(Object count) => '$count小时';
+  String catCatchDurationHours(Object count) {
+    return '$count小时';
+  }
 
   @override
-  String catCatchDurationMinutes(Object count) => '$count分钟';
+  String catCatchDurationMinutes(Object count) {
+    return '$count分钟';
+  }
 
   @override
-  String catCatchDurationSeconds(Object count) => '$count秒';
+  String catCatchDurationSeconds(Object count) {
+    return '$count秒';
+  }
 
   @override
   String get catcatchRetryStep => '重试此步骤';
@@ -6106,30 +6146,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get toolBuiltinEnableHelp => '是否在助手中启用，由该助手的默认工具设置管理。';
 
   @override
-  String get httpToolBraveDescription =>
-      '使用 Brave Search API 搜索网络。需要配置 API Key。';
-
-  @override
-  String get httpToolBochaDescription =>
-      '使用博查 AI Search API 搜索网络。需要配置 API Key。';
-
-  @override
-  String get httpToolQueritDescription => '使用 Querit Search 搜索网络。需要配置 API Key。';
-
-  @override
-  String get httpToolSearxngDescription =>
-      '注重隐私保护的自托管元搜索引擎，可聚合多种搜索源。需要配置实例 URL。';
-
-  @override
-  String get httpToolSearchQueryDescription => '搜索关键词。';
-
-  @override
-  String get httpToolSearchCountDescription => '返回结果数量。';
-
-  @override
-  String get httpToolSearchCountMax20Description => '返回结果数量（最大 20）。';
-
-  @override
   String get mcpSseUrlLabel => 'SSE URL';
 
   @override
@@ -9184,37 +9200,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get connectivityTestRun => '运行测试';
 
   @override
-  String get connectivityTestHttpSuccess => "HTTP 工具请求成功";
-  String get connectivityTestHttpFailure => "HTTP 工具请求失败";
-  String get connectivityTestInvalidMcpConfig => "MCP 配置无效";
-  String get connectivityTestMissingTransport => "缺少有效的传输类型配置。";
-  String get connectivityTestStdioUnsupported => "当前平台不支持 stdio";
-  String get connectivityTestStdioDesktopOnly => "stdio MCP 需要启动本地进程，请在 Stroom 桌面版中测试。";
-  String get connectivityTestInvalidContent => "测试内容无效";
-  String get connectivityTestMethodMustBeString => "method 必须是字符串。";
-  String get connectivityTestUnsupportedMethod => "不支持的测试方法";
-  String get connectivityTestReadOnlyMethodOnly => "为避免测试写入远程业务数据，MCP 连通性测试只允许只读的 tools/list 方法。";
-  String get connectivityTestParamsMustBeObject => "params 必须是 JSON 对象。";
-  String get connectivityTestMcpConnectionFailed => "无法连接 MCP 服务";
-  String get connectivityTestCheckConnectionSettings => "请检查地址、认证信息和网络，或查看应用日志获取连接详情。";
-  String get connectivityTestRemainingToolsOmitted => "；其余工具已省略";
-  String get connectivityTestMcpSuccess => "MCP 连通性测试成功";
-  String get connectivityTestTodoMutationBlocked => "测试参数会修改待办数据";
-  String get connectivityTestTodoReadOnly => "为保护当前会话待办列表，连通性测试只允许省略 todos 或设置为 null。";
-  String get connectivityTestUnknownBuiltin => "未知的内置工具";
-  String get connectivityTestBuiltinSuccess => "内置工具测试成功";
-  String get connectivityTestBuiltinFailure => "内置工具测试失败";
-  String get connectivityTestResultTruncated => "…（结果已截断）";
-  String get connectivityTestTopLevelObjectRequired => "测试内容顶层必须是 JSON 对象。";
-  String connectivityTestMcpRequestTimeout(String method) =>
-      'MCP 请求超时：$method';
-  String get connectivityTestRequestTimeout => "请求超时，请检查服务响应和网络。";
-  String connectivityTestToolNames(String names) => "：$names";
-  String connectivityTestMcpSuccessDetails(int count, String names, String suffix) =>
-      "连接及 tools/list 请求成功，共发现 $count 个工具$names$suffix。";
-  String connectivityTestBuiltinExecutorMissing(String toolName) =>
-      "找不到工具“$toolName”的测试执行器。";
-
   String get connectivityTestFailedSummary => '测试未能完成';
 
   @override
@@ -10638,123 +10623,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get renderErrorRestartMessage => '请尝试重启应用。';
 
   @override
-  String backupRestoreApkgImportSummary(int decks, int notes, int cards) {
-    return '导入完成：$decks 个牌组，$notes 个笔记，$cards 张卡片';
-  }
-
-  @override
-  String backupRestoreApkgFileNotFound(String path) {
-    return '找不到所选的 .apkg 文件：$path';
-  }
-
-  @override
-  String get backupRestoreApkgInvalidArchive =>
-      '所选的 .apkg 文件已损坏或不是有效的压缩包。';
-
-  @override
-  String get backupRestoreApkgCollectionMissing =>
-      '.apkg 文件中缺少 collection.anki2。';
-
-  @override
-  String backupRestoreApkgTargetMissing(String path) {
-    return '请先打开 Anki 闪卡功能，再导入或导出牌组：$path';
-  }
-
-  @override
-  String get backupRestoreApkgDatabaseCorrupt => 'Anki collection 数据库已损坏。';
-
-  @override
-  String backupRestoreApkgLocalFileFailure(String path) {
-    return '无法访问本地 Anki 文件：$path';
-  }
-
-  @override
-  String backupRestoreApkgUnexpectedError(String path) {
-    return '.apkg 操作访问此路径时失败：$path';
-  }
-
-  @override
-  String get backupRestoreApkgOperationFailed => '.apkg 操作失败，无法读取文件或数据库。';
-
-  @override
-  String backupRestoreApkgExportFailed(String path) {
-    return '无法从此数据库打包导出 Anki 牌组：$path';
-  }
-
-  @override
-  String ankiSyncStatusServerAuthRejected(int statusCode) {
-    return '同步服务器拒绝了请求（HTTP $statusCode）。请检查登录凭据和服务器权限。';
-  }
-
-  @override
-  String ankiSyncStatusServerEndpointNotFound(int statusCode) {
-    return '找不到同步接口（HTTP $statusCode）。请检查服务器地址。';
-  }
-
-  @override
-  String get ankiSyncStatusMediaProtocolFailed =>
-      '媒体同步服务器返回了无效响应。请确认服务器支持 Anki 媒体同步后重试。';
-
-  @override
-  String get ankiSyncStatusMediaIndexCorrupt =>
-      '本地媒体同步索引已损坏。请重置媒体同步数据后重试。';
-
-  @override
-  String get ankiSyncStatusMediaIndexFailure => '本地媒体同步索引无法读取或更新。';
-
-  @override
-  String get ankiSyncStatusMediaChecksumMismatch => '下载的媒体文件校验失败。请重试媒体同步。';
-
-  @override
-  String ankiSyncStatusMediaFilenameConflict(String filename) {
-    return '媒体文件“$filename”在本地和服务器上均有修改。请先备份并解决同名冲突，再重试。';
-  }
-
-  @override
-  String ankiSyncStatusMediaInvalidFilename(String filename) {
-    return '媒体文件名“$filename”无法同步。请将其重命名为符合 Anki 规则的名称后重试。';
-  }
-
-  @override
-  String ankiSyncStatusMediaFileSizeLimit(int limitMb) {
-    return '媒体文件为空或超过 $limitMb MB 限制。';
-  }
-
-  @override
-  String ankiSyncStatusMediaBatchLimitExceeded(int count, int limit) {
-    return '媒体压缩包包含 $count 个条目，最多允许 $limit 个（含清单）。';
-  }
-
-  @override
-  String get ankiSyncStatusMediaSanityCheckFailed => '媒体同步校验失败。请重试同步。';
-
-  @override
-  String get ankiWebSyncUnsupportedPlatform =>
-      '网页端需登录 AnkiWeb 才能同步。请点击云朵图标打开 Anki 设置并登录。';
-
-  @override
-  String get ankiWebDecksUnsupportedPlatform =>
-      '如需在网页端浏览或管理牌组，请点击云朵图标登录 AnkiWeb。';
-
-  @override
-  String get ankiStatsUnsupportedPlatform => '当前平台无法查看 Anki 统计数据。';
-
-  @override
-  String get ankiSyncStatusDeviceClockMismatch =>
-      '设备时间与同步服务器相差超过 5 分钟，请校准设备时间后重试。';
-
-  @override
-  String get ankiSyncStatusFullDownloadRequired =>
-      '同步数据校验失败，本地更改已回滚。请完整下载服务器 collection 后重试。';
-
-  @override
-  String get ankiSyncStatusFullTransferRequired =>
-      '此 collection 无法增量同步。请选择完整上传或下载后继续。';
-
-  @override
-  String get ankiSyncStatusIncrementalSyncFailed => '增量同步未能完成。请检查服务器和网络连接后重试。';
-
-  @override
   String get batchDlgFileName => '文件名';
 
   @override
@@ -10776,7 +10644,42 @@ class AppLocalizationsZh extends AppLocalizations {
   String get batchDlgNameWhitespaceError => '名称不能以空白开头或结尾，可添加空白清理规则';
 
   @override
+  String batchDlgNameEmpty(String kind) {
+    return '$kind不能为空';
+  }
+
+  @override
+  String batchDlgNameTrailingWhitespace(String kind) {
+    return '$kind不能以空白结尾';
+  }
+
+  @override
+  String batchDlgNameTooLong(String kind, String count) {
+    return '$kind不能超过$count个字符';
+  }
+
+  @override
+  String batchDlgNameIllegalCharacters(String kind) {
+    return '$kind不能包含 Windows 非法字符';
+  }
+
+  @override
+  String batchDlgNameTrailingDot(String kind) {
+    return '$kind不能以 . 结尾';
+  }
+
+  @override
+  String batchDlgNameReserved(String kind) {
+    return '$kind不能使用 Windows 保留名称';
+  }
+
+  @override
   String get batchDlgIntermediateNameTooLong => '中间名称过长，请调整规则';
+
+  @override
+  String batchDlgTemplateMissingDate(String date) {
+    return '该项目没有$date，请调整模板';
+  }
 
   @override
   String get batchDlgCreatedDate => '创建时间';
@@ -10785,52 +10688,101 @@ class AppLocalizationsZh extends AppLocalizations {
   String get batchDlgModifiedDate => '修改时间';
 
   @override
-  String get emojiCategorySmileys => '表情';
+  String get connectivityTestHttpSuccess => 'HTTP 工具请求成功';
 
   @override
-  String get emojiCategoryPeople => '人物';
+  String get connectivityTestHttpFailure => 'HTTP 工具请求失败';
 
   @override
-  String get emojiCategoryAnimals => '动物';
+  String get connectivityTestInvalidMcpConfig => 'MCP 配置无效';
 
   @override
-  String get emojiCategoryFood => '食物';
+  String get connectivityTestMissingTransport => '缺少有效的传输类型配置。';
 
   @override
-  String get emojiCategoryActivities => '活动';
+  String get connectivityTestStdioUnsupported => '当前平台不支持 stdio';
 
   @override
-  String get emojiCategoryTravel => '旅行';
+  String get connectivityTestStdioDesktopOnly =>
+      'stdio MCP 需要启动本地进程，请在 Stroom 桌面版中测试。';
 
   @override
-  String get emojiCategoryObjects => '物品';
+  String get connectivityTestInvalidContent => '测试内容无效';
 
   @override
-  String get emojiCategorySymbols => '符号';
+  String get connectivityTestMethodMustBeString => 'method 必须是字符串。';
 
   @override
-  String get emojiCategoryFlags => '旗帜';
+  String get connectivityTestUnsupportedMethod => '不支持的测试方法';
 
   @override
-  String batchDlgNameEmpty(String kind) => '$kind不能为空';
+  String get connectivityTestReadOnlyMethodOnly =>
+      '为避免测试写入远程业务数据，MCP 连通性测试只允许只读的 tools/list 方法。';
 
   @override
-  String batchDlgNameTrailingWhitespace(String kind) => '$kind不能以空白结尾';
+  String get connectivityTestParamsMustBeObject => 'params 必须是 JSON 对象。';
 
   @override
-  String batchDlgNameTooLong(String kind, String count) => '$kind不能超过$count个字符';
+  String get connectivityTestMcpConnectionFailed => '无法连接 MCP 服务';
 
   @override
-  String batchDlgNameIllegalCharacters(String kind) => '$kind不能包含 Windows 非法字符';
+  String get connectivityTestCheckConnectionSettings =>
+      '请检查地址、认证信息和网络，或查看应用日志获取连接详情。';
 
   @override
-  String batchDlgNameTrailingDot(String kind) => '$kind不能以 . 结尾';
+  String get connectivityTestRemainingToolsOmitted => '；其余工具已省略';
 
   @override
-  String batchDlgNameReserved(String kind) => '$kind不能使用 Windows 保留名称';
+  String get connectivityTestMcpSuccess => 'MCP 连通性测试成功';
 
   @override
-  String batchDlgTemplateMissingDate(String date) => '该项目没有$date，请调整模板';
+  String connectivityTestToolNames(Object names) {
+    return '：$names';
+  }
+
+  @override
+  String connectivityTestMcpSuccessDetails(
+    int count,
+    String names,
+    String suffix,
+  ) {
+    return '连接及 tools/list 请求成功，共发现 $count 个工具$names$suffix。';
+  }
+
+  @override
+  String get connectivityTestTodoMutationBlocked => '测试参数会修改待办数据';
+
+  @override
+  String get connectivityTestTodoReadOnly =>
+      '为保护当前会话待办列表，连通性测试只允许省略 todos 或设置为 null。';
+
+  @override
+  String get connectivityTestUnknownBuiltin => '未知的内置工具';
+
+  @override
+  String connectivityTestBuiltinExecutorMissing(String toolName) {
+    return '找不到工具“$toolName”的测试执行器。';
+  }
+
+  @override
+  String get connectivityTestBuiltinSuccess => '内置工具测试成功';
+
+  @override
+  String get connectivityTestBuiltinFailure => '内置工具测试失败';
+
+  @override
+  String get connectivityTestTopLevelObjectRequired => '测试内容顶层必须是 JSON 对象。';
+
+  @override
+  String get connectivityTestRequestTimeout => '请求超时，请检查服务响应和网络。';
+
+  @override
+  String connectivityTestMcpRequestTimeout(String method) {
+    return 'MCP 请求超时：$method';
+  }
+
+  @override
+  String get connectivityTestResultTruncated => '…（结果已截断）';
 
   @override
   String get toolResultWebSearchEmptyQuery => '错误：搜索关键词不能为空。';
@@ -11008,53 +10960,212 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get httpToolBraveDescription =>
+      '使用 Brave Search API 搜索网络。需要配置 API Key。';
+
+  @override
+  String get httpToolBochaDescription =>
+      '使用博查 AI Search API 搜索网络。需要配置 API Key。';
+
+  @override
+  String get httpToolQueritDescription => '使用 Querit Search 搜索网络。需要配置 API Key。';
+
+  @override
+  String get httpToolSearxngDescription =>
+      '注重隐私保护的自托管元搜索引擎，可聚合多种搜索源。需要配置实例 URL。';
+
+  @override
+  String get httpToolSearchQueryDescription => '搜索关键词。';
+
+  @override
+  String get httpToolSearchCountDescription => '返回结果数量。';
+
+  @override
+  String get httpToolSearchCountMax20Description => '返回结果数量（最大 20）。';
+
+  @override
+  String backupRestoreApkgImportSummary(int decks, int notes, int cards) {
+    return '导入完成：$decks 个牌组，$notes 个笔记，$cards 张卡片';
+  }
+
+  @override
+  String backupRestoreApkgFileNotFound(String path) {
+    return '找不到所选的 .apkg 文件：$path';
+  }
+
+  @override
+  String get backupRestoreApkgInvalidArchive => '所选的 .apkg 文件已损坏或不是有效的压缩包。';
+
+  @override
+  String get backupRestoreApkgCollectionMissing =>
+      '.apkg 文件中缺少 collection.anki2。';
+
+  @override
+  String backupRestoreApkgTargetMissing(String path) {
+    return '请先打开 Anki 闪卡功能，再导入或导出牌组：$path';
+  }
+
+  @override
+  String get backupRestoreApkgDatabaseCorrupt => 'Anki collection 数据库已损坏。';
+
+  @override
+  String backupRestoreApkgLocalFileFailure(String path) {
+    return '无法访问本地 Anki 文件：$path';
+  }
+
+  @override
+  String backupRestoreApkgUnexpectedError(String path) {
+    return '.apkg 操作访问此路径时失败：$path';
+  }
+
+  @override
+  String get backupRestoreApkgOperationFailed => '.apkg 操作失败，无法读取文件或数据库。';
+
+  @override
+  String backupRestoreApkgExportFailed(String path) {
+    return '无法从此数据库打包导出 Anki 牌组：$path';
+  }
+
+  @override
   String get ankiSyncStatusProtocolFailed =>
       '同步服务器响应无效或不完整。请确认服务器支持 Anki sync v10。';
 
   @override
-  String get ankiSyncStatusLoginRequired =>
-      '请先登录 Anki 同步账户，再继续操作。';
+  String get ankiSyncStatusLoginRequired => '请先登录 Anki 同步账户，再继续操作。';
 
   @override
-  String get ankiSyncStatusInvalidServerUrl =>
-      '请输入有效的 HTTP 或 HTTPS 同步服务器地址。';
+  String get ankiSyncStatusInvalidServerUrl => '请输入有效的 HTTP 或 HTTPS 同步服务器地址。';
 
   @override
-  String get ankiSyncStatusHttpsRequired =>
-      '远程自建同步服务器必须使用 HTTPS。';
+  String get ankiSyncStatusHttpsRequired => '远程自建同步服务器必须使用 HTTPS。';
 
   @override
-  String get ankiSyncStatusConnectionTimeout =>
-      '同步请求超时。请检查服务器地址和网络后重试。';
+  String get ankiSyncStatusConnectionTimeout => '同步请求超时。请检查服务器地址和网络后重试。';
 
   @override
-  String get ankiSyncStatusTlsFailure =>
-      '无法验证服务器证书。请检查证书或配置自定义 CA。';
+  String get ankiSyncStatusTlsFailure => '无法验证服务器证书。请检查证书或配置自定义 CA。';
 
   @override
-  String get ankiSyncStatusConnectionFailure =>
-      '无法连接到同步服务器。请检查服务器地址和网络。';
+  String get ankiSyncStatusConnectionFailure => '无法连接到同步服务器。请检查服务器地址和网络。';
 
   @override
-  String get ankiSyncStatusRequestFailure =>
-      '同步请求失败。请检查服务器和网络后重试。';
+  String get ankiSyncStatusRequestFailure => '同步请求失败。请检查服务器和网络后重试。';
 
   @override
-  String ankiSyncStatusServerHttpError(int statusCode) =>
-      '同步服务器返回了 HTTP $statusCode。';
+  String ankiSyncStatusServerHttpError(int statusCode) {
+    return '同步服务器返回了 HTTP $statusCode。';
+  }
 
   @override
-  String ankiSyncStatusResponseTooLarge(int limitMb) =>
-      '同步响应超过 $limitMb MB 限制。';
+  String ankiSyncStatusResponseTooLarge(int limitMb) {
+    return '同步响应超过 $limitMb MB 限制。';
+  }
 
   @override
-  String get ankiSyncStatusLocalFileFailure =>
-      '无法读取或清理本地同步文件。请检查磁盘访问权限后重试。';
+  String get ankiSyncStatusLocalFileFailure => '无法读取或清理本地同步文件。请检查磁盘访问权限后重试。';
 
   @override
   String get ankiSyncStatusCollectionInvalid =>
       '无法打开或更新 collection，或该文件未通过 SQLite/schema 校验。请恢复有效的 collection 备份或重新下载。';
 
+  @override
+  String ankiSyncStatusServerAuthRejected(int statusCode) {
+    return '同步服务器拒绝了请求（HTTP $statusCode）。请检查登录凭据和服务器权限。';
+  }
+
+  @override
+  String ankiSyncStatusServerEndpointNotFound(int statusCode) {
+    return '找不到同步接口（HTTP $statusCode）。请检查服务器地址。';
+  }
+
+  @override
+  String get ankiSyncStatusMediaProtocolFailed =>
+      '媒体同步服务器返回了无效响应。请确认服务器支持 Anki 媒体同步后重试。';
+
+  @override
+  String get ankiSyncStatusMediaIndexCorrupt => '本地媒体同步索引已损坏。请重置媒体同步数据后重试。';
+
+  @override
+  String get ankiSyncStatusMediaIndexFailure => '本地媒体同步索引无法读取或更新。';
+
+  @override
+  String get ankiSyncStatusMediaChecksumMismatch => '下载的媒体文件校验失败。请重试媒体同步。';
+
+  @override
+  String ankiSyncStatusMediaFilenameConflict(String filename) {
+    return '媒体文件“$filename”在本地和服务器上均有修改。请先备份并解决同名冲突，再重试。';
+  }
+
+  @override
+  String ankiSyncStatusMediaInvalidFilename(String filename) {
+    return '媒体文件名“$filename”无法同步。请将其重命名为符合 Anki 规则的名称后重试。';
+  }
+
+  @override
+  String ankiSyncStatusMediaFileSizeLimit(int limitMb) {
+    return '媒体文件为空或超过 $limitMb MB 限制。';
+  }
+
+  @override
+  String ankiSyncStatusMediaBatchLimitExceeded(int count, int limit) {
+    return '媒体压缩包包含 $count 个条目，最多允许 $limit 个（含清单）。';
+  }
+
+  @override
+  String get ankiSyncStatusMediaSanityCheckFailed => '媒体同步校验失败。请重试同步。';
+
+  @override
+  String get ankiWebSyncUnsupportedPlatform =>
+      '网页端需登录 AnkiWeb 才能同步。请点击云朵图标打开 Anki 设置并登录。';
+
+  @override
+  String get ankiWebDecksUnsupportedPlatform =>
+      '如需在网页端浏览或管理牌组，请点击云朵图标登录 AnkiWeb。';
+
+  @override
+  String get ankiStatsUnsupportedPlatform => '当前平台无法查看 Anki 统计数据。';
+
+  @override
+  String get ankiSyncStatusDeviceClockMismatch =>
+      '设备时间与同步服务器相差超过 5 分钟，请校准设备时间后重试。';
+
+  @override
+  String get ankiSyncStatusFullDownloadRequired =>
+      '同步数据校验失败，本地更改已回滚。请完整下载服务器 collection 后重试。';
+
+  @override
+  String get ankiSyncStatusFullTransferRequired =>
+      '此 collection 无法增量同步。请选择完整上传或下载后继续。';
+
+  @override
+  String get ankiSyncStatusIncrementalSyncFailed => '增量同步未能完成。请检查服务器和网络连接后重试。';
+
+  @override
+  String get emojiCategorySmileys => '表情';
+
+  @override
+  String get emojiCategoryPeople => '人物';
+
+  @override
+  String get emojiCategoryAnimals => '动物';
+
+  @override
+  String get emojiCategoryFood => '食物';
+
+  @override
+  String get emojiCategoryActivities => '活动';
+
+  @override
+  String get emojiCategoryTravel => '旅行';
+
+  @override
+  String get emojiCategoryObjects => '物品';
+
+  @override
+  String get emojiCategorySymbols => '符号';
+
+  @override
+  String get emojiCategoryFlags => '旗帜';
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).
@@ -11428,6 +11539,31 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get taskFlowUseTemplate => '使用';
 
   @override
+  String get taskFlowOcrInputMissing => '找不到图片文件，请重新选择图片。';
+
+  @override
+  String get taskFlowOcrInputReadFailed => '无法读取图片文件，请检查文件访问权限后重试。';
+
+  @override
+  String get taskFlowOcrModelUnavailable =>
+      '未配置可用的 OCR 模型，请在流程设置中选择 OCR 服务和模型。';
+
+  @override
+  String taskFlowOcrRequestSizeLimit(Object size) {
+    return 'OCR 请求大小预算（$size MiB）';
+  }
+
+  @override
+  String taskFlowImageInputSizeLimit(Object size) {
+    return '任务流图片输入上限（$size MiB）';
+  }
+
+  @override
+  String taskFlowOcrInputTooLarge(Object limit) {
+    return '图片超过$limit，请缩小图片后重试。';
+  }
+
+  @override
   String get ocrTemplatePlainTextLabel => '纯文本模板';
 
   @override
@@ -12140,12 +12276,10 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get updateApkInstallFailedNoDetails => '安装失败，请手动打开 APK 安装';
 
   @override
-  String get updateApkInstallerUnavailable =>
-      '未找到可安装 APK 的应用，请手动打开 APK 安装。';
+  String get updateApkInstallerUnavailable => '未找到可安装 APK 的应用，请手动打开 APK 安装。';
 
   @override
-  String get updateApkInstallPermissionDenied =>
-      '请在系统设置中允许 Stroom 安装未知来源应用。';
+  String get updateApkInstallPermissionDenied => '请在系统设置中允许 Stroom 安装未知来源应用。';
 
   @override
   String get updateRestartDialogTitle => '更新检测';
@@ -13835,21 +13969,29 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get catcatchSkipped => '已跳过（无需处理）';
 
   @override
-  String catCatchDetailMediaResources(Object count) => '获取到$count个媒体资源';
+  String catCatchDetailMediaResources(Object count) {
+    return '获取到$count个媒体资源';
+  }
 
   @override
-  String catCatchDetailResources(Object count) => '获取到$count个资源';
+  String catCatchDetailResources(Object count) {
+    return '获取到$count个资源';
+  }
 
   @override
-  String catCatchDetailBrowserResources(Object count) =>
-      '浏览器中获取到$count个资源';
+  String catCatchDetailBrowserResources(Object count) {
+    return '浏览器中获取到$count个资源';
+  }
 
   @override
-  String catCatchDetailPlaylistResources(Object total, Object segments) =>
-      '获取到$total个资源（播放列表$segments个分段）';
+  String catCatchDetailPlaylistResources(Object total, Object segments) {
+    return '获取到$total个资源（播放列表$segments个分段）';
+  }
 
   @override
-  String catCatchDetailChooseResource(Object count) => '共$count个资源，请用户选择';
+  String catCatchDetailChooseResource(Object count) {
+    return '共$count个资源，请用户选择';
+  }
 
   @override
   String get catCatchDetailAutoSelectFirst => '自动选择第1个结果，进入下载';
@@ -13858,8 +14000,9 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get catCatchDetailAutoSelectRemaining => '剩余1个结果，自动进入下载';
 
   @override
-  String catCatchDetailSkipFormat(Object extension) =>
-      '.$extension 格式无需转换，已跳过';
+  String catCatchDetailSkipFormat(Object extension) {
+    return '.$extension 格式无需转换，已跳过';
+  }
 
   @override
   String get catCatchDetailSkipNoExtension => '. 格式无需转换，已跳过';
@@ -13869,21 +14012,29 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
     Object duration,
     Object remaining,
     Object removed,
-  ) =>
-      '按照$duration时长筛选后剩余$remaining个结果（已排除$removed个不匹配的资源）';
+  ) {
+    return '按照$duration时长筛选后剩余$remaining个结果（已排除$removed个不匹配的资源）';
+  }
 
   @override
-  String catCatchDetailDurationAllMatch(Object count, Object duration) =>
-      '按时长$duration筛选，$count个资源全部匹配';
+  String catCatchDetailDurationAllMatch(Object count, Object duration) {
+    return '按时长$duration筛选，$count个资源全部匹配';
+  }
 
   @override
-  String catCatchDurationHours(Object count) => '$count小时';
+  String catCatchDurationHours(Object count) {
+    return '$count小时';
+  }
 
   @override
-  String catCatchDurationMinutes(Object count) => '$count分钟';
+  String catCatchDurationMinutes(Object count) {
+    return '$count分钟';
+  }
 
   @override
-  String catCatchDurationSeconds(Object count) => '$count秒';
+  String catCatchDurationSeconds(Object count) {
+    return '$count秒';
+  }
 
   @override
   String get catcatchRetryStep => '重试此步骤';
@@ -17156,30 +17307,6 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get toolBuiltinEnableHelp => '是否在助手中启用，由该助手的默认工具设置管理。';
-
-  @override
-  String get httpToolBraveDescription =>
-      '使用 Brave Search API 搜索网络。需要配置 API Key。';
-
-  @override
-  String get httpToolBochaDescription =>
-      '使用博查 AI Search API 搜索网络。需要配置 API Key。';
-
-  @override
-  String get httpToolQueritDescription => '使用 Querit Search 搜索网络。需要配置 API Key。';
-
-  @override
-  String get httpToolSearxngDescription =>
-      '注重隐私保护的自托管元搜索引擎，可聚合多种搜索源。需要配置实例 URL。';
-
-  @override
-  String get httpToolSearchQueryDescription => '搜索关键词。';
-
-  @override
-  String get httpToolSearchCountDescription => '返回结果数量。';
-
-  @override
-  String get httpToolSearchCountMax20Description => '返回结果数量（最大 20）。';
 
   @override
   String get mcpSseUrlLabel => 'SSE URL';
@@ -21659,6 +21786,367 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get renderErrorRestartMessage => '请尝试重启应用。';
 
   @override
+  String get batchDlgFileName => '文件名';
+
+  @override
+  String get batchDlgFolderName => '文件夹名';
+
+  @override
+  String get batchDlgFileNameConflict => '同一文件夹内存在同名文件';
+
+  @override
+  String get batchDlgFolderNameConflict => '目标位置已存在同名文件夹';
+
+  @override
+  String get batchDlgFolderNameSwapConflict => '文件夹之间不能在同一批次互换名称';
+
+  @override
+  String get batchDlgControlCharacterError => '名称不能包含控制字符';
+
+  @override
+  String get batchDlgNameWhitespaceError => '名称不能以空白开头或结尾，可添加空白清理规则';
+
+  @override
+  String batchDlgNameEmpty(String kind) {
+    return '$kind不能为空';
+  }
+
+  @override
+  String batchDlgNameTrailingWhitespace(String kind) {
+    return '$kind不能以空白结尾';
+  }
+
+  @override
+  String batchDlgNameTooLong(String kind, String count) {
+    return '$kind不能超过$count个字符';
+  }
+
+  @override
+  String batchDlgNameIllegalCharacters(String kind) {
+    return '$kind不能包含 Windows 非法字符';
+  }
+
+  @override
+  String batchDlgNameTrailingDot(String kind) {
+    return '$kind不能以 . 结尾';
+  }
+
+  @override
+  String batchDlgNameReserved(String kind) {
+    return '$kind不能使用 Windows 保留名称';
+  }
+
+  @override
+  String get batchDlgIntermediateNameTooLong => '中间名称过长，请调整规则';
+
+  @override
+  String batchDlgTemplateMissingDate(String date) {
+    return '该项目没有$date，请调整模板';
+  }
+
+  @override
+  String get batchDlgCreatedDate => '创建时间';
+
+  @override
+  String get batchDlgModifiedDate => '修改时间';
+
+  @override
+  String get connectivityTestHttpSuccess => 'HTTP 工具请求成功';
+
+  @override
+  String get connectivityTestHttpFailure => 'HTTP 工具请求失败';
+
+  @override
+  String get connectivityTestInvalidMcpConfig => 'MCP 配置无效';
+
+  @override
+  String get connectivityTestMissingTransport => '缺少有效的传输类型配置。';
+
+  @override
+  String get connectivityTestStdioUnsupported => '当前平台不支持 stdio';
+
+  @override
+  String get connectivityTestStdioDesktopOnly =>
+      'stdio MCP 需要启动本地进程，请在 Stroom 桌面版中测试。';
+
+  @override
+  String get connectivityTestInvalidContent => '测试内容无效';
+
+  @override
+  String get connectivityTestMethodMustBeString => 'method 必须是字符串。';
+
+  @override
+  String get connectivityTestUnsupportedMethod => '不支持的测试方法';
+
+  @override
+  String get connectivityTestReadOnlyMethodOnly =>
+      '为避免测试写入远程业务数据，MCP 连通性测试只允许只读的 tools/list 方法。';
+
+  @override
+  String get connectivityTestParamsMustBeObject => 'params 必须是 JSON 对象。';
+
+  @override
+  String get connectivityTestMcpConnectionFailed => '无法连接 MCP 服务';
+
+  @override
+  String get connectivityTestCheckConnectionSettings =>
+      '请检查地址、认证信息和网络，或查看应用日志获取连接详情。';
+
+  @override
+  String get connectivityTestRemainingToolsOmitted => '；其余工具已省略';
+
+  @override
+  String get connectivityTestMcpSuccess => 'MCP 连通性测试成功';
+
+  @override
+  String connectivityTestToolNames(Object names) {
+    return '：$names';
+  }
+
+  @override
+  String connectivityTestMcpSuccessDetails(
+    int count,
+    String names,
+    String suffix,
+  ) {
+    return '连接及 tools/list 请求成功，共发现 $count 个工具$names$suffix。';
+  }
+
+  @override
+  String get connectivityTestTodoMutationBlocked => '测试参数会修改待办数据';
+
+  @override
+  String get connectivityTestTodoReadOnly =>
+      '为保护当前会话待办列表，连通性测试只允许省略 todos 或设置为 null。';
+
+  @override
+  String get connectivityTestUnknownBuiltin => '未知的内置工具';
+
+  @override
+  String connectivityTestBuiltinExecutorMissing(String toolName) {
+    return '找不到工具“$toolName”的测试执行器。';
+  }
+
+  @override
+  String get connectivityTestBuiltinSuccess => '内置工具测试成功';
+
+  @override
+  String get connectivityTestBuiltinFailure => '内置工具测试失败';
+
+  @override
+  String get connectivityTestTopLevelObjectRequired => '测试内容顶层必须是 JSON 对象。';
+
+  @override
+  String get connectivityTestRequestTimeout => '请求超时，请检查服务响应和网络。';
+
+  @override
+  String connectivityTestMcpRequestTimeout(String method) {
+    return 'MCP 请求超时：$method';
+  }
+
+  @override
+  String get connectivityTestResultTruncated => '…（结果已截断）';
+
+  @override
+  String get toolResultWebSearchEmptyQuery => '错误：搜索关键词不能为空。';
+
+  @override
+  String toolResultWebSearchInvalidSource(Object source) {
+    return '错误：不支持的搜索引擎“$source”。可选值：google、bing、baidu。';
+  }
+
+  @override
+  String toolResultWebSearchFallback(
+    Object preferred,
+    Object reason,
+    Object fallback,
+  ) {
+    return '首选引擎 $preferred $reason，已切换到 $fallback。';
+  }
+
+  @override
+  String get toolResultWebSearchNotFound => '未找到相关搜索结果。';
+
+  @override
+  String toolResultWebSearchNotFoundFrom(Object sources) {
+    return '未找到相关搜索结果（$sources 均明确返回无结果）。';
+  }
+
+  @override
+  String toolResultWebSearchIncomplete(Object sources, Object failures) {
+    return '搜索不完整：$sources 明确返回无结果；其他引擎不可用或返回了无法解析的页面：$failures';
+  }
+
+  @override
+  String toolResultWebSearchUnavailable(Object failures) {
+    return '错误：所有搜索引擎均不可用。$failures';
+  }
+
+  @override
+  String toolResultWebSearchResultsHeader(Object source) {
+    return '来自 $source 的搜索结果：';
+  }
+
+  @override
+  String get toolResultWebSearchLinkLabel => '链接';
+
+  @override
+  String get toolResultWebSearchSummaryLabel => '摘要';
+
+  @override
+  String get toolResultWebSearchEmptyResults => '未找到相关搜索结果。';
+
+  @override
+  String get toolResultTodoInvalid => '错误：todos 参数必须是数组（省略或传 null 表示读取待办列表）。';
+
+  @override
+  String get toolResultTodoEmpty => '当前没有待办事项。';
+
+  @override
+  String toolResultTodoCount(Object count) {
+    return '$count 个待办事项未完成';
+  }
+
+  @override
+  String toolResultMcpReconnectFailed(Object server) {
+    return '错误：MCP 服务器“$server”重新连接失败。';
+  }
+
+  @override
+  String toolResultMcpUnavailable(Object server) {
+    return '错误：MCP 服务器“$server”当前不可用。';
+  }
+
+  @override
+  String toolResultMcpNoTools(Object server) {
+    return '错误：MCP 服务器“$server”连接失败或未返回任何工具，请检查服务器配置。';
+  }
+
+  @override
+  String toolResultMcpAliasedName(Object tool, Object alias) {
+    return '真实工具“$tool”在此服务器上的调用名为“$alias”。';
+  }
+
+  @override
+  String toolResultMcpDuplicateNames(Object tool, Object routes) {
+    return '同名工具“$tool”由多个 MCP 服务器提供；请使用对应调用名：$routes。';
+  }
+
+  @override
+  String toolResultMcpAliasedConflict(Object tool) {
+    return '错误：真实工具“$tool”存在名称冲突，请使用上面列出的调用名。';
+  }
+
+  @override
+  String toolResultMcpMissingTool(Object server, Object tool) {
+    return '错误：MCP 服务器“$server”没有名为“$tool”的工具。';
+  }
+
+  @override
+  String toolResultMcpAvailableTools(Object tools) {
+    return '该服务器可用的工具：$tools。请改用这些工具名调用。';
+  }
+
+  @override
+  String toolResultMcpAliasConflict(Object tool, Object routes) {
+    return '错误：MCP 工具“$tool”当前使用了冲突别名。请使用对应调用名：$routes。';
+  }
+
+  @override
+  String toolResultToolDisabled(Object tool) {
+    return '错误：工具“$tool”已停用。';
+  }
+
+  @override
+  String toolResultToolUnknown(Object tool) {
+    return '错误：未知工具“$tool”';
+  }
+
+  @override
+  String get toolResultWebSearchFallbackNoResults => '未找到相关结果';
+
+  @override
+  String get toolResultWebSearchFallbackUnavailable => '暂不可用';
+
+  @override
+  String toolResultMcpServerRoute(Object server) {
+    return '（MCP 服务器 $server）';
+  }
+
+  @override
+  String get toolResultWebSearchUnparsedResults => '未返回可解析的搜索结果';
+
+  @override
+  String get toolResultSearchTitleLabel => '标题';
+
+  @override
+  String get toolResultSearchContentLabel => '内容';
+
+  @override
+  String toolResultHttpApiKeyMissing(Object provider) {
+    return '错误：$provider API Key 未配置，请在设置页面配置。';
+  }
+
+  @override
+  String toolResultHttpUrlMissing(Object provider) {
+    return '错误：$provider 实例 URL 未配置，请在设置页面配置。';
+  }
+
+  @override
+  String toolResultHttpRequestFailedStatus(Object provider, Object statusCode) {
+    return '错误：$provider 请求失败 (HTTP $statusCode)';
+  }
+
+  @override
+  String toolResultHttpRequestFailed(Object provider, Object detail) {
+    return '错误：$provider 请求失败：$detail';
+  }
+
+  @override
+  String toolResultHttpUnknownTool(Object provider) {
+    return '错误：未知的 HTTP 工具“$provider”';
+  }
+
+  @override
+  String toolResultMcpNotConnected(Object server) {
+    return '错误：MCP 服务器“$server”未连接。';
+  }
+
+  @override
+  String toolResultMcpNoResponse(Object tool) {
+    return '错误：MCP 工具“$tool”无响应。';
+  }
+
+  @override
+  String toolResultMcpCallFailed(Object detail) {
+    return '错误：$detail';
+  }
+
+  @override
+  String get httpToolBraveDescription =>
+      '使用 Brave Search API 搜索网络。需要配置 API Key。';
+
+  @override
+  String get httpToolBochaDescription =>
+      '使用博查 AI Search API 搜索网络。需要配置 API Key。';
+
+  @override
+  String get httpToolQueritDescription => '使用 Querit Search 搜索网络。需要配置 API Key。';
+
+  @override
+  String get httpToolSearxngDescription =>
+      '注重隐私保护的自托管元搜索引擎，可聚合多种搜索源。需要配置实例 URL。';
+
+  @override
+  String get httpToolSearchQueryDescription => '搜索关键词。';
+
+  @override
+  String get httpToolSearchCountDescription => '返回结果数量。';
+
+  @override
+  String get httpToolSearchCountMax20Description => '返回结果数量（最大 20）。';
+
+  @override
   String backupRestoreApkgImportSummary(int decks, int notes, int cards) {
     return '导入完成：$decks 个牌组，$notes 个笔记，$cards 张卡片';
   }
@@ -21667,6 +22155,9 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String backupRestoreApkgFileNotFound(String path) {
     return '找不到所选的 .apkg 文件：$path';
   }
+
+  @override
+  String get backupRestoreApkgInvalidArchive => '所选的 .apkg 文件已损坏或不是有效的压缩包。';
 
   @override
   String get backupRestoreApkgCollectionMissing =>
@@ -21679,6 +22170,11 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get backupRestoreApkgDatabaseCorrupt => 'Anki collection 数据库已损坏。';
+
+  @override
+  String backupRestoreApkgLocalFileFailure(String path) {
+    return '无法访问本地 Anki 文件：$path';
+  }
 
   @override
   String backupRestoreApkgUnexpectedError(String path) {
@@ -21694,30 +22190,46 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   }
 
   @override
-  String get ankiWebSyncUnsupportedPlatform =>
-      '网页端需登录 AnkiWeb 才能同步。请点击云朵图标打开 Anki 设置并登录。';
+  String get ankiSyncStatusProtocolFailed =>
+      '同步服务器响应无效或不完整。请确认服务器支持 Anki sync v10。';
 
   @override
-  String get ankiWebDecksUnsupportedPlatform =>
-      '如需在网页端浏览或管理牌组，请点击云朵图标登录 AnkiWeb。';
+  String get ankiSyncStatusLoginRequired => '请先登录 Anki 同步账户，再继续操作。';
 
   @override
-  String get ankiStatsUnsupportedPlatform => '当前平台无法查看 Anki 统计数据。';
+  String get ankiSyncStatusInvalidServerUrl => '请输入有效的 HTTP 或 HTTPS 同步服务器地址。';
 
   @override
-  String get ankiSyncStatusDeviceClockMismatch =>
-      '设备时间与同步服务器相差超过 5 分钟，请校准设备时间后重试。';
+  String get ankiSyncStatusHttpsRequired => '远程自建同步服务器必须使用 HTTPS。';
 
   @override
-  String get ankiSyncStatusFullDownloadRequired =>
-      '同步数据校验失败，本地更改已回滚。请完整下载服务器 collection 后重试。';
+  String get ankiSyncStatusConnectionTimeout => '同步请求超时。请检查服务器地址和网络后重试。';
 
   @override
-  String get ankiSyncStatusFullTransferRequired =>
-      '此 collection 无法增量同步。请选择完整上传或下载后继续。';
+  String get ankiSyncStatusTlsFailure => '无法验证服务器证书。请检查证书或配置自定义 CA。';
 
   @override
-  String get ankiSyncStatusIncrementalSyncFailed => '增量同步未能完成。请检查服务器和网络连接后重试。';
+  String get ankiSyncStatusConnectionFailure => '无法连接到同步服务器。请检查服务器地址和网络。';
+
+  @override
+  String get ankiSyncStatusRequestFailure => '同步请求失败。请检查服务器和网络后重试。';
+
+  @override
+  String ankiSyncStatusServerHttpError(int statusCode) {
+    return '同步服务器返回了 HTTP $statusCode。';
+  }
+
+  @override
+  String ankiSyncStatusResponseTooLarge(int limitMb) {
+    return '同步响应超过 $limitMb MB 限制。';
+  }
+
+  @override
+  String get ankiSyncStatusLocalFileFailure => '无法读取或清理本地同步文件。请检查磁盘访问权限后重试。';
+
+  @override
+  String get ankiSyncStatusCollectionInvalid =>
+      '无法打开或更新 collection，或该文件未通过 SQLite/schema 校验。请恢复有效的 collection 备份或重新下载。';
 
   @override
   String ankiSyncStatusServerAuthRejected(int statusCode) {
@@ -21732,6 +22244,12 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   @override
   String get ankiSyncStatusMediaProtocolFailed =>
       '媒体同步服务器返回了无效响应。请确认服务器支持 Anki 媒体同步后重试。';
+
+  @override
+  String get ankiSyncStatusMediaIndexCorrupt => '本地媒体同步索引已损坏。请重置媒体同步数据后重试。';
+
+  @override
+  String get ankiSyncStatusMediaIndexFailure => '本地媒体同步索引无法读取或更新。';
 
   @override
   String get ankiSyncStatusMediaChecksumMismatch => '下载的媒体文件校验失败。请重试媒体同步。';
@@ -21760,12 +22278,55 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get ankiSyncStatusMediaSanityCheckFailed => '媒体同步校验失败。请重试同步。';
 
   @override
-  String backupRestoreApkgLocalFileFailure(String path) {
-    return '无法访问本地 Anki 文件：$path';
-  }
+  String get ankiWebSyncUnsupportedPlatform =>
+      '网页端需登录 AnkiWeb 才能同步。请点击云朵图标打开 Anki 设置并登录。';
 
   @override
-  String get ankiSyncStatusCollectionInvalid =>
-      '无法打开或更新 collection，或该文件未通过 SQLite/schema 校验。请恢复有效的 collection 备份或重新下载。';
+  String get ankiWebDecksUnsupportedPlatform =>
+      '如需在网页端浏览或管理牌组，请点击云朵图标登录 AnkiWeb。';
 
+  @override
+  String get ankiStatsUnsupportedPlatform => '当前平台无法查看 Anki 统计数据。';
+
+  @override
+  String get ankiSyncStatusDeviceClockMismatch =>
+      '设备时间与同步服务器相差超过 5 分钟，请校准设备时间后重试。';
+
+  @override
+  String get ankiSyncStatusFullDownloadRequired =>
+      '同步数据校验失败，本地更改已回滚。请完整下载服务器 collection 后重试。';
+
+  @override
+  String get ankiSyncStatusFullTransferRequired =>
+      '此 collection 无法增量同步。请选择完整上传或下载后继续。';
+
+  @override
+  String get ankiSyncStatusIncrementalSyncFailed => '增量同步未能完成。请检查服务器和网络连接后重试。';
+
+  @override
+  String get emojiCategorySmileys => '表情';
+
+  @override
+  String get emojiCategoryPeople => '人物';
+
+  @override
+  String get emojiCategoryAnimals => '动物';
+
+  @override
+  String get emojiCategoryFood => '食物';
+
+  @override
+  String get emojiCategoryActivities => '活动';
+
+  @override
+  String get emojiCategoryTravel => '旅行';
+
+  @override
+  String get emojiCategoryObjects => '物品';
+
+  @override
+  String get emojiCategorySymbols => '符号';
+
+  @override
+  String get emojiCategoryFlags => '旗帜';
 }

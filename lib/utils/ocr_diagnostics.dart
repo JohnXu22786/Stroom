@@ -27,6 +27,12 @@ class OcrDiagnosticSnapshot {
   static const _knownSafeStoredTaskErrorSummaries = {
     'OCR 图片格式无法识别',
     'OCR 任务因格式问题未完成',
+    '找不到图片文件，请重新选择图片。',
+    '无法读取图片文件，请检查文件访问权限后重试。',
+    '未配置可用的 OCR 模型，请在流程设置中选择 OCR 服务和模型。',
+    'The image file could not be found. Select the image again.',
+    'The image file could not be read. Check file access and try again.',
+    'No usable OCR model is configured. Choose an OCR provider and model in flow settings.',
     '图片内容损坏或无法解码，请重新选择，或转换为 PNG、JPEG、WebP 后重试。',
     'OCR request failed',
     'OCR失败',
@@ -491,6 +497,12 @@ class OcrDiagnosticSnapshot {
     var candidate = value;
     while (candidate.isNotEmpty) {
       if (_knownSafeStoredTaskErrorSummaries.contains(candidate) ||
+          RegExp(
+            r'^The image exceeds (?:OCR request size budget \([\d.]+ MiB\)|the task flow image input limit \([\d.]+ MiB\))\. Choose a smaller image and try again\.$',
+          ).hasMatch(candidate) ||
+          RegExp(
+            r'^图片超过(?:OCR 请求大小预算（[\d.]+ MiB）|任务流图片输入上限（[\d.]+ MiB）)，请缩小图片后重试。$',
+          ).hasMatch(candidate) ||
           RegExp(
             r'^HTTP\s+[1-5]\d{2}$',
             caseSensitive: false,
