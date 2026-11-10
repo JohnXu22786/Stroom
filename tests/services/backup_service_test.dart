@@ -198,8 +198,8 @@ void main() {
     );
   });
 
-  testWidgets('task-flow backup rejects attachment symlinks outside storage',
-      (WidgetTester t) async {
+  test('task-flow backup rejects attachment symlinks outside storage',
+      () async {
     final originalPathProvider = PathProviderPlatform.instance;
     final tempRoot = await Directory.systemTemp.createTemp('backup_task_link_');
     final appDir = Directory(p.join(tempRoot.path, 'app'));
