@@ -3,6 +3,7 @@ import 'dart:isolate';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:image/image.dart' as img;
 
 /// Bound decoded OCR image memory to roughly 200 MiB of RGBA pixels.
@@ -221,11 +222,11 @@ OcrImagePayload prepareOcrImagePayloadSync(
   if (orientation != null && orientation != 1) {
     try {
       // The JPEG decoder already applies EXIF orientation while decoding.
-      // Other supported decoders may leave it in metadata, so bake it here.
-      final decodedOrientation = decoded.exif.imageIfd.orientation;
-      final oriented = decodedOrientation != null && decodedOrientation != 1
-          ? img.bakeOrientation(decoded)
-          : decoded;
+      // Other supported decoders may leave it unapplied and omit it from the
+      // decoded frame metadata (as WebP does), so apply the source value here.
+      final oriented = decoder is img.JpegDecoder
+          ? decoded
+          : applyOcrImageSourceOrientation(decoded, orientation);
       // The image package has no lossless JPEG transform. PNG preserves the
       // decoded pixels and avoids another lossy encode, with no resize.
       final normalized = img.encodePng(oriented, level: 6);
@@ -248,6 +249,15 @@ OcrImagePayload prepareOcrImagePayloadSync(
     width: decoded.width,
     height: decoded.height,
   );
+}
+
+/// Applies an EXIF orientation parsed from the encoded source to decoded pixels.
+///
+/// Exposed for tests because some decoders omit source metadata on frames.
+@visibleForTesting
+img.Image applyOcrImageSourceOrientation(img.Image decoded, int orientation) {
+  decoded.exif.imageIfd.orientation = orientation;
+  return img.bakeOrientation(decoded);
 }
 
 String? _detectOcrImageFormat(Uint8List bytes) {
