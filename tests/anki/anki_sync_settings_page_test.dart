@@ -116,6 +116,51 @@ void main() {
     expect(find.text('双向同步'), findsOneWidget);
   });
 
+  testWidgets('keeps the key-save warning after checking server status', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final requests = <Uri>[];
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ankiSyncSecureStorageProvider.overrideWith(
+            (_) => _FailingWriteSecureStorage(),
+          ),
+          ankiSyncProtocolClientFactoryProvider.overrideWithValue(
+            (config, hostKey) => AnkiSyncProtocolClient.ankiWeb(
+              client: _LoginAndMetaHttpClient(requests),
+              hostKey: hostKey,
+            ),
+          ),
+        ],
+        child: _localizedApp(home: const AnkiSyncSettingsPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('登录AnkiWeb'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byType(TextFormField).at(0),
+      'user@example.com',
+    );
+    await tester.enterText(find.byType(TextFormField).at(1), 'password');
+    await tester.tap(find.text('登录').last);
+    for (var frame = 0;
+        frame < 10 && find.text('双向同步').evaluate().isEmpty;
+        frame++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    expect(requests.map((uri) => uri.pathSegments.last), ['hostKey', 'meta']);
+    expect(find.text('双向同步'), findsOneWidget);
+    expect(
+      find.textContaining('登录成功，但无法安全保存同步密钥'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('does not allow switching modes before settings load', (
     tester,
   ) async {
@@ -582,6 +627,34 @@ class _StoredSecureStorage extends FlutterSecureStorage {
     WindowsOptions? wOptions,
   }) async =>
       values[key];
+}
+
+class _FailingWriteSecureStorage extends FlutterSecureStorage {
+  @override
+  Future<String?> read({
+    required String key,
+    AppleOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    AppleOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async =>
+      null;
+
+  @override
+  Future<void> write({
+    required String key,
+    required String? value,
+    AppleOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    AppleOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async {
+    throw StateError('secure storage write failed');
+  }
 }
 
 class _GatedAnkiSyncNotifier extends AnkiSyncNotifier {

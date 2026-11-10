@@ -231,19 +231,21 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
         persisted = false;
       }
       if (!mounted) return;
+      final persistenceWarning = persisted
+          ? null
+          : AppLocalizations.of(context)!.ankiSyncStatusLoginSuccessNoSave;
       setState(() {
         _hostKey = key;
         _loadedIdentity = config.secureStorageKey;
-        _status = persisted
-            ? AppLocalizations.of(context)!.ankiSyncStatusLoginSuccess
-            : AppLocalizations.of(context)!.ankiSyncStatusLoginSuccessNoSave;
+        _status = persistenceWarning ??
+            AppLocalizations.of(context)!.ankiSyncStatusLoginSuccess;
       });
       try {
         final meta = await client.checkStatus();
         if (!mounted) return;
         setState(() {
           _remoteMeta = meta;
-          _status = meta.shouldContinue
+          final status = meta.shouldContinue
               ? (meta.isEmpty
                   ? AppLocalizations.of(context)!
                       .ankiSyncStatusConnectedCollectionEmpty
@@ -252,11 +254,17 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
               : (meta.message.isEmpty
                   ? AppLocalizations.of(context)!.ankiSyncStatusUpgradeClient
                   : meta.message);
+          _status = persistenceWarning == null
+              ? status
+              : '$persistenceWarning\n$status';
         });
       } catch (error) {
         if (!mounted) return;
-        setState(() => _status = AppLocalizations.of(context)!
-            .ankiSyncStatusCheckFailed(_safeMessage(context, error)));
+        final status = AppLocalizations.of(context)!
+            .ankiSyncStatusCheckFailed(_safeMessage(context, error));
+        setState(() => _status = persistenceWarning == null
+            ? status
+            : '$persistenceWarning\n$status');
       }
     } catch (error) {
       if (!mounted) return;
