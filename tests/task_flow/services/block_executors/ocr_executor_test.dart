@@ -297,16 +297,28 @@ void main() {
     expect(estimatorFailure, isNotNull);
     final estimatorDetail = estimatorFailure!.message;
     expect(estimatorDetail, isNotEmpty);
+    final estimatorTask = background.state.last;
+    final estimatorSummary =
+        '${localizations.unifiedTaskOcrFailed}: $estimatorDetail';
     expect(
-      background.state.last.error,
-      '${localizations.unifiedTaskOcrFailed}: $estimatorDetail',
+      estimatorTask.error,
+      estimatorSummary,
     );
-    expect(background.state.last.status, TaskStatus.failed);
+    expect(estimatorTask.status, TaskStatus.failed);
     expect(
       executions.execution(execId)?.subTasks.single.status,
       TaskStatus.failed,
     );
     await background.pendingPersistence;
+    final restoredEstimator = BackgroundTaskNotifier(
+      localizationsResolver: () => localizations,
+    );
+    addTearDown(restoredEstimator.dispose);
+    expect(await restoredEstimator.restoreFromPersistence(), isTrue);
+    expect(
+      restoredEstimator.taskById(estimatorTask.id)?.error,
+      estimatorSummary,
+    );
 
     BlockExecutionException? requestFailure;
     try {
@@ -328,16 +340,28 @@ void main() {
     expect(requestFailure, isNotNull);
     final requestDetail = requestFailure!.message;
     expect(requestDetail, isNotEmpty);
+    final requestTask = background.state.last;
+    final requestSummary =
+        '${localizations.unifiedTaskOcrFailed}: $requestDetail';
     expect(
-      background.state.last.error,
-      '${localizations.unifiedTaskOcrFailed}: $requestDetail',
+      requestTask.error,
+      requestSummary,
     );
-    expect(background.state.last.status, TaskStatus.failed);
+    expect(requestTask.status, TaskStatus.failed);
     expect(
       executions.execution(execId)?.subTasks.single.status,
       TaskStatus.failed,
     );
     await background.pendingPersistence;
+    final restoredRequest = BackgroundTaskNotifier(
+      localizationsResolver: () => localizations,
+    );
+    addTearDown(restoredRequest.dispose);
+    expect(await restoredRequest.restoreFromPersistence(), isTrue);
+    expect(
+      restoredRequest.taskById(requestTask.id)?.error,
+      requestSummary,
+    );
   }
 
   test('OCR uses payload bytes instead of the filename suffix', () async {
