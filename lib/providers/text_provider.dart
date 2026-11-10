@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/legacy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../utils/folder_copy_lock.dart';
+import '../utils/folder_membership_lock.dart';
 import '../utils/folder_operation_rollback.dart';
 import '../utils/text_manifest.dart';
 
@@ -429,7 +430,11 @@ class TextRecordsNotifier extends StateNotifier<List<TextRecord>> {
     await FolderCopyLock.withLock(
       'text',
       newPath,
-      () => _copyFolderToDestination(sourceName, targetParentClean, newPath),
+      () => FolderMembershipLock.withCopyLock(
+        'text',
+        sourceName,
+        () => _copyFolderToDestination(sourceName, targetParentClean, newPath),
+      ),
     );
   }
 
@@ -438,6 +443,44 @@ class TextRecordsNotifier extends StateNotifier<List<TextRecord>> {
     String targetParentClean,
     String newPath,
   ) async {
+    final prefix = '$sourceName/';
+    final initialRecords = (await TextManifest.loadRecords()).where(
+      (record) =>
+          record.folder == sourceName || record.folder.startsWith(prefix),
+    );
+    final initialKeys = initialRecords.map((record) => record.hash).toSet();
+    var retry = false;
+    Future<void> publishWithLocks() async {
+      final records = (await TextManifest.loadRecordsStrict())
+          .where(
+            (record) =>
+                record.folder == sourceName || record.folder.startsWith(prefix),
+          )
+          .toList();
+      if (records.any((record) => !initialKeys.contains(record.hash))) {
+        retry = true;
+        return;
+      }
+      await FolderMembershipLock.afterCopySnapshotForTesting?.call();
+      await _copyFolderSnapshot(
+        sourceName,
+        targetParentClean,
+        newPath,
+        records,
+      );
+    }
+
+    await TextManifest.withCopySourceLocks(initialKeys, publishWithLocks);
+    if (retry)
+      await _copyFolderToDestination(sourceName, targetParentClean, newPath);
+  }
+
+  Future<void> _copyFolderSnapshot(
+    String sourceName,
+    String targetParentClean,
+    String newPath,
+    List<TextRecord> records,
+  ) async {
     // 目标位置（或其下）已存在同名文件夹：拒绝，避免重复复制/合并
     final existing = await TextManifest.getAllFolders();
     if (existing.any((f) => f == newPath || f.startsWith('$newPath/'))) return;
@@ -445,7 +488,6 @@ class TextRecordsNotifier extends StateNotifier<List<TextRecord>> {
     // Snapshot: addRecord mutates the manifest cache, which loadRecords
     // returns directly — iterating it while copying would throw
     // ConcurrentModificationError.
-    final records = List<TextRecord>.from(await TextManifest.loadRecords());
 
     final rollbackFolderAncestors = <String>{};
     if (targetParentClean.isNotEmpty) {
