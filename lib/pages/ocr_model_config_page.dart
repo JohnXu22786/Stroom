@@ -270,6 +270,10 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
           : param.defaultValue.trim();
       final hasEffectiveOption =
           param.type != 'json' && param.options.isNotEmpty && value.isNotEmpty;
+      final hasImplicitTrueBoolean =
+          param.type == 'boolean' &&
+          param.options.isEmpty &&
+          param.defaultValue.trim().isEmpty;
       if (name == 'stream') {
         var isNonStreaming = false;
         if (param.type == 'boolean') {
@@ -313,7 +317,9 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
         return;
       }
       if (name.isEmpty ||
-          (param.defaultValue.trim().isEmpty && !hasEffectiveOption)) {
+          (param.defaultValue.trim().isEmpty &&
+              !hasEffectiveOption &&
+              !hasImplicitTrueBoolean)) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
