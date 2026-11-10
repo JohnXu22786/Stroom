@@ -238,6 +238,26 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
             ? AppLocalizations.of(context)!.ankiSyncStatusLoginSuccess
             : AppLocalizations.of(context)!.ankiSyncStatusLoginSuccessNoSave;
       });
+      try {
+        final meta = await client.checkStatus();
+        if (!mounted) return;
+        setState(() {
+          _remoteMeta = meta;
+          _status = meta.shouldContinue
+              ? (meta.isEmpty
+                  ? AppLocalizations.of(context)!
+                      .ankiSyncStatusConnectedCollectionEmpty
+                  : AppLocalizations.of(context)!
+                      .ankiSyncStatusConnectedStatusRead)
+              : (meta.message.isEmpty
+                  ? AppLocalizations.of(context)!.ankiSyncStatusUpgradeClient
+                  : meta.message);
+        });
+      } catch (error) {
+        if (!mounted) return;
+        setState(() => _status = AppLocalizations.of(context)!
+            .ankiSyncStatusCheckFailed(_safeMessage(context, error)));
+      }
     } catch (error) {
       if (!mounted) return;
       setState(() => _status = AppLocalizations.of(context)!
