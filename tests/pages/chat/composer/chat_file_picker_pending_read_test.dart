@@ -18,6 +18,56 @@ void main() {
     TextManifest.readFileOverrideForTesting = null;
   });
 
+  testWidgets('confirm waits until a pending file read completes', (
+    tester,
+  ) async {
+    final pendingRead = Completer<Uint8List?>();
+    final pendingReadStarted = Completer<void>();
+    TextManifest.readFileOverrideForTesting = (_) {
+      pendingReadStarted.complete();
+      return pendingRead.future;
+    };
+
+    await tester.runAsync(() async {
+      await TextManifest.addRecord(
+        TextRecord(
+          name: 'pending',
+          hash: 'pending',
+          size: 1,
+          createdAt: DateTime.now(),
+        ),
+      );
+    });
+
+    List<MapEntry<String, Uint8List>>? pickerResult;
+    await tester.pumpWidget(_buildTestApp((result) => pickerResult = result));
+    await _openPicker(tester);
+
+    await tester.tap(find.text('pending.txt'));
+    await tester.pump();
+    expect(pendingReadStarted.isCompleted, isTrue);
+
+    final confirmButton = find.byKey(const Key('file_picker_confirm_btn'));
+    expect(tester.widget<FilledButton>(confirmButton).onPressed, isNull);
+    await tester.tap(confirmButton);
+    await tester.pump();
+    expect(find.text('pending.txt'), findsOneWidget);
+    expect(pickerResult, isNull);
+
+    final fileBytes = Uint8List.fromList([1, 2, 3]);
+    pendingRead.complete(fileBytes);
+    await tester.pump();
+    await tester.pump();
+
+    expect(tester.widget<FilledButton>(confirmButton).onPressed, isNotNull);
+    await tester.tap(confirmButton);
+    await tester.pump();
+
+    expect(pickerResult, hasLength(1));
+    expect(pickerResult!.single.key, 'pending.txt');
+    expect(pickerResult!.single.value, fileBytes);
+  });
+
   testWidgets('clearing selection ignores an earlier pending file read', (
     tester,
   ) async {

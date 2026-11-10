@@ -59,6 +59,7 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
   // Selected items across all tabs: key = "tabType:recordId", value = (fileName, bytes)
   final Map<String, MapEntry<String, Uint8List>> _selectedItems = {};
   int _selectionGeneration = 0;
+  int _pendingReadCount = 0;
 
   /// Track temp file paths created during edit for cleanup on dialog close.
   final List<String> _tempEditFiles = [];
@@ -191,6 +192,7 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
     _cleanupTempFiles();
     setState(() {
       _selectedItems.clear();
+      _pendingReadCount = 0;
     });
   }
 
@@ -292,10 +294,12 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
                 ),
                 child: FilledButton.icon(
                   key: const Key('file_picker_confirm_btn'),
-                  onPressed: () {
-                    final result = _selectedItems.values.toList();
-                    Navigator.of(context).pop(result);
-                  },
+                  onPressed: _pendingReadCount > 0
+                      ? null
+                      : () {
+                          final result = _selectedItems.values.toList();
+                          Navigator.of(context).pop(result);
+                        },
                   icon: const Icon(Icons.check, size: 18),
                   label: Text(
                     hasSelection
@@ -619,22 +623,34 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
 
   void _onFileTap(_FileTabType type, FileRecord record) async {
     final selectionGeneration = _selectionGeneration;
-    // Read file bytes
-    Uint8List? bytes;
+    setState(() {
+      _pendingReadCount++;
+    });
+
     try {
-      bytes = await _readFileBytes(type, record);
-    } catch (_) {}
-    if (!mounted || selectionGeneration != _selectionGeneration) return;
-    if (bytes == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(AppLocalizations.of(context)!.appMediaUnreadable),
-        ),
-      );
-      return;
+      // Read file bytes
+      Uint8List? bytes;
+      try {
+        bytes = await _readFileBytes(type, record);
+      } catch (_) {}
+      if (!mounted || selectionGeneration != _selectionGeneration) return;
+      if (bytes == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(AppLocalizations.of(context)!.appMediaUnreadable),
+          ),
+        );
+        return;
+      }
+      final fileName = '${record.name}.${record.format}';
+      _toggleSelection(type, record.id, fileName, bytes);
+    } finally {
+      if (mounted && selectionGeneration == _selectionGeneration) {
+        setState(() {
+          _pendingReadCount--;
+        });
+      }
     }
-    final fileName = '${record.name}.${record.format}';
-    _toggleSelection(type, record.id, fileName, bytes);
   }
 
   Future<Uint8List?> _readFileBytes(
