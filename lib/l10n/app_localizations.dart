@@ -11150,6 +11150,12 @@ abstract class AppLocalizations {
   /// **'JSON'**
   String get paramTypeJsonLabel;
 
+  /// Label for a custom parameter whose stored type is not supported.
+  ///
+  /// In en, this message translates to:
+  /// **'Unsupported type: {type}'**
+  String ocrConfigUnsupportedParamType(String type);
+
   /// No description provided for @paramTypeStringHint.
   ///
   /// In en, this message translates to:
