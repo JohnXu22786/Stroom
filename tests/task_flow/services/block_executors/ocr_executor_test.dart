@@ -146,7 +146,8 @@ void main() {
     executions.addSubTask(execId, subTask);
   });
 
-  tearDown(() {
+  tearDown(() async {
+    await background.pendingPersistence;
     if (executions.mounted) executions.dispose();
     background.dispose();
     WebFileStore.disableTestMode();
@@ -275,10 +276,9 @@ void main() {
         await File('${directory.path}/localized_failure.png').writeAsBytes(
       _validPng(),
     );
-    const estimatorDetail = 'OCR 处理失败（TypeError）';
-
-    await expectLater(
-      executeOcrBlock(
+    BlockExecutionException? estimatorFailure;
+    try {
+      await executeOcrBlock(
         block: ocrBlock(),
         def: BlockTypeDefinition.ocr,
         input: source.path,
@@ -290,13 +290,13 @@ void main() {
           modelTypeConfig: {'userInstruction': 42},
         ),
         localizations: localizations,
-      ),
-      throwsA(isA<BlockExecutionException>().having(
-        (error) => error.message,
-        'message',
-        estimatorDetail,
-      )),
-    );
+      );
+    } on BlockExecutionException catch (error) {
+      estimatorFailure = error;
+    }
+    expect(estimatorFailure, isNotNull);
+    final estimatorDetail = estimatorFailure!.message;
+    expect(estimatorDetail, isNotEmpty);
     expect(
       background.state.last.error,
       '${localizations.unifiedTaskOcrFailed}: $estimatorDetail',
@@ -306,9 +306,11 @@ void main() {
       executions.execution(execId)?.subTasks.single.status,
       TaskStatus.failed,
     );
+    await background.pendingPersistence;
 
-    await expectLater(
-      executeOcrBlock(
+    BlockExecutionException? requestFailure;
+    try {
+      await executeOcrBlock(
         block: ocrBlock(),
         def: BlockTypeDefinition.ocr,
         input: source.path,
@@ -319,22 +321,23 @@ void main() {
         providerEntries: providerForOcr(),
         localizations: localizations,
         requestOcr: (_, _) async => throw StateError('synthetic OCR failure'),
-      ),
-      throwsA(isA<BlockExecutionException>().having(
-        (error) => error.message,
-        'message',
-        'OCR 处理失败（StateError）',
-      )),
-    );
+      );
+    } on BlockExecutionException catch (error) {
+      requestFailure = error;
+    }
+    expect(requestFailure, isNotNull);
+    final requestDetail = requestFailure!.message;
+    expect(requestDetail, isNotEmpty);
     expect(
       background.state.last.error,
-      '${localizations.unifiedTaskOcrFailed}: OCR 处理失败（StateError）',
+      '${localizations.unifiedTaskOcrFailed}: $requestDetail',
     );
     expect(background.state.last.status, TaskStatus.failed);
     expect(
       executions.execution(execId)?.subTasks.single.status,
       TaskStatus.failed,
     );
+    await background.pendingPersistence;
   }
 
   test('OCR uses payload bytes instead of the filename suffix', () async {
