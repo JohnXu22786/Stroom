@@ -1590,9 +1590,7 @@ void main() {
           rawRequest: {
             'headers': {'Authorization': 'Bearer $requestCredential'},
           },
-          rawResponse: {
-            'body': {'error': 'invalid credential: $responseCredential'},
-          },
+          rawResponse: {'requestId': responseCredential},
           ocrCredentialValuesForSanitization: const [responseCredential],
         );
 
