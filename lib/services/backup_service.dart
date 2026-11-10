@@ -487,7 +487,7 @@ class BackupService {
       final taskFlowAttachmentPaths =
           selection.includeMediaFiles && !kIsWeb && !WebFileStore.isTestMode
               ? await _taskFlowAttachmentPathsForBackup(appDir)
-              : <String>{};
+              : <String, String>{};
       await _addTaskPlanFile(
         jsonFiles,
         memoryFiles,
@@ -537,12 +537,12 @@ class BackupService {
       // CatCatch completed outputs are stored separately from their gallery
       // copies. Keep the task list's open-file action working after transfer.
       if (selection.includeMediaFiles) {
-        for (final relativePath in taskFlowAttachmentPaths) {
+        for (final entry in taskFlowAttachmentPaths.entries) {
           await _addPlanFile(
             diskFiles,
             memoryFiles,
-            'task_flow_attachments/$relativePath',
-            p.joinAll([appDir, 'attachments', ...relativePath.split('/')]),
+            'task_flow_attachments/${entry.key}',
+            entry.value,
             useStreaming,
           );
         }
@@ -797,15 +797,17 @@ class BackupService {
     if (selection.chatRecordsAndAttachments && selection.includeMediaFiles) {
       final attachmentPaths = await collectAttachmentPaths();
       for (final storagePath in attachmentPaths) {
-        final parts = storagePath.split('/');
-        if (parts.length < 2) continue;
-        final subDir = parts[0];
-        final fileName = parts.sublist(1).join('/');
+        if (!storagePath.startsWith('attachments/')) continue;
+        final sourcePath = await resolveSafeAttachmentSourcePath(
+          appDir,
+          storagePath,
+        );
+        if (sourcePath == null) continue;
         await _addPlanFile(
           diskFiles,
           memoryFiles,
           storagePath,
-          p.join(appDir, subDir, fileName),
+          sourcePath,
           useStreaming,
         );
       }
@@ -1329,7 +1331,11 @@ class BackupService {
       return;
     }
 
-    final directory = Directory(sourcePath);
+    final nativeSourcePath = archivePrefix == 'attachments'
+        ? await resolveSafeAttachmentDirectoryPath(p.dirname(sourcePath))
+        : sourcePath;
+    if (nativeSourcePath == null) return;
+    final directory = Directory(nativeSourcePath);
     if (!await directory.exists()) return;
     var count = 0;
     await for (final entity in directory.list(
@@ -1443,7 +1449,11 @@ class BackupService {
       return;
     }
 
-    final directory = Directory(sourcePath);
+    final nativeSourcePath = archivePrefix == 'attachments'
+        ? await resolveSafeAttachmentDirectoryPath(p.dirname(sourcePath))
+        : sourcePath;
+    if (nativeSourcePath == null) return;
+    final directory = Directory(nativeSourcePath);
     if (!await directory.exists()) return;
     var count = 0;
     await for (final entity in directory.list(
@@ -1843,7 +1853,7 @@ class BackupService {
         final appDir = await AppStorage.directory;
         final taskFlowAttachmentPaths = selection.includeMediaFiles
             ? await _taskFlowAttachmentPathsForBackup(appDir)
-            : <String>{};
+            : <String, String>{};
         await _addPortableTaskFileToArchive(
           archive,
           'synthesis/tasks.json',
@@ -1875,13 +1885,11 @@ class BackupService {
           appDir: appDir,
         );
         if (selection.includeMediaFiles) {
-          for (final relativePath in taskFlowAttachmentPaths) {
-            final data = await File(
-              p.joinAll([appDir, 'attachments', ...relativePath.split('/')]),
-            ).readAsBytes();
+          for (final entry in taskFlowAttachmentPaths.entries) {
+            final data = await File(entry.value).readAsBytes();
             archive.addFile(
               ArchiveFile(
-                'task_flow_attachments/$relativePath',
+                'task_flow_attachments/${entry.key}',
                 data.length,
                 data,
               ),
@@ -5272,7 +5280,7 @@ class BackupService {
         'task_flows/executions.json',
       });
 
-  static Future<Set<String>> _taskFlowAttachmentPathsForBackup(
+  static Future<Map<String, String>> _taskFlowAttachmentPathsForBackup(
     String appDir,
   ) async {
     final taskFlowFiles = await _collectTaskFlowAttachmentKeys(const {
@@ -5284,7 +5292,7 @@ class BackupService {
         '无法读取任务流附件引用，已取消备份以避免遗漏任务文件。',
       );
     }
-    final relativePaths = <String>{};
+    final relativePaths = <String, String>{};
     for (final key in taskFlowFiles) {
       late final String relativePath;
       if (key.startsWith('attachments/')) {
@@ -5297,13 +5305,17 @@ class BackupService {
       if (!_isSafeRelativeArchivePath(relativePath)) {
         throw const DataManagementPreflightException('任务流包含无效附件路径，已取消备份。');
       }
-      final file = File(
-        p.joinAll([appDir, 'attachments', ...relativePath.split('/')]),
+      final sourcePath = await resolveSafeAttachmentSourcePath(
+        appDir,
+        'attachments/$relativePath',
       );
-      if (!await file.exists()) {
-        throw FileSystemException('任务流引用的附件不存在', file.path);
+      if (sourcePath == null) {
+        throw const DataManagementPreflightException('任务流包含无效附件路径，已取消备份。');
       }
-      relativePaths.add(relativePath);
+      if (!await File(sourcePath).exists()) {
+        throw FileSystemException('任务流引用的附件不存在', sourcePath);
+      }
+      relativePaths[relativePath] = sourcePath;
     }
     return relativePaths;
   }

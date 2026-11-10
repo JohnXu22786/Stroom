@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/services/backup_service_shared.dart';
 
@@ -22,10 +24,10 @@ void main() {
               {
                 'attachments': [
                   {
-                    'storagePath': '/data/a.png',
-                    'thumbnailPath': '/data/a_thumb.png',
+                    'storagePath': 'attachments/a.png',
+                    'thumbnailPath': 'attachments/a_thumb.png',
                   },
-                  {'storagePath': '/data/b.pdf'},
+                  {'storagePath': 'attachments/b.pdf'},
                 ],
               },
               {'attachments': []},
@@ -36,9 +38,9 @@ void main() {
 
       final paths = await collectAttachmentPaths();
 
-      expect(paths, contains('/data/a.png'));
-      expect(paths, contains('/data/a_thumb.png'));
-      expect(paths, contains('/data/b.pdf'));
+      expect(paths, contains('attachments/a.png'));
+      expect(paths, contains('attachments/a_thumb.png'));
+      expect(paths, contains('attachments/b.pdf'));
     });
 
     test('skips corrupt entries instead of dropping every attachment path',
@@ -64,7 +66,7 @@ void main() {
             'messages': [
               {
                 'attachments': [
-                  {'storagePath': '/data/valid.png'},
+                  {'storagePath': 'attachments/valid.png'},
                 ],
               },
             ],
@@ -74,8 +76,8 @@ void main() {
 
       final paths = await collectAttachmentPaths();
 
-      expect(paths, contains('/data/valid.png'), reason: '合法条目必须仍然被收集');
-      expect(paths, isNot(contains('/data/nonexistent')));
+      expect(paths, contains('attachments/valid.png'), reason: '合法条目必须仍然被收集');
+      expect(paths, isNot(contains('attachments/nonexistent')));
     });
 
     test('non-array conversations returns an empty set', () async {
@@ -86,6 +88,78 @@ void main() {
       final paths = await collectAttachmentPaths();
 
       expect(paths, isEmpty);
+    });
+
+    test(
+        'collects only canonical attachment paths within the attachment folder',
+        () async {
+      SharedPreferences.setMockInitialValues({
+        'conversations': jsonEncode([
+          {
+            'messages': [
+              {
+                'attachments': [
+                  {'storagePath': 'attachments/photo.png'},
+                  {'storagePath': 'attachments/sub/../safe.png'},
+                  {'storagePath': 'attachments/../../private-file'},
+                  {'storagePath': r'attachments\..\..\private-file'},
+                  {'storagePath': 'attachments/C:/outside'},
+                  {'storagePath': 'attachments/.. /private-file'},
+                  {'storagePath': '/private-file'},
+                ],
+              },
+            ],
+          },
+        ]),
+      });
+
+      final paths = await collectAttachmentPaths();
+
+      expect(paths, contains('attachments/photo.png'));
+      expect(paths, contains('attachments/safe.png'));
+      expect(paths, everyElement(startsWith('attachments/')));
+      expect(paths, isNot(contains('attachments/../../private-file')));
+      expect(paths, isNot(contains('../private-file')));
+      expect(paths, isNot(contains(r'attachments\..\..\private-file')));
+      expect(paths, isNot(contains('attachments/C:/outside')));
+      expect(paths, isNot(contains('attachments/.. /private-file')));
+      expect(paths, isNot(contains('/private-file')));
+
+      final tempRoot = await Directory.systemTemp.createTemp();
+      try {
+        final attachments = Directory(p.join(tempRoot.path, 'attachments'));
+        final outside = Directory(p.join(tempRoot.path, 'outside'));
+        await attachments.create();
+        await outside.create();
+        await File(p.join(outside.path, 'private.txt'))
+            .writeAsString('private');
+        await Link(p.join(attachments.path, 'outside-link'))
+            .create(outside.path);
+
+        final sourcePath = await resolveSafeAttachmentSourcePath(
+          tempRoot.path,
+          'attachments/outside-link/private.txt',
+        );
+
+        expect(sourcePath, isNull);
+
+        final linkedApp = Directory(p.join(tempRoot.path, 'linked-app'));
+        final linkedAppPrivate = Directory(p.join(linkedApp.path, 'private'));
+        await linkedApp.create();
+        await linkedAppPrivate.create();
+        await File(p.join(linkedAppPrivate.path, 'private.txt'))
+            .writeAsString('private');
+        await Link(p.join(linkedApp.path, 'attachments'))
+            .create(linkedAppPrivate.path);
+        final linkedRootSourcePath = await resolveSafeAttachmentSourcePath(
+          linkedApp.path,
+          'attachments/private.txt',
+        );
+
+        expect(linkedRootSourcePath, isNull);
+      } finally {
+        await tempRoot.delete(recursive: true);
+      }
     });
   });
 }

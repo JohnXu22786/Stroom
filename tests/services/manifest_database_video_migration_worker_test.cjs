@@ -1,0 +1,69 @@
+const {test} = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+const {TextDecoder, TextEncoder} = require('node:util');
+
+test('Web worker migrates legacy video rows into an existing video list', () => {
+  const workerSource = fs.readFileSync(
+    path.resolve(__dirname, '../../web/data_integrity_json_worker.js'),
+    'utf8',
+  );
+  let onMessage;
+  const messages = [];
+  const context = {
+    self: {
+      addEventListener: (_event, handler) => { onMessage = handler; },
+      postMessage: (message) => messages.push(message),
+    },
+    TextDecoder,
+    TextEncoder,
+  };
+  vm.runInNewContext(workerSource, context);
+
+  const input = {
+    audio_records: [
+      {id: 'audio-1', name: 'voice', format: 'mp3'},
+      {
+        id: 'duplicate-video',
+        name: 'migrated clip',
+        format: 'mp4',
+        createdAt: '2025-01-01T03:04:05.000Z',
+        modifiedAt: '2025-01-02T03:04:05.000Z',
+      },
+      {
+        id: 'legacy-video',
+        name: 'new clip',
+        format: 'mov',
+        createdAt: '2025-01-03T03:04:05.000Z',
+        modifiedAt: '2025-01-04T03:04:05.000Z',
+      },
+    ],
+    video_records: [
+      {id: 'existing-video', name: 'existing', format: 'mov'},
+      {id: 'duplicate-video', name: 'stale clip', format: 'avi'},
+    ],
+  };
+  onMessage({data: [
+    'migrateWebManifestData',
+    new TextEncoder().encode(JSON.stringify(input)),
+    [],
+    true,
+    true,
+  ]});
+
+  const metadata = JSON.parse(messages[0]);
+  assert.equal(metadata.status, 'ok');
+  assert.equal(metadata.changed, true);
+  assert.equal(metadata.setVideoFlag, true);
+  const migrated = JSON.parse(new TextDecoder().decode(new Uint8Array(messages[1])));
+  assert.deepEqual(
+    migrated.video_records.map((record) => record.id),
+    ['existing-video', 'duplicate-video', 'legacy-video'],
+  );
+  assert.equal(migrated.video_records[1].name, 'migrated clip');
+  assert.equal(migrated.video_records[1].modifiedAt, '2025-01-02T03:04:05.000Z');
+  assert.equal(migrated.video_records[2].modifiedAt, '2025-01-04T03:04:05.000Z');
+  assert.deepEqual(migrated.audio_records.map((record) => record.id), ['audio-1']);
+});
