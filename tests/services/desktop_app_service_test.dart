@@ -10,22 +10,56 @@ import 'package:shared_preferences_platform_interface/shared_preferences_platfor
 import 'package:stroom/services/background_service.dart' as background_service;
 import 'package:stroom/services/desktop_app_service.dart';
 import 'package:tray_manager/legacy.dart' show Menu, TrayListener;
-import 'package:window_manager/window_manager.dart' show windowManager;
+import 'package:window_manager/legacy.dart' show WindowListener;
 
-/// Records method calls made on a mocked platform channel.
-class RecordingChannelMock {
+/// Records window-manager calls without loading native FFI code.
+class RecordingChannelMock implements DesktopWindowManagerAdapter {
   final List<MethodCall> calls = [];
+  final List<WindowListener> listeners = [];
   Object? throwError;
   String? throwOnMethod;
   bool hasListeners = false;
 
-  Future<Object?> handler(MethodCall call) async {
-    calls.add(call);
+  void _record(String method, [Object? arguments]) {
+    calls.add(MethodCall(method, arguments));
     if (throwError != null &&
-        (throwOnMethod == null || throwOnMethod == call.method)) {
+        (throwOnMethod == null || throwOnMethod == method)) {
       throw throwError!;
     }
-    return true;
+  }
+
+  @override
+  Future<void> ensureInitialized() async => _record('ensureInitialized');
+
+  @override
+  Future<void> setPreventClose(bool isPreventClose) async =>
+      _record('setPreventClose', {'isPreventClose': isPreventClose});
+
+  @override
+  Future<void> close() async => _record('close');
+
+  @override
+  Future<void> hide() async => _record('hide');
+
+  @override
+  Future<void> show() async => _record('show');
+
+  @override
+  Future<void> focus() async => _record('focus');
+
+  @override
+  Future<void> destroy() async => _record('destroy');
+
+  @override
+  void addListener(WindowListener listener) {
+    listeners.add(listener);
+    _record('addListener');
+  }
+
+  @override
+  void removeListener(WindowListener listener) {
+    listeners.remove(listener);
+    _record('removeListener');
   }
 }
 
@@ -95,18 +129,14 @@ class _PendingFailedDesktopCloseMinimizePreferenceStore
   }
 }
 
-/// Registers recording mocks for the window_manager / tray_manager channels
-/// and returns them keyed by channel name.
+/// Registers recording adapters for window_manager and tray_manager.
 Map<String, RecordingChannelMock> registerChannelMocks() {
   final mocks = <String, RecordingChannelMock>{
     'window_manager': RecordingChannelMock(),
     'tray_manager': RecordingChannelMock(),
   };
-  final messenger =
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
-  messenger.setMockMethodCallHandler(
-    const MethodChannel('window_manager'),
-    mocks['window_manager']!.handler,
+  DesktopAppService.instance.setWindowManagerAdapterForTesting(
+    mocks['window_manager']!,
   );
   DesktopAppService.instance.setTrayAdapterForTesting(
     _RecordingTrayAdapter(mocks['tray_manager']!),
@@ -131,16 +161,10 @@ bool _calledWith(List<MethodCall> calls, String method) {
   return calls.any((c) => c.method == method);
 }
 
-Future<void> _emitWindowClose() async {
-  const codec = StandardMethodCodec();
-  await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-      .handlePlatformMessage(
-    'window_manager',
-    codec.encodeMethodCall(
-      const MethodCall('onEvent', {'eventName': 'close'}),
-    ),
-    (_) {},
-  );
+Future<void> _emitWindowClose(RecordingChannelMock windowManager) async {
+  for (final listener in windowManager.listeners.toList()) {
+    listener.onWindowClose();
+  }
 }
 
 void main() {
@@ -169,8 +193,11 @@ void main() {
         TargetPlatform.linux,
       ]) {
         debugDefaultTargetPlatformOverride = platform;
-        expect(DesktopAppService.isDesktopPlatform, isTrue,
-            reason: '$platform should be a desktop platform');
+        expect(
+          DesktopAppService.isDesktopPlatform,
+          isTrue,
+          reason: '$platform should be a desktop platform',
+        );
       }
       debugDefaultTargetPlatformOverride = null;
     });
@@ -183,17 +210,19 @@ void main() {
   });
 
   group('DesktopAppService - initialization', () {
-    test('initialize() calls window_manager ensureInitialized on Windows',
-        () async {
-      final mocks = registerChannelMocks();
-      await withDesktopPlatform(TargetPlatform.windows, () async {
-        await DesktopAppService.instance.initialize();
-      });
-      expect(
-        _calledWith(mocks['window_manager']!.calls, 'ensureInitialized'),
-        isTrue,
-      );
-    });
+    test(
+      'initialize() calls window_manager ensureInitialized on Windows',
+      () async {
+        final mocks = registerChannelMocks();
+        await withDesktopPlatform(TargetPlatform.windows, () async {
+          await DesktopAppService.instance.initialize();
+        });
+        expect(
+          _calledWith(mocks['window_manager']!.calls, 'ensureInitialized'),
+          isTrue,
+        );
+      },
+    );
 
     test('initialize() is idempotent', () async {
       final mocks = registerChannelMocks();
@@ -208,56 +237,68 @@ void main() {
       expect(ensureCount, 1);
     });
 
-    test('initialize intercepts close before tray setup during startup',
-        () async {
-      SharedPreferences.setMockInitialValues({'desktop_close_minimize': true});
-      final mocks = registerChannelMocks();
-      final exitCodes = <int>[];
-      DesktopAppService.exitApp = exitCodes.add;
+    test(
+      'initialize intercepts close before tray setup during startup',
+      () async {
+        SharedPreferences.setMockInitialValues({
+          'desktop_close_minimize': true,
+        });
+        final mocks = registerChannelMocks();
+        final exitCodes = <int>[];
+        DesktopAppService.exitApp = exitCodes.add;
 
-      await withDesktopPlatform(TargetPlatform.windows, () async {
-        // main() awaits initialize() before runApp(), while tray setup is
-        // deferred until Application's first post-frame callback.
-        await DesktopAppService.instance.initialize();
+        await withDesktopPlatform(TargetPlatform.windows, () async {
+          // main() awaits initialize() before runApp(), while tray setup is
+          // deferred until Application's first post-frame callback.
+          await DesktopAppService.instance.initialize();
 
-        final windowCalls = mocks['window_manager']!.calls;
-        expect(
-          windowCalls.any((call) =>
-              call.method == 'setPreventClose' &&
-              (call.arguments as Map)['isPreventClose'] == true),
-          isTrue,
-          reason: 'the native close guard must be armed before the first frame',
-        );
-        expect(
-          windowManager.listeners.contains(DesktopAppService.instance),
-          isTrue,
-        );
-        expect(mocks['tray_manager']!.calls, isEmpty,
-            reason: 'tray setup has not started before the first frame');
+          final windowCalls = mocks['window_manager']!.calls;
+          expect(
+            windowCalls.any(
+              (call) =>
+                  call.method == 'setPreventClose' &&
+                  (call.arguments as Map)['isPreventClose'] == true,
+            ),
+            isTrue,
+            reason:
+                'the native close guard must be armed before the first frame',
+          );
+          expect(
+            mocks['window_manager']!.listeners.contains(
+                  DesktopAppService.instance,
+                ),
+            isTrue,
+          );
+          expect(
+            mocks['tray_manager']!.calls,
+            isEmpty,
+            reason: 'tray setup has not started before the first frame',
+          );
 
-        // A native close in this interval is intercepted but must leave the
-        // startup window visible until a tray is available.
-        await _emitWindowClose();
-        await Future<void>.delayed(const Duration(milliseconds: 20));
+          // A native close in this interval is intercepted but must leave the
+          // startup window visible until a tray is available.
+          await _emitWindowClose(mocks['window_manager']!);
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+          expect(
+            windowCalls.where((call) => call.method == 'hide'),
+            isEmpty,
+            reason: 'the startup window cannot hide before a tray is ready',
+          );
+          expect(exitCodes, isEmpty);
+
+          // Once the tray is ready, the saved minimize preference applies to
+          // the close request received during startup.
+          await DesktopAppService.instance.setupTrayAndCloseBehavior();
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+        });
+
         expect(
-          windowCalls.where((call) => call.method == 'hide'),
-          isEmpty,
-          reason: 'the startup window cannot hide before a tray is ready',
+          mocks['window_manager']!.calls.where((call) => call.method == 'hide'),
+          hasLength(1),
         );
         expect(exitCodes, isEmpty);
-
-        // Once the tray is ready, the saved minimize preference applies to
-        // the close request received during startup.
-        await DesktopAppService.instance.setupTrayAndCloseBehavior();
-        await Future<void>.delayed(const Duration(milliseconds: 20));
-      });
-
-      expect(
-        mocks['window_manager']!.calls.where((call) => call.method == 'hide'),
-        hasLength(1),
-      );
-      expect(exitCodes, isEmpty);
-    });
+      },
+    );
   });
 
   group('DesktopAppService - tray setup', () {
@@ -269,16 +310,16 @@ void main() {
         await service.setupTrayAndCloseBehavior();
       });
 
-      var tooltipCall = mocks['tray_manager']!
-          .calls
-          .firstWhere((call) => call.method == 'setToolTip');
+      var tooltipCall = mocks['tray_manager']!.calls.firstWhere(
+            (call) => call.method == 'setToolTip',
+          );
       expect(
         (tooltipCall.arguments as Map)['toolTip'],
         'Stroom is running in the background',
       );
-      var menuCall = mocks['tray_manager']!
-          .calls
-          .firstWhere((call) => call.method == 'setContextMenu');
+      var menuCall = mocks['tray_manager']!.calls.firstWhere(
+            (call) => call.method == 'setContextMenu',
+          );
       var menuItems =
           ((menuCall.arguments as Map)['menu'] as Map)['items'] as List;
       expect(menuItems.map((item) => (item as Map)['label']), [
@@ -306,42 +347,49 @@ void main() {
       ]);
     });
 
-    test('setupTrayAndCloseBehavior prevents close and registers tray',
-        () async {
-      DesktopAppService.instance.updateLocaleOverride(const Locale('zh', 'CN'));
-      final mocks = registerChannelMocks();
-      await withDesktopPlatform(TargetPlatform.windows, () async {
-        await DesktopAppService.instance.setupTrayAndCloseBehavior();
-      });
+    test(
+      'setupTrayAndCloseBehavior prevents close and registers tray',
+      () async {
+        DesktopAppService.instance.updateLocaleOverride(
+          const Locale('zh', 'CN'),
+        );
+        final mocks = registerChannelMocks();
+        await withDesktopPlatform(TargetPlatform.windows, () async {
+          await DesktopAppService.instance.setupTrayAndCloseBehavior();
+        });
 
-      final windowCalls = mocks['window_manager']!.calls;
-      final trayCalls = mocks['tray_manager']!.calls;
+        final windowCalls = mocks['window_manager']!.calls;
+        final trayCalls = mocks['tray_manager']!.calls;
 
-      // Close interception must be enabled.
-      expect(
-        windowCalls.any((c) =>
-            c.method == 'setPreventClose' &&
-            (c.arguments as Map)['isPreventClose'] == true),
-        isTrue,
-      );
+        // Close interception must be enabled.
+        expect(
+          windowCalls.any(
+            (c) =>
+                c.method == 'setPreventClose' &&
+                (c.arguments as Map)['isPreventClose'] == true,
+          ),
+          isTrue,
+        );
 
-      // Windows tray icon must be the .ico asset.
-      final setIcon = trayCalls.where((c) => c.method == 'setIcon').toList();
-      expect(setIcon, hasLength(1));
-      final iconArg = (setIcon.single.arguments as Map)['iconPath'] as String;
-      expect(iconArg, contains('tray_icon.ico'));
+        // Windows tray icon must be the .ico asset.
+        final setIcon = trayCalls.where((c) => c.method == 'setIcon').toList();
+        expect(setIcon, hasLength(1));
+        final iconArg = (setIcon.single.arguments as Map)['iconPath'] as String;
+        expect(iconArg, contains('tray_icon.ico'));
 
-      // Tooltip + menu must be registered.
-      expect(_calledWith(trayCalls, 'setToolTip'), isTrue);
-      final menuCall =
-          trayCalls.firstWhere((c) => c.method == 'setContextMenu');
-      final menuJson = (menuCall.arguments as Map)['menu'] as Map;
-      final labels = (menuJson['items'] as List)
-          .map((e) => (e as Map)['label'] as String)
-          .toList();
-      expect(labels, contains('显示主窗口'));
-      expect(labels, contains('退出 Stroom'));
-    });
+        // Tooltip + menu must be registered.
+        expect(_calledWith(trayCalls, 'setToolTip'), isTrue);
+        final menuCall = trayCalls.firstWhere(
+          (c) => c.method == 'setContextMenu',
+        );
+        final menuJson = (menuCall.arguments as Map)['menu'] as Map;
+        final labels = (menuJson['items'] as List)
+            .map((e) => (e as Map)['label'] as String)
+            .toList();
+        expect(labels, contains('显示主窗口'));
+        expect(labels, contains('退出 Stroom'));
+      },
+    );
 
     test('macOS keeps close interception when tray setup succeeds', () async {
       SharedPreferences.setMockInitialValues({'desktop_close_minimize': true});
@@ -356,15 +404,19 @@ void main() {
 
       expect(DesktopAppService.instance.isTrayReady, isTrue);
       expect(
-        mocks['window_manager']!.calls.any((call) =>
-            call.method == 'setPreventClose' &&
-            (call.arguments as Map)['isPreventClose'] == true),
+        mocks['window_manager']!.calls.any(
+              (call) =>
+                  call.method == 'setPreventClose' &&
+                  (call.arguments as Map)['isPreventClose'] == true,
+            ),
         isTrue,
         reason:
             'closing the window must still be intercepted while the tray is ready',
       );
       expect(
-          windowManager.listeners.contains(DesktopAppService.instance), isTrue);
+        mocks['window_manager']!.listeners.contains(DesktopAppService.instance),
+        isTrue,
+      );
       expect(_calledWith(mocks['window_manager']!.calls, 'hide'), isTrue);
       expect(exitCodes, isEmpty);
     });
@@ -377,15 +429,19 @@ void main() {
       });
 
       expect(
-        mocks['window_manager']!.calls.any((call) =>
-            call.method == 'setPreventClose' &&
-            (call.arguments as Map)['isPreventClose'] == false),
+        mocks['window_manager']!.calls.any(
+              (call) =>
+                  call.method == 'setPreventClose' &&
+                  (call.arguments as Map)['isPreventClose'] == false,
+            ),
         isTrue,
         reason:
             'without a tray, macOS must be allowed to close the last window',
       );
-      expect(windowManager.listeners.contains(DesktopAppService.instance),
-          isFalse);
+      expect(
+        mocks['window_manager']!.listeners.contains(DesktopAppService.instance),
+        isFalse,
+      );
     });
 
     test('setupTrayAndCloseBehavior is idempotent', () async {
@@ -418,33 +474,41 @@ void main() {
       }
     });
 
-    test('setupTrayAndCloseBehavior survives plugin errors gracefully',
-        () async {
-      final mocks = registerChannelMocks();
-      mocks['tray_manager']!.throwError = 'tray unavailable';
-      await withDesktopPlatform(TargetPlatform.windows, () async {
-        // Must not throw — tray failure must not crash the app.
-        await DesktopAppService.instance.setupTrayAndCloseBehavior();
-      });
-      // preventClose must still have been attempted...
-      expect(
-        _calledWith(mocks['window_manager']!.calls, 'setPreventClose'),
-        isTrue,
-      );
-      // ...but the failure must roll the close-guard back so the window
-      // still closes for real (no unreachable hidden window), and the
-      // listeners must be detached.
-      expect(
-        mocks['window_manager']!.calls.any((c) =>
-            c.method == 'setPreventClose' &&
-            (c.arguments as Map)['isPreventClose'] == false),
-        isTrue,
-        reason: 'tray failure must re-enable close-to-quit as fallback',
-      );
-      expect(windowManager.listeners.contains(DesktopAppService.instance),
-          isFalse);
-      expect(mocks['tray_manager']!.hasListeners, isFalse);
-    });
+    test(
+      'setupTrayAndCloseBehavior survives plugin errors gracefully',
+      () async {
+        final mocks = registerChannelMocks();
+        mocks['tray_manager']!.throwError = 'tray unavailable';
+        await withDesktopPlatform(TargetPlatform.windows, () async {
+          // Must not throw — tray failure must not crash the app.
+          await DesktopAppService.instance.setupTrayAndCloseBehavior();
+        });
+        // preventClose must still have been attempted...
+        expect(
+          _calledWith(mocks['window_manager']!.calls, 'setPreventClose'),
+          isTrue,
+        );
+        // ...but the failure must roll the close-guard back so the window
+        // still closes for real (no unreachable hidden window), and the
+        // listeners must be detached.
+        expect(
+          mocks['window_manager']!.calls.any(
+                (c) =>
+                    c.method == 'setPreventClose' &&
+                    (c.arguments as Map)['isPreventClose'] == false,
+              ),
+          isTrue,
+          reason: 'tray failure must re-enable close-to-quit as fallback',
+        );
+        expect(
+          mocks['window_manager']!.listeners.contains(
+                DesktopAppService.instance,
+              ),
+          isFalse,
+        );
+        expect(mocks['tray_manager']!.hasListeners, isFalse);
+      },
+    );
 
     test('pending close is replayed when tray setup fails', () async {
       final mocks = registerChannelMocks();
@@ -452,7 +516,7 @@ void main() {
         // Initialization intercepts close requests before the first-frame
         // tray setup. The first click must still be honored if setup fails.
         await DesktopAppService.instance.initialize();
-        await _emitWindowClose();
+        await _emitWindowClose(mocks['window_manager']!);
 
         mocks['tray_manager']!.throwError = 'tray unavailable';
         await DesktopAppService.instance.setupTrayAndCloseBehavior();
@@ -482,107 +546,136 @@ void main() {
             'a tray',
       );
       expect(
-        windowManager.listeners.contains(DesktopAppService.instance),
+        mocks['window_manager']!.listeners.contains(DesktopAppService.instance),
         isFalse,
       );
     });
 
-    test('close remains handled when tray rollback cannot clear interception',
-        () async {
-      final mocks = registerChannelMocks();
-      final exitCodes = <int>[];
-      var confirmationCalls = 0;
-      DesktopAppService.exitApp = exitCodes.add;
-      DesktopAppService.instance.onQuitConfirmation = () async {
-        confirmationCalls++;
-        return true;
-      };
+    test(
+      'close remains handled when tray rollback cannot clear interception',
+      () async {
+        final mocks = registerChannelMocks();
+        final exitCodes = <int>[];
+        var confirmationCalls = 0;
+        DesktopAppService.exitApp = exitCodes.add;
+        DesktopAppService.instance.onQuitConfirmation = () async {
+          confirmationCalls++;
+          return true;
+        };
 
-      await withDesktopPlatform(TargetPlatform.windows, () async {
-        await DesktopAppService.instance.initialize();
-        mocks['tray_manager']!.throwError = 'tray unavailable';
-        mocks['window_manager']!
-          ..throwOnMethod = 'setPreventClose'
-          ..throwError = 'close interception could not be cleared';
+        await withDesktopPlatform(TargetPlatform.windows, () async {
+          await DesktopAppService.instance.initialize();
+          mocks['tray_manager']!.throwError = 'tray unavailable';
+          mocks['window_manager']!
+            ..throwOnMethod = 'setPreventClose'
+            ..throwError = 'close interception could not be cleared';
 
-        await DesktopAppService.instance.setupTrayAndCloseBehavior();
+          await DesktopAppService.instance.setupTrayAndCloseBehavior();
 
+          expect(
+            mocks['window_manager']!.listeners.contains(
+                  DesktopAppService.instance,
+                ),
+            isTrue,
+            reason: 'the listener must stay registered while native close '
+                'interception may still be active',
+          );
+
+          await _emitWindowClose(mocks['window_manager']!);
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+        });
+
+        final windowCalls = mocks['window_manager']!.calls;
         expect(
-          windowManager.listeners.contains(DesktopAppService.instance),
+          windowCalls.any(
+            (call) =>
+                call.method == 'setPreventClose' &&
+                (call.arguments as Map)['isPreventClose'] == false,
+          ),
           isTrue,
-          reason: 'the listener must stay registered while native close '
-              'interception may still be active',
         );
-
-        await _emitWindowClose();
-        await Future<void>.delayed(const Duration(milliseconds: 20));
-      });
-
-      final windowCalls = mocks['window_manager']!.calls;
-      expect(
-        windowCalls.any((call) =>
-            call.method == 'setPreventClose' &&
-            (call.arguments as Map)['isPreventClose'] == false),
-        isTrue,
-      );
-      expect(confirmationCalls, 1,
-          reason: 'a later close must use the configured confirmation');
-      expect(exitCodes, [0]);
-      expect(_calledWith(windowCalls, 'hide'), isFalse,
-          reason: 'a missing tray cannot be used as a minimize destination');
-      expect(_calledWith(windowCalls, 'close'), isFalse,
+        expect(
+          confirmationCalls,
+          1,
+          reason: 'a later close must use the configured confirmation',
+        );
+        expect(exitCodes, [0]);
+        expect(
+          _calledWith(windowCalls, 'hide'),
+          isFalse,
+          reason: 'a missing tray cannot be used as a minimize destination',
+        );
+        expect(
+          _calledWith(windowCalls, 'close'),
+          isFalse,
           reason: 'native close must not be replayed while interception may '
-              'still be active');
-      expect(_calledWith(windowCalls, 'destroy'), isTrue);
-    });
+              'still be active',
+        );
+        expect(_calledWith(windowCalls, 'destroy'), isTrue);
+      },
+    );
 
     test(
-        'pending close is honored when tray rollback cannot clear interception',
-        () async {
-      final mocks = registerChannelMocks();
-      final exitCodes = <int>[];
-      var confirmationCalls = 0;
-      DesktopAppService.exitApp = exitCodes.add;
-      DesktopAppService.instance.onQuitConfirmation = () async {
-        confirmationCalls++;
-        return false;
-      };
+      'pending close is honored when tray rollback cannot clear interception',
+      () async {
+        final mocks = registerChannelMocks();
+        final exitCodes = <int>[];
+        var confirmationCalls = 0;
+        DesktopAppService.exitApp = exitCodes.add;
+        DesktopAppService.instance.onQuitConfirmation = () async {
+          confirmationCalls++;
+          return false;
+        };
 
-      await withDesktopPlatform(TargetPlatform.windows, () async {
-        await DesktopAppService.instance.initialize();
-        await _emitWindowClose();
+        await withDesktopPlatform(TargetPlatform.windows, () async {
+          await DesktopAppService.instance.initialize();
+          await _emitWindowClose(mocks['window_manager']!);
 
-        mocks['tray_manager']!.throwError = 'tray unavailable';
-        mocks['window_manager']!
-          ..throwOnMethod = 'setPreventClose'
-          ..throwError = 'close interception could not be cleared';
-        await DesktopAppService.instance.setupTrayAndCloseBehavior();
-      });
+          mocks['tray_manager']!.throwError = 'tray unavailable';
+          mocks['window_manager']!
+            ..throwOnMethod = 'setPreventClose'
+            ..throwError = 'close interception could not be cleared';
+          await DesktopAppService.instance.setupTrayAndCloseBehavior();
+        });
 
-      final windowCalls = mocks['window_manager']!.calls;
-      expect(confirmationCalls, 1,
-          reason: 'the captured close must use the configured confirmation');
-      expect(exitCodes, isEmpty,
-          reason: 'cancelling the captured close must keep the app alive');
-      expect(_calledWith(windowCalls, 'close'), isFalse,
+        final windowCalls = mocks['window_manager']!.calls;
+        expect(
+          confirmationCalls,
+          1,
+          reason: 'the captured close must use the configured confirmation',
+        );
+        expect(
+          exitCodes,
+          isEmpty,
+          reason: 'cancelling the captured close must keep the app alive',
+        );
+        expect(
+          _calledWith(windowCalls, 'close'),
+          isFalse,
           reason: 'native close must not be replayed while interception may '
-              'still be active');
-      expect(_calledWith(windowCalls, 'hide'), isFalse);
-      expect(
-        windowManager.listeners.contains(DesktopAppService.instance),
-        isTrue,
-        reason: 'failed native reset must not remove the only close listener',
-      );
-    });
+              'still be active',
+        );
+        expect(_calledWith(windowCalls, 'hide'), isFalse);
+        expect(
+          mocks['window_manager']!.listeners.contains(
+                DesktopAppService.instance,
+              ),
+          isTrue,
+          reason: 'failed native reset must not remove the only close listener',
+        );
+      },
+    );
 
-    test('setupTrayAndCloseBehavior is a no-op on non-desktop platforms',
-        () async {
-      final mocks = registerChannelMocks();
-      // Default test platform is Android — nothing may be called.
-      await DesktopAppService.instance.setupTrayAndCloseBehavior();
-      expect(mocks['window_manager']!.calls, isEmpty);
-      expect(mocks['tray_manager']!.calls, isEmpty);
-    });
+    test(
+      'setupTrayAndCloseBehavior is a no-op on non-desktop platforms',
+      () async {
+        final mocks = registerChannelMocks();
+        // Default test platform is Android — nothing may be called.
+        await DesktopAppService.instance.setupTrayAndCloseBehavior();
+        expect(mocks['window_manager']!.calls, isEmpty);
+        expect(mocks['tray_manager']!.calls, isEmpty);
+      },
+    );
   });
 
   group('DesktopAppService - window/tray behavior', () {
@@ -624,14 +717,19 @@ void main() {
 
           final save = background_service.setDesktopCloseMinimizeEnabled(false);
           await store.writeStarted.future;
-          expect(prefs.getBool('desktop_close_minimize'), isFalse,
-              reason:
-                  'SharedPreferences exposes the pending value in its cache');
+          expect(
+            prefs.getBool('desktop_close_minimize'),
+            isFalse,
+            reason: 'SharedPreferences exposes the pending value in its cache',
+          );
 
           DesktopAppService.instance.onWindowClose();
           await Future<void>.delayed(const Duration(milliseconds: 20));
-          expect(confirmationCalls, 0,
-              reason: 'close must wait for the pending write outcome');
+          expect(
+            confirmationCalls,
+            0,
+            reason: 'close must wait for the pending write outcome',
+          );
           expect(
             mocks['window_manager']!.calls.where((c) => c.method == 'hide'),
             isEmpty,
@@ -762,10 +860,12 @@ void main() {
         await Future<void>.delayed(const Duration(milliseconds: 20));
 
         DesktopAppService.instance.onQuitConfirmation = () async {
-          final showAlreadyCalled =
-              mocks['window_manager']!.calls.any((c) => c.method == 'show');
+          final showAlreadyCalled = mocks['window_manager']!.calls.any(
+                (c) => c.method == 'show',
+              );
           order.add(
-              showAlreadyCalled ? 'confirm-after-show' : 'confirm-no-show');
+            showAlreadyCalled ? 'confirm-after-show' : 'confirm-no-show',
+          );
           return false; // 取消退出
         };
 
@@ -774,9 +874,12 @@ void main() {
         DesktopAppService.instance.onTrayMenuItemClick(quitItem);
         await Future<void>.delayed(const Duration(milliseconds: 20));
 
-        expect(order, contains('confirm-after-show'),
-            reason: 'show（恢复窗口）必须发生在确认回调之前，'
-                '否则对话框显示在隐藏窗口上');
+        expect(
+          order,
+          contains('confirm-after-show'),
+          reason: 'show（恢复窗口）必须发生在确认回调之前，'
+              '否则对话框显示在隐藏窗口上',
+        );
         // 用户取消 → 不退出。
         expect(exitCodes, isEmpty);
       });
@@ -820,41 +923,43 @@ void main() {
     });
 
     test(
-        'close event during an in-flight confirmation does not hide the window',
-        () async {
-      // 回归：确认对话框打开期间，最小化模式的关闭事件不得隐藏窗口
-      // （否则窗口和对话框一起消失，_confirmInProgress 一直锁死）。
-      final mocks = registerChannelMocks();
-      final exitCodes = <int>[];
-      DesktopAppService.exitApp = exitCodes.add;
-      final completer = Completer<bool>();
-      await withDesktopPlatform(TargetPlatform.windows, () async {
-        await DesktopAppService.instance.setupTrayAndCloseBehavior();
-        DesktopAppService.instance.onQuitConfirmation = () => completer.future;
+      'close event during an in-flight confirmation does not hide the window',
+      () async {
+        // 回归：确认对话框打开期间，最小化模式的关闭事件不得隐藏窗口
+        // （否则窗口和对话框一起消失，_confirmInProgress 一直锁死）。
+        final mocks = registerChannelMocks();
+        final exitCodes = <int>[];
+        DesktopAppService.exitApp = exitCodes.add;
+        final completer = Completer<bool>();
+        await withDesktopPlatform(TargetPlatform.windows, () async {
+          await DesktopAppService.instance.setupTrayAndCloseBehavior();
+          DesktopAppService.instance.onQuitConfirmation =
+              () => completer.future;
 
-        final quitFuture = DesktopAppService.instance.quitWithConfirmation();
-        await Future<void>.delayed(const Duration(milliseconds: 20));
+          final quitFuture = DesktopAppService.instance.quitWithConfirmation();
+          await Future<void>.delayed(const Duration(milliseconds: 20));
 
-        // 确认仍在进行中 → 关闭事件必须被忽略（不隐藏窗口）。
-        DesktopAppService.instance.onWindowClose();
-        await Future<void>.delayed(const Duration(milliseconds: 20));
-        expect(
-          mocks['window_manager']!.calls.where((c) => c.method == 'hide'),
-          isEmpty,
-          reason: '确认进行中隐藏窗口会把对话框一起藏起来',
-        );
+          // 确认仍在进行中 → 关闭事件必须被忽略（不隐藏窗口）。
+          DesktopAppService.instance.onWindowClose();
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+          expect(
+            mocks['window_manager']!.calls.where((c) => c.method == 'hide'),
+            isEmpty,
+            reason: '确认进行中隐藏窗口会把对话框一起藏起来',
+          );
 
-        // 用户取消 → 无销毁、无退出，守卫释放。
-        completer.complete(false);
-        await quitFuture;
-        await Future<void>.delayed(const Duration(milliseconds: 20));
-        expect(
-          mocks['window_manager']!.calls.where((c) => c.method == 'destroy'),
-          isEmpty,
-        );
-        expect(exitCodes, isEmpty);
-      });
-    });
+          // 用户取消 → 无销毁、无退出，守卫释放。
+          completer.complete(false);
+          await quitFuture;
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+          expect(
+            mocks['window_manager']!.calls.where((c) => c.method == 'destroy'),
+            isEmpty,
+          );
+          expect(exitCodes, isEmpty);
+        });
+      },
+    );
 
     test('close hides to tray when the minimize pref read fails', () async {
       // isDesktopCloseMinimizeEnabled 读取失败时必须默认最小化，
@@ -870,22 +975,24 @@ void main() {
       expect(_calledWith(mocks['window_manager']!.calls, 'destroy'), isFalse);
     });
 
-    test('quitWithConfirmation falls through when the callback throws',
-        () async {
-      final mocks = registerChannelMocks();
-      final exitCodes = <int>[];
-      DesktopAppService.exitApp = exitCodes.add;
-      await withDesktopPlatform(TargetPlatform.windows, () async {
-        await DesktopAppService.instance.setupTrayAndCloseBehavior();
-        // 确认回调抛异常：放行退出，绝不阻塞用户关闭窗口。
-        DesktopAppService.instance.onQuitConfirmation = () async {
-          throw StateError('provider unavailable');
-        };
-        await DesktopAppService.instance.quitWithConfirmation();
-      });
-      expect(_calledWith(mocks['window_manager']!.calls, 'destroy'), isTrue);
-      expect(exitCodes, [0]);
-    });
+    test(
+      'quitWithConfirmation falls through when the callback throws',
+      () async {
+        final mocks = registerChannelMocks();
+        final exitCodes = <int>[];
+        DesktopAppService.exitApp = exitCodes.add;
+        await withDesktopPlatform(TargetPlatform.windows, () async {
+          await DesktopAppService.instance.setupTrayAndCloseBehavior();
+          // 确认回调抛异常：放行退出，绝不阻塞用户关闭窗口。
+          DesktopAppService.instance.onQuitConfirmation = () async {
+            throw StateError('provider unavailable');
+          };
+          await DesktopAppService.instance.quitWithConfirmation();
+        });
+        expect(_calledWith(mocks['window_manager']!.calls, 'destroy'), isTrue);
+        expect(exitCodes, [0]);
+      },
+    );
 
     test('after quit, further tray setup is a no-op', () async {
       final mocks = registerChannelMocks();
