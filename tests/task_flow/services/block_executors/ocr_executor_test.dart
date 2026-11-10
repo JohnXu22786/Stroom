@@ -454,7 +454,8 @@ void main() {
   });
 
   test('OCR failure summaries are localized in Chinese', () async {
-    await expectLocalizedFailureSummaries(localizations: AppLocalizationsZhCn());
+    await expectLocalizedFailureSummaries(
+        localizations: AppLocalizationsZhCn());
   });
 
   test('OCR rejects oversized WebFileStore input before request dispatch',
