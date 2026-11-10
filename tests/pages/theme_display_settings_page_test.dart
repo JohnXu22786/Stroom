@@ -23,6 +23,16 @@ void main() {
         const Locale('zh', 'CN'),
       );
       expect(resolveSystemLocale(const Locale('zh')), const Locale('zh', 'CN'));
+      expect(resolveSystemLocale(const Locale('es')), const Locale('es', 'ES'));
+      expect(
+        resolveSystemLocale(const Locale('es', 'MX')),
+        const Locale('es', 'ES'),
+      );
+      expect(resolveSystemLocale(const Locale('ja')), const Locale('ja', 'JP'));
+      expect(
+        resolveSystemLocale(const Locale('ja', 'US')),
+        const Locale('ja', 'JP'),
+      );
       expect(
         resolveSystemLocale(const Locale('zh', 'TW')),
         const Locale('en', 'US'),
@@ -49,8 +59,12 @@ void main() {
     );
     expect(localeNativeName(const Locale('en', 'US')), 'English');
     expect(localeNativeName(const Locale('zh', 'CN')), '简体中文');
+    expect(localeNativeName(const Locale('es', 'ES')), 'Español');
+    expect(localeNativeName(const Locale('ja', 'JP')), '日本語');
     expect(localeIdTag(const Locale('en', 'US')), 'en-us');
     expect(localeIdTag(const Locale('zh', 'CN')), 'zh-cn');
+    expect(localeIdTag(const Locale('es', 'ES')), 'es-es');
+    expect(localeIdTag(const Locale('ja', 'JP')), 'ja-jp');
   });
 
   group('locale preference persistence', () {

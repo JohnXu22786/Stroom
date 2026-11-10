@@ -7010,5 +7010,7 @@
       }
     }
   },
-  "ankiSyncStatusMediaSanityCheckFailed": "Media sync verification failed. Retry the sync."
+  "ankiSyncStatusMediaSanityCheckFailed": "Media sync verification failed. Retry the sync.",
+  "languageNameSpanish": "Spanish",
+  "languageNameJapanese": "Japanese"
 }
