@@ -5918,7 +5918,13 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       _ocrCacheCleanupSafe = false;
     }
     final skippedEntries = canPreserveSkippedEntries
-        ? List<dynamic>.unmodifiable(_skippedTaskEntries)
+        ? List<dynamic>.unmodifiable([
+            for (final entry in _skippedTaskEntries)
+              if (entry is Map && entry['type'] == BackgroundTaskType.ocr.name)
+                (Map<dynamic, dynamic>.of(entry)..remove('apiKey'))
+              else
+                entry,
+          ])
         : const <dynamic>[];
     final retireUnrestoredRecords = _restoreGeneration > 0;
     // A durable replacement snapshot removes an unknown task row and all of
@@ -6222,7 +6228,10 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       if (rawSteps != null) {
         if (rawSteps is! List) return false;
         for (final rawStep in rawSteps) {
-          if (rawStep is! Map) continue;
+          if (rawStep is! Map) {
+            if (entryType == BackgroundTaskType.ocr.name) return false;
+            continue;
+          }
           final stepError = rawStep['error'];
           if (stepError != null &&
               (stepError is! String ||
