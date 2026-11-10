@@ -681,8 +681,8 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
             else
               ...List.generate(_customParams.length, (i) {
                 final param = _customParams[i];
-                final isUnsupportedType = ParamType.values
-                    .every((type) => type.value != param.type);
+                final isUnsupportedType =
+                    ParamType.values.every((type) => type.value != param.type);
                 final name = param.paramName.trim();
                 final isDuplicate = name.isNotEmpty &&
                     _customParams.indexWhere(

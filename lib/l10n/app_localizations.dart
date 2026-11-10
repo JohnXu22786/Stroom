@@ -16234,7 +16234,8 @@ abstract class AppLocalizations {
   String connectivityTestMcpRequestTimeout(String method);
   String get connectivityTestResultTruncated;
   String connectivityTestToolNames(String names);
-  String connectivityTestMcpSuccessDetails(int count, String names, String suffix);
+  String connectivityTestMcpSuccessDetails(
+      int count, String names, String suffix);
   String connectivityTestBuiltinExecutorMissing(String toolName);
 
   String connectivityTestDurationSeconds(String seconds);
