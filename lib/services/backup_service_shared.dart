@@ -207,8 +207,30 @@ void _collectAttachments(Object? rawAttachments, Set<String> paths) {
 
 String? _canonicalAttachmentPath(Object? value) {
   if (value is! String || value.isEmpty) return null;
-  if (value.startsWith('temp_edited/')) {
-    return 'attachments/${p.basename(value)}';
+  if (value.contains('\u0000')) return null;
+
+  // Stored attachment references are app-relative keys, never arbitrary file
+  // paths. Normalize both separator styles before resolving so legacy or
+  // tampered references cannot escape the attachments directory when joined
+  // to the app directory during export.
+  final normalized = p.posix.normalize(value.replaceAll('\\', '/'));
+  if (normalized
+      .split('/')
+      .any((part) => RegExp(r'^[a-zA-Z]:').hasMatch(part))) {
+    return null;
   }
-  return value;
+  if (normalized.startsWith('temp_edited/')) {
+    final fileName = p.posix.basename(normalized);
+    return fileName.isEmpty || fileName == '.' || fileName == '..'
+        ? null
+        : 'attachments/$fileName';
+  }
+  if (!normalized.startsWith('attachments/')) return null;
+
+  // Requiring the normalized key to retain its attachment-root prefix also
+  // rejects paths such as `attachments/../../private-file`.
+  if (normalized.length == 'attachments/'.length || normalized.endsWith('/')) {
+    return null;
+  }
+  return normalized;
 }
