@@ -135,13 +135,17 @@ void main() {
           () => find.byType(ExtendedImageEditorPage).evaluate().isEmpty);
     }
 
-    Future<Uint8List> openEditor(
+    Future<(Uint8List, Directory)> openEditor(
       WidgetTester tester, {
       required Future<void> Function(String path, Uint8List bytes)?
           tempFileWriter,
     }) async {
       await tester.binding.setSurfaceSize(const Size(1200, 2000));
       addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final tempDir = await tester.runAsync(
+          () => Directory.systemTemp.createTemp('stroom-file-picker-test-'));
+      if (tempDir == null) fail('Could not create the test temp directory');
 
       final png = await tester.runAsync(_createEnginePng);
       await tester.runAsync(() async {
@@ -165,6 +169,7 @@ void main() {
             onPressed: () => showAppFilePickerDialog(
               context,
               tempFileWriter: tempFileWriter,
+              tempDirectoryProvider: () async => tempDir,
             ),
             child: const Text('Open Picker'),
           ),
@@ -184,7 +189,7 @@ void main() {
       final originalBytes =
           tester.widget<PreviewChip>(find.byType(PreviewChip)).bytes;
       await editSelectedImage(tester);
-      return originalBytes;
+      return (originalBytes, tempDir);
     }
 
     testWidgets(
@@ -307,7 +312,8 @@ void main() {
       final writeStarted = Completer<void>();
       final allowWrite = Completer<void>();
       String? writtenPath;
-      await openEditor(tester, tempFileWriter: (path, bytes) async {
+      final (_, tempDir) =
+          await openEditor(tester, tempFileWriter: (path, bytes) async {
         writtenPath = path;
         writeStarted.complete();
         await allowWrite.future;
@@ -326,12 +332,13 @@ void main() {
       expect(exists, isFalse,
           reason: 'a write finishing after picker cleanup must not orphan its '
               'temp file');
+      await tester.runAsync(() => tempDir.delete(recursive: true));
     });
 
     testWidgets('failed temp write deletes partial file but keeps edited bytes',
         (tester) async {
       String? partialPath;
-      final originalBytes =
+      final (originalBytes, tempDir) =
           await openEditor(tester, tempFileWriter: (path, bytes) async {
         partialPath = path;
         await File(path).writeAsBytes(bytes.take(4).toList());
@@ -349,6 +356,9 @@ void main() {
       expect(tester.widget<PreviewChip>(find.byType(PreviewChip)).bytes,
           isNot(same(originalBytes)),
           reason: 'cache failure must leave edited bytes available in memory');
+      await tester.tap(find.byIcon(Icons.close));
+      await tester.pumpAndSettle();
+      await tester.runAsync(() => tempDir.delete(recursive: true));
     });
 
     testWidgets('clear cleanup preserves paths from newer edits',
@@ -359,7 +369,8 @@ void main() {
       final writtenPaths = <String>[];
       var writeCount = 0;
 
-      await openEditor(tester, tempFileWriter: (path, bytes) async {
+      final (_, tempDir) =
+          await openEditor(tester, tempFileWriter: (path, bytes) async {
         writtenPaths.add(path);
         writeCount++;
         if (writeCount == 1) {
@@ -394,6 +405,7 @@ void main() {
       expect(remaining, everyElement(isFalse),
           reason: 'a clear operation must not untrack a file written by a '
               'newer live edit');
+      await tester.runAsync(() => tempDir.delete(recursive: true));
     });
   });
 

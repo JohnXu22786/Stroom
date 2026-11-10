@@ -30,11 +30,15 @@ import 'file_picker_shared.dart';
 Future<List<MapEntry<String, Uint8List>>?> showAppFilePickerDialog(
   BuildContext context, {
   Future<void> Function(String path, Uint8List bytes)? tempFileWriter,
+  Future<Directory> Function()? tempDirectoryProvider,
 }) {
   return showDialog<List<MapEntry<String, Uint8List>>?>(
     context: context,
     useSafeArea: false,
-    builder: (ctx) => _AppFilePickerDialog(tempFileWriter: tempFileWriter),
+    builder: (ctx) => _AppFilePickerDialog(
+      tempFileWriter: tempFileWriter,
+      tempDirectoryProvider: tempDirectoryProvider,
+    ),
   );
 }
 
@@ -43,9 +47,13 @@ Future<List<MapEntry<String, Uint8List>>?> showAppFilePickerDialog(
 // ====================================================================
 
 class _AppFilePickerDialog extends StatefulWidget {
-  const _AppFilePickerDialog({this.tempFileWriter});
+  const _AppFilePickerDialog({
+    this.tempFileWriter,
+    this.tempDirectoryProvider,
+  });
 
   final Future<void> Function(String path, Uint8List bytes)? tempFileWriter;
+  final Future<Directory> Function()? tempDirectoryProvider;
 
   @override
   State<_AppFilePickerDialog> createState() => _AppFilePickerDialogState();
@@ -874,7 +882,10 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
 
     // Save edited bytes to temp cache directory (do NOT overwrite original)
     try {
-      final tempDir = await getTemporaryDirectory();
+      final directoryProvider = widget.tempDirectoryProvider;
+      final tempDir = directoryProvider == null
+          ? await getTemporaryDirectory()
+          : await directoryProvider();
       if (!mounted ||
           editGeneration != _selectionGeneration ||
           !_selectedItems.values
