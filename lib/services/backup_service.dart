@@ -21,6 +21,7 @@ import 'browser_cookie_service.dart';
 import 'browser_profile_service.dart';
 import 'data_migration_service.dart';
 import '../utils/file_picker_utils.dart';
+import '../utils/file_manifest.dart' show AudioRecord;
 import 'manifest_database.dart';
 import 'startup_preferences.dart';
 import 'storage_service.dart';
@@ -2559,6 +2560,23 @@ class BackupService {
           Set<String> stringColumns,
           Set<String> integerColumns,
         ) {
+          bool isSafeStorageComponent(Object? value) {
+            if (value is! String ||
+                value.isEmpty ||
+                value == '.' ||
+                value == '..' ||
+                value.length > 255 ||
+                value.contains('/') ||
+                value.contains('\\') ||
+                value.contains(':') ||
+                RegExp(r'[<>"|?*\x00-\x1F]').hasMatch(value) ||
+                value.endsWith('.') ||
+                value.endsWith(' ')) {
+              return false;
+            }
+            return true;
+          }
+
           if (value == null) return;
           if (value is! List) throw FormatException('$field 不是数组');
           for (final item in value) {
@@ -2615,6 +2633,44 @@ class BackupService {
                 } else if (value is! int) {
                   throw FormatException('$field 字段 ${entry.key} 不是有效日期');
                 }
+              }
+            }
+
+            for (final storageField in const ['hash', 'format']) {
+              if (columns.containsKey(storageField) &&
+                  !isSafeStorageComponent(columns[storageField])) {
+                throw FormatException(
+                  '$field 字段 $storageField 不是安全的存储路径组件',
+                );
+              }
+            }
+
+            final hash = columns['hash'] as String;
+            final format = columns['format'] as String? ??
+                switch (field) {
+                  'image_records' => 'jpg',
+                  'video_records' => 'mp4',
+                  'audio_records' => 'wav',
+                  _ => 'txt',
+                };
+            final storageName = switch (field) {
+              'text_records' =>
+                '$hash.${format == 'srt' || format == 'vtt' ? format : 'txt'}',
+              'audio_records' => AudioRecord.storageFileNameFor(
+                  hash: hash,
+                  format: format,
+                ),
+              _ => '$hash.$format',
+            };
+            if (!isSafeStorageComponent(storageName) ||
+                utf8.encode(storageName).length > 255) {
+              throw FormatException('$field 生成的存储文件名无效或过长');
+            }
+            if (field == 'audio_records') {
+              final archiveStorageName = '$hash.$format';
+              if (!isSafeStorageComponent(archiveStorageName) ||
+                  utf8.encode(archiveStorageName).length > 255) {
+                throw FormatException('$field 备份文件名无效或过长');
               }
             }
 
