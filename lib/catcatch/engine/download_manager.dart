@@ -40,7 +40,8 @@ class DownloadManager {
 
   static bool _pathExists(String path) {
     try {
-      return File(path).existsSync();
+      return FileSystemEntity.typeSync(path, followLinks: false) !=
+          FileSystemEntityType.notFound;
     } catch (_) {
       return false;
     }
@@ -57,8 +58,8 @@ class DownloadManager {
     do {
       candidate = p.join(directory, '$baseName ($suffix)$extension');
       suffix++;
-    } while (_activeDownloadPaths.contains(candidate) ||
-        _pathExists(candidate));
+    } while (
+        _activeDownloadPaths.contains(candidate) || _pathExists(candidate));
     _activeDownloadPaths.add(candidate);
     return candidate;
   }
@@ -148,7 +149,8 @@ class DownloadManager {
     final requestedOutputPath = p.join(saveDir, fileName);
     final outputPath = _reserveOutputPath(requestedOutputPath);
     final sameNameDownloadIsActive = outputPath != requestedOutputPath;
-    final taskSuffix = base64Url.encode(utf8.encode(taskId)).replaceAll('=', '');
+    final taskSuffix =
+        base64Url.encode(utf8.encode(taskId)).replaceAll('=', '');
     final tempPath = taskId.isEmpty
         ? '$outputPath${DefaultRules.tempFileSuffix}'
         : '$requestedOutputPath.$taskSuffix${DefaultRules.tempFileSuffix}';

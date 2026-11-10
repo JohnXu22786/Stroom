@@ -92,12 +92,17 @@ void main() {
         ]);
 
         expect(results.toSet(), hasLength(2));
+        expect(
+          results.where((path) => path.endsWith(DefaultRules.tempFileSuffix)),
+          isEmpty,
+        );
         final contents = await Future.wait(
           results.map((path) => File(path).readAsString()),
         );
         expect(contents.toSet(), {firstContent, secondContent});
       }
 
+      Directory('${directory.path}/shared (1).bin').createSync();
       await verifyPair(
         fileName: 'shared.bin',
         firstContent: 'first-content',
