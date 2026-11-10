@@ -678,7 +678,10 @@ def _table_rows(
                     cells = tuple(normalize_text(cell) for cell in line.split("\t"))
                     if column_count is None or (
                         len(cells) == column_count
-                        and cells in (matching_rows or set())
+                        and (
+                            matching_rows is None
+                            or cells in matching_rows
+                        )
                     ):
                         # Annotated rows disambiguate TSV from tab-delimited prose.
                         rows.append(cells)
