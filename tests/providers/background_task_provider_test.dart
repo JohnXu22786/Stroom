@@ -26030,15 +26030,15 @@ void main() {
 
           final rows = jsonDecode(await file.readAsString()) as List;
           final savedSkippedRow = rows.whereType<Map>().singleWhere(
-            (row) => row['title'] == skippedRow['title'],
-          );
+                (row) => row['title'] == skippedRow['title'],
+              );
           expect(savedSkippedRow, isNot(contains('apiKey')));
           expect(jsonEncode(savedSkippedRow), isNot(contains(credential)));
           expect(savedSkippedRow['title'], skippedRow['title']);
           expect(
             rows.whereType<Map>().any(
-              (row) => row['id'] == 'safe-partial-ocr-api-key-trigger',
-            ),
+                  (row) => row['id'] == 'safe-partial-ocr-api-key-trigger',
+                ),
             isTrue,
           );
         } finally {
