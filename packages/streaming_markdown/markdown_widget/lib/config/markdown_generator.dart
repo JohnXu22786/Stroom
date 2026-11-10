@@ -101,19 +101,22 @@ class MarkdownGenerator {
     return widgets;
   }
 
-  /// Builds a source-preserving live preview without invoking the Markdown
-  /// parser. Streaming sessions use this only after one unresolved block grows
-  /// past their incremental parse budget; the finalized document is rendered
-  /// through [buildWidgets] and receives the complete Markdown semantics.
+  /// Builds a bounded live preview without reparsing ordinary long text.
+  /// Excerpts containing strong emphasis or display math go through the full
+  /// parser so those visible constructs do not fall back to literal markers.
   List<Widget> buildPlainTextPreview(
     List<String> fragments, {
     MarkdownConfig? config,
   }) {
     if (fragments.isEmpty) return const [];
     final mdConfig = config ?? MarkdownConfig.defaultConfig;
+    final source = fragments.join();
+    if (source.contains('**') || source.contains(r'$$')) {
+      return buildWidgets(source, config: mdConfig);
+    }
     final sourceSpan = TextSpan(
       style: mdConfig.p.textStyle,
-      children: [for (final fragment in fragments) TextSpan(text: fragment)],
+      text: source,
     );
     return [
       Padding(

@@ -12,8 +12,8 @@ typedef MarkdownIncrementalConfigBuilder = MarkdownConfig Function(
 
 /// Holds stable widgets for complete top-level Markdown blocks and reparses
 /// only a bounded number of updates to the final block while its meaning can
-/// still change. Oversized active blocks use a source-preserving plain-text
-/// preview until the finalized message receives its canonical Markdown render.
+/// still change. Oversized active blocks use a bounded preview until the
+/// finalized message receives its canonical Markdown render.
 ///
 /// The caller must provide append-only input. A new document is required when
 /// the stream is reset, the generator/configuration changes, or the text is
