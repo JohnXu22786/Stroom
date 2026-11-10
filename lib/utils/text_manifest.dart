@@ -406,6 +406,31 @@ class TextManifest {
         return filePath;
       });
 
+  /// Saves a newly created text record only when its name, format, and folder
+  /// are unused. The check and insertion share the record mutation lock so
+  /// concurrent create requests cannot both publish the same visible name.
+  static Future<bool> saveTextRecordIfUnique(TextRecord record, String text) =>
+      withSaveLock(
+          record.hash,
+          () => _withRecordMutationLock(() async {
+                final records = await _ops.loadRecords(
+                  forceRefresh: true,
+                  throwOnError: true,
+                );
+                if (records.any(
+                  (existing) =>
+                      existing.name == record.name &&
+                      existing.format == record.format &&
+                      existing.folder == record.folder,
+                )) {
+                  return false;
+                }
+
+                await writeText(record.storagePath, text);
+                await _ops.addRecord(record);
+                return true;
+              }));
+
   /// Writes edited text and updates its manifest record under the content
   /// locks, so deletion cannot race a change to the record's content hash.
   static Future<String> updateTextRecord(TextRecord record, String text) async {
