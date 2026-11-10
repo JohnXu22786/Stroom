@@ -265,17 +265,31 @@ Future<String> executeOcrBlock({
       imageBytes,
       maxReencodedPngBytes: maxReencodedPngBytes,
     );
-  } on FormatException catch (error) {
+  } on OcrImagePayloadException catch (error) {
+    final localizedError = switch (error.failure) {
+      OcrImagePayloadFailure.empty => strings.ocrImageEmpty,
+      OcrImagePayloadFailure.unsupportedFormat =>
+        strings.ocrImageUnsupportedFormat,
+      OcrImagePayloadFailure.unsupportedSpecialFormat =>
+        strings.ocrImageUnsupportedSpecialFormat,
+      OcrImagePayloadFailure.decodeFailed => strings.ocrImageDecodeFailed,
+      OcrImagePayloadFailure.dimensionsTooLarge =>
+        strings.ocrImageDimensionsTooLarge,
+      OcrImagePayloadFailure.orientationPngTooLarge =>
+        strings.ocrImageOrientationPngTooLarge,
+      OcrImagePayloadFailure.orientationFailed =>
+        strings.ocrImageOrientationFailed,
+    };
     failSubTask(
       bgNotifier,
       taskId,
       execNotifier,
       execId,
       flowSubTask.id,
-      error.message,
+      localizedError,
     );
     throw BlockExecutionException(
-      error.message,
+      localizedError,
       blockType: def.typeKey.name,
       blockTitle: def.label,
     );

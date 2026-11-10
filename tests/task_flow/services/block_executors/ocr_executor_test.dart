@@ -483,6 +483,7 @@ void main() {
         flowSubTask: subTask,
         bgNotifier: background,
         providerEntries: providerForOcr(),
+        localizations: AppLocalizationsZh(),
         requestOcr: (_, format) async {
           requested = true;
           return format;
@@ -498,6 +499,52 @@ void main() {
     expect(requested, isFalse);
     expect(background.state.single.status, TaskStatus.failed);
     expect(background.state.single.error, contains('损坏'));
+  });
+
+  test('OCR localizes unsupported image payload errors in English', () async {
+    final source = await File('${directory.path}/unsupported.tiff')
+        .writeAsBytes([0x49, 0x49, 0x2a, 0x00, 0x08, 0x00]);
+    final localizations = AppLocalizationsEn();
+    final expectedError = localizations.ocrImageUnsupportedSpecialFormat;
+
+    await expectPreflightFailure(
+      expectedError: expectedError,
+      execute: () => executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: source.path,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(),
+        localizations: localizations,
+      ),
+    );
+  });
+
+  test('OCR localizes corrupt image payload errors in Simplified Chinese',
+      () async {
+    final source = await File('${directory.path}/corrupt.png').writeAsBytes(
+      [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00],
+    );
+    final localizations = AppLocalizationsZh();
+    final expectedError = localizations.ocrImageDecodeFailed;
+
+    await expectPreflightFailure(
+      expectedError: expectedError,
+      execute: () => executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: source.path,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(),
+        localizations: localizations,
+      ),
+    );
   });
 
   test('OCR rejects files above the flow image limit before reading', () async {
