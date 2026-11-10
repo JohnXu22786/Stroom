@@ -325,6 +325,31 @@ class _InstructionsLoadFailsOnRetryNotifier extends OcrInstructionsNotifier {
   }
 }
 
+class _InstructionsLoadFailsTwiceNotifier extends OcrInstructionsNotifier {
+  _InstructionsLoadFailsTwiceNotifier(
+    super.ref, {
+    required this.firstLoadStarted,
+    required this.failFirstLoad,
+    required this.secondLoadStarted,
+  });
+
+  final Completer<void> firstLoadStarted;
+  final Completer<void> failFirstLoad;
+  final Completer<void> secondLoadStarted;
+  var _loadCount = 0;
+
+  @override
+  Future<void> load() async {
+    if (++_loadCount == 1) {
+      firstLoadStarted.complete();
+      await failFirstLoad.future;
+    } else {
+      secondLoadStarted.complete();
+    }
+    throw StateError('instruction store unavailable');
+  }
+}
+
 class _InstructionsLoadAlwaysFailsNotifier extends OcrInstructionsNotifier {
   _InstructionsLoadAlwaysFailsNotifier(super.ref);
 
@@ -2621,6 +2646,68 @@ void main() {
       finishFirstLoad.complete();
       await tester.pump();
     });
+
+    testWidgets(
+      'duplicate retry instruction load failure clears startup flags',
+      (tester) async {
+        final firstLoadStarted = Completer<void>();
+        final failFirstLoad = Completer<void>();
+        final secondLoadStarted = Completer<void>();
+        final imagePreparation = Completer<OcrImagePayload>();
+        final backgroundTasks = _InspectableBackgroundTaskNotifier();
+        await tester.pumpWidget(
+          _buildTestApp(
+            entries: [_createOcrEntry(withModels: true)],
+            retryData: {
+              'type': 'ocr',
+              'images': [
+                {'bytes': base64Encode(_createTestPngBytes()), 'format': 'png'},
+              ],
+              'modelIndex': 0,
+              'instructionIndex': 1,
+            },
+            backgroundTasksNotifier: backgroundTasks,
+            testInstructionsNotifierBuilder: (ref) =>
+                _InstructionsLoadFailsTwiceNotifier(
+              ref,
+              firstLoadStarted: firstLoadStarted,
+              failFirstLoad: failFirstLoad,
+              secondLoadStarted: secondLoadStarted,
+            ),
+            testImagePayloadPreparer: (_) => imagePreparation.future,
+          ),
+        );
+        await tester.pumpAndSettle();
+        await firstLoadStarted.future;
+        await tester.tap(find.byKey(const Key('ocr_confirm_legacy_model')));
+        await tester.pump();
+
+        await tester.tap(find.text('开始识别'));
+        await tester.pump();
+        failFirstLoad.complete();
+        await tester.pump();
+        await tester.pump();
+
+        expect(find.text('读取识别指令失败，请重试'), findsOneWidget);
+        imagePreparation.complete(
+          OcrImagePayload(
+            bytes: _createTestPngBytes(),
+            format: 'png',
+            width: 1,
+            height: 1,
+          ),
+        );
+        await secondLoadStarted.future;
+        await tester.pumpAndSettle();
+
+        final startButton = tester.widget<FilledButton>(
+          find.byType(FilledButton).last,
+        );
+        expect(startButton.onPressed, isNotNull);
+        expect(backgroundTasks.tasksForTest, isEmpty);
+        expect(tester.takeException(), isNull);
+      },
+    );
 
     testWidgets(
       'initial retry instruction restore load failure is handled and retryable',
