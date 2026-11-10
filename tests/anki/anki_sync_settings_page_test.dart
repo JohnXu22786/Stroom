@@ -116,6 +116,56 @@ void main() {
     expect(find.text('双向同步'), findsOneWidget);
   });
 
+  testWidgets('offers sync after login and keeps the sync button available', (
+    tester,
+  ) async {
+    final requests = await _loginUntilSyncPrompt(tester);
+
+    expect(requests.map((uri) => uri.pathSegments.last), ['hostKey', 'meta']);
+    expect(find.text('现在同步收藏集吗？'), findsOneWidget);
+    expect(find.text('立即同步'), findsOneWidget);
+    expect(find.text('双向同步'), findsOneWidget);
+  });
+
+  testWidgets('accepting the login sync prompt starts two-way sync', (
+    tester,
+  ) async {
+    var databaseReads = 0;
+    final databaseOverride = ankiDatabaseProvider.overrideWith((ref) async {
+      databaseReads++;
+      throw StateError('Stop after confirming the sync path starts');
+    });
+    await _loginUntilSyncPrompt(
+      tester,
+      additionalOverrides: [databaseOverride],
+    );
+
+    await tester.tap(find.text('立即同步'));
+    await tester.pumpAndSettle();
+
+    expect(databaseReads, 1);
+  });
+
+  testWidgets('cancelling the login sync prompt does not start sync', (
+    tester,
+  ) async {
+    var databaseReads = 0;
+    final databaseOverride = ankiDatabaseProvider.overrideWith((ref) async {
+      databaseReads++;
+      throw StateError('Sync must not start after cancellation');
+    });
+    await _loginUntilSyncPrompt(
+      tester,
+      additionalOverrides: [databaseOverride],
+    );
+
+    await tester.tap(find.text('继续使用'));
+    await tester.pumpAndSettle();
+
+    expect(databaseReads, 0);
+    expect(find.text('双向同步'), findsOneWidget);
+  });
+
   testWidgets('keeps the key-save warning after checking server status', (
     tester,
   ) async {
@@ -588,6 +638,39 @@ void main() {
     );
     expect(find.textContaining('须为 HTTPS'), findsNothing);
   });
+}
+
+Future<List<Uri>> _loginUntilSyncPrompt(
+  WidgetTester tester, {
+  List<dynamic> additionalOverrides = const [],
+}) async {
+  SharedPreferences.setMockInitialValues({});
+  final requests = <Uri>[];
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        ankiSyncSecureStorageProvider.overrideWith(
+          (_) => _StoredSecureStorage({}),
+        ),
+        ankiSyncProtocolClientFactoryProvider.overrideWithValue(
+          (config, hostKey) => AnkiSyncProtocolClient.ankiWeb(
+            client: _LoginAndMetaHttpClient(requests),
+            hostKey: hostKey,
+          ),
+        ),
+        ...additionalOverrides,
+      ],
+      child: _localizedApp(home: const AnkiSyncSettingsPage()),
+    ),
+  );
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('登录AnkiWeb'));
+  await tester.pumpAndSettle();
+  await tester.enterText(find.byType(TextFormField).at(0), 'user@example.com');
+  await tester.enterText(find.byType(TextFormField).at(1), 'password');
+  await tester.tap(find.text('登录').last);
+  await tester.pumpAndSettle();
+  return requests;
 }
 
 class _FakeSecureStorage extends FlutterSecureStorage {

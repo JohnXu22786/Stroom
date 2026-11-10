@@ -6567,6 +6567,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get ankiSyncStatusLoginSuccess => '登录成功。密码未保存，同步密钥已加密保存。';
 
   @override
+  String get ankiSyncLoginSuccessPromptTitle => '登录成功';
+
+  @override
+  String get ankiSyncLoginSuccessPromptMessage => '现在同步收藏集吗？';
+
+  @override
+  String get ankiSyncLoginSuccessPromptSync => '立即同步';
+
+  @override
+  String get ankiSyncLoginSuccessPromptLater => '继续使用';
+
+  @override
   String get ankiSyncStatusLoginSuccessNoSave =>
       '登录成功，但无法安全保存同步密钥；关闭页面后需要重新登录。';
 
