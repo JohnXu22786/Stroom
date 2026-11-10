@@ -3730,6 +3730,43 @@ Iterable<String> _credentialValuesFromOcrRetryData(
   yield* valuesFrom(retryData);
 }
 
+dynamic _sanitizeSkippedOcrCredentialFields(
+  dynamic value,
+  Iterable<String> credentialValues,
+) {
+  if (value is Map) {
+    return {
+      for (final entry in value.entries)
+        if (!_isOcrCredentialField(entry.key) &&
+            (entry.key is! String ||
+                !_legacyOcrTextContainsCredential(
+                  entry.key as String,
+                  credentialValues,
+                )) &&
+            (entry.value is! String ||
+                !_legacyOcrTextContainsCredential(
+                  entry.value as String,
+                  credentialValues,
+                )))
+          entry.key: _sanitizeSkippedOcrCredentialFields(
+            entry.value,
+            credentialValues,
+          ),
+    };
+  }
+  if (value is Iterable) {
+    return [
+      for (final item in value)
+        _sanitizeSkippedOcrCredentialFields(item, credentialValues),
+    ];
+  }
+  if (value is String &&
+      _legacyOcrTextContainsCredential(value, credentialValues)) {
+    return null;
+  }
+  return value;
+}
+
 Map<String, dynamic> _safeUnsupportedOcrRetryData(
   String taskId,
   Map<String, dynamic> malformedRetryData, {
@@ -5918,7 +5955,16 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       _ocrCacheCleanupSafe = false;
     }
     final skippedEntries = canPreserveSkippedEntries
-        ? List<dynamic>.unmodifiable(_skippedTaskEntries)
+        ? List<dynamic>.unmodifiable([
+            for (final entry in _skippedTaskEntries)
+              if (entry is Map && entry['type'] == BackgroundTaskType.ocr.name)
+                _sanitizeSkippedOcrCredentialFields(
+                  entry,
+                  _credentialValuesFromOcrRetryData(entry),
+                )
+              else
+                entry,
+          ])
         : const <dynamic>[];
     final retireUnrestoredRecords = _restoreGeneration > 0;
     // A durable replacement snapshot removes an unknown task row and all of
@@ -6222,7 +6268,10 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       if (rawSteps != null) {
         if (rawSteps is! List) return false;
         for (final rawStep in rawSteps) {
-          if (rawStep is! Map) continue;
+          if (rawStep is! Map) {
+            if (entryType == BackgroundTaskType.ocr.name) return false;
+            continue;
+          }
           final stepError = rawStep['error'];
           if (stepError != null &&
               (stepError is! String ||

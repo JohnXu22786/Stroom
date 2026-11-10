@@ -25993,6 +25993,117 @@ void main() {
     );
 
     test(
+      'partial restore removes API keys from skipped OCR rows',
+      () async {
+        const credential = 'synthetic-ocr-api-key-915';
+        final skippedRow = <String, dynamic>{
+          'type': 'ocr',
+          'title': 'Malformed OCR row with nested credentials',
+          'status': 'not-a-task-status',
+          'createdAt': DateTime.utc(2026).toIso8601String(),
+          'apiKey': credential,
+          'metadata': {
+            'apiKey': credential,
+            'note': 'The diagnostic echoed $credential',
+          },
+          'steps': <dynamic>[],
+          'ocrPageOutcomes': <dynamic>[],
+          'retryData': {
+            'type': 'ocr',
+            'version': OcrRetrySnapshot.currentVersion,
+            'images': <dynamic>[],
+            'batchMode': 'joint',
+            'perImageConcurrency': 1,
+            'requestSizeBudgetBytes': 1024,
+          },
+        };
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(jsonEncode([skippedRow]));
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          expect(await notifier.restoreFromPersistence(), isFalse);
+          notifier.addTask(
+            type: BackgroundTaskType.asr,
+            title: 'Trigger safe partial snapshot',
+            startImmediately: false,
+            taskId: 'safe-partial-ocr-api-key-trigger',
+          );
+          await notifier.pendingPersistence;
+
+          final rows = jsonDecode(await file.readAsString()) as List;
+          final savedSkippedRow = rows.whereType<Map>().singleWhere(
+                (row) => row['title'] == skippedRow['title'],
+              );
+          expect(savedSkippedRow, isNot(contains('apiKey')));
+          expect(jsonEncode(savedSkippedRow), isNot(contains(credential)));
+          expect(savedSkippedRow['metadata'], isNot(contains('apiKey')));
+          expect(savedSkippedRow['title'], skippedRow['title']);
+          expect(
+            rows.whereType<Map>().any(
+                  (row) => row['id'] == 'safe-partial-ocr-api-key-trigger',
+                ),
+            isTrue,
+          );
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+        }
+      },
+    );
+
+    test(
+      'partial restore does not preserve skipped OCR rows with non-map steps',
+      () async {
+        const credential = 'synthetic-step-credential-916';
+        final skippedRow = <String, dynamic>{
+          'type': 'ocr',
+          'title': 'Malformed OCR row with an uninspectable step',
+          'status': 'not-a-task-status',
+          'createdAt': DateTime.utc(2026).toIso8601String(),
+          'steps': [credential],
+          'ocrPageOutcomes': <dynamic>[],
+          'retryData': {
+            'type': 'ocr',
+            'version': OcrRetrySnapshot.currentVersion,
+            'images': <dynamic>[],
+            'batchMode': 'joint',
+            'perImageConcurrency': 1,
+            'requestSizeBudgetBytes': 1024,
+          },
+        };
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        final originalContent = jsonEncode([skippedRow]);
+        await file.writeAsString(originalContent);
+        var writeAttempts = 0;
+        BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = () async {
+          writeAttempts++;
+        };
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          expect(await notifier.restoreFromPersistence(), isFalse);
+          notifier.addTask(
+            type: BackgroundTaskType.asr,
+            title: 'Do not rewrite unsafe partial OCR snapshot',
+            startImmediately: false,
+            taskId: 'unsafe-partial-ocr-step-trigger',
+          );
+          await notifier.pendingPersistence;
+
+          expect(writeAttempts, 0);
+          expect(await file.readAsString(), originalContent);
+          expect(originalContent, contains(credential));
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+        }
+      },
+    );
+
+    test(
       'partial restore does not rewrite credential-bearing skipped OCR page errors',
       () async {
         const credential = '识别失败';
