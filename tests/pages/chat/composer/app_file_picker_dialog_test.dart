@@ -59,12 +59,9 @@ Finder _pickerCloseButton() => find.descendant(
 
 Future<void> _waitForCleanup(
   WidgetTester tester,
-  Future<void> cleanup,
-) async {
-  await tester.runAsync(
-    () => cleanup.timeout(const Duration(seconds: 10)),
-  );
-}
+  Completer<void> cleanup,
+) =>
+    _pumpUntil(tester, () => cleanup.isCompleted);
 
 void main() {
   setUp(() {
@@ -349,7 +346,7 @@ void main() {
       await tester.tap(_pickerCloseButton());
       await tester.pumpAndSettle();
       allowWrite.complete();
-      await _waitForCleanup(tester, cleanupFinished.future);
+      await _waitForCleanup(tester, cleanupFinished);
 
       final exists = await tester.runAsync(() => File(writtenPath!).exists());
       expect(exists, isFalse,
@@ -425,7 +422,7 @@ void main() {
       await _pumpUntil(tester, () => secondWriteFinished.isCompleted);
 
       releaseFirstWrite.complete();
-      await _waitForCleanup(tester, clearCleanupFinished.future);
+      await _waitForCleanup(tester, clearCleanupFinished);
       await tester.pump();
       final originalEditExists =
           await tester.runAsync(() => File(writtenPaths[0]).exists());
@@ -438,7 +435,7 @@ void main() {
               'while the picker remains open');
       await tester.tap(_pickerCloseButton());
       await tester.pumpAndSettle();
-      await _waitForCleanup(tester, closeCleanupFinished.future);
+      await _waitForCleanup(tester, closeCleanupFinished);
 
       final remaining = await tester.runAsync(() async =>
           Future.wait(writtenPaths.map((path) => File(path).exists())));

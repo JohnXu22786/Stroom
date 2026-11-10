@@ -120,21 +120,22 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
 
   /// Clean up any temp edit files written to the cache directory.
   Future<void> _cleanupTempFiles() async {
+    final onCleanupComplete = widget.onTempFileCleanupComplete;
     final writesToFinish = List<Future<void>>.of(_pendingTempFileWrites);
     final filesToDelete = List<String>.of(_tempEditFiles);
     await Future.wait(writesToFinish);
     for (final path in filesToDelete) {
-      _tempEditFiles.remove(path);
       try {
         final file = File(path);
         if (await file.exists()) {
           await file.delete();
         }
+        _tempEditFiles.remove(path);
       } catch (_) {
-        // Non-critical cleanup
+        // Keep failed paths tracked so a later cleanup can retry them.
       }
     }
-    widget.onTempFileCleanupComplete?.call();
+    onCleanupComplete?.call();
   }
 
   Future<void> _loadTabData(_FileTabType type) async {
@@ -935,11 +936,11 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
         await writer(file.path, bytes);
       }
     } catch (_) {
-      _tempEditFiles.remove(file.path);
       try {
         if (await file.exists()) await file.delete();
+        _tempEditFiles.remove(file.path);
       } catch (_) {
-        // Non-critical cleanup
+        // Keep the path tracked so the picker cleanup can retry it.
       }
     }
   }
