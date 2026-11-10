@@ -6,11 +6,11 @@ import 'package:stroom/pages/text_storage_shared.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/text_manifest.dart';
 
-Widget _buildTestApp() {
+Widget _buildTestApp({String initialFolder = ''}) {
   return MaterialApp(
     locale: const Locale('zh', 'CN'),
     supportedLocales: AppLocalizations.supportedLocales,
-    home: const TextCreatePage(),
+    home: TextCreatePage(initialFolder: initialFolder),
     localizationsDelegates: AppLocalizations.localizationsDelegates,
   );
 }
@@ -25,6 +25,138 @@ void main() {
   });
 
   group('TextCreatePage', () {
+    testWidgets('rejects same-folder duplicate name and format', (
+      tester,
+    ) async {
+      await TextManifest.saveTextRecord(
+        TextRecord(
+          name: 'existing',
+          hash: 'existing-hash',
+          format: 'txt',
+          createdAt: DateTime.utc(2024),
+          size: 1,
+          folder: 'docs',
+        ),
+        'existing content',
+      );
+      await tester.pumpWidget(_buildTestApp(initialFolder: 'docs'));
+      await tester.pump();
+
+      await tester.enterText(
+        find.widgetWithText(TextField, '标题').first,
+        'existing',
+      );
+      await tester.tap(find.text('保存'));
+      await tester.pump();
+
+      expect(find.text('文件 “existing.txt” 已存在'), findsOneWidget);
+      expect(await TextManifest.loadRecords(), hasLength(1));
+    });
+
+    testWidgets('allows same-folder duplicate name with another format', (
+      tester,
+    ) async {
+      await TextManifest.saveTextRecord(
+        TextRecord(
+          name: 'shared-name',
+          hash: 'existing-hash',
+          format: 'txt',
+          createdAt: DateTime.utc(2024),
+          size: 1,
+          folder: 'docs',
+        ),
+        'existing content',
+      );
+      await tester.pumpWidget(_buildTestApp(initialFolder: 'docs'));
+      await tester.pump();
+
+      await tester.enterText(
+        find.widgetWithText(TextField, '标题').first,
+        'shared-name',
+      );
+      await tester.tap(find.byType(DropdownButtonFormField<String>));
+      await tester.pump();
+      await tester.tap(find.text('md').last);
+      await tester.pump();
+      await tester.tap(find.text('保存'));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+
+      final records = await TextManifest.loadRecords();
+      expect(records, hasLength(2));
+      expect(
+        records.map((record) => record.format),
+        containsAll(['txt', 'md']),
+      );
+    });
+
+    testWidgets('allows same name and format in another folder', (
+      tester,
+    ) async {
+      await TextManifest.saveTextRecord(
+        TextRecord(
+          name: 'shared-name',
+          hash: 'existing-hash',
+          format: 'txt',
+          createdAt: DateTime.utc(2024),
+          size: 1,
+          folder: 'docs',
+        ),
+        'existing content',
+      );
+      await tester.pumpWidget(_buildTestApp(initialFolder: 'archive'));
+      await tester.pump();
+
+      await tester.enterText(
+        find.widgetWithText(TextField, '标题').first,
+        'shared-name',
+      );
+      await tester.tap(find.text('保存'));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+
+      final records = await TextManifest.loadRecords();
+      expect(records, hasLength(2));
+      expect(
+        records.map((record) => record.folder),
+        containsAll(['docs', 'archive']),
+      );
+    });
+
+    test(
+      'concurrent same-folder duplicate saves persist only one record',
+      () async {
+        final now = DateTime.utc(2024);
+        final results = await Future.wait([
+          TextManifest.saveTextRecordIfUnique(
+            TextRecord(
+              name: 'racing-name',
+              hash: 'first-hash',
+              format: 'txt',
+              createdAt: now,
+              size: 1,
+              folder: 'docs',
+            ),
+            'first content',
+          ),
+          TextManifest.saveTextRecordIfUnique(
+            TextRecord(
+              name: 'racing-name',
+              hash: 'second-hash',
+              format: 'txt',
+              createdAt: now,
+              size: 1,
+              folder: 'docs',
+            ),
+            'second content',
+          ),
+        ]);
+
+        expect(results.where((saved) => saved), hasLength(1));
+        expect(await TextManifest.loadRecords(), hasLength(1));
+      },
+    );
+
     testWidgets('shows format dropdown with txt and md options',
         (tester) async {
       await tester.pumpWidget(_buildTestApp());

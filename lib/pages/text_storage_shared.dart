@@ -77,17 +77,17 @@ class TextCreatePageState extends State<TextCreatePage> {
       return;
     }
 
+    final format = _selectedFormat;
     setState(() => _isSaving = true);
 
     try {
       final bytes = Uint8List.fromList(utf8.encode(content));
       final hash = computeTextHash(bytes);
-
-      await TextManifest.saveTextRecord(
+      final saved = await TextManifest.saveTextRecordIfUnique(
         TextRecord(
           name: title,
           hash: hash,
-          format: _selectedFormat,
+          format: format,
           createdAt: DateTime.now(),
           size: bytes.length,
           folder: widget.initialFolder,
@@ -95,6 +95,19 @@ class TextCreatePageState extends State<TextCreatePage> {
         ),
         content,
       );
+      if (!mounted) return;
+      if (!saved) {
+        setState(() => _isSaving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context)!
+                  .fileManagerFileExists(format, title),
+            ),
+          ),
+        );
+        return;
+      }
 
       if (mounted) {
         setState(() => _isSaving = false);
