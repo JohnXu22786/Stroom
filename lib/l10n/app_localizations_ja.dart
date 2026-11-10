@@ -6724,6 +6724,18 @@ class AppLocalizationsJa extends AppLocalizations {
       'ログインに成功しました。パスワードは保存されていませんでした。同期キーは暗号化されて保存されました。';
 
   @override
+  String get ankiSyncLoginSuccessPromptTitle => 'ログイン成功';
+
+  @override
+  String get ankiSyncLoginSuccessPromptMessage => 'コレクションを今すぐ同期しますか？';
+
+  @override
+  String get ankiSyncLoginSuccessPromptSync => '今すぐ同期';
+
+  @override
+  String get ankiSyncLoginSuccessPromptLater => '続行';
+
+  @override
   String get ankiSyncStatusLoginSuccessNoSave =>
       'ログインは成功しましたが、同期キーを安全に保存できませんでした。このページを閉じた後、再度ログインする必要があります。';
 
@@ -18207,6 +18219,18 @@ class AppLocalizationsJaJp extends AppLocalizationsJa {
   @override
   String get ankiSyncStatusLoginSuccess =>
       'ログインに成功しました。パスワードは保存されていませんでした。同期キーは暗号化されて保存されました。';
+
+  @override
+  String get ankiSyncLoginSuccessPromptTitle => 'ログイン成功';
+
+  @override
+  String get ankiSyncLoginSuccessPromptMessage => 'コレクションを今すぐ同期しますか？';
+
+  @override
+  String get ankiSyncLoginSuccessPromptSync => '今すぐ同期';
+
+  @override
+  String get ankiSyncLoginSuccessPromptLater => '続行';
 
   @override
   String get ankiSyncStatusLoginSuccessNoSave =>

@@ -216,6 +216,7 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
       _hostKey = null;
       _remoteMeta = null;
     });
+    var offerSyncPrompt = false;
     try {
       final client = _clientFor(config);
       final key = await client.login(
@@ -258,6 +259,7 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
               ? status
               : '$persistenceWarning\n$status';
         });
+        offerSyncPrompt = meta.shouldContinue;
       } catch (error) {
         if (!mounted) return;
         final status = AppLocalizations.of(context)!
@@ -272,9 +274,44 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
           .ankiSyncStatusLoginFailed(_safeMessage(context, error)));
     } finally {
       _closeClientIfDisposed();
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() => _busy = false);
+        if (offerSyncPrompt) {
+          final syncNow = await _showLoginSuccessSyncPrompt();
+          if (mounted && syncNow == true) await _syncBothWays(config);
+        }
+      }
     }
   }
+
+  Future<bool?> _showLoginSuccessSyncPrompt() => showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text(
+            AppLocalizations.of(dialogContext)!.ankiSyncLoginSuccessPromptTitle,
+          ),
+          content: Text(
+            AppLocalizations.of(dialogContext)!
+                .ankiSyncLoginSuccessPromptMessage,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: Text(
+                AppLocalizations.of(dialogContext)!
+                    .ankiSyncLoginSuccessPromptLater,
+              ),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: Text(
+                AppLocalizations.of(dialogContext)!
+                    .ankiSyncLoginSuccessPromptSync,
+              ),
+            ),
+          ],
+        ),
+      );
 
   Future<Map<String, String>?> _showLoginDialog(AnkiSyncMode mode) async {
     final formKey = GlobalKey<FormState>();

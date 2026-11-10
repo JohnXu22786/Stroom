@@ -6986,6 +6986,19 @@ class AppLocalizationsEs extends AppLocalizations {
       'Inicie sesión exitosamente. Su contraseña no fue guardada; la clave de sincronización fue cifrada y guardada.';
 
   @override
+  String get ankiSyncLoginSuccessPromptTitle => 'Inicio de sesión exitoso';
+
+  @override
+  String get ankiSyncLoginSuccessPromptMessage =>
+      '¿Desea sincronizar su colección ahora?';
+
+  @override
+  String get ankiSyncLoginSuccessPromptSync => 'Sincronizar ahora';
+
+  @override
+  String get ankiSyncLoginSuccessPromptLater => 'Continuar';
+
+  @override
   String get ankiSyncStatusLoginSuccessNoSave =>
       'Inicie sesión correctamente, pero la clave de sincronización no se pudo almacenar de forma segura. Deberá iniciar sesión nuevamente después de cerrar esta página.';
 
@@ -18964,6 +18977,19 @@ class AppLocalizationsEsEs extends AppLocalizationsEs {
   @override
   String get ankiSyncStatusLoginSuccess =>
       'Inicie sesión exitosamente. Su contraseña no fue guardada; la clave de sincronización fue cifrada y guardada.';
+
+  @override
+  String get ankiSyncLoginSuccessPromptTitle => 'Inicio de sesión exitoso';
+
+  @override
+  String get ankiSyncLoginSuccessPromptMessage =>
+      '¿Desea sincronizar su colección ahora?';
+
+  @override
+  String get ankiSyncLoginSuccessPromptSync => 'Sincronizar ahora';
+
+  @override
+  String get ankiSyncLoginSuccessPromptLater => 'Continuar';
 
   @override
   String get ankiSyncStatusLoginSuccessNoSave =>

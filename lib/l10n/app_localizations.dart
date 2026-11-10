@@ -11688,6 +11688,30 @@ abstract class AppLocalizations {
   /// **'Login successful. Your password was not saved; the sync key was encrypted and saved.'**
   String get ankiSyncStatusLoginSuccess;
 
+  /// No description provided for @ankiSyncLoginSuccessPromptTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Login successful'**
+  String get ankiSyncLoginSuccessPromptTitle;
+
+  /// No description provided for @ankiSyncLoginSuccessPromptMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Would you like to sync your collection now?'**
+  String get ankiSyncLoginSuccessPromptMessage;
+
+  /// No description provided for @ankiSyncLoginSuccessPromptSync.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync now'**
+  String get ankiSyncLoginSuccessPromptSync;
+
+  /// No description provided for @ankiSyncLoginSuccessPromptLater.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get ankiSyncLoginSuccessPromptLater;
+
   /// No description provided for @ankiSyncStatusLoginSuccessNoSave.
   ///
   /// In en, this message translates to:
