@@ -902,21 +902,22 @@ String? _sanitizeOcrTaskError(
           'OCR error details were hidden',
         ];
         var safeDetails = sanitizedDetails;
-        if (safeDetails != null) {
+        final candidateDetails = safeDetails;
+        if (candidateDetails != null) {
           for (final hiddenDetailsPrefix in hiddenDetailsPrefixes) {
-            if (safeDetails == hiddenDetailsPrefix) {
+            if (candidateDetails == hiddenDetailsPrefix) {
               safeDetails = localizedHiddenDetails;
               break;
             }
-            if (safeDetails.startsWith('$hiddenDetailsPrefix（') &&
-                safeDetails.endsWith('）') &&
+            if (candidateDetails.startsWith('$hiddenDetailsPrefix（') &&
+                candidateDetails.endsWith('）') &&
                 OcrDiagnosticSnapshot.sanitizeStoredTaskError(
-                      safeDetails,
+                      candidateDetails,
                       excludedValues: credentialValues,
                     ) ==
-                    safeDetails) {
+                    candidateDetails) {
               safeDetails =
-                  '$localizedHiddenDetails${safeDetails.substring(hiddenDetailsPrefix.length)}';
+                  '$localizedHiddenDetails${candidateDetails.substring(hiddenDetailsPrefix.length)}';
               break;
             }
           }
