@@ -1,6 +1,7 @@
 // ignore_for_file: invalid_use_of_visible_for_testing_member, invalid_use_of_protected_member
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -320,7 +321,9 @@ void main() {
     expect(estimatorFailure, isNotNull);
     final estimatorDetail = estimatorFailure!.message;
     expect(estimatorDetail, isNotEmpty);
-    final estimatorTask = background.state.last;
+    final estimatorTaskId =
+        executions.execution(execId)!.subTasks.single.subTaskId;
+    final estimatorTask = background.taskById(estimatorTaskId)!;
     final estimatorSummary = localizedSummary(estimatorDetail, localizations);
     expect(
       estimatorTask.error,
@@ -365,7 +368,9 @@ void main() {
     expect(requestDetail, isNotEmpty);
     expect(requestDetail, contains('HTTP 429'));
     expect(requestDetail, isNot(contains('test-key')));
-    final requestTask = background.state.last;
+    final requestTaskId =
+        executions.execution(execId)!.subTasks.single.subTaskId;
+    final requestTask = background.taskById(requestTaskId)!;
     final requestSummary = localizedSummary(requestDetail, localizations);
     expect(
       requestTask.error,
@@ -377,6 +382,13 @@ void main() {
       TaskStatus.failed,
     );
     await background.pendingPersistence;
+    final persistedTasks = jsonDecode(
+      await File('${directory.path}/background/tasks.json').readAsString(),
+    ) as List<dynamic>;
+    final persistedRequest = persistedTasks
+        .map((row) => Map<String, dynamic>.from(row as Map))
+        .firstWhere((row) => row['id'] == requestTask.id);
+    expect(persistedRequest['error'], requestSummary);
     final restoredRequest = BackgroundTaskNotifier(
       localizationsResolver: () => restoredLocalizations,
     );
