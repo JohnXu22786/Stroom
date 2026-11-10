@@ -559,6 +559,15 @@ String? _localizeStoredBackgroundError(
       'Saving speech transcription failed: ',
     ])
       (prefix, strings.bgTaskAsrSaveError),
+    for (final prefix in [
+      '${lookupAppLocalizations(const Locale('en', 'US')).unifiedTaskOcrFailed}: ',
+      '${lookupAppLocalizations(const Locale('zh', 'CN')).unifiedTaskOcrFailed}: ',
+    ])
+      (
+        prefix,
+        (detail) =>
+            '${strings.unifiedTaskOcrFailed}: ${_localizeStoredBackgroundError(detail, strings) ?? detail}',
+      ),
     for (final prefix in ['OCR识别失败: ', 'OCR识别失败：', 'OCR failed: '])
       (prefix, strings.bgTaskOcrError),
     for (final prefix in [

@@ -272,6 +272,18 @@ void main() {
   Future<void> expectLocalizedFailureSummaries({
     required AppLocalizations localizations,
   }) async {
+    final restoredLocalizations = localizations is AppLocalizationsEn
+        ? AppLocalizationsZhCn()
+        : AppLocalizationsEn();
+
+    String reLocalizedSummary(String detail) {
+      final localizedDetail =
+          detail == 'OCR 错误详情已隐藏' || detail == 'OCR error details were hidden'
+              ? restoredLocalizations.bgTaskOcrErrorDetailsHidden
+              : detail;
+      return '${restoredLocalizations.unifiedTaskOcrFailed}: $localizedDetail';
+    }
+
     final source =
         await File('${directory.path}/localized_failure.png').writeAsBytes(
       _validPng(),
@@ -311,13 +323,13 @@ void main() {
     );
     await background.pendingPersistence;
     final restoredEstimator = BackgroundTaskNotifier(
-      localizationsResolver: () => localizations,
+      localizationsResolver: () => restoredLocalizations,
     );
     addTearDown(restoredEstimator.dispose);
     expect(await restoredEstimator.restoreFromPersistence(), isTrue);
     expect(
       restoredEstimator.taskById(estimatorTask.id)?.error,
-      estimatorSummary,
+      reLocalizedSummary(estimatorDetail),
     );
 
     BlockExecutionException? requestFailure;
@@ -354,13 +366,13 @@ void main() {
     );
     await background.pendingPersistence;
     final restoredRequest = BackgroundTaskNotifier(
-      localizationsResolver: () => localizations,
+      localizationsResolver: () => restoredLocalizations,
     );
     addTearDown(restoredRequest.dispose);
     expect(await restoredRequest.restoreFromPersistence(), isTrue);
     expect(
       restoredRequest.taskById(requestTask.id)?.error,
-      requestSummary,
+      reLocalizedSummary(requestDetail),
     );
   }
 
