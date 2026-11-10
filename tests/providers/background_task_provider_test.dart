@@ -25998,10 +25998,14 @@ void main() {
         const credential = 'synthetic-ocr-api-key-915';
         final skippedRow = <String, dynamic>{
           'type': 'ocr',
-          'title': 'Malformed OCR row with a top-level API key',
+          'title': 'Malformed OCR row with nested credentials',
           'status': 'not-a-task-status',
           'createdAt': DateTime.utc(2026).toIso8601String(),
           'apiKey': credential,
+          'metadata': {
+            'apiKey': credential,
+            'note': 'The diagnostic echoed $credential',
+          },
           'steps': <dynamic>[],
           'ocrPageOutcomes': <dynamic>[],
           'retryData': {
@@ -26034,6 +26038,7 @@ void main() {
               );
           expect(savedSkippedRow, isNot(contains('apiKey')));
           expect(jsonEncode(savedSkippedRow), isNot(contains(credential)));
+          expect(savedSkippedRow['metadata'], isNot(contains('apiKey')));
           expect(savedSkippedRow['title'], skippedRow['title']);
           expect(
             rows.whereType<Map>().any(

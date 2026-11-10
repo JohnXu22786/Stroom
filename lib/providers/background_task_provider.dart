@@ -3730,6 +3730,43 @@ Iterable<String> _credentialValuesFromOcrRetryData(
   yield* valuesFrom(retryData);
 }
 
+dynamic _sanitizeSkippedOcrCredentialFields(
+  dynamic value,
+  Iterable<String> credentialValues,
+) {
+  if (value is Map) {
+    return {
+      for (final entry in value.entries)
+        if (!_isOcrCredentialField(entry.key) &&
+            (entry.key is! String ||
+                !_legacyOcrTextContainsCredential(
+                  entry.key as String,
+                  credentialValues,
+                )) &&
+            (entry.value is! String ||
+                !_legacyOcrTextContainsCredential(
+                  entry.value as String,
+                  credentialValues,
+                ))
+          entry.key: _sanitizeSkippedOcrCredentialFields(
+            entry.value,
+            credentialValues,
+          ),
+    };
+  }
+  if (value is Iterable) {
+    return [
+      for (final item in value)
+        _sanitizeSkippedOcrCredentialFields(item, credentialValues),
+    ];
+  }
+  if (value is String &&
+      _legacyOcrTextContainsCredential(value, credentialValues)) {
+    return null;
+  }
+  return value;
+}
+
 Map<String, dynamic> _safeUnsupportedOcrRetryData(
   String taskId,
   Map<String, dynamic> malformedRetryData, {
@@ -5921,7 +5958,10 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         ? List<dynamic>.unmodifiable([
             for (final entry in _skippedTaskEntries)
               if (entry is Map && entry['type'] == BackgroundTaskType.ocr.name)
-                (Map<dynamic, dynamic>.of(entry)..remove('apiKey'))
+                _sanitizeSkippedOcrCredentialFields(
+                  entry,
+                  _credentialValuesFromOcrRetryData(entry),
+                )
               else
                 entry,
           ])
