@@ -535,6 +535,117 @@ void main() {
           reason: 'oversized JSON must be rejected preflight',
         );
       });
+
+      test(
+        'encodedRequestSizeBytes matches and accepts a batch at its exact boundary',
+        () async {
+          final bytesList = <(Uint8List, String)>[
+            (Uint8List.fromList([1, 2, 3, 4]), 'png'),
+            (Uint8List.fromList([5, 6, 7, 8, 9]), 'webp'),
+          ];
+          final config = _testOcrConfig.copyWith(
+            typeConfig: {'userInstruction': '识别 café — 第三页'},
+            customParams: [
+              CustomParam(
+                paramName: 'metadata',
+                type: 'string',
+                defaultValue: '章节：第二章 📖',
+              ),
+            ],
+          );
+          final measuredService = OcrService(config: config);
+          final estimatedBytes = measuredService.encodedRequestSizeBytes(
+            imageBytesList: bytesList,
+          );
+          measuredService.close();
+
+          late RequestOptions sentRequest;
+          final service = OcrService(
+            config: config.copyWith(requestSizeBudgetBytes: estimatedBytes),
+            dio: Dio()
+              ..interceptors.add(
+                _InterceptorWithCallback(
+                  callback: (options, handler) {
+                    sentRequest = options;
+                    handler.resolve(
+                      Response(
+                        requestOptions: options,
+                        statusCode: 200,
+                        data: {
+                          'choices': [
+                            {
+                              'message': {'content': 'recognized'}
+                            },
+                          ],
+                        },
+                      ),
+                    );
+                  },
+                ),
+              ),
+          );
+
+          await service.recognizeBatch(imageBytesList: bytesList);
+
+          expect(
+            estimatedBytes,
+            utf8.encode(jsonEncode(sentRequest.data)).length,
+          );
+        },
+      );
+
+      test('recognize rejects over-budget bytes before base64 encoding',
+          () async {
+        var encodings = 0;
+        final adapter = _CountingAdapter();
+        final service = OcrService(
+          config: _testOcrConfig.copyWith(requestSizeBudgetBytes: 1),
+          dio: Dio()..httpClientAdapter = adapter,
+          encodeImageBytes: (bytes) {
+            encodings++;
+            return base64Encode(bytes);
+          },
+        );
+
+        await expectLater(
+          service.recognize(imageBytes: Uint8List.fromList([1, 2, 3, 4])),
+          throwsA(isA<OcrRequestTooLargeException>()),
+        );
+
+        expect(encodings, 0);
+        expect(adapter.requestCount, 0);
+        service.close();
+      });
+
+      test(
+        'recognizeBatch rejects over-budget bytes before base64 encoding',
+        () async {
+          var encodings = 0;
+          final adapter = _CountingAdapter();
+          final service = OcrService(
+            config: _testOcrConfig.copyWith(requestSizeBudgetBytes: 1),
+            dio: Dio()..httpClientAdapter = adapter,
+            encodeImageBytes: (bytes) {
+              encodings++;
+              return base64Encode(bytes);
+            },
+          );
+
+          await expectLater(
+            service.recognizeBatch(
+              imageBytesList: [
+                (Uint8List.fromList([1, 2, 3]), 'png'),
+                (Uint8List.fromList([4, 5, 6]), 'jpeg'),
+              ],
+            ),
+            throwsA(isA<OcrRequestTooLargeException>()),
+          );
+
+          expect(encodings, 0);
+          expect(adapter.requestCount, 0);
+          service.close();
+        },
+      );
     });
 
     group('OcrService response parsing', () {
