@@ -1148,6 +1148,7 @@ void main() {
             },
             testOcrServiceFactory: (config) => OcrService(
               config: config,
+              ownsDio: true,
               dio: Dio()..httpClientAdapter = adapter,
             ),
           ),
@@ -1312,6 +1313,7 @@ void main() {
               prepareOcrImagePayloadSync(bytes),
           testOcrServiceFactory: (config) => OcrService(
             config: config,
+            ownsDio: true,
             dio: Dio(
               BaseOptions(
                 headers: {'Authorization': 'Bearer ${config.apiKey}'},
@@ -3630,6 +3632,7 @@ void main() {
             },
             testOcrServiceFactory: (config) => OcrService(
               config: config,
+              ownsDio: true,
               dio: Dio()..httpClientAdapter = _CapturingOcrAdapter(),
             ),
           ),
@@ -3743,6 +3746,7 @@ void main() {
               serviceConfig = config;
               return OcrService(
                 config: config,
+                ownsDio: true,
                 dio: Dio()..httpClientAdapter = adapter,
               );
             },
@@ -5314,6 +5318,7 @@ void main() {
           },
           testOcrServiceFactory: (config) => OcrService(
             config: config,
+            ownsDio: true,
             dio: Dio()..httpClientAdapter = adapter,
           ),
           testRetrySnapshotCacher: ({required taskId, required snapshot}) {

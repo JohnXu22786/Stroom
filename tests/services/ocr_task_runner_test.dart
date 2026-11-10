@@ -166,6 +166,7 @@ void main() {
       folder: 'captured folder',
       serviceFactory: (config) => OcrService(
         config: config,
+        ownsDio: true,
         dio: Dio()..httpClientAdapter = adapter,
       ),
       writeText: (name, text, {beforeCommit}) async {
@@ -285,7 +286,11 @@ void main() {
         title: 'owned',
         folder: 'captured folder',
         serviceFactory: (config) =>
-            OcrService(config: config, dio: Dio()..httpClientAdapter = adapter),
+            OcrService(
+              config: config,
+              ownsDio: true,
+              dio: Dio()..httpClientAdapter = adapter,
+            ),
         writeText: TextManifest.writeText,
         onSaved: () {},
       );
@@ -321,6 +326,7 @@ void main() {
         folder: 'captured folder',
         serviceFactory: (config) => OcrService(
           config: config,
+          ownsDio: true,
           dio: Dio()..httpClientAdapter = outOfOrderAdapter,
         ),
         writeText: TextManifest.writeText,
@@ -395,6 +401,7 @@ void main() {
       folder: 'captured folder',
       serviceFactory: (config) => OcrService(
         config: config,
+        ownsDio: true,
         dio: Dio()..httpClientAdapter = englishAdapter,
       ),
       writeText: TextManifest.writeText,
@@ -443,6 +450,7 @@ void main() {
       folder: 'captured folder',
       serviceFactory: (config) => OcrService(
         config: config,
+        ownsDio: true,
         dio: Dio()..httpClientAdapter = emptyFailedAdapter,
       ),
       writeText: writePartialText,
@@ -515,6 +523,7 @@ void main() {
       folder: 'captured folder',
       serviceFactory: (config) => OcrService(
         config: config,
+        ownsDio: true,
         dio: Dio()..httpClientAdapter = stagedAdapter,
       ),
       writeText: TextManifest.writeText,
@@ -558,6 +567,7 @@ void main() {
       folder: 'captured folder',
       serviceFactory: (config) => OcrService(
         config: config,
+        ownsDio: true,
         dio: Dio()..httpClientAdapter = progressAdapter,
       ),
       writeText: TextManifest.writeText,
@@ -598,6 +608,7 @@ void main() {
       folder: 'captured folder',
       serviceFactory: (config) => OcrService(
         config: config,
+        ownsDio: true,
         dio: Dio()..httpClientAdapter = progressAdapter,
       ),
       writeText: TextManifest.writeText,
@@ -651,6 +662,7 @@ void main() {
           }
           return OcrService(
             config: config,
+            ownsDio: true,
             dio: Dio()..httpClientAdapter = adapter,
           );
         },
@@ -705,6 +717,7 @@ void main() {
         folder: 'captured folder',
         serviceFactory: (config) => OcrService(
           config: config,
+          ownsDio: true,
           dio: Dio()..httpClientAdapter = failedBeforeUploadAdapter,
         ),
         writeText: TextManifest.writeText,
@@ -763,6 +776,7 @@ void main() {
       folder: 'captured folder',
       serviceFactory: (config) => OcrService(
         config: config,
+        ownsDio: true,
         dio: Dio()..httpClientAdapter = diagnosticsAdapter,
       ),
       writeText: TextManifest.writeText,
@@ -813,6 +827,7 @@ void main() {
       folder: 'captured folder',
       serviceFactory: (config) => OcrService(
         config: config,
+        ownsDio: true,
         dio: Dio()..httpClientAdapter = diagnosticsAdapter,
       ),
       writeText: TextManifest.writeText,
@@ -866,7 +881,11 @@ void main() {
       title: 'owned',
       folder: 'captured folder',
       serviceFactory: (config) =>
-          OcrService(config: config, dio: Dio()..httpClientAdapter = adapter),
+          OcrService(
+            config: config,
+            ownsDio: true,
+            dio: Dio()..httpClientAdapter = adapter,
+          ),
       writeText: TextManifest.writeText,
       onSaved: () {},
     );
@@ -901,7 +920,11 @@ void main() {
         title: 'owned',
         folder: 'captured folder',
         serviceFactory: (config) =>
-            OcrService(config: config, dio: Dio()..httpClientAdapter = adapter),
+            OcrService(
+              config: config,
+              ownsDio: true,
+              dio: Dio()..httpClientAdapter = adapter,
+            ),
         writeText: TextManifest.writeText,
         onSaved: () {},
       );
@@ -938,7 +961,11 @@ void main() {
         title: 'owned',
         folder: 'captured folder',
         serviceFactory: (config) =>
-            OcrService(config: config, dio: Dio()..httpClientAdapter = adapter),
+            OcrService(
+              config: config,
+              ownsDio: true,
+              dio: Dio()..httpClientAdapter = adapter,
+            ),
         writeText: TextManifest.writeText,
         onSaved: () {},
       );
@@ -986,7 +1013,11 @@ void main() {
         title: 'owned',
         folder: 'captured folder',
         serviceFactory: (config) =>
-            OcrService(config: config, dio: Dio()..httpClientAdapter = adapter),
+            OcrService(
+              config: config,
+              ownsDio: true,
+              dio: Dio()..httpClientAdapter = adapter,
+            ),
         writeText: TextManifest.writeText,
         onSaved: () {},
       );
@@ -1011,6 +1042,7 @@ void main() {
         folder: 'captured folder',
         serviceFactory: (config) => OcrService(
           config: config,
+          ownsDio: true,
           dio: Dio()..httpClientAdapter = replacementAdapter,
         ),
         writeText: TextManifest.writeText,
@@ -1106,6 +1138,7 @@ void main() {
       folder: 'captured folder',
       serviceFactory: (config) => OcrService(
         config: config,
+        ownsDio: true,
         dio: Dio()..httpClientAdapter = adapter,
       ),
       writeText: TextManifest.writeText,
@@ -1152,6 +1185,7 @@ void main() {
           folder: 'captured folder',
           serviceFactory: (config) => OcrService(
             config: config,
+            ownsDio: true,
             dio: Dio()..httpClientAdapter = adapter,
           ),
           writeText: TextManifest.writeText,
@@ -1277,6 +1311,7 @@ void main() {
       onSaved: () {},
       serviceFactory: (config) => OcrService(
         config: config,
+        ownsDio: true,
         dio: Dio()..httpClientAdapter = adapter,
       ),
       writeText: (name, text, {beforeCommit}) async {
@@ -1616,6 +1651,7 @@ void main() {
         folder: 'captured folder',
         serviceFactory: (config) => OcrService(
           config: config,
+          ownsDio: true,
           dio: Dio()..httpClientAdapter = replacementAdapter,
         ),
         writeText: TextManifest.writeText,
@@ -1799,8 +1835,11 @@ void main() {
 
   test('batch uses one cancellable request with body-sized upload timeout',
       () async {
-    final service =
-        OcrService(config: _config, dio: Dio()..httpClientAdapter = adapter);
+    final service = OcrService(
+      config: _config,
+      ownsDio: true,
+      dio: Dio()..httpClientAdapter = adapter,
+    );
     final token = CancelToken();
     final stages = <OcrRequestStage>[];
     final running = service.recognizeBatch(
@@ -1893,7 +1932,11 @@ void main() {
         folder: '',
         onSaved: () {},
         serviceFactory: (config) =>
-            OcrService(config: config, dio: Dio()..httpClientAdapter = adapter),
+            OcrService(
+              config: config,
+              ownsDio: true,
+              dio: Dio()..httpClientAdapter = adapter,
+            ),
         writeText: (name, text, {beforeCommit}) async {
           final path = await TextManifest.writeText(name, text,
               beforeCommit: beforeCommit);
@@ -1955,7 +1998,11 @@ void main() {
       folder: '',
       onSaved: () {},
       serviceFactory: (config) =>
-          OcrService(config: config, dio: Dio()..httpClientAdapter = adapter),
+          OcrService(
+            config: config,
+            ownsDio: true,
+            dio: Dio()..httpClientAdapter = adapter,
+          ),
       writeText: (name, text, {beforeCommit}) async {
         final path = await TextManifest.writeText(name, text,
             beforeCommit: beforeCommit);
@@ -2053,7 +2100,11 @@ void main() {
       folder: '',
       onSaved: () {},
       serviceFactory: (config) =>
-          OcrService(config: config, dio: Dio()..httpClientAdapter = adapter),
+          OcrService(
+            config: config,
+            ownsDio: true,
+            dio: Dio()..httpClientAdapter = adapter,
+          ),
       writeText: (name, text, {beforeCommit}) async {
         final path = await TextManifest.writeText(name, text,
             beforeCommit: beforeCommit);
@@ -2098,7 +2149,11 @@ void main() {
       folder: '',
       onSaved: () {},
       serviceFactory: (config) =>
-          OcrService(config: config, dio: Dio()..httpClientAdapter = adapter),
+          OcrService(
+            config: config,
+            ownsDio: true,
+            dio: Dio()..httpClientAdapter = adapter,
+          ),
       writeText: (name, text, {beforeCommit}) async {
         final path = await TextManifest.writeText(name, text,
             beforeCommit: beforeCommit);
