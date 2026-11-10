@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/widgets.dart' show Locale;
 
 import '../l10n/app_localizations.dart';
@@ -150,6 +151,7 @@ class OcrService {
   final bool _usesInjectedDio;
   final bool _ownsDio;
   final Duration? _sendTimeoutOverride;
+  final String Function(List<int>) _encodeImageBytes;
 
   // ── Diagnostic capture (mirrors chat_api_provider pattern) ───────────
   /// The last request body sent to the API.
@@ -274,7 +276,9 @@ class OcrService {
     Duration? connectTimeout,
     Duration? sendTimeout,
     Duration? receiveTimeout,
+    @visibleForTesting String Function(List<int>)? encodeImageBytes,
   })  : _sendTimeoutOverride = sendTimeout,
+        _encodeImageBytes = encodeImageBytes ?? base64Encode,
         _usesInjectedDio = dio != null,
         _ownsDio = dio == null || ownsDio,
         _dio = dio ??
@@ -316,18 +320,7 @@ class OcrService {
     if (imageBytesList.isEmpty) {
       throw ArgumentError('imageBytesList must not be empty');
     }
-    final contents = <Map<String, dynamic>>[
-      for (final (bytes, format) in imageBytesList)
-        _buildImageContent(
-          'data:image/' + format + ';base64,' + base64Encode(bytes),
-        ),
-    ];
-    final instruction = config.effectiveUserInstruction;
-    if (instruction.isNotEmpty) {
-      contents.add({'type': 'text', 'text': instruction});
-    }
-    final body = _buildRequestBody(contents);
-    return _encodedBodyLength(body);
+    return _estimateEncodedRequestSizeBytes(imageBytesList);
   }
 
   /// Largest raw image length whose base64 data URI can fit the configured
@@ -387,7 +380,10 @@ class OcrService {
     );
 
     try {
-      final base64Image = base64Encode(imageBytes);
+      _ensureEstimatedRequestWithinSizeBudget(
+        _estimateEncodedRequestSizeBytes([(imageBytes, imageFormat)]),
+      );
+      final base64Image = _encodeImageBytes(imageBytes);
       final dataUri = 'data:image/$imageFormat;base64,$base64Image';
 
       // Images first, optional instruction text after them — matches the
@@ -511,12 +507,15 @@ class OcrService {
     );
 
     try {
+      _ensureEstimatedRequestWithinSizeBudget(
+        _estimateEncodedRequestSizeBytes(imageBytesList),
+      );
       // Consecutive image parts (image identity is conveyed by array order,
       // per official docs), then the optional instruction text last.
       final contents = <Map<String, dynamic>>[
         for (final (bytes, format) in imageBytesList)
           _buildImageContent(
-            'data:image/$format;base64,${base64Encode(bytes)}',
+            'data:image/$format;base64,${_encodeImageBytes(bytes)}',
           ),
       ];
       final instruction = config.effectiveUserInstruction;
@@ -640,6 +639,43 @@ class OcrService {
 
   int _encodedBodyLength(Map<String, dynamic> body) =>
       utf8.encode(jsonEncode(body)).length;
+
+  int _estimateEncodedRequestSizeBytes(
+    List<(Uint8List bytes, String format)> imageBytesList,
+  ) {
+    final contents = <Map<String, dynamic>>[
+      for (final (_, format) in imageBytesList)
+        _buildImageContent('data:image/$format;base64,'),
+    ];
+    final instruction = config.effectiveUserInstruction;
+    if (instruction.isNotEmpty) {
+      contents.add({'type': 'text', 'text': instruction});
+    }
+    final bodyBytes = _encodedBodyLength(_buildRequestBody(contents));
+    return imageBytesList.fold<int>(
+      bodyBytes,
+      (total, image) => total + _base64EncodedLength(image.$1.length),
+    );
+  }
+
+  int _base64EncodedLength(int rawLength) => ((rawLength + 2) ~/ 3) * 4;
+
+  int _ensureEstimatedRequestWithinSizeBudget(int encodedBytes) {
+    if (config.requestSizeBudgetBytes <= 0) {
+      throw ArgumentError.value(
+        config.requestSizeBudgetBytes,
+        'requestSizeBudgetBytes',
+        'OCR request size budget must be greater than zero',
+      );
+    }
+    if (encodedBytes > config.requestSizeBudgetBytes) {
+      throw OcrRequestTooLargeException(
+        encodedBytes: encodedBytes,
+        budgetBytes: config.requestSizeBudgetBytes,
+      );
+    }
+    return encodedBytes;
+  }
 
   int _ensureRequestWithinSizeBudget(Map<String, dynamic> body) {
     if (config.requestSizeBudgetBytes <= 0) {
