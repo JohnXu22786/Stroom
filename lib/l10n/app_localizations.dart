@@ -766,6 +766,42 @@ abstract class AppLocalizations {
   /// **'Use'**
   String get taskFlowUseTemplate;
 
+  /// No description provided for @taskFlowOcrInputMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'The image file could not be found. Select the image again.'**
+  String get taskFlowOcrInputMissing;
+
+  /// No description provided for @taskFlowOcrInputReadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'The image file could not be read. Check file access and try again.'**
+  String get taskFlowOcrInputReadFailed;
+
+  /// No description provided for @taskFlowOcrModelUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'No usable OCR model is configured. Choose an OCR provider and model in flow settings.'**
+  String get taskFlowOcrModelUnavailable;
+
+  /// No description provided for @taskFlowOcrRequestSizeLimit.
+  ///
+  /// In en, this message translates to:
+  /// **'OCR request size budget ({size} MiB)'**
+  String taskFlowOcrRequestSizeLimit(Object size);
+
+  /// No description provided for @taskFlowImageInputSizeLimit.
+  ///
+  /// In en, this message translates to:
+  /// **'the task flow image input limit ({size} MiB)'**
+  String taskFlowImageInputSizeLimit(Object size);
+
+  /// No description provided for @taskFlowOcrInputTooLarge.
+  ///
+  /// In en, this message translates to:
+  /// **'The image exceeds {limit}. Choose a smaller image and try again.'**
+  String taskFlowOcrInputTooLarge(Object limit);
+
   /// No description provided for @ocrTemplatePlainTextLabel.
   ///
   /// In en, this message translates to:
@@ -4979,33 +5015,63 @@ abstract class AppLocalizations {
   /// **'Skipped (nothing to process)'**
   String get catcatchSkipped;
 
+  /// No description provided for @catCatchDetailMediaResources.
+  ///
+  /// In en, this message translates to:
   /// **'Found {count} media resources'**
   String catCatchDetailMediaResources(Object count);
 
+  /// No description provided for @catCatchDetailResources.
+  ///
+  /// In en, this message translates to:
   /// **'Found {count} resources'**
   String catCatchDetailResources(Object count);
 
+  /// No description provided for @catCatchDetailBrowserResources.
+  ///
+  /// In en, this message translates to:
   /// **'Browser found {count} resources'**
   String catCatchDetailBrowserResources(Object count);
 
+  /// No description provided for @catCatchDetailPlaylistResources.
+  ///
+  /// In en, this message translates to:
   /// **'Found {total} resources ({segments} playlist segments)'**
   String catCatchDetailPlaylistResources(Object total, Object segments);
 
+  /// No description provided for @catCatchDetailChooseResource.
+  ///
+  /// In en, this message translates to:
   /// **'{count} resources found. Choose one.'**
   String catCatchDetailChooseResource(Object count);
 
+  /// No description provided for @catCatchDetailAutoSelectFirst.
+  ///
+  /// In en, this message translates to:
   /// **'Automatically selected result 1 and started downloading'**
   String get catCatchDetailAutoSelectFirst;
 
+  /// No description provided for @catCatchDetailAutoSelectRemaining.
+  ///
+  /// In en, this message translates to:
   /// **'1 result remains; started downloading automatically'**
   String get catCatchDetailAutoSelectRemaining;
 
-  /// **'Conversion skipped for {extension}; this format needs no conversion'**
+  /// No description provided for @catCatchDetailSkipFormat.
+  ///
+  /// In en, this message translates to:
+  /// **'Conversion skipped for .{extension}; this format needs no conversion'**
   String catCatchDetailSkipFormat(Object extension);
 
+  /// No description provided for @catCatchDetailSkipNoExtension.
+  ///
+  /// In en, this message translates to:
   /// **'Conversion skipped; this format needs no conversion'**
   String get catCatchDetailSkipNoExtension;
 
+  /// No description provided for @catCatchDetailDurationFiltered.
+  ///
+  /// In en, this message translates to:
   /// **'After filtering for {duration}, {remaining} results remain ({removed} unmatched resources excluded)'**
   String catCatchDetailDurationFiltered(
     Object duration,
@@ -5013,12 +5079,28 @@ abstract class AppLocalizations {
     Object removed,
   );
 
+  /// No description provided for @catCatchDetailDurationAllMatch.
+  ///
+  /// In en, this message translates to:
   /// **'All {count} resources match the {duration} duration filter'**
   String catCatchDetailDurationAllMatch(Object count, Object duration);
 
-  /// Duration components used in filtered detail text.
+  /// No description provided for @catCatchDurationHours.
+  ///
+  /// In en, this message translates to:
+  /// **'{count}h'**
   String catCatchDurationHours(Object count);
+
+  /// No description provided for @catCatchDurationMinutes.
+  ///
+  /// In en, this message translates to:
+  /// **'{count}m'**
   String catCatchDurationMinutes(Object count);
+
+  /// No description provided for @catCatchDurationSeconds.
+  ///
+  /// In en, this message translates to:
+  /// **'{count}s'**
   String catCatchDurationSeconds(Object count);
 
   /// No description provided for @catcatchRetryStep.
@@ -10835,48 +10917,6 @@ abstract class AppLocalizations {
   /// **'Enable this tool for an assistant in that assistant’s default tool settings.'**
   String get toolBuiltinEnableHelp;
 
-  /// No description provided for @httpToolBraveDescription.
-  ///
-  /// In en, this message translates to:
-  /// **'Search the web with the Brave Search API. Requires an API key.'**
-  String get httpToolBraveDescription;
-
-  /// No description provided for @httpToolBochaDescription.
-  ///
-  /// In en, this message translates to:
-  /// **'Search the web with the Bocha AI Search API. Requires an API key.'**
-  String get httpToolBochaDescription;
-
-  /// No description provided for @httpToolQueritDescription.
-  ///
-  /// In en, this message translates to:
-  /// **'Search the web with Querit Search. Requires an API key.'**
-  String get httpToolQueritDescription;
-
-  /// No description provided for @httpToolSearxngDescription.
-  ///
-  /// In en, this message translates to:
-  /// **'Search the web with a SearXNG instance. Requires an instance URL.'**
-  String get httpToolSearxngDescription;
-
-  /// No description provided for @httpToolSearchQueryDescription.
-  ///
-  /// In en, this message translates to:
-  /// **'Search terms.'**
-  String get httpToolSearchQueryDescription;
-
-  /// No description provided for @httpToolSearchCountDescription.
-  ///
-  /// In en, this message translates to:
-  /// **'Number of results to return.'**
-  String get httpToolSearchCountDescription;
-
-  /// No description provided for @httpToolSearchCountMax20Description.
-  ///
-  /// In en, this message translates to:
-  /// **'Number of results to return (maximum 20).'**
-  String get httpToolSearchCountMax20Description;
-
   /// No description provided for @mcpSseUrlLabel.
   ///
   /// In en, this message translates to:
@@ -11150,13 +11190,13 @@ abstract class AppLocalizations {
   /// **'JSON'**
   String get paramTypeJsonLabel;
 
-  /// Label for a custom parameter whose stored type is not supported.
+  /// No description provided for @ocrConfigUnsupportedParamType.
   ///
   /// In en, this message translates to:
   /// **'Unsupported type: {type}'**
   String ocrConfigUnsupportedParamType(String type);
 
-  /// Validation message for a custom parameter with an unsupported type.
+  /// No description provided for @ocrConfigUnsupportedParamSaveError.
   ///
   /// In en, this message translates to:
   /// **'Parameter “{name}” uses unsupported type “{type}”. Replace it with a supported type or remove the parameter before saving.'**
@@ -16215,35 +16255,6 @@ abstract class AppLocalizations {
   ///
   /// In en, this message translates to:
   /// **'{seconds} sec'**
-  String get connectivityTestHttpSuccess;
-  String get connectivityTestHttpFailure;
-  String get connectivityTestInvalidMcpConfig;
-  String get connectivityTestMissingTransport;
-  String get connectivityTestStdioUnsupported;
-  String get connectivityTestStdioDesktopOnly;
-  String get connectivityTestInvalidContent;
-  String get connectivityTestMethodMustBeString;
-  String get connectivityTestUnsupportedMethod;
-  String get connectivityTestReadOnlyMethodOnly;
-  String get connectivityTestParamsMustBeObject;
-  String get connectivityTestMcpConnectionFailed;
-  String get connectivityTestCheckConnectionSettings;
-  String get connectivityTestRemainingToolsOmitted;
-  String get connectivityTestMcpSuccess;
-  String get connectivityTestTodoMutationBlocked;
-  String get connectivityTestTodoReadOnly;
-  String get connectivityTestUnknownBuiltin;
-  String get connectivityTestBuiltinSuccess;
-  String get connectivityTestBuiltinFailure;
-  String get connectivityTestTopLevelObjectRequired;
-  String get connectivityTestRequestTimeout;
-  String connectivityTestMcpRequestTimeout(String method);
-  String get connectivityTestResultTruncated;
-  String connectivityTestToolNames(String names);
-  String connectivityTestMcpSuccessDetails(
-      int count, String names, String suffix);
-  String connectivityTestBuiltinExecutorMissing(String toolName);
-
   String connectivityTestDurationSeconds(String seconds);
 
   /// No description provided for @connectivityTestDurationMilliseconds.
@@ -18503,166 +18514,273 @@ abstract class AppLocalizations {
   /// **'Please try restarting the app.'**
   String get renderErrorRestartMessage;
 
-  /// No description provided for @backupRestoreApkgImportSummary.
+  /// No description provided for @batchDlgFileName.
   ///
   /// In en, this message translates to:
-  /// **'Imported {decks} decks, {notes} notes, and {cards} cards'**
-  String backupRestoreApkgImportSummary(int decks, int notes, int cards);
-
-  /// No description provided for @backupRestoreApkgFileNotFound.
-  ///
-  /// In en, this message translates to:
-  /// **'The selected .apkg file could not be found: {path}'**
-  String backupRestoreApkgFileNotFound(String path);
-
-  String get backupRestoreApkgInvalidArchive;
-
-  /// No description provided for @backupRestoreApkgCollectionMissing.
-  ///
-  /// In en, this message translates to:
-  /// **'The .apkg file does not contain collection.anki2.'**
-  String get backupRestoreApkgCollectionMissing;
-
-  /// No description provided for @backupRestoreApkgTargetMissing.
-  ///
-  /// In en, this message translates to:
-  /// **'Open Anki flashcards before importing or exporting a deck: {path}'**
-  String backupRestoreApkgTargetMissing(String path);
-
-  /// No description provided for @backupRestoreApkgDatabaseCorrupt.
-  ///
-  /// In en, this message translates to:
-  /// **'The Anki collection database is damaged.'**
-  String get backupRestoreApkgDatabaseCorrupt;
-
-  /// **'Could not access the local Anki file: {path}'**
-  String backupRestoreApkgLocalFileFailure(String path);
-
-  /// No description provided for @backupRestoreApkgUnexpectedError.
-  ///
-  /// In en, this message translates to:
-  /// **'The .apkg operation failed while accessing this path: {path}'**
-  String backupRestoreApkgUnexpectedError(String path);
-
-  /// No description provided for @backupRestoreApkgOperationFailed.
-  ///
-  /// In en, this message translates to:
-  /// **'The .apkg operation failed because the file or database could not be read.'**
-  String get backupRestoreApkgOperationFailed;
-
-  /// No description provided for @backupRestoreApkgExportFailed.
-  ///
-  /// In en, this message translates to:
-  /// **'The Anki deck could not be packaged from this database: {path}'**
-  String backupRestoreApkgExportFailed(String path);
-
-  /// No description provided for @ankiWebSyncUnsupportedPlatform.
-  ///
-  /// In en, this message translates to:
-  /// **'Sign in to AnkiWeb to sync on web. Open Anki settings with the cloud icon to log in.'**
-  String ankiSyncStatusServerAuthRejected(int statusCode);
-  String ankiSyncStatusServerEndpointNotFound(int statusCode);
-  String get ankiSyncStatusMediaProtocolFailed;
-  String get ankiSyncStatusMediaIndexCorrupt;
-  String get ankiSyncStatusMediaIndexFailure;
-  String get ankiSyncStatusMediaChecksumMismatch;
-  String ankiSyncStatusMediaFilenameConflict(String filename);
-  String ankiSyncStatusMediaInvalidFilename(String filename);
-  String ankiSyncStatusMediaFileSizeLimit(int limitMb);
-  String ankiSyncStatusMediaBatchLimitExceeded(int count, int limit);
-  String get ankiSyncStatusMediaSanityCheckFailed;
-
-  String get ankiWebSyncUnsupportedPlatform;
-
-  /// No description provided for @ankiWebDecksUnsupportedPlatform.
-  ///
-  /// In en, this message translates to:
-  /// **'To browse or manage decks on web, sign in to AnkiWeb using the cloud icon.'**
-  String get ankiWebDecksUnsupportedPlatform;
-
-  /// No description provided for @ankiStatsUnsupportedPlatform.
-  ///
-  /// In en, this message translates to:
-  /// **'Anki statistics are unavailable on this platform.'**
-  String get ankiStatsUnsupportedPlatform;
-
-  /// No description provided for @ankiSyncStatusDeviceClockMismatch.
-  ///
-  /// In en, this message translates to:
-  /// **'The device clock differs from the sync server by more than 5 minutes. Correct the clock and try again.'**
-  String get ankiSyncStatusDeviceClockMismatch;
-
-  /// No description provided for @ankiSyncStatusFullDownloadRequired.
-  ///
-  /// In en, this message translates to:
-  /// **'The sync sanity check failed and local changes were rolled back. Download the server collection in full, then try again.'**
-  String get ankiSyncStatusFullDownloadRequired;
-
-  /// No description provided for @ankiSyncStatusFullTransferRequired.
-  ///
-  /// In en, this message translates to:
-  /// **'This collection cannot be synchronized incrementally. Choose a full upload or download to continue.'**
-  String get ankiSyncStatusFullTransferRequired;
-
-  /// No description provided for @ankiSyncStatusIncrementalSyncFailed.
-  ///
-  /// In en, this message translates to:
-  /// **'Incremental sync could not complete. Check the server and connection, then try again.'**
-  String get ankiSyncStatusIncrementalSyncFailed;
-
-  /// No description provided for @ankiSyncStatusProtocolFailed.
-  String get ankiSyncStatusProtocolFailed;
-
-  /// No description provided for @ankiSyncStatusLoginRequired.
-  String get ankiSyncStatusLoginRequired;
-
-  /// No description provided for @ankiSyncStatusInvalidServerUrl.
-  String get ankiSyncStatusInvalidServerUrl;
-
-  /// No description provided for @ankiSyncStatusHttpsRequired.
-  String get ankiSyncStatusHttpsRequired;
-
-  /// No description provided for @ankiSyncStatusConnectionTimeout.
-  String get ankiSyncStatusConnectionTimeout;
-
-  /// No description provided for @ankiSyncStatusTlsFailure.
-  String get ankiSyncStatusTlsFailure;
-
-  /// No description provided for @ankiSyncStatusConnectionFailure.
-  String get ankiSyncStatusConnectionFailure;
-
-  /// No description provided for @ankiSyncStatusRequestFailure.
-  String get ankiSyncStatusRequestFailure;
-
-  /// No description provided for @ankiSyncStatusServerHttpError.
-  String ankiSyncStatusServerHttpError(int statusCode);
-
-  /// No description provided for @ankiSyncStatusResponseTooLarge.
-  String ankiSyncStatusResponseTooLarge(int limitMb);
-
-  /// No description provided for @ankiSyncStatusLocalFileFailure.
-  String get ankiSyncStatusLocalFileFailure;
-
-  /// No description provided for @ankiSyncStatusCollectionInvalid.
-  String get ankiSyncStatusCollectionInvalid;
-
+  /// **'File name'**
   String get batchDlgFileName;
+
+  /// No description provided for @batchDlgFolderName.
+  ///
+  /// In en, this message translates to:
+  /// **'Folder name'**
   String get batchDlgFolderName;
+
+  /// No description provided for @batchDlgFileNameConflict.
+  ///
+  /// In en, this message translates to:
+  /// **'Another file in this folder has the same name'**
   String get batchDlgFileNameConflict;
+
+  /// No description provided for @batchDlgFolderNameConflict.
+  ///
+  /// In en, this message translates to:
+  /// **'A folder with the same name already exists at the target location'**
   String get batchDlgFolderNameConflict;
+
+  /// No description provided for @batchDlgFolderNameSwapConflict.
+  ///
+  /// In en, this message translates to:
+  /// **'Folder names cannot be exchanged in the same batch'**
   String get batchDlgFolderNameSwapConflict;
+
+  /// No description provided for @batchDlgControlCharacterError.
+  ///
+  /// In en, this message translates to:
+  /// **'Name cannot contain control characters'**
   String get batchDlgControlCharacterError;
+
+  /// No description provided for @batchDlgNameWhitespaceError.
+  ///
+  /// In en, this message translates to:
+  /// **'Name cannot begin or end with whitespace; use the whitespace cleanup rule'**
   String get batchDlgNameWhitespaceError;
+
+  /// No description provided for @batchDlgNameEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'{kind} cannot be empty'**
   String batchDlgNameEmpty(String kind);
+
+  /// No description provided for @batchDlgNameTrailingWhitespace.
+  ///
+  /// In en, this message translates to:
+  /// **'{kind} cannot end with whitespace'**
   String batchDlgNameTrailingWhitespace(String kind);
+
+  /// No description provided for @batchDlgNameTooLong.
+  ///
+  /// In en, this message translates to:
+  /// **'{kind} cannot exceed {count} characters'**
   String batchDlgNameTooLong(String kind, String count);
+
+  /// No description provided for @batchDlgNameIllegalCharacters.
+  ///
+  /// In en, this message translates to:
+  /// **'{kind} cannot contain Windows-invalid characters'**
   String batchDlgNameIllegalCharacters(String kind);
+
+  /// No description provided for @batchDlgNameTrailingDot.
+  ///
+  /// In en, this message translates to:
+  /// **'{kind} cannot end with a period'**
   String batchDlgNameTrailingDot(String kind);
+
+  /// No description provided for @batchDlgNameReserved.
+  ///
+  /// In en, this message translates to:
+  /// **'{kind} cannot use a reserved Windows name'**
   String batchDlgNameReserved(String kind);
+
+  /// No description provided for @batchDlgIntermediateNameTooLong.
+  ///
+  /// In en, this message translates to:
+  /// **'An intermediate name is too long; adjust the rules'**
   String get batchDlgIntermediateNameTooLong;
+
+  /// No description provided for @batchDlgTemplateMissingDate.
+  ///
+  /// In en, this message translates to:
+  /// **'This item has no {date} date; adjust the template'**
   String batchDlgTemplateMissingDate(String date);
+
+  /// No description provided for @batchDlgCreatedDate.
+  ///
+  /// In en, this message translates to:
+  /// **'creation'**
   String get batchDlgCreatedDate;
+
+  /// No description provided for @batchDlgModifiedDate.
+  ///
+  /// In en, this message translates to:
+  /// **'modification'**
   String get batchDlgModifiedDate;
+
+  /// No description provided for @connectivityTestHttpSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'HTTP tool request succeeded'**
+  String get connectivityTestHttpSuccess;
+
+  /// No description provided for @connectivityTestHttpFailure.
+  ///
+  /// In en, this message translates to:
+  /// **'HTTP tool request failed'**
+  String get connectivityTestHttpFailure;
+
+  /// No description provided for @connectivityTestInvalidMcpConfig.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid MCP configuration'**
+  String get connectivityTestInvalidMcpConfig;
+
+  /// No description provided for @connectivityTestMissingTransport.
+  ///
+  /// In en, this message translates to:
+  /// **'A valid transport type configuration is missing.'**
+  String get connectivityTestMissingTransport;
+
+  /// No description provided for @connectivityTestStdioUnsupported.
+  ///
+  /// In en, this message translates to:
+  /// **'stdio is not supported on this platform'**
+  String get connectivityTestStdioUnsupported;
+
+  /// No description provided for @connectivityTestStdioDesktopOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'stdio MCP requires starting a local process. Test it in the Stroom desktop app.'**
+  String get connectivityTestStdioDesktopOnly;
+
+  /// No description provided for @connectivityTestInvalidContent.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid test content'**
+  String get connectivityTestInvalidContent;
+
+  /// No description provided for @connectivityTestMethodMustBeString.
+  ///
+  /// In en, this message translates to:
+  /// **'method must be a string.'**
+  String get connectivityTestMethodMustBeString;
+
+  /// No description provided for @connectivityTestUnsupportedMethod.
+  ///
+  /// In en, this message translates to:
+  /// **'Unsupported test method'**
+  String get connectivityTestUnsupportedMethod;
+
+  /// No description provided for @connectivityTestReadOnlyMethodOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'To avoid writing remote business data, MCP connectivity tests only allow the read-only tools/list method.'**
+  String get connectivityTestReadOnlyMethodOnly;
+
+  /// No description provided for @connectivityTestParamsMustBeObject.
+  ///
+  /// In en, this message translates to:
+  /// **'params must be a JSON object.'**
+  String get connectivityTestParamsMustBeObject;
+
+  /// No description provided for @connectivityTestMcpConnectionFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not connect to the MCP service'**
+  String get connectivityTestMcpConnectionFailed;
+
+  /// No description provided for @connectivityTestCheckConnectionSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Check the address, authentication, and network, or view the app log for connection details.'**
+  String get connectivityTestCheckConnectionSettings;
+
+  /// No description provided for @connectivityTestRemainingToolsOmitted.
+  ///
+  /// In en, this message translates to:
+  /// **'; remaining tools omitted'**
+  String get connectivityTestRemainingToolsOmitted;
+
+  /// No description provided for @connectivityTestMcpSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'MCP connectivity test succeeded'**
+  String get connectivityTestMcpSuccess;
+
+  /// No description provided for @connectivityTestToolNames.
+  ///
+  /// In en, this message translates to:
+  /// **': {names}'**
+  String connectivityTestToolNames(Object names);
+
+  /// No description provided for @connectivityTestMcpSuccessDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'Connection and tools/list request succeeded; found {count} tools{names}{suffix}.'**
+  String connectivityTestMcpSuccessDetails(
+    int count,
+    String names,
+    String suffix,
+  );
+
+  /// No description provided for @connectivityTestTodoMutationBlocked.
+  ///
+  /// In en, this message translates to:
+  /// **'Test parameters would modify todo data'**
+  String get connectivityTestTodoMutationBlocked;
+
+  /// No description provided for @connectivityTestTodoReadOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'To protect the current session todo list, omit todos or set it to null in connectivity tests.'**
+  String get connectivityTestTodoReadOnly;
+
+  /// No description provided for @connectivityTestUnknownBuiltin.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown built-in tool'**
+  String get connectivityTestUnknownBuiltin;
+
+  /// No description provided for @connectivityTestBuiltinExecutorMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'No test executor found for tool \"{toolName}\".'**
+  String connectivityTestBuiltinExecutorMissing(String toolName);
+
+  /// No description provided for @connectivityTestBuiltinSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Built-in tool test succeeded'**
+  String get connectivityTestBuiltinSuccess;
+
+  /// No description provided for @connectivityTestBuiltinFailure.
+  ///
+  /// In en, this message translates to:
+  /// **'Built-in tool test failed'**
+  String get connectivityTestBuiltinFailure;
+
+  /// No description provided for @connectivityTestTopLevelObjectRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Test content must be a top-level JSON object.'**
+  String get connectivityTestTopLevelObjectRequired;
+
+  /// No description provided for @connectivityTestRequestTimeout.
+  ///
+  /// In en, this message translates to:
+  /// **'Request timed out. Check the service response and network.'**
+  String get connectivityTestRequestTimeout;
+
+  /// No description provided for @connectivityTestMcpRequestTimeout.
+  ///
+  /// In en, this message translates to:
+  /// **'MCP request timed out: {method}'**
+  String connectivityTestMcpRequestTimeout(String method);
+
+  /// No description provided for @connectivityTestResultTruncated.
+  ///
+  /// In en, this message translates to:
+  /// **'… (result truncated)'**
+  String get connectivityTestResultTruncated;
 
   /// No description provided for @toolResultWebSearchEmptyQuery.
   ///
@@ -18749,7 +18867,7 @@ abstract class AppLocalizations {
   /// No description provided for @toolResultTodoCount.
   ///
   /// In en, this message translates to:
-  /// **'{count} active todos'**
+  /// **'Active todo items: {count}'**
   String toolResultTodoCount(Object count);
 
   /// No description provided for @toolResultMcpReconnectFailed.
@@ -18887,13 +19005,13 @@ abstract class AppLocalizations {
   /// No description provided for @toolResultMcpNotConnected.
   ///
   /// In en, this message translates to:
-  /// **'Error: MCP server "{server}" is not connected.'**
+  /// **'Error: MCP server \"{server}\" is not connected.'**
   String toolResultMcpNotConnected(Object server);
 
   /// No description provided for @toolResultMcpNoResponse.
   ///
   /// In en, this message translates to:
-  /// **'Error: No response from MCP tool "{tool}".'**
+  /// **'Error: No response from MCP tool \"{tool}\".'**
   String toolResultMcpNoResponse(Object tool);
 
   /// No description provided for @toolResultMcpCallFailed.
@@ -18902,14 +19020,340 @@ abstract class AppLocalizations {
   /// **'Error: {detail}'**
   String toolResultMcpCallFailed(Object detail);
 
+  /// No description provided for @httpToolBraveDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Search the web with the Brave Search API. Requires an API key.'**
+  String get httpToolBraveDescription;
+
+  /// No description provided for @httpToolBochaDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Search the web with the Bocha AI Search API. Requires an API key.'**
+  String get httpToolBochaDescription;
+
+  /// No description provided for @httpToolQueritDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Search the web with Querit Search. Requires an API key.'**
+  String get httpToolQueritDescription;
+
+  /// No description provided for @httpToolSearxngDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'A privacy-focused, self-hosted metasearch engine that aggregates search sources. Requires an instance URL.'**
+  String get httpToolSearxngDescription;
+
+  /// No description provided for @httpToolSearchQueryDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Search terms.'**
+  String get httpToolSearchQueryDescription;
+
+  /// No description provided for @httpToolSearchCountDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Number of results to return.'**
+  String get httpToolSearchCountDescription;
+
+  /// No description provided for @httpToolSearchCountMax20Description.
+  ///
+  /// In en, this message translates to:
+  /// **'Number of results to return (maximum 20).'**
+  String get httpToolSearchCountMax20Description;
+
+  /// No description provided for @backupRestoreApkgImportSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'Imported {decks} decks, {notes} notes, and {cards} cards'**
+  String backupRestoreApkgImportSummary(int decks, int notes, int cards);
+
+  /// No description provided for @backupRestoreApkgFileNotFound.
+  ///
+  /// In en, this message translates to:
+  /// **'The selected .apkg file could not be found: {path}'**
+  String backupRestoreApkgFileNotFound(String path);
+
+  /// No description provided for @backupRestoreApkgInvalidArchive.
+  ///
+  /// In en, this message translates to:
+  /// **'The selected .apkg file is damaged or is not a valid archive.'**
+  String get backupRestoreApkgInvalidArchive;
+
+  /// No description provided for @backupRestoreApkgCollectionMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'The .apkg file does not contain collection.anki2.'**
+  String get backupRestoreApkgCollectionMissing;
+
+  /// No description provided for @backupRestoreApkgTargetMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Anki flashcards before importing or exporting a deck: {path}'**
+  String backupRestoreApkgTargetMissing(String path);
+
+  /// No description provided for @backupRestoreApkgDatabaseCorrupt.
+  ///
+  /// In en, this message translates to:
+  /// **'The Anki collection database is damaged.'**
+  String get backupRestoreApkgDatabaseCorrupt;
+
+  /// No description provided for @backupRestoreApkgLocalFileFailure.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not access the local Anki file: {path}'**
+  String backupRestoreApkgLocalFileFailure(String path);
+
+  /// No description provided for @backupRestoreApkgUnexpectedError.
+  ///
+  /// In en, this message translates to:
+  /// **'The .apkg operation failed while accessing this path: {path}'**
+  String backupRestoreApkgUnexpectedError(String path);
+
+  /// No description provided for @backupRestoreApkgOperationFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'The .apkg operation failed because the file or database could not be read.'**
+  String get backupRestoreApkgOperationFailed;
+
+  /// No description provided for @backupRestoreApkgExportFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'The Anki deck could not be packaged from this database: {path}'**
+  String backupRestoreApkgExportFailed(String path);
+
+  /// No description provided for @ankiSyncStatusProtocolFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'The sync server response is invalid or incomplete. Check that the server supports Anki sync v10.'**
+  String get ankiSyncStatusProtocolFailed;
+
+  /// No description provided for @ankiSyncStatusLoginRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Log in to Anki sync before continuing.'**
+  String get ankiSyncStatusLoginRequired;
+
+  /// No description provided for @ankiSyncStatusInvalidServerUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a valid HTTP or HTTPS sync server address.'**
+  String get ankiSyncStatusInvalidServerUrl;
+
+  /// No description provided for @ankiSyncStatusHttpsRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Remote self-hosted sync servers must use HTTPS.'**
+  String get ankiSyncStatusHttpsRequired;
+
+  /// No description provided for @ankiSyncStatusConnectionTimeout.
+  ///
+  /// In en, this message translates to:
+  /// **'The sync request timed out. Check the server address and network, then retry.'**
+  String get ankiSyncStatusConnectionTimeout;
+
+  /// No description provided for @ankiSyncStatusTlsFailure.
+  ///
+  /// In en, this message translates to:
+  /// **'The server certificate could not be verified. Check the certificate or configure a custom CA.'**
+  String get ankiSyncStatusTlsFailure;
+
+  /// No description provided for @ankiSyncStatusConnectionFailure.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not connect to the sync server. Check the address and network.'**
+  String get ankiSyncStatusConnectionFailure;
+
+  /// No description provided for @ankiSyncStatusRequestFailure.
+  ///
+  /// In en, this message translates to:
+  /// **'The sync request failed. Check the server and network, then retry.'**
+  String get ankiSyncStatusRequestFailure;
+
+  /// No description provided for @ankiSyncStatusServerHttpError.
+  ///
+  /// In en, this message translates to:
+  /// **'The sync server returned HTTP {statusCode}.'**
+  String ankiSyncStatusServerHttpError(int statusCode);
+
+  /// No description provided for @ankiSyncStatusResponseTooLarge.
+  ///
+  /// In en, this message translates to:
+  /// **'The sync response exceeded the {limitMb} MB limit.'**
+  String ankiSyncStatusResponseTooLarge(int limitMb);
+
+  /// No description provided for @ankiSyncStatusLocalFileFailure.
+  ///
+  /// In en, this message translates to:
+  /// **'A local sync file could not be read or cleaned up. Check disk access and retry.'**
+  String get ankiSyncStatusLocalFileFailure;
+
+  /// No description provided for @ankiSyncStatusCollectionInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'The collection could not be opened, updated, or passed SQLite/schema validation. Restore a valid collection or download it again.'**
+  String get ankiSyncStatusCollectionInvalid;
+
+  /// No description provided for @ankiSyncStatusServerAuthRejected.
+  ///
+  /// In en, this message translates to:
+  /// **'The sync server rejected the request (HTTP {statusCode}). Check the login credentials and server permissions.'**
+  String ankiSyncStatusServerAuthRejected(int statusCode);
+
+  /// No description provided for @ankiSyncStatusServerEndpointNotFound.
+  ///
+  /// In en, this message translates to:
+  /// **'The sync endpoint could not be found (HTTP {statusCode}). Check the server address.'**
+  String ankiSyncStatusServerEndpointNotFound(int statusCode);
+
+  /// No description provided for @ankiSyncStatusMediaProtocolFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'The media sync server returned an invalid response. Check that it supports Anki media sync and try again.'**
+  String get ankiSyncStatusMediaProtocolFailed;
+
+  /// No description provided for @ankiSyncStatusMediaIndexCorrupt.
+  ///
+  /// In en, this message translates to:
+  /// **'The local media sync index is corrupted. Reset media sync data and try again.'**
+  String get ankiSyncStatusMediaIndexCorrupt;
+
+  /// No description provided for @ankiSyncStatusMediaIndexFailure.
+  ///
+  /// In en, this message translates to:
+  /// **'The local media sync index could not be read or updated.'**
+  String get ankiSyncStatusMediaIndexFailure;
+
+  /// No description provided for @ankiSyncStatusMediaChecksumMismatch.
+  ///
+  /// In en, this message translates to:
+  /// **'A downloaded media file failed checksum validation. Retry media sync.'**
+  String get ankiSyncStatusMediaChecksumMismatch;
+
+  /// No description provided for @ankiSyncStatusMediaFilenameConflict.
+  ///
+  /// In en, this message translates to:
+  /// **'The media file “{filename}” has conflicting local and server changes. Back it up and resolve the name conflict before retrying.'**
+  String ankiSyncStatusMediaFilenameConflict(String filename);
+
+  /// No description provided for @ankiSyncStatusMediaInvalidFilename.
+  ///
+  /// In en, this message translates to:
+  /// **'The media filename “{filename}” cannot be synchronized. Rename it to a valid Anki filename and retry.'**
+  String ankiSyncStatusMediaInvalidFilename(String filename);
+
+  /// No description provided for @ankiSyncStatusMediaFileSizeLimit.
+  ///
+  /// In en, this message translates to:
+  /// **'A media file is empty or exceeds the {limitMb} MB limit.'**
+  String ankiSyncStatusMediaFileSizeLimit(int limitMb);
+
+  /// No description provided for @ankiSyncStatusMediaBatchLimitExceeded.
+  ///
+  /// In en, this message translates to:
+  /// **'The media archive contains {count} entries; the maximum is {limit} including its manifest.'**
+  String ankiSyncStatusMediaBatchLimitExceeded(int count, int limit);
+
+  /// No description provided for @ankiSyncStatusMediaSanityCheckFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Media sync verification failed. Retry the sync.'**
+  String get ankiSyncStatusMediaSanityCheckFailed;
+
+  /// No description provided for @ankiWebSyncUnsupportedPlatform.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in to AnkiWeb to sync on web. Open Anki settings with the cloud icon to log in.'**
+  String get ankiWebSyncUnsupportedPlatform;
+
+  /// No description provided for @ankiWebDecksUnsupportedPlatform.
+  ///
+  /// In en, this message translates to:
+  /// **'To browse or manage decks on web, sign in to AnkiWeb using the cloud icon.'**
+  String get ankiWebDecksUnsupportedPlatform;
+
+  /// No description provided for @ankiStatsUnsupportedPlatform.
+  ///
+  /// In en, this message translates to:
+  /// **'Anki statistics are unavailable on this platform.'**
+  String get ankiStatsUnsupportedPlatform;
+
+  /// No description provided for @ankiSyncStatusDeviceClockMismatch.
+  ///
+  /// In en, this message translates to:
+  /// **'The device clock differs from the sync server by more than 5 minutes. Correct the clock and try again.'**
+  String get ankiSyncStatusDeviceClockMismatch;
+
+  /// No description provided for @ankiSyncStatusFullDownloadRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'The sync sanity check failed and local changes were rolled back. Download the server collection in full, then try again.'**
+  String get ankiSyncStatusFullDownloadRequired;
+
+  /// No description provided for @ankiSyncStatusFullTransferRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'This collection cannot be synchronized incrementally. Choose a full upload or download to continue.'**
+  String get ankiSyncStatusFullTransferRequired;
+
+  /// No description provided for @ankiSyncStatusIncrementalSyncFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Incremental sync could not complete. Check the server and connection, then try again.'**
+  String get ankiSyncStatusIncrementalSyncFailed;
+
+  /// No description provided for @emojiCategorySmileys.
+  ///
+  /// In en, this message translates to:
+  /// **'Smileys'**
   String get emojiCategorySmileys;
+
+  /// No description provided for @emojiCategoryPeople.
+  ///
+  /// In en, this message translates to:
+  /// **'People'**
   String get emojiCategoryPeople;
+
+  /// No description provided for @emojiCategoryAnimals.
+  ///
+  /// In en, this message translates to:
+  /// **'Animals'**
   String get emojiCategoryAnimals;
+
+  /// No description provided for @emojiCategoryFood.
+  ///
+  /// In en, this message translates to:
+  /// **'Food'**
   String get emojiCategoryFood;
+
+  /// No description provided for @emojiCategoryActivities.
+  ///
+  /// In en, this message translates to:
+  /// **'Activities'**
   String get emojiCategoryActivities;
+
+  /// No description provided for @emojiCategoryTravel.
+  ///
+  /// In en, this message translates to:
+  /// **'Travel'**
   String get emojiCategoryTravel;
+
+  /// No description provided for @emojiCategoryObjects.
+  ///
+  /// In en, this message translates to:
+  /// **'Objects'**
   String get emojiCategoryObjects;
+
+  /// No description provided for @emojiCategorySymbols.
+  ///
+  /// In en, this message translates to:
+  /// **'Symbols'**
   String get emojiCategorySymbols;
+
+  /// No description provided for @emojiCategoryFlags.
+  ///
+  /// In en, this message translates to:
+  /// **'Flags'**
   String get emojiCategoryFlags;
 }
 

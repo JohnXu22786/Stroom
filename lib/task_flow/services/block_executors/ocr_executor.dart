@@ -91,10 +91,10 @@ Future<String> executeOcrBlock({
         execNotifier,
         execId,
         flowSubTask.id,
-        '输入文件不存在: $input',
+        strings.taskFlowOcrInputMissing,
       );
       throw BlockExecutionException(
-        '输入文件不存在',
+        strings.taskFlowOcrInputMissing,
         blockType: def.typeKey.name,
         blockTitle: def.label,
       );
@@ -107,10 +107,10 @@ Future<String> executeOcrBlock({
       execNotifier,
       execId,
       flowSubTask.id,
-      '读取文件失败: $e',
+      strings.taskFlowOcrInputReadFailed,
     );
     throw BlockExecutionException(
-      '读取文件失败',
+      strings.taskFlowOcrInputReadFailed,
       blockType: def.typeKey.name,
       blockTitle: def.label,
     );
@@ -127,10 +127,10 @@ Future<String> executeOcrBlock({
       execNotifier,
       execId,
       flowSubTask.id,
-      '未配置OCR模型或模型引用已失效，请重新选择',
+      strings.taskFlowOcrModelUnavailable,
     );
     throw BlockExecutionException(
-      '未配置OCR模型',
+      strings.taskFlowOcrModelUnavailable,
       blockType: def.typeKey.name,
       blockTitle: def.label,
     );
@@ -187,9 +187,13 @@ Future<String> executeOcrBlock({
 
   BlockExecutionException oversizedInputException() {
     final limitLabel = maxRequestImageBytes < maxFlowImageInputBytes
-        ? 'OCR 请求大小预算（${ocrRequestSizeBudgetMib(requestSizeBudgetBytes)} MiB）'
-        : '任务流图片输入上限（${ocrRequestSizeBudgetMib(maxFlowImageInputBytes)} MiB）';
-    final error = 'OCR 输入图片超过$limitLabel允许的范围，请缩小图片后重试';
+        ? strings.taskFlowOcrRequestSizeLimit(
+            ocrRequestSizeBudgetMib(requestSizeBudgetBytes),
+          )
+        : strings.taskFlowImageInputSizeLimit(
+            ocrRequestSizeBudgetMib(maxFlowImageInputBytes),
+          );
+    final error = strings.taskFlowOcrInputTooLarge(limitLabel);
     failSubTask(
       bgNotifier,
       taskId,
@@ -216,10 +220,10 @@ Future<String> executeOcrBlock({
           execNotifier,
           execId,
           flowSubTask.id,
-          '输入文件不存在: $input',
+          strings.taskFlowOcrInputMissing,
         );
         throw BlockExecutionException(
-          '输入文件不存在',
+          strings.taskFlowOcrInputMissing,
           blockType: def.typeKey.name,
           blockTitle: def.label,
         );
@@ -246,10 +250,10 @@ Future<String> executeOcrBlock({
       execNotifier,
       execId,
       flowSubTask.id,
-      '读取文件失败: $e',
+      strings.taskFlowOcrInputReadFailed,
     );
     throw BlockExecutionException(
-      '读取文件失败',
+      strings.taskFlowOcrInputReadFailed,
       blockType: def.typeKey.name,
       blockTitle: def.label,
     );

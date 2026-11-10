@@ -181,12 +181,34 @@ void main() {
         ]),
       ]);
 
-  TaskFlowBlock ocrBlock() => TaskFlowBlock(
+  TaskFlowBlock ocrBlock({String modelId = 'model'}) => TaskFlowBlock(
         typeKey: BlockType.ocr,
         params: {
-          'modelRef': {'configId': 'config', 'modelId': 'model'},
+          'modelRef': {'configId': 'config', 'modelId': modelId},
         },
       );
+
+  Future<void> expectPreflightFailure({
+    required String expectedError,
+    required Future<String> Function() execute,
+  }) async {
+    await expectLater(
+      execute(),
+      throwsA(isA<BlockExecutionException>().having(
+        (error) => error.message,
+        'message',
+        expectedError,
+      )),
+    );
+
+    final failedTask = background.state.last;
+    expect(failedTask.status, TaskStatus.failed);
+    expect(failedTask.error, expectedError);
+    expect(
+      executions.execution(execId)?.subTasks.single.status,
+      TaskStatus.failed,
+    );
+  }
 
   Future<void> expectIncompleteOcrLocalization({
     required AppLocalizations localizations,
@@ -382,7 +404,7 @@ void main() {
       throwsA(isA<BlockExecutionException>().having(
         (error) => error.message,
         'message',
-        contains('OCR 输入图片超过OCR 请求大小预算'),
+        contains('OCR request size budget (1.00 MiB)'),
       )),
     );
 
@@ -517,7 +539,10 @@ void main() {
     expect(requested, isFalse);
     expect(readAttempted, isFalse);
     expect(background.state.single.status, TaskStatus.failed);
-    expect(background.state.single.error, 'OCR 错误详情已隐藏');
+    expect(
+      background.state.single.error,
+      contains('the task flow image input limit (20.00 MiB)'),
+    );
     expect(
       executions.execution(execId)?.subTasks.single.status,
       TaskStatus.failed,
@@ -556,14 +581,17 @@ void main() {
       throwsA(isA<BlockExecutionException>().having(
         (error) => error.message,
         'message',
-        contains('OCR 输入图片超过OCR 请求大小预算'),
+        contains('OCR request size budget (1.00 MiB)'),
       )),
     );
 
     expect(requested, isFalse);
     expect(readAttempted, isFalse);
     expect(background.state.single.status, TaskStatus.failed);
-    expect(background.state.single.error, 'OCR 错误详情已隐藏');
+    expect(
+      background.state.single.error,
+      contains('OCR request size budget (1.00 MiB)'),
+    );
   });
 
   test('OCR rejects input that grows past the bounded read ceiling', () async {
@@ -590,13 +618,16 @@ void main() {
       throwsA(isA<BlockExecutionException>().having(
         (error) => error.message,
         'message',
-        contains('OCR 输入图片超过OCR 请求大小预算'),
+        contains('OCR request size budget'),
       )),
     );
 
     expect(requested, isFalse);
     expect(background.state.single.status, TaskStatus.failed);
-    expect(background.state.single.error, 'OCR 错误详情已隐藏');
+    expect(
+      background.state.single.error,
+      contains('OCR request size budget (0.00097656 MiB)'),
+    );
   });
 
   test('OCR provider key echoes are removed from all failure surfaces',
@@ -635,5 +666,216 @@ void main() {
     expect(task.steps.first.error, contains('HTTP 401'));
     expect(thrown!.toString(), isNot(contains(apiKey)));
     expect(thrown.toString(), contains('HTTP 401'));
+  });
+
+  test('missing OCR input failure is localized in English', () async {
+    const expectedError =
+        'The image file could not be found. Select the image again.';
+    await expectPreflightFailure(
+      expectedError: expectedError,
+      execute: () => executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: '${directory.path}/missing.png',
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(),
+        localizations: AppLocalizationsEn(),
+      ),
+    );
+  });
+
+  test('missing OCR input failure is localized in Chinese', () async {
+    const expectedError = '找不到图片文件，请重新选择图片。';
+    await expectPreflightFailure(
+      expectedError: expectedError,
+      execute: () => executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: '${directory.path}/missing.png',
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(),
+        localizations: AppLocalizationsZhCn(),
+      ),
+    );
+  });
+
+  test('unreadable OCR input failure is localized in English', () async {
+    final source = await File('${directory.path}/unreadable.png')
+        .writeAsBytes(_validPng());
+    const expectedError =
+        'The image file could not be read. Check file access and try again.';
+    await expectPreflightFailure(
+      expectedError: expectedError,
+      execute: () => executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: source.path,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(),
+        localizations: AppLocalizationsEn(),
+        readInputBytes: (_, _) => throw StateError('read failed'),
+      ),
+    );
+  });
+
+  test('unreadable OCR input failure is localized in Chinese', () async {
+    final source = await File('${directory.path}/unreadable.png')
+        .writeAsBytes(_validPng());
+    const expectedError = '无法读取图片文件，请检查文件访问权限后重试。';
+    await expectPreflightFailure(
+      expectedError: expectedError,
+      execute: () => executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: source.path,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(),
+        localizations: AppLocalizationsZhCn(),
+        readInputBytes: (_, _) => throw StateError('read failed'),
+      ),
+    );
+  });
+
+  test('unavailable OCR model failure is localized in English', () async {
+    final source = await File('${directory.path}/unused_model_en.png')
+        .writeAsBytes(_validPng());
+    const expectedError =
+        'No usable OCR model is configured. Choose an OCR provider and model in flow settings.';
+    await expectPreflightFailure(
+      expectedError: expectedError,
+      execute: () => executeOcrBlock(
+        block: ocrBlock(modelId: 'unavailable'),
+        def: BlockTypeDefinition.ocr,
+        input: source.path,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(),
+        localizations: AppLocalizationsEn(),
+      ),
+    );
+  });
+
+  test('unavailable OCR model failure is localized in Chinese', () async {
+    final source = await File('${directory.path}/unused_model_zh.png')
+        .writeAsBytes(_validPng());
+    const expectedError = '未配置可用的 OCR 模型，请在流程设置中选择 OCR 服务和模型。';
+    await expectPreflightFailure(
+      expectedError: expectedError,
+      execute: () => executeOcrBlock(
+        block: ocrBlock(modelId: 'unavailable'),
+        def: BlockTypeDefinition.ocr,
+        input: source.path,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(),
+        localizations: AppLocalizationsZhCn(),
+      ),
+    );
+  });
+
+  test('oversized OCR input failure is localized in English', () async {
+    const key = 'attachments/oversized_taskflow_image_en.png';
+    await WebFileStore.write(key, Uint8List(800 * 1024));
+    const expectedError =
+        'The image exceeds OCR request size budget (1.00 MiB). Choose a smaller image and try again.';
+    await expectPreflightFailure(
+      expectedError: expectedError,
+      execute: () => executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: key,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(requestSizeBudgetBytes: 1024 * 1024),
+        localizations: AppLocalizationsEn(),
+      ),
+    );
+  });
+
+  test('oversized OCR input failure is localized in Chinese', () async {
+    const key = 'attachments/oversized_taskflow_image_zh.png';
+    await WebFileStore.write(key, Uint8List(800 * 1024));
+    const expectedError = '图片超过OCR 请求大小预算（1.00 MiB），请缩小图片后重试。';
+    await expectPreflightFailure(
+      expectedError: expectedError,
+      execute: () => executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: key,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(requestSizeBudgetBytes: 1024 * 1024),
+        localizations: AppLocalizationsZhCn(),
+      ),
+    );
+  });
+
+  test('task flow image limit error is localized in English', () async {
+    final source = File('${directory.path}/flow_limit_en.png');
+    final handle = await source.open(mode: FileMode.write);
+    await handle.setPosition(20 * 1024 * 1024);
+    await handle.writeByte(0);
+    await handle.close();
+    const expectedError =
+        'The image exceeds the task flow image input limit (20.00 MiB). Choose a smaller image and try again.';
+    await expectPreflightFailure(
+      expectedError: expectedError,
+      execute: () => executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: source.path,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries:
+            providerForOcr(requestSizeBudgetBytes: 40 * 1024 * 1024),
+        localizations: AppLocalizationsEn(),
+      ),
+    );
+  });
+
+  test('task flow image limit error is localized in Chinese', () async {
+    final source = File('${directory.path}/flow_limit_zh.png');
+    final handle = await source.open(mode: FileMode.write);
+    await handle.setPosition(20 * 1024 * 1024);
+    await handle.writeByte(0);
+    await handle.close();
+    const expectedError = '图片超过任务流图片输入上限（20.00 MiB），请缩小图片后重试。';
+    await expectPreflightFailure(
+      expectedError: expectedError,
+      execute: () => executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: source.path,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries:
+            providerForOcr(requestSizeBudgetBytes: 40 * 1024 * 1024),
+        localizations: AppLocalizationsZhCn(),
+      ),
+    );
   });
 }
