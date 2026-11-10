@@ -395,6 +395,11 @@ void main() {
       await tester.runAsync(
           () => Future<void>.delayed(const Duration(milliseconds: 100)));
       await tester.pump();
+      final newerEditStillExists =
+          await tester.runAsync(() => File(writtenPaths[1]).exists());
+      expect(newerEditStillExists, isTrue,
+          reason: 'the clear cleanup must leave the newer edit file available '
+              'while the picker remains open');
       await tester.tap(find.byIcon(Icons.close));
       await tester.pumpAndSettle();
       await tester.runAsync(
