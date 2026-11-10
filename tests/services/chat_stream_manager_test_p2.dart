@@ -154,7 +154,8 @@ void chatStreamManagerGroup2() {
       manager.dispose();
     });
 
-    test('failed retry replaces the previous failed assistant response', () async {
+    test('failed retry replaces the previous failed assistant response',
+        () async {
       final manager = ChatStreamManager();
       final oldUser = _userMsg('Question', 'u1');
       final oldFailure = ChatMessage(
@@ -165,7 +166,8 @@ void chatStreamManagerGroup2() {
       );
       final provider = _MockProvider([
         [AIStreamEvent('Retry attempt')],
-      ])..throwAfterYield = true;
+      ])
+        ..throwAfterYield = true;
       manager.adapter.forceService(_makeChatService(provider));
 
       final result = await manager.startStreaming(
@@ -189,7 +191,8 @@ void chatStreamManagerGroup2() {
         _makeChatService(
           _MockProvider([
             [AIStreamEvent('Edit attempt')],
-          ])..throwAfterYield = true,
+          ])
+            ..throwAfterYield = true,
         ),
       );
       final editResult = await manager.startStreaming(
