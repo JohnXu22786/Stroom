@@ -52,7 +52,7 @@ Future<String> executeOcrBlock({
   /// Allows bounded reads to be observed in preflight limit tests.
   Future<Uint8List> Function(File, int)? readInputBytes,
 
-  /// Controlled Dio client for request/response contract tests.
+  /// Shared Dio client for this request. The executor does not own or close it.
   Dio? ocrDio,
 }) async {
   final inputBasename = p.basename(input);

@@ -145,6 +145,7 @@ OcrPage _ocrPage({
           prepareOcrImagePayloadSync(bytes),
       testOcrServiceFactory: (config) => OcrService(
         config: config,
+        ownsDio: true,
         dio: _dioFor(config, adapter),
       ),
     );
@@ -439,6 +440,7 @@ void main() {
       onSaved: () {},
       serviceFactory: (config) => OcrService(
         config: config,
+        ownsDio: true,
         dio: _dioFor(config, failureAdapter),
       ),
     );
@@ -480,6 +482,7 @@ void main() {
       onSaved: () {},
       serviceFactory: (config) => OcrService(
         config: config,
+        ownsDio: true,
         dio: _dioFor(config, retryAdapter),
       ),
     );
