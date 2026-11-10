@@ -59,6 +59,7 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
   // Selected items across all tabs: key = "tabType:recordId", value = (fileName, bytes)
   final Map<String, MapEntry<String, Uint8List>> _selectedItems = {};
   int _selectionGeneration = 0;
+  final Map<String, int> _pendingReadGenerationByKey = {};
   int _pendingReadCount = 0;
 
   /// Track temp file paths created during edit for cleanup on dialog close.
@@ -622,7 +623,18 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
   }
 
   void _onFileTap(_FileTabType type, FileRecord record) async {
+    final key = _selectionKey(type, record.id);
+    if (_selectedItems.containsKey(key)) {
+      setState(() {
+        _selectedItems.remove(key);
+        _pendingReadGenerationByKey[key] =
+            (_pendingReadGenerationByKey[key] ?? 0) + 1;
+      });
+      return;
+    }
+
     final selectionGeneration = _selectionGeneration;
+    final pendingReadGeneration = _pendingReadGenerationByKey[key] ?? 0;
     setState(() {
       _pendingReadCount++;
     });
@@ -633,7 +645,11 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
       try {
         bytes = await _readFileBytes(type, record);
       } catch (_) {}
-      if (!mounted || selectionGeneration != _selectionGeneration) return;
+      if (!mounted ||
+          selectionGeneration != _selectionGeneration ||
+          pendingReadGeneration != (_pendingReadGenerationByKey[key] ?? 0)) {
+        return;
+      }
       if (bytes == null) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -803,6 +819,8 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
                         .key;
                     setState(() {
                       _selectedItems.remove(key);
+                      _pendingReadGenerationByKey[key] =
+                          (_pendingReadGenerationByKey[key] ?? 0) + 1;
                     });
                   },
                   onTap: isImage ? () => _onPreviewImageTap(entry) : null,
