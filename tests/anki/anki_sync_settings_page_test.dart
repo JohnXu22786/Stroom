@@ -74,6 +74,143 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('loads sync actions after a successful AnkiWeb login', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final requests = <Uri>[];
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ankiSyncSecureStorageProvider.overrideWith(
+            (_) => _StoredSecureStorage({}),
+          ),
+          ankiSyncProtocolClientFactoryProvider.overrideWithValue(
+            (config, hostKey) => AnkiSyncProtocolClient.ankiWeb(
+              client: _LoginAndMetaHttpClient(requests),
+              hostKey: hostKey,
+            ),
+          ),
+        ],
+        child: _localizedApp(home: const AnkiSyncSettingsPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('登录AnkiWeb'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byType(TextFormField).at(0),
+      'user@example.com',
+    );
+    await tester.enterText(find.byType(TextFormField).at(1), 'password');
+    await tester.tap(find.text('登录').last);
+    for (var frame = 0;
+        frame < 10 && find.text('双向同步').evaluate().isEmpty;
+        frame++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    expect(requests.map((uri) => uri.pathSegments.last), ['hostKey', 'meta']);
+    expect(find.text('检查服务器状态'), findsOneWidget);
+    expect(find.text('双向同步'), findsOneWidget);
+  });
+
+  testWidgets('offers sync after login and keeps the sync button available', (
+    tester,
+  ) async {
+    final requests = await _loginUntilSyncPrompt(tester);
+
+    expect(requests.map((uri) => uri.pathSegments.last), ['hostKey', 'meta']);
+    expect(find.text('现在同步收藏集吗？'), findsOneWidget);
+    expect(find.text('立即同步'), findsOneWidget);
+    expect(find.text('双向同步'), findsOneWidget);
+  });
+
+  testWidgets('accepting the login sync prompt starts two-way sync', (
+    tester,
+  ) async {
+    var databaseReads = 0;
+    final databaseOverride = ankiDatabaseProvider.overrideWith((ref) async {
+      databaseReads++;
+      throw StateError('Stop after confirming the sync path starts');
+    });
+    await _loginUntilSyncPrompt(
+      tester,
+      additionalOverrides: [databaseOverride],
+    );
+
+    await tester.tap(find.text('立即同步'));
+    await tester.pumpAndSettle();
+
+    expect(databaseReads, 1);
+  });
+
+  testWidgets('cancelling the login sync prompt does not start sync', (
+    tester,
+  ) async {
+    var databaseReads = 0;
+    final databaseOverride = ankiDatabaseProvider.overrideWith((ref) async {
+      databaseReads++;
+      throw StateError('Sync must not start after cancellation');
+    });
+    await _loginUntilSyncPrompt(
+      tester,
+      additionalOverrides: [databaseOverride],
+    );
+
+    await tester.tap(find.text('继续使用'));
+    await tester.pumpAndSettle();
+
+    expect(databaseReads, 0);
+    expect(find.text('双向同步'), findsOneWidget);
+  });
+
+  testWidgets('keeps the key-save warning after checking server status', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final requests = <Uri>[];
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ankiSyncSecureStorageProvider.overrideWith(
+            (_) => _FailingWriteSecureStorage(),
+          ),
+          ankiSyncProtocolClientFactoryProvider.overrideWithValue(
+            (config, hostKey) => AnkiSyncProtocolClient.ankiWeb(
+              client: _LoginAndMetaHttpClient(requests),
+              hostKey: hostKey,
+            ),
+          ),
+        ],
+        child: _localizedApp(home: const AnkiSyncSettingsPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('登录AnkiWeb'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byType(TextFormField).at(0),
+      'user@example.com',
+    );
+    await tester.enterText(find.byType(TextFormField).at(1), 'password');
+    await tester.tap(find.text('登录').last);
+    for (var frame = 0;
+        frame < 10 && find.text('双向同步').evaluate().isEmpty;
+        frame++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    expect(requests.map((uri) => uri.pathSegments.last), ['hostKey', 'meta']);
+    expect(find.text('双向同步'), findsOneWidget);
+    expect(
+      find.textContaining('登录成功，但无法安全保存同步密钥'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('does not allow switching modes before settings load', (
     tester,
   ) async {
@@ -503,6 +640,39 @@ void main() {
   });
 }
 
+Future<List<Uri>> _loginUntilSyncPrompt(
+  WidgetTester tester, {
+  List<dynamic> additionalOverrides = const [],
+}) async {
+  SharedPreferences.setMockInitialValues({});
+  final requests = <Uri>[];
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        ankiSyncSecureStorageProvider.overrideWith(
+          (_) => _StoredSecureStorage({}),
+        ),
+        ankiSyncProtocolClientFactoryProvider.overrideWithValue(
+          (config, hostKey) => AnkiSyncProtocolClient.ankiWeb(
+            client: _LoginAndMetaHttpClient(requests),
+            hostKey: hostKey,
+          ),
+        ),
+        ...additionalOverrides,
+      ],
+      child: _localizedApp(home: const AnkiSyncSettingsPage()),
+    ),
+  );
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('登录AnkiWeb'));
+  await tester.pumpAndSettle();
+  await tester.enterText(find.byType(TextFormField).at(0), 'user@example.com');
+  await tester.enterText(find.byType(TextFormField).at(1), 'password');
+  await tester.tap(find.text('登录').last);
+  await tester.pumpAndSettle();
+  return requests;
+}
+
 class _FakeSecureStorage extends FlutterSecureStorage {
   const _FakeSecureStorage();
 
@@ -540,6 +710,52 @@ class _StoredSecureStorage extends FlutterSecureStorage {
     WindowsOptions? wOptions,
   }) async =>
       values[key];
+
+  @override
+  Future<void> write({
+    required String key,
+    required String? value,
+    AppleOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    AppleOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async {
+    if (value == null) {
+      values.remove(key);
+    } else {
+      values[key] = value;
+    }
+  }
+}
+
+class _FailingWriteSecureStorage extends FlutterSecureStorage {
+  @override
+  Future<String?> read({
+    required String key,
+    AppleOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    AppleOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async =>
+      null;
+
+  @override
+  Future<void> write({
+    required String key,
+    required String? value,
+    AppleOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    AppleOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async {
+    throw StateError('secure storage write failed');
+  }
 }
 
 class _GatedAnkiSyncNotifier extends AnkiSyncNotifier {
@@ -619,6 +835,35 @@ class _RecordingHttpClient extends http.BaseClient {
           }),
         ),
       ),
+      HttpStatus.ok,
+      request: request,
+    );
+  }
+}
+
+class _LoginAndMetaHttpClient extends http.BaseClient {
+  _LoginAndMetaHttpClient(this.requests);
+
+  final List<Uri> requests;
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    requests.add(request.url);
+    final body = request.url.path.endsWith('/hostKey')
+        ? {'key': 'host-key'}
+        : {
+            'mod': 1700000000,
+            'scm': 1600000000000,
+            'usn': 7,
+            'ts': 1700000000,
+            'msg': '',
+            'cont': true,
+            'hostNum': 1,
+            'empty': false,
+            'media_usn': 3,
+          };
+    return http.StreamedResponse(
+      Stream<List<int>>.value(utf8.encode(jsonEncode(body))),
       HttpStatus.ok,
       request: request,
     );
