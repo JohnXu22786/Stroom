@@ -586,14 +586,15 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     if (!mounted) return;
     final message = AppLocalizations.of(context)!.ocrReadInstructionFailed;
     final alreadyReported = _errorMessage == message;
-    if (alreadyReported) return;
     setState(() {
       _ocrStarting = false;
       _isProcessing = false;
       _isPreparingRetryData = false;
-      _errorMessage = message;
+      if (!alreadyReported) _errorMessage = message;
     });
-    debugPrint('[OCR] Failed to restore retry instruction: $error');
+    if (!alreadyReported) {
+      debugPrint('[OCR] Failed to restore retry instruction: $error');
+    }
   }
 
   @override
