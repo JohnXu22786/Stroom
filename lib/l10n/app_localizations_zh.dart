@@ -6288,6 +6288,11 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String ocrConfigUnsupportedParamSaveError(String name, String type) {
+    return '参数“$name”使用了不支持的类型“$type”，请替换为支持的类型或删除该参数后再保存。';
+  }
+
+  @override
   String get paramTypeStringHint => '例如: cheerful';
 
   @override
@@ -17332,6 +17337,11 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   @override
   String ocrConfigUnsupportedParamType(String type) {
     return '不支持的类型：$type';
+  }
+
+  @override
+  String ocrConfigUnsupportedParamSaveError(String name, String type) {
+    return '参数“$name”使用了不支持的类型“$type”，请替换为支持的类型或删除该参数后再保存。';
   }
 
   @override

@@ -335,6 +335,21 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
         );
         return;
       }
+      final hasStoredValue = param.defaultValue.trim().isNotEmpty ||
+          param.options.any((option) => option.trim().isNotEmpty);
+      if (hasStoredValue &&
+          ParamType.values.every((type) => type.value != param.type)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context)!
+                  .ocrConfigUnsupportedParamSaveError(name, param.type),
+            ),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
       if (param.type == 'json') {
         try {
           jsonDecode(value);

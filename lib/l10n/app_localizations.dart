@@ -11156,6 +11156,12 @@ abstract class AppLocalizations {
   /// **'Unsupported type: {type}'**
   String ocrConfigUnsupportedParamType(String type);
 
+  /// Validation message for a custom parameter with an unsupported type.
+  ///
+  /// In en, this message translates to:
+  /// **'Parameter “{name}” uses unsupported type “{type}”. Replace it with a supported type or remove the parameter before saving.'**
+  String ocrConfigUnsupportedParamSaveError(String name, String type);
+
   /// No description provided for @paramTypeStringHint.
   ///
   /// In en, this message translates to:
