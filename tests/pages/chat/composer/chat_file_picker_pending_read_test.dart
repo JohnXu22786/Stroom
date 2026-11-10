@@ -68,6 +68,50 @@ void main() {
     expect(pickerResult!.single.value, fileBytes);
   });
 
+  testWidgets('repeated tap does not start another pending file read', (
+    tester,
+  ) async {
+    final pendingRead = Completer<Uint8List?>();
+    var readCount = 0;
+    TextManifest.readFileOverrideForTesting = (_) {
+      readCount++;
+      return pendingRead.future;
+    };
+
+    await tester.runAsync(() async {
+      await TextManifest.addRecord(
+        TextRecord(
+          name: 'repeated',
+          hash: 'repeated',
+          size: 1,
+          createdAt: DateTime.now(),
+        ),
+      );
+    });
+
+    List<MapEntry<String, Uint8List>>? pickerResult;
+    await tester.pumpWidget(_buildTestApp((result) => pickerResult = result));
+    await _openPicker(tester);
+
+    await tester.tap(find.text('repeated.txt'));
+    await tester.pump();
+    await tester.tap(find.text('repeated.txt'));
+    await tester.pump();
+    expect(readCount, 1);
+
+    final fileBytes = Uint8List.fromList([1, 2, 3]);
+    pendingRead.complete(fileBytes);
+    await tester.pump();
+    await tester.pump();
+    expect(find.byType(PreviewChip), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('file_picker_confirm_btn')));
+    await tester.pump();
+    expect(pickerResult, hasLength(1));
+    expect(pickerResult!.single.key, 'repeated.txt');
+    expect(pickerResult!.single.value, fileBytes);
+  });
+
   testWidgets('selected file can be deselected after it becomes unreadable', (
     tester,
   ) async {
@@ -104,16 +148,9 @@ void main() {
     expect(readCount, 1);
   });
 
-  testWidgets('deselecting ignores another pending read for the file', (
-    tester,
-  ) async {
-    final firstRead = Completer<Uint8List?>();
-    final secondRead = Completer<Uint8List?>();
-    var readCount = 0;
-    TextManifest.readFileOverrideForTesting = (_) {
-      readCount++;
-      return readCount == 1 ? firstRead.future : secondRead.future;
-    };
+  testWidgets('deselecting a selected file removes it', (tester) async {
+    final pendingRead = Completer<Uint8List?>();
+    TextManifest.readFileOverrideForTesting = (_) => pendingRead.future;
 
     await tester.runAsync(() async {
       await TextManifest.addRecord(
@@ -131,11 +168,7 @@ void main() {
 
     await tester.tap(find.text('pending.txt'));
     await tester.pump();
-    await tester.tap(find.text('pending.txt'));
-    await tester.pump();
-    expect(readCount, 2);
-
-    firstRead.complete(Uint8List.fromList([1]));
+    pendingRead.complete(Uint8List.fromList([1]));
     await tester.pump();
     await tester.pump();
     expect(find.byType(PreviewChip), findsOneWidget);
@@ -143,23 +176,11 @@ void main() {
     await tester.tap(find.byType(Checkbox).first);
     await tester.pump();
     expect(find.byType(PreviewChip), findsNothing);
-
-    secondRead.complete(Uint8List.fromList([2]));
-    await tester.pump();
-    await tester.pump();
-    expect(find.byType(PreviewChip), findsNothing);
   });
 
-  testWidgets('preview chip removal ignores another pending read', (
-    tester,
-  ) async {
-    final firstRead = Completer<Uint8List?>();
-    final secondRead = Completer<Uint8List?>();
-    var readCount = 0;
-    TextManifest.readFileOverrideForTesting = (_) {
-      readCount++;
-      return readCount == 1 ? firstRead.future : secondRead.future;
-    };
+  testWidgets('preview chip removal removes a selected file', (tester) async {
+    TextManifest.readFileOverrideForTesting =
+        (_) async => Uint8List.fromList([1]);
 
     await tester.runAsync(() async {
       await TextManifest.addRecord(
@@ -177,10 +198,6 @@ void main() {
 
     await tester.tap(find.text('pending.txt'));
     await tester.pump();
-    await tester.tap(find.text('pending.txt'));
-    await tester.pump();
-
-    firstRead.complete(Uint8List.fromList([1]));
     await tester.pump();
     await tester.pump();
     expect(find.byType(PreviewChip), findsOneWidget);
@@ -191,11 +208,6 @@ void main() {
         matching: find.byIcon(Icons.close),
       ),
     );
-    await tester.pump();
-    expect(find.byType(PreviewChip), findsNothing);
-
-    secondRead.complete(Uint8List.fromList([2]));
-    await tester.pump();
     await tester.pump();
     expect(find.byType(PreviewChip), findsNothing);
   });
