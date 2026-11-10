@@ -1,5 +1,6 @@
 import hashlib
 import json
+import os
 import shutil
 import struct
 import subprocess
@@ -200,6 +201,42 @@ class EvaluateTests(unittest.TestCase):
             self.assertEqual(result.stderr, "")
             report = json.loads(output_path.read_text(encoding="utf-8"))
             self.assertEqual(report["status"], "pending")
+
+    def test_cli_stdout_uses_utf8_when_locale_encoding_is_ascii(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest_path = root / "manifest.json"
+            predictions_path = root / "predictions.json"
+            manifest_path.write_text(json.dumps(small_manifest()), encoding="utf-8")
+            input_data = predictions([])
+            input_data["run"]["model_id"] = "识别📄"
+            predictions_path.write_text(json.dumps(input_data), encoding="utf-8")
+            for errors in ("strict", "backslashreplace"):
+                with self.subTest(errors=errors):
+                    environment = dict(os.environ)
+                    environment["PYTHONIOENCODING"] = f"ascii:{errors}"
+
+                    result = subprocess.run(
+                        [
+                            sys.executable,
+                            str(ROOT / "evaluate.py"),
+                            "--manifest",
+                            str(manifest_path),
+                            "--predictions",
+                            str(predictions_path),
+                        ],
+                        capture_output=True,
+                        text=True,
+                        encoding="utf-8",
+                        env=environment,
+                        check=False,
+                    )
+
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(result.stderr, "")
+                    self.assertNotIn("Traceback", result.stderr)
+                    report = json.loads(result.stdout)
+                    self.assertEqual(report["run"]["model_id"], "识别📄")
 
     def test_cli_rejects_output_that_is_the_predictions_file(self):
         with TemporaryDirectory() as directory:
