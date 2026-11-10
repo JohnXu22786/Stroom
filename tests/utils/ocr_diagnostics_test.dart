@@ -1176,6 +1176,13 @@ void main() {
       ),
       'OCR エラーの詳細は非表示になりました（HTTP 429）',
     );
+    expect(
+      OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+        '错误详情已隐藏（HTTP 429，finish_reason=secret）',
+        excludedValues: ['OCR', '429', 'secret'],
+      ),
+      '错误详情已隐藏（HTTP 429）',
+    );
   });
 
   test('safe hidden summaries still exclude credentials in the hidden label',

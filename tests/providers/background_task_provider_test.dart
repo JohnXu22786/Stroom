@@ -344,6 +344,49 @@ void main() {
       notifier.dispose();
     });
 
+    test(
+      'generic OCR hidden details with safe status relocalize after restore',
+      () async {
+        var strings = lookupAppLocalizations(const Locale('en', 'US'));
+        final notifier = BackgroundTaskNotifier(
+          localizationsResolver: () => strings,
+        );
+        final id = notifier.addTask(
+          type: BackgroundTaskType.ocr,
+          title: 'OCR',
+        );
+        notifier.failTask(
+          id,
+          error:
+              '${strings.unifiedTaskOcrFailed}: OCR error details were hidden（HTTP 429）',
+          ocrCredentialValuesForSanitization: ['OCR'],
+        );
+
+        expect(
+          notifier.taskById(id)!.error,
+          '${strings.unifiedTaskOcrFailed}: ${strings.bgTaskErrorDetailsHidden}（HTTP 429）',
+        );
+        await notifier.pendingPersistence;
+
+        strings = lookupAppLocalizations(const Locale('ja', 'JP'));
+        final restored = BackgroundTaskNotifier(
+          localizationsResolver: () => strings,
+        );
+        try {
+          expect(await restored.restoreFromPersistence(), isTrue);
+          expect(
+            restored.taskById(id)!.error,
+            '${strings.unifiedTaskOcrFailed}: ${strings.bgTaskErrorDetailsHidden}（HTTP 429）',
+          );
+        } finally {
+          restored.dispose();
+          await restored.pendingPersistence;
+          notifier.dispose();
+          await notifier.pendingPersistence;
+        }
+      },
+    );
+
     test('stored ASR and OCR error wrappers localize without changing details',
         () async {
       var strings = lookupAppLocalizations(const Locale('zh', 'CN'));

@@ -582,6 +582,9 @@ class OcrDiagnosticSnapshot {
       'Los detalles del error de OCR estaban ocultos',
       'OCR エラーの詳細は非表示になりました',
       '错误详情已隐藏',
+      'Error details were hidden',
+      'Los detalles del error estaban ocultos',
+      'エラーの詳細は非表示になりました',
       '请求失败',
       '请重试',
     ];
@@ -620,6 +623,10 @@ class OcrDiagnosticSnapshot {
       'OCR error details were hidden',
       'Los detalles del error de OCR estaban ocultos',
       'OCR エラーの詳細は非表示になりました',
+      '错误详情已隐藏',
+      'Error details were hidden',
+      'Los detalles del error estaban ocultos',
+      'エラーの詳細は非表示になりました',
     ];
     for (final prefix in prefixes) {
       if (containsCredential(prefix, excludedValues: excludedValues)) {

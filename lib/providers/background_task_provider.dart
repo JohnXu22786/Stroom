@@ -537,6 +537,20 @@ String? _localizeStoredBackgroundError(
       return '${strings.bgTaskOcrErrorDetailsHidden}${error.substring(hiddenDetailsPrefix.length)}';
     }
   }
+  final genericHiddenDetailsPrefixes = {
+    for (final locale in AppLocalizations.supportedLocales)
+      lookupAppLocalizations(locale).bgTaskErrorDetailsHidden,
+  };
+  for (final hiddenDetailsPrefix in genericHiddenDetailsPrefixes) {
+    if (error == hiddenDetailsPrefix) {
+      return strings.bgTaskErrorDetailsHidden;
+    }
+    if (error.startsWith('$hiddenDetailsPrefix（') &&
+        error.endsWith('）') &&
+        OcrDiagnosticSnapshot.sanitizeStoredTaskError(error) == error) {
+      return '${strings.bgTaskErrorDetailsHidden}${error.substring(hiddenDetailsPrefix.length)}';
+    }
+  }
   if (error == '错误详情已隐藏' || error == 'Error details were hidden') {
     return strings.bgTaskErrorDetailsHidden;
   }
@@ -898,16 +912,21 @@ String? _sanitizeOcrTaskError(
                     details,
                     excludedValues: credentialValues,
                   );
-        final hiddenDetailsPrefixes = {
-          for (final locale in AppLocalizations.supportedLocales)
-            lookupAppLocalizations(locale).bgTaskOcrErrorDetailsHidden,
-        };
         var safeDetails = sanitizedDetails;
         final candidateDetails = safeDetails;
         if (candidateDetails != null) {
-          for (final hiddenDetailsPrefix in hiddenDetailsPrefixes) {
+          final hiddenDetailsLabels = <String, String>{
+            for (final locale in AppLocalizations.supportedLocales)
+              lookupAppLocalizations(locale).bgTaskOcrErrorDetailsHidden:
+                  strings.bgTaskOcrErrorDetailsHidden,
+            for (final locale in AppLocalizations.supportedLocales)
+              lookupAppLocalizations(locale).bgTaskErrorDetailsHidden:
+                  strings.bgTaskErrorDetailsHidden,
+          };
+          for (final entry in hiddenDetailsLabels.entries) {
+            final hiddenDetailsPrefix = entry.key;
             if (candidateDetails == hiddenDetailsPrefix) {
-              safeDetails = localizedHiddenDetails;
+              safeDetails = entry.value;
               break;
             }
             if (candidateDetails.startsWith('$hiddenDetailsPrefix（') &&
@@ -918,7 +937,7 @@ String? _sanitizeOcrTaskError(
                     ) ==
                     candidateDetails) {
               safeDetails =
-                  '$localizedHiddenDetails${candidateDetails.substring(hiddenDetailsPrefix.length)}';
+                  '${entry.value}${candidateDetails.substring(hiddenDetailsPrefix.length)}';
               break;
             }
           }
