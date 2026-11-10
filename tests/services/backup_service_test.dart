@@ -225,6 +225,11 @@ void main() {
       await tempRoot.delete(recursive: true);
     });
 
+    expect(
+      await BackupService.collectTaskFlowAttachmentKeysForSafety(),
+      contains('attachments/external-link/private.txt'),
+    );
+
     Object? backupError;
     try {
       await BackupService.buildBackupBytesForTest(
