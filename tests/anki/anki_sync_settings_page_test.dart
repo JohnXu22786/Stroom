@@ -106,7 +106,7 @@ void main() {
     await tester.enterText(find.byType(TextFormField).at(1), 'password');
     await tester.tap(find.text('登录').last);
     for (var frame = 0;
-        frame < 100 && find.text('双向同步').evaluate().isEmpty;
+        frame < 10 && find.text('双向同步').evaluate().isEmpty;
         frame++) {
       await tester.pump(const Duration(milliseconds: 100));
     }
@@ -148,7 +148,7 @@ void main() {
     await tester.enterText(find.byType(TextFormField).at(1), 'password');
     await tester.tap(find.text('登录').last);
     for (var frame = 0;
-        frame < 100 && find.text('双向同步').evaluate().isEmpty;
+        frame < 10 && find.text('双向同步').evaluate().isEmpty;
         frame++) {
       await tester.pump(const Duration(milliseconds: 100));
     }
@@ -627,6 +627,24 @@ class _StoredSecureStorage extends FlutterSecureStorage {
     WindowsOptions? wOptions,
   }) async =>
       values[key];
+
+  @override
+  Future<void> write({
+    required String key,
+    required String? value,
+    AppleOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    AppleOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async {
+    if (value == null) {
+      values.remove(key);
+    } else {
+      values[key] = value;
+    }
+  }
 }
 
 class _FailingWriteSecureStorage extends FlutterSecureStorage {
