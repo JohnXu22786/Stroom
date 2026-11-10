@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:path/path.dart' as p;
@@ -15,6 +16,52 @@ import 'download_manager_shared.dart';
 /// - 下载进度持久化（应用重启后可恢复）
 class DownloadManager {
   DownloadManager._();
+
+  static final Set<String> _activeDownloadPaths = <String>{};
+  static final Map<String, int> _activeLegacyPartialUsers = <String, int>{};
+
+  static bool _reserveLegacyPartial(String? path) {
+    if (path == null) return false;
+    final canUsePartial = !_activeLegacyPartialUsers.containsKey(path);
+    _activeLegacyPartialUsers.update(path, (users) => users + 1,
+        ifAbsent: () => 1);
+    return canUsePartial;
+  }
+
+  static void _releaseLegacyPartial(String? path) {
+    if (path == null) return;
+    final users = _activeLegacyPartialUsers[path];
+    if (users == null || users <= 1) {
+      _activeLegacyPartialUsers.remove(path);
+    } else {
+      _activeLegacyPartialUsers[path] = users - 1;
+    }
+  }
+
+  static bool _pathExists(String path) {
+    try {
+      return File(path).existsSync();
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static String _reserveOutputPath(String outputPath) {
+    if (_activeDownloadPaths.add(outputPath)) return outputPath;
+
+    final directory = p.dirname(outputPath);
+    final extension = p.extension(outputPath);
+    final baseName = p.basenameWithoutExtension(outputPath);
+    var suffix = 1;
+    late String candidate;
+    do {
+      candidate = p.join(directory, '$baseName ($suffix)$extension');
+      suffix++;
+    } while (_activeDownloadPaths.contains(candidate) ||
+        _pathExists(candidate));
+    _activeDownloadPaths.add(candidate);
+    return candidate;
+  }
 
   /// 检测服务器是否支持断点续传（Range 请求）
   ///
@@ -98,6 +145,22 @@ class DownloadManager {
     String? existingPath,
     String taskId = '',
   }) async {
+    final requestedOutputPath = p.join(saveDir, fileName);
+    final outputPath = _reserveOutputPath(requestedOutputPath);
+    final sameNameDownloadIsActive = outputPath != requestedOutputPath;
+    final taskSuffix = base64Url.encode(utf8.encode(taskId)).replaceAll('=', '');
+    final tempPath = taskId.isEmpty
+        ? '$outputPath${DefaultRules.tempFileSuffix}'
+        : '$requestedOutputPath.$taskSuffix${DefaultRules.tempFileSuffix}';
+    final hasExistingPartialReservation =
+        existingPath != null && existingPath != tempPath;
+    final ownsExistingPartialReservation =
+        hasExistingPartialReservation && _reserveLegacyPartial(existingPath);
+    final canUseExistingPartial = ownsExistingPartialReservation &&
+        !(sameNameDownloadIsActive &&
+            existingPath ==
+                '$requestedOutputPath${DefaultRules.tempFileSuffix}');
+
     // Directory creation - wrapped in try-catch for web compatibility
     try {
       final dir = Directory(saveDir);
@@ -106,24 +169,23 @@ class DownloadManager {
       }
     } catch (_) {}
 
-    final outputPath = p.join(saveDir, fileName);
-    final tempPath = '$outputPath${DefaultRules.tempFileSuffix}';
-
     // 确定起始位置（断点续传）
     int startByte = 0;
     try {
-      if (existingPath != null) {
+      final tempFile = File(tempPath);
+      if (!await tempFile.exists() &&
+          existingPath != null &&
+          existingPath != tempPath &&
+          canUseExistingPartial) {
         final existingFile = File(existingPath);
         if (await existingFile.exists()) {
-          startByte = await existingFile.length();
-          debugPrint('[DownloadManager] Resuming from byte $startByte');
+          await existingFile.copy(tempPath);
         }
-      } else {
-        final tempFile = File(tempPath);
-        if (await tempFile.exists()) {
-          startByte = await tempFile.length();
-          debugPrint(
-              '[DownloadManager] Found partial download, resuming from byte $startByte');
+      }
+      if (await tempFile.exists()) {
+        startByte = await tempFile.length();
+        if (startByte > 0) {
+          debugPrint('[DownloadManager] Resuming from byte $startByte');
         }
       }
     } catch (_) {}
@@ -196,6 +258,11 @@ class DownloadManager {
           await File(outputPath).delete();
         }
         await file.rename(outputPath);
+        if (canUseExistingPartial && existingPath != tempPath) {
+          try {
+            await File(existingPath).delete();
+          } catch (_) {}
+        }
         debugPrint('[DownloadManager] Download complete: $outputPath');
         return outputPath;
       } catch (e) {
@@ -205,6 +272,10 @@ class DownloadManager {
       }
     } finally {
       dio.close();
+      _activeDownloadPaths.remove(outputPath);
+      if (hasExistingPartialReservation) {
+        _releaseLegacyPartial(existingPath);
+      }
     }
   }
 
