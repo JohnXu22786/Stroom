@@ -570,8 +570,8 @@ String? _localizeStoredBackgroundError(
     ])
       (prefix, strings.bgTaskAsrSaveError),
     for (final prefix in [
-      '${lookupAppLocalizations(const Locale('en', 'US')).unifiedTaskOcrFailed}: ',
-      '${lookupAppLocalizations(const Locale('zh', 'CN')).unifiedTaskOcrFailed}: ',
+      for (final locale in AppLocalizations.supportedLocales)
+        '${lookupAppLocalizations(locale).unifiedTaskOcrFailed}: ',
     ])
       (
         prefix,
@@ -874,7 +874,7 @@ String? _sanitizeOcrTaskError(
     ...additionalCredentialValues,
   }.toList();
   if (error != null) {
-    for (final locale in [const Locale('en', 'US'), const Locale('zh', 'CN')]) {
+    for (final locale in AppLocalizations.supportedLocales) {
       final strings = lookupAppLocalizations(locale);
       final taskFlowFailurePrefix = '${strings.unifiedTaskOcrFailed}: ';
       for (final prefix in [
