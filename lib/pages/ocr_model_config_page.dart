@@ -276,6 +276,10 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
       final hasImplicitTrueBoolean = param.type == 'boolean' &&
           param.options.isEmpty &&
           param.defaultValue.trim().isEmpty;
+      final hasStoredValue = param.defaultValue.trim().isNotEmpty ||
+          param.options.any((option) => option.trim().isNotEmpty);
+      final hasUnsupportedStoredType = hasStoredValue &&
+          ParamType.values.every((type) => type.value != param.type);
       if (name == 'stream') {
         var isNonStreaming = false;
         if (param.type == 'boolean') {
@@ -318,7 +322,10 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
         );
         return;
       }
-      if (name.isEmpty || (!hasRequiredValue && !hasImplicitTrueBoolean)) {
+      if (name.isEmpty ||
+          (!hasRequiredValue &&
+              !hasImplicitTrueBoolean &&
+              !hasUnsupportedStoredType)) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -340,10 +347,7 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
         );
         return;
       }
-      final hasStoredValue = param.defaultValue.trim().isNotEmpty ||
-          param.options.any((option) => option.trim().isNotEmpty);
-      if (hasStoredValue &&
-          ParamType.values.every((type) => type.value != param.type)) {
+      if (hasUnsupportedStoredType) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
