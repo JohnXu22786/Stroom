@@ -6599,6 +6599,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get paramTypeJsonLabel => 'JSON';
 
   @override
+  String ocrConfigUnsupportedParamType(String type) {
+    return 'Unsupported type: $type';
+  }
+
+  @override
   String get paramTypeStringHint => 'e.g. cheerful';
 
   @override
@@ -18240,6 +18245,11 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get paramTypeJsonLabel => 'JSON';
+
+  @override
+  String ocrConfigUnsupportedParamType(String type) {
+    return 'Unsupported type: $type';
+  }
 
   @override
   String get paramTypeStringHint => 'e.g. cheerful';

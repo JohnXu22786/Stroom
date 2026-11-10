@@ -3587,6 +3587,14 @@
   "@paramTypeJsonLabel": {
     "placeholders": {}
   },
+  "ocrConfigUnsupportedParamType": "Unsupported type: {type}",
+  "@ocrConfigUnsupportedParamType": {
+    "placeholders": {
+      "type": {
+        "type": "String"
+      }
+    }
+  },
   "paramTypeStringHint": "e.g. cheerful",
   "@paramTypeStringHint": {
     "placeholders": {}

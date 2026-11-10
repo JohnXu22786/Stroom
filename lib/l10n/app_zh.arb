@@ -3589,6 +3589,14 @@
   "@paramTypeJsonLabel": {
     "placeholders": {}
   },
+  "ocrConfigUnsupportedParamType": "不支持的类型：{type}",
+  "@ocrConfigUnsupportedParamType": {
+    "placeholders": {
+      "type": {
+        "type": "String"
+      }
+    }
+  },
   "paramTypeStringHint": "例如: cheerful",
   "@paramTypeStringHint": {
     "placeholders": {}

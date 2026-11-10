@@ -228,8 +228,9 @@ void main() {
         await _scrollTo(tester, typeDropdown);
         expect(
           tester.widget<DropdownButton<String>>(typeDropdown).value,
-          'string',
+          'legacy_blob',
         );
+        expect(find.text('不支持的类型：legacy_blob'), findsOneWidget);
 
         await tester.tap(find.text('保存'));
         await tester.pumpAndSettle();
@@ -240,6 +241,41 @@ void main() {
         expect(saved!.customParams.single.defaultValue, 'preserve me');
       },
     );
+
+    testWidgets('replacing an unsupported type saves a supported string type',
+        (tester) async {
+      ModelConfig? saved;
+      final model = ModelConfig(
+        name: 'OCR模型',
+        modelId: 'qwen-vl-ocr',
+        customParams: [
+          CustomParam(
+            paramName: 'legacy',
+            type: 'legacy_blob',
+            defaultValue: 'preserve me',
+          ),
+        ],
+      );
+
+      await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
+      final typeDropdown = find.byType(DropdownButton<String>);
+      await _scrollTo(tester, typeDropdown);
+      await tester.tap(typeDropdown);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('字符串').last);
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.widget<DropdownButton<String>>(typeDropdown).value,
+        'string',
+      );
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      expect(saved, isNotNull);
+      expect(saved!.customParams.single.type, 'string');
+      expect(saved!.customParams.single.defaultValue, 'preserve me');
+    });
 
     testWidgets('switching to JSON displays its default value', (tester) async {
       final model = ModelConfig(

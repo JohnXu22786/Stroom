@@ -6283,6 +6283,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get paramTypeJsonLabel => 'JSON';
 
   @override
+  String ocrConfigUnsupportedParamType(String type) {
+    return '不支持的类型：$type';
+  }
+
+  @override
   String get paramTypeStringHint => '例如: cheerful';
 
   @override
@@ -17323,6 +17328,11 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get paramTypeJsonLabel => 'JSON';
+
+  @override
+  String ocrConfigUnsupportedParamType(String type) {
+    return '不支持的类型：$type';
+  }
 
   @override
   String get paramTypeStringHint => '例如: cheerful';
