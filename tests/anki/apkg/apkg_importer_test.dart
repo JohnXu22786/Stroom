@@ -149,9 +149,48 @@ void main() {
     }
   });
 
-  test('links imported cards to an existing duplicate note', () async {
+  test('does not import a duplicate card for an existing note', () async {
     final documents = await Directory.systemTemp.createTemp(
       'stroom_anki_apkg_import_duplicate_note_card_link_test_',
+    );
+    final previous = PathProviderPlatform.instance;
+    PathProviderPlatform.instance = _DocumentsPathProvider(documents.path);
+    final sourcePath = '${documents.path}/source.anki2';
+    final targetPath = '${documents.path}/collection.anki2';
+
+    try {
+      await _createCollection(sourcePath, includeNote: true, includeCard: true);
+      await _createCollection(
+        targetPath,
+        includeNote: true,
+        includeCard: true,
+        noteId: 900,
+      );
+      final packagePath = await _packageCollection(documents, sourcePath);
+
+      final summary = await AnkiApkgImporter.import(packagePath);
+
+      final target = await sqflite.openDatabase(targetPath, readOnly: true);
+      try {
+        final notes = await target.query('notes');
+        final cards = await target.query('cards');
+        expect(notes, hasLength(1));
+        expect(notes.single['id'], 900);
+        expect(cards, hasLength(1));
+        expect(cards.single['nid'], 900);
+        expect(summary.cardsImported, 0);
+      } finally {
+        await target.close();
+      }
+    } finally {
+      PathProviderPlatform.instance = previous;
+      await documents.delete(recursive: true);
+    }
+  });
+
+  test('imports a missing card ordinal for an existing note', () async {
+    final documents = await Directory.systemTemp.createTemp(
+      'stroom_anki_apkg_import_missing_duplicate_note_card_test_',
     );
     final previous = PathProviderPlatform.instance;
     PathProviderPlatform.instance = _DocumentsPathProvider(documents.path);
@@ -163,7 +202,7 @@ void main() {
       await _createCollection(targetPath, includeNote: true, noteId: 900);
       final packagePath = await _packageCollection(documents, sourcePath);
 
-      await AnkiApkgImporter.import(packagePath);
+      final summary = await AnkiApkgImporter.import(packagePath);
 
       final target = await sqflite.openDatabase(targetPath, readOnly: true);
       try {
@@ -173,6 +212,7 @@ void main() {
         expect(notes.single['id'], 900);
         expect(cards, hasLength(1));
         expect(cards.single['nid'], 900);
+        expect(summary.cardsImported, 1);
       } finally {
         await target.close();
       }
