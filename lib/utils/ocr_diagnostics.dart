@@ -421,13 +421,12 @@ class OcrDiagnosticSnapshot {
     for (final fallback in fallbacks) {
       final candidate =
           detailsText.isEmpty ? fallback : '$fallback（$detailsText）';
-      if (!containsCredential(candidate, excludedValues: exclusions)) {
+      if (!containsCredential(fallback, excludedValues: exclusions)) {
+        // [details] is built only from a parsed HTTP status and a separately
+        // validated finish reason. Do not treat digits in the bounded status
+        // as a credential merely because the same digits are excluded.
         return candidate;
       }
-    }
-    if (detailsText.isNotEmpty &&
-        !containsCredential(detailsText, excludedValues: exclusions)) {
-      return detailsText;
     }
     return '';
   }
@@ -490,9 +489,9 @@ class OcrDiagnosticSnapshot {
       caseSensitive: false,
     ).firstMatch(value)?.group(1);
     final details = <String>[
-      if (statusCode != null &&
-          !containsCredential(statusCode, excludedValues: credentialValues))
-        'HTTP $statusCode',
+      // A parsed, bounded HTTP status is protocol metadata even when its digits
+      // happen to match an excluded credential value.
+      if (statusCode != null) 'HTTP $statusCode',
       if (_safeReason(
         RegExp(
           r'finish[_ ]reason\s*=\s*([a-zA-Z0-9_-]{1,48})',

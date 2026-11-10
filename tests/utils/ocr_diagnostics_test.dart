@@ -1135,14 +1135,14 @@ void main() {
     expect(sanitized, isNot(contains('finish_reason=')));
   });
 
-  test('legacy task error details exclude an unsafe HTTP status token', () {
+  test('legacy task errors retain bounded status when digits collide', () {
     final sanitized = OcrDiagnosticSnapshot.sanitizeStoredTaskError(
-      'OCR 请求失败 HTTP 503',
-      excludedValues: ['503'],
+      'OCR 请求失败 HTTP 503 token=private-secret',
+      excludedValues: ['503', 'private-secret'],
     )!;
 
-    expect(sanitized, 'OCR 错误详情已隐藏');
-    expect(sanitized, isNot(contains('503')));
+    expect(sanitized, 'OCR 错误详情已隐藏（HTTP 503）');
+    expect(sanitized, isNot(contains('private-secret')));
   });
 
   test(
