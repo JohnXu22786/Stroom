@@ -26049,6 +26049,65 @@ void main() {
     );
 
     test(
+      'partial restore does not preserve skipped OCR errors echoing retry credentials',
+      () async {
+        const credential = 'violetRiverWindow';
+        final skippedRow = <String, dynamic>{
+          // Invalid status makes this a skipped row while retaining valid OCR
+          // retry data whose recognized credential value is echoed in errors.
+          'type': 'ocr',
+          'title': 'Malformed OCR row with credential-bearing task errors',
+          'status': 'not-a-task-status',
+          'createdAt': DateTime.utc(2026).toIso8601String(),
+          'error': 'Provider rejected $credential',
+          'steps': [
+            {
+              'label': 'Submit OCR request',
+              'status': 'failed',
+              'error': 'Request failed with $credential',
+            },
+          ],
+          'retryData': {
+            'type': 'ocr',
+            'version': OcrRetrySnapshot.currentVersion,
+            'images': <dynamic>[],
+            'batchMode': 'joint',
+            'perImageConcurrency': 1,
+            'requestSizeBudgetBytes': 1024,
+            'apiKey': credential,
+          },
+          'ocrPageOutcomes': <dynamic>[],
+        };
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        final originalContent = jsonEncode([skippedRow]);
+        await file.writeAsString(originalContent);
+        var writeAttempts = 0;
+        BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = () async {
+          writeAttempts++;
+        };
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          expect(await notifier.restoreFromPersistence(), isFalse);
+          notifier.addTask(
+            type: BackgroundTaskType.asr,
+            title: 'Do not rewrite unsafe partial OCR snapshot',
+            startImmediately: false,
+            taskId: 'unsafe-partial-ocr-task-error-trigger',
+          );
+          await notifier.pendingPersistence;
+
+          expect(writeAttempts, 0);
+          expect(await file.readAsString(), originalContent);
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+        }
+      },
+    );
+
+    test(
       'malformed ASR rows release ownership after durable sanitization',
       () async {
         WebFileStore.enableTestMode();
