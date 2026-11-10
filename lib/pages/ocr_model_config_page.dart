@@ -60,7 +60,10 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
       if (_nameController.text.isNotEmpty) return true;
       if (_modelIdController.text.isNotEmpty) return true;
       if (_customParams.any(
-        (p) => p.paramName.isNotEmpty || p.defaultValue.isNotEmpty,
+        (p) =>
+            p.paramName.isNotEmpty ||
+            p.defaultValue.isNotEmpty ||
+            p.type != ParamType.string.value,
       )) {
         return true;
       }

@@ -172,6 +172,32 @@ void main() {
 
   group('OcrModelConfigPage unsaved custom params', () {
     testWidgets(
+      'system Back prompts when only a new blank-name param type changes',
+      (tester) async {
+        await _pumpConfigPage(tester);
+
+        await _scrollTo(tester, find.text('添加参数'));
+        await tester.tap(find.text('添加参数'));
+        await tester.pumpAndSettle();
+
+        final typeDropdown = find.byType(DropdownButton<String>);
+        await _scrollTo(tester, typeDropdown);
+        await tester.tap(typeDropdown);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('数字').last);
+        await tester.pumpAndSettle();
+
+        expect(
+          tester.widget<DropdownButton<String>>(typeDropdown).value,
+          'number',
+        );
+        await _simulateSystemBack(tester);
+
+        expect(find.text('放弃修改？'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
       'system Back prompts when a blank-name param default is edited and '
       'cancel keeps the edit',
       (tester) async {
