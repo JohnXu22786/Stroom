@@ -75,6 +75,7 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
   final Map<String, MapEntry<String, Uint8List>> _selectedItems = {};
   int _selectionGeneration = 0;
   final Map<String, int> _pendingReadGenerationByKey = {};
+  final Map<String, Object> _pendingReadTokens = {};
   int _pendingReadCount = 0;
 
   /// Track temp file paths created during edit for cleanup on dialog close.
@@ -212,6 +213,7 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
   void _clearSelection() {
     _selectionGeneration++;
     _cleanupTempFiles();
+    _pendingReadTokens.clear();
     setState(() {
       _selectedItems.clear();
       _pendingReadCount = 0;
@@ -653,9 +655,12 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
       });
       return;
     }
+    if (_pendingReadTokens.containsKey(key)) return;
 
     final selectionGeneration = _selectionGeneration;
     final pendingReadGeneration = _pendingReadGenerationByKey[key] ?? 0;
+    final pendingReadToken = Object();
+    _pendingReadTokens[key] = pendingReadToken;
     setState(() {
       _pendingReadCount++;
     });
@@ -682,6 +687,9 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
       final fileName = '${record.name}.${record.format}';
       _toggleSelection(type, record.id, fileName, bytes);
     } finally {
+      if (identical(_pendingReadTokens[key], pendingReadToken)) {
+        _pendingReadTokens.remove(key);
+      }
       if (mounted && selectionGeneration == _selectionGeneration) {
         setState(() {
           _pendingReadCount--;
