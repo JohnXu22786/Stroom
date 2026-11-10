@@ -143,6 +143,27 @@ void main() {
       expect(index.first.sha256, isNotEmpty);
     });
 
+    test('index entries cannot name files outside the snapshots directory',
+        () async {
+      await snapDir.create(recursive: true);
+      final indexFile =
+          File(p.join(snapDir.path, SnapshotService.manifestName));
+      await indexFile.writeAsString(jsonEncode({
+        'snapshots': [
+          SnapshotEntry(
+            file: '../outside.zip',
+            sha256: 'matching-digest-is-not-enough',
+            createdAt: '2026-10-01T18:29:18.268046',
+            partVersions: const {},
+          ).toJson(),
+        ],
+      }));
+
+      final index = await SnapshotService.readIndex();
+
+      expect(index, isEmpty);
+    });
+
     test('rebuilt index preserves fractional timestamp precision', () async {
       await snapDir.create(recursive: true);
       final snapshotFile = File(
