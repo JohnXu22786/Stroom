@@ -155,11 +155,25 @@ class DownloadManager {
         },
       );
 
+      // A server may ignore Range and return the full file with status 200.
+      // In that case restart from the full response instead of appending it to
+      // the existing partial file.
+      if (startByte > 0 && response.statusCode == HttpStatus.ok) {
+        startByte = 0;
+      } else if (startByte > 0 &&
+          response.statusCode != HttpStatus.partialContent) {
+        throw StateError(
+          'Expected a partial response when resuming, got ${response.statusCode}',
+        );
+      }
+
       // On web, File operations will fail - this is expected
       // We still try to write the file for native platforms
       try {
         final file = File(tempPath);
-        final raf = await file.open(mode: FileMode.writeOnlyAppend);
+        final raf = await file.open(
+          mode: startByte > 0 ? FileMode.writeOnlyAppend : FileMode.write,
+        );
         try {
           final stream = response.data.stream as Stream<List<int>>;
           await for (final chunk in stream) {
