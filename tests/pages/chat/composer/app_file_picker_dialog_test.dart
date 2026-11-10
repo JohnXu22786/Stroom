@@ -52,6 +52,20 @@ Future<void> _pumpUntil(
   }
 }
 
+Finder _pickerCloseButton() => find.descendant(
+      of: find.byType(AppBar),
+      matching: find.byIcon(Icons.close),
+    );
+
+Future<void> _waitForCleanup(
+  WidgetTester tester,
+  Future<void> cleanup,
+) async {
+  await tester.runAsync(
+    () => cleanup.timeout(const Duration(seconds: 10)),
+  );
+}
+
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
@@ -147,6 +161,9 @@ void main() {
       final tempDir = await tester.runAsync(
           () => Directory.systemTemp.createTemp('stroom-file-picker-test-'));
       if (tempDir == null) fail('Could not create the test temp directory');
+      addTearDown(() => tester.runAsync(() async {
+            if (await tempDir.exists()) await tempDir.delete(recursive: true);
+          }));
 
       final png = await tester.runAsync(_createEnginePng);
       await tester.runAsync(() async {
@@ -324,12 +341,15 @@ void main() {
       }, onTempFileCleanupComplete: () {
         if (!cleanupFinished.isCompleted) cleanupFinished.complete();
       });
+      addTearDown(() {
+        if (!allowWrite.isCompleted) allowWrite.complete();
+      });
       await _pumpUntil(tester, () => writeStarted.isCompleted);
 
-      await tester.tap(find.byIcon(Icons.close));
+      await tester.tap(_pickerCloseButton());
       await tester.pumpAndSettle();
       allowWrite.complete();
-      await tester.runAsync(() => cleanupFinished.future);
+      await _waitForCleanup(tester, cleanupFinished.future);
 
       final exists = await tester.runAsync(() => File(writtenPath!).exists());
       expect(exists, isFalse,
@@ -359,7 +379,7 @@ void main() {
       expect(tester.widget<PreviewChip>(find.byType(PreviewChip)).bytes,
           isNot(same(originalBytes)),
           reason: 'cache failure must leave edited bytes available in memory');
-      await tester.tap(find.byIcon(Icons.close));
+      await tester.tap(_pickerCloseButton());
       await tester.pumpAndSettle();
       await tester.runAsync(() => tempDir.delete(recursive: true));
     });
@@ -390,6 +410,9 @@ void main() {
         if (cleanupCount == 1) clearCleanupFinished.complete();
         if (cleanupCount == 2) closeCleanupFinished.complete();
       });
+      addTearDown(() {
+        if (!releaseFirstWrite.isCompleted) releaseFirstWrite.complete();
+      });
       await _pumpUntil(tester, () => firstWriteStarted.isCompleted);
 
       await tester.tap(find.byKey(const Key('file_picker_clear_btn')));
@@ -402,7 +425,7 @@ void main() {
       await _pumpUntil(tester, () => secondWriteFinished.isCompleted);
 
       releaseFirstWrite.complete();
-      await tester.runAsync(() => clearCleanupFinished.future);
+      await _waitForCleanup(tester, clearCleanupFinished.future);
       await tester.pump();
       final originalEditExists =
           await tester.runAsync(() => File(writtenPaths[0]).exists());
@@ -413,9 +436,9 @@ void main() {
       expect(newerEditStillExists, isTrue,
           reason: 'the clear cleanup must leave the newer edit file available '
               'while the picker remains open');
-      await tester.tap(find.byIcon(Icons.close));
+      await tester.tap(_pickerCloseButton());
       await tester.pumpAndSettle();
-      await tester.runAsync(() => closeCleanupFinished.future);
+      await _waitForCleanup(tester, closeCleanupFinished.future);
 
       final remaining = await tester.runAsync(() async =>
           Future.wait(writtenPaths.map((path) => File(path).exists())));
@@ -600,7 +623,7 @@ void main() {
       expect(find.text('返回根目录'), findsOneWidget,
           reason: 'the test must be inside the work folder');
 
-      await tester.tap(find.byIcon(Icons.close));
+      await tester.tap(_pickerCloseButton());
       await tester.pumpAndSettle();
       expect(find.text('选择文件'), findsNothing,
           reason: 'the explicit close button must always close the picker');
