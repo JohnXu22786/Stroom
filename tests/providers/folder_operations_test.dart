@@ -328,6 +328,7 @@ void main() {
       String initialFile,
       String secondFile,
       String initialId,
+      String initialHash,
       String secondId,
     })>[
       (
@@ -336,6 +337,7 @@ void main() {
         initialFile: 'copy_add_text.txt',
         secondFile: 'copy_add_text_second.txt',
         initialId: 'copy_add_text',
+        initialHash: 'copy_add_text',
         secondId: 'copy_add_text_second',
         saveInitial: () async {
           await TextManifest.writeFile(
@@ -379,6 +381,7 @@ void main() {
         initialFile: 'copy_add_image.png',
         secondFile: 'copy_add_image_second.png',
         initialId: 'copy_add_image',
+        initialHash: 'copy_add_image',
         secondId: 'copy_add_image_second',
         saveInitial: () async {
           await ImageManifest.writeFile(
@@ -425,6 +428,7 @@ void main() {
         initialFile: 'copy_add_video.mp4',
         secondFile: 'copy_add_video_second.mp4',
         initialId: 'copy_add_video',
+        initialHash: 'copy_add_video',
         secondId: 'copy_add_video_second',
         saveInitial: () async {
           await VideoManifest.writeFile(
@@ -471,6 +475,7 @@ void main() {
         initialFile: 'copy_add_audio.wav',
         secondFile: 'copy_add_audio_second.wav',
         initialId: 'copy_add_audio',
+        initialHash: 'copy_add_audio',
         secondId: 'copy_add_audio_second',
         saveInitial: () async {
           await FileManifest.writeFile(
@@ -539,7 +544,9 @@ void main() {
         final copied = records.where(
           (record) => record.folder == item.destination,
         );
-        expect(copied.map((record) => record.id), [item.initialId]);
+        expect(copied, hasLength(1));
+        expect(copied.map((record) => record.hash), [item.initialHash]);
+        expect(records.any((record) => record.id == item.initialId), isTrue);
         expect(records.any((record) => record.id == item.secondId), isTrue);
         expect(await item.read(item.initialFile), isNotNull);
         expect(await item.read(item.secondFile), isNotNull);
