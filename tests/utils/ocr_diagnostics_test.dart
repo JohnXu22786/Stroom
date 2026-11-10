@@ -1145,6 +1145,17 @@ void main() {
     expect(sanitized, isNot(contains('503')));
   });
 
+  test(
+      'safe hidden summaries retain bounded status despite credential collision',
+      () {
+    final sanitized = OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+      'OCR 错误详情已隐藏（HTTP 429，finish_reason=test-key）',
+      excludedValues: ['429', 'test-key'],
+    );
+
+    expect(sanitized, 'OCR 错误详情已隐藏（HTTP 429）');
+  });
+
   test('safe Dio error types still honor recovered credential exclusions', () {
     const credential = 'connectionTimeout';
     final sanitized = OcrDiagnosticSnapshot.sanitizeStoredTaskError(

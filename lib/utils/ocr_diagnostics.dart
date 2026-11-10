@@ -440,6 +440,11 @@ class OcrDiagnosticSnapshot {
   }) {
     if (value == null || value.isEmpty) return value;
     final credentialValues = excludedValues.toList(growable: false);
+    final safeHiddenSummary = _sanitizeSafeHiddenTaskErrorSummary(
+      value,
+      excludedValues: credentialValues,
+    );
+    if (safeHiddenSummary != null) return safeHiddenSummary;
     if (value.length <= _maxTextLength) {
       var safeDioCandidate = value;
       while (true) {
@@ -602,6 +607,45 @@ class OcrDiagnosticSnapshot {
       });
     }
     return false;
+  }
+
+  static String? _sanitizeSafeHiddenTaskErrorSummary(
+    String value, {
+    required Iterable<String> excludedValues,
+  }) {
+    if (value.length > _maxTextLength) return null;
+    const prefixes = [
+      'OCR 错误详情已隐藏',
+      'OCR error details were hidden',
+    ];
+    for (final prefix in prefixes) {
+      if (value == prefix) return value;
+      if (!value.startsWith('$prefix（') || !value.endsWith('）')) continue;
+
+      final details = value.substring(prefix.length + 1, value.length - 1);
+      final parts = details.split('，');
+      if (parts.isEmpty || parts.length > 2) return null;
+      final safeParts = <String>[];
+      for (final part in parts) {
+        if (RegExp(r'^HTTP\s+[1-5]\d{2}$').hasMatch(part)) {
+          // Bounded HTTP status metadata is safe even when its digits happen
+          // to match a transient credential value.
+          safeParts.add(part);
+          continue;
+        }
+        final finishReason = RegExp(
+          r'^finish_reason=([A-Za-z0-9_-]{1,48})$',
+        ).firstMatch(part)?.group(1);
+        if (finishReason == null ||
+            _safeReason(finishReason, excludedValues: excludedValues) !=
+                finishReason) {
+          return null;
+        }
+        safeParts.add(part);
+      }
+      return safeParts.isEmpty ? prefix : '$prefix（${safeParts.join('，')}）';
+    }
+    return null;
   }
 
   /// Whether text contains a credential-shaped value or a supplied secret.
