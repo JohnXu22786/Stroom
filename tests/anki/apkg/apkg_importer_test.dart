@@ -116,6 +116,72 @@ void main() {
     }
   });
 
+  test('links imported cards to newly imported notes', () async {
+    final documents = await Directory.systemTemp.createTemp(
+      'stroom_anki_apkg_import_note_card_link_test_',
+    );
+    final previous = PathProviderPlatform.instance;
+    PathProviderPlatform.instance = _DocumentsPathProvider(documents.path);
+    final sourcePath = '${documents.path}/source.anki2';
+    final targetPath = '${documents.path}/collection.anki2';
+
+    try {
+      await _createCollection(sourcePath, includeNote: true, includeCard: true);
+      await _createCollection(targetPath);
+      final packagePath = await _packageCollection(documents, sourcePath);
+
+      await AnkiApkgImporter.import(packagePath);
+
+      final target = await sqflite.openDatabase(targetPath, readOnly: true);
+      try {
+        final notes = await target.query('notes');
+        final cards = await target.query('cards');
+        expect(notes, hasLength(1));
+        expect(cards, hasLength(1));
+        expect(cards.single['nid'], notes.single['id']);
+        expect(notes.single['id'], isNot(42));
+      } finally {
+        await target.close();
+      }
+    } finally {
+      PathProviderPlatform.instance = previous;
+      await documents.delete(recursive: true);
+    }
+  });
+
+  test('links imported cards to an existing duplicate note', () async {
+    final documents = await Directory.systemTemp.createTemp(
+      'stroom_anki_apkg_import_duplicate_note_card_link_test_',
+    );
+    final previous = PathProviderPlatform.instance;
+    PathProviderPlatform.instance = _DocumentsPathProvider(documents.path);
+    final sourcePath = '${documents.path}/source.anki2';
+    final targetPath = '${documents.path}/collection.anki2';
+
+    try {
+      await _createCollection(sourcePath, includeNote: true, includeCard: true);
+      await _createCollection(targetPath, includeNote: true, noteId: 900);
+      final packagePath = await _packageCollection(documents, sourcePath);
+
+      await AnkiApkgImporter.import(packagePath);
+
+      final target = await sqflite.openDatabase(targetPath, readOnly: true);
+      try {
+        final notes = await target.query('notes');
+        final cards = await target.query('cards');
+        expect(notes, hasLength(1));
+        expect(notes.single['id'], 900);
+        expect(cards, hasLength(1));
+        expect(cards.single['nid'], 900);
+      } finally {
+        await target.close();
+      }
+    } finally {
+      PathProviderPlatform.instance = previous;
+      await documents.delete(recursive: true);
+    }
+  });
+
   test(
     'maps invalid SQLite package data and removes the extracted temp file',
     () async {
@@ -308,6 +374,84 @@ void main() {
       }
     },
   );
+}
+
+Future<void> _createCollection(
+  String path, {
+  bool includeNote = false,
+  bool includeCard = false,
+  int noteId = 42,
+}) async {
+  final db = await sqflite.openDatabase(
+    path,
+    version: 1,
+    onCreate: (db, _) async {
+      await db.execute(
+        'CREATE TABLE col (id INTEGER PRIMARY KEY, decks TEXT, mod INTEGER, dty INTEGER)',
+      );
+      await db.insert('col', {'id': 1, 'decks': '{}'});
+      await db.execute(
+        'CREATE TABLE notes (id INTEGER, guid TEXT, mid INTEGER, tags TEXT, flds TEXT, sfld TEXT, csum INTEGER, flags INTEGER, data TEXT)',
+      );
+      await db.execute(
+        'CREATE TABLE cards (id INTEGER, nid INTEGER, did INTEGER, ord INTEGER, mod INTEGER, usn INTEGER, type INTEGER, queue INTEGER, due INTEGER, ivl INTEGER, factor INTEGER, reps INTEGER, lapses INTEGER, left INTEGER, odue INTEGER, odid INTEGER, flags INTEGER, data TEXT)',
+      );
+      if (includeNote) {
+        await db.insert('notes', {
+          'id': noteId,
+          'guid': 'note-guid',
+          'mid': 1,
+          'tags': '',
+          'flds': 'front\u001fback',
+          'sfld': 'front',
+          'csum': 0,
+          'flags': 0,
+          'data': '',
+        });
+      }
+      if (includeCard) {
+        await db.insert('cards', {
+          'id': 43,
+          'nid': noteId,
+          'did': 1,
+          'ord': 0,
+          'mod': 0,
+          'usn': 0,
+          'type': 0,
+          'queue': 0,
+          'due': 0,
+          'ivl': 0,
+          'factor': 2500,
+          'reps': 0,
+          'lapses': 0,
+          'left': 0,
+          'odue': 0,
+          'odid': 0,
+          'flags': 0,
+          'data': '',
+        });
+      }
+    },
+  );
+  await db.close();
+}
+
+Future<String> _packageCollection(
+  Directory directory,
+  String sourcePath,
+) async {
+  final source = File(sourcePath);
+  final archive = Archive()
+    ..addFile(
+      ArchiveFile(
+        'collection.anki2',
+        await source.length(),
+        await source.readAsBytes(),
+      ),
+    );
+  final packagePath = '${directory.path}/package.apkg';
+  await File(packagePath).writeAsBytes(ZipEncoder().encode(archive));
+  return packagePath;
 }
 
 class _DocumentsPathProvider extends PathProviderPlatform {
