@@ -33,6 +33,12 @@ Locale resolveSystemLocale(Locale systemLocale) {
       return locale;
     }
   }
+  if (systemLocale.languageCode == 'es') {
+    return const Locale('es', 'ES');
+  }
+  if (systemLocale.languageCode == 'ja') {
+    return const Locale('ja', 'JP');
+  }
   return const Locale('en', 'US');
 }
 

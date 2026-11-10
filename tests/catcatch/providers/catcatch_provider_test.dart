@@ -2703,6 +2703,14 @@ void main() {
         final secondArtifact = File(
           '${downloadDir.path}/second.mp4.catcatch_tmp',
         )..writeAsStringSync('second partial');
+        final taskSuffix =
+            base64Url.encode(utf8.encode('duplicate')).replaceAll('=', '');
+        final firstTaskPartial = File(
+          '${downloadDir.path}/first.mp4.$taskSuffix.catcatch_tmp',
+        )..writeAsStringSync('first task partial');
+        final secondTaskPartial = File(
+          '${downloadDir.path}/second.mp4.$taskSuffix.catcatch_tmp',
+        )..writeAsStringSync('second task partial');
         final firstPartial = File('${directory.path}/first.partial')
           ..writeAsStringSync('first recorded partial');
         final secondPartial = File('${directory.path}/second.partial')
@@ -2727,6 +2735,8 @@ void main() {
         final removedArtifacts = [
           firstArtifact,
           secondArtifact,
+          firstTaskPartial,
+          secondTaskPartial,
           firstPartial,
           secondPartial,
         ];

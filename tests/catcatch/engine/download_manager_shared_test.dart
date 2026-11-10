@@ -35,6 +35,112 @@ void main() {
       await directory.delete(recursive: true);
     }
   });
+  test('isolates concurrent downloads with the same output filename', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final serverDone = server.listen((request) async {
+      final contents = request.uri.pathSegments.last;
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      final range = request.headers.value(HttpHeaders.rangeHeader);
+      if (range != null) {
+        final startByte =
+            int.parse(RegExp(r'bytes=(\d+)-').firstMatch(range)![1]!);
+        request.response.statusCode = HttpStatus.partialContent;
+        request.response.write(contents.substring(startByte));
+      } else {
+        request.response.write(contents);
+      }
+      await request.response.close();
+    });
+    final directory = await Directory.systemTemp.createTemp('same-name-');
+    final origin = 'http://${server.address.address}:${server.port}';
+    try {
+      Future<void> verifyPair({
+        required String fileName,
+        required String firstContent,
+        required String secondContent,
+        String? firstTaskId,
+        String? secondTaskId,
+        String? existingPath,
+      }) async {
+        Future<String> download(String content, String? taskId) {
+          if (existingPath != null) {
+            return DownloadManager.downloadFile(
+              url: '$origin/$content',
+              saveDir: directory.path,
+              fileName: fileName,
+              taskId: taskId ?? '',
+              existingPath: existingPath,
+            );
+          }
+          return taskId == null
+              ? DownloadManager.downloadFile(
+                  url: '$origin/$content',
+                  saveDir: directory.path,
+                  fileName: fileName,
+                )
+              : DownloadManager.downloadFile(
+                  url: '$origin/$content',
+                  saveDir: directory.path,
+                  fileName: fileName,
+                  taskId: taskId,
+                );
+        }
+
+        final results = await Future.wait([
+          download(firstContent, firstTaskId),
+          download(secondContent, secondTaskId),
+        ]);
+
+        expect(results.toSet(), hasLength(2));
+        expect(
+          results.where((path) => path.endsWith(DefaultRules.tempFileSuffix)),
+          isEmpty,
+        );
+        final contents = await Future.wait(
+          results.map((path) => File(path).readAsString()),
+        );
+        expect(contents.toSet(), {firstContent, secondContent});
+      }
+
+      Directory('${directory.path}/shared (1).bin').createSync();
+      await verifyPair(
+        fileName: 'shared.bin',
+        firstContent: 'first-content',
+        secondContent: 'second-content',
+        firstTaskId: 'first-task',
+        secondTaskId: 'second-task',
+      );
+      await verifyPair(
+        fileName: 'shared-default.bin',
+        firstContent: 'first-default-content',
+        secondContent: 'second-default-content',
+      );
+      final legacyPartialPath = '${directory.path}/shared-legacy.bin.tmp';
+      await File(legacyPartialPath).writeAsString('first-resume-');
+      await verifyPair(
+        fileName: 'shared-legacy.bin',
+        firstContent: 'first-resume-content',
+        secondContent: 'second-resume-content',
+        firstTaskId: 'first-resume-task',
+        secondTaskId: 'second-resume-task',
+        existingPath: legacyPartialPath,
+      );
+      final legacyDefaultPartialPath =
+          '${directory.path}/shared-legacy-default.bin.tmp';
+      await File(legacyDefaultPartialPath)
+          .writeAsString('first-default-resume-');
+      await verifyPair(
+        fileName: 'shared-legacy-default.bin',
+        firstContent: 'first-default-resume-content',
+        secondContent: 'second-default-resume-content',
+        existingPath: legacyDefaultPartialPath,
+      );
+    } finally {
+      await serverDone.cancel();
+      await server.close(force: true);
+      await directory.delete(recursive: true);
+    }
+  });
   test('applies headers per segment URL', () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     final cookiesByPath = <String, String?>{};

@@ -556,8 +556,11 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
     // The downloader writes the non-dot temp file while the executor checks
     // the dot-prefixed variant when resuming.
     final tempSuffix = DefaultRules.tempFileSuffix;
+    final taskSuffix =
+        base64Url.encode(utf8.encode(task.id)).replaceAll('=', '');
     return [
       File(p.join(downloadDir, '$fileName$tempSuffix')),
+      File(p.join(downloadDir, '$fileName.$taskSuffix$tempSuffix')),
       File(p.join(downloadDir, '.$fileName$tempSuffix')),
       File(p.join(downloadDir, fileName)),
       for (final extension in ['ts', 'mp4']) ...[
