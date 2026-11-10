@@ -854,40 +854,27 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
         await ref.read(imageFolderListProvider.notifier).loadFolders();
       },
       onCopyFile: (id, selectedFolder) async {
-        try {
-          final source = records.firstWhere((r) => r.id == id);
-          String copyName = '${source.name}_副本';
-          int copyIdx = 2;
-          while (records.any(
-            (r) => r.name == copyName && r.folder == selectedFolder,
-          )) {
-            copyName = '${source.name}_副本 ($copyIdx)';
-            copyIdx++;
-          }
-          await ImageManifest.addRecord(
-            ImageRecord(
-              name: copyName,
-              hash: source.hash,
-              format: source.format,
-              createdAt: DateTime.now(),
-              size: source.size,
-              folder: selectedFolder,
-            ),
-          );
-          await ref.read(imageRecordsProvider.notifier).loadRecords();
-          await ref.read(imageFolderListProvider.notifier).loadFolders();
-        } catch (e) {
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  AppLocalizations.of(context)!.galleryCopyFailed(e.toString()),
-                ),
-                duration: const Duration(seconds: 2),
-              ),
-            );
-          }
+        final source = records.firstWhere((r) => r.id == id);
+        String copyName = '${source.name}_副本';
+        int copyIdx = 2;
+        while (records.any(
+          (r) => r.name == copyName && r.folder == selectedFolder,
+        )) {
+          copyName = '${source.name}_副本 ($copyIdx)';
+          copyIdx++;
         }
+        await ImageManifest.addRecord(
+          ImageRecord(
+            name: copyName,
+            hash: source.hash,
+            format: source.format,
+            createdAt: DateTime.now(),
+            size: source.size,
+            folder: selectedFolder,
+          ),
+        );
+        await ref.read(imageRecordsProvider.notifier).loadRecords();
+        await ref.read(imageFolderListProvider.notifier).loadFolders();
       },
       onDeleteFile: (id) async {
         _invalidateThumbnails(records.where((r) => r.id == id));

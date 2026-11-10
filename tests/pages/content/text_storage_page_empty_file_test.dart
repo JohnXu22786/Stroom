@@ -8,6 +8,7 @@ import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/text_storage_page.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/text_manifest.dart';
+import 'package:stroom/widgets/folder_picker_dialog.dart';
 
 import '../../fake_file_picker.dart';
 
@@ -92,11 +93,13 @@ void main() {
     originalPicker = FilePickerPlatform.instance;
     SharedPreferences.setMockInitialValues({});
     ManifestDatabase.enableTestMode();
+    ManifestDatabase.beforeJsonRecordRegistrationForTesting = null;
     TextManifest.invalidateCache();
   });
 
   tearDown(() {
     FilePickerPlatform.instance = originalPicker;
+    ManifestDatabase.beforeJsonRecordRegistrationForTesting = null;
   });
 
   testWidgets('imports a zero-byte text file', (tester) async {
@@ -176,5 +179,44 @@ void main() {
     expect(picker.savedBytes, isNotNull);
     expect(picker.savedBytes, isEmpty);
     expect(find.textContaining('读取失败'), findsNothing);
+  });
+
+  testWidgets('keeps batch copy selection when text record registration fails',
+      (tester) async {
+    await TextManifest.saveTextRecord(
+      TextRecord(
+        id: 'source',
+        name: 'source',
+        hash: 'source-hash',
+        format: 'txt',
+        createdAt: DateTime.utc(2024),
+        size: 1,
+      ),
+      'x',
+    );
+    await TextManifest.addFolder('destination');
+    ManifestDatabase.beforeJsonRecordRegistrationForTesting = () {
+      throw StateError('disk error');
+    };
+
+    await tester.pumpWidget(_buildApp());
+    await tester.pumpAndSettle();
+
+    await tester.longPress(find.byKey(const Key('fm_file_source')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('fm_selection_copy_btn')));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.descendant(
+        of: find.byType(FolderPickerDialog),
+        matching: find.text('destination'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('确定'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('批量复制失败: Bad state: disk error'), findsOneWidget);
+    expect(find.text('已选择 1 项'), findsOneWidget);
   });
 }
