@@ -45,8 +45,7 @@ enum OcrImagePayloadFailure {
 }
 
 class OcrImagePayloadException extends FormatException {
-  const OcrImagePayloadException(this.failure, String message)
-      : super(message);
+  const OcrImagePayloadException(this.failure, String message) : super(message);
 
   final OcrImagePayloadFailure failure;
 }

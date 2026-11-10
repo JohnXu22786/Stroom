@@ -503,7 +503,7 @@ void main() {
   test('OCR localizes unsupported image payload errors in English', () async {
     final source = await File('${directory.path}/unsupported.tiff')
         .writeAsBytes([0x49, 0x49, 0x2a, 0x00, 0x08, 0x00]);
-    const localizations = AppLocalizationsEn();
+    final localizations = AppLocalizationsEn();
     final expectedError = localizations.ocrImageUnsupportedSpecialFormat;
 
     await expectPreflightFailure(
@@ -527,7 +527,7 @@ void main() {
     final source = await File('${directory.path}/corrupt.png').writeAsBytes(
       [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00],
     );
-    const localizations = AppLocalizationsZh();
+    final localizations = AppLocalizationsZh();
     final expectedError = localizations.ocrImageDecodeFailed;
 
     await expectPreflightFailure(
