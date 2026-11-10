@@ -485,9 +485,10 @@ class OcrDiagnosticSnapshot {
       caseSensitive: false,
     ).firstMatch(value)?.group(1);
     final details = <String>[
-      if (statusCode != null &&
-          !containsCredential(statusCode, excludedValues: credentialValues))
-        'HTTP $statusCode',
+      // HTTP status codes are bounded protocol metadata, not credential
+      // material. Preserve this safe diagnostic even if an unrelated secret
+      // happens to contain the same short digit sequence.
+      if (statusCode != null) 'HTTP $statusCode',
       if (_safeReason(
         RegExp(
           r'finish[_ ]reason\s*=\s*([a-zA-Z0-9_-]{1,48})',
