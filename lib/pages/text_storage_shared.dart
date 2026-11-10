@@ -10,6 +10,31 @@ import '../utils/text_manifest.dart';
 /// 文本文件可切换的格式（新建与重命名下拉框共用同一份列表）
 const List<String> kTextFileFormats = ['txt', 'md', 'mmd'];
 
+/// Generates a text-record name not already used by the same format in folder.
+String uniqueTextRecordName(
+  String baseName,
+  String format,
+  String folder,
+  List<TextRecord> records,
+  Set<String> usedInBatch,
+) {
+  bool taken(String name) =>
+      usedInBatch.contains('$name\u0000$format') ||
+      records.any(
+        (record) =>
+            record.name == name &&
+            record.format == format &&
+            record.folder == folder,
+      );
+
+  if (!taken(baseName)) return baseName;
+  var index = 2;
+  while (taken('$baseName ($index)')) {
+    index++;
+  }
+  return '$baseName ($index)';
+}
+
 class TextCreatePage extends StatefulWidget {
   final String initialFolder;
 
