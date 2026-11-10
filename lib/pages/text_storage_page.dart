@@ -74,22 +74,6 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
     'env',
   };
 
-  String _uniqueTextName(
-    String baseName,
-    List<TextRecord> records,
-    Set<String> usedInBatch,
-  ) {
-    bool taken(String name) =>
-        usedInBatch.contains(name) ||
-        records.any((r) => r.name == name && r.folder == _currentFolder);
-    if (!taken(baseName)) return baseName;
-    int i = 2;
-    while (taken('$baseName ($i)')) {
-      i++;
-    }
-    return '$baseName ($i)';
-  }
-
   // ====================================================================
   // Import text files
   // ====================================================================
@@ -151,12 +135,14 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
           }
           continue;
         }
-        final displayName = _uniqueTextName(
+        final displayName = uniqueTextRecordName(
           p.basenameWithoutExtension(rawName),
+          format,
+          _currentFolder,
           records,
           usedInBatch,
         );
-        usedInBatch.add(displayName);
+        usedInBatch.add('$displayName\u0000$format');
 
         await TextManifest.saveTextRecord(
           TextRecord(
@@ -599,14 +585,13 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
     final records = ref.read(textRecordsProvider);
     try {
       final source = records.firstWhere((r) => r.id == id);
-      String copyName = '${source.name}_副本';
-      int copyIdx = 2;
-      while (records.any(
-        (r) => r.name == copyName && r.folder == selectedFolder,
-      )) {
-        copyName = '${source.name}_副本 ($copyIdx)';
-        copyIdx++;
-      }
+      final copyName = uniqueTextRecordName(
+        '${source.name}_副本',
+        source.format,
+        selectedFolder,
+        records,
+        {},
+      );
       await TextManifest.addRecord(
         TextRecord(
           name: copyName,
