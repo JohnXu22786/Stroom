@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:stroom/widgets/stroom_menu_style.dart';
 
 import '../l10n/app_localizations.dart';
+import '../utils/folder_path_utils.dart';
 import '../utils/text_manifest.dart';
 
 /// 文本文件可切换的格式（新建与重命名下拉框共用同一份列表）
@@ -66,6 +67,13 @@ class TextCreatePageState extends State<TextCreatePage> {
         SnackBar(
             content: Text(AppLocalizations.of(context)!.textCreateEnterTitle)),
       );
+      return;
+    }
+
+    final nameError = FolderPathUtils.validateFileName(title);
+    if (nameError != null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(nameError)));
       return;
     }
 
