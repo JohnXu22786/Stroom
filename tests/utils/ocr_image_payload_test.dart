@@ -166,6 +166,68 @@ void main() {
       expect(prepared.height, 2);
       expect(img.decodeImage(prepared.bytes), isNotNull);
     });
+
+    test('applies WebP EXIF orientation to the normalized PNG pixels', () {
+      final source = img.Image(width: 4, height: 3, numChannels: 3);
+      for (var y = 0; y < source.height; y++) {
+        for (var x = 0; x < source.width; x++) {
+          source.setPixelRgb(x, y, x * 50, y * 70, (x + y) * 30);
+        }
+      }
+      final exif = img.ExifData()..imageIfd.orientation = 6;
+      final webp = img.encodeWebP(source..exif = exif);
+      final decoder = img.WebPDecoder()..startDecode(webp);
+      final rawFrame = decoder.decodeFrame(0)!;
+      expect(decoder.info?.exif, isNotNull);
+      final sourceOrientation = img.ExifData.fromInputBuffer(
+        img.InputBuffer(decoder.info!.exif.codeUnits),
+      ).imageIfd.orientation!;
+      expect(sourceOrientation, 6);
+
+      final frameWithoutExif = img.Image.from(rawFrame)
+        ..exif.imageIfd.orientation = null;
+      expect(frameWithoutExif.exif.imageIfd.orientation, isNull);
+      final expectedOriented = applyOcrImageSourceOrientation(
+        frameWithoutExif,
+        sourceOrientation,
+      );
+
+      final prepared = prepareOcrImagePayloadSync(webp);
+      final oriented = img.decodePng(prepared.bytes)!;
+
+      expect(prepared.format, 'png');
+      expect(prepared.width, 3);
+      expect(prepared.height, 4);
+      expect(oriented.width, 3);
+      expect(oriented.height, 4);
+      expect(expectedOriented.width, 3);
+      expect(expectedOriented.height, 4);
+      for (var y = 0; y < expectedOriented.height; y++) {
+        for (var x = 0; x < expectedOriented.width; x++) {
+          final actual = oriented.getPixel(x, y);
+          final expected = rawFrame.getPixel(y, rawFrame.height - 1 - x);
+          final helperPixel = expectedOriented.getPixel(x, y);
+          expect(actual.r, expected.r, reason: 'pixel ($x, $y) red channel');
+          expect(actual.g, expected.g, reason: 'pixel ($x, $y) green channel');
+          expect(actual.b, expected.b, reason: 'pixel ($x, $y) blue channel');
+          expect(
+            helperPixel.r,
+            expected.r,
+            reason: 'metadata-free helper pixel ($x, $y) red channel',
+          );
+          expect(
+            helperPixel.g,
+            expected.g,
+            reason: 'metadata-free helper pixel ($x, $y) green channel',
+          );
+          expect(
+            helperPixel.b,
+            expected.b,
+            reason: 'metadata-free helper pixel ($x, $y) blue channel',
+          );
+        }
+      }
+    });
   });
 
   group('applyOcrImageImportQualitySync', () {
