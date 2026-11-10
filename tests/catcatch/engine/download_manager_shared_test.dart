@@ -1,9 +1,40 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/catcatch/config/default_rules.dart';
 import 'package:stroom/catcatch/engine/download_manager.dart';
 
 void main() {
+  test('restarts a resumed download when the server ignores Range', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    String? requestedRange;
+    final serverDone = server.listen((request) async {
+      requestedRange = request.headers.value(HttpHeaders.rangeHeader);
+      request.response.write('complete file');
+      await request.response.close();
+    });
+    final directory = await Directory.systemTemp.createTemp('ignored-range-');
+    const fileName = 'download.bin';
+    final partial = File(
+      '${directory.path}/$fileName${DefaultRules.tempFileSuffix}',
+    )..writeAsStringSync('complete ');
+    final expectedRange = 'bytes=${await partial.length()}-';
+    final url = 'http://${server.address.address}:${server.port}/file';
+    try {
+      final outputPath = await DownloadManager.downloadFile(
+        url: url,
+        saveDir: directory.path,
+        fileName: fileName,
+      );
+
+      expect(requestedRange, expectedRange);
+      expect(await File(outputPath).readAsString(), 'complete file');
+    } finally {
+      await serverDone.cancel();
+      await server.close(force: true);
+      await directory.delete(recursive: true);
+    }
+  });
   test('applies headers per segment URL', () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     final cookiesByPath = <String, String?>{};
