@@ -3747,7 +3747,7 @@ dynamic _sanitizeSkippedOcrCredentialFields(
                 !_legacyOcrTextContainsCredential(
                   entry.value as String,
                   credentialValues,
-                ))
+                )))
           entry.key: _sanitizeSkippedOcrCredentialFields(
             entry.value,
             credentialValues,
