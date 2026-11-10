@@ -189,6 +189,7 @@ class AnkiApkgImporter {
       // but for simplicity, we'll just merge and leave the active deck as-is
 
       // ── Import notes ────────────────────────────────────
+      final noteMap = <int, int>{}; // source note ID → target note ID
       List<Map<String, Object?>> srcNotes;
       try {
         srcNotes = await importDb.rawQuery('SELECT * FROM notes');
@@ -212,9 +213,14 @@ class AnkiApkgImporter {
         } catch (_) {
           throw AnkiApkgException.unexpectedError(targetDbPath);
         }
-        if (dup.isNotEmpty) continue;
+        final sourceId = note['id'] as int;
+        if (dup.isNotEmpty) {
+          noteMap[sourceId] = dup.first['id'] as int;
+          continue;
+        }
 
         final id = ++newId;
+        noteMap[sourceId] = id;
         await targetDb.insert('notes', {
           'id': id,
           'guid': guid,
@@ -247,7 +253,7 @@ class AnkiApkgImporter {
 
         await targetDb.insert('cards', {
           'id': id,
-          'nid': card['nid'],
+          'nid': noteMap[card['nid'] as int] ?? card['nid'],
           'did': newDid,
           'ord': card['ord'],
           'mod': nowSec,
