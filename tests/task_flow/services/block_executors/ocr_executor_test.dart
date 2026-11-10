@@ -483,6 +483,7 @@ void main() {
         flowSubTask: subTask,
         bgNotifier: background,
         providerEntries: providerForOcr(),
+        localizations: AppLocalizationsZh(),
         requestOcr: (_, format) async {
           requested = true;
           return format;
