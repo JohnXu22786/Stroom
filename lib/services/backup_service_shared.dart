@@ -254,11 +254,11 @@ Future<String?> resolveSafeAttachmentSourcePath(
 
   final sourcePath = p.join(appDir, storagePath);
   final sourceFile = File(sourcePath);
-  if (!await sourceFile.exists()) return sourcePath;
 
   try {
     final attachmentRoot = await resolveSafeAttachmentDirectoryPath(appDir);
     if (attachmentRoot == null) return null;
+    if (!await sourceFile.exists()) return sourcePath;
     final resolvedSource = await sourceFile.resolveSymbolicLinks();
     return p.isWithin(attachmentRoot, resolvedSource) ? resolvedSource : null;
   } on FileSystemException {
