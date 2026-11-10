@@ -152,6 +152,11 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
   /// Guard flag to prevent double [Navigator.pop] calls (e.g., rapid taps).
   bool _resultDelivered = false;
 
+  /// Pending read token per record. Removing/replacing a token invalidates its
+  /// completion, such as when the user clears or toggles a selection.
+  final Map<String, int> _pendingSelectionReads = {};
+  int _nextSelectionReadToken = 0;
+
   @override
   void initState() {
     super.initState();
@@ -242,6 +247,12 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
       });
       return;
     }
+    if (_pendingSelectionReads.containsKey(key)) {
+      if (widget.config.multiSelect) {
+        _pendingSelectionReads.remove(key);
+      }
+      return;
+    }
 
     // Read the file data (skipped entirely in path-only mode — the caller
     // provided no readFile, so single-select resolves via onRecordPicked
@@ -249,17 +260,19 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
     Uint8List? readData;
     final readFile = widget.config.readFile;
     if (readFile != null) {
+      final readToken = ++_nextSelectionReadToken;
+      _pendingSelectionReads[key] = readToken;
       try {
         readData = await readFile(record);
       } catch (_) {}
+      if (!mounted || _pendingSelectionReads[key] != readToken) return;
+      _pendingSelectionReads.remove(key);
       if (readData == null || readData.isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(AppLocalizations.of(context)!.appMediaUnreadable),
-            ),
-          );
-        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(AppLocalizations.of(context)!.appMediaUnreadable),
+          ),
+        );
         return;
       }
     }
@@ -306,6 +319,7 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
     setState(() {
       _selectedItems.clear();
       _selectedRecords.clear();
+      _pendingSelectionReads.clear();
     });
   }
 

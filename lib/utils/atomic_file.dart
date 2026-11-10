@@ -36,6 +36,22 @@ class AtomicFile {
     );
   }
 
+  /// Writes chunks synchronously to a staged file, then atomically replaces
+  /// [file] after the writer completes successfully.
+  static Future<void> writeFromSync(
+    File file,
+    void Function(RandomAccessFile output) write,
+  ) =>
+      _enqueue(file, (stagedFile) async {
+        final output = await stagedFile.open(mode: FileMode.write);
+        try {
+          write(output);
+          await output.flush();
+        } finally {
+          await output.close();
+        }
+      });
+
   static Future<void> _enqueue(
     File file,
     Future<void> Function(File) write, {

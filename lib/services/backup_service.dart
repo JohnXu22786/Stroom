@@ -2477,19 +2477,10 @@ class BackupService {
     final dir = Directory(p.join(appDir, subDir));
     final dest = File(p.join(dir.path, fileName));
     await dest.parent.create(recursive: true);
-    final raf = dest.openSync(mode: FileMode.write);
-    try {
-      reader.extractEntry(entry, raf.writeFromSync);
-    } catch (_) {
-      try {
-        raf.closeSync();
-      } catch (_) {}
-      try {
-        await dest.delete();
-      } catch (_) {}
-      rethrow;
-    }
-    raf.closeSync();
+    await AtomicFile.writeFromSync(
+      dest,
+      (output) => reader.extractEntry(entry, output.writeFromSync),
+    );
   }
 
   /// 预解析并校验备份中的全部 JSON 元数据（在任何删除操作之前调用）。
