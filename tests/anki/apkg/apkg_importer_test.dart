@@ -391,7 +391,7 @@ Future<void> _createCollection(
       );
       await db.insert('col', {'id': 1, 'decks': '{}'});
       await db.execute(
-        'CREATE TABLE notes (id INTEGER, guid TEXT, mid INTEGER, tags TEXT, flds TEXT, sfld TEXT, csum INTEGER, flags INTEGER, data TEXT)',
+        'CREATE TABLE notes (id INTEGER, guid TEXT, mid INTEGER, mod INTEGER, usn INTEGER, tags TEXT, flds TEXT, sfld TEXT, csum INTEGER, flags INTEGER, data TEXT)',
       );
       await db.execute(
         'CREATE TABLE cards (id INTEGER, nid INTEGER, did INTEGER, ord INTEGER, mod INTEGER, usn INTEGER, type INTEGER, queue INTEGER, due INTEGER, ivl INTEGER, factor INTEGER, reps INTEGER, lapses INTEGER, left INTEGER, odue INTEGER, odid INTEGER, flags INTEGER, data TEXT)',
@@ -401,6 +401,8 @@ Future<void> _createCollection(
           'id': noteId,
           'guid': 'note-guid',
           'mid': 1,
+          'mod': 0,
+          'usn': 0,
           'tags': '',
           'flds': 'front\u001fback',
           'sfld': 'front',
