@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -119,6 +121,68 @@ void main() {
   // edited bytes once it pops.
   // ====================================================================
   group('AppFilePickerDialog quick-edit flow', () {
+    Future<Uint8List> openEditor(
+      WidgetTester tester, {
+      required Future<void> Function(String path, Uint8List bytes)?
+          tempFileWriter,
+    }) async {
+      await tester.binding.setSurfaceSize(const Size(1200, 2000));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final png = await tester.runAsync(_createEnginePng);
+      await tester.runAsync(() async {
+        await ImageManifest.writeFile('gate-hash.png', png!);
+        await ImageManifest.addRecord(ImageRecord(
+          name: 'gate-file',
+          hash: 'gate-hash',
+          format: 'png',
+          createdAt: DateTime.now(),
+          size: png.length,
+          folder: '',
+        ));
+      });
+
+      await tester.pumpWidget(MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: Builder(
+          builder: (context) => ElevatedButton(
+            onPressed: () => showAppFilePickerDialog(
+              context,
+              tempFileWriter: tempFileWriter,
+            ),
+            child: const Text('Open Picker'),
+          ),
+        ),
+      ));
+      await tester.tap(find.text('Open Picker'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.tap(find.byKey(const Key('file_picker_tab_image')));
+      await tester.pumpAndSettle();
+      await _pumpUntil(tester,
+          () => find.text('gate-file.png').evaluate().isNotEmpty);
+      await tester.tap(find.byType(Checkbox), warnIfMissed: false);
+      await tester.pump();
+      await _pumpUntil(tester,
+          () => find.byType(PreviewChip).evaluate().isNotEmpty);
+      final originalBytes =
+          tester.widget<PreviewChip>(find.byType(PreviewChip)).bytes;
+      await tester.tap(find.byType(PreviewChip));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.crop));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await _pumpUntil(tester,
+          () => find.byType(ExtendedImageEditor).evaluate().isNotEmpty);
+      await tester.tap(find.text('保存'));
+      await tester.pump();
+      await _pumpUntil(tester,
+          () => find.byType(ExtendedImageEditorPage).evaluate().isEmpty);
+      return originalBytes;
+    }
+
     testWidgets(
         'the quick editor processes in place, then the selection holds '
         'the edited bytes', (tester) async {
@@ -232,6 +296,52 @@ void main() {
       expect(pickerResult, isNotNull);
       expect(pickerResult!.single.value, isNot(same(originalChipBytes)),
           reason: 'the confirmed selection must hold the edited bytes');
+    });
+
+    testWidgets('closing during temp write cleans up after the write finishes',
+        (tester) async {
+      final writeStarted = Completer<void>();
+      final allowWrite = Completer<void>();
+      String? writtenPath;
+      await openEditor(tester, tempFileWriter: (path, bytes) async {
+        writtenPath = path;
+        writeStarted.complete();
+        await allowWrite.future;
+        await File(path).writeAsBytes(bytes);
+      });
+      await _pumpUntil(tester, () => writeStarted.isCompleted);
+
+      await tester.tap(find.byIcon(Icons.close));
+      await tester.pumpAndSettle();
+      allowWrite.complete();
+      await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 100)));
+      await tester.pump();
+
+      final exists = await tester.runAsync(() => File(writtenPath!).exists());
+      expect(exists, isFalse,
+          reason: 'a write finishing after picker cleanup must not orphan its '
+              'temp file');
+    });
+
+    testWidgets('failed temp write deletes partial file but keeps edited bytes',
+        (tester) async {
+      String? partialPath;
+      final originalBytes = await openEditor(tester, tempFileWriter: (path, bytes) async {
+        partialPath = path;
+        await File(path).writeAsBytes(bytes.take(4).toList());
+        throw const FileSystemException('simulated partial write failure');
+      });
+      await _pumpUntil(tester, () =>
+          tester.widget<PreviewChip>(find.byType(PreviewChip)).bytes !=
+              originalBytes);
+
+      final exists = await tester.runAsync(() => File(partialPath!).exists());
+      expect(exists, isFalse,
+          reason: 'a failed write must remove its incomplete temp file');
+      expect(tester.widget<PreviewChip>(find.byType(PreviewChip)).bytes,
+          isNot(same(originalBytes)),
+          reason: 'cache failure must leave edited bytes available in memory');
     });
   });
 
