@@ -335,6 +335,21 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
         );
         return;
       }
+      final hasStoredValue = param.defaultValue.trim().isNotEmpty ||
+          param.options.any((option) => option.trim().isNotEmpty);
+      if (hasStoredValue &&
+          ParamType.values.every((type) => type.value != param.type)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context)!
+                  .ocrConfigUnsupportedParamSaveError(name, param.type),
+            ),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
       if (param.type == 'json') {
         try {
           jsonDecode(value);
@@ -681,6 +696,8 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
             else
               ...List.generate(_customParams.length, (i) {
                 final param = _customParams[i];
+                final isUnsupportedType =
+                    ParamType.values.every((type) => type.value != param.type);
                 final name = param.paramName.trim();
                 final isDuplicate = name.isNotEmpty &&
                     _customParams.indexWhere(
@@ -733,23 +750,32 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
                                     context,
                                   ),
                                   borderRadius: StroomMenuStyle.borderRadius,
-                                  value: param.paramType.value,
+                                  value: param.type,
                                   isDense: true,
-                                  items: ParamType.values
-                                      .map(
-                                        (t) => DropdownMenuItem(
-                                          value: t.value,
-                                          child: Text(
-                                            localizedParamTypeLabel(
-                                                AppLocalizations.of(context)!,
-                                                t),
-                                            style: const TextStyle(
-                                              fontSize: 13,
-                                            ),
-                                          ),
+                                  isExpanded: true,
+                                  items: [
+                                    if (isUnsupportedType)
+                                      DropdownMenuItem(
+                                        value: param.type,
+                                        child: Text(
+                                          param.type,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(fontSize: 13),
                                         ),
-                                      )
-                                      .toList(),
+                                      ),
+                                    ...ParamType.values.map(
+                                      (t) => DropdownMenuItem<String>(
+                                        value: t.value,
+                                        child: Text(
+                                          localizedParamTypeLabel(
+                                            AppLocalizations.of(context)!,
+                                            t,
+                                          ),
+                                          style: const TextStyle(fontSize: 13),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                   onChanged: (v) {
                                     if (v != null) {
                                       setState(() {
@@ -774,6 +800,21 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
                             ),
                           ],
                         ),
+                        if (isUnsupportedType)
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: Padding(
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Text(
+                                AppLocalizations.of(context)!
+                                    .ocrConfigUnsupportedParamType(param.type),
+                                style: TextStyle(
+                                  color: Theme.of(context).colorScheme.error,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                          ),
                         const SizedBox(height: 8),
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,

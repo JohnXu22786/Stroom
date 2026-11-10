@@ -1,5 +1,6 @@
 import hashlib
 import json
+import os
 import shutil
 import struct
 import subprocess
@@ -69,6 +70,93 @@ def predictions(results):
 
 
 class EvaluateTests(unittest.TestCase):
+    def test_ragged_pipe_table_annotation_is_rejected(self):
+        for table in ("A | B\nx | y | z", "A | B\n| C |"):
+            with self.subTest(table=table):
+                manifest = {
+                    "fixtures": [
+                        {
+                            "id": "ragged-table",
+                            "gold_text": table,
+                            "table_text": table,
+                            "categories": ["english", "table"],
+                        }
+                    ]
+                }
+
+                with self.assertRaisesRegex(
+                    EvaluationError, "table_text rows must have consistent columns"
+                ):
+                    evaluate_predictions(
+                        manifest,
+                        predictions([{"fixture_id": "ragged-table", "text": table}]),
+                    )
+
+    def test_rectangular_pipe_table_annotation_scores_exact_prediction(self):
+        for table in ("A | B\nx | y", "A | B\nA | B |"):
+            with self.subTest(table=table):
+                report = evaluate_predictions(
+                    {
+                        "fixtures": [
+                            {
+                                "id": "rectangular-table",
+                                "gold_text": table,
+                                "table_text": table,
+                                "categories": ["english", "table"],
+                            }
+                        ]
+                    },
+                    predictions(
+                        [{"fixture_id": "rectangular-table", "text": table}]
+                    ),
+                )
+
+                self.assertEqual(report["metrics"]["table_fidelity"]["value"], 1)
+
+    def test_markdown_formula_annotation_scores_exact_prediction(self):
+        input_data = predictions(
+            [{"fixture_id": "markdown-formula", "text": "The formula is **x**."}]
+        )
+        input_data["run"]["output_format"] = "markdown"
+
+        report = evaluate_predictions(
+            {
+                "fixtures": [
+                    {
+                        "id": "markdown-formula",
+                        "gold_text": "The formula is **x**.",
+                        "formula_text": "**x**",
+                        "categories": ["english", "formula"],
+                    }
+                ]
+            },
+            input_data,
+        )
+
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 1)
+
+    def test_markdown_formula_annotation_rejects_mismatched_prediction(self):
+        input_data = predictions(
+            [{"fixture_id": "markdown-formula", "text": "The formula is **y**."}]
+        )
+        input_data["run"]["output_format"] = "markdown"
+
+        report = evaluate_predictions(
+            {
+                "fixtures": [
+                    {
+                        "id": "markdown-formula",
+                        "gold_text": "The formula is **x**.",
+                        "formula_text": "**x**",
+                        "categories": ["english", "formula"],
+                    }
+                ]
+            },
+            input_data,
+        )
+
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 0)
+
     def _run_cli_with_output(self, directory, output_path):
         directory_path = Path(directory)
         manifest_path = directory_path / "manifest.json"
@@ -113,6 +201,42 @@ class EvaluateTests(unittest.TestCase):
             self.assertEqual(result.stderr, "")
             report = json.loads(output_path.read_text(encoding="utf-8"))
             self.assertEqual(report["status"], "pending")
+
+    def test_cli_stdout_uses_utf8_when_locale_encoding_is_ascii(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest_path = root / "manifest.json"
+            predictions_path = root / "predictions.json"
+            manifest_path.write_text(json.dumps(small_manifest()), encoding="utf-8")
+            input_data = predictions([])
+            input_data["run"]["model_id"] = "识别📄"
+            predictions_path.write_text(json.dumps(input_data), encoding="utf-8")
+            for errors in ("strict", "backslashreplace"):
+                with self.subTest(errors=errors):
+                    environment = dict(os.environ)
+                    environment["PYTHONIOENCODING"] = f"ascii:{errors}"
+
+                    result = subprocess.run(
+                        [
+                            sys.executable,
+                            str(ROOT / "evaluate.py"),
+                            "--manifest",
+                            str(manifest_path),
+                            "--predictions",
+                            str(predictions_path),
+                        ],
+                        capture_output=True,
+                        text=True,
+                        encoding="utf-8",
+                        env=environment,
+                        check=False,
+                    )
+
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(result.stderr, "")
+                    self.assertNotIn("Traceback", result.stderr)
+                    report = json.loads(result.stdout)
+                    self.assertEqual(report["run"]["model_id"], "识别📄")
 
     def test_cli_rejects_output_that_is_the_predictions_file(self):
         with TemporaryDirectory() as directory:
@@ -676,6 +800,31 @@ class EvaluateTests(unittest.TestCase):
         self.assertIn("evaluation error: cannot read", stderr.getvalue())
         self.assertNotIn("Traceback", stderr.getvalue())
 
+    def test_cli_reports_excessive_json_nesting_without_traceback(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest_path = root / "manifest.json"
+            predictions_path = root / "predictions.json"
+            manifest_path.write_text(json.dumps(small_manifest()), encoding="utf-8")
+            predictions_path.write_text(
+                "[" * 10000 + "0" + "]" * 10000, encoding="utf-8"
+            )
+
+            stderr = StringIO()
+            with redirect_stderr(stderr):
+                exit_code = main(
+                    [
+                        "--manifest",
+                        str(manifest_path),
+                        "--predictions",
+                        str(predictions_path),
+                    ]
+                )
+
+        self.assertEqual(exit_code, 2)
+        self.assertIn("JSON nesting exceeds parser limit", stderr.getvalue())
+        self.assertNotIn("Traceback", stderr.getvalue())
+
     def test_cli_reports_invalid_utf8_fixture_manifest_without_traceback(self):
         with TemporaryDirectory() as directory:
             manifest_path = Path(directory) / "manifest.json"
@@ -848,6 +997,18 @@ class EvaluateTests(unittest.TestCase):
         report = evaluate_predictions(small_manifest(), input_data)
 
         self.assertEqual(report["run"]["settings"], input_data["run"]["settings"])
+
+    def test_excessively_nested_run_settings_are_rejected(self):
+        input_data = predictions([])
+        nested_setting = "leaf"
+        for _ in range(65):
+            nested_setting = [nested_setting]
+        input_data["run"]["settings"] = {"nested": nested_setting}
+
+        with self.assertRaisesRegex(
+            EvaluationError, "settings exceeds maximum nesting depth"
+        ):
+            evaluate_predictions(small_manifest(), input_data)
 
     def test_double_encoded_credential_like_query_key_is_rejected(self):
         input_data = predictions([])
@@ -4720,6 +4881,47 @@ class EvaluateTests(unittest.TestCase):
             }.issubset(summary["categories"])
         )
 
+    def test_fixture_verification_reports_self_referential_symlink_as_evaluation_error(self):
+        with TemporaryDirectory() as directory:
+            fixture_root = Path(directory)
+            shutil.copytree(ROOT / "fixtures", fixture_root / "fixtures")
+            manifest = json.loads((ROOT / "manifest.json").read_text())
+            fixture = manifest["fixtures"][0]
+            fixture["image"] = "fixtures/self-loop.png"
+            (fixture_root / fixture["image"]).symlink_to("self-loop.png")
+            manifest_path = fixture_root / "manifest.json"
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "evaluate.py"),
+                    "--manifest",
+                    str(manifest_path),
+                    "--verify-fixtures",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+        self.assertEqual(result.returncode, 2)
+        self.assertRegex(result.stderr, r"^evaluation error: .*cannot resolve")
+        self.assertNotIn("Traceback", result.stderr)
+
+    def test_fixture_verification_rejects_image_path_outside_fixture_root(self):
+        with TemporaryDirectory() as directory:
+            fixture_root = Path(directory)
+            shutil.copytree(ROOT / "fixtures", fixture_root / "fixtures")
+            manifest = json.loads((ROOT / "manifest.json").read_text())
+            fixture = manifest["fixtures"][0]
+            fixture["image"] = "../outside.png"
+            manifest_path = fixture_root / "manifest.json"
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            with self.assertRaisesRegex(EvaluationError, "image path escapes fixture root"):
+                verify_fixtures(manifest_path)
+
     def test_fixture_verification_rejects_truncated_png_with_matching_digest(self):
         image_bytes = (ROOT / "fixtures" / "mixed-zh-en-01.png").read_bytes()[:24]
         self._assert_fixture_png_rejected(image_bytes)
@@ -4817,6 +5019,16 @@ class EvaluateTests(unittest.TestCase):
         )
         self._assert_fixture_png_rejected(malformed_png)
 
+    def test_fixture_verification_rejects_chromaticity_pair_sum_above_png_range(self):
+        malformed_png = (
+            b"\x89PNG\r\n\x1a\n"
+            + png_chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0))
+            + png_chunk(b"cHRM", struct.pack(">IIIIIIII", 80000, 80000, 1, 1, 1, 1, 1, 1))
+            + png_chunk(b"IDAT", zlib.compress(b"\x00\x00\x00\x00"))
+            + png_chunk(b"IEND", b"")
+        )
+        self._assert_fixture_png_rejected(malformed_png)
+
     def test_fixture_verification_rejects_unsupported_exif_chunk(self):
         malformed_png = (
             b"\x89PNG\r\n\x1a\n"
@@ -4831,7 +5043,7 @@ class EvaluateTests(unittest.TestCase):
         valid_png = (
             b"\x89PNG\r\n\x1a\n"
             + png_chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 1, 3, 0, 0, 0))
-            + png_chunk(b"cHRM", struct.pack(">IIIIIIII", *([1] * 8)))
+            + png_chunk(b"cHRM", struct.pack(">IIIIIIII", *([50000] * 8)))
             + png_chunk(b"gAMA", struct.pack(">I", 100000))
             + png_chunk(b"sBIT", b"\x08\x08\x08")
             + png_chunk(b"sRGB", b"\x00")

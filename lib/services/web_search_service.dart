@@ -2,6 +2,9 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
+import 'package:flutter/widgets.dart' show Locale;
+
+import '../providers/locale_provider.dart' show appLocalizationsForLocale;
 
 import '../models/tool_call.dart';
 
@@ -100,19 +103,23 @@ class WebSearchService {
   ///   - query (String): 搜索关键词
   ///   - source (String?): 搜索引擎，可选 google/bing/baidu，默认 google
   ///   - count (int?): 返回结果数量，默认 5，最大 10
-  static Future<String> handleWebSearch(Map<String, dynamic> args) async {
+  static Future<String> handleWebSearch(
+    Map<String, dynamic> args, {
+    Locale? locale,
+  }) async {
+    final l10n = appLocalizationsForLocale(locale);
+    final isEnglish = l10n.localeName.startsWith('en');
     final query = (args['query'] as String?)?.trim() ?? '';
     final source = args['source'] as String?;
     final count = (args['count'] as num?)?.toInt() ?? 5;
 
     // 验证参数
     if (query.isEmpty) {
-      return '错误: 搜索关键词不能为空。';
+      return l10n.toolResultWebSearchEmptyQuery;
     }
 
     if (!isValidSource(source)) {
-      return '错误: 不支持的搜索引擎 "$source"。'
-          '可选值: google, bing, baidu';
+      return l10n.toolResultWebSearchInvalidSource(source ?? '');
     }
 
     final effectiveSource = _resolveSource(source);
@@ -153,16 +160,27 @@ class WebSearchService {
             noResultSources.add(sourceToTry);
             continue;
           }
-          failures.add('$sourceToTry: 未返回可解析的搜索结果');
+          failures.add(
+            '$sourceToTry: ${l10n.toolResultWebSearchUnparsedResults}',
+          );
           continue;
         }
 
-        final formattedResults = formatResults(results, sourceToTry);
+        final formattedResults = formatResults(
+          results,
+          sourceToTry,
+          locale: locale,
+        );
         if (sourceToTry != effectiveSource) {
-          final preferredReason =
-              noResultSources.contains(effectiveSource) ? '未找到相关结果' : '暂不可用';
-          return '首选引擎 ${_sourceName(effectiveSource)} $preferredReason，已切换到 ${_sourceName(sourceToTry)}。\n\n'
-              '$formattedResults';
+          final preferredReason = noResultSources.contains(effectiveSource)
+              ? l10n.toolResultWebSearchFallbackNoResults
+              : l10n.toolResultWebSearchFallbackUnavailable;
+          final message = l10n.toolResultWebSearchFallback(
+            _sourceName(effectiveSource, isEnglish),
+            preferredReason,
+            _sourceName(sourceToTry, isEnglish),
+          );
+          return '$message\n\n$formattedResults';
         }
         return formattedResults;
       } on DioException catch (e) {
@@ -180,21 +198,27 @@ class WebSearchService {
     }
 
     if (noResultSources.isNotEmpty) {
-      final noResults = noResultSources.map(_sourceName).join('、');
+      final noResults = noResultSources
+          .map((source) => _sourceName(source, isEnglish))
+          .join(isEnglish ? ', ' : '、');
       if (failures.isEmpty && noResultSources.length == sourcesToTry.length) {
-        return '未找到相关搜索结果（$noResults 均明确返回无结果）。';
+        return l10n.toolResultWebSearchNotFoundFrom(noResults);
       }
-      return '搜索不完整：$noResults 明确返回无结果；'
-          '其他引擎不可用或返回了无法解析的页面：${failures.join('；')}';
+      return l10n.toolResultWebSearchIncomplete(
+        noResults,
+        failures.join(isEnglish ? '; ' : '；'),
+      );
     }
 
-    return '错误: 所有搜索引擎均不可用。${failures.join('；')}';
+    return l10n.toolResultWebSearchUnavailable(
+      failures.join(isEnglish ? '; ' : '；'),
+    );
   }
 
-  static String _sourceName(String source) => switch (source) {
+  static String _sourceName(String source, bool isEnglish) => switch (source) {
         'google' => 'Google',
         'bing' => 'Bing',
-        'baidu' => '百度',
+        'baidu' => isEnglish ? 'Baidu' : '百度',
         _ => source,
       };
 
@@ -338,20 +362,30 @@ class WebSearchService {
 
   /// 格式化搜索结果
   @visibleForTesting
-  static String formatResults(List<SearchResult> results, String source) {
+  static String formatResults(
+    List<SearchResult> results,
+    String source, {
+    Locale? locale,
+  }) {
+    final l10n = appLocalizationsForLocale(locale);
     if (results.isEmpty) {
-      return '未找到相关搜索结果。';
+      return l10n.toolResultWebSearchEmptyResults;
     }
 
-    final sourceName = _sourceName(source);
-    final buffer = StringBuffer('来自 $sourceName 的搜索结果：\n\n');
+    final isEnglish = l10n.localeName.startsWith('en');
+    final sourceName = _sourceName(source, isEnglish);
+    final buffer = StringBuffer(
+      '${l10n.toolResultWebSearchResultsHeader(sourceName)}\n\n',
+    );
 
     for (var i = 0; i < results.length; i++) {
       final r = results[i];
       buffer.writeln('${i + 1}. ${r.title}');
-      buffer.writeln('   链接: ${r.url}');
+      buffer.writeln('   ${l10n.toolResultWebSearchLinkLabel}: ${r.url}');
       if (r.snippet.isNotEmpty) {
-        buffer.writeln('   摘要: ${r.snippet}');
+        buffer.writeln(
+          '   ${l10n.toolResultWebSearchSummaryLabel}: ${r.snippet}',
+        );
       }
       if (i < results.length - 1) {
         buffer.writeln('---');

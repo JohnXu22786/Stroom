@@ -206,7 +206,83 @@ void main() {
 
   group('OcrModelConfigPage custom parameter validation', () {
     testWidgets(
-      'opens and saves a model with an unsupported stored parameter type',
+      'rejects saving a nonempty parameter with an unsupported stored type',
+      (tester) async {
+        ModelConfig? saved;
+        final model = ModelConfig(
+          name: 'OCR模型',
+          modelId: 'qwen-vl-ocr',
+          customParams: [
+            CustomParam(
+              paramName: 'legacy',
+              type: 'legacy_blob',
+              defaultValue: 'preserve me',
+              options: [''],
+            ),
+          ],
+        );
+
+        await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
+
+        await _enterField(tester, 0, 'Edited OCR模型');
+        final typeDropdown = find.byType(DropdownButton<String>);
+        await _scrollTo(tester, typeDropdown);
+        expect(
+          tester.widget<DropdownButton<String>>(typeDropdown).value,
+          'legacy_blob',
+        );
+        expect(find.text('不支持的类型：legacy_blob'), findsOneWidget);
+
+        await tester.tap(find.text('保存'));
+        await tester.pumpAndSettle();
+
+        expect(saved, isNull);
+        expect(
+          find.text(
+            '参数“legacy”使用了不支持的类型“legacy_blob”，请替换为支持的类型或删除该参数后再保存。',
+          ),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets('replacing an unsupported type saves a supported string type',
+        (tester) async {
+      ModelConfig? saved;
+      final model = ModelConfig(
+        name: 'OCR模型',
+        modelId: 'qwen-vl-ocr',
+        customParams: [
+          CustomParam(
+            paramName: 'legacy',
+            type: 'legacy_blob',
+            defaultValue: 'preserve me',
+          ),
+        ],
+      );
+
+      await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
+      final typeDropdown = find.byType(DropdownButton<String>);
+      await _scrollTo(tester, typeDropdown);
+      await tester.tap(typeDropdown);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('字符串').last);
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.widget<DropdownButton<String>>(typeDropdown).value,
+        'string',
+      );
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      expect(saved, isNotNull);
+      expect(saved!.customParams.single.type, 'string');
+      expect(saved!.customParams.single.defaultValue, 'preserve me');
+    });
+
+    testWidgets(
+      'removing an unsupported parameter allows the model to save',
       (tester) async {
         ModelConfig? saved;
         final model = ModelConfig(
@@ -222,22 +298,15 @@ void main() {
         );
 
         await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
-
-        await _enterField(tester, 0, 'Edited OCR模型');
-        final typeDropdown = find.byType(DropdownButton<String>);
-        await _scrollTo(tester, typeDropdown);
-        expect(
-          tester.widget<DropdownButton<String>>(typeDropdown).value,
-          'string',
-        );
-
+        final deleteButton = find.byIcon(Icons.delete);
+        await _scrollTo(tester, deleteButton);
+        await tester.tap(deleteButton);
+        await tester.pumpAndSettle();
         await tester.tap(find.text('保存'));
         await tester.pumpAndSettle();
 
         expect(saved, isNotNull);
-        expect(saved!.name, 'Edited OCR模型');
-        expect(saved!.customParams.single.type, 'legacy_blob');
-        expect(saved!.customParams.single.defaultValue, 'preserve me');
+        expect(saved!.customParams, isEmpty);
       },
     );
 

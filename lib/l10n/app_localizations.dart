@@ -1618,7 +1618,10 @@ abstract class AppLocalizations {
   /// **'The update check failed. Please try again.'**
   String get aboutUpdateCheckFailed;
 
-  /// Assistant update check failure shown on the topic selection page.
+  /// No description provided for @topicAssistantUpdateCheckFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Assistant update check failed: {error}'**
   String topicAssistantUpdateCheckFailed(Object error);
 
   /// No description provided for @aboutPrivacyContent.
@@ -10634,12 +10637,46 @@ abstract class AppLocalizations {
   /// **'Built-in'**
   String get providerBuiltinBadge;
 
+  /// No description provided for @providerBuiltinTtsName.
+  ///
+  /// In en, this message translates to:
+  /// **'TTS Provider'**
   String get providerBuiltinTtsName;
+
+  /// No description provided for @providerBuiltinLlmName.
+  ///
+  /// In en, this message translates to:
+  /// **'LLM Provider'**
   String get providerBuiltinLlmName;
+
+  /// No description provided for @providerBuiltinOcrName.
+  ///
+  /// In en, this message translates to:
+  /// **'OCR Provider'**
   String get providerBuiltinOcrName;
+
+  /// No description provided for @providerBuiltinAsrName.
+  ///
+  /// In en, this message translates to:
+  /// **'Speech Recognition Provider'**
   String get providerBuiltinAsrName;
+
+  /// No description provided for @providerBuiltinMcpName.
+  ///
+  /// In en, this message translates to:
+  /// **'MCP Provider'**
   String get providerBuiltinMcpName;
+
+  /// No description provided for @providerBuiltinSearchGroupName.
+  ///
+  /// In en, this message translates to:
+  /// **'Search'**
   String get providerBuiltinSearchGroupName;
+
+  /// No description provided for @providerBuiltinMcpServicesGroupName.
+  ///
+  /// In en, this message translates to:
+  /// **'Other MCP Services'**
   String get providerBuiltinMcpServicesGroupName;
 
   /// No description provided for @providerConnectivityTest.
@@ -10797,6 +10834,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Enable this tool for an assistant in that assistant’s default tool settings.'**
   String get toolBuiltinEnableHelp;
+
+  /// No description provided for @httpToolBraveDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Search the web with the Brave Search API. Requires an API key.'**
+  String get httpToolBraveDescription;
+
+  /// No description provided for @httpToolBochaDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Search the web with the Bocha AI Search API. Requires an API key.'**
+  String get httpToolBochaDescription;
+
+  /// No description provided for @httpToolQueritDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Search the web with Querit Search. Requires an API key.'**
+  String get httpToolQueritDescription;
+
+  /// No description provided for @httpToolSearxngDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Search the web with a SearXNG instance. Requires an instance URL.'**
+  String get httpToolSearxngDescription;
+
+  /// No description provided for @httpToolSearchQueryDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Search terms.'**
+  String get httpToolSearchQueryDescription;
+
+  /// No description provided for @httpToolSearchCountDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Number of results to return.'**
+  String get httpToolSearchCountDescription;
+
+  /// No description provided for @httpToolSearchCountMax20Description.
+  ///
+  /// In en, this message translates to:
+  /// **'Number of results to return (maximum 20).'**
+  String get httpToolSearchCountMax20Description;
 
   /// No description provided for @mcpSseUrlLabel.
   ///
@@ -11070,6 +11149,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'JSON'**
   String get paramTypeJsonLabel;
+
+  /// Label for a custom parameter whose stored type is not supported.
+  ///
+  /// In en, this message translates to:
+  /// **'Unsupported type: {type}'**
+  String ocrConfigUnsupportedParamType(String type);
+
+  /// Validation message for a custom parameter with an unsupported type.
+  ///
+  /// In en, this message translates to:
+  /// **'Parameter “{name}” uses unsupported type “{type}”. Replace it with a supported type or remove the parameter before saving.'**
+  String ocrConfigUnsupportedParamSaveError(String name, String type);
 
   /// No description provided for @paramTypeStringHint.
   ///
@@ -16124,6 +16215,35 @@ abstract class AppLocalizations {
   ///
   /// In en, this message translates to:
   /// **'{seconds} sec'**
+  String get connectivityTestHttpSuccess;
+  String get connectivityTestHttpFailure;
+  String get connectivityTestInvalidMcpConfig;
+  String get connectivityTestMissingTransport;
+  String get connectivityTestStdioUnsupported;
+  String get connectivityTestStdioDesktopOnly;
+  String get connectivityTestInvalidContent;
+  String get connectivityTestMethodMustBeString;
+  String get connectivityTestUnsupportedMethod;
+  String get connectivityTestReadOnlyMethodOnly;
+  String get connectivityTestParamsMustBeObject;
+  String get connectivityTestMcpConnectionFailed;
+  String get connectivityTestCheckConnectionSettings;
+  String get connectivityTestRemainingToolsOmitted;
+  String get connectivityTestMcpSuccess;
+  String get connectivityTestTodoMutationBlocked;
+  String get connectivityTestTodoReadOnly;
+  String get connectivityTestUnknownBuiltin;
+  String get connectivityTestBuiltinSuccess;
+  String get connectivityTestBuiltinFailure;
+  String get connectivityTestTopLevelObjectRequired;
+  String get connectivityTestRequestTimeout;
+  String connectivityTestMcpRequestTimeout(String method);
+  String get connectivityTestResultTruncated;
+  String connectivityTestToolNames(String names);
+  String connectivityTestMcpSuccessDetails(
+      int count, String names, String suffix);
+  String connectivityTestBuiltinExecutorMissing(String toolName);
+
   String connectivityTestDurationSeconds(String seconds);
 
   /// No description provided for @connectivityTestDurationMilliseconds.
@@ -18353,20 +18473,178 @@ abstract class AppLocalizations {
   /// **'Provider entry {index} uses unknown provider type \"{type}\" and may not work correctly.'**
   String startupIssueUnknownProviderType(Object index, Object type);
 
-  /// Shown when application initialization fails before the main app is ready.
+  /// No description provided for @startupErrorTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'App startup failed'**
   String get startupErrorTitle;
 
-  /// Includes the initialization error for diagnostics.
+  /// No description provided for @startupErrorDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'Error: {error}'**
   String startupErrorDetails(Object error);
 
-  /// Shown when a widget fails to render in a release build.
+  /// No description provided for @renderErrorTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Interface rendering error'**
   String get renderErrorTitle;
 
-  /// Shown when a widget fails to render in a debug build.
+  /// No description provided for @renderErrorDebugTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Interface rendering error (Debug mode)'**
   String get renderErrorDebugTitle;
 
-  /// Instructions shown below a release render error.
+  /// No description provided for @renderErrorRestartMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Please try restarting the app.'**
   String get renderErrorRestartMessage;
+
+  /// No description provided for @backupRestoreApkgImportSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'Imported {decks} decks, {notes} notes, and {cards} cards'**
+  String backupRestoreApkgImportSummary(int decks, int notes, int cards);
+
+  /// No description provided for @backupRestoreApkgFileNotFound.
+  ///
+  /// In en, this message translates to:
+  /// **'The selected .apkg file could not be found: {path}'**
+  String backupRestoreApkgFileNotFound(String path);
+
+  String get backupRestoreApkgInvalidArchive;
+
+  /// No description provided for @backupRestoreApkgCollectionMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'The .apkg file does not contain collection.anki2.'**
+  String get backupRestoreApkgCollectionMissing;
+
+  /// No description provided for @backupRestoreApkgTargetMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Anki flashcards before importing or exporting a deck: {path}'**
+  String backupRestoreApkgTargetMissing(String path);
+
+  /// No description provided for @backupRestoreApkgDatabaseCorrupt.
+  ///
+  /// In en, this message translates to:
+  /// **'The Anki collection database is damaged.'**
+  String get backupRestoreApkgDatabaseCorrupt;
+
+  /// **'Could not access the local Anki file: {path}'**
+  String backupRestoreApkgLocalFileFailure(String path);
+
+  /// No description provided for @backupRestoreApkgUnexpectedError.
+  ///
+  /// In en, this message translates to:
+  /// **'The .apkg operation failed while accessing this path: {path}'**
+  String backupRestoreApkgUnexpectedError(String path);
+
+  /// No description provided for @backupRestoreApkgOperationFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'The .apkg operation failed because the file or database could not be read.'**
+  String get backupRestoreApkgOperationFailed;
+
+  /// No description provided for @backupRestoreApkgExportFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'The Anki deck could not be packaged from this database: {path}'**
+  String backupRestoreApkgExportFailed(String path);
+
+  /// No description provided for @ankiWebSyncUnsupportedPlatform.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in to AnkiWeb to sync on web. Open Anki settings with the cloud icon to log in.'**
+  String ankiSyncStatusServerAuthRejected(int statusCode);
+  String ankiSyncStatusServerEndpointNotFound(int statusCode);
+  String get ankiSyncStatusMediaProtocolFailed;
+  String get ankiSyncStatusMediaIndexCorrupt;
+  String get ankiSyncStatusMediaIndexFailure;
+  String get ankiSyncStatusMediaChecksumMismatch;
+  String ankiSyncStatusMediaFilenameConflict(String filename);
+  String ankiSyncStatusMediaInvalidFilename(String filename);
+  String ankiSyncStatusMediaFileSizeLimit(int limitMb);
+  String ankiSyncStatusMediaBatchLimitExceeded(int count, int limit);
+  String get ankiSyncStatusMediaSanityCheckFailed;
+
+  String get ankiWebSyncUnsupportedPlatform;
+
+  /// No description provided for @ankiWebDecksUnsupportedPlatform.
+  ///
+  /// In en, this message translates to:
+  /// **'To browse or manage decks on web, sign in to AnkiWeb using the cloud icon.'**
+  String get ankiWebDecksUnsupportedPlatform;
+
+  /// No description provided for @ankiStatsUnsupportedPlatform.
+  ///
+  /// In en, this message translates to:
+  /// **'Anki statistics are unavailable on this platform.'**
+  String get ankiStatsUnsupportedPlatform;
+
+  /// No description provided for @ankiSyncStatusDeviceClockMismatch.
+  ///
+  /// In en, this message translates to:
+  /// **'The device clock differs from the sync server by more than 5 minutes. Correct the clock and try again.'**
+  String get ankiSyncStatusDeviceClockMismatch;
+
+  /// No description provided for @ankiSyncStatusFullDownloadRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'The sync sanity check failed and local changes were rolled back. Download the server collection in full, then try again.'**
+  String get ankiSyncStatusFullDownloadRequired;
+
+  /// No description provided for @ankiSyncStatusFullTransferRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'This collection cannot be synchronized incrementally. Choose a full upload or download to continue.'**
+  String get ankiSyncStatusFullTransferRequired;
+
+  /// No description provided for @ankiSyncStatusIncrementalSyncFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Incremental sync could not complete. Check the server and connection, then try again.'**
+  String get ankiSyncStatusIncrementalSyncFailed;
+
+  /// No description provided for @ankiSyncStatusProtocolFailed.
+  String get ankiSyncStatusProtocolFailed;
+
+  /// No description provided for @ankiSyncStatusLoginRequired.
+  String get ankiSyncStatusLoginRequired;
+
+  /// No description provided for @ankiSyncStatusInvalidServerUrl.
+  String get ankiSyncStatusInvalidServerUrl;
+
+  /// No description provided for @ankiSyncStatusHttpsRequired.
+  String get ankiSyncStatusHttpsRequired;
+
+  /// No description provided for @ankiSyncStatusConnectionTimeout.
+  String get ankiSyncStatusConnectionTimeout;
+
+  /// No description provided for @ankiSyncStatusTlsFailure.
+  String get ankiSyncStatusTlsFailure;
+
+  /// No description provided for @ankiSyncStatusConnectionFailure.
+  String get ankiSyncStatusConnectionFailure;
+
+  /// No description provided for @ankiSyncStatusRequestFailure.
+  String get ankiSyncStatusRequestFailure;
+
+  /// No description provided for @ankiSyncStatusServerHttpError.
+  String ankiSyncStatusServerHttpError(int statusCode);
+
+  /// No description provided for @ankiSyncStatusResponseTooLarge.
+  String ankiSyncStatusResponseTooLarge(int limitMb);
+
+  /// No description provided for @ankiSyncStatusLocalFileFailure.
+  String get ankiSyncStatusLocalFileFailure;
+
+  /// No description provided for @ankiSyncStatusCollectionInvalid.
+  String get ankiSyncStatusCollectionInvalid;
 
   String get batchDlgFileName;
   String get batchDlgFolderName;
@@ -18385,6 +18663,254 @@ abstract class AppLocalizations {
   String batchDlgTemplateMissingDate(String date);
   String get batchDlgCreatedDate;
   String get batchDlgModifiedDate;
+
+  /// No description provided for @toolResultWebSearchEmptyQuery.
+  ///
+  /// In en, this message translates to:
+  /// **'Error: The search query cannot be empty.'**
+  String get toolResultWebSearchEmptyQuery;
+
+  /// No description provided for @toolResultWebSearchInvalidSource.
+  ///
+  /// In en, this message translates to:
+  /// **'Error: Unsupported search engine \"{source}\". Supported values: google, bing, baidu.'**
+  String toolResultWebSearchInvalidSource(Object source);
+
+  /// No description provided for @toolResultWebSearchFallback.
+  ///
+  /// In en, this message translates to:
+  /// **'The preferred engine {preferred} {reason}; switched to {fallback}.'**
+  String toolResultWebSearchFallback(
+    Object preferred,
+    Object reason,
+    Object fallback,
+  );
+
+  /// No description provided for @toolResultWebSearchNotFound.
+  ///
+  /// In en, this message translates to:
+  /// **'No relevant search results were found.'**
+  String get toolResultWebSearchNotFound;
+
+  /// No description provided for @toolResultWebSearchNotFoundFrom.
+  ///
+  /// In en, this message translates to:
+  /// **'No relevant search results were found ({sources} explicitly returned no results).'**
+  String toolResultWebSearchNotFoundFrom(Object sources);
+
+  /// No description provided for @toolResultWebSearchIncomplete.
+  ///
+  /// In en, this message translates to:
+  /// **'Search incomplete: {sources} explicitly returned no results; other engines were unavailable or returned pages that could not be parsed: {failures}'**
+  String toolResultWebSearchIncomplete(Object sources, Object failures);
+
+  /// No description provided for @toolResultWebSearchUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Error: All search engines are unavailable. {failures}'**
+  String toolResultWebSearchUnavailable(Object failures);
+
+  /// No description provided for @toolResultWebSearchResultsHeader.
+  ///
+  /// In en, this message translates to:
+  /// **'Search results from {source}:'**
+  String toolResultWebSearchResultsHeader(Object source);
+
+  /// No description provided for @toolResultWebSearchLinkLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Link'**
+  String get toolResultWebSearchLinkLabel;
+
+  /// No description provided for @toolResultWebSearchSummaryLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Summary'**
+  String get toolResultWebSearchSummaryLabel;
+
+  /// No description provided for @toolResultWebSearchEmptyResults.
+  ///
+  /// In en, this message translates to:
+  /// **'No relevant search results were found.'**
+  String get toolResultWebSearchEmptyResults;
+
+  /// No description provided for @toolResultTodoInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Error: The todos parameter must be an array (omit it or pass null to read the todo list).'**
+  String get toolResultTodoInvalid;
+
+  /// No description provided for @toolResultTodoEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'There are no todo items yet.'**
+  String get toolResultTodoEmpty;
+
+  /// No description provided for @toolResultTodoCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} active todos'**
+  String toolResultTodoCount(Object count);
+
+  /// No description provided for @toolResultMcpReconnectFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Error: Could not reconnect to MCP server \"{server}\".'**
+  String toolResultMcpReconnectFailed(Object server);
+
+  /// No description provided for @toolResultMcpUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Error: MCP server \"{server}\" is currently unavailable.'**
+  String toolResultMcpUnavailable(Object server);
+
+  /// No description provided for @toolResultMcpNoTools.
+  ///
+  /// In en, this message translates to:
+  /// **'Error: MCP server \"{server}\" failed to connect or returned no tools. Check the server configuration.'**
+  String toolResultMcpNoTools(Object server);
+
+  /// No description provided for @toolResultMcpAliasedName.
+  ///
+  /// In en, this message translates to:
+  /// **'Real tool \"{tool}\" is published under the call name \"{alias}\" on this server.'**
+  String toolResultMcpAliasedName(Object tool, Object alias);
+
+  /// No description provided for @toolResultMcpDuplicateNames.
+  ///
+  /// In en, this message translates to:
+  /// **'Tool \"{tool}\" is provided by multiple MCP servers; use the matching call name: {routes}.'**
+  String toolResultMcpDuplicateNames(Object tool, Object routes);
+
+  /// No description provided for @toolResultMcpAliasedConflict.
+  ///
+  /// In en, this message translates to:
+  /// **'Error: Real tool \"{tool}\" has a name conflict. Use one of the call names listed above.'**
+  String toolResultMcpAliasedConflict(Object tool);
+
+  /// No description provided for @toolResultMcpMissingTool.
+  ///
+  /// In en, this message translates to:
+  /// **'Error: MCP server \"{server}\" has no tool named \"{tool}\".'**
+  String toolResultMcpMissingTool(Object server, Object tool);
+
+  /// No description provided for @toolResultMcpAvailableTools.
+  ///
+  /// In en, this message translates to:
+  /// **'Tools available on this server: {tools}. Use these names instead.'**
+  String toolResultMcpAvailableTools(Object tools);
+
+  /// No description provided for @toolResultMcpAliasConflict.
+  ///
+  /// In en, this message translates to:
+  /// **'Error: MCP tool \"{tool}\" currently has a conflicting alias. Use the matching call name: {routes}.'**
+  String toolResultMcpAliasConflict(Object tool, Object routes);
+
+  /// No description provided for @toolResultToolDisabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Error: Tool \"{tool}\" is disabled.'**
+  String toolResultToolDisabled(Object tool);
+
+  /// No description provided for @toolResultToolUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'Error: Unknown tool \"{tool}\"'**
+  String toolResultToolUnknown(Object tool);
+
+  /// No description provided for @toolResultWebSearchFallbackNoResults.
+  ///
+  /// In en, this message translates to:
+  /// **'returned no results'**
+  String get toolResultWebSearchFallbackNoResults;
+
+  /// No description provided for @toolResultWebSearchFallbackUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'is temporarily unavailable'**
+  String get toolResultWebSearchFallbackUnavailable;
+
+  /// No description provided for @toolResultMcpServerRoute.
+  ///
+  /// In en, this message translates to:
+  /// **'(MCP server {server})'**
+  String toolResultMcpServerRoute(Object server);
+
+  /// No description provided for @toolResultWebSearchUnparsedResults.
+  ///
+  /// In en, this message translates to:
+  /// **'returned a page that could not be parsed'**
+  String get toolResultWebSearchUnparsedResults;
+
+  /// No description provided for @toolResultSearchTitleLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Title'**
+  String get toolResultSearchTitleLabel;
+
+  /// No description provided for @toolResultSearchContentLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Content'**
+  String get toolResultSearchContentLabel;
+
+  /// No description provided for @toolResultHttpApiKeyMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'Error: {provider} API key is not configured. Configure it in settings.'**
+  String toolResultHttpApiKeyMissing(Object provider);
+
+  /// No description provided for @toolResultHttpUrlMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'Error: {provider} instance URL is not configured. Configure it in settings.'**
+  String toolResultHttpUrlMissing(Object provider);
+
+  /// No description provided for @toolResultHttpRequestFailedStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Error: {provider} request failed (HTTP {statusCode})'**
+  String toolResultHttpRequestFailedStatus(Object provider, Object statusCode);
+
+  /// No description provided for @toolResultHttpRequestFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Error: {provider} request failed: {detail}'**
+  String toolResultHttpRequestFailed(Object provider, Object detail);
+
+  /// No description provided for @toolResultHttpUnknownTool.
+  ///
+  /// In en, this message translates to:
+  /// **'Error: Unknown HTTP tool \"{provider}\"'**
+  String toolResultHttpUnknownTool(Object provider);
+
+  /// No description provided for @toolResultMcpNotConnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Error: MCP server "{server}" is not connected.'**
+  String toolResultMcpNotConnected(Object server);
+
+  /// No description provided for @toolResultMcpNoResponse.
+  ///
+  /// In en, this message translates to:
+  /// **'Error: No response from MCP tool "{tool}".'**
+  String toolResultMcpNoResponse(Object tool);
+
+  /// No description provided for @toolResultMcpCallFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Error: {detail}'**
+  String toolResultMcpCallFailed(Object detail);
+
+  String get emojiCategorySmileys;
+  String get emojiCategoryPeople;
+  String get emojiCategoryAnimals;
+  String get emojiCategoryFood;
+  String get emojiCategoryActivities;
+  String get emojiCategoryTravel;
+  String get emojiCategoryObjects;
+  String get emojiCategorySymbols;
+  String get emojiCategoryFlags;
 }
 
 class _AppLocalizationsDelegate

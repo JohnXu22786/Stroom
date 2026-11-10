@@ -11,7 +11,7 @@ import 'package:flutter/foundation.dart'
         visibleForTesting;
 import 'package:flutter/widgets.dart' show Locale;
 import 'package:tray_manager/legacy.dart';
-import 'package:window_manager/window_manager.dart';
+import 'package:window_manager/legacy.dart';
 
 import 'app_log_service.dart';
 import 'background_service.dart' as background_service;
@@ -52,6 +52,54 @@ class _LegacyDesktopTrayAdapter implements DesktopTrayAdapter {
   @override
   void removeListener(TrayListener listener) =>
       trayManager.removeListener(listener);
+}
+
+/// Operations the desktop service needs from the legacy window API.
+/// Keeping this boundary injectable lets tests avoid native FFI calls.
+@visibleForTesting
+abstract interface class DesktopWindowManagerAdapter {
+  Future<void> ensureInitialized();
+  Future<void> setPreventClose(bool isPreventClose);
+  Future<void> close();
+  Future<void> hide();
+  Future<void> show();
+  Future<void> focus();
+  Future<void> destroy();
+  void addListener(WindowListener listener);
+  void removeListener(WindowListener listener);
+}
+
+class _LegacyDesktopWindowManagerAdapter
+    implements DesktopWindowManagerAdapter {
+  @override
+  Future<void> ensureInitialized() => windowManager.ensureInitialized();
+
+  @override
+  Future<void> setPreventClose(bool isPreventClose) =>
+      windowManager.setPreventClose(isPreventClose);
+
+  @override
+  Future<void> close() => windowManager.close();
+
+  @override
+  Future<void> hide() => windowManager.hide();
+
+  @override
+  Future<void> show() => windowManager.show();
+
+  @override
+  Future<void> focus() => windowManager.focus();
+
+  @override
+  Future<void> destroy() => windowManager.destroy();
+
+  @override
+  void addListener(WindowListener listener) =>
+      windowManager.addListener(listener);
+
+  @override
+  void removeListener(WindowListener listener) =>
+      windowManager.removeListener(listener);
 }
 
 // ====================================================================
@@ -107,6 +155,8 @@ class DesktopAppService extends WindowListener with TrayListener {
   bool _quitRequested = false;
   Menu? _menu;
   DesktopTrayAdapter _trayAdapter = _LegacyDesktopTrayAdapter();
+  DesktopWindowManagerAdapter _windowManagerAdapter =
+      _LegacyDesktopWindowManagerAdapter();
   Locale? _localeOverride;
   String? _effectiveLocaleName;
   int _localeGeneration = 0;
@@ -141,6 +191,13 @@ class DesktopAppService extends WindowListener with TrayListener {
     _trayAdapter = adapter;
   }
 
+  /// Replaces native window calls in tests to avoid loading platform FFI code.
+  @visibleForTesting
+  void setWindowManagerAdapterForTesting(DesktopWindowManagerAdapter adapter) {
+    _windowManagerAdapter.removeListener(this);
+    _windowManagerAdapter = adapter;
+  }
+
   /// 托盘是否已成功注册（用于 UI 展示真实状态）。
   bool get isTrayReady => _trayReady.value;
 
@@ -157,9 +214,10 @@ class DesktopAppService extends WindowListener with TrayListener {
   /// 测试用：重置单例内部状态，避免用例之间相互污染。
   @visibleForTesting
   void resetForTesting() {
-    windowManager.removeListener(this);
+    _windowManagerAdapter.removeListener(this);
     _trayAdapter.removeListener(this);
     _trayAdapter = _LegacyDesktopTrayAdapter();
+    _windowManagerAdapter = _LegacyDesktopWindowManagerAdapter();
     _initialized = false;
     _windowCloseListenerRegistered = false;
     _pendingCloseBeforeTrayReady = false;
@@ -180,7 +238,7 @@ class DesktopAppService extends WindowListener with TrayListener {
   Future<void> initialize() async {
     if (!isDesktopPlatform || _initialized) return;
     try {
-      await windowManager.ensureInitialized();
+      await _windowManagerAdapter.ensureInitialized();
       _initialized = true;
       await _armWindowCloseInterception();
       debugPrint('[DesktopAppService] Window manager initialized');
@@ -259,11 +317,13 @@ class DesktopAppService extends WindowListener with TrayListener {
         // 同样受超时保护：回滚路径绝不能再次被插件挂起阻塞。
         var closeInterceptionCleared = false;
         try {
-          await windowManager.setPreventClose(false).timeout(_trayTimeout);
+          await _windowManagerAdapter
+              .setPreventClose(false)
+              .timeout(_trayTimeout);
           closeInterceptionCleared = true;
         } catch (_) {}
         if (closeInterceptionCleared) {
-          windowManager.removeListener(this);
+          _windowManagerAdapter.removeListener(this);
           _windowCloseListenerRegistered = false;
         } else {
           // Keep the only close listener active and use the no-tray exit
@@ -276,7 +336,7 @@ class DesktopAppService extends WindowListener with TrayListener {
           if (closeInterceptionCleared) {
             // The original native close was intercepted and consumed. Replay
             // it now that interception is disabled so the first click is honored.
-            await windowManager.close().timeout(_trayTimeout);
+            await _windowManagerAdapter.close().timeout(_trayTimeout);
           } else {
             // Native close may still be intercepted, so honor the pending
             // request through the close-to-quit confirmation path.
@@ -317,9 +377,9 @@ class DesktopAppService extends WindowListener with TrayListener {
       final localeGeneration = _localeGeneration;
       final strings = appLocalizationsForLocale(_localeOverride);
       try {
-        await _trayAdapter.setToolTip(strings.desktopTrayTooltip).timeout(
-              _trayTimeout,
-            );
+        await _trayAdapter
+            .setToolTip(strings.desktopTrayTooltip)
+            .timeout(_trayTimeout);
       } catch (e) {
         debugPrint('[DesktopAppService] setToolTip unsupported: $e');
       }
@@ -339,10 +399,14 @@ class DesktopAppService extends WindowListener with TrayListener {
 
   Future<void> _armWindowCloseInterception() async {
     if (_windowCloseListenerRegistered) return;
-    await windowManager.setPreventClose(true);
-    windowManager.addListener(this);
+    await _windowManagerAdapter.setPreventClose(true);
+    _windowManagerAdapter.addListener(this);
     _windowCloseListenerRegistered = true;
   }
+
+  /// Reasserts the native close guard after the tray becomes ready.
+  Future<void> ensureWindowCloseInterception() =>
+      _windowManagerAdapter.setPreventClose(true);
 
   /// 用户点击窗口关闭按钮：按用户设置最小化到托盘，或确认后退出。
   ///
@@ -462,9 +526,9 @@ class DesktopAppService extends WindowListener with TrayListener {
 
   Future<void> _hideWindow() async {
     try {
-      // 超时保护：window_manager 通道卡死（Linux/DBus 挂起）时，
+      // 超时保护：原生窗口调用卡死（Linux/DBus 挂起）时，
       // 关闭事件不能永远停在隐藏步骤。
-      await windowManager.hide().timeout(_trayTimeout);
+      await _windowManagerAdapter.hide().timeout(_trayTimeout);
     } catch (e) {
       debugPrint('[DesktopAppService] Failed to hide window: $e');
     }
@@ -475,8 +539,8 @@ class DesktopAppService extends WindowListener with TrayListener {
     try {
       // 超时保护：show/focus 卡死时不能把退出确认流程永久挂起
       // （_confirmInProgress 会一直锁死，后续退出全部变成 no-op）。
-      await windowManager.show().timeout(_trayTimeout);
-      await windowManager.focus().timeout(_trayTimeout);
+      await _windowManagerAdapter.show().timeout(_trayTimeout);
+      await _windowManagerAdapter.focus().timeout(_trayTimeout);
     } catch (e) {
       debugPrint('[DesktopAppService] Failed to show window: $e');
     }
@@ -498,7 +562,7 @@ class DesktopAppService extends WindowListener with TrayListener {
       debugPrint('[DesktopAppService] Failed to destroy tray: $e');
     }
     try {
-      await windowManager.destroy().timeout(_trayTimeout);
+      await _windowManagerAdapter.destroy().timeout(_trayTimeout);
     } catch (e) {
       debugPrint('[DesktopAppService] Failed to destroy window: $e');
     }

@@ -41,6 +41,9 @@ PNG_PRE_IDAT_CHUNKS = {
     b"tRNS",
 }
 OUTPUT_FORMATS = {"plain_text", "markdown", "table", "latex"}
+# Keep accepted settings nesting well below Python's recursion limit so validation
+# reports malformed input instead of exhausting the interpreter stack.
+MAX_SAFE_SETTINGS_DEPTH = 64
 LITERAL_LATEX_DOLLAR = "\ue000"
 LATEX_GREEK_COMMANDS = {
     "Gamma": "Γ",
@@ -252,6 +255,29 @@ def _validated_fixtures(manifest: dict[str, Any]) -> list[dict[str, Any]]:
                 raise EvaluationError(
                     f"{fixture_id}: {field} must occur in gold_text"
                 )
+        if "table_text" in fixture:
+            table_column_counts = None
+            for line in fixture["table_text"].splitlines():
+                stripped = line.strip()
+                if "|" not in stripped:
+                    continue
+                raw_cells = _split_pipe_cells(stripped)
+                possible_counts = {len(raw_cells)}
+                if stripped.startswith("|"):
+                    possible_counts = {len(raw_cells) - 1}
+                    if _has_unescaped_trailing_pipe(stripped):
+                        possible_counts = {len(raw_cells) - 2}
+                elif _has_unescaped_trailing_pipe(stripped):
+                    possible_counts.add(len(raw_cells) - 1)
+                if len(raw_cells) > 1:
+                    if table_column_counts is None:
+                        table_column_counts = possible_counts
+                    else:
+                        table_column_counts &= possible_counts
+            if table_column_counts == set():
+                raise EvaluationError(
+                    f"{fixture_id}: table_text rows must have consistent columns"
+                )
     return fixtures
 
 
@@ -337,7 +363,13 @@ def _contains_credential_like_value(value: str) -> bool:
     )
 
 
-def _validate_safe_settings(value: Any, path: str = "settings") -> None:
+def _validate_safe_settings(
+    value: Any, path: str = "settings", depth: int = 0
+) -> None:
+    if isinstance(value, (dict, list)) and depth > MAX_SAFE_SETTINGS_DEPTH:
+        raise EvaluationError(
+            f"settings exceeds maximum nesting depth of {MAX_SAFE_SETTINGS_DEPTH}"
+        )
     if isinstance(value, dict):
         for key, child in value.items():
             if not isinstance(key, str):
@@ -346,10 +378,10 @@ def _validate_safe_settings(value: Any, path: str = "settings") -> None:
                 raise EvaluationError(
                     f"{path} contains a credential-like field name"
                 )
-            _validate_safe_settings(child, f"{path}.{key}")
+            _validate_safe_settings(child, f"{path}.{key}", depth + 1)
     elif isinstance(value, list):
         for index, child in enumerate(value):
-            _validate_safe_settings(child, f"{path}[{index}]")
+            _validate_safe_settings(child, f"{path}[{index}]", depth + 1)
     elif isinstance(value, str) and _contains_credential_like_value(value):
         raise EvaluationError(f"{path} contains a credential-like value")
     elif value is not None and not isinstance(value, (str, int, float, bool)):
@@ -1820,7 +1852,12 @@ def _exact_snippet_metric(
                 gold_text=fixture.get("gold_text"),
             )
         else:
-            expected = _canonical_formula(fixture[field], output_format)
+            expected_text = fixture[field]
+            if output_format in {"markdown", "table"}:
+                emphasis = re.fullmatch(r"(\*\*|__)(.+?)\1", expected_text)
+                if emphasis:
+                    expected_text = emphasis.group(2)
+            expected = _canonical_formula(expected_text, output_format)
             actual = _normalized_formula_text(
                 text,
                 output_format,
@@ -2287,9 +2324,12 @@ def _validate_png(image_bytes: bytes, fixture_id: str) -> None:
             if chunk_type in (b"cHRM", b"gAMA", b"sRGB") and palette_seen:
                 raise invalid()
             if chunk_type == b"cHRM":
-                if chunk_length != 32 or any(
-                    value > 100000
-                    for (value,) in struct.iter_unpack(">I", chunk_data)
+                if chunk_length != 32:
+                    raise invalid()
+                chromaticities = struct.unpack(">IIIIIIII", chunk_data)
+                if any(value > 100000 for value in chromaticities) or any(
+                    x + y > 100000
+                    for x, y in zip(chromaticities[::2], chromaticities[1::2])
                 ):
                     raise invalid()
             if chunk_type == b"gAMA" and (
@@ -2451,7 +2491,12 @@ def verify_fixtures(
         digest = fixture.get("sha256")
         if not isinstance(image, str) or not isinstance(digest, str):
             raise EvaluationError(f"{fixture_id}: image and sha256 are required")
-        image_path = (root / image).resolve()
+        try:
+            image_path = (root / image).resolve()
+        except (OSError, RuntimeError) as error:
+            raise EvaluationError(
+                f"{fixture_id}: cannot resolve image path {image}: {error}"
+            ) from error
         if not image_path.is_relative_to(root):
             raise EvaluationError(f"{fixture_id}: image path escapes fixture root")
         _reject_output_input_collision(
@@ -2484,6 +2529,10 @@ def verify_fixtures(
 def _read_json(path: Path) -> dict[str, Any]:
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
+    except RecursionError as error:
+        raise EvaluationError(
+            f"cannot read {path}: JSON nesting exceeds parser limit"
+        ) from error
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise EvaluationError(f"cannot read {path}: {error}") from error
     if not isinstance(value, dict):
@@ -2581,7 +2630,15 @@ def main(argv: list[str] | None = None) -> int:
             except OSError as error:
                 raise EvaluationError(f"cannot write {args.output}: {error}") from error
         else:
-            print(output)
+            encoding = getattr(sys.stdout, "encoding", None)
+            if encoding and encoding.lower().replace("_", "-") != "utf-8":
+                stdout_buffer = getattr(sys.stdout, "buffer", None)
+            else:
+                stdout_buffer = None
+            if stdout_buffer is not None:
+                stdout_buffer.write((output + "\n").encode("utf-8"))
+            else:
+                print(output)
         return 0
     except EvaluationError as error:
         print(f"evaluation error: {error}", file=sys.stderr)

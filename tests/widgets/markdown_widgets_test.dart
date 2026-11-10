@@ -33,6 +33,7 @@ List<m.Node> _parseLikeMarkdownGenerator(String text) {
     extensionSet: m.ExtensionSet.gitHubFlavored,
     encodeHtml: false,
     inlineSyntaxes: [LatexSyntax(), BrSyntax(), USyntax()],
+    blockSyntaxes: [DisplayMathBlockSyntax()],
   );
   return doc.parse(text);
 }
@@ -107,6 +108,98 @@ void main() {
   // ===========================================================================
   // 1. markdown_extensions_test.dart
   // ===========================================================================
+  group('DisplayMathBlockSyntax - cross-line display math', () {
+    test('keeps list-looking formula lines inside a display math block', () {
+      const input = r'''Before
+
+$$
+\text{地面有效辐射}
+- \text{地面吸收的大气逆辐射}
+$$
+
+After''';
+      final nodes = _parseLikeMarkdownGenerator(input);
+      final latex = _findElement(nodes, 'latex');
+
+      expect(latex, isNotNull);
+      expect(latex!.attributes['content'],
+          r'\text{地面有效辐射}' '\n' r'- \text{地面吸收的大气逆辐射}');
+      expect(latex.attributes['isInline'], 'false');
+      expect(_findElement(nodes, 'ul'), isNull);
+
+      final streamingNodes = _parseLikeMarkdownGenerator(r'$$' '\n- x');
+      final openMath = _findElement(streamingNodes, 'latex');
+      expect(openMath, isNotNull);
+      expect(openMath!.attributes['content'], isNull);
+      expect(_findElement(streamingNodes, 'ul'), isNull);
+
+      final codeNodes = _parseLikeMarkdownGenerator(r'''    $$
+    x
+    $$''');
+      expect(_findElement(codeNodes, 'latex'), isNull);
+      expect(_findElement(codeNodes, 'pre'), isNotNull);
+
+      final fencedCodeNodes = _parseLikeMarkdownGenerator(r'''$$
+x
+```
+$$
+```''');
+      expect(_findElement(fencedCodeNodes, 'latex'), isNull);
+      expect(_findElement(fencedCodeNodes, 'pre'), isNotNull);
+
+      final tabClosedFenceNodes = _parseLikeMarkdownGenerator(
+        r'$$'
+        '\nx\n```\n'
+        r'$$'
+        '\n```\t\n'
+        r'$$',
+      );
+      final tabClosedFenceMath = _findElement(tabClosedFenceNodes, 'latex');
+      expect(tabClosedFenceMath, isNotNull);
+      expect(
+        tabClosedFenceMath!.attributes['content'],
+        'x\n```\n'
+        r'$$'
+        '\n```\t',
+      );
+    });
+  });
+
+  group('MarkdownGenerator.buildPlainTextPreview - Markdown constructs', () {
+    test('renders display math and bold in the bounded streaming preview', () {
+      final widgets = markdownGenerator.buildPlainTextPreview(
+        [
+          r'''$$
+\text{地面有效辐射}
+- \text{地面吸收的大气逆辐射}
+$$
+
+**不一定。** and **也可能是**''',
+        ],
+      );
+      final spans = [
+        for (final widget in widgets)
+          if (widget is Padding && widget.child is Text)
+            (widget.child as Text).textSpan!,
+      ];
+      TextSpan? findSpan(String text) {
+        for (final span in spans) {
+          final found = _leafSpanWithText(span, text);
+          if (found != null) return found;
+        }
+        return null;
+      }
+
+      expect(findSpan('不一定。')?.style?.fontWeight, FontWeight.bold);
+      expect(findSpan('也可能是')?.style?.fontWeight, FontWeight.bold);
+      expect(_widgetsFromInlineSpans(widgets), isNotEmpty);
+      final renderedText = spans.map((span) => span.toPlainText()).join();
+      expect(renderedText, isNot(contains('**')));
+      expect(renderedText, isNot(contains(r'$$')));
+      expect(renderedText, isNot(contains(r'\text')));
+    });
+  });
+
   group('LatexSyntax - inline math \$...\$', () {
     test('parses simple inline math', () {
       final regex = RegExp(LatexSyntax.latexPattern);

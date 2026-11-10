@@ -302,6 +302,7 @@ class CategorizedEmojiPicker extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final l10n = AppLocalizations.of(context)!;
     final categories = EmojiCategories.categories;
 
     return Center(
@@ -324,7 +325,7 @@ class CategorizedEmojiPicker extends StatelessWidget {
                     tabs: categories.map((cat) {
                       return Tab(
                         child: Text(
-                          cat.label,
+                          _emojiCategoryLabel(l10n, cat.type),
                           style: const TextStyle(fontSize: 12),
                         ),
                       );
@@ -379,3 +380,16 @@ class CategorizedEmojiPicker extends StatelessWidget {
     );
   }
 }
+
+String _emojiCategoryLabel(AppLocalizations l10n, EmojiCategoryType category) =>
+    switch (category) {
+      EmojiCategoryType.smileys => l10n.emojiCategorySmileys,
+      EmojiCategoryType.people => l10n.emojiCategoryPeople,
+      EmojiCategoryType.animals => l10n.emojiCategoryAnimals,
+      EmojiCategoryType.food => l10n.emojiCategoryFood,
+      EmojiCategoryType.activities => l10n.emojiCategoryActivities,
+      EmojiCategoryType.travel => l10n.emojiCategoryTravel,
+      EmojiCategoryType.objects => l10n.emojiCategoryObjects,
+      EmojiCategoryType.symbols => l10n.emojiCategorySymbols,
+      EmojiCategoryType.flags => l10n.emojiCategoryFlags,
+    };

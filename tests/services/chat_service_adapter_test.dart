@@ -9,7 +9,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/models/assistant.dart';
 import 'package:stroom/models/mcp.dart';
 import 'package:stroom/models/tool_call.dart';
-import 'package:stroom/providers/locale_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/services/chat_adapter.dart';
 import 'package:stroom/services/chat_service.dart';
@@ -817,8 +816,9 @@ void main() {
       );
       final result = await HttpToolService.handleBraveSearch(
         {'query': 'test'},
+        locale: const Locale('en', 'US'),
       );
-      expect(result, contains('Brave Search API Key 未配置'));
+      expect(result, contains('Brave Search API key is not configured'));
     });
 
     test(

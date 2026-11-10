@@ -174,6 +174,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
         ? config.models[0].typeConfig
         : config.typeConfig;
     final isHttpTool = typeConfig['isHttpTool'] == true;
+    final localizations = AppLocalizations.of(context)!;
     await showDialog<void>(
       context: context,
       builder: (_) => ConnectivityTestDialog(
@@ -182,12 +183,14 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
           config,
           isHttpTool: isHttpTool,
         ),
-        note: AppLocalizations.of(context)!.providerTestSafetyNote,
+        note: localizations.providerTestSafetyNote,
         onSave: (content) =>
             _saveProviderConnectivityTest(configIndex, content),
         onRun: (content) => ConnectivityTestService.runProviderTest(
           config: config,
           testContent: content,
+          localizations: localizations,
+          locale: Localizations.localeOf(context),
         ),
       ),
     );
@@ -232,12 +235,13 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
       definition.name,
     );
     if (!mounted) return;
+    final localizations = AppLocalizations.of(context)!;
     await showDialog<void>(
       context: context,
       builder: (_) => ConnectivityTestDialog(
         title: definition.name,
         initialContent: initialContent,
-        note: AppLocalizations.of(context)!.providerTestSafetyNote,
+        note: localizations.providerTestSafetyNote,
         onSave: (content) => ConnectivityTestService.saveBuiltinTestContent(
           definition.name,
           content,
@@ -245,6 +249,8 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
         onRun: (content) => ConnectivityTestService.runBuiltinTest(
           toolName: definition.name,
           testContent: content,
+          localizations: localizations,
+          locale: Localizations.localeOf(context),
         ),
       ),
     );

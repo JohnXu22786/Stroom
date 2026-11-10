@@ -379,7 +379,11 @@
   "topicSelectionEditAssistant": "Edit assistant",
   "topicSelectionReorderHint": "Long-press and drag to reorder conversations",
   "@conversationDeleteNamed": {
-    "placeholders": {"title": {"type": "String"}}
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
   },
   "conversationDeleteNamed": "Delete conversation “{title}”? This cannot be undone.",
   "conversationDeleteTitle": "Delete conversation",
@@ -513,9 +517,15 @@
   "@homeMediaDurationHoursMinutesSeconds": {
     "description": "Media duration with hours, minutes, and seconds",
     "placeholders": {
-      "hours": {"type": "int"},
-      "minutes": {"type": "int"},
-      "seconds": {"type": "int"}
+      "hours": {
+        "type": "int"
+      },
+      "minutes": {
+        "type": "int"
+      },
+      "seconds": {
+        "type": "int"
+      }
     }
   },
   "mediaDuration": "Duration: {value}",
@@ -1047,30 +1057,78 @@
   "browserRecoveryContinue": "Continue flow",
   "catcatchSkipped": "Skipped (nothing to process)",
   "catCatchDetailMediaResources": "Found {count} media resources",
-  "@catCatchDetailMediaResources": { "placeholders": { "count": {} } },
+  "@catCatchDetailMediaResources": {
+    "placeholders": {
+      "count": {}
+    }
+  },
   "catCatchDetailResources": "Found {count} resources",
-  "@catCatchDetailResources": { "placeholders": { "count": {} } },
+  "@catCatchDetailResources": {
+    "placeholders": {
+      "count": {}
+    }
+  },
   "catCatchDetailBrowserResources": "Browser found {count} resources",
-  "@catCatchDetailBrowserResources": { "placeholders": { "count": {} } },
+  "@catCatchDetailBrowserResources": {
+    "placeholders": {
+      "count": {}
+    }
+  },
   "catCatchDetailPlaylistResources": "Found {total} resources ({segments} playlist segments)",
-  "@catCatchDetailPlaylistResources": { "placeholders": { "total": {}, "segments": {} } },
+  "@catCatchDetailPlaylistResources": {
+    "placeholders": {
+      "total": {},
+      "segments": {}
+    }
+  },
   "catCatchDetailChooseResource": "{count} resources found. Choose one.",
-  "@catCatchDetailChooseResource": { "placeholders": { "count": {} } },
+  "@catCatchDetailChooseResource": {
+    "placeholders": {
+      "count": {}
+    }
+  },
   "catCatchDetailAutoSelectFirst": "Automatically selected result 1 and started downloading",
   "catCatchDetailAutoSelectRemaining": "1 result remains; started downloading automatically",
   "catCatchDetailSkipFormat": "Conversion skipped for .{extension}; this format needs no conversion",
-  "@catCatchDetailSkipFormat": { "placeholders": { "extension": {} } },
+  "@catCatchDetailSkipFormat": {
+    "placeholders": {
+      "extension": {}
+    }
+  },
   "catCatchDetailSkipNoExtension": "Conversion skipped; this format needs no conversion",
   "catCatchDetailDurationFiltered": "After filtering for {duration}, {remaining} results remain ({removed} unmatched resources excluded)",
-  "@catCatchDetailDurationFiltered": { "placeholders": { "duration": {}, "remaining": {}, "removed": {} } },
+  "@catCatchDetailDurationFiltered": {
+    "placeholders": {
+      "duration": {},
+      "remaining": {},
+      "removed": {}
+    }
+  },
   "catCatchDetailDurationAllMatch": "All {count} resources match the {duration} duration filter",
-  "@catCatchDetailDurationAllMatch": { "placeholders": { "count": {}, "duration": {} } },
+  "@catCatchDetailDurationAllMatch": {
+    "placeholders": {
+      "count": {},
+      "duration": {}
+    }
+  },
   "catCatchDurationHours": "{count}h",
-  "@catCatchDurationHours": { "placeholders": { "count": {} } },
+  "@catCatchDurationHours": {
+    "placeholders": {
+      "count": {}
+    }
+  },
   "catCatchDurationMinutes": "{count}m",
-  "@catCatchDurationMinutes": { "placeholders": { "count": {} } },
+  "@catCatchDurationMinutes": {
+    "placeholders": {
+      "count": {}
+    }
+  },
   "catCatchDurationSeconds": "{count}s",
-  "@catCatchDurationSeconds": { "placeholders": { "count": {} } },
+  "@catCatchDurationSeconds": {
+    "placeholders": {
+      "count": {}
+    }
+  },
   "catcatchRetryStep": "Retry this step",
   "catcatchCollapseSegments": "Hide {count} segments",
   "catcatchShowSegments": "Show {count} segments",
@@ -3531,6 +3589,25 @@
   "@paramTypeJsonLabel": {
     "placeholders": {}
   },
+  "ocrConfigUnsupportedParamType": "Unsupported type: {type}",
+  "@ocrConfigUnsupportedParamType": {
+    "placeholders": {
+      "type": {
+        "type": "String"
+      }
+    }
+  },
+  "ocrConfigUnsupportedParamSaveError": "Parameter “{name}” uses unsupported type “{type}”. Replace it with a supported type or remove the parameter before saving.",
+  "@ocrConfigUnsupportedParamSaveError": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "type": {
+        "type": "String"
+      }
+    }
+  },
   "paramTypeStringHint": "e.g. cheerful",
   "@paramTypeStringHint": {
     "placeholders": {}
@@ -4556,17 +4633,23 @@
   },
   "@backupServiceExportSavedTo": {
     "placeholders": {
-      "location": { "type": "String" }
+      "location": {
+        "type": "String"
+      }
     }
   },
   "@backupServiceExportFailed": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "@backupServiceRestoreFailed": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "@backupRestoreSkippedCategories": {
@@ -5478,14 +5561,20 @@
   "ocrResultPageHeading": "Image {index}",
   "@ocrResultPageHeading": {
     "placeholders": {
-      "index": { "type": "String" }
+      "index": {
+        "type": "String"
+      }
     }
   },
   "ocrResultPageHeadingWithName": "Image {index}: {name}",
   "@ocrResultPageHeadingWithName": {
     "placeholders": {
-      "index": { "type": "String" },
-      "name": { "type": "String" }
+      "index": {
+        "type": "String"
+      },
+      "name": {
+        "type": "String"
+      }
     }
   },
   "ocrPartialResultSuffix": " (partial result)",
@@ -5773,22 +5862,32 @@
   "sseConnectionFailedWithStatus": "SSE connection failed (HTTP {statusCode}: {statusText})",
   "@sseConnectionFailedWithStatus": {
     "placeholders": {
-      "statusCode": {"type": "int"},
-      "statusText": {"type": "String"}
+      "statusCode": {
+        "type": "int"
+      },
+      "statusText": {
+        "type": "String"
+      }
     }
   },
   "sseConnectionFailedWithoutStatusText": "SSE connection failed (HTTP {statusCode})",
   "@sseConnectionFailedWithoutStatusText": {
     "placeholders": {
-      "statusCode": {"type": "int"}
+      "statusCode": {
+        "type": "int"
+      }
     }
   },
   "sseConnectionUnavailable": "SSE connection failed: unable to connect to server",
   "sseHttpRequestFailed": "HTTP request failed (HTTP {statusCode}: {statusText})",
   "@sseHttpRequestFailed": {
     "placeholders": {
-      "statusCode": {"type": "int"},
-      "statusText": {"type": "String"}
+      "statusCode": {
+        "type": "int"
+      },
+      "statusText": {
+        "type": "String"
+      }
     }
   },
   "sseRequestFailed": "Request failed",
@@ -5796,14 +5895,20 @@
   "sseNetworkRequestFailedWithStatus": "Network request failed (HTTP {statusCode}: {statusText})",
   "@sseNetworkRequestFailedWithStatus": {
     "placeholders": {
-      "statusCode": {"type": "int"},
-      "statusText": {"type": "String"}
+      "statusCode": {
+        "type": "int"
+      },
+      "statusText": {
+        "type": "String"
+      }
     }
   },
   "sseNetworkRequestFailedWithoutStatusText": "Network request failed (HTTP {statusCode})",
   "@sseNetworkRequestFailedWithoutStatusText": {
     "placeholders": {
-      "statusCode": {"type": "int"}
+      "statusCode": {
+        "type": "int"
+      }
     }
   },
   "sseNetworkConnectionUnavailable": "Network request failed: unable to connect to server",
@@ -5817,20 +5922,26 @@
   "startupSafetyNewerDataVersion": "This data was created by a newer version of the app ({version}).\n\nThis app version cannot safely read the data. Install the latest version to continue. Your data has not been changed.",
   "@startupSafetyNewerDataVersion": {
     "placeholders": {
-        "version": {"type": "String"}
+      "version": {
+        "type": "String"
+      }
     }
   },
   "startupSafetyStatusUnreadable": "The data safety status could not be confirmed (the status marker could not be read or was invalid).\n\nTo avoid overwriting a possible frozen state, startup has been blocked without repairing data or migrating formats. First export your data file, then exit the app, repair the status marker, and try again.",
   "startupSafetyMigrationFailedNoChanges": "Data format migration failed ({part}).\n\nTo protect your data, no changes were made. Return to the previous app version, or wait for a fixed version before upgrading.",
   "@startupSafetyMigrationFailedNoChanges": {
     "placeholders": {
-        "part": {"type": "String"}
+      "part": {
+        "type": "String"
+      }
     }
   },
   "startupSafetyMigrationFailedRestored": "Data format migration failed ({part}).\n\nYour data was restored to its pre-migration state. To protect it, return to the previous app version, or wait for a fixed version before upgrading.",
   "@startupSafetyMigrationFailedRestored": {
     "placeholders": {
-        "part": {"type": "String"}
+      "part": {
+        "type": "String"
+      }
     }
   },
   "startupSafetyDataCorrupted": "Data is damaged and could not be repaired automatically.\n\nThe app has been frozen to prevent further damage. Export your data file, then import it manually or reinstall.",
@@ -5839,7 +5950,9 @@
   "startupSafetyCheckFailed": "Startup check failed: {detail}",
   "@startupSafetyCheckFailed": {
     "placeholders": {
-        "detail": {"type": "String"}
+      "detail": {
+        "type": "String"
+      }
     }
   },
   "startupSafetyStatusUnreadableAfterChecks": "The data safety status could not be confirmed after startup checks (the status marker could not be read or was invalid).\n\nStartup has stopped to avoid making further data changes. Export your data file, exit the app, repair the status marker, and try again.",
@@ -5852,21 +5965,27 @@
   "catCatchBadResponse": "The server returned an error (HTTP {statusCode})",
   "@catCatchBadResponse": {
     "placeholders": {
-      "statusCode": {"type": "int"}
+      "statusCode": {
+        "type": "int"
+      }
     }
   },
   "catCatchRequestCancelled": "The request was cancelled.",
   "catCatchNetworkError": "Network error: {message}",
   "@catCatchNetworkError": {
     "placeholders": {
-      "message": {"type": "String"}
+      "message": {
+        "type": "String"
+      }
     }
   },
   "catCatchUnknownError": "Unknown error",
   "catCatchOriginalError": "Original error: {message}",
   "@catCatchOriginalError": {
     "placeholders": {
-      "message": {"type": "String"}
+      "message": {
+        "type": "String"
+      }
     }
   },
   "catCatchWebDownloadHint": "Web browsers cannot download media files directly.",
@@ -6109,7 +6228,8 @@
   "mermaidCatalogActionAddRequirement": "Add requirement",
   "mermaidCatalogActionAddElement": "Add element",
   "mermaidCatalogActionAddVerification": "Add verification",
-  "mermaidCatalogGanttDependencyBaseTask": "Dependency base task",  "mermaidCatalogGanttDependentTaskName": "Follow-up task",
+  "mermaidCatalogGanttDependencyBaseTask": "Dependency base task",
+  "mermaidCatalogGanttDependentTaskName": "Follow-up task",
   "startupMigrationTitle": "Data format upgrade complete",
   "startupMigrationBody": "Your data has been migrated to the new format. Restart the app to use the updated version.",
   "startupMigrationExit": "Exit app",
@@ -6231,11 +6351,18 @@
   "asrFailureStageStorage": "storage",
   "chatMissingProvider": "Please configure a chat provider first",
   "anthropicStreamApiError": "Anthropic API error: {detail}",
-  "@anthropicStreamApiError": { "placeholders": { "detail": {} } },
+  "@anthropicStreamApiError": {
+    "placeholders": {
+      "detail": {}
+    }
+  },
   "anthropicStreamUnknownError": "Unknown error",
   "chatHttpRequestFailed": "API request failed (HTTP {statusCode}): {detail}",
   "@chatHttpRequestFailed": {
-    "placeholders": { "statusCode": {}, "detail": {} }
+    "placeholders": {
+      "statusCode": {},
+      "detail": {}
+    }
   },
   "fileUploadApiKeyMissing": "API key is not configured; file upload is unavailable",
   "fileUploadApiUrlMissing": "API URL is not configured; file upload is unavailable",
@@ -6250,18 +6377,33 @@
   "fileUploadMissingFileId": "File upload failed: response is missing file id",
   "fileUploadRequestFailedStatus": "File upload request failed (HTTP {statusCode}): {detail}",
   "@fileUploadRequestFailedStatus": {
-    "placeholders": { "statusCode": {}, "detail": {} }
+    "placeholders": {
+      "statusCode": {},
+      "detail": {}
+    }
   },
   "fileUploadRequestFailed": "File upload request failed: {detail}",
-  "@fileUploadRequestFailed": { "placeholders": { "detail": {} } },
+  "@fileUploadRequestFailed": {
+    "placeholders": {
+      "detail": {}
+    }
+  },
   "chatApiKeyNotConfigured": "API key is not configured",
   "chatStreamError": "API stream error: {detail}",
-  "@chatStreamError": { "placeholders": { "detail": {} } },
+  "@chatStreamError": {
+    "placeholders": {
+      "detail": {}
+    }
+  },
   "chatChoicesMissing": "API response has no choices",
   "chatContentBlocksMissing": "API response has no content blocks",
   "chatResponseContentEmpty": "API response content is empty",
   "chatRequestFailed": "Request failed: {detail}",
-  "@chatRequestFailed": { "placeholders": { "detail": {} } },
+  "@chatRequestFailed": {
+    "placeholders": {
+      "detail": {}
+    }
+  },
   "startupTagline": "Your learning assistant",
   "startupProgressDataSafety": "Checking data safety...",
   "startupProgressFormatVersion": "Checking data format version...",
@@ -6269,40 +6411,103 @@
   "startupProgressDataIntegrity": "Checking data integrity...",
   "startupProgressResults": "Processing check results...",
   "startupProgressCompleteWithWarnings": "Startup complete (note: {warning})",
-  "@startupProgressCompleteWithWarnings": { "placeholders": { "warning": {} } },
+  "@startupProgressCompleteWithWarnings": {
+    "placeholders": {
+      "warning": {}
+    }
+  },
   "startupProgressCompleteAfterMigration": "Data checks complete. Preparing to start the app.",
   "startupProgressReady": "Preparing to start the app.",
   "startupWarningErrorCount": "Found {count} data issue(s):",
-  "@startupWarningErrorCount": { "placeholders": { "count": {} } },
+  "@startupWarningErrorCount": {
+    "placeholders": {
+      "count": {}
+    }
+  },
   "startupWarningWarningCount": "{count} warning(s):",
-  "@startupWarningWarningCount": { "placeholders": { "count": {} } },
+  "@startupWarningWarningCount": {
+    "placeholders": {
+      "count": {}
+    }
+  },
   "startupIssueProviderEntriesInvalid": "Provider entries have an invalid format: expected a JSON array.",
   "startupIssueProviderEntryInvalid": "Provider entry {index} is null or has an invalid type.",
-  "@startupIssueProviderEntryInvalid": { "placeholders": { "index": {} } },
+  "@startupIssueProviderEntryInvalid": {
+    "placeholders": {
+      "index": {}
+    }
+  },
   "startupIssueProviderIdMissing": "Provider entry {index} is missing an ID or has an empty ID.",
-  "@startupIssueProviderIdMissing": { "placeholders": { "index": {} } },
+  "@startupIssueProviderIdMissing": {
+    "placeholders": {
+      "index": {}
+    }
+  },
   "startupIssueProviderTypeMissing": "Provider entry {index} is missing a type or has an empty type.",
-  "@startupIssueProviderTypeMissing": { "placeholders": { "index": {} } },
+  "@startupIssueProviderTypeMissing": {
+    "placeholders": {
+      "index": {}
+    }
+  },
   "startupIssueProviderNameMissing": "Provider entry {index} is missing a name or has an empty name.",
-  "@startupIssueProviderNameMissing": { "placeholders": { "index": {} } },
+  "@startupIssueProviderNameMissing": {
+    "placeholders": {
+      "index": {}
+    }
+  },
   "startupIssueProviderListInvalid": "Provider entry {index} field {field} is not a valid list.",
-  "@startupIssueProviderListInvalid": { "placeholders": { "index": {}, "field": {} } },
+  "@startupIssueProviderListInvalid": {
+    "placeholders": {
+      "index": {},
+      "field": {}
+    }
+  },
   "startupIssueProviderNestedItemInvalid": "Provider entry {index}, {field} contains an invalid item that may cause a parsing failure.",
-  "@startupIssueProviderNestedItemInvalid": { "placeholders": { "index": {}, "field": {} } },
+  "@startupIssueProviderNestedItemInvalid": {
+    "placeholders": {
+      "index": {},
+      "field": {}
+    }
+  },
   "startupIssueConversationsInvalid": "Conversations have an invalid format: expected a JSON array.",
   "startupIssueConversationInvalid": "Conversation {index} is null or has an invalid type.",
-  "@startupIssueConversationInvalid": { "placeholders": { "index": {} } },
+  "@startupIssueConversationInvalid": {
+    "placeholders": {
+      "index": {}
+    }
+  },
   "startupIssueConversationIdMissing": "Conversation {index} is missing an ID.",
-  "@startupIssueConversationIdMissing": { "placeholders": { "index": {} } },
+  "@startupIssueConversationIdMissing": {
+    "placeholders": {
+      "index": {}
+    }
+  },
   "startupIssueConversationMessagesMissing": "Conversation {index} is missing its messages field.",
-  "@startupIssueConversationMessagesMissing": { "placeholders": { "index": {} } },
+  "@startupIssueConversationMessagesMissing": {
+    "placeholders": {
+      "index": {}
+    }
+  },
   "startupIssueConversationMessagesInvalid": "Conversation {index} messages field is not a valid list.",
-  "@startupIssueConversationMessagesInvalid": { "placeholders": { "index": {} } },
+  "@startupIssueConversationMessagesInvalid": {
+    "placeholders": {
+      "index": {}
+    }
+  },
   "startupIssueUnknownProviderType": "Provider entry {index} uses unknown provider type \"{type}\" and may not work correctly.",
-  "@startupIssueUnknownProviderType": { "placeholders": { "index": {}, "type": {} } },
+  "@startupIssueUnknownProviderType": {
+    "placeholders": {
+      "index": {},
+      "type": {}
+    }
+  },
   "startupErrorTitle": "App startup failed",
   "startupErrorDetails": "Error: {error}",
-  "@startupErrorDetails": {"placeholders": {"error": {}}},
+  "@startupErrorDetails": {
+    "placeholders": {
+      "error": {}
+    }
+  },
   "renderErrorTitle": "Interface rendering error",
   "renderErrorDebugTitle": "Interface rendering error (Debug mode)",
   "renderErrorRestartMessage": "Please try restarting the app.",
@@ -6314,20 +6519,486 @@
   "batchDlgControlCharacterError": "Name cannot contain control characters",
   "batchDlgNameWhitespaceError": "Name cannot begin or end with whitespace; use the whitespace cleanup rule",
   "batchDlgNameEmpty": "{kind} cannot be empty",
-  "@batchDlgNameEmpty": {"placeholders":{"kind":{"type":"String"}}},
+  "@batchDlgNameEmpty": {
+    "placeholders": {
+      "kind": {
+        "type": "String"
+      }
+    }
+  },
   "batchDlgNameTrailingWhitespace": "{kind} cannot end with whitespace",
-  "@batchDlgNameTrailingWhitespace": {"placeholders":{"kind":{"type":"String"}}},
+  "@batchDlgNameTrailingWhitespace": {
+    "placeholders": {
+      "kind": {
+        "type": "String"
+      }
+    }
+  },
   "batchDlgNameTooLong": "{kind} cannot exceed {count} characters",
-  "@batchDlgNameTooLong": {"placeholders":{"kind":{"type":"String"},"count":{"type":"String"}}},
+  "@batchDlgNameTooLong": {
+    "placeholders": {
+      "kind": {
+        "type": "String"
+      },
+      "count": {
+        "type": "String"
+      }
+    }
+  },
   "batchDlgNameIllegalCharacters": "{kind} cannot contain Windows-invalid characters",
-  "@batchDlgNameIllegalCharacters": {"placeholders":{"kind":{"type":"String"}}},
+  "@batchDlgNameIllegalCharacters": {
+    "placeholders": {
+      "kind": {
+        "type": "String"
+      }
+    }
+  },
   "batchDlgNameTrailingDot": "{kind} cannot end with a period",
-  "@batchDlgNameTrailingDot": {"placeholders":{"kind":{"type":"String"}}},
+  "@batchDlgNameTrailingDot": {
+    "placeholders": {
+      "kind": {
+        "type": "String"
+      }
+    }
+  },
   "batchDlgNameReserved": "{kind} cannot use a reserved Windows name",
-  "@batchDlgNameReserved": {"placeholders":{"kind":{"type":"String"}}},
+  "@batchDlgNameReserved": {
+    "placeholders": {
+      "kind": {
+        "type": "String"
+      }
+    }
+  },
   "batchDlgIntermediateNameTooLong": "An intermediate name is too long; adjust the rules",
   "batchDlgTemplateMissingDate": "This item has no {date} date; adjust the template",
-  "@batchDlgTemplateMissingDate": {"placeholders":{"date":{"type":"String"}}},
+  "@batchDlgTemplateMissingDate": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
   "batchDlgCreatedDate": "creation",
-  "batchDlgModifiedDate": "modification"
+  "batchDlgModifiedDate": "modification",
+  "connectivityTestHttpSuccess": "HTTP tool request succeeded",
+  "connectivityTestHttpFailure": "HTTP tool request failed",
+  "connectivityTestInvalidMcpConfig": "Invalid MCP configuration",
+  "connectivityTestMissingTransport": "A valid transport type configuration is missing.",
+  "connectivityTestStdioUnsupported": "stdio is not supported on this platform",
+  "connectivityTestStdioDesktopOnly": "stdio MCP requires starting a local process. Test it in the Stroom desktop app.",
+  "connectivityTestInvalidContent": "Invalid test content",
+  "connectivityTestMethodMustBeString": "method must be a string.",
+  "connectivityTestUnsupportedMethod": "Unsupported test method",
+  "connectivityTestReadOnlyMethodOnly": "To avoid writing remote business data, MCP connectivity tests only allow the read-only tools/list method.",
+  "connectivityTestParamsMustBeObject": "params must be a JSON object.",
+  "connectivityTestMcpConnectionFailed": "Could not connect to the MCP service",
+  "connectivityTestCheckConnectionSettings": "Check the address, authentication, and network, or view the app log for connection details.",
+  "connectivityTestRemainingToolsOmitted": "; remaining tools omitted",
+  "connectivityTestMcpSuccess": "MCP connectivity test succeeded",
+  "connectivityTestToolNames": ": {names}",
+  "connectivityTestMcpSuccessDetails": "Connection and tools/list request succeeded; found {count} tools{names}{suffix}.",
+  "connectivityTestTodoMutationBlocked": "Test parameters would modify todo data",
+  "connectivityTestTodoReadOnly": "To protect the current session todo list, omit todos or set it to null in connectivity tests.",
+  "connectivityTestUnknownBuiltin": "Unknown built-in tool",
+  "connectivityTestBuiltinExecutorMissing": "No test executor found for tool \"{toolName}\".",
+  "connectivityTestBuiltinSuccess": "Built-in tool test succeeded",
+  "connectivityTestBuiltinFailure": "Built-in tool test failed",
+  "connectivityTestTopLevelObjectRequired": "Test content must be a top-level JSON object.",
+  "connectivityTestRequestTimeout": "Request timed out. Check the service response and network.",
+  "connectivityTestMcpRequestTimeout": "MCP request timed out: {method}",
+  "connectivityTestResultTruncated": "… (result truncated)",
+  "@connectivityTestMcpSuccessDetails": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "names": {
+        "type": "String"
+      },
+      "suffix": {
+        "type": "String"
+      }
+    }
+  },
+  "@connectivityTestBuiltinExecutorMissing": {
+    "placeholders": {
+      "toolName": {
+        "type": "String"
+      }
+    }
+  },
+  "@connectivityTestMcpRequestTimeout": {
+    "placeholders": {
+      "method": {
+        "type": "String"
+      }
+    }
+  },
+  "toolResultWebSearchEmptyQuery": "Error: The search query cannot be empty.",
+  "toolResultWebSearchInvalidSource": "Error: Unsupported search engine \"{source}\". Supported values: google, bing, baidu.",
+  "toolResultWebSearchFallback": "The preferred engine {preferred} {reason}; switched to {fallback}.",
+  "toolResultWebSearchNotFound": "No relevant search results were found.",
+  "toolResultWebSearchNotFoundFrom": "No relevant search results were found ({sources} explicitly returned no results).",
+  "toolResultWebSearchIncomplete": "Search incomplete: {sources} explicitly returned no results; other engines were unavailable or returned pages that could not be parsed: {failures}",
+  "toolResultWebSearchUnavailable": "Error: All search engines are unavailable. {failures}",
+  "toolResultWebSearchResultsHeader": "Search results from {source}:",
+  "toolResultWebSearchLinkLabel": "Link",
+  "toolResultWebSearchSummaryLabel": "Summary",
+  "toolResultWebSearchEmptyResults": "No relevant search results were found.",
+  "toolResultTodoInvalid": "Error: The todos parameter must be an array (omit it or pass null to read the todo list).",
+  "toolResultTodoEmpty": "There are no todo items yet.",
+  "toolResultTodoCount": "Active todo items: {count}",
+  "toolResultMcpReconnectFailed": "Error: Could not reconnect to MCP server \"{server}\".",
+  "toolResultMcpUnavailable": "Error: MCP server \"{server}\" is currently unavailable.",
+  "toolResultMcpNoTools": "Error: MCP server \"{server}\" failed to connect or returned no tools. Check the server configuration.",
+  "toolResultMcpAliasedName": "Real tool \"{tool}\" is published under the call name \"{alias}\" on this server.",
+  "toolResultMcpDuplicateNames": "Tool \"{tool}\" is provided by multiple MCP servers; use the matching call name: {routes}.",
+  "toolResultMcpAliasedConflict": "Error: Real tool \"{tool}\" has a name conflict. Use one of the call names listed above.",
+  "toolResultMcpMissingTool": "Error: MCP server \"{server}\" has no tool named \"{tool}\".",
+  "toolResultMcpAvailableTools": "Tools available on this server: {tools}. Use these names instead.",
+  "toolResultMcpAliasConflict": "Error: MCP tool \"{tool}\" currently has a conflicting alias. Use the matching call name: {routes}.",
+  "toolResultToolDisabled": "Error: Tool \"{tool}\" is disabled.",
+  "toolResultToolUnknown": "Error: Unknown tool \"{tool}\"",
+  "@toolResultWebSearchInvalidSource": {
+    "placeholders": {
+      "source": {}
+    }
+  },
+  "@toolResultWebSearchFallback": {
+    "placeholders": {
+      "preferred": {},
+      "reason": {},
+      "fallback": {}
+    }
+  },
+  "@toolResultWebSearchNotFoundFrom": {
+    "placeholders": {
+      "sources": {}
+    }
+  },
+  "@toolResultWebSearchIncomplete": {
+    "placeholders": {
+      "sources": {},
+      "failures": {}
+    }
+  },
+  "@toolResultWebSearchUnavailable": {
+    "placeholders": {
+      "failures": {}
+    }
+  },
+  "@toolResultWebSearchResultsHeader": {
+    "placeholders": {
+      "source": {}
+    }
+  },
+  "@toolResultTodoCount": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "@toolResultMcpReconnectFailed": {
+    "placeholders": {
+      "server": {}
+    }
+  },
+  "@toolResultMcpUnavailable": {
+    "placeholders": {
+      "server": {}
+    }
+  },
+  "@toolResultMcpNoTools": {
+    "placeholders": {
+      "server": {}
+    }
+  },
+  "@toolResultMcpAliasedName": {
+    "placeholders": {
+      "tool": {},
+      "alias": {}
+    }
+  },
+  "@toolResultMcpDuplicateNames": {
+    "placeholders": {
+      "tool": {},
+      "routes": {}
+    }
+  },
+  "@toolResultMcpAliasedConflict": {
+    "placeholders": {
+      "tool": {}
+    }
+  },
+  "@toolResultMcpMissingTool": {
+    "placeholders": {
+      "server": {},
+      "tool": {}
+    }
+  },
+  "@toolResultMcpAvailableTools": {
+    "placeholders": {
+      "tools": {}
+    }
+  },
+  "@toolResultMcpAliasConflict": {
+    "placeholders": {
+      "tool": {},
+      "routes": {}
+    }
+  },
+  "@toolResultToolDisabled": {
+    "placeholders": {
+      "tool": {}
+    }
+  },
+  "@toolResultToolUnknown": {
+    "placeholders": {
+      "tool": {}
+    }
+  },
+  "toolResultWebSearchFallbackNoResults": "returned no results",
+  "toolResultWebSearchFallbackUnavailable": "is temporarily unavailable",
+  "toolResultMcpServerRoute": "(MCP server {server})",
+  "@toolResultMcpServerRoute": {
+    "placeholders": {
+      "server": {}
+    }
+  },
+  "toolResultWebSearchUnparsedResults": "returned a page that could not be parsed",
+  "toolResultSearchTitleLabel": "Title",
+  "toolResultSearchContentLabel": "Content",
+  "toolResultHttpApiKeyMissing": "Error: {provider} API key is not configured. Configure it in settings.",
+  "toolResultHttpUrlMissing": "Error: {provider} instance URL is not configured. Configure it in settings.",
+  "toolResultHttpRequestFailedStatus": "Error: {provider} request failed (HTTP {statusCode})",
+  "toolResultHttpRequestFailed": "Error: {provider} request failed: {detail}",
+  "toolResultHttpUnknownTool": "Error: Unknown HTTP tool \"{provider}\"",
+  "@toolResultHttpApiKeyMissing": {
+    "placeholders": {
+      "provider": {}
+    }
+  },
+  "@toolResultHttpUrlMissing": {
+    "placeholders": {
+      "provider": {}
+    }
+  },
+  "@toolResultHttpRequestFailedStatus": {
+    "placeholders": {
+      "provider": {},
+      "statusCode": {}
+    }
+  },
+  "@toolResultHttpRequestFailed": {
+    "placeholders": {
+      "provider": {},
+      "detail": {}
+    }
+  },
+  "@toolResultHttpUnknownTool": {
+    "placeholders": {
+      "provider": {}
+    }
+  },
+  "toolResultMcpNotConnected": "Error: MCP server \"{server}\" is not connected.",
+  "toolResultMcpNoResponse": "Error: No response from MCP tool \"{tool}\".",
+  "toolResultMcpCallFailed": "Error: {detail}",
+  "@toolResultMcpNotConnected": {
+    "placeholders": {
+      "server": {}
+    }
+  },
+  "@toolResultMcpNoResponse": {
+    "placeholders": {
+      "tool": {}
+    }
+  },
+  "@toolResultMcpCallFailed": {
+    "placeholders": {
+      "detail": {}
+    }
+  },
+  "httpToolBraveDescription": "Search the web with the Brave Search API. Requires an API key.",
+  "@httpToolBraveDescription": {
+    "placeholders": {}
+  },
+  "httpToolBochaDescription": "Search the web with the Bocha AI Search API. Requires an API key.",
+  "@httpToolBochaDescription": {
+    "placeholders": {}
+  },
+  "httpToolQueritDescription": "Search the web with Querit Search. Requires an API key.",
+  "@httpToolQueritDescription": {
+    "placeholders": {}
+  },
+  "httpToolSearxngDescription": "A privacy-focused, self-hosted metasearch engine that aggregates search sources. Requires an instance URL.",
+  "@httpToolSearxngDescription": {
+    "placeholders": {}
+  },
+  "httpToolSearchQueryDescription": "Search terms.",
+  "@httpToolSearchQueryDescription": {
+    "placeholders": {}
+  },
+  "httpToolSearchCountDescription": "Number of results to return.",
+  "@httpToolSearchCountDescription": {
+    "placeholders": {}
+  },
+  "httpToolSearchCountMax20Description": "Number of results to return (maximum 20).",
+  "@httpToolSearchCountMax20Description": {
+    "placeholders": {}
+  },
+  "backupRestoreApkgImportSummary": "Imported {decks} decks, {notes} notes, and {cards} cards",
+  "@backupRestoreApkgImportSummary": {
+    "placeholders": {
+      "decks": {
+        "type": "int"
+      },
+      "notes": {
+        "type": "int"
+      },
+      "cards": {
+        "type": "int"
+      }
+    }
+  },
+  "backupRestoreApkgFileNotFound": "The selected .apkg file could not be found: {path}",
+  "backupRestoreApkgInvalidArchive": "The selected .apkg file is damaged or is not a valid archive.",
+  "@backupRestoreApkgFileNotFound": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "backupRestoreApkgCollectionMissing": "The .apkg file does not contain collection.anki2.",
+  "backupRestoreApkgTargetMissing": "Open Anki flashcards before importing or exporting a deck: {path}",
+  "@backupRestoreApkgTargetMissing": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "backupRestoreApkgDatabaseCorrupt": "The Anki collection database is damaged.",
+  "backupRestoreApkgLocalFileFailure": "Could not access the local Anki file: {path}",
+  "@backupRestoreApkgLocalFileFailure": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "backupRestoreApkgUnexpectedError": "The .apkg operation failed while accessing this path: {path}",
+  "@backupRestoreApkgUnexpectedError": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "backupRestoreApkgOperationFailed": "The .apkg operation failed because the file or database could not be read.",
+  "backupRestoreApkgExportFailed": "The Anki deck could not be packaged from this database: {path}",
+  "@backupRestoreApkgExportFailed": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "ankiSyncStatusProtocolFailed": "The sync server response is invalid or incomplete. Check that the server supports Anki sync v10.",
+  "ankiSyncStatusLoginRequired": "Log in to Anki sync before continuing.",
+  "ankiSyncStatusInvalidServerUrl": "Enter a valid HTTP or HTTPS sync server address.",
+  "ankiSyncStatusHttpsRequired": "Remote self-hosted sync servers must use HTTPS.",
+  "ankiSyncStatusConnectionTimeout": "The sync request timed out. Check the server address and network, then retry.",
+  "ankiSyncStatusTlsFailure": "The server certificate could not be verified. Check the certificate or configure a custom CA.",
+  "ankiSyncStatusConnectionFailure": "Could not connect to the sync server. Check the address and network.",
+  "ankiSyncStatusRequestFailure": "The sync request failed. Check the server and network, then retry.",
+  "ankiSyncStatusServerHttpError": "The sync server returned HTTP {statusCode}.",
+  "@ankiSyncStatusServerHttpError": {
+    "placeholders": {
+      "statusCode": {
+        "type": "int"
+      }
+    }
+  },
+  "ankiSyncStatusResponseTooLarge": "The sync response exceeded the {limitMb} MB limit.",
+  "@ankiSyncStatusResponseTooLarge": {
+    "placeholders": {
+      "limitMb": {
+        "type": "int"
+      }
+    }
+  },
+  "ankiSyncStatusLocalFileFailure": "A local sync file could not be read or cleaned up. Check disk access and retry.",
+  "ankiSyncStatusCollectionInvalid": "The collection could not be opened, updated, or passed SQLite/schema validation. Restore a valid collection or download it again.",
+  "ankiSyncStatusServerAuthRejected": "The sync server rejected the request (HTTP {statusCode}). Check the login credentials and server permissions.",
+  "@ankiSyncStatusServerAuthRejected": {
+    "placeholders": {
+      "statusCode": {
+        "type": "int"
+      }
+    }
+  },
+  "ankiSyncStatusServerEndpointNotFound": "The sync endpoint could not be found (HTTP {statusCode}). Check the server address.",
+  "@ankiSyncStatusServerEndpointNotFound": {
+    "placeholders": {
+      "statusCode": {
+        "type": "int"
+      }
+    }
+  },
+  "ankiSyncStatusMediaProtocolFailed": "The media sync server returned an invalid response. Check that it supports Anki media sync and try again.",
+  "ankiSyncStatusMediaIndexCorrupt": "The local media sync index is corrupted. Reset media sync data and try again.",
+  "ankiSyncStatusMediaIndexFailure": "The local media sync index could not be read or updated.",
+  "ankiSyncStatusMediaChecksumMismatch": "A downloaded media file failed checksum validation. Retry media sync.",
+  "ankiSyncStatusMediaFilenameConflict": "The media file “{filename}” has conflicting local and server changes. Back it up and resolve the name conflict before retrying.",
+  "@ankiSyncStatusMediaFilenameConflict": {
+    "placeholders": {
+      "filename": {
+        "type": "String"
+      }
+    }
+  },
+  "ankiSyncStatusMediaInvalidFilename": "The media filename “{filename}” cannot be synchronized. Rename it to a valid Anki filename and retry.",
+  "@ankiSyncStatusMediaInvalidFilename": {
+    "placeholders": {
+      "filename": {
+        "type": "String"
+      }
+    }
+  },
+  "ankiSyncStatusMediaFileSizeLimit": "A media file is empty or exceeds the {limitMb} MB limit.",
+  "@ankiSyncStatusMediaFileSizeLimit": {
+    "placeholders": {
+      "limitMb": {
+        "type": "int"
+      }
+    }
+  },
+  "ankiSyncStatusMediaBatchLimitExceeded": "The media archive contains {count} entries; the maximum is {limit} including its manifest.",
+  "@ankiSyncStatusMediaBatchLimitExceeded": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "limit": {
+        "type": "int"
+      }
+    }
+  },
+  "ankiSyncStatusMediaSanityCheckFailed": "Media sync verification failed. Retry the sync.",
+  "ankiWebSyncUnsupportedPlatform": "Sign in to AnkiWeb to sync on web. Open Anki settings with the cloud icon to log in.",
+  "ankiWebDecksUnsupportedPlatform": "To browse or manage decks on web, sign in to AnkiWeb using the cloud icon.",
+  "ankiStatsUnsupportedPlatform": "Anki statistics are unavailable on this platform.",
+  "ankiSyncStatusDeviceClockMismatch": "The device clock differs from the sync server by more than 5 minutes. Correct the clock and try again.",
+  "ankiSyncStatusFullDownloadRequired": "The sync sanity check failed and local changes were rolled back. Download the server collection in full, then try again.",
+  "ankiSyncStatusFullTransferRequired": "This collection cannot be synchronized incrementally. Choose a full upload or download to continue.",
+  "ankiSyncStatusIncrementalSyncFailed": "Incremental sync could not complete. Check the server and connection, then try again.",
+  "emojiCategorySmileys": "Smileys",
+  "emojiCategoryPeople": "People",
+  "emojiCategoryAnimals": "Animals",
+  "emojiCategoryFood": "Food",
+  "emojiCategoryActivities": "Activities",
+  "emojiCategoryTravel": "Travel",
+  "emojiCategoryObjects": "Objects",
+  "emojiCategorySymbols": "Symbols",
+  "emojiCategoryFlags": "Flags"
 }
