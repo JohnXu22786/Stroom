@@ -1843,7 +1843,12 @@ def _exact_snippet_metric(
                 gold_text=fixture.get("gold_text"),
             )
         else:
-            expected = _canonical_formula(fixture[field], output_format)
+            expected_text = fixture[field]
+            if output_format in {"markdown", "table"}:
+                emphasis = re.fullmatch(r"(\*\*|__)(.+?)\1", expected_text)
+                if emphasis:
+                    expected_text = emphasis.group(2)
+            expected = _canonical_formula(expected_text, output_format)
             actual = _normalized_formula_text(
                 text,
                 output_format,
