@@ -56,6 +56,15 @@ void main() {
         ),
         contains('A[開始]'),
       );
+      final japaneseClassDiagram = MermaidTemplates.getTemplate(
+        'classDiagram',
+        strings: AppLocalizationsJa(),
+      );
+      expect(japaneseClassDiagram, contains('class Person'));
+      expect(japaneseClassDiagram, contains('+String 名前'));
+      expect(japaneseClassDiagram, contains('+int 年齢'));
+      expect(japaneseClassDiagram, contains('+String 学生ID'));
+      expect(japaneseClassDiagram, contains('+String 教師ID'));
     });
 
     test(
