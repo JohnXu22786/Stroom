@@ -25,7 +25,13 @@ test('Web worker migrates legacy video rows into an existing video list', () => 
   const input = {
     audio_records: [
       {id: 'audio-1', name: 'voice', format: 'mp3'},
-      {id: 'legacy-video', name: 'clip', format: 'mp4'},
+      {
+        id: 'legacy-video',
+        name: 'clip',
+        format: 'mp4',
+        createdAt: '2025-01-01T03:04:05.000Z',
+        modifiedAt: '2025-01-02T03:04:05.000Z',
+      },
     ],
     video_records: [
       {id: 'existing-video', name: 'existing', format: 'mov'},
@@ -48,5 +54,6 @@ test('Web worker migrates legacy video rows into an existing video list', () => 
     migrated.video_records.map((record) => record.id),
     ['existing-video', 'legacy-video'],
   );
+  assert.equal(migrated.video_records[1].modifiedAt, '2025-01-02T03:04:05.000Z');
   assert.deepEqual(migrated.audio_records.map((record) => record.id), ['audio-1']);
 });

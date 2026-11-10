@@ -143,6 +143,7 @@ function migrateWebManifestData(
           hash: record.hash,
           format: record.format,
           createdAt: record.createdAt,
+          modifiedAt: record.modifiedAt,
           size: record.size,
           folder: record.folder,
           duration: record.duration,

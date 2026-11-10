@@ -131,14 +131,20 @@ void main() {
   test(
     'JSON video migration moves legacy rows into an existing video list',
     () async {
-      SharedPreferences.setMockInitialValues({});
+      SharedPreferences.setMockInitialValues({'migrated_video_records': true});
       ManifestDatabase.enableTestMode();
       await WebFileStore.write(
         'manifest_database_data',
         Uint8List.fromList(utf8.encode(jsonEncode({
           'audio_records': [
             {'id': 'audio-1', 'name': 'voice', 'format': 'mp3'},
-            {'id': 'legacy-video', 'name': 'clip', 'format': 'mp4'},
+            {
+              'id': 'legacy-video',
+              'name': 'clip',
+              'format': 'mp4',
+              'createdAt': '2025-01-01T03:04:05.000Z',
+              'modifiedAt': '2025-01-02T03:04:05.000Z',
+            },
           ],
           'video_records': [
             {'id': 'existing-video', 'name': 'existing', 'format': 'mov'},
@@ -153,6 +159,7 @@ void main() {
         videos.map((record) => record['id']),
         ['existing-video', 'legacy-video'],
       );
+      expect(videos.last['modifiedAt'], '2025-01-02T03:04:05.000Z');
       expect(audios.map((record) => record['id']), ['audio-1']);
     },
   );

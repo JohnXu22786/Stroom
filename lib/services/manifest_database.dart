@@ -355,7 +355,7 @@ class ManifestDatabase {
 
   static Future<void> _migrateOldVideoRecords(Database db) async {
     try {
-      if (await StartupPreferences.getBool('migrated_video_records') == true) {
+      if (await StartupPreferences.getBool('migrated_video_records_v2') == true) {
         return;
       }
       final videoFormats = [
@@ -377,7 +377,7 @@ class ManifestDatabase {
         whereArgs: videoFormats,
       );
       if (rows.isEmpty) {
-        await StartupPreferences.setBool('migrated_video_records', true);
+        await StartupPreferences.setBool('migrated_video_records_v2', true);
         return;
       }
       final batch = db.batch();
@@ -407,7 +407,7 @@ class ManifestDatabase {
         );
       }
       await batch.commit(noResult: true);
-      await StartupPreferences.setBool('migrated_video_records', true);
+      await StartupPreferences.setBool('migrated_video_records_v2', true);
     } catch (error, stackTrace) {
       if (error is StartupPreferencesUnavailable) rethrow;
       Error.throwWithStackTrace(
@@ -419,7 +419,7 @@ class ManifestDatabase {
 
   static Future<void> _migrateOldVideoRecordsJson() async {
     await _withJsonRecordRegistrationLock(() async {
-      if (await StartupPreferences.getBool('migrated_video_records') == true) {
+      if (await StartupPreferences.getBool('migrated_video_records_v2') == true) {
         return;
       }
       final audioList =
@@ -449,7 +449,7 @@ class ManifestDatabase {
         }
       }
       if (toMigrate.isEmpty) {
-        await StartupPreferences.setBool('migrated_video_records', true);
+        await StartupPreferences.setBool('migrated_video_records_v2', true);
         return;
       }
       for (final record in toMigrate) {
@@ -459,6 +459,7 @@ class ManifestDatabase {
           'hash': record['hash'],
           'format': record['format'],
           'createdAt': record['createdAt'],
+          'modifiedAt': record['modifiedAt'],
           'size': record['size'],
           'folder': record['folder'],
           'duration': record['duration'],
@@ -468,7 +469,7 @@ class ManifestDatabase {
       _webData![ManifestTables.audioRecords] = remaining;
       _webData![ManifestTables.videoRecords] = videoList;
       await _saveWebData();
-      await StartupPreferences.setBool('migrated_video_records', true);
+      await StartupPreferences.setBool('migrated_video_records_v2', true);
     });
   }
 
@@ -595,7 +596,7 @@ class ManifestDatabase {
       }
 
       final migrateOldVideos =
-          await StartupPreferences.getBool('migrated_video_records') != true;
+          await StartupPreferences.getBool('migrated_video_records_v2') != true;
       final result = await json_parser.migrateWebManifestData(
         raw,
         folderTables,
@@ -620,7 +621,7 @@ class ManifestDatabase {
           await _writeWebMigrationData(payload);
         }
         if (result['setVideoFlag'] == true) {
-          await StartupPreferences.setBool('migrated_video_records', true);
+          await StartupPreferences.setBool('migrated_video_records_v2', true);
         }
         throw StartupDataValidationUnavailable.migration(
           StateError('${result['error']}'),
@@ -642,7 +643,7 @@ class ManifestDatabase {
         await _writeWebMigrationData(payload);
       }
       if (result['setVideoFlag'] == true) {
-        await StartupPreferences.setBool('migrated_video_records', true);
+        await StartupPreferences.setBool('migrated_video_records_v2', true);
       }
       _webData = null;
       if (result['foldersMigrated'] == true) {
