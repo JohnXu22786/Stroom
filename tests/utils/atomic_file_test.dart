@@ -146,6 +146,36 @@ void main() {
       expect(await file.readAsString(), 'new-content');
     });
 
+    test('failed streamed write preserves destination and cleans its partial',
+        () async {
+      final file = File('${tempDir.path}/restored.bin');
+      await file.writeAsBytes([1, 2, 3]);
+
+      await expectLater(
+        AtomicFile.writeFromSync(file, (output) {
+          output.writeFromSync([9, 8]);
+          throw const FormatException('injected extraction failure');
+        }),
+        throwsFormatException,
+      );
+
+      expect(await file.readAsBytes(), [1, 2, 3]);
+      expect(tempDir.listSync().map((entry) => entry.path), [file.path]);
+    });
+
+    test('successful streamed write replaces destination with all bytes',
+        () async {
+      final file = File('${tempDir.path}/restored.bin');
+      await file.writeAsBytes([1, 2, 3]);
+
+      await AtomicFile.writeFromSync(file, (output) {
+        output.writeFromSync([9, 8, 7, 6]);
+      });
+
+      expect(await file.readAsBytes(), [9, 8, 7, 6]);
+      expect(tempDir.listSync().map((entry) => entry.path), [file.path]);
+    });
+
     test(
       'replacement preserves restrictive permissions on POSIX',
       () async {
