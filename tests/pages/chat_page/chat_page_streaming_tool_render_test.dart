@@ -47,6 +47,7 @@ class _HangingStreamManager extends ChatStreamManager {
     required List<ChatMessage> history,
     List<ChatMessage>? requestHistoryOverride,
     List<ChatMessage>? historyOnSuccess,
+    bool replaceHistoryOnError = false,
     List<ToolDefinition> tools = const [],
     bool reasoning = false,
     String reasoningEffort = 'medium',

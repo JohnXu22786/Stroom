@@ -87,7 +87,13 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
     // Align with the catch clause in startStreaming, which folds the error
     // text into fullReply for ANY thrown object (not just Exception/Error).
     final hadStreamError = streamError != null;
-    if (!wasCancelled && !hadStreamError && state.historyOnSuccess != null) {
+    // Edit/retry flows provide an explicit replacement history. Edits only
+    // replace the old turn on success; retries also replace it on errors so a
+    // failed regeneration appears in place. Ordinary sends provide no
+    // replacement history and retain earlier failed replies.
+    if (!wasCancelled &&
+        state.historyOnSuccess != null &&
+        (!hadStreamError || state.replaceHistoryOnError)) {
       final storedMessagesById = <String, ChatMessage>{};
       for (final storedMessage in state.history) {
         storedMessagesById.putIfAbsent(

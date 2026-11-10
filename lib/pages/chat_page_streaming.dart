@@ -331,6 +331,7 @@ extension _ChatPageStreamingExt on _ChatPageState {
     List<ChatMessage>? historyOverride,
     List<ChatMessage>? requestHistoryOverride,
     List<ChatMessage>? historyOnSuccess,
+    bool replaceHistoryOnError = false,
   }) async {
     final effectiveConvId =
         capturedConvId ?? ref.read(activeConversationIdProvider) ?? '';
@@ -447,6 +448,7 @@ extension _ChatPageStreamingExt on _ChatPageState {
       history: histBefore,
       requestHistoryOverride: requestHistoryOverride,
       historyOnSuccess: historyOnSuccess,
+      replaceHistoryOnError: replaceHistoryOnError,
       tools: filteredTools,
       reasoning: reasoning,
       reasoningEffort: reasoningEffort,
