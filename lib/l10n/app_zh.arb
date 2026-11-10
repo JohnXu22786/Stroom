@@ -3755,6 +3755,10 @@
   "ankiSyncStatusServerAddressChanged": "服务器地址已更改，请重新登录后继续",
   "ankiSyncStatusVerifyingLogin": "正在验证登录…",
   "ankiSyncStatusLoginSuccess": "登录成功。密码未保存，同步密钥已加密保存。",
+  "ankiSyncLoginSuccessPromptTitle": "登录成功",
+  "ankiSyncLoginSuccessPromptMessage": "现在同步收藏集吗？",
+  "ankiSyncLoginSuccessPromptSync": "立即同步",
+  "ankiSyncLoginSuccessPromptLater": "继续使用",
   "ankiSyncStatusLoginSuccessNoSave": "登录成功，但无法安全保存同步密钥；关闭页面后需要重新登录。",
   "ankiSyncStatusLoginFailed": "登录失败：{error}",
   "@ankiSyncStatusLoginFailed": {
