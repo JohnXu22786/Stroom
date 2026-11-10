@@ -452,7 +452,7 @@ class VideoManifest {
 
   static Future<void> writeThumbnail(String hash, Uint8List bytes) async {
     final thumbPath = '${hash}_thumb$_thumbExtension';
-    await writeFile(thumbPath, bytes);
+    await withSaveLock(hash, () => writeFile(thumbPath, bytes));
   }
 
   // Folder management
