@@ -27,10 +27,22 @@ const localeNameCatalog = <String, LocaleNameInfo>{
     nativeName: '简体中文',
     id: 'zh-cn',
   ),
+  'es_ES': LocaleNameInfo(
+    displayName: _spanishName,
+    nativeName: 'Español',
+    id: 'es-es',
+  ),
+  'ja_JP': LocaleNameInfo(
+    displayName: _japaneseName,
+    nativeName: '日本語',
+    id: 'ja-jp',
+  ),
 };
 
 String _englishName(AppLocalizations strings) => strings.languageNameEnglish;
 String _chineseName(AppLocalizations strings) => strings.languageNameChinese;
+String _spanishName(AppLocalizations strings) => strings.languageNameSpanish;
+String _japaneseName(AppLocalizations strings) => strings.languageNameJapanese;
 
 String localeDisplayName(AppLocalizations strings, Locale locale) =>
     localeNameCatalog[localeCodeForCatalog(locale)]?.displayName(strings) ??

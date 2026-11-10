@@ -11166,6 +11166,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get emojiCategoryFlags => '旗帜';
+
+  @override
+  String get languageNameSpanish => '西班牙语';
+
+  @override
+  String get languageNameJapanese => '日语';
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).
@@ -22329,4 +22335,10 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get emojiCategoryFlags => '旗帜';
+
+  @override
+  String get languageNameSpanish => '西班牙语';
+
+  @override
+  String get languageNameJapanese => '日语';
 }

@@ -6,6 +6,8 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:intl/intl.dart' as intl;
 
 import 'app_localizations_en.dart';
+import 'app_localizations_es.dart';
+import 'app_localizations_ja.dart';
 import 'app_localizations_zh.dart';
 
 // ignore_for_file: type=lint
@@ -96,7 +98,11 @@ abstract class AppLocalizations {
   static const List<Locale> supportedLocales = <Locale>[
     Locale('en', 'US'),
     Locale('zh', 'CN'),
+    Locale('es', 'ES'),
+    Locale('ja', 'JP'),
     Locale('en'),
+    Locale('es'),
+    Locale('ja'),
     Locale('zh'),
   ];
 
@@ -19355,6 +19361,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Flags'**
   String get emojiCategoryFlags;
+
+  /// No description provided for @languageNameSpanish.
+  ///
+  /// In en, this message translates to:
+  /// **'Spanish'**
+  String get languageNameSpanish;
+
+  /// No description provided for @languageNameJapanese.
+  ///
+  /// In en, this message translates to:
+  /// **'Japanese'**
+  String get languageNameJapanese;
 }
 
 class _AppLocalizationsDelegate
@@ -19368,7 +19386,7 @@ class _AppLocalizationsDelegate
 
   @override
   bool isSupported(Locale locale) =>
-      <String>['en', 'zh'].contains(locale.languageCode);
+      <String>['en', 'es', 'ja', 'zh'].contains(locale.languageCode);
 
   @override
   bool shouldReload(_AppLocalizationsDelegate old) => false;
@@ -19382,6 +19400,22 @@ AppLocalizations lookupAppLocalizations(Locale locale) {
         switch (locale.countryCode) {
           case 'US':
             return AppLocalizationsEnUs();
+        }
+        break;
+      }
+    case 'es':
+      {
+        switch (locale.countryCode) {
+          case 'ES':
+            return AppLocalizationsEsEs();
+        }
+        break;
+      }
+    case 'ja':
+      {
+        switch (locale.countryCode) {
+          case 'JP':
+            return AppLocalizationsJaJp();
         }
         break;
       }
@@ -19399,6 +19433,10 @@ AppLocalizations lookupAppLocalizations(Locale locale) {
   switch (locale.languageCode) {
     case 'en':
       return AppLocalizationsEn();
+    case 'es':
+      return AppLocalizationsEs();
+    case 'ja':
+      return AppLocalizationsJa();
     case 'zh':
       return AppLocalizationsZh();
   }

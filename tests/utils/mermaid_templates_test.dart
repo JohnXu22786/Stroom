@@ -1,10 +1,63 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/l10n/app_localizations_en.dart';
+import 'package:stroom/l10n/app_localizations_es.dart';
+import 'package:stroom/l10n/app_localizations_ja.dart';
 import 'package:stroom/l10n/app_localizations_zh.dart';
 import 'package:stroom/utils/mermaid_templates.dart';
 
 void main() {
   group('Mermaid catalog localization', () {
+    test('Spanish and Japanese starter templates keep Mermaid syntax', () {
+      final syntaxByType = <String, List<String>>{
+        'flowchart': ['graph TD', 'A --> B'],
+        'sequenceDiagram': ['sequenceDiagram', 'participant ', '->>'],
+        'classDiagram': ['classDiagram', 'class ', '--|>'],
+        'stateDiagram': ['stateDiagram-v2', 'state ', '-->'],
+        'erDiagram': ['erDiagram', '||--o{', ' PK'],
+        'gantt': ['gantt', 'dateFormat  YYYY-MM-DD', 'section '],
+        'pie': ['pie showData', 'title '],
+        'journey': ['journey', 'title ', 'section '],
+        'gitGraph': ['gitGraph', 'commit id:', 'branch ', 'merge '],
+        'mindmap': ['mindmap', 'root(('],
+        'timeline': ['timeline', 'title '],
+        'block': ['block-beta', 'columns 3', '-->'],
+        'requirement': ['requirementDiagram', 'requirement ', '- satisfies ->'],
+      };
+      final locales = [AppLocalizationsEs(), AppLocalizationsJa()];
+
+      for (final strings in locales) {
+        for (final entry in syntaxByType.entries) {
+          final template = MermaidTemplates.getTemplate(
+            entry.key,
+            strings: strings,
+          );
+
+          for (final syntax in entry.value) {
+            expect(
+              template,
+              contains(syntax),
+              reason: '${strings.localeName} ${entry.key} template',
+            );
+          }
+        }
+      }
+
+      expect(
+        MermaidTemplates.getTemplate(
+          'flowchart',
+          strings: AppLocalizationsEs(),
+        ),
+        contains('A[Inicio]'),
+      );
+      expect(
+        MermaidTemplates.getTemplate(
+          'flowchart',
+          strings: AppLocalizationsJa(),
+        ),
+        contains('A[開始]'),
+      );
+    });
+
     test(
       'localizes diagram type labels and descriptions in English and Chinese',
       () {

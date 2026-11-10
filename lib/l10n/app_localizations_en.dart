@@ -11782,6 +11782,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get emojiCategoryFlags => 'Flags';
+
+  @override
+  String get languageNameSpanish => 'Spanish';
+
+  @override
+  String get languageNameJapanese => 'Japanese';
 }
 
 /// The translations for English, as used in the United States (`en_US`).
@@ -23561,4 +23567,10 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get emojiCategoryFlags => 'Flags';
+
+  @override
+  String get languageNameSpanish => 'Spanish';
+
+  @override
+  String get languageNameJapanese => 'Japanese';
 }
