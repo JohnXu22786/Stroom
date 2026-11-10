@@ -26,15 +26,23 @@ test('Web worker migrates legacy video rows into an existing video list', () => 
     audio_records: [
       {id: 'audio-1', name: 'voice', format: 'mp3'},
       {
-        id: 'legacy-video',
-        name: 'clip',
+        id: 'duplicate-video',
+        name: 'migrated clip',
         format: 'mp4',
         createdAt: '2025-01-01T03:04:05.000Z',
         modifiedAt: '2025-01-02T03:04:05.000Z',
       },
+      {
+        id: 'legacy-video',
+        name: 'new clip',
+        format: 'mov',
+        createdAt: '2025-01-03T03:04:05.000Z',
+        modifiedAt: '2025-01-04T03:04:05.000Z',
+      },
     ],
     video_records: [
       {id: 'existing-video', name: 'existing', format: 'mov'},
+      {id: 'duplicate-video', name: 'stale clip', format: 'avi'},
     ],
   };
   onMessage({data: [
@@ -52,8 +60,10 @@ test('Web worker migrates legacy video rows into an existing video list', () => 
   const migrated = JSON.parse(new TextDecoder().decode(new Uint8Array(messages[1])));
   assert.deepEqual(
     migrated.video_records.map((record) => record.id),
-    ['existing-video', 'legacy-video'],
+    ['existing-video', 'duplicate-video', 'legacy-video'],
   );
+  assert.equal(migrated.video_records[1].name, 'migrated clip');
   assert.equal(migrated.video_records[1].modifiedAt, '2025-01-02T03:04:05.000Z');
+  assert.equal(migrated.video_records[2].modifiedAt, '2025-01-04T03:04:05.000Z');
   assert.deepEqual(migrated.audio_records.map((record) => record.id), ['audio-1']);
 });

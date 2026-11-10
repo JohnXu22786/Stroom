@@ -466,7 +466,14 @@ class ManifestDatabase {
           'folder': record['folder'],
           'duration': record['duration'],
         };
-        videoList.add(videoRecord);
+        final existingIndex = videoList.indexWhere(
+          (item) => item is Map<String, dynamic> && item['id'] == record['id'],
+        );
+        if (existingIndex == -1) {
+          videoList.add(videoRecord);
+        } else {
+          videoList[existingIndex] = videoRecord;
+        }
       }
       _webData![ManifestTables.audioRecords] = remaining;
       _webData![ManifestTables.videoRecords] = videoList;

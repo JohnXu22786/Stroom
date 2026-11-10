@@ -137,7 +137,7 @@ function migrateWebManifestData(
     if (toMigrate.length > 0) {
       data.audio_records = remaining;
       for (const record of toMigrate) {
-        videoRecords.push({
+        const videoRecord = {
           id: record.id,
           name: record.name,
           hash: record.hash,
@@ -147,7 +147,15 @@ function migrateWebManifestData(
           size: record.size,
           folder: record.folder,
           duration: record.duration,
-        });
+        };
+        const existingIndex = videoRecords.findIndex((existing) =>
+          isRecord(existing) && existing.id === videoRecord.id,
+        );
+        if (existingIndex === -1) {
+          videoRecords.push(videoRecord);
+        } else {
+          videoRecords[existingIndex] = videoRecord;
+        }
       }
       data.video_records = videoRecords;
       changed = true;

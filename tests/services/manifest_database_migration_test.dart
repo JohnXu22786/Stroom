@@ -139,15 +139,23 @@ void main() {
           'audio_records': [
             {'id': 'audio-1', 'name': 'voice', 'format': 'mp3'},
             {
-              'id': 'legacy-video',
-              'name': 'clip',
+              'id': 'duplicate-video',
+              'name': 'migrated clip',
               'format': 'mp4',
               'createdAt': '2025-01-01T03:04:05.000Z',
               'modifiedAt': '2025-01-02T03:04:05.000Z',
             },
+            {
+              'id': 'legacy-video',
+              'name': 'new clip',
+              'format': 'mov',
+              'createdAt': '2025-01-03T03:04:05.000Z',
+              'modifiedAt': '2025-01-04T03:04:05.000Z',
+            },
           ],
           'video_records': [
             {'id': 'existing-video', 'name': 'existing', 'format': 'mov'},
+            {'id': 'duplicate-video', 'name': 'stale clip', 'format': 'avi'},
           ],
         }))),
       );
@@ -157,9 +165,11 @@ void main() {
 
       expect(
         videos.map((record) => record['id']),
-        ['existing-video', 'legacy-video'],
+        ['existing-video', 'duplicate-video', 'legacy-video'],
       );
-      expect(videos.last['modifiedAt'], '2025-01-02T03:04:05.000Z');
+      expect(videos[1]['name'], 'migrated clip');
+      expect(videos[1]['modifiedAt'], '2025-01-02T03:04:05.000Z');
+      expect(videos[2]['modifiedAt'], '2025-01-04T03:04:05.000Z');
       expect(audios.map((record) => record['id']), ['audio-1']);
     },
   );
