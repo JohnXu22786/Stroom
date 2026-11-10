@@ -41,6 +41,9 @@ PNG_PRE_IDAT_CHUNKS = {
     b"tRNS",
 }
 OUTPUT_FORMATS = {"plain_text", "markdown", "table", "latex"}
+# Keep accepted settings nesting well below Python's recursion limit so validation
+# reports malformed input instead of exhausting the interpreter stack.
+MAX_SAFE_SETTINGS_DEPTH = 64
 LITERAL_LATEX_DOLLAR = "\ue000"
 LATEX_GREEK_COMMANDS = {
     "Gamma": "Γ",
@@ -360,7 +363,13 @@ def _contains_credential_like_value(value: str) -> bool:
     )
 
 
-def _validate_safe_settings(value: Any, path: str = "settings") -> None:
+def _validate_safe_settings(
+    value: Any, path: str = "settings", depth: int = 0
+) -> None:
+    if isinstance(value, (dict, list)) and depth > MAX_SAFE_SETTINGS_DEPTH:
+        raise EvaluationError(
+            f"settings exceeds maximum nesting depth of {MAX_SAFE_SETTINGS_DEPTH}"
+        )
     if isinstance(value, dict):
         for key, child in value.items():
             if not isinstance(key, str):
@@ -369,10 +378,10 @@ def _validate_safe_settings(value: Any, path: str = "settings") -> None:
                 raise EvaluationError(
                     f"{path} contains a credential-like field name"
                 )
-            _validate_safe_settings(child, f"{path}.{key}")
+            _validate_safe_settings(child, f"{path}.{key}", depth + 1)
     elif isinstance(value, list):
         for index, child in enumerate(value):
-            _validate_safe_settings(child, f"{path}[{index}]")
+            _validate_safe_settings(child, f"{path}[{index}]", depth + 1)
     elif isinstance(value, str) and _contains_credential_like_value(value):
         raise EvaluationError(f"{path} contains a credential-like value")
     elif value is not None and not isinstance(value, (str, int, float, bool)):
@@ -2520,6 +2529,10 @@ def verify_fixtures(
 def _read_json(path: Path) -> dict[str, Any]:
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
+    except RecursionError as error:
+        raise EvaluationError(
+            f"cannot read {path}: JSON nesting exceeds parser limit"
+        ) from error
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise EvaluationError(f"cannot read {path}: {error}") from error
     if not isinstance(value, dict):
