@@ -145,6 +145,7 @@ void main() {
 
     test('index entries cannot name files outside the snapshots directory',
         () async {
+      await snapDir.create(recursive: true);
       final indexFile =
           File(p.join(snapDir.path, SnapshotService.manifestName));
       await indexFile.writeAsString(jsonEncode({
