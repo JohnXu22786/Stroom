@@ -1,22 +1,38 @@
 import 'dart:convert';
 
+import 'package:archive/archive.dart';
+
 /// 应用版本号（CD 构建时通过 --dart-define=APP_VERSION=... 注入，
 /// 即发布时的 release 版本号）。
-const String appVersion =
-    String.fromEnvironment('APP_VERSION', defaultValue: '0.2.13');
+const String appVersion = String.fromEnvironment(
+  'APP_VERSION',
+  defaultValue: '0.2.13',
+);
 
 /// CD 构建的发布时间（ISO 8601 UTC，如 `2026-08-08T09:30:00Z`），
 /// 通过 --dart-define=APP_RELEASE_TIME=... 注入；本地构建时为空。
-const String appReleaseTime =
-    String.fromEnvironment('APP_RELEASE_TIME', defaultValue: '');
+const String appReleaseTime = String.fromEnvironment(
+  'APP_RELEASE_TIME',
+  defaultValue: '',
+);
 
-/// CD 构建的更新内容（GitHub Release 说明，Base64 编码后注入），
-/// 通过 --dart-define=APP_RELEASE_NOTES_B64=... 注入；本地构建时为空。
-const String appReleaseNotesEncoded =
-    String.fromEnvironment('APP_RELEASE_NOTES_B64', defaultValue: '');
+/// CD 构建的更新内容（GitHub Release 说明，zlib 压缩后 Base64 编码），
+/// 通过 --dart-define-from-file 注入；本地构建时为空。
+const String appReleaseNotesZlibEncoded = String.fromEnvironment(
+  'APP_RELEASE_NOTES_ZLIB_B64',
+  defaultValue: '',
+);
+
+/// 兼容旧版构建信息，便于本地脚本继续注入未压缩的更新内容。
+const String appReleaseNotesLegacyEncoded = String.fromEnvironment(
+  'APP_RELEASE_NOTES_B64',
+  defaultValue: '',
+);
 
 /// 解码后的更新内容；未注入或解码失败时返回空字符串。
-String get appReleaseNotes => decodeReleaseNotes(appReleaseNotesEncoded);
+String get appReleaseNotes => appReleaseNotesZlibEncoded.isNotEmpty
+    ? decodeCompressedReleaseNotes(appReleaseNotesZlibEncoded)
+    : decodeReleaseNotes(appReleaseNotesLegacyEncoded);
 
 /// 展示用的发布时间（UTC+0 `yyyy-MM-dd HH:mm`）；
 /// 未注入或解析失败时返回空字符串。
@@ -27,6 +43,17 @@ String decodeReleaseNotes(String encoded) {
   if (encoded.isEmpty) return '';
   try {
     return utf8.decode(base64Decode(encoded));
+  } catch (_) {
+    return '';
+  }
+}
+
+/// 将 Base64 + zlib 编码的 UTF-8 文本解码；非法输入时返回空字符串。
+String decodeCompressedReleaseNotes(String encoded) {
+  if (encoded.isEmpty) return '';
+  try {
+    final compressed = base64Decode(encoded);
+    return utf8.decode(ZLibDecoder().decodeBytes(compressed));
   } catch (_) {
     return '';
   }

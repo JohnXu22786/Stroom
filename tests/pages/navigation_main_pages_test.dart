@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/models/assistant.dart';
 import 'package:stroom/pages/home_page.dart';
 import 'package:stroom/providers/assistant_provider.dart';
@@ -36,6 +37,7 @@ Widget _buildTestApp({Size? screenSize, List<Assistant>? assistants}) {
         }),
     ],
     child: MaterialApp(
+      locale: const Locale('zh', 'CN'),
       home: Navigator(
         key: _navigatorKey,
         onGenerateRoute: (settings) {
@@ -45,10 +47,8 @@ Widget _buildTestApp({Size? screenSize, List<Assistant>? assistants}) {
           );
         },
       ),
-      localizationsDelegates: const [
-        DefaultMaterialLocalizations.delegate,
-        DefaultWidgetsLocalizations.delegate,
-      ],
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
     ),
   );
   if (screenSize != null) {

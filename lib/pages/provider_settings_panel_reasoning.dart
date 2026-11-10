@@ -1,4 +1,5 @@
 part of 'provider_settings_panel.dart';
+
 // Extension methods on the State class cannot use @protected members
 // (setState / state) without analyzer warnings, but the receiver IS the
 // State/StateNotifier, so runtime behavior is identical to the original
@@ -67,8 +68,9 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
       additional.insert(newIndex, param);
       // 重建列表：开关/力度保持原顺序，附加参数按新顺序
       final rebuilt = <ReasoningParam>[
-        ..._reasoningParams
-            .where((p) => p.isReasoningToggle || p.isEffortParam),
+        ..._reasoningParams.where(
+          (p) => p.isReasoningToggle || p.isEffortParam,
+        ),
         ...additional,
       ];
       _reasoningParams
@@ -119,8 +121,12 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
         value: value,
         readOnly: !editable,
         decoration: InputDecoration(
-          labelText: '选项 ${rowIndex + 1}',
-          hintText: editable ? '如 low, medium, high' : '请先填写推理开关',
+          labelText: AppLocalizations.of(context)!
+              .providerOptionIndexLabel((rowIndex + 1).toString()),
+          hintText: editable
+              ? AppLocalizations.of(context)!
+                  .providerOptionExampleHint('low, medium, high')
+              : AppLocalizations.of(context)!.providerToggleRequiredHint,
           border: const OutlineInputBorder(),
           isDense: true,
         ),
@@ -136,7 +142,7 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
             onPressed: editable
                 ? () => _removeOptionFromParam(actualIndex, rowIndex)
                 : null,
-            tooltip: '删除选项',
+            tooltip: AppLocalizations.of(context)!.providerDeleteOptionTooltip,
           )
         : const SizedBox.shrink();
     // 拖拽反馈：整行副本（含静态把手图标）
@@ -205,26 +211,12 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
         .toList();
   }
 
-  bool get _isToggleComplete {
-    final toggle = _toggleReasoningParam;
-    if (toggle == null) return false;
-    // boolean 类型开关只需参数名（开/关值由聊天面板提供）
-    if (toggle.type == 'boolean') {
-      return toggle.paramName.trim().isNotEmpty;
-    }
-    return toggle.paramName.trim().isNotEmpty &&
-        (toggle.onValue != null && toggle.onValue!.trim().isNotEmpty) &&
-        (toggle.offValue != null && toggle.offValue!.trim().isNotEmpty);
-  }
-
   /// 判断 [param] 的当前参数名是否与「本供应商其他已填写参数」或
   /// 自定义参数重名（除自身外）。
   bool _isReasoningParamNameDuplicate(ReasoningParam param) {
     final name = param.paramName.trim();
     if (name.isEmpty) return false;
-    return _reasoningParams.indexWhere(
-              (p) => p.paramName.trim() == name,
-            ) !=
+    return _reasoningParams.indexWhere((p) => p.paramName.trim() == name) !=
             _reasoningParams.indexOf(param) ||
         _customParams.any((p) => p.paramName.trim() == name);
   }
@@ -232,7 +224,7 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
   List<Widget> _buildReasoningParamsSection(ColorScheme cs) {
     return [
       Text(
-        '推理参数',
+        AppLocalizations.of(context)!.providerReasoningParamsHeading,
         style: TextStyle(
           fontWeight: FontWeight.w700,
           fontSize: 16,
@@ -241,12 +233,10 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
       ),
       const SizedBox(height: 4),
       Text(
-        '推理开关控制聊天页面中推理功能的开启和关闭，由您定义参数名和对应的开/关值。'
-        '推理力度参数有且只有一个，每个含参数名和可选项；参数名必填，'
-        '选项值可选（仅填参数名时，参数值由模型配置提供——模型可在推理'
-        '力度参数上添加自己的选项值）。'
-        '您还可以通过底部按钮添加额外的推理参数。'
-        '参数名支持点号嵌套（如 thinking.type 会展开为 {"thinking": {"type": "..."}}）。',
+        AppLocalizations.of(context)!.providerReasoningSettingsHelp(
+          'thinking.type',
+          '{"thinking": {"type": "..."}}',
+        ),
         style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
       ),
       const SizedBox(height: 12),
@@ -287,16 +277,13 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
           icon: Icon(
             Icons.add,
             size: 16,
-            color: _toggleReasoningParam != null ? null : Colors.grey,
+            color: null,
           ),
           label: Text(
-            '添加推理参数',
-            style: TextStyle(
-              fontSize: 13,
-              color: _toggleReasoningParam != null ? null : Colors.grey,
-            ),
+            AppLocalizations.of(context)!.providerAddReasoningParam,
+            style: Theme.of(context).textTheme.labelLarge,
           ),
-          onPressed: _toggleReasoningParam != null ? _addReasoningParam : null,
+          onPressed: _addReasoningParam,
         ),
       ),
       const SizedBox(height: 24),
@@ -312,7 +299,10 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
         child: Center(
           child: TextButton.icon(
             icon: const Icon(Icons.add, size: 16),
-            label: const Text('添加推理开关', style: TextStyle(fontSize: 13)),
+            label: Text(
+              AppLocalizations.of(context)!.providerAddReasoningToggle,
+              style: Theme.of(context).textTheme.labelLarge,
+            ),
             onPressed: () {
               setState(() {
                 _reasoningParams.insert(
@@ -346,7 +336,7 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text(
-                    '推理开关',
+                    AppLocalizations.of(context)!.providerReasoningToggle,
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
@@ -361,7 +351,8 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
                   icon: const Icon(Icons.delete, color: Colors.red, size: 20),
                   onPressed: () =>
                       _removeReasoningParam(_reasoningParams.indexOf(toggle)),
-                  tooltip: '删除推理开关',
+                  tooltip: AppLocalizations.of(context)!
+                      .providerDeleteReasoningToggle,
                 ),
               ],
             ),
@@ -369,11 +360,15 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
             TextFormField(
               initialValue: toggle.paramName,
               decoration: InputDecoration(
-                labelText: '参数名',
-                hintText: '如 thinking.type、reasoning',
+                labelText: AppLocalizations.of(context)!.providerParamNameLabel,
+                hintText: AppLocalizations.of(context)!
+                    .providerParamNameHint('thinking.type, reasoning'),
                 border: const OutlineInputBorder(),
                 isDense: true,
-                errorText: isDuplicate ? '已存在该参数' : null,
+                errorText: isDuplicate
+                    ? AppLocalizations.of(context)!
+                        .providerParamAlreadyExists(toggle.paramName.trim())
+                    : null,
                 errorStyle: const TextStyle(fontSize: 11),
               ),
               onChanged: (v) {
@@ -386,7 +381,7 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
             // 提供开/关切换（请求按开关状态发送 'true'/'false'）。
             if (toggle.type == 'boolean')
               Text(
-                '布尔类型无需配置参数值，聊天面板提供开/关切换。',
+                AppLocalizations.of(context)!.providerReasoningBooleanHelp,
                 style: TextStyle(
                   fontSize: 12,
                   color: cs.onSurfaceVariant.withValues(alpha: 0.7),
@@ -399,8 +394,10 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
                     child: TextFormField(
                       initialValue: toggle.onValue ?? '',
                       decoration: InputDecoration(
-                        labelText: '开启时值',
-                        hintText: '如 enabled、true',
+                        labelText: AppLocalizations.of(context)!
+                            .providerToggleOnValueLabel,
+                        hintText: AppLocalizations.of(context)!
+                            .providerParamNameHint('enabled, true'),
                         border: const OutlineInputBorder(),
                         isDense: true,
                       ),
@@ -415,8 +412,10 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
                     child: TextFormField(
                       initialValue: toggle.offValue ?? '',
                       decoration: InputDecoration(
-                        labelText: '关闭时值',
-                        hintText: '如 disabled、false',
+                        labelText: AppLocalizations.of(context)!
+                            .providerToggleOffValueLabel,
+                        hintText: AppLocalizations.of(context)!
+                            .providerParamNameHint('disabled, false'),
                         border: const OutlineInputBorder(),
                         isDense: true,
                       ),
@@ -430,8 +429,10 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
               ),
               const SizedBox(height: 8),
               Text(
-                '推理开关打开时发送「${toggle.onValue ?? ''}」，'
-                '关闭时发送「${toggle.offValue ?? ''}」',
+                AppLocalizations.of(context)!.providerReasoningToggleSummary(
+                  toggle.onValue ?? '',
+                  toggle.offValue ?? '',
+                ),
                 style: TextStyle(
                   fontSize: 11,
                   color: cs.onSurfaceVariant.withValues(alpha: 0.7),
@@ -446,14 +447,14 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
 
   /// Builds the reasoning effort section (mirrors the model config page).
   /// If an effort param exists, shows the effort card. Otherwise, shows the
-  /// "添加推理力度" button, which is disabled (gray) when no toggle exists.
+  /// "添加推理力度" button.
   Widget _buildReasoningEffortSection(ColorScheme cs) {
     final effort = _effortReasoningParam;
     if (effort != null) {
       return _buildReasoningEffortCard(effort, cs);
     }
-    // No effort param — show add button (always visible, disabled if no toggle)
-    final hasToggle = _toggleReasoningParam != null;
+    // Effort configuration is independent of whether the provider supports an
+    // explicit reasoning toggle.
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Center(
@@ -461,16 +462,13 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
           icon: Icon(
             Icons.add,
             size: 16,
-            color: hasToggle ? null : Colors.grey,
+            color: null,
           ),
           label: Text(
-            '添加推理力度',
-            style: TextStyle(
-              fontSize: 13,
-              color: hasToggle ? null : Colors.grey,
-            ),
+            AppLocalizations.of(context)!.providerAddReasoningEffort,
+            style: Theme.of(context).textTheme.labelLarge,
           ),
-          onPressed: hasToggle ? _addEffortReasoningParam : null,
+          onPressed: _addEffortReasoningParam,
         ),
       ),
     );
@@ -482,7 +480,6 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
   /// a name-only effort param defers its value to the model config /
   /// chat panel selection.
   Widget _buildReasoningEffortCard(ReasoningParam effort, ColorScheme cs) {
-    final toggleComplete = _isToggleComplete;
     final isDuplicate = _isReasoningParamNameDuplicate(effort);
 
     return Card(
@@ -498,7 +495,7 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text(
-                    '推理力度',
+                    AppLocalizations.of(context)!.chatReasoningEffort,
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
@@ -512,20 +509,25 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
                   icon: const Icon(Icons.delete, color: Colors.red, size: 20),
                   onPressed: () =>
                       _removeReasoningParam(_reasoningParams.indexOf(effort)),
-                  tooltip: '删除推理力度参数',
+                  tooltip: AppLocalizations.of(context)!
+                      .providerDeleteReasoningEffort,
                 ),
               ],
             ),
             const SizedBox(height: 8),
             TextFormField(
               initialValue: effort.paramName,
-              readOnly: !toggleComplete,
+              readOnly: false,
               decoration: InputDecoration(
-                labelText: '参数名',
-                hintText: toggleComplete ? '如 reasoning_effort' : '请先填写推理开关',
+                labelText: AppLocalizations.of(context)!.providerParamNameLabel,
+                hintText: AppLocalizations.of(context)!
+                    .providerParamNameHint('reasoning_effort'),
                 border: const OutlineInputBorder(),
                 isDense: true,
-                errorText: isDuplicate ? '已存在该参数' : null,
+                errorText: isDuplicate
+                    ? AppLocalizations.of(context)!
+                        .providerParamAlreadyExists(effort.paramName.trim())
+                    : null,
                 errorStyle: const TextStyle(fontSize: 11),
               ),
               onChanged: (v) {
@@ -538,7 +540,7 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
             // boolean → 无参数值（只有参数名）。
             if (effort.type == 'boolean')
               Text(
-                '布尔类型无需配置参数值，聊天面板提供开/关切换。',
+                AppLocalizations.of(context)!.providerReasoningBooleanHelp,
                 style: TextStyle(
                   fontSize: 12,
                   color: cs.onSurfaceVariant.withValues(alpha: 0.7),
@@ -548,16 +550,21 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
               TextFormField(
                 initialValue:
                     effort.options.isNotEmpty ? effort.options.first : '',
-                readOnly: !toggleComplete,
+                readOnly: false,
                 maxLines: 5,
                 decoration: InputDecoration(
-                  labelText: 'JSON 值',
-                  hintText: '如 {"thinking": {"budget": 1024}}',
+                  labelText:
+                      AppLocalizations.of(context)!.providerJsonValueLabel,
+                  hintText:
+                      AppLocalizations.of(context)!.providerOptionExampleHint(
+                    '{"thinking": {"budget": 1024}}',
+                  ),
                   border: const OutlineInputBorder(),
                   alignLabelWithHint: true,
                   errorText: _jsonValueError(
-                          effort.options.isNotEmpty ? effort.options.first : '')
-                      ? 'JSON 格式不正确'
+                    effort.options.isNotEmpty ? effort.options.first : '',
+                  )
+                      ? AppLocalizations.of(context)!.codeEditorInvalidFormat
                       : null,
                   errorStyle: const TextStyle(fontSize: 11),
                 ),
@@ -571,8 +578,7 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
               )
             else ...[
               Text(
-                '选项值（可选，仅填参数名时参数值由模型配置提供；'
-                '长按把手拖拽排序）',
+                AppLocalizations.of(context)!.providerReasoningOptionsHelp,
                 style: TextStyle(
                   fontSize: 12,
                   color: cs.onSurfaceVariant.withValues(alpha: 0.7),
@@ -593,29 +599,20 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
                   value,
                   effort,
                   cs,
-                  editable: toggleComplete,
+                  editable: true,
                 ),
               ),
               const SizedBox(height: 4),
               TextButton.icon(
                 icon: Icon(Icons.add, size: 16),
-                label: Text('添加选项', style: TextStyle(fontSize: 13)),
-                onPressed: toggleComplete
-                    ? () => _addOptionToParam(_reasoningParams.indexOf(effort))
-                    : null,
+                label: Text(
+                  AppLocalizations.of(context)!.providerAddOption,
+                  style: Theme.of(context).textTheme.labelLarge,
+                ),
+                onPressed: () =>
+                    _addOptionToParam(_reasoningParams.indexOf(effort)),
               ),
             ],
-            if (!toggleComplete)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(
-                  '请先完整填写推理开关后再配置推理力度',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: cs.onSurfaceVariant.withValues(alpha: 0.7),
-                  ),
-                ),
-              ),
           ],
         ),
       ),
@@ -628,7 +625,7 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
       width: 100,
       decoration: BoxDecoration(
         border: Border.all(color: Colors.grey.shade400),
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.circular(8),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 4),
       child: DropdownButtonHideUnderline(
@@ -643,7 +640,9 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
               .map(
                 (t) => DropdownMenuItem(
                   value: t.value,
-                  child: Text(t.label, style: const TextStyle(fontSize: 12)),
+                  child: Text(
+                      localizedParamTypeLabel(AppLocalizations.of(context)!, t),
+                      style: const TextStyle(fontSize: 12)),
                 ),
               )
               .toList(),
@@ -682,11 +681,21 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
                   child: TextFormField(
                     initialValue: param.paramName,
                     decoration: InputDecoration(
-                      labelText: '参数名（支持点号嵌套）',
+                      labelText: AppLocalizations.of(context)!
+                          .providerParamNameNestedLabel,
                       border: const OutlineInputBorder(),
                       isDense: true,
-                      hintText: '如 thinking.type 或 budget_tokens',
-                      errorText: isDuplicate ? '已存在该参数' : null,
+                      hintText: AppLocalizations.of(
+                        context,
+                      )!
+                          .providerParamNameHint(
+                              'thinking.type, budget_tokens'),
+                      errorText: isDuplicate
+                          ? AppLocalizations.of(context)!
+                              .providerParamAlreadyExists(
+                              param.paramName.trim(),
+                            )
+                          : null,
                       errorStyle: const TextStyle(fontSize: 11),
                     ),
                     onChanged: (v) {
@@ -706,10 +715,14 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
                     _buildTypeDropdown(param, cs),
                     const SizedBox(width: 4),
                     IconButton(
-                      icon:
-                          const Icon(Icons.delete, color: Colors.red, size: 20),
+                      icon: const Icon(
+                        Icons.delete,
+                        color: Colors.red,
+                        size: 20,
+                      ),
                       onPressed: () => _removeReasoningParam(actualIndex),
-                      tooltip: '删除参数',
+                      tooltip: AppLocalizations.of(context)!
+                          .providerDeleteCustomParam,
                     ),
                   ],
                 ),
@@ -721,7 +734,7 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
             // json → 大输入框；boolean → 无参数值。
             if (param.type == 'boolean')
               Text(
-                '布尔类型无需配置参数值。',
+                AppLocalizations.of(context)!.providerBooleanParamNoValue,
                 style: TextStyle(
                   fontSize: 12,
                   color: cs.onSurfaceVariant.withValues(alpha: 0.7),
@@ -733,13 +746,18 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
                     param.options.isNotEmpty ? param.options.first : '',
                 maxLines: 5,
                 decoration: InputDecoration(
-                  labelText: 'JSON 值',
-                  hintText: '如 {"thinking": {"budget": 1024}}',
+                  labelText:
+                      AppLocalizations.of(context)!.providerJsonValueLabel,
+                  hintText:
+                      AppLocalizations.of(context)!.providerOptionExampleHint(
+                    '{"thinking": {"budget": 1024}}',
+                  ),
                   border: const OutlineInputBorder(),
                   alignLabelWithHint: true,
                   errorText: _jsonValueError(
-                          param.options.isNotEmpty ? param.options.first : '')
-                      ? 'JSON 格式不正确'
+                    param.options.isNotEmpty ? param.options.first : '',
+                  )
+                      ? AppLocalizations.of(context)!.codeEditorInvalidFormat
                       : null,
                   errorStyle: const TextStyle(fontSize: 11),
                 ),
@@ -753,7 +771,7 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
               )
             else ...[
               Text(
-                '选项值（长按把手拖拽排序）',
+                AppLocalizations.of(context)!.providerOptionValuesReorderHelp,
                 style: TextStyle(
                   fontSize: 12,
                   color: cs.onSurfaceVariant.withValues(alpha: 0.7),
@@ -772,7 +790,10 @@ extension _ProviderSettingsPanelReasoningExt on _ProviderSettingsPanelState {
               const SizedBox(height: 4),
               TextButton.icon(
                 icon: const Icon(Icons.add, size: 16),
-                label: const Text('添加选项', style: TextStyle(fontSize: 13)),
+                label: Text(
+                  AppLocalizations.of(context)!.providerAddOption,
+                  style: Theme.of(context).textTheme.labelLarge,
+                ),
                 onPressed: () => _addOptionToParam(actualIndex),
               ),
             ],

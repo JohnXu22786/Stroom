@@ -4,6 +4,41 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/utils/ocr_diagnostics.dart';
 
 void main() {
+  test('nested request body credentials exclude echoed request IDs', () {
+    const credential = 'opaque-secret-77';
+    const nestedCredential = 'nested-token-secret-77';
+    const safeRequestId = 'req-safe-nested-credentials-77';
+    final excludedValues = OcrDiagnosticSnapshot.credentialValuesFromRequest({
+      'body': {
+        'credentials': {
+          'value': credential,
+          'nested': [
+            {'access_token': nestedCredential},
+          ],
+        },
+      },
+    });
+    final echoedResponse = OcrDiagnosticSnapshot.sanitizeResponse(
+      {'statusCode': 401, 'requestId': credential},
+      excludedValues: excludedValues,
+    )!;
+    final safeResponse = OcrDiagnosticSnapshot.sanitizeResponse(
+      {'statusCode': 429, 'requestId': safeRequestId},
+      excludedValues: excludedValues,
+    )!;
+
+    expect(excludedValues, containsAll([credential, nestedCredential]));
+    expect(echoedResponse, {'statusCode': 401});
+    expect(safeResponse, {
+      'statusCode': 429,
+      'requestId': safeRequestId,
+    });
+    expect(jsonEncode([echoedResponse, safeResponse]),
+        isNot(contains(credential)));
+    expect(jsonEncode([echoedResponse, safeResponse]),
+        isNot(contains(nestedCredential)));
+  });
+
   test('long body credentials exclude echoed request ID prefixes', () {
     final credential = List.filled(700, 'x').join();
     final echoedPrefix = credential.substring(0, 120);
@@ -19,7 +54,6 @@ void main() {
       {'statusCode': 429, 'requestId': safeRequestId},
       excludedValues: excludedValues,
     )!;
-
     expect(echoedResponse, {'statusCode': 401});
     expect(safeResponse, {
       'statusCode': 429,
@@ -27,6 +61,104 @@ void main() {
     });
     expect(jsonEncode([echoedResponse, safeResponse]),
         isNot(contains(echoedPrefix)));
+  });
+
+  test('long body credentials exclude later request ID fragments', () {
+    final echoedRequestId = 'req-${List.filled(146, 'e').join()}';
+    final credential =
+        '${List.filled(180, 'x').join()}$echoedRequestId${List.filled(400, 'y').join()}';
+    const safeRequestId = 'req-safe-after-long-credential-fragment-202';
+    final excludedValues = OcrDiagnosticSnapshot.credentialValuesFromRequest({
+      'body': {'api_key': credential},
+    });
+    final echoedResponse = OcrDiagnosticSnapshot.sanitizeResponse(
+      {'statusCode': 401, 'requestId': echoedRequestId},
+      excludedValues: excludedValues,
+    )!;
+    final safeResponse = OcrDiagnosticSnapshot.sanitizeResponse(
+      {'statusCode': 429, 'requestId': safeRequestId},
+      excludedValues: excludedValues,
+    )!;
+    final shortSafeResponse = OcrDiagnosticSnapshot.sanitizeResponse(
+      {'requestId': 'req'},
+      excludedValues: excludedValues,
+    )!;
+
+    expect(echoedRequestId.length, 150);
+    expect(credential.length, greaterThan(512));
+    expect(excludedValues, isNot(contains(echoedRequestId)));
+    expect(echoedResponse, {'statusCode': 401});
+    expect(safeResponse, {
+      'statusCode': 429,
+      'requestId': safeRequestId,
+    });
+    expect(shortSafeResponse, {'requestId': 'req'});
+  });
+
+  test('long body credentials exclude request ID fragments after bound', () {
+    final echoedRequestId = 'req-${List.filled(146, 'e').join()}';
+    final credential =
+        '${List.filled(600, 'x').join()}$echoedRequestId${List.filled(2300, 'y').join()}';
+    const safeRequestId = 'req-safe-after-long-credential-bound-203';
+    final excludedValues = OcrDiagnosticSnapshot.credentialValuesFromRequest({
+      'body': {'api_key': credential},
+    });
+    final echoedResponse = OcrDiagnosticSnapshot.sanitizeResponse(
+      {'statusCode': 401, 'requestId': echoedRequestId},
+      excludedValues: excludedValues,
+    )!;
+    final safeResponse = OcrDiagnosticSnapshot.sanitizeResponse(
+      {'statusCode': 429, 'requestId': safeRequestId},
+      excludedValues: excludedValues,
+    )!;
+
+    expect(credential.length, greaterThan(2900));
+    expect(echoedRequestId.length, 150);
+    expect(echoedResponse, {'statusCode': 401});
+    expect(safeResponse, {
+      'statusCode': 429,
+      'requestId': safeRequestId,
+    });
+  });
+
+  test('long body credentials exclude request ID fragments beyond 2048', () {
+    final echoedRequestId = 'req-${List.filled(146, 'e').join()}';
+    final credential =
+        '${List.filled(2300, 'x').join()}$echoedRequestId${List.filled(2300, 'y').join()}';
+    const safeRequestId = 'req-safe-after-very-long-credential-204';
+    final excludedValues = OcrDiagnosticSnapshot.credentialValuesFromRequest({
+      'body': {'api_key': credential},
+    });
+    final echoedResponse = OcrDiagnosticSnapshot.sanitizeResponse(
+      {'statusCode': 401, 'requestId': echoedRequestId},
+      excludedValues: excludedValues,
+    )!;
+    final safeResponse = OcrDiagnosticSnapshot.sanitizeResponse(
+      {'statusCode': 429, 'requestId': safeRequestId},
+      excludedValues: excludedValues,
+    )!;
+    final safeRequest = OcrDiagnosticSnapshot.sanitizeRequest(
+      {
+        'method': 'POST',
+        'requestId': safeRequestId,
+        'body': {'api_key': credential},
+      },
+      excludedValues: excludedValues,
+    )!;
+
+    expect(credential.length, greaterThan(4600));
+    expect(echoedRequestId.length, 150);
+    expect(echoedResponse, {'statusCode': 401});
+    expect(safeResponse, {
+      'statusCode': 429,
+      'requestId': safeRequestId,
+    });
+    final diagnostics = jsonEncode([safeRequest, echoedResponse, safeResponse]);
+    expect(diagnostics, isNot(contains(credential)));
+    expect(
+      utf8.encode(diagnostics).length,
+      lessThanOrEqualTo(OcrDiagnosticSnapshot.maxSerializedBytes),
+    );
   });
 
   test('long Bearer credentials exclude stripped URL and header echoes', () {
@@ -84,6 +216,28 @@ void main() {
     expect(response, isEmpty);
   });
 
+  test('valid query credentials survive unrelated malformed components', () {
+    const url = 'https://ocr.test/v1?api_key=opaque-secret&'
+        'api_key=another-secret&other=%FF';
+    final credentialValues = OcrDiagnosticSnapshot.credentialValuesFromUrl(url);
+    final response = OcrDiagnosticSnapshot.sanitizeResponse(
+      {'statusCode': 502, 'requestId': 'opaque-secret'},
+      excludedValues: credentialValues,
+    )!;
+
+    expect(credentialValues, containsAll(['opaque-secret', 'another-secret']));
+    expect(response, {'statusCode': 502});
+  });
+
+  test('malformed query credentials are skipped without stopping extraction',
+      () {
+    const url = 'https://ocr.test/v1?api_key=%FF&%FF=opaque-malformed-key&'
+        'token=safe-token';
+    final credentialValues = OcrDiagnosticSnapshot.credentialValuesFromUrl(url);
+
+    expect(credentialValues, ['safe-token']);
+  });
+
   test('request URL extraction recognizes camel case secret key parameters',
       () {
     for (final entry in [
@@ -107,6 +261,44 @@ void main() {
       expect(response, isEmpty, reason: entry.$1);
     }
   });
+
+  test(
+    'X-Auth header secrets exclude echoed diagnostics but keep safe IDs',
+    () {
+      const credential = 'opaque-user-secret-192';
+      const safeRequestId = 'req-safe-after-x-auth-192';
+      final rawRequest = {
+        'method': 'POST',
+        'requestId': credential,
+        'headers': {'X-Auth': credential},
+      };
+      final credentialValues =
+          OcrDiagnosticSnapshot.credentialValuesFromRequest(rawRequest);
+      final request = OcrDiagnosticSnapshot.sanitizeRequest(rawRequest)!;
+      final echoedResponse = OcrDiagnosticSnapshot.sanitizeResponse(
+        {
+          'statusCode': 401,
+          'requestId': credential,
+          'data': {'id': credential},
+        },
+        excludedValues: credentialValues,
+      )!;
+      final safeResponse = OcrDiagnosticSnapshot.sanitizeResponse(
+        {'statusCode': 429, 'requestId': safeRequestId},
+        excludedValues: credentialValues,
+      )!;
+      final diagnostics = jsonEncode([request, echoedResponse, safeResponse]);
+
+      expect(credentialValues, contains(credential));
+      expect(request, {'method': 'POST'});
+      expect(echoedResponse, {'statusCode': 401});
+      expect(safeResponse, {
+        'statusCode': 429,
+        'requestId': safeRequestId,
+      });
+      expect(diagnostics, isNot(contains(credential)));
+    },
+  );
 
   test('request secret and private key headers exclude echoed response IDs',
       () {
@@ -598,6 +790,34 @@ void main() {
     },
   );
 
+  test('finish reason aliases are sanitized independently before fallback', () {
+    final validSnakeCaseAlias = OcrDiagnosticSnapshot.sanitizeResponse({
+      'finishReason': 'JaneDoe19810102',
+      'finish_reason': 'length',
+    })!;
+    final malformedCamelCaseAlias = OcrDiagnosticSnapshot.sanitizeResponse({
+      'finishReason': {'unexpected': 'value'},
+      'finish_reason': 'max_tokens',
+    })!;
+    final dataFallback = OcrDiagnosticSnapshot.sanitizeResponse({
+      'finishReason': 'JaneDoe19810102',
+      'finish_reason': ['malformed'],
+      'data': {
+        'choices': [
+          {'finish_reason': 'stop'},
+        ],
+      },
+    })!;
+
+    expect(validSnakeCaseAlias, {'finishReason': 'length'});
+    expect(malformedCamelCaseAlias, {'finishReason': 'max_tokens'});
+    expect(dataFallback, {'finishReason': 'stop'});
+    expect(
+      jsonEncode([validSnakeCaseAlias, malformedCamelCaseAlias, dataFallback]),
+      isNot(contains('JaneDoe19810102')),
+    );
+  });
+
   test('stored OCR task errors retain the safe max_tokens finish reason', () {
     expect(
       OcrDiagnosticSnapshot.sanitizeStoredTaskError(
@@ -728,6 +948,35 @@ void main() {
     expect(jsonEncode(response), isNot(contains(credential)));
   });
 
+  test('camelCase API credential headers exclude echoed response IDs', () {
+    const safeRequestId = 'req-safe-camel-case-credentials';
+    for (final entry in {
+      'apiSecret': 'opaque-api-secret-header-value',
+      'apiToken': 'opaque-api-token-header-value',
+    }.entries) {
+      final excludedValues = OcrDiagnosticSnapshot.credentialValuesFromRequest({
+        'headers': {entry.key: entry.value},
+      });
+      final echoedResponse = OcrDiagnosticSnapshot.sanitizeResponse(
+        {'statusCode': 401, 'requestId': entry.value},
+        excludedValues: excludedValues,
+      )!;
+      final safeResponse = OcrDiagnosticSnapshot.sanitizeResponse(
+        {'statusCode': 429, 'requestId': safeRequestId},
+        excludedValues: excludedValues,
+      )!;
+
+      expect(excludedValues, contains(entry.value));
+      expect(echoedResponse, {'statusCode': 401});
+      expect(safeResponse, {
+        'statusCode': 429,
+        'requestId': safeRequestId,
+      });
+      expect(jsonEncode([echoedResponse, safeResponse]),
+          isNot(contains(entry.value)));
+    }
+  });
+
   test('request IDs exclude echoes matching a short masked auth header', () {
     const apiKey = 'abcd123456789';
     final excludedValues = OcrDiagnosticSnapshot.credentialValuesFromHeaders({
@@ -790,6 +1039,7 @@ void main() {
         'OCR 处理失败（TypeError）',
         'OCR 处理失败（TimeoutException）',
         'OCR 处理失败（UnsupportedError）',
+        'Some images were not fully recognized: Image 1: recognition failed; Image 3: incomplete result',
         'OCR 未识别到文字内容',
         'OCR 未识别到文字内容（content 列表为空）',
         'OCR 返回了不支持的非文本 content block',

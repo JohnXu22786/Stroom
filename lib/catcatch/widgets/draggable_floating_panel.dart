@@ -51,6 +51,9 @@ class DraggableFloatingPanel extends StatefulWidget {
   /// Whether the panel is visible. Shows when true, hides when false.
   final bool visible;
 
+  /// Whether confirming the selected URL is currently allowed.
+  final bool confirmEnabled;
+
   /// Bumped by the parent whenever the detected-URL list is reset for a new
   /// page. The panel drops its current selection when this changes, so a
   /// selection from the previous page can never capture a URL from the new
@@ -64,6 +67,7 @@ class DraggableFloatingPanel extends StatefulWidget {
     this.onClose,
     this.onDragUpdate,
     this.visible = true,
+    this.confirmEnabled = true,
     this.detectionEpoch = 0,
   });
 
@@ -188,14 +192,14 @@ class _DraggableFloatingPanelState extends State<DraggableFloatingPanel> {
     // ambiguous and horizontal drags would move the panel while scrolling.
     return Material(
       elevation: 8,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(16),
       color: colorScheme.surfaceContainerHigh,
       surfaceTintColor: colorScheme.primaryContainer,
       child: Container(
         width: DraggableFloatingPanel.panelWidth,
         constraints: BoxConstraints(maxHeight: _panelMaxHeight),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: colorScheme.primary.withValues(alpha: 0.3),
             width: 1.5,
@@ -213,8 +217,8 @@ class _DraggableFloatingPanelState extends State<DraggableFloatingPanel> {
                 decoration: BoxDecoration(
                   color: colorScheme.primaryContainer,
                   borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(10),
-                    topRight: Radius.circular(10),
+                    topLeft: Radius.circular(8),
+                    topRight: Radius.circular(8),
                   ),
                 ),
                 padding: const EdgeInsets.symmetric(
@@ -266,7 +270,7 @@ class _DraggableFloatingPanelState extends State<DraggableFloatingPanel> {
                     // Minimize
                     InkWell(
                       onTap: _toggleMinimize,
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(16),
                       child: Padding(
                         padding: const EdgeInsets.all(4),
                         child: Icon(
@@ -279,7 +283,7 @@ class _DraggableFloatingPanelState extends State<DraggableFloatingPanel> {
                     // Close
                     InkWell(
                       onTap: widget.onClose,
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(16),
                       child: Padding(
                         padding: const EdgeInsets.all(4),
                         child: Icon(
@@ -461,7 +465,7 @@ class _DraggableFloatingPanelState extends State<DraggableFloatingPanel> {
           SizedBox(
             height: 28,
             child: FilledButton.icon(
-              onPressed: hasSelection
+              onPressed: hasSelection && widget.confirmEnabled
                   ? () {
                       widget.onConfirmCapture(
                         widget.detectedUrls[selectedIndex],

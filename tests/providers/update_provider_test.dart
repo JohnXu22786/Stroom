@@ -1,14 +1,19 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io' show Directory, File;
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart'
     show
         debugDefaultTargetPlatformOverride,
         defaultTargetPlatform,
         TargetPlatform;
+import 'package:flutter/services.dart' show MethodChannel, PlatformException;
+import 'package:flutter/widgets.dart' show Locale;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/l10n/app_localizations.dart';
+import 'package:stroom/providers/locale_provider.dart';
 import 'package:stroom/providers/update_provider.dart';
 
 /// Creates a mock [Dio] that intercepts all requests and returns [jsonResponse]
@@ -307,6 +312,53 @@ void main() {
   });
 
   group('UpdateNotifier', () {
+    test('localizes update check errors and preserves HTTP status', () async {
+      SharedPreferences.setMockInitialValues({});
+
+      final english = UpdateNotifier(
+        dio: _createNon200Dio(503),
+        localizations: () =>
+            appLocalizationsForLocale(const Locale('en', 'US')),
+      );
+      await english.checkForUpdate();
+      expect(english.state.error, 'Failed to check for updates: HTTP 503');
+
+      final chinese = UpdateNotifier(
+        dio: _createNon200Dio(503),
+        localizations: () =>
+            appLocalizationsForLocale(const Locale('zh', 'CN')),
+      );
+      await chinese.checkForUpdate();
+      expect(chinese.state.error, '检查更新失败：HTTP 503');
+    });
+
+    test('localizes download errors and preserves exception details', () async {
+      SharedPreferences.setMockInitialValues({});
+      final english = UpdateNotifier(
+        dio: _createFailingDio(),
+        localizations: () =>
+            appLocalizationsForLocale(const Locale('en', 'US')),
+      );
+      english.state = const UpdateState(
+        downloadUrl: 'https://example.com/update.zip',
+      );
+      await english.downloadUpdate(downloadDir: Directory.systemTemp.path);
+      expect(english.state.downloadError, contains('Download failed: '));
+      expect(english.state.downloadError, contains('Connection refused'));
+
+      final chinese = UpdateNotifier(
+        dio: _createFailingDio(),
+        localizations: () =>
+            appLocalizationsForLocale(const Locale('zh', 'CN')),
+      );
+      chinese.state = const UpdateState(
+        downloadUrl: 'https://example.com/update.zip',
+      );
+      await chinese.downloadUpdate(downloadDir: Directory.systemTemp.path);
+      expect(chinese.state.downloadError, contains('下载失败：'));
+      expect(chinese.state.downloadError, contains('Connection refused'));
+    });
+
     test('checkForUpdate sets isChecking immediately', () {
       final dio = Dio(BaseOptions());
       dio.interceptors.add(InterceptorsWrapper(
@@ -372,7 +424,7 @@ void main() {
 
       expect(notifier.state.isChecking, false);
       expect(notifier.state.error, isNotNull);
-      expect(notifier.state.error, contains('网络错误'));
+      expect(notifier.state.error, contains('Connection refused'));
     });
 
     test('resets state on HTTP failure when silent', () async {
@@ -1033,7 +1085,7 @@ void main() {
 
       expect(notifier.state.isDownloading, false);
       expect(notifier.state.downloadError, isNotNull);
-      expect(notifier.state.downloadError, contains('下载失败'));
+      expect(notifier.state.downloadError, contains('Connection refused'));
     });
 
     test('downloadUpdate handles non-200 response', () async {
@@ -1097,6 +1149,116 @@ void main() {
       // downloadedFilePath is null → early return, no install attempt
       await notifier.installDownloadedFile();
       expect(notifier.state.downloadError, isNull);
+    });
+
+    test('localizes APK install fallback in English and Simplified Chinese',
+        () async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      const channel = MethodChannel('com.johntsui.stroom/install');
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+        throw PlatformException(code: 'install_failed');
+      });
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+
+      try {
+        final english = UpdateNotifier(
+          dio: Dio(BaseOptions()),
+          localizations: () =>
+              appLocalizationsForLocale(const Locale('en', 'US')),
+        )..state = UpdateState(downloadedFilePath: '$tempDir/update.apk');
+        await english.installDownloadedFile();
+        expect(
+          english.state.downloadError,
+          'Installation failed. Open the APK manually.',
+        );
+
+        final chinese = UpdateNotifier(
+          dio: Dio(BaseOptions()),
+          localizations: () =>
+              appLocalizationsForLocale(const Locale('zh', 'CN')),
+        )..state = UpdateState(downloadedFilePath: '$tempDir/update.apk');
+        await chinese.installDownloadedFile();
+        expect(chinese.state.downloadError, '安装失败，请手动打开 APK 安装');
+      } finally {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, null);
+        debugDefaultTargetPlatformOverride = originalPlatform;
+      }
+    });
+
+    test(
+        'localizes Android installer error codes without showing platform text',
+        () async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      const channel = MethodChannel('com.johntsui.stroom/install');
+      var errorCode = 'ACTIVITY_NOT_FOUND';
+      var platformMessage = '未找到 APK 安装程序，请手动安装';
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+        throw PlatformException(code: errorCode, message: platformMessage);
+      });
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+
+      try {
+        final cases = [
+          (
+            'ACTIVITY_NOT_FOUND',
+            '未找到 APK 安装程序，请手动安装',
+            'Could not find an app to install this APK. Open it manually.',
+            '未找到可安装 APK 的应用，请手动打开 APK 安装。',
+          ),
+          (
+            'SECURITY_EXCEPTION',
+            '缺少安装权限，请在设置中允许安装未知来源应用',
+            'Allow Stroom to install unknown apps in system settings.',
+            '请在系统设置中允许 Stroom 安装未知来源应用。',
+          ),
+          (
+            'INSTALL_FAILED',
+            'APK 安装失败: private platform details',
+            'Installation failed. Open the APK manually.',
+            '安装失败，请手动打开 APK 安装',
+          ),
+          (
+            'NULL_FILEPATH',
+            '安装文件路径为空',
+            'Installation failed. Open the APK manually.',
+            '安装失败，请手动打开 APK 安装',
+          ),
+          (
+            'UNRECOGNIZED_CODE',
+            'unrecognized private platform details',
+            'Installation failed. Open the APK manually.',
+            '安装失败，请手动打开 APK 安装',
+          ),
+        ];
+        for (final (code, message, englishText, chineseText) in cases) {
+          errorCode = code;
+          platformMessage = message;
+          for (final (locale, expected) in [
+            (const Locale('en', 'US'), englishText),
+            (const Locale('zh', 'CN'), chineseText),
+          ]) {
+            final notifier = UpdateNotifier(
+              dio: Dio(BaseOptions()),
+              localizations: () => appLocalizationsForLocale(locale),
+            )..state = UpdateState(downloadedFilePath: '$tempDir/update.apk');
+
+            await notifier.installDownloadedFile();
+
+            expect(notifier.state.downloadError, expected);
+            expect(
+              notifier.state.downloadError,
+              isNot(contains(platformMessage)),
+            );
+          }
+        }
+      } finally {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, null);
+        debugDefaultTargetPlatformOverride = originalPlatform;
+      }
     });
 
     test('installDownloadedFile does nothing when downloadedFilePath is empty',
@@ -2003,6 +2165,25 @@ void main() {
       expect(notifier.state.updateAvailable, true);
       expect(notifier.state.availableVersions!.length, 1);
       expect(notifier.state.availableVersions![0].version, '0.2.14');
+    });
+
+    test('current release with a v-prefixed installed version is not offered',
+        () async {
+      // A build from a v-prefixed tag can report the installed version as
+      // "v0.2.13". The release list uses the normalized "0.2.13" version,
+      // and its published_at can be later than the timestamp baked from the
+      // release draft. The current release must still be excluded.
+      UpdateNotifier.debugAppVersionOverride = 'v0.2.13';
+      UpdateNotifier.debugAppReleaseTimeOverride = '2024-06-15T10:00:00Z';
+      final releases = _githubReleases([
+        ('v0.2.13', false, 'Current version', '2024-06-15T10:05:00Z'),
+      ]);
+      final notifier = UpdateNotifier(dio: _createMockDioForList(releases));
+
+      await notifier.checkForUpdate();
+
+      expect(notifier.state.updateAvailable, false);
+      expect(notifier.state.availableVersions, isNull);
     });
 
     test(

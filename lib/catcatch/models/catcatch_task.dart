@@ -150,13 +150,42 @@ enum TaskStatus {
 
 /// 猫抓下载任务
 class CatCatchTask {
+  /// Marks a flow-owned ambiguity picker so the global CatCatch dialog stays
+  /// closed while the task-flow card presents its scoped choices.
+  static const flowManagedSelectionKey = 'flowManagedSelection';
+
+  /// JSON selection-identity allow-list for the current flow-owned prompt.
+  /// Legacy URL-only entries remain accepted for already-persisted tasks.
+  static const flowSelectionCandidatesKey = 'flowSelectionCandidates';
+  static const flowSelectionCandidatesIdentityVersionKey =
+      'flowSelectionCandidatesIdentityVersion';
+  static const flowSelectionCandidatesIdentityVersion = '2';
+
+  static bool flowSelectionCandidateAllowed({
+    required Set<String> candidates,
+    required String identity,
+    required String url,
+    required bool hasByteRange,
+    required bool identityVersioned,
+  }) =>
+      candidates.contains(identity) ||
+      (!identityVersioned && hasByteRange && candidates.contains(url));
+
   /// Written only after native save registered this exact completed file.
   /// Legacy task records require the task-flow registration fallback.
   static const nativeRegisteredPathKey = 'nativeRegisteredPath';
 
+  /// Marks the fetch step as waiting for a user to finish in BrowserPage.
+  static const webViewRecoveryRequiredKey = 'webViewRecoveryRequired';
+
   // Keep ownership across immutable updates without persisting runtime state.
   final Object? _runtimeIdentity;
   Object get runtimeIdentity => _runtimeIdentity ?? this;
+  final Map<String, String> _runtimeBrowserCookieHeadersByUrl;
+
+  String? browserCookieHeaderForUrl(String url) {
+    return _runtimeBrowserCookieHeadersByUrl[url];
+  }
 
   final String id;
   final String url;
@@ -198,7 +227,9 @@ class CatCatchTask {
     this.metadata = const {},
     this.downloadedBytes = 0,
     Object? runtimeIdentity,
-  }) : _runtimeIdentity = runtimeIdentity;
+    Map<String, String> runtimeBrowserCookieHeadersByUrl = const {},
+  })  : _runtimeIdentity = runtimeIdentity,
+        _runtimeBrowserCookieHeadersByUrl = runtimeBrowserCookieHeadersByUrl;
 
   // ---------------------------------------------------------------------------
   // copyWith
@@ -225,6 +256,8 @@ class CatCatchTask {
     bool clearCompletedAt = false,
     bool clearDownloadedFilePath = false,
     bool clearSelectedMedia = false,
+    Map<String, String>? runtimeBrowserCookieHeadersByUrl,
+    bool clearRuntimeBrowserCookieHeader = false,
   }) {
     final newStatus = status ?? this.status;
     final newStatusChangedAt = statusChangedAt ??
@@ -234,6 +267,11 @@ class CatCatchTask {
 
     return CatCatchTask(
       runtimeIdentity: runtimeIdentity,
+      runtimeBrowserCookieHeadersByUrl: clearRuntimeBrowserCookieHeader
+          ? const {}
+          : runtimeBrowserCookieHeadersByUrl == null
+              ? _runtimeBrowserCookieHeadersByUrl
+              : Map.unmodifiable(runtimeBrowserCookieHeadersByUrl),
       id: id ?? this.id,
       url: url ?? this.url,
       expectedDurationSec: expectedDurationSec ?? this.expectedDurationSec,
@@ -253,6 +291,59 @@ class CatCatchTask {
           : (downloadedFilePath ?? this.downloadedFilePath),
       metadata: metadata ?? this.metadata,
       downloadedBytes: downloadedBytes ?? this.downloadedBytes,
+    );
+  }
+
+  /// Builds the same task at the first step after an interactive browser
+  /// recovery, retaining any media found before the pause.
+  CatCatchTask? resumeAfterBrowserRecovery({
+    required List<MediaResource> recoveredMedia,
+    String? pageTitle,
+    Map<String, String> cookieHeadersByUrl = const {},
+  }) {
+    if (status != TaskStatus.paused ||
+        metadata[webViewRecoveryRequiredKey] != 'true') {
+      return null;
+    }
+    final media = <MediaResource>[];
+    final mediaIndexByUrl = <String, int>{};
+    for (final resource in detectedMedia) {
+      if (mediaIndexByUrl.containsKey(resource.url)) continue;
+      mediaIndexByUrl[resource.url] = media.length;
+      media.add(resource);
+    }
+    for (final resource in recoveredMedia) {
+      final existingIndex = mediaIndexByUrl[resource.url];
+      if (existingIndex == null) {
+        mediaIndexByUrl[resource.url] = media.length;
+        media.add(resource);
+      } else {
+        // Browser recovery carries fresher MIME and initiator metadata for a
+        // URL that an earlier headless scan may have classified incompletely.
+        media[existingIndex] = resource;
+      }
+    }
+    if (media.isEmpty) return null;
+
+    final nextSteps = List<StepStatus>.from(steps);
+    while (nextSteps.length < StepType.values.length) {
+      nextSteps.add(StepStatus.pending(StepType.values[nextSteps.length]));
+    }
+    nextSteps[0] = StepStatus.done(
+      StepType.fetching,
+      detail: '浏览器中获取到${media.length}个资源',
+    );
+    nextSteps[1] = StepStatus.done(StepType.analyzing);
+    final nextMetadata = Map<String, String>.from(metadata)
+      ..remove(webViewRecoveryRequiredKey);
+    return copyWith(
+      status: TaskStatus.running,
+      steps: nextSteps,
+      detectedMedia: media,
+      metadata: nextMetadata,
+      title: pageTitle?.trim().isNotEmpty == true ? pageTitle!.trim() : title,
+      runtimeBrowserCookieHeadersByUrl: cookieHeadersByUrl,
+      clearError: true,
     );
   }
 

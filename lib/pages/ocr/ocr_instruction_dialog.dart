@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../l10n/app_localizations.dart';
 import '../../providers/ocr_instructions_provider.dart';
 
 // ============================================================================
@@ -65,6 +66,7 @@ class _OcrInstructionManageDialogState
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final l10n = AppLocalizations.of(context)!;
     final instructions = ref.watch(ocrInstructionsProvider);
 
     return AlertDialog(
@@ -80,8 +82,8 @@ class _OcrInstructionManageDialogState
             child: Icon(Icons.edit_note, size: 16, color: cs.primary),
           ),
           const SizedBox(width: 10),
-          const Text(
-            '管理识别指令',
+          Text(
+            l10n.ocrManageInstructions,
             style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
           ),
         ],
@@ -93,7 +95,7 @@ class _OcrInstructionManageDialogState
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '指令为通用设置，对所有识别模型生效。不选择时仅发送图片。',
+              l10n.ocrInstructionManageGuidance,
               style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
             ),
             const SizedBox(height: 12),
@@ -105,7 +107,7 @@ class _OcrInstructionManageDialogState
                         padding: const EdgeInsets.symmetric(vertical: 24),
                         child: Center(
                           child: Text(
-                            '暂无指令',
+                            l10n.ocrInstructionManageEmpty,
                             style: TextStyle(
                               color: cs.onSurfaceVariant,
                               fontSize: 13,
@@ -125,7 +127,7 @@ class _OcrInstructionManageDialogState
                               color: cs.surfaceContainerLow.withValues(
                                 alpha: 0.5,
                               ),
-                              borderRadius: BorderRadius.circular(10),
+                              borderRadius: BorderRadius.circular(8),
                               border: Border.all(
                                 color: cs.outlineVariant.withValues(
                                   alpha: 0.4,
@@ -174,7 +176,7 @@ class _OcrInstructionManageDialogState
                                 IconButton(
                                   icon:
                                       const Icon(Icons.edit_outlined, size: 18),
-                                  tooltip: '编辑指令',
+                                  tooltip: l10n.ocrInstructionEditTooltip,
                                   onPressed: () => _editInstruction(index),
                                 ),
                                 IconButton(
@@ -183,7 +185,7 @@ class _OcrInstructionManageDialogState
                                     size: 18,
                                     color: cs.error,
                                   ),
-                                  tooltip: '删除指令',
+                                  tooltip: l10n.ocrInstructionDeleteTooltip,
                                   onPressed: () async {
                                     final removal = ref
                                         .read(
@@ -207,12 +209,12 @@ class _OcrInstructionManageDialogState
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('关闭'),
+          child: Text(l10n.builtInPromptClose),
         ),
         FilledButton.icon(
           onPressed: _addInstruction,
           icon: const Icon(Icons.add, size: 18),
-          label: const Text('添加指令'),
+          label: Text(l10n.ocrInstructionAdd),
         ),
       ],
     );
@@ -261,12 +263,13 @@ class _InstructionEditorDialogState extends State<_InstructionEditorDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final canSave = _contentController.text.trim().isNotEmpty;
     return AlertDialog(
       title: Text(
         widget.initialName.isEmpty && widget.initialContent.isEmpty
-            ? '添加指令'
-            : '编辑指令',
+            ? l10n.ocrInstructionAdd
+            : l10n.ocrInstructionEditorEditTitle,
         style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
       ),
       content: SizedBox(
@@ -276,8 +279,8 @@ class _InstructionEditorDialogState extends State<_InstructionEditorDialog> {
           children: [
             TextField(
               controller: _nameController,
-              decoration: const InputDecoration(
-                labelText: '指令名称（可选）',
+              decoration: InputDecoration(
+                labelText: l10n.ocrInstructionNameLabel,
                 border: OutlineInputBorder(),
                 isDense: true,
               ),
@@ -288,8 +291,8 @@ class _InstructionEditorDialogState extends State<_InstructionEditorDialog> {
               minLines: 3,
               maxLines: 6,
               onChanged: (_) => setState(() {}),
-              decoration: const InputDecoration(
-                labelText: '指令内容',
+              decoration: InputDecoration(
+                labelText: l10n.ocrInstructionContentLabel,
                 border: OutlineInputBorder(),
                 isDense: true,
                 alignLabelWithHint: true,
@@ -301,11 +304,11 @@ class _InstructionEditorDialogState extends State<_InstructionEditorDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
+          child: Text(l10n.ocrCancel),
         ),
         FilledButton(
           onPressed: canSave ? _save : null,
-          child: const Text('保存'),
+          child: Text(l10n.systemAssistantSave),
         ),
       ],
     );

@@ -6,6 +6,98 @@ part of 'chat_page.dart';
 // ignore_for_file: invalid_use_of_protected_member
 
 extension _ChatPageStreamingExt on _ChatPageState {
+  void _attachStreamPage(
+      ChatStreamManager manager, String convId, String msgId) {
+    _detachStreamPage();
+    manager.attachStreamPage(convId, msgId, _streamPageOwner);
+    _attachedStreamManager = manager;
+    _attachedStreamConvId = convId;
+    _attachedStreamMsgId = msgId;
+  }
+
+  void _registerContinuationHandler(
+      ChatStreamManager manager, String convId, String msgId) {
+    manager.setContinuationHandler(convId, (continuation) async {
+      if (!mounted || ref.read(activeConversationIdProvider) != convId) {
+        return false;
+      }
+      final pendingLoad = _messageLoadCompleter;
+      if (pendingLoad != null) await pendingLoad.future;
+      if (!mounted || ref.read(activeConversationIdProvider) != convId) {
+        return false;
+      }
+
+      final streamController = _controller;
+      if (streamController == null) return false;
+      final continuationAlreadyVisible = streamController.messages
+          .any((message) => message.id == continuation.id);
+      final assistantPlaceholder = streamController?.messages
+          .where((message) => message.id == msgId)
+          .firstOrNull;
+      if (assistantPlaceholder != null) {
+        await streamController?.removeMessage(assistantPlaceholder);
+      }
+      if (!continuationAlreadyVisible) {
+        await streamController?.insertMessage(
+          Message.text(
+            id: continuation.id,
+            authorId: _currentUser.id,
+            text: continuation.content,
+            createdAt: continuation.createdAt,
+          ),
+        );
+      }
+      await streamController?.insertMessage(
+        assistantPlaceholder ??
+            Message.text(
+              id: msgId,
+              authorId: _aiUser.id,
+              text: manager.fullReplyFor(convId),
+              createdAt: DateTime.now(),
+            ),
+      );
+      return true;
+    });
+  }
+
+  void _detachStreamPageFor(String convId, String msgId) {
+    if (_attachedStreamConvId == convId && _attachedStreamMsgId == msgId) {
+      _detachStreamPage();
+    }
+  }
+
+  void _detachStreamPage({bool clearIfCompleted = false}) {
+    final manager = _attachedStreamManager;
+    final convId = _attachedStreamConvId;
+    final msgId = _attachedStreamMsgId;
+    if (manager != null && convId != null && msgId != null) {
+      _streamingMarkdownCache
+          .removeWhere((key, _) => key.startsWith('$msgId:'));
+      _streamingFenceInfoCaches
+          .removeWhere((key, _) => key.startsWith('$msgId:'));
+      _streamingSearchOccurrenceCache
+          .removeWhere((key, _) => key.startsWith('$msgId:'));
+      _livePlainTextFragments
+          .removeWhere((key, _) => key.startsWith('$msgId:'));
+      _liveMarkdownSearchPreviews
+          .removeWhere((key, _) => key.startsWith('$msgId:'));
+      _liveMarkdownAppendCounts
+          .removeWhere((key, _) => key.startsWith('$msgId:'));
+      _legacyFullReplySnapshots.remove('$convId:$msgId');
+      _legacyFullReplySequences.remove('$convId:$msgId');
+      _legacyFullReplyGenerations.remove('$convId:$msgId');
+      manager.detachStreamPage(
+        convId,
+        msgId,
+        _streamPageOwner,
+        clearIfCompleted: clearIfCompleted,
+      );
+    }
+    _attachedStreamManager = null;
+    _attachedStreamConvId = null;
+    _attachedStreamMsgId = null;
+  }
+
   /// Restores the streaming message UI when the page is re-initialized after
   /// having been disposed during active streaming (user navigated away during
   /// generation and came back). Uses per-conversation state from the manager
@@ -19,6 +111,8 @@ extension _ChatPageStreamingExt on _ChatPageState {
 
     final msgId = manager.streamingMsgIdFor(activeConvId);
     if (msgId == null) return;
+    _attachStreamPage(manager, activeConvId, msgId);
+    _registerContinuationHandler(manager, activeConvId, msgId);
 
     final fullReply = manager.fullReplyFor(activeConvId);
     final reasoningSections = manager.reasoningSectionsFor(activeConvId);
@@ -35,10 +129,16 @@ extension _ChatPageStreamingExt on _ChatPageState {
     _isStreamingActive = true;
     _streamingMsgId = msgId;
     try {
+      final restoredTextChunks = manager.publishedTextChunksFor(activeConvId);
+      final restoredChunkIndex = restoredTextChunks.length - 1;
+      final restoredAppendCount = manager.textChunkAppendCountFor(activeConvId);
+      final appendCountKey = '$msgId:$restoredChunkIndex';
+      final priorAppendCount = _liveMarkdownAppendCounts[appendCountKey] ?? 0;
+      if (restoredAppendCount > priorAppendCount) {
+        _liveMarkdownAppendCounts[appendCountKey] = restoredAppendCount;
+      }
       ref.read(isStreamingProvider(activeConvId).notifier).state = true;
       ref.read(streamingMsgIdProvider(activeConvId).notifier).state = msgId;
-      ref.read(streamingFullReplyProvider(activeConvId).notifier).state =
-          fullReply;
       ref
           .read(streamingReasoningSectionsProvider(activeConvId).notifier)
           .state = List<String>.from(reasoningSections);
@@ -47,8 +147,7 @@ extension _ChatPageStreamingExt on _ChatPageState {
       // roundStarts is set BEFORE toolCalls so that the toolCalls listener's
       // synchronous _rebuildLiveSegments reads the fresh round boundary.
       ref.read(streamingTextSectionsProvider(activeConvId).notifier).state =
-          List<String>.from(
-              ref.read(chatStreamManagerProvider).textChunksFor(activeConvId));
+          List<String>.from(restoredTextChunks);
       ref
               .read(streamingToolCallRoundStartsProvider(activeConvId).notifier)
               .state =
@@ -122,9 +221,9 @@ extension _ChatPageStreamingExt on _ChatPageState {
         // Insert directly as Message.text so it renders through the
         // normal textMessageBuilder (gray bubble + segments) instead of
         // textStreamMessageBuilder (raw white-background Markdown).
-        // Re-read the fullReply at insert time (not the value captured
-        // at _restoreStreamingState time) so the bubble carries the
-        // latest text if the stream advanced while the load ran.
+        // This fallback insertion happens only when async restore left the
+        // message out of the replacement controller. Seed the restored text
+        // so the re-entry bubble is immediately complete.
         final latestFullReply = manager.fullReplyFor(activeConvId);
         restoreController
             ?.insertMessage(
@@ -181,6 +280,8 @@ extension _ChatPageStreamingExt on _ChatPageState {
 
     _isStreamingActive = false;
     _streamingMsgId = null;
+    if (msgId != null) _convertedStreamingPlaceholderIds.remove(msgId);
+    _detachStreamPage();
     final convId = ref.read(activeConversationIdProvider);
     try {
       if (convId != null) {
@@ -189,10 +290,13 @@ extension _ChatPageStreamingExt on _ChatPageState {
         ref.read(streamingFullReplyProvider(convId).notifier).state = '';
         ref.read(streamingHasFirstTokenProvider(convId).notifier).state = false;
         ref.read(streamingReasoningProvider(convId).notifier).state = '';
+        ref.read(streamingReasoningAppendProvider(convId).notifier).state =
+            null;
         ref.read(streamingReasoningSectionsProvider(convId).notifier).state =
             [];
         ref.read(streamingToolCallsProvider(convId).notifier).state = [];
         ref.read(streamingTextSectionsProvider(convId).notifier).state = [''];
+        ref.read(streamingTextAppendProvider(convId).notifier).state = null;
         ref.read(streamingToolCallRoundStartsProvider(convId).notifier).state =
             [];
       }
@@ -203,6 +307,17 @@ extension _ChatPageStreamingExt on _ChatPageState {
     // reload will replace _chatSegments from the persisted message (which
     // carries toolCallRoundStarts, so multi-tool grouping is correct).
     if (msgId != null) _finalizedMessages.add(msgId);
+    if (msgId != null) {
+      _liveMarkdownSearchPreviews
+          .removeWhere((key, _) => key.startsWith('$msgId:'));
+      _liveMarkdownAppendCounts
+          .removeWhere((key, _) => key.startsWith('$msgId:'));
+      if (convId != null) {
+        _legacyFullReplySnapshots.remove('$convId:$msgId');
+        _legacyFullReplySequences.remove('$convId:$msgId');
+        _legacyFullReplyGenerations.remove('$convId:$msgId');
+      }
+    }
     // Reload from DB. _loadConversationMessages is now unguarded because
     // _isStreamingActive is false. It clears _chatSegments / _finalizedMessages
     // and rebuilds from the persisted message (including toolCallRoundStarts).
@@ -214,6 +329,8 @@ extension _ChatPageStreamingExt on _ChatPageState {
     String text, {
     String? capturedConvId,
     List<ChatMessage>? historyOverride,
+    List<ChatMessage>? requestHistoryOverride,
+    List<ChatMessage>? historyOnSuccess,
   }) async {
     final effectiveConvId =
         capturedConvId ?? ref.read(activeConversationIdProvider) ?? '';
@@ -251,6 +368,21 @@ extension _ChatPageStreamingExt on _ChatPageState {
     final reasoning = ref.read(reasoningEnabledProvider);
     final reasoningEffort = ref.read(reasoningEffortProvider);
     final reasoningParamValues = ref.read(reasoningParamValuesProvider);
+    final storedCustomParamValues = ref.read(customParamValuesProvider);
+    final customParamValues = storedCustomParamValues == null
+        ? null
+        : Map<String, String>.from(storedCustomParamValues);
+    if (customParamValues != null) {
+      for (final param
+          in _adapter.customParams.where((p) => p.type == 'json')) {
+        if (!customParamValues.containsKey(param.paramName)) continue;
+        if (param.defaultValue.trim().isEmpty) {
+          customParamValues.remove(param.paramName);
+        } else {
+          customParamValues[param.paramName] = param.defaultValue;
+        }
+      }
+    }
     final histBefore = historyOverride ?? List<ChatMessage>.from(_history);
     // Guard: only block if THIS conversation is streaming, not another.
     if (ref.read(streamingConversationsProvider).contains(effectiveConvId)) {
@@ -262,10 +394,6 @@ extension _ChatPageStreamingExt on _ChatPageState {
     if (mounted && ref.read(activeConversationIdProvider) != effectiveConvId) {
       return;
     }
-    ref.read(isStreamingProvider(effectiveConvId).notifier).state = true;
-    _isStreamingActive = true;
-    if (mounted) setState(() {});
-
     final aiMsgId = 'a${DateTime.now().microsecondsSinceEpoch}';
     _streamingMsgId = aiMsgId;
     _chatSegments[aiMsgId] = [];
@@ -305,16 +433,30 @@ extension _ChatPageStreamingExt on _ChatPageState {
       ref.read(isStreamingProvider(effectiveConvId).notifier).state = false;
       return;
     }
-    final StreamResult result = await manager.startStreaming(
+    // Advertise a stoppable stream immediately before manager registration.
+    // startStreaming registers its state synchronously before its first await,
+    // so Stop can never race ahead of the state that cancel() needs to mark.
+    ref.read(isStreamingProvider(effectiveConvId).notifier).state = true;
+    _isStreamingActive = true;
+    if (mounted) setState(() {});
+    _registerContinuationHandler(manager, effectiveConvId, aiMsgId);
+
+    final streamFuture = manager.startStreaming(
       text: text,
       convId: effectiveConvId,
       history: histBefore,
+      requestHistoryOverride: requestHistoryOverride,
+      historyOnSuccess: historyOnSuccess,
       tools: filteredTools,
       reasoning: reasoning,
       reasoningEffort: reasoningEffort,
       reasoningParamValues: reasoningParamValues,
+      customParamValues: customParamValues,
       streamingMsgId: aiMsgId,
     );
+    _attachStreamPage(manager, effectiveConvId, aiMsgId);
+    final StreamResult result = await streamFuture;
+    _detachStreamPageFor(effectiveConvId, aiMsgId);
 
     if (!mounted) return;
 
@@ -327,9 +469,19 @@ extension _ChatPageStreamingExt on _ChatPageState {
     // conversation's data and overwriting it would corrupt the display.
     final pageOwnedStream = _streamingMsgId == aiMsgId &&
         ref.read(activeConversationIdProvider) == effectiveConvId;
-    if (pageOwnedStream) {
+    // Stop clears the page-owned id immediately so an aborted manager result
+    // cannot overwrite the live partial response with an incomplete result.
+    // Once the real manager returns its persisted cancellation message, apply
+    // that result too; otherwise edit/regenerate leaves _history stale after
+    // the stop and subsequent actions cannot find the newly saved message.
+    final finalizedStoppedStream = _streamingMsgId == null &&
+        result.assistantMessage?.isError == true &&
+        ref.read(activeConversationIdProvider) == effectiveConvId;
+    final shouldApplyStreamResult = pageOwnedStream || finalizedStoppedStream;
+    if (shouldApplyStreamResult) {
       _history.clear();
       _history.addAll(result.history);
+      await _removeOrphanMessagesFromController();
     }
 
     // Clear the local streaming flag IMMEDIATELY (before any await below)
@@ -337,9 +489,10 @@ extension _ChatPageStreamingExt on _ChatPageState {
     // (_handleStreamCompletion, guard: `if (!_isStreamingActive) return;`)
     // sees false and skips — avoiding a wasteful DB reload + visual flicker
     // in the normal (non-re-entry) completion path.
-    if (pageOwnedStream) {
+    if (shouldApplyStreamResult) {
       _streamingMsgId = null;
       _isStreamingActive = false;
+      _convertedStreamingPlaceholderIds.remove(aiMsgId);
     }
 
     // Clean up local streaming state and providers. Do not clear providers
@@ -358,6 +511,9 @@ extension _ChatPageStreamingExt on _ChatPageState {
             .state = false;
         ref.read(streamingReasoningProvider(effectiveConvId).notifier).state =
             '';
+        ref
+            .read(streamingReasoningAppendProvider(effectiveConvId).notifier)
+            .state = null;
         ref
             .read(streamingReasoningSectionsProvider(effectiveConvId).notifier)
             .state = [];
@@ -384,7 +540,7 @@ extension _ChatPageStreamingExt on _ChatPageState {
     } catch (_) {}
 
     // Update the controller: replace streaming placeholder with final message
-    if (pageOwnedStream &&
+    if (shouldApplyStreamResult &&
         mounted &&
         ref.read(activeConversationIdProvider) == effectiveConvId) {
       final finalMsg = result.assistantMessage;
@@ -421,6 +577,14 @@ extension _ChatPageStreamingExt on _ChatPageState {
         // 内的分段/推理缓存条目（切换对话时会统一清除）。
         await _controller?.removeMessage(placeholder);
         _chatSegments.remove(aiMsgId);
+        _streamingMarkdownCache
+            .removeWhere((key, _) => key.startsWith('$aiMsgId:'));
+        _streamingFenceInfoCaches
+            .removeWhere((key, _) => key.startsWith('$aiMsgId:'));
+        _streamingSearchOccurrenceCache
+            .removeWhere((key, _) => key.startsWith('$aiMsgId:'));
+        _livePlainTextFragments
+            .removeWhere((key, _) => key.startsWith('$aiMsgId:'));
         _reasoningContents.remove(aiMsgId);
         _isReasoningCompletedForMsg.remove(aiMsgId);
       }
@@ -430,13 +594,37 @@ extension _ChatPageStreamingExt on _ChatPageState {
 
   /// Builds the final [_chatSegments] entry for a completed assistant message.
   void _buildFinalSegments(ChatMessage msg) {
-    final blocks = msg.blocks ??
-        legacyToBlocks(
-          reasoningSections: msg.reasoningSections ?? [],
-          textChunks: msg.textSections ?? [],
-          toolCalls: msg.toolCalls ?? [],
-          toolCallRoundStarts: msg.toolCallRoundStarts ?? [],
-        );
+    _streamingMarkdownCache
+        .removeWhere((key, _) => key.startsWith('${msg.id}:'));
+    _streamingFenceInfoCaches
+        .removeWhere((key, _) => key.startsWith('${msg.id}:'));
+    _streamingSearchOccurrenceCache
+        .removeWhere((key, _) => key.startsWith('${msg.id}:'));
+    _livePlainTextFragments
+        .removeWhere((key, _) => key.startsWith('${msg.id}:'));
+    _liveMarkdownSearchPreviews
+        .removeWhere((key, _) => key.startsWith('${msg.id}:'));
+    _liveMarkdownAppendCounts
+        .removeWhere((key, _) => key.startsWith('${msg.id}:'));
+    _legacyFullReplySnapshots
+        .removeWhere((key, _) => key.endsWith(':${msg.id}'));
+    _legacyFullReplySequences
+        .removeWhere((key, _) => key.endsWith(':${msg.id}'));
+    _legacyFullReplyGenerations
+        .removeWhere((key, _) => key.endsWith(':${msg.id}'));
+    final rebuiltBlocks = legacyToBlocks(
+      reasoningSections: msg.reasoningSections ?? [],
+      textChunks: msg.textSections ?? [],
+      toolCalls: msg.toolCalls ?? [],
+      toolCallRoundStarts: msg.toolCallRoundStarts ?? [],
+    );
+    rebuiltBlocks.addAll(msg.blocks?.whereType<ErrorBlock>() ?? const []);
+    final hasCanonicalFields = msg.toolCallRoundStarts != null ||
+        ((msg.toolCalls == null || msg.toolCalls!.isEmpty) &&
+            !(msg.blocks?.any((block) => block is ToolCallBlock) ?? false) &&
+            (msg.reasoningSections != null || msg.textSections != null));
+    final blocks =
+        hasCanonicalFields ? rebuiltBlocks : (msg.blocks ?? rebuiltBlocks);
     final segments = blocksToSegments(blocks);
 
     // Fallback: no blocks produced anything, use content as single block
@@ -459,18 +647,57 @@ extension _ChatPageStreamingExt on _ChatPageState {
     if (convId == null) return;
 
     final segments = buildAgentChainSegments(
-      reasoningSections: List<String>.from(
-          ref.read(streamingReasoningSectionsProvider(convId))),
-      textChunks:
-          List<String>.from(ref.read(streamingTextSectionsProvider(convId))),
-      toolCalls:
-          List<ToolCallData>.from(ref.read(streamingToolCallsProvider(convId))),
+      reasoningSections: _reasoningContents[msgId] ??
+          ref.read(streamingReasoningSectionsProvider(convId)),
+      textChunks: ref.read(streamingTextSectionsProvider(convId)),
+      toolCalls: ref.read(streamingToolCallsProvider(convId)),
       isLastReasoningStreaming: !(_isReasoningCompletedForMsg[msgId] ?? false),
-      toolCallRoundStarts: List<int>.from(
-          ref.read(streamingToolCallRoundStartsProvider(convId))),
+      toolCallRoundStarts:
+          ref.read(streamingToolCallRoundStartsProvider(convId)),
     );
 
+    // Markdown updates arrive as deltas without publishing a full text-section
+    // snapshot on every throttle tick. Preserve the active renderer segment
+    // when unrelated reasoning/tool providers trigger a segment rebuild.
+    final activeMarkdown = (_chatSegments[msgId] ?? const <MessageSegment>[])
+        .whereType<TextSegment>()
+        .where((segment) => segment.liveMarkdownAppend != null);
+    for (final liveSegment in activeMarkdown) {
+      final index = segments.lastIndexWhere(
+        (segment) =>
+            segment is TextSegment &&
+            segment.chunkIndex == liveSegment.chunkIndex,
+      );
+      if (index >= 0) {
+        segments[index] = liveSegment;
+      } else {
+        segments.add(liveSegment);
+      }
+    }
+
     _chatSegments[msgId] = segments;
+  }
+
+  /// Replaces only the final growing text section after a throttled text
+  /// update. The sealed reasoning, text, and tool segments keep their object
+  /// identity so their Markdown widgets can reuse the existing parse tree.
+  bool _updateLiveTextSegment(String msgId, List<String> textChunks) {
+    if (textChunks.isEmpty) return false;
+    final segments = _chatSegments[msgId];
+    if (segments == null) return false;
+    final chunkIndex = textChunks.length - 1;
+    final segmentIndex = segments.lastIndexWhere(
+      (segment) => segment is TextSegment && segment.chunkIndex == chunkIndex,
+    );
+    if (segmentIndex == -1) return false;
+
+    final updated = List<MessageSegment>.of(segments);
+    updated[segmentIndex] = TextSegment(
+      textChunks[chunkIndex],
+      chunkIndex: chunkIndex,
+    );
+    _chatSegments[msgId] = updated;
+    return true;
   }
 
   void _stopStreaming() {
@@ -478,41 +705,75 @@ extension _ChatPageStreamingExt on _ChatPageState {
     final convId = ref.read(activeConversationIdProvider);
     _isStreamingActive = false;
     _streamingMsgId = null;
+    if (stoppedMsgId != null) {
+      _convertedStreamingPlaceholderIds.remove(stoppedMsgId);
+    }
     try {
       ref.read(chatStreamManagerProvider).cancel(convId);
-      // 立即用已收到的部分回复替换流式占位符（恢复旧行为）：
-      // 置空 _streamingMsgId 后，post-stream 的 pageOwnedStream 门控
-      // 为 false，占位符的更新/移除分支不会执行——不在这里处理，
-      // spinner 会永久残留（取消且无内容时尤其明显）。
+      // Render the partial response and interruption error immediately. The
+      // manager finalizes persistence independently; clearing the page-owned
+      // id leaves the normal history reload to read that saved result instead
+      // of replacing this live message with an incomplete result object.
       if (stoppedMsgId != null && convId != null && _controller != null) {
         final partial =
             ref.read(chatStreamManagerProvider).fullReplyFor(convId);
-        if (partial.isNotEmpty) {
-          _controller?.updateMessage(
-            Message.textStream(
-                id: stoppedMsgId, authorId: _aiUser.id, streamId: stoppedMsgId),
-            Message.text(
-              id: stoppedMsgId,
-              authorId: _aiUser.id,
-              text: partial,
-            ),
-          );
-        } else {
-          _controller?.removeMessage(Message.textStream(
-              id: stoppedMsgId, authorId: _aiUser.id, streamId: stoppedMsgId));
-          _chatSegments.remove(stoppedMsgId);
-          _reasoningContents.remove(stoppedMsgId);
-          _isReasoningCompletedForMsg.remove(stoppedMsgId);
+        final textChunks =
+            ref.read(chatStreamManagerProvider).textChunksFor(convId);
+        final segments =
+            List<MessageSegment>.from(_chatSegments[stoppedMsgId] ?? const []);
+        for (var i = 0; i < segments.length; i++) {
+          final segment = segments[i];
+          if (segment is TextSegment &&
+              segment.liveMarkdownAppend != null &&
+              segment.chunkIndex != null &&
+              segment.chunkIndex! < textChunks.length) {
+            segments[i] = TextSegment(
+              textChunks[segment.chunkIndex!],
+              chunkIndex: segment.chunkIndex,
+            );
+          }
         }
+        final legacyKey = '$convId:$stoppedMsgId';
+        final legacySnapshot = _legacyFullReplySnapshots[legacyKey];
+        if (legacySnapshot != null) {
+          final textIndex = segments.lastIndexWhere(
+            (segment) => segment is TextSegment && segment.chunkIndex == 0,
+          );
+          final canonicalSegment = TextSegment(legacySnapshot, chunkIndex: 0);
+          if (textIndex >= 0) {
+            segments[textIndex] = canonicalSegment;
+          } else {
+            segments.add(canonicalSegment);
+          }
+          _legacyFullReplySnapshots.remove(legacyKey);
+          _legacyFullReplySequences.remove(legacyKey);
+          _legacyFullReplyGenerations.remove(legacyKey);
+        }
+        _chatSegments[stoppedMsgId] = segments;
+        _liveMarkdownSearchPreviews
+            .removeWhere((key, _) => key.startsWith('$stoppedMsgId:'));
+        _liveMarkdownAppendCounts
+            .removeWhere((key, _) => key.startsWith('$stoppedMsgId:'));
+        if (!segments.any((segment) => segment is ErrorSegment)) {
+          segments.add(
+            ErrorSegment(AppLocalizations.of(context)!.chatErrorCancelled),
+          );
+        }
+        _chatSegments[stoppedMsgId] = segments;
+        _controller?.updateMessage(
+          Message.textStream(
+              id: stoppedMsgId, authorId: _aiUser.id, streamId: stoppedMsgId),
+          Message.text(
+            id: stoppedMsgId,
+            authorId: _aiUser.id,
+            text: partial,
+          ),
+        );
+        if (mounted) setState(() {});
       }
-      // Immediately remove this conversation from the streaming set so
-      // the send/stop button reflects the stopped state without waiting
-      // for the manager's async cleanup loop to finish.
-      if (convId != null) {
-        final activeSet = <String>{...ref.read(streamingConversationsProvider)}
-          ..remove(convId);
-        ref.read(streamingConversationsProvider.notifier).state = activeSet;
-      }
+      // Keep the manager's streaming set entry until its cancelled result is
+      // persisted. The send guard uses this set and prevents a fast resend
+      // from replacing the cancelled state before its partial/error is saved.
     } catch (e) {
       debugPrint('[ChatPage] _stopStreaming cancel error: $e');
     }
@@ -524,10 +785,13 @@ extension _ChatPageStreamingExt on _ChatPageState {
         ref.read(streamingFullReplyProvider(convId).notifier).state = '';
         ref.read(streamingHasFirstTokenProvider(convId).notifier).state = false;
         ref.read(streamingReasoningProvider(convId).notifier).state = '';
+        ref.read(streamingReasoningAppendProvider(convId).notifier).state =
+            null;
         ref.read(streamingReasoningSectionsProvider(convId).notifier).state =
             [];
         ref.read(streamingToolCallsProvider(convId).notifier).state = [];
         ref.read(streamingTextSectionsProvider(convId).notifier).state = [''];
+        ref.read(streamingTextAppendProvider(convId).notifier).state = null;
         ref.read(streamingToolCallRoundStartsProvider(convId).notifier).state =
             [];
       }

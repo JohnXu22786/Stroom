@@ -6,20 +6,16 @@ Stroom's application license is AGPL-3.0; see the root [`LICENSE`](../LICENSE).
 
 About > Open Source Licenses uses Flutter's `showLicensePage` and
 `LicenseRegistry` to show licenses from the package graph resolved for the
-build. The repository tracks `pubspec.lock`, which records the resolved direct
-and transitive Dart package versions. The Flutter SDK itself also supplies
-packages, so the graph can vary with the Flutter version used for a build.
-This note does not duplicate or claim to enumerate that graph. The committed
-lock was generated with Flutter 3.47.8; CI and release workflows use that same
-SDK version when enforcing the lock.
+build. The repository does not track `pubspec.lock`, so Pub resolves direct and
+transitive Dart package versions from the constraints in `pubspec.yaml` for each
+build. The Flutter SDK itself also supplies packages, so the graph can vary
+with the Flutter version used for a build. This note does not duplicate or
+claim to enumerate that graph. CI and release workflows use Flutter 3.47.8.
 
-The previous lock resolved `function_tree` 0.9.1 as a transitive dependency of
-`visual_math` 0.1.0. `visual_math` 0.1.1 no longer declares it, so it is absent
-from the current lock. `cupertino_icons` remains at 1.0.9 because the
-latest Chewie release (1.17.4) requires `cupertino_icons ^1.0.9`, which excludes
-the newer 2.0.0 release. The test-only `cross_file` dependency remains at
-0.3.5+5 because `file_picker_platform_interface` 4.2.0 requires `^0.3.5+4`,
-which excludes `cross_file` 0.4.0.
+`visual_math` 0.1.1 no longer depends on `function_tree`; the earlier 0.1.0
+release resolved it transitively. `cupertino_icons` is constrained by Chewie's
+dependency range, and the test-only `cross_file` dependency is constrained by
+`file_picker_platform_interface`.
 
 `fvp: ^0.39.1` is declared by Stroom. The [`fvp` 0.39.1 package archive](https://pub.dev/packages/fvp/versions/0.39.1)
 is BSD-3-Clause licensed, and Flutter's generated package registry shows that
@@ -30,9 +26,8 @@ FVP 0.39.1's [CMake setup](https://pub.dev/packages/fvp/versions/0.39.1)
 downloads MDK SDK archives from SourceForge's mutable
 [`nightly` directory](https://sourceforge.net/projects/mdk-sdk/files/nightly/)
 unless `FVP_DEPS_URL` is set; for Windows x64 it selects
-`mdk-sdk-windows-x64.7z`. Stroom's release workflow does not set that override,
-and this repository tracks `pubspec.lock` for Dart package versions, but that
-lockfile does not pin FVP's downloaded native runtime. The notices below
+`mdk-sdk-windows-x64.7z`. Stroom's release workflow does not set that override.
+The notices below
 describe runtime packages inspected on 2026-10-11; they do not identify every
 future release artifact or make the downloaded runtime reproducible.
 
@@ -223,10 +218,9 @@ the 62 identified artifacts and `androidx.arch.core:core-runtime`. Flutter's
 `NOTICES.Z` does not enumerate these Maven dependencies.
 
 This notice group describes only the dependencies observed in APK
-`v0.5.0-rc.1`; the repository does not track a Gradle lockfile. Its
-`pubspec.lock` records Dart/Flutter package versions, but does not enumerate
-Android Maven resolution or claim to cover future APK contents. On newer
-`main`, `wechat_assets_picker` 10.1.3 has a root Apache-2.0 license already
+`v0.5.0-rc.1`; the repository does not track a Gradle or Pub lockfile and does
+not claim to cover future APK contents. On newer `main`, `wechat_assets_picker`
+10.1.3 has a root Apache-2.0 license already
 collected by Flutter. Its `photo_manager` dependency declares no Android Maven
 runtime dependency and is not part of this observed APK group.
 
@@ -277,6 +271,15 @@ had no visible `LICENSE` file or GitHub license metadata. Stroom's local
 implementation XORs the first 100 bytes by `0xFF` and remuxes the decoded FLV
 to MP4; the reference script writes an FLV. The citation does not establish a
 license grant, and this note does not determine whether any code was copied.
+
+## OpenCode CLI design reference
+
+The retry and stream-continuation behavior was informed by the CLI portions of
+[`anomalyco/opencode`](https://github.com/anomalyco/opencode), reviewed at
+commit [`84262f9277f14fc3a493d46c31789942ea5cb55e`](https://github.com/anomalyco/opencode/tree/84262f9277f14fc3a493d46c31789942ea5cb55e).
+OpenCode is distributed under the [MIT License](https://github.com/anomalyco/opencode/blob/84262f9277f14fc3a493d46c31789942ea5cb55e/LICENSE).
+This is a design reference only; no OpenCode code was copied into Stroom.
+Stroom remains licensed under AGPL-3.0.
 
 ## Bundled vendor assets
 

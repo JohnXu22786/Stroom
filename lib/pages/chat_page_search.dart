@@ -1,4 +1,5 @@
 part of 'chat_page.dart';
+
 // Extension methods on the State class cannot use @protected members
 // (setState / state) without analyzer warnings, but the receiver IS the
 // State/StateNotifier, so runtime behavior is identical to the original
@@ -11,27 +12,29 @@ extension _ChatPageSearchExt on _ChatPageState {
       _searchQuery = query;
       _searchMatches.clear();
       _currentMatchIndex = 0;
-      if (query.isEmpty) return;
-      final lowerQuery = query.toLowerCase();
-      for (final msg in _history) {
-        // AI messages are rendered as markdown: matches inside code blocks,
-        // inline code or math can never be highlighted (those are rendered
-        // as dedicated widgets), so strip them before matching — otherwise
-        // they would overstate the counter and shift the "current" match.
-        // User messages are plain text and keep raw offsets (used by the
-        // plain-text highlight).
-        final text = msg.role == 'user'
-            ? msg.content
-            : stripSearchIrrelevantMarkdown(msg.content);
-        final lowerContent = text.toLowerCase();
-        int start = 0;
-        while (true) {
-          final idx = lowerContent.indexOf(lowerQuery, start);
-          if (idx == -1) break;
-          _searchMatches.add(SearchMatch(msg.id, idx, idx + query.length));
-          start = idx + query.length;
+      if (query.isNotEmpty) {
+        final lowerQuery = query.toLowerCase();
+        for (final msg in _history) {
+          // AI messages are rendered as markdown: matches inside code blocks,
+          // inline code or math can never be highlighted (those are rendered
+          // as dedicated widgets), so strip them before matching — otherwise
+          // they would overstate the counter and shift the "current" match.
+          // User messages are plain text and keep raw offsets (used by the
+          // plain-text highlight).
+          final text = msg.role == 'user'
+              ? msg.content
+              : stripSearchIrrelevantMarkdown(msg.content);
+          final lowerContent = text.toLowerCase();
+          int start = 0;
+          while (true) {
+            final idx = lowerContent.indexOf(lowerQuery, start);
+            if (idx == -1) break;
+            _searchMatches.add(SearchMatch(msg.id, idx, idx + query.length));
+            start = idx + query.length;
+          }
         }
       }
+      _rebuildSearchMatchFirstIndex();
     });
     if (_searchMatches.isNotEmpty) {
       // Scroll after the rebuild so the message list reflects the new
@@ -39,6 +42,16 @@ extension _ChatPageSearchExt on _ChatPageState {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _scrollToCurrentMatch();
       });
+    }
+  }
+
+  void _rebuildSearchMatchFirstIndex() {
+    _searchMatchFirstIndexByMessageId.clear();
+    for (var i = 0; i < _searchMatches.length; i++) {
+      _searchMatchFirstIndexByMessageId.putIfAbsent(
+        _searchMatches[i].messageId,
+        () => i,
+      );
     }
   }
 
@@ -85,14 +98,18 @@ extension _ChatPageSearchExt on _ChatPageState {
           // Nothing more to load (or retries exhausted): the target message
           // is not in the chat controller.
           if (stalledRetries > 10) {
-            debugPrint('[ChatPage] search navigation retries exhausted for '
-                'message ${match.messageId}');
+            debugPrint(
+              '[ChatPage] search navigation retries exhausted for '
+              'message ${match.messageId}',
+            );
           }
           break;
         }
         if (++loadGuard > 100) {
-          debugPrint('[ChatPage] search navigation gave up before reaching '
-              'message ${match.messageId}');
+          debugPrint(
+            '[ChatPage] search navigation gave up before reaching '
+            'message ${match.messageId}',
+          );
           break;
         }
       }
@@ -185,11 +202,13 @@ extension _ChatPageSearchExt on _ChatPageState {
   }
 
   void _closeSearch() {
+    _liveMarkdownSearchPreviews.clear();
     setState(() {
       _isSearching = false;
       _searchMode = SearchMode.current;
       _searchQuery = '';
       _searchMatches.clear();
+      _searchMatchFirstIndexByMessageId.clear();
       _currentMatchIndex = 0;
       _searchTextController.clear();
     });
@@ -207,7 +226,7 @@ extension _ChatPageSearchExt on _ChatPageState {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
         decoration: BoxDecoration(
           color: selected ? cs.primaryContainer : Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: selected ? cs.primary : cs.outlineVariant,
             width: selected ? 1.0 : 0.5,
@@ -351,10 +370,7 @@ extension _ChatPageSearchExt on _ChatPageState {
     return TextFieldTapRegion(
       groupId: chatComposerTapRegionGroupId,
       child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 4,
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.surface,
           border: Border(
@@ -373,9 +389,7 @@ extension _ChatPageSearchExt on _ChatPageState {
                 Icon(
                   Icons.search,
                   size: 18,
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.onSurfaceVariant,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
                 const SizedBox(width: 8),
                 Expanded(
@@ -398,8 +412,8 @@ extension _ChatPageSearchExt on _ChatPageState {
                       },
                       decoration: InputDecoration(
                         hintText: _searchMode == SearchMode.current
-                            ? '搜索当前对话...'
-                            : '搜索所有对话...',
+                            ? AppLocalizations.of(context)!.chatSearchCurrent
+                            : AppLocalizations.of(context)!.chatSearchAll,
                         isDense: true,
                         contentPadding: const EdgeInsets.symmetric(
                           horizontal: 8,
@@ -418,19 +432,14 @@ extension _ChatPageSearchExt on _ChatPageState {
                     '${_currentMatchIndex + 1}/${_searchMatches.length}',
                     style: TextStyle(
                       fontSize: 12,
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.onSurfaceVariant,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ),
                 ],
                 if (_searchMode == SearchMode.current) ...[
                   IconButton(
-                    icon: const Icon(
-                      Icons.keyboard_arrow_up,
-                      size: 20,
-                    ),
-                    tooltip: '上一个',
+                    icon: const Icon(Icons.keyboard_arrow_up, size: 20),
+                    tooltip: AppLocalizations.of(context)!.searchPrevious,
                     onPressed: _previousMatch,
                     visualDensity: VisualDensity.compact,
                     padding: EdgeInsets.zero,
@@ -440,11 +449,8 @@ extension _ChatPageSearchExt on _ChatPageState {
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(
-                      Icons.keyboard_arrow_down,
-                      size: 20,
-                    ),
-                    tooltip: '下一个',
+                    icon: const Icon(Icons.keyboard_arrow_down, size: 20),
+                    tooltip: AppLocalizations.of(context)!.searchNext,
                     onPressed: _nextMatch,
                     visualDensity: VisualDensity.compact,
                     padding: EdgeInsets.zero,
@@ -456,7 +462,7 @@ extension _ChatPageSearchExt on _ChatPageState {
                 ],
                 IconButton(
                   icon: const Icon(Icons.close, size: 18),
-                  tooltip: '关闭搜索',
+                  tooltip: AppLocalizations.of(context)!.searchClose,
                   onPressed: _closeSearch,
                   visualDensity: VisualDensity.compact,
                   padding: EdgeInsets.zero,
@@ -472,7 +478,8 @@ extension _ChatPageSearchExt on _ChatPageState {
             Row(
               children: [
                 _buildModeChip(
-                  label: '当前对话',
+                  label:
+                      AppLocalizations.of(context)!.searchCurrentConversation,
                   selected: _searchMode == SearchMode.current,
                   onTap: () {
                     if (_searchMode != SearchMode.current) {
@@ -486,7 +493,7 @@ extension _ChatPageSearchExt on _ChatPageState {
                 ),
                 const SizedBox(width: 8),
                 _buildModeChip(
-                  label: '所有对话',
+                  label: AppLocalizations.of(context)!.searchAllConversations,
                   selected: _searchMode == SearchMode.global,
                   onTap: () {
                     if (_searchMode != SearchMode.global) {

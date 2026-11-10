@@ -8,6 +8,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:uuid/uuid.dart';
 import 'package:dio/dio.dart';
+import '../l10n/app_localizations.dart';
+import 'locale_provider.dart';
 import 'package:path/path.dart' as p;
 
 import '../services/storage_service.dart';
@@ -104,8 +106,10 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
     try {
       final synthConfig = ref.read(synthesisConfigProvider);
 
-      final provider =
-          tts_provider_base.createProviderFromConfig(task.providerConfig);
+      final provider = tts_provider_base.createProviderFromConfig(
+        task.providerConfig,
+        locale: ref.read(localeProvider),
+      );
 
       // 构建参数
       final params = <String, dynamic>{
@@ -188,7 +192,10 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
         final temporaryPath = await FlowTemporaryArtifactStorage.writeBytes(
           executionId: temporaryExecutionId!,
           blockId: temporaryBlockId!,
-          fileName: '${computeAudioHash(audioData)}.$actualFormat',
+          fileName: AudioRecord.storageFileNameFor(
+            hash: computeAudioHash(audioData),
+            format: actualFormat,
+          ),
           bytes: audioData,
         );
         if (cancelToken.isCancelled || !isCurrent()) {
@@ -209,7 +216,10 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
       // 保存音频文件
       final saveFolder = task.customParams?['saveFolder'] ?? '';
       final savedFilePath = await FileManifest.withStorageFileSaveLock(
-        '${computeAudioHash(audioData)}.$actualFormat',
+        AudioRecord.storageFileNameFor(
+          hash: computeAudioHash(audioData),
+          format: actualFormat,
+        ),
         () async {
           final saved = await _saveAudioFile(
             audioData,
@@ -269,29 +279,40 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
           responseBodyStr = d.toString();
         }
       }
-      final String origMsg = e.message ?? '';
-      final String extra = origMsg.isNotEmpty ? '\n原始错误: $origMsg' : '';
+      final strings = appLocalizationsForLocale(ref.read(localeProvider));
+      final String origMsg = e.message ?? e.error?.toString() ?? '';
+      final String extra =
+          origMsg.isNotEmpty ? strings.ttsErrorOriginalError(origMsg) : '';
       String errorMsg;
       switch (e.type) {
         case DioExceptionType.connectionTimeout:
-          errorMsg = '网络连接超时，请检查网络或API地址$extra';
+          errorMsg = '${strings.ttsErrorNetworkConnectionTimeout}$extra';
           break;
         case DioExceptionType.receiveTimeout:
-          errorMsg = '服务器响应超时，请稍后重试$extra';
+          errorMsg = '${strings.ttsErrorServerResponseTimeout}$extra';
           break;
         case DioExceptionType.connectionError:
           errorMsg = kIsWeb
-              ? '无法连接到服务器。Web端常见原因：CORS跨域限制或API地址不正确。$extra'
-              : '无法连接到服务器（${e.message ?? "未知网络错误"}）';
+              ? strings.ttsErrorWebConnectionGuidance(extra)
+              : strings.ttsErrorConnectionFailed(
+                  e.message ??
+                      e.error?.toString() ??
+                      strings.ttsErrorUnknownNetwork,
+                );
           break;
         case DioExceptionType.badResponse:
           final statusCode = e.response?.statusCode ?? 0;
           final body = e.response?.data;
-          errorMsg =
-              'API返回错误 (HTTP $statusCode${body != null ? ": $body" : ""})$extra';
+          errorMsg = strings.ttsErrorApiResponse(
+                body != null ? ': $body' : '',
+                statusCode.toString(),
+              ) +
+              extra;
           break;
         default:
-          errorMsg = '合成失败: ${e.message ?? e.toString()}';
+          errorMsg = strings.ttsErrorSynthesisFailed(
+            e.message ?? e.toString(),
+          );
       }
       _updateTask(
         task.id,
@@ -311,7 +332,11 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
         origReq = e.requestBody;
         origResp = e.responseBody;
       }
-      final errorMsg = '合成失败: $e';
+      final errorMsg = e is tts_provider_base.SynthesisException
+          ? e.message
+          : appLocalizationsForLocale(
+              ref.read(localeProvider),
+            ).ttsErrorSynthesisFailed('$e');
       _updateTask(
         task.id,
         TaskStatus.failed,
@@ -541,12 +566,21 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
     String folder = '',
   }) async {
     final hash = computeAudioHash(audioData);
-    final audioName = '$hash.$format';
     final textName = '$hash.txt';
     // 如果未提供标题，使用文本的前几个字
     final displayName = name.isNotEmpty
         ? name
         : (text.length > 20 ? text.substring(0, 20) : text);
+    final record = AudioRecord(
+      name: displayName,
+      hash: hash,
+      format: format,
+      createdAt: DateTime.now(),
+      size: audioData.length,
+      sourceText: text,
+      folder: folder,
+    );
+    final audioName = record.storageFileName;
 
     // Two attempts can produce the same hash. Keep the old save and its
     // rollback together so a resumed attempt never loses its new files.
@@ -570,16 +604,6 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
       final audioExisted = await FileManifest.readFilePath(audioName) != null;
       final previousText = await FileManifest.readFile(textName);
       if (!isCurrent()) return null;
-
-      final record = AudioRecord(
-        name: displayName,
-        hash: hash,
-        format: format,
-        createdAt: DateTime.now(),
-        size: audioData.length,
-        sourceText: text,
-        folder: folder,
-      );
 
       var wroteAudio = false;
       var wroteText = false;

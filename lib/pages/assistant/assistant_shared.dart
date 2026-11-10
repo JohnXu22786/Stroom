@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 
 import '../../models/assistant.dart';
 import '../../utils/emojis.dart';
@@ -85,9 +86,12 @@ class AssistantCard extends StatelessWidget {
               top: 4,
               right: 4,
               child: IconButton(
-                icon:
-                    Icon(Icons.more_vert, size: 18, color: cs.onSurfaceVariant),
-                tooltip: '更多操作',
+                icon: Icon(
+                  Icons.more_vert,
+                  size: 18,
+                  color: cs.onSurfaceVariant,
+                ),
+                tooltip: AppLocalizations.of(context)!.assistantMoreActions,
                 onPressed: onMenu,
                 visualDensity: VisualDensity.compact,
                 constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
@@ -122,16 +126,16 @@ class EmojiAvatarButton extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
 
     return Tooltip(
-      message: '选择表情',
+      message: AppLocalizations.of(context)!.assistantChooseEmoji,
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(8),
         onTap: () => _showPickerPanel(context),
         child: Container(
           width: size,
           height: size,
           decoration: BoxDecoration(
             color: cs.primaryContainer.withValues(alpha: 0.3),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(8),
             border: Border.all(color: cs.outlineVariant),
           ),
           child: Center(
@@ -152,7 +156,7 @@ class EmojiAvatarButton extends StatelessWidget {
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('选择表情'),
+        title: Text(AppLocalizations.of(context)!.assistantChooseEmoji),
         content: CategorizedEmojiPicker(
           selectedEmoji: selectedEmoji,
           onEmojiSelected: (e) {
@@ -163,7 +167,7 @@ class EmojiAvatarButton extends StatelessWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
+            child: Text(AppLocalizations.of(context)!.batchDlgCancel),
           ),
         ],
       ),
@@ -207,10 +211,10 @@ class AssistantEditorFields extends StatelessWidget {
   /// to avoid overflowing (e.g. accessibility text scaling on short windows).
   static const double minFillWindowHeight = 540;
 
-  Widget _promptField() => TextField(
+  Widget _promptField(AppLocalizations strings) => TextField(
         controller: promptController,
-        decoration: const InputDecoration(
-          labelText: '系统提示词',
+        decoration: InputDecoration(
+          labelText: strings.builtInPromptSystemPromptHeading,
           border: OutlineInputBorder(),
           alignLabelWithHint: true,
         ),
@@ -239,7 +243,7 @@ class AssistantEditorFields extends StatelessWidget {
             child: TextField(
               controller: nameController,
               decoration: InputDecoration(
-                labelText: '助手名称',
+                labelText: AppLocalizations.of(context)!.assistantNameLabel,
                 hintText: nameHint,
                 border: const OutlineInputBorder(),
               ),
@@ -252,7 +256,7 @@ class AssistantEditorFields extends StatelessWidget {
       TextField(
         controller: descriptionController,
         decoration: InputDecoration(
-          labelText: '描述（可选）',
+          labelText: AppLocalizations.of(context)!.assistantDescriptionOptional,
           hintText: descriptionHint,
           border: const OutlineInputBorder(),
         ),
@@ -266,7 +270,7 @@ class AssistantEditorFields extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           ...fields,
-          Expanded(child: _promptField()),
+          Expanded(child: _promptField(AppLocalizations.of(context)!)),
         ],
       );
     }
@@ -275,7 +279,10 @@ class AssistantEditorFields extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           ...fields,
-          SizedBox(height: 180, child: _promptField()),
+          SizedBox(
+            height: 180,
+            child: _promptField(AppLocalizations.of(context)!),
+          ),
         ],
       ),
     );
@@ -295,6 +302,7 @@ class CategorizedEmojiPicker extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final l10n = AppLocalizations.of(context)!;
     final categories = EmojiCategories.categories;
 
     return Center(
@@ -317,7 +325,7 @@ class CategorizedEmojiPicker extends StatelessWidget {
                     tabs: categories.map((cat) {
                       return Tab(
                         child: Text(
-                          cat.label,
+                          _emojiCategoryLabel(l10n, cat.type),
                           style: const TextStyle(fontSize: 12),
                         ),
                       );
@@ -346,7 +354,7 @@ class CategorizedEmojiPicker extends StatelessWidget {
                             child: Container(
                               decoration: BoxDecoration(
                                 color: isSelected ? cs.primaryContainer : null,
-                                borderRadius: BorderRadius.circular(6),
+                                borderRadius: BorderRadius.circular(8),
                                 border: isSelected
                                     ? Border.all(color: cs.primary)
                                     : null,
@@ -372,3 +380,16 @@ class CategorizedEmojiPicker extends StatelessWidget {
     );
   }
 }
+
+String _emojiCategoryLabel(AppLocalizations l10n, EmojiCategoryType category) =>
+    switch (category) {
+      EmojiCategoryType.smileys => l10n.emojiCategorySmileys,
+      EmojiCategoryType.people => l10n.emojiCategoryPeople,
+      EmojiCategoryType.animals => l10n.emojiCategoryAnimals,
+      EmojiCategoryType.food => l10n.emojiCategoryFood,
+      EmojiCategoryType.activities => l10n.emojiCategoryActivities,
+      EmojiCategoryType.travel => l10n.emojiCategoryTravel,
+      EmojiCategoryType.objects => l10n.emojiCategoryObjects,
+      EmojiCategoryType.symbols => l10n.emojiCategorySymbols,
+      EmojiCategoryType.flags => l10n.emojiCategoryFlags,
+    };

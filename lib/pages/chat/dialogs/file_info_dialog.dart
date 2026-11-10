@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/pages/chat/widgets/info_row.dart';
 import 'package:stroom/utils/format_file_size.dart';
@@ -26,16 +27,16 @@ void showFileInfoPreviewDialog({
   String typeLabel;
   switch (attachment.fileType) {
     case 'audio':
-      typeLabel = '音频文件';
+      typeLabel = AppLocalizations.of(context)!.chatFileTypeAudio;
       break;
     case 'video':
-      typeLabel = '视频文件';
+      typeLabel = AppLocalizations.of(context)!.chatFileTypeVideo;
       break;
     case 'document':
-      typeLabel = '文档';
+      typeLabel = AppLocalizations.of(context)!.chatFileTypeDocument;
       break;
     default:
-      typeLabel = '文件';
+      typeLabel = AppLocalizations.of(context)!.chatFileTypeGeneric;
   }
 
   showDialog(
@@ -74,11 +75,17 @@ void showFileInfoPreviewDialog({
             ),
             const SizedBox(height: 12),
             // File info rows
-            InfoRow(label: '类型', value: '$typeLabel (${attachment.mimeType})'),
+            InfoRow(
+                label: AppLocalizations.of(context)!.chatInfoType,
+                value: '$typeLabel (${attachment.mimeType})'),
             const SizedBox(height: 6),
-            InfoRow(label: '大小', value: formatFileSize(attachment.fileSize)),
+            InfoRow(
+                label: AppLocalizations.of(context)!.chatInfoSize,
+                value: formatFileSize(attachment.fileSize)),
             const SizedBox(height: 6),
-            InfoRow(label: '路径', value: attachment.storagePath),
+            InfoRow(
+                label: AppLocalizations.of(context)!.chatInfoPath,
+                value: attachment.storagePath),
             const SizedBox(height: 24),
             // Action buttons
             Row(
@@ -87,7 +94,7 @@ void showFileInfoPreviewDialog({
                 TextButton.icon(
                   onPressed: () => Navigator.pop(ctx),
                   icon: const Icon(Icons.close, size: 18),
-                  label: const Text('关闭'),
+                  label: Text(AppLocalizations.of(context)!.actionClose),
                 ),
               ],
             ),

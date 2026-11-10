@@ -31,17 +31,24 @@ void showAddCustomParameterDialog(
         final name = nameController.text.trim();
         final hasInvalidName = name.isNotEmpty && !isValidParamName(name);
         return AlertDialog(
-          title: const Text('添加自定义参数'),
+          title: Text(
+            AppLocalizations.of(context)!.assistantAddCustomParameter,
+          ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
                 controller: nameController,
                 decoration: InputDecoration(
-                  labelText: '参数名',
-                  hintText: '如: top_k 或 provider.only',
+                  labelText:
+                      AppLocalizations.of(context)!.assistantParameterName,
+                  hintText:
+                      AppLocalizations.of(context)!.assistantParameterNameHint,
                   border: const OutlineInputBorder(),
-                  errorText: hasInvalidName ? '参数名格式不正确（点号分段不能为空）' : null,
+                  errorText: hasInvalidName
+                      ? AppLocalizations.of(context)!
+                          .assistantParameterNameInvalid
+                      : null,
                 ),
                 autofocus: true,
                 onChanged: (_) => setDlgState(() {}),
@@ -53,15 +60,38 @@ void showAddCustomParameterDialog(
                 dropdownColor: StroomMenuStyle.surface(context),
                 borderRadius: StroomMenuStyle.borderRadius,
                 initialValue: type,
-                decoration: const InputDecoration(
-                  labelText: '类型',
+                decoration: InputDecoration(
+                  labelText: AppLocalizations.of(context)!.chatInfoType,
                   border: OutlineInputBorder(),
                 ),
-                items: const [
-                  DropdownMenuItem(value: 'string', child: Text('字符串')),
-                  DropdownMenuItem(value: 'number', child: Text('数字')),
-                  DropdownMenuItem(value: 'boolean', child: Text('布尔')),
-                  DropdownMenuItem(value: 'json', child: Text('JSON')),
+                items: [
+                  DropdownMenuItem(
+                    value: 'string',
+                    child: Text(
+                      AppLocalizations.of(context)!
+                          .assistantParamValueTypeString,
+                    ),
+                  ),
+                  DropdownMenuItem(
+                    value: 'number',
+                    child: Text(
+                      AppLocalizations.of(context)!
+                          .assistantParamValueTypeNumber,
+                    ),
+                  ),
+                  DropdownMenuItem(
+                    value: 'boolean',
+                    child: Text(
+                      AppLocalizations.of(context)!
+                          .assistantParamValueTypeBoolean,
+                    ),
+                  ),
+                  DropdownMenuItem(
+                    value: 'json',
+                    child: Text(
+                      AppLocalizations.of(context)!.assistantParamValueTypeJson,
+                    ),
+                  ),
                 ],
                 onChanged: (v) {
                   if (v != null) {
@@ -92,14 +122,18 @@ void showAddCustomParameterDialog(
                           ? const [CodeSmartInputFormatter()]
                           : null,
                       decoration: InputDecoration(
-                        labelText: '值',
+                        labelText: AppLocalizations.of(context)!.assistantValue,
                         hintText: type == 'boolean'
-                            ? 'true 或 false'
+                            ? AppLocalizations.of(context)!
+                                .assistantTrueFalseHint
                             : type == 'number'
-                                ? '输入数字'
+                                ? AppLocalizations.of(context)!
+                                    .assistantNumberHint
                                 : type == 'json'
-                                    ? '例如: {"key": "value"}'
-                                    : '输入值',
+                                    ? AppLocalizations.of(context)!
+                                        .assistantJsonHint('{"key": "value"}')
+                                    : AppLocalizations.of(context)!
+                                        .assistantValueHint,
                         border: const OutlineInputBorder(),
                         errorText: jsonError,
                         errorMaxLines: 3,
@@ -114,18 +148,22 @@ void showAddCustomParameterDialog(
                   const SizedBox(width: 4),
                   IconButton(
                     icon: const Icon(Icons.fullscreen, size: 20),
-                    tooltip: '全屏编辑',
+                    tooltip: AppLocalizations.of(context)!.chatFullscreenEdit,
                     onPressed: () {
                       showJsonValueEditorDialog(
                         ctx,
                         initialValue: valueController.text,
                         hintText: type == 'boolean'
-                            ? 'true 或 false'
+                            ? AppLocalizations.of(context)!
+                                .assistantTrueFalseHint
                             : type == 'number'
-                                ? '输入数字'
+                                ? AppLocalizations.of(context)!
+                                    .assistantNumberHint
                                 : type == 'json'
-                                    ? '例如: {"key": "value"}'
-                                    : '输入值',
+                                    ? AppLocalizations.of(context)!
+                                        .assistantJsonHint('{"key": "value"}')
+                                    : AppLocalizations.of(context)!
+                                        .assistantValueHint,
                         type: type,
                         onSave: (text) {
                           setDlgState(() {
@@ -147,7 +185,7 @@ void showAddCustomParameterDialog(
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('取消'),
+              child: Text(AppLocalizations.of(context)!.batchDlgCancel),
             ),
             FilledButton(
               onPressed: () {
@@ -172,7 +210,7 @@ void showAddCustomParameterDialog(
                 valueController.dispose();
                 Navigator.pop(ctx);
               },
-              child: const Text('添加'),
+              child: Text(AppLocalizations.of(context)!.builtInPromptAdd),
             ),
           ],
         );

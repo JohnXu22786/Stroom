@@ -16,9 +16,9 @@ extension _SettingsPageContextManagementExt on _SettingsPageState {
           children: [
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
-              title: const Text('工具结果自动清理 (Prune)'),
-              subtitle: const Text(
-                '旧工具结果超过阈值时自动压缩为占位符，释放存储与上下文',
+              title: Text(AppLocalizations.of(context)!.contextToolPruneTitle),
+              subtitle: Text(
+                AppLocalizations.of(context)!.contextToolPruneDescription,
               ),
               value: settings.pruneEnabled,
               onChanged: notifier.setPruneEnabled,
@@ -26,10 +26,11 @@ extension _SettingsPageContextManagementExt on _SettingsPageState {
             const Divider(height: 1),
             _buildListTile(
               leading: const Icon(Icons.compress),
-              title: '压缩触发设置',
+              title: AppLocalizations.of(context)!
+                  .contextCompactionTriggerSettings,
               subtitle: settings.compactionEnabled
                   ? _compactionSummary(settings)
-                  : '已关闭（不触发压缩）',
+                  : AppLocalizations.of(context)!.contextCompactionDisabled,
               trailing: const Icon(Icons.chevron_right),
               onTap: () {
                 Navigator.of(context).push(
@@ -49,8 +50,13 @@ extension _SettingsPageContextManagementExt on _SettingsPageState {
     final overrides = settings.perModelCompaction.values
         .where((c) => c.enabled && c.threshold != null)
         .length;
-    final base = '全局触发 ${settings.globalCompactionPercent}%';
-    return overrides > 0 ? '$base · $overrides 个模型独立设置' : base;
+    final strings = AppLocalizations.of(context)!;
+    final base = strings.contextGlobalTriggerPercent(
+      settings.globalCompactionPercent,
+    );
+    return overrides > 0
+        ? '$base · ${strings.contextModelOverrideCount(overrides)}'
+        : base;
   }
 }
 
@@ -100,14 +106,20 @@ class _CompactionSettingsPanelState
     final models = _buildModelList();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('压缩触发设置'), centerTitle: true),
+      appBar: AppBar(
+        title:
+            Text(AppLocalizations.of(context)!.contextCompressionTriggerTitle),
+        centerTitle: true,
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
-            title: const Text('上下文自动压缩'),
-            subtitle: const Text('关闭后所有模型都不触发压缩'),
+            title: Text(AppLocalizations.of(context)!.contextAutoCompaction),
+            subtitle: Text(
+              AppLocalizations.of(context)!.contextAutoCompactionDisabled,
+            ),
             value: settings.compactionEnabled,
             onChanged: notifier.setCompactionEnabled,
           ),
@@ -119,13 +131,13 @@ class _CompactionSettingsPanelState
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  '全局触发百分比',
+                Text(
+                  AppLocalizations.of(context)!.contextGlobalTrigger,
                   style: TextStyle(fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '未单独设置的模型，按模型上下文窗口的该百分比触发压缩',
+                  AppLocalizations.of(context)!.contextGlobalTriggerDescription,
                   style: TextStyle(
                       fontSize: 12, color: colorScheme.onSurfaceVariant),
                 ),
@@ -141,7 +153,8 @@ class _CompactionSettingsPanelState
                     ),
                     IconButton(
                       icon: const Icon(Icons.refresh),
-                      tooltip: '重置为 $kDefaultCompactionPercent%',
+                      tooltip: AppLocalizations.of(context)!
+                          .contextResetPercent(kDefaultCompactionPercent),
                       onPressed: enabled
                           ? notifier.resetGlobalCompactionPercent
                           : null,
@@ -151,8 +164,8 @@ class _CompactionSettingsPanelState
                 const SizedBox(height: 16),
                 const Divider(height: 1),
                 const SizedBox(height: 12),
-                const Text(
-                  '按模型设置',
+                Text(
+                  AppLocalizations.of(context)!.contextPerModelSettings,
                   style: TextStyle(fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 4),
@@ -160,7 +173,7 @@ class _CompactionSettingsPanelState
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     child: Text(
-                      '暂无已配置的模型',
+                      AppLocalizations.of(context)!.contextNoConfiguredModels,
                       style: TextStyle(
                         fontSize: 12,
                         color: colorScheme.onSurfaceVariant,
@@ -268,8 +281,13 @@ class _PerModelRow extends StatelessWidget {
           title: Text(displayName, overflow: TextOverflow.ellipsis),
           subtitle: Text(
             perModelEnabled
-                ? (threshold != null ? '独立触发值 $threshold token' : '填写下方独立触发值')
-                : '跟随全局 $globalPercent%',
+                ? (threshold != null
+                    ? AppLocalizations.of(context)!
+                        .contextIndependentThreshold(threshold)
+                    : AppLocalizations.of(context)!
+                        .contextEnterIndependentThreshold)
+                : AppLocalizations.of(context)!
+                    .contextFollowGlobalPercent(globalPercent),
           ),
           value: perModelEnabled,
           onChanged: enabled ? onToggle : null,
@@ -362,9 +380,9 @@ class _TokenFieldState extends State<_TokenField> {
     return TextFormField(
       controller: _controller,
       enabled: widget.enabled,
-      decoration: const InputDecoration(
-        labelText: '独立触发值 (token)',
-        hintText: '如 48000（非百分比，直接填写 token 数）',
+      decoration: InputDecoration(
+        labelText: AppLocalizations.of(context)!.contextThresholdField,
+        hintText: AppLocalizations.of(context)!.contextThresholdHint,
         border: OutlineInputBorder(),
         isDense: true,
       ),
@@ -471,9 +489,10 @@ class _PercentFieldState extends State<_PercentField> {
       key: const Key('global-percent-field'),
       controller: _controller,
       enabled: widget.enabled,
-      decoration: const InputDecoration(
-        labelText: '百分比',
-        hintText: '如 $kDefaultCompactionPercent',
+      decoration: InputDecoration(
+        labelText: AppLocalizations.of(context)!.contextPercentField,
+        hintText: AppLocalizations.of(context)!
+            .contextPercentHint(kDefaultCompactionPercent),
         suffixText: '%',
         border: OutlineInputBorder(),
         isDense: true,

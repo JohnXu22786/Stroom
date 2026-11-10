@@ -41,6 +41,9 @@ PNG_PRE_IDAT_CHUNKS = {
     b"tRNS",
 }
 OUTPUT_FORMATS = {"plain_text", "markdown", "table", "latex"}
+# Keep accepted settings nesting well below Python's recursion limit so validation
+# reports malformed input instead of exhausting the interpreter stack.
+MAX_SAFE_SETTINGS_DEPTH = 64
 LITERAL_LATEX_DOLLAR = "\ue000"
 LATEX_GREEK_COMMANDS = {
     "Gamma": "Γ",
@@ -156,6 +159,15 @@ def normalize_text(value: str) -> str:
     return " ".join(unicodedata.normalize("NFC", line_normalized).split())
 
 
+def _validate_unicode_scalar_text(value: str, fixture_id: str, field: str) -> None:
+    try:
+        value.encode("utf-8")
+    except UnicodeEncodeError as error:
+        raise EvaluationError(
+            f"{fixture_id}: {field} must contain valid Unicode scalar values"
+        ) from error
+
+
 def levenshtein_distance(left: str, right: str) -> int:
     """Return code-point Levenshtein distance using two working rows."""
     if len(left) < len(right):
@@ -193,6 +205,7 @@ def _validated_fixtures(manifest: dict[str, Any]) -> list[dict[str, Any]]:
         seen.add(fixture_id)
         if not isinstance(fixture.get("gold_text"), str):
             raise EvaluationError(f"{fixture_id}: gold_text must be a string")
+        _validate_unicode_scalar_text(fixture["gold_text"], fixture_id, "gold_text")
         categories = fixture.get("categories")
         if (
             not isinstance(categories, list)
@@ -203,13 +216,23 @@ def _validated_fixtures(manifest: dict[str, Any]) -> list[dict[str, Any]]:
         for field in ("table_text", "formula_text"):
             if field in fixture and not isinstance(fixture[field], str):
                 raise EvaluationError(f"{fixture_id}: {field} must be a string")
+            if field in fixture:
+                _validate_unicode_scalar_text(fixture[field], fixture_id, field)
             if field in fixture and not normalize_text(fixture[field]):
                 raise EvaluationError(f"{fixture_id}: {field} must not be empty")
         reading_order = fixture.get("reading_order", [])
         if not isinstance(reading_order, list) or any(
-            not isinstance(anchor, str) or not normalize_text(anchor)
+            not isinstance(anchor, str)
             for anchor in reading_order
         ):
+            raise EvaluationError(
+                f"{fixture_id}: reading_order must contain non-empty strings"
+            )
+        for index, anchor in enumerate(reading_order):
+            _validate_unicode_scalar_text(
+                anchor, fixture_id, f"reading_order[{index}]"
+            )
+        if any(not normalize_text(anchor) for anchor in reading_order):
             raise EvaluationError(
                 f"{fixture_id}: reading_order must contain non-empty strings"
             )
@@ -219,6 +242,10 @@ def _validated_fixtures(manifest: dict[str, Any]) -> list[dict[str, Any]]:
         normalized_gold = normalize_text(fixture["gold_text"])
         if not normalized_gold and "blank" not in categories:
             raise EvaluationError(f"{fixture_id}: gold_text must not be empty")
+        if normalized_gold and "blank" in categories:
+            raise EvaluationError(
+                f"{fixture_id}: blank fixture needs empty gold_text"
+            )
         if any(anchor not in normalized_gold for anchor in normalized_anchors):
             raise EvaluationError(
                 f"{fixture_id}: every reading_order anchor must occur in gold_text"
@@ -227,6 +254,29 @@ def _validated_fixtures(manifest: dict[str, Any]) -> list[dict[str, Any]]:
             if field in fixture and normalize_text(fixture[field]) not in normalized_gold:
                 raise EvaluationError(
                     f"{fixture_id}: {field} must occur in gold_text"
+                )
+        if "table_text" in fixture:
+            table_column_counts = None
+            for line in fixture["table_text"].splitlines():
+                stripped = line.strip()
+                if "|" not in stripped:
+                    continue
+                raw_cells = _split_pipe_cells(stripped)
+                possible_counts = {len(raw_cells)}
+                if stripped.startswith("|"):
+                    possible_counts = {len(raw_cells) - 1}
+                    if _has_unescaped_trailing_pipe(stripped):
+                        possible_counts = {len(raw_cells) - 2}
+                elif _has_unescaped_trailing_pipe(stripped):
+                    possible_counts.add(len(raw_cells) - 1)
+                if len(raw_cells) > 1:
+                    if table_column_counts is None:
+                        table_column_counts = possible_counts
+                    else:
+                        table_column_counts &= possible_counts
+            if table_column_counts == set():
+                raise EvaluationError(
+                    f"{fixture_id}: table_text rows must have consistent columns"
                 )
     return fixtures
 
@@ -292,7 +342,12 @@ def _is_credential_like_setting_name(key: str) -> bool:
 
 
 def _contains_credential_like_value(value: str) -> bool:
-    decoded_value = unquote(value)
+    decoded_value = value
+    while True:
+        next_value = unquote(decoded_value)
+        if next_value == decoded_value:
+            break
+        decoded_value = next_value
     if any(pattern.search(decoded_value) for pattern in OPAQUE_CREDENTIAL_PATTERNS):
         return True
     if re.search(r"(?i)\b(?:bearer|basic)\s+\S+", decoded_value):
@@ -308,7 +363,13 @@ def _contains_credential_like_value(value: str) -> bool:
     )
 
 
-def _validate_safe_settings(value: Any, path: str = "settings") -> None:
+def _validate_safe_settings(
+    value: Any, path: str = "settings", depth: int = 0
+) -> None:
+    if isinstance(value, (dict, list)) and depth > MAX_SAFE_SETTINGS_DEPTH:
+        raise EvaluationError(
+            f"settings exceeds maximum nesting depth of {MAX_SAFE_SETTINGS_DEPTH}"
+        )
     if isinstance(value, dict):
         for key, child in value.items():
             if not isinstance(key, str):
@@ -317,10 +378,10 @@ def _validate_safe_settings(value: Any, path: str = "settings") -> None:
                 raise EvaluationError(
                     f"{path} contains a credential-like field name"
                 )
-            _validate_safe_settings(child, f"{path}.{key}")
+            _validate_safe_settings(child, f"{path}.{key}", depth + 1)
     elif isinstance(value, list):
         for index, child in enumerate(value):
-            _validate_safe_settings(child, f"{path}[{index}]")
+            _validate_safe_settings(child, f"{path}[{index}]", depth + 1)
     elif isinstance(value, str) and _contains_credential_like_value(value):
         raise EvaluationError(f"{path} contains a credential-like value")
     elif value is not None and not isinstance(value, (str, int, float, bool)):
@@ -376,6 +437,13 @@ def _validated_run_and_predictions(
         text = prediction.get("text")
         if text is not None and not isinstance(text, str):
             raise EvaluationError(f"{fixture_id}: text must be a string or null")
+        if text is not None:
+            try:
+                text.encode("utf-8")
+            except UnicodeEncodeError as error:
+                raise EvaluationError(
+                    f"{fixture_id}: text must contain valid Unicode scalar values"
+                ) from error
         elapsed_ms = prediction.get("elapsed_ms")
         if elapsed_ms is not None:
             if isinstance(elapsed_ms, bool) or not isinstance(
@@ -463,6 +531,7 @@ def _table_rows(
     *,
     allow_tsv: bool = False,
     matching_rows: set[tuple[str, ...]] | None = None,
+    known_prose_rows: set[tuple[str, ...]] | None = None,
     allow_unframed_shape_without_context: bool = False,
     allow_compact_pipe_row_without_context: bool = False,
     allow_markdown_separator_rows: bool = False,
@@ -558,6 +627,37 @@ def _table_rows(
                 and is_table_context_row(lines[line_index + 1])
             )
 
+        def is_trailing_labeled_table_row(line_index: int) -> bool:
+            stripped = lines[line_index].strip()
+            if (
+                line_index != len(lines) - 1
+                or line_index == 0
+                or not has_prose_label(stripped)
+                or stripped.startswith("|")
+                or _has_unescaped_trailing_pipe(stripped)
+                or "|" not in stripped
+            ):
+                return False
+            cells = tuple(
+                normalize_text(cell) for cell in _split_pipe_cells(stripped)
+            )
+            previous = lines[line_index - 1].strip()
+            if (
+                cells in (known_prose_rows or set())
+                or (column_count is not None and len(cells) != column_count)
+                or len(cells) < 2
+                or not is_table_context_row(previous)
+            ):
+                return False
+            previous_cells = tuple(
+                normalize_text(cell) for cell in _split_pipe_cells(previous)
+            )
+            if previous.startswith("|"):
+                previous_cells = previous_cells[1:]
+            if _has_unescaped_trailing_pipe(previous):
+                previous_cells = previous_cells[:-1]
+            return len(previous_cells) == len(cells)
+
         def is_one_sided_pipe_formula(line: str) -> bool:
             stripped = line.strip()
             return (
@@ -576,7 +676,15 @@ def _table_rows(
             if "|" not in line:
                 if allow_tsv and "\t" in line:
                     cells = tuple(normalize_text(cell) for cell in line.split("\t"))
-                    rows.append(cells)
+                    if column_count is None or (
+                        len(cells) == column_count
+                        and (
+                            matching_rows is None
+                            or cells in matching_rows
+                        )
+                    ):
+                        # Annotated rows disambiguate TSV from tab-delimited prose.
+                        rows.append(cells)
                 continue
             stripped = line.strip()
             has_table_row_shape = (
@@ -586,7 +694,9 @@ def _table_rows(
             )
             has_context_on_both_sides = has_table_context_on_both_sides(line_index)
             is_prose_label = (
-                has_prose_label(stripped) and not has_context_on_both_sides
+                has_prose_label(stripped)
+                and not has_context_on_both_sides
+                and not is_trailing_labeled_table_row(line_index)
             )
             raw_cells = _split_pipe_cells(stripped)
             has_leading_pipe = stripped.startswith("|")
@@ -616,6 +726,13 @@ def _table_rows(
                 ):
                     continue
             normalized_cells = tuple(cells)
+            if (
+                not has_leading_pipe
+                and not has_trailing_pipe
+                and normalized_cells in (known_prose_rows or set())
+                and normalized_cells not in (matching_rows or set())
+            ):
+                continue
             is_compact_pipe_row = (
                 allow_compact_pipe_row_without_context
                 and not has_leading_pipe
@@ -759,12 +876,10 @@ def _table_matches(
     actual: str,
     output_format: str,
     formula_text: str | None = None,
+    gold_text: str | None = None,
 ) -> bool:
     allow_tsv = output_format == "plain_text"
     expected_rows = _table_rows(expected, allow_tsv=allow_tsv)
-    if not expected_rows:
-        return normalize_text(expected) in normalize_text(actual)
-    expected_column_count = max(len(row) for row in expected_rows)
     if formula_text:
         canonical_formula = _canonical_formula(formula_text, output_format)
         strip_markdown_markup = output_format in {"markdown", "table"}
@@ -777,19 +892,78 @@ def _table_matches(
                 formula_text=formula_text,
             )
 
+        def is_formula_line(value: str) -> bool:
+            stripped = value.strip()
+            if matches_formula_row(stripped):
+                return True
+            if stripped.startswith("|") and _has_unescaped_trailing_pipe(stripped):
+                parsed_row = _table_rows(stripped, 1)
+                return len(parsed_row) == 1 and matches_formula_row(
+                    parsed_row[0][0]
+                )
+            return False
+
+    if not expected_rows:
+        candidates = [actual]
+        if formula_text:
+            table_lines = actual.splitlines()
+            for line_index, line in enumerate(table_lines):
+                if is_formula_line(line):
+                    candidates.append(
+                        "\n".join(
+                            table_lines[:line_index] + table_lines[line_index + 1 :]
+                        )
+                    )
+                    break
+        normalized_expected = normalize_text(expected)
+        expected_row = (normalized_expected,)
+        for candidate in candidates:
+            if normalized_expected == normalize_text(candidate):
+                return True
+
+            candidate_rows = []
+            for line in candidate.splitlines():
+                if not line.strip():
+                    continue
+                rows = _table_rows(
+                    line,
+                    1,
+                    matching_rows={expected_row},
+                    allow_markdown_separator_rows=True,
+                    prefer_markdown_separator_rows=(
+                        output_format in {"markdown", "table"}
+                    ),
+                )
+                if rows:
+                    candidate_rows.extend(rows)
+                elif output_format in {"markdown", "table"} and (
+                    _is_table_separator_row(line, 1)
+                ):
+                    continue
+                else:
+                    break
+            else:
+                if candidate_rows == [expected_row]:
+                    return True
+        return False
+    expected_column_count = max(len(row) for row in expected_rows)
+    known_prose_rows = set()
+    if gold_text is not None:
+        for line in gold_text.splitlines():
+            stripped = line.strip()
+            raw_cells = _split_pipe_cells(stripped)
+            if stripped.startswith("|"):
+                raw_cells = raw_cells[1:]
+            if _has_unescaped_trailing_pipe(stripped):
+                raw_cells = raw_cells[:-1]
+            if len(raw_cells) > 1:
+                prose_row = tuple(normalize_text(cell) for cell in raw_cells)
+                if prose_row not in expected_rows:
+                    known_prose_rows.add(prose_row)
+    if formula_text:
         table_lines = actual.splitlines()
         for line_index, line in enumerate(table_lines):
-            stripped = line.strip()
-            formula_row = matches_formula_row(stripped)
-            if (
-                not formula_row
-                and stripped.startswith("|")
-                and _has_unescaped_trailing_pipe(stripped)
-            ):
-                parsed_row = _table_rows(stripped, 1)
-                if len(parsed_row) == 1:
-                    formula_row = matches_formula_row(parsed_row[0][0])
-            if formula_row:
+            if is_formula_line(line):
                 candidate_lines = table_lines[:line_index] + table_lines[
                     line_index + 1 :
                 ]
@@ -798,6 +972,7 @@ def _table_matches(
                     expected_column_count,
                     allow_tsv=allow_tsv,
                     matching_rows=set(expected_rows),
+                    known_prose_rows=known_prose_rows,
                     allow_markdown_separator_rows=True,
                     prefer_markdown_separator_rows=(
                         output_format in {"markdown", "table"}
@@ -812,6 +987,7 @@ def _table_matches(
         expected_column_count,
         allow_tsv=allow_tsv,
         matching_rows=set(expected_rows),
+        known_prose_rows=known_prose_rows,
         allow_markdown_separator_rows=True,
         prefer_markdown_separator_rows=(
             output_format in {"markdown", "table"}
@@ -887,11 +1063,32 @@ def _strip_latex_markup(value: str) -> str:
     def has_binary_operator(operand: str) -> bool:
         return re.search(r"\S\s*[-−+*/·×=<>≤≥]\s*\S", operand) is not None
 
+    def is_fully_parenthesized(operand: str) -> bool:
+        if not operand.startswith("(") or not operand.endswith(")"):
+            return False
+
+        depth = 0
+        index = 0
+        while index < len(operand):
+            if operand[index] == "\\":
+                index += 2
+                continue
+            if operand[index] == "(":
+                depth += 1
+            elif operand[index] == ")":
+                depth -= 1
+                if depth < 0:
+                    return False
+                if depth == 0:
+                    return index == len(operand) - 1
+            index += 1
+        return False
+
     def fraction_text(numerator: str, denominator: str) -> str:
         def group_if_compound(operand: str) -> str:
             operand = operand.strip()
-            if has_binary_operator(operand) and not (
-                operand.startswith("(") and operand.endswith(")")
+            if has_binary_operator(operand) and not is_fully_parenthesized(
+                operand
             ):
                 return f"({operand})"
             return operand
@@ -917,6 +1114,36 @@ def _strip_latex_markup(value: str) -> str:
                     return value[opening_index + 1 : index], index + 1
             index += 1
         return None
+
+    def root_operand(value: str, start_index: int) -> tuple[str, int] | None:
+        group = braced_group(value, start_index)
+        if group is not None:
+            return group
+        if start_index >= len(value) or value[start_index] in "{}":
+            return None
+
+        fraction_match = fraction_command.match(value, start_index)
+        if fraction_match is not None:
+            numerator_group = braced_group(value, fraction_match.end())
+            if numerator_group is not None:
+                next_index = numerator_group[1]
+                while next_index < len(value) and value[next_index].isspace():
+                    next_index += 1
+                denominator_group = braced_group(value, next_index)
+                if denominator_group is not None:
+                    end_index = denominator_group[1]
+                    return value[start_index:end_index], end_index
+
+        end_index = start_index + 1
+        if value[start_index] == "\\":
+            if end_index >= len(value):
+                return None
+            if value[end_index].isalpha():
+                while end_index < len(value) and value[end_index].isalpha():
+                    end_index += 1
+            else:
+                end_index += 1
+        return value[start_index:end_index], end_index
 
     def replace_fractions(value: str) -> str:
         output = []
@@ -965,7 +1192,7 @@ def _strip_latex_markup(value: str) -> str:
                 if match.group(1) is None
                 else indexed_root_symbols.get(match.group(1))
             )
-            operand_group = braced_group(value, match.end())
+            operand_group = root_operand(value, match.end())
             if root_symbol is None or operand_group is None:
                 output.append(value[index : match.end()])
                 index = match.end()
@@ -973,8 +1200,8 @@ def _strip_latex_markup(value: str) -> str:
 
             operand, end_index = operand_group
             operand = replace_roots(replace_fractions(operand)).strip()
-            if has_binary_operator(operand) and not (
-                operand.startswith("(") and operand.endswith(")")
+            if has_binary_operator(operand) and not is_fully_parenthesized(
+                operand
             ):
                 operand = f"({operand})"
             output.append(f"{root_symbol}{operand}")
@@ -983,8 +1210,8 @@ def _strip_latex_markup(value: str) -> str:
 
     while True:
         previous = text
-        text = replace_fractions(text)
         text = replace_roots(text)
+        text = replace_fractions(text)
         if text == previous:
             break
 
@@ -1108,6 +1335,7 @@ def _plain_text_for_cer(
     table_text: str | None = None,
     formula_text: str | None = None,
     *,
+    gold_text: str | None = None,
     strip_markdown_markup: bool = False,
 ) -> str:
     text = value
@@ -1115,17 +1343,41 @@ def _plain_text_for_cer(
         annotated_table_rows = set(_table_rows(table_text))
         if annotated_table_rows:
             expected_column_count = max(map(len, annotated_table_rows))
+            known_prose_rows = set()
+            for line in (gold_text or "").splitlines():
+                parsed_rows = _table_rows(
+                    line,
+                    expected_column_count,
+                    matching_rows=annotated_table_rows,
+                    allow_unframed_shape_without_context=True,
+                    allow_compact_pipe_row_without_context=True,
+                )
+                if parsed_rows and parsed_rows[0] not in annotated_table_rows:
+                    known_prose_rows.add(parsed_rows[0])
             lines = []
             source_lines = (
                 text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
             )
-            for index, line in enumerate(source_lines):
+            parsed_rows_by_index = {}
+            table_row_indices = set()
+            separator_row_indices = {
+                index
+                for index in range(len(source_lines))
                 if _is_markdown_separator_row_at(
                     source_lines,
                     index,
                     expected_column_count,
                     matching_rows=annotated_table_rows,
-                ):
+                )
+            }
+            structural_table_context_indices = {
+                neighbor
+                for index in separator_row_indices
+                for neighbor in (index - 1, index + 1)
+                if 0 <= neighbor < len(source_lines)
+            }
+            for index, line in enumerate(source_lines):
+                if index in separator_row_indices:
                     continue
                 parsed_rows = _table_rows(
                     line,
@@ -1143,7 +1395,34 @@ def _plain_text_for_cer(
                     None,
                 )
                 if normalized_row is not None:
-                    line = " ".join(normalized_row)
+                    parsed_rows_by_index[index] = normalized_row
+                    if (
+                        normalized_row in annotated_table_rows
+                        or (
+                            normalized_row not in known_prose_rows
+                            and index in structural_table_context_indices
+                        )
+                    ):
+                        table_row_indices.add(index)
+            while True:
+                additional_table_rows = {
+                    index
+                    for index, row in parsed_rows_by_index.items()
+                    if index not in table_row_indices
+                    and row not in known_prose_rows
+                    and any(
+                        neighbor in table_row_indices
+                        for neighbor in (index - 1, index + 1)
+                    )
+                }
+                if not additional_table_rows:
+                    break
+                table_row_indices.update(additional_table_rows)
+            for index, line in enumerate(source_lines):
+                if index in separator_row_indices:
+                    continue
+                if index in table_row_indices:
+                    line = " ".join(parsed_rows_by_index[index])
                 lines.append(line)
             text = "\n".join(lines)
     if output_format in {"markdown", "table"}:
@@ -1573,9 +1852,15 @@ def _exact_snippet_metric(
                 text,
                 output_format,
                 formula_text=fixture.get("formula_text"),
+                gold_text=fixture.get("gold_text"),
             )
         else:
-            expected = _canonical_formula(fixture[field], output_format)
+            expected_text = fixture[field]
+            if output_format in {"markdown", "table"}:
+                emphasis = re.fullmatch(r"(\*\*|__)(.+?)\1", expected_text)
+                if emphasis:
+                    expected_text = emphasis.group(2)
+            expected = _canonical_formula(expected_text, output_format)
             actual = _normalized_formula_text(
                 text,
                 output_format,
@@ -1635,18 +1920,16 @@ def _reading_order_metric(
             pending_pages += 1
             continue
         normalized_prediction = normalize_text(text)
-        occurrences = []
-        for anchor in anchors:
-            positions = []
-            start = 0
-            while (position := normalized_prediction.find(anchor, start)) >= 0:
-                positions.append(position)
-                start = position + 1
-            occurrences.append(positions)
-        for left_index, left_positions in enumerate(occurrences):
-            for right_positions in occurrences[left_index + 1 :]:
-                if left_positions and right_positions:
-                    if min(left_positions) < max(right_positions):
+        # Choose one canonical occurrence per anchor so every pair is evaluated
+        # from the same assignment, even when the prediction repeats anchors.
+        positions = [
+            normalized_prediction.find(anchor)
+            for anchor in anchors
+        ]
+        for left_index, left_position in enumerate(positions):
+            for right_position in positions[left_index + 1 :]:
+                if left_position >= 0 and right_position >= 0:
+                    if left_position < right_position:
                         correct_pairs += 1
 
     if not eligible:
@@ -1724,6 +2007,7 @@ def evaluate_predictions(
                 run["output_format"],
                 fixture.get("table_text"),
                 fixture.get("formula_text"),
+                    gold_text=expected_value,
                 strip_markdown_markup=True,
             )
             if actual_value is not None
@@ -1734,6 +2018,7 @@ def evaluate_predictions(
             run["output_format"],
             fixture.get("table_text"),
             fixture.get("formula_text"),
+            gold_text=expected_value,
         )
         edit_distance += levenshtein_distance(expected, actual)
         reference_characters += len(expected)
@@ -2042,9 +2327,12 @@ def _validate_png(image_bytes: bytes, fixture_id: str) -> None:
             if chunk_type in (b"cHRM", b"gAMA", b"sRGB") and palette_seen:
                 raise invalid()
             if chunk_type == b"cHRM":
-                if chunk_length != 32 or any(
-                    value > 100000
-                    for (value,) in struct.iter_unpack(">I", chunk_data)
+                if chunk_length != 32:
+                    raise invalid()
+                chromaticities = struct.unpack(">IIIIIIII", chunk_data)
+                if any(value > 100000 for value in chromaticities) or any(
+                    x + y > 100000
+                    for x, y in zip(chromaticities[::2], chromaticities[1::2])
                 ):
                     raise invalid()
             if chunk_type == b"gAMA" and (
@@ -2176,7 +2464,9 @@ def _validate_png(image_bytes: bytes, fixture_id: str) -> None:
     raise invalid()
 
 
-def verify_fixtures(manifest_path: Path) -> dict[str, Any]:
+def verify_fixtures(
+    manifest_path: Path, output_path: Path | None = None
+) -> dict[str, Any]:
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
@@ -2204,9 +2494,17 @@ def verify_fixtures(manifest_path: Path) -> dict[str, Any]:
         digest = fixture.get("sha256")
         if not isinstance(image, str) or not isinstance(digest, str):
             raise EvaluationError(f"{fixture_id}: image and sha256 are required")
-        image_path = (root / image).resolve()
+        try:
+            image_path = (root / image).resolve()
+        except (OSError, RuntimeError) as error:
+            raise EvaluationError(
+                f"{fixture_id}: cannot resolve image path {image}: {error}"
+            ) from error
         if not image_path.is_relative_to(root):
             raise EvaluationError(f"{fixture_id}: image path escapes fixture root")
+        _reject_output_input_collision(
+            output_path, [("fixture image", image_path)]
+        )
         try:
             image_bytes = image_path.read_bytes()
         except OSError as error:
@@ -2234,11 +2532,37 @@ def verify_fixtures(manifest_path: Path) -> dict[str, Any]:
 def _read_json(path: Path) -> dict[str, Any]:
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
+    except RecursionError as error:
+        raise EvaluationError(
+            f"cannot read {path}: JSON nesting exceeds parser limit"
+        ) from error
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise EvaluationError(f"cannot read {path}: {error}") from error
     if not isinstance(value, dict):
         raise EvaluationError(f"{path} must contain a JSON object")
     return value
+
+
+def _reject_output_input_collision(
+    output_path: Path | None,
+    input_paths: list[tuple[str, Path]],
+) -> None:
+    if output_path is None:
+        return
+
+    try:
+        resolved_output = output_path.resolve()
+        for option, input_path in input_paths:
+            if resolved_output == input_path.resolve() or (
+                output_path.exists()
+                and input_path.exists()
+                and output_path.samefile(input_path)
+            ):
+                raise EvaluationError(
+                    f"--output path conflicts with input file {option}: {input_path}"
+                )
+    except (OSError, RuntimeError) as error:
+        raise EvaluationError(f"cannot resolve output or input path: {error}") from error
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -2259,10 +2583,20 @@ def main(argv: list[str] | None = None) -> int:
         if args.verify_fixtures:
             if args.predictions or args.baseline:
                 parser.error("--verify-fixtures cannot be combined with prediction files")
-            result = {"status": "fixtures_verified", **verify_fixtures(args.manifest)}
+            _reject_output_input_collision(
+                args.output, [("--manifest", args.manifest)]
+            )
+            result = {
+                "status": "fixtures_verified",
+                **verify_fixtures(args.manifest, args.output),
+            }
         else:
             if args.predictions is None:
                 parser.error("--predictions is required unless --verify-fixtures is used")
+            input_paths = [("--manifest", args.manifest), ("--predictions", args.predictions)]
+            if args.baseline is not None:
+                input_paths.append(("--baseline", args.baseline))
+            _reject_output_input_collision(args.output, input_paths)
             manifest = _read_json(args.manifest)
             candidate = evaluate_predictions(
                 manifest, _read_json(args.predictions)
@@ -2287,13 +2621,27 @@ def main(argv: list[str] | None = None) -> int:
                     "comparison": comparison,
                 }
         output = json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False)
+        try:
+            output.encode("utf-8")
+        except UnicodeEncodeError as error:
+            raise EvaluationError(
+                "report contains invalid Unicode scalar values"
+            ) from error
         if args.output:
             try:
                 args.output.write_text(output + "\n", encoding="utf-8")
             except OSError as error:
                 raise EvaluationError(f"cannot write {args.output}: {error}") from error
         else:
-            print(output)
+            encoding = getattr(sys.stdout, "encoding", None)
+            if encoding and encoding.lower().replace("_", "-") != "utf-8":
+                stdout_buffer = getattr(sys.stdout, "buffer", None)
+            else:
+                stdout_buffer = None
+            if stdout_buffer is not None:
+                stdout_buffer.write((output + "\n").encode("utf-8"))
+            else:
+                print(output)
         return 0
     except EvaluationError as error:
         print(f"evaluation error: {error}", file=sys.stderr)

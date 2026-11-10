@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart'
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/home_page.dart';
 import 'package:visual_math/visual_math.dart';
 
@@ -15,7 +16,12 @@ void main() {
     try {
       await tester.pumpWidget(
         const ProviderScope(
-          child: MaterialApp(home: HomePage()),
+          child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: HomePage(),
+          ),
         ),
       );
       await tester.pumpAndSettle();

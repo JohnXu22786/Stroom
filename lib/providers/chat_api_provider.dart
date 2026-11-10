@@ -1,11 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart' show Locale;
 import 'package:dio/dio.dart';
+import '../l10n/app_localizations.dart';
 import '../models/ai_stream_event.dart';
 import '../services/sse_client.dart';
 import 'anthropic_chat_provider.dart';
 import 'chat_api_shared.dart';
+import 'locale_provider.dart';
 export 'chat_api_shared.dart';
 
 part 'chat_api_provider_ext.dart';
@@ -23,6 +26,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
   final String _baseUrl;
   final String _name;
   final Dio _dio;
+  final Locale? Function()? _localeOverride;
   Map<String, dynamic>? _lastRequestBody;
   Map<String, dynamic>? _lastResponseData;
   Map<String, String>? _lastRequestHeaders;
@@ -35,19 +39,23 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     required String baseUrl,
     required String apiKey,
     String name = 'OpenAI Compatible',
+    Locale? Function()? localeOverride,
+    Dio? dio,
   })  : _baseUrl = baseUrl,
         _apiKey = apiKey,
         _name = name,
-        _dio = Dio(BaseOptions(
-          baseUrl: '',
-          headers: {
-            'Content-Type': 'application/json',
-            if (apiKey.isNotEmpty) 'Authorization': 'Bearer $apiKey',
-            ...openRouterAppHeaders,
-          },
-          connectTimeout: const Duration(seconds: 10),
-          receiveTimeout: const Duration(seconds: 60),
-        ));
+        _localeOverride = localeOverride,
+        _dio = dio ??
+            Dio(BaseOptions(
+              baseUrl: '',
+              headers: {
+                'Content-Type': 'application/json',
+                if (apiKey.isNotEmpty) 'Authorization': 'Bearer $apiKey',
+                ...openRouterAppHeaders,
+              },
+              connectTimeout: const Duration(seconds: 10),
+              receiveTimeout: const Duration(seconds: 60),
+            ));
 
   @override
   String get name => _name;
@@ -104,11 +112,16 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
   /// 检查流式 chunk 是否携带 API 错误（choices 空 + error 字段）。
   /// 有错误时抛出（对齐 Anthropic 行为，防止截断回复被当作成功）。
   @visibleForTesting
-  static void throwIfApiError(Map<String, dynamic> data) {
+  static void throwIfApiError(
+    Map<String, dynamic> data, {
+    AppLocalizations Function()? localizations,
+  }) {
     final apiError = data['error'];
     if (apiError is Map) {
       final msg = apiError['message'] ?? apiError.toString();
-      throw Exception('API 流式错误: $msg');
+      final strings =
+          (localizations ?? () => appLocalizationsForLocale(null))();
+      throw Exception(strings.chatStreamError('$msg'));
     }
   }
 
@@ -252,7 +265,12 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     Map<String, dynamic>? extraParams,
     String? system,
   }) async {
-    if (_apiKey.isEmpty) throw Exception('API key not configured');
+    if (_apiKey.isEmpty) {
+      throw Exception(
+        appLocalizationsForLocale(_localeOverride?.call())
+            .chatApiKeyNotConfigured,
+      );
+    }
 
     final body = _buildBody(messages,
         model: model,
@@ -291,17 +309,26 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
 
       final choices = response.data['choices'] as List?;
       if (choices == null || choices.isEmpty) {
-        throw Exception('API 返回了空的 choices 列表');
+        throw Exception(
+          appLocalizationsForLocale(_localeOverride?.call()).chatChoicesMissing,
+        );
       }
       final content = choices[0]['message']?['content'] as String?;
       if (content == null) {
-        throw Exception('API 返回内容为空');
+        throw Exception(
+          appLocalizationsForLocale(_localeOverride?.call())
+              .chatResponseContentEmpty,
+        );
       }
       return content;
     } on DioException catch (e) {
       throw _handleChatDioError(e);
     } catch (e) {
-      throw Exception('请求失败: $e');
+      throw Exception(
+        appLocalizationsForLocale(_localeOverride?.call()).chatRequestFailed(
+          '$e',
+        ),
+      );
     }
   }
 
@@ -321,7 +348,10 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
     String? system,
   }) async* {
     if (_apiKey.isEmpty) {
-      throw Exception('API key not configured');
+      throw Exception(
+        appLocalizationsForLocale(_localeOverride?.call())
+            .chatApiKeyNotConfigured,
+      );
     }
 
     final body = _buildBody(messages,
@@ -349,9 +379,12 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
         'OpenAICompatibleChatProvider: 流式 POST $_baseUrl - 消息数: ${messages.length}');
 
     final Map<int, Map<String, dynamic>> toolCallAccumulators = {};
+    final Map<int, StringBuffer> toolCallArgumentBuffers = {};
     // 本次请求的 usage（局部收集，per-request 隔离——
     // 共享 provider 实例的 _lastUsage 槽会被并发对话覆盖）
     Map<String, dynamic>? localUsage;
+    var usageEmitted = false;
+    var emittedCost = 0.0;
 
     try {
       // Mark as successfully connected once we start receiving events
@@ -366,6 +399,7 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
         },
         jsonEncode(body),
         cancelToken: cancelToken,
+        locale: _localeOverride?.call(),
         onResponseHeaders: (headers) {
           _lastResponseHeaders = headers;
         },
@@ -386,7 +420,12 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
 
           // 流中的 API 错误 chunk（choices 空 + error 字段）必须上抛，
           // 否则会被当成正常截断回复（对齐 Anthropic 行为）
-          throwIfApiError(data);
+          throwIfApiError(
+            data,
+            localizations: () => appLocalizationsForLocale(
+              _localeOverride?.call(),
+            ),
+          );
 
           // 收集实际 token 计量（OpenAI 规范：usage 只在末 chunk；
           // 但部分兼容端点会在中间 chunk 上报部分 usage）——
@@ -396,6 +435,22 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
           if (usage != null) {
             localUsage ??= {};
             localUsage.addAll(usage);
+            final totalCost = localUsage['cost'] is num
+                ? (localUsage['cost'] as num).toDouble()
+                : null;
+            final costIncrement =
+                totalCost == null ? null : totalCost - emittedCost;
+            if (totalCost != null) emittedCost = totalCost;
+            usageEmitted = true;
+            // Emit as soon as the provider has observed usage. A later
+            // cancellation can stop this async* stream before its terminal
+            // event, so deferring this snapshot until after [DONE] loses
+            // already-received billing data.
+            yield AIStreamEvent(
+              '',
+              usage: Map<String, dynamic>.from(localUsage),
+              usageCostIncrement: costIncrement,
+            );
           }
 
           // Parse the stream event using the static helper method
@@ -406,7 +461,8 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
             yield pe;
           }
 
-          _accumulateToolCallDeltas(data, toolCallAccumulators);
+          _accumulateToolCallDeltas(
+              data, toolCallAccumulators, toolCallArgumentBuffers);
         } catch (e) {
           // API 错误 chunk（Exception）必须上抛；仅解析/形状错误
           // （FormatException/TypeError，如代理式多余行）跳过继续。
@@ -419,23 +475,30 @@ class OpenAICompatibleChatProvider extends BaseChatProvider {
       await _resetForStreamError(e);
       // 错误轮也可能已产生计费 usage：先产出计量事件再上抛，
       // 让 ChatService 在 onError 之前累计到成本
-      if (localUsage != null) {
-        _lastUsage = localUsage;
+      if (localUsage != null) _lastUsage = localUsage;
+      if (localUsage != null && !usageEmitted) {
         yield AIStreamEvent('', usage: localUsage);
       }
       rethrow;
+    } finally {
+      // The service keeps its per-conversation copy until the manager
+      // snapshots rawRequest. Do not retain this shared provider copy after
+      // the stream, and do not clear a newer concurrent request's slot.
+      if (identical(_lastRequestBody, body)) _lastRequestBody = null;
     }
 
     // After stream ends, yield the usage metering for this request
     // (per-request isolation via event, not the shared _lastUsage slot)
-    if (localUsage != null) {
+    if (localUsage != null && !usageEmitted) {
       // 同时填充诊断槽（与 lastResponseData 同语义）
       _lastUsage = localUsage;
       yield AIStreamEvent('', usage: localUsage);
     }
+    if (localUsage != null) _lastUsage = localUsage;
 
     // After stream ends, yield tool calls if any were accumulated
-    final toolEvent = _buildToolCallEvent(toolCallAccumulators);
+    final toolEvent =
+        _buildToolCallEvent(toolCallAccumulators, toolCallArgumentBuffers);
     if (toolEvent != null) {
       yield toolEvent;
     }
@@ -460,12 +523,14 @@ BaseChatProvider createChatProviderFromConfig({
   required String apiKey,
   String? model,
   String endpointType = 'openai',
+  Locale? Function()? localeOverride,
 }) {
   if (endpointType == 'anthropic') {
     return AnthropicChatProvider(
       baseUrl: baseUrl,
       apiKey: apiKey,
       name: providerName,
+      localeOverride: localeOverride,
     );
   }
   // OpenAI-compatible（默认）
@@ -473,5 +538,6 @@ BaseChatProvider createChatProviderFromConfig({
     baseUrl: baseUrl,
     apiKey: apiKey,
     name: providerName,
+    localeOverride: localeOverride,
   );
 }

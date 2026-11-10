@@ -1,8 +1,10 @@
 import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/providers/update_provider.dart';
 import 'package:stroom/widgets/update_dialog.dart';
@@ -12,13 +14,15 @@ import 'package:stroom/widgets/update_dialog.dart';
 Future<void> _showDialog({
   required WidgetTester tester,
   required UpdateNotifier notifier,
+  Locale locale = const Locale('zh', 'CN'),
 }) async {
   await tester.pumpWidget(
     ProviderScope(
-      overrides: [
-        updateProvider.overrideWith((ref) => notifier),
-      ],
+      overrides: [updateProvider.overrideWith((ref) => notifier)],
       child: MaterialApp(
+        locale: locale,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Builder(
           builder: (context) {
             Future.microtask(() {
@@ -38,48 +42,46 @@ Future<void> _showDialog({
 }
 
 /// Sets up an [UpdateNotifier] with a mock Dio and given [state].
-({UpdateNotifier notifier, ProviderContainer container}) _setupNotifier({
-  required UpdateState state,
-}) {
-  final dio = _createMockDio(_githubRelease('v0.2.14'));
-  final container = ProviderContainer(
-    overrides: [
-      updateProvider.overrideWith((ref) => UpdateNotifier(dio: dio)),
-    ],
+UpdateNotifier _setupNotifier({required UpdateState state}) {
+  final notifier = UpdateNotifier(
+    dio: _createMockDio(_githubRelease('v0.2.14')),
   );
-  final notifier = container.read(updateProvider.notifier);
   notifier.state = state;
-  return (notifier: notifier, container: container);
+  return notifier;
 }
 
 /// Creates a mock [Dio] that returns the given [jsonResponse] wrapped in
 /// a list (matching the [/releases] array response from the unified endpoint).
 Dio _createMockDio(String jsonResponse) {
   final dio = Dio(BaseOptions());
-  dio.interceptors.add(InterceptorsWrapper(
-    onRequest: (options, handler) {
-      // For GET requests (checkForUpdate), use the interceptor
-      if (options.method == 'GET') {
-        handler.resolve(
-          Response(
-            requestOptions: options,
-            statusCode: 200,
-            data: jsonDecode('[$jsonResponse]') as List<dynamic>,
-          ),
-        );
-      } else {
-        handler.next(options);
-      }
-    },
-  ));
+  dio.interceptors.add(
+    InterceptorsWrapper(
+      onRequest: (options, handler) {
+        // For GET requests (checkForUpdate), use the interceptor
+        if (options.method == 'GET') {
+          handler.resolve(
+            Response(
+              requestOptions: options,
+              statusCode: 200,
+              data: jsonDecode('[$jsonResponse]') as List<dynamic>,
+            ),
+          );
+        } else {
+          handler.next(options);
+        }
+      },
+    ),
+  );
   return dio;
 }
 
 /// Build a GitHub releases API response for the given tag.
-String _githubRelease(String tagName,
-    {String body = '',
-    String? htmlUrl,
-    String publishedAt = '2024-01-15T10:00:00Z'}) {
+String _githubRelease(
+  String tagName, {
+  String body = '',
+  String? htmlUrl,
+  String publishedAt = '2024-01-15T10:00:00Z',
+}) {
   htmlUrl ??= 'https://github.com/JohnXu22786/Stroom/releases/tag/$tagName';
   return '''
 {
@@ -93,12 +95,35 @@ String _githubRelease(String tagName,
 
 void main() {
   group('UpdateDialog - Shared Dialog', () {
-    testWidgets('skip button calls skipVersion and closes dialog',
-        (tester) async {
-      SharedPreferences.setMockInitialValues({});
-      final dio = _createMockDio(
-        _githubRelease('v0.2.14'),
+    testWidgets('labels follow the selected locale', (tester) async {
+      final notifier = _setupNotifier(
+        state: const UpdateState(
+          latestVersion: 'v0.2.14',
+          downloadUrl:
+              'https://github.com/JohnXu22786/Stroom/releases/tag/v0.2.14',
+          updateAvailable: true,
+        ),
       );
+      await _showDialog(
+        tester: tester,
+        notifier: notifier,
+        locale: const Locale('en', 'US'),
+      );
+
+      expect(find.text('New version available'), findsOneWidget);
+      expect(find.text('Latest version: v0.2.14'), findsOneWidget);
+      expect(find.text('Skip this version'), findsOneWidget);
+      expect(find.text('Remind me later'), findsOneWidget);
+      expect(find.text('Download in browser'), findsOneWidget);
+      await tester.tap(find.text('Remind me later'));
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('skip button calls skipVersion and closes dialog', (
+      tester,
+    ) async {
+      SharedPreferences.setMockInitialValues({});
+      final dio = _createMockDio(_githubRelease('v0.2.14'));
 
       final container = ProviderContainer(
         overrides: [
@@ -115,10 +140,11 @@ void main() {
 
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [
-            updateProvider.overrideWith((ref) => notifier),
-          ],
+          overrides: [updateProvider.overrideWith((ref) => notifier)],
           child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
             home: Builder(
               builder: (context) {
                 Future.microtask(() {
@@ -147,12 +173,11 @@ void main() {
       expect(notifier.state.updateAvailable, false);
     });
 
-    testWidgets('later button closes dialog without side effects',
-        (tester) async {
+    testWidgets('later button closes dialog without side effects', (
+      tester,
+    ) async {
       SharedPreferences.setMockInitialValues({});
-      final dio = _createMockDio(
-        _githubRelease('v0.2.14'),
-      );
+      final dio = _createMockDio(_githubRelease('v0.2.14'));
 
       final container = ProviderContainer(
         overrides: [
@@ -169,10 +194,11 @@ void main() {
 
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [
-            updateProvider.overrideWith((ref) => notifier),
-          ],
+          overrides: [updateProvider.overrideWith((ref) => notifier)],
           child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
             home: Builder(
               builder: (context) {
                 Future.microtask(() {
@@ -203,9 +229,7 @@ void main() {
 
     testWidgets('shows download progress bar when downloading', (tester) async {
       SharedPreferences.setMockInitialValues({});
-      final dio = _createMockDio(
-        _githubRelease('v0.2.14'),
-      );
+      final dio = _createMockDio(_githubRelease('v0.2.14'));
 
       final container = ProviderContainer(
         overrides: [
@@ -224,10 +248,11 @@ void main() {
 
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [
-            updateProvider.overrideWith((ref) => notifier),
-          ],
+          overrides: [updateProvider.overrideWith((ref) => notifier)],
           child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
             home: Builder(
               builder: (context) {
                 Future.microtask(() {
@@ -256,12 +281,11 @@ void main() {
       expect(find.text('稍后提醒'), findsNothing);
     });
 
-    testWidgets('shows installing state UI when isInstalling is true',
-        (tester) async {
+    testWidgets('shows installing state UI when isInstalling is true', (
+      tester,
+    ) async {
       SharedPreferences.setMockInitialValues({});
-      final dio = _createMockDio(
-        _githubRelease('v0.2.14'),
-      );
+      final dio = _createMockDio(_githubRelease('v0.2.14'));
 
       final container = ProviderContainer(
         overrides: [
@@ -281,10 +305,11 @@ void main() {
 
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [
-            updateProvider.overrideWith((ref) => notifier),
-          ],
+          overrides: [updateProvider.overrideWith((ref) => notifier)],
           child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
             home: Builder(
               builder: (context) {
                 Future.microtask(() {
@@ -309,12 +334,11 @@ void main() {
       expect(find.text('手动安装'), findsNothing);
     });
 
-    testWidgets('shows fallback install button when auto-install fails',
-        (tester) async {
+    testWidgets('shows fallback install button when auto-install fails', (
+      tester,
+    ) async {
       SharedPreferences.setMockInitialValues({});
-      final dio = _createMockDio(
-        _githubRelease('v0.2.14'),
-      );
+      final dio = _createMockDio(_githubRelease('v0.2.14'));
 
       final container = ProviderContainer(
         overrides: [
@@ -335,10 +359,11 @@ void main() {
 
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [
-            updateProvider.overrideWith((ref) => notifier),
-          ],
+          overrides: [updateProvider.overrideWith((ref) => notifier)],
           child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
             home: Builder(
               builder: (context) {
                 Future.microtask(() {
@@ -364,8 +389,9 @@ void main() {
       expect(find.text('安装失败，请手动打开 APK 安装'), findsOneWidget);
     });
 
-    testWidgets('dialog cannot be dismissed by popping while downloading',
-        (tester) async {
+    testWidgets('dialog cannot be dismissed by popping while downloading', (
+      tester,
+    ) async {
       SharedPreferences.setMockInitialValues({});
       final notifier = _setupNotifier(
         state: UpdateState(
@@ -376,7 +402,7 @@ void main() {
           isDownloading: true,
           downloadProgress: 0.5,
         ),
-      ).notifier;
+      );
 
       await _showDialog(tester: tester, notifier: notifier);
 
@@ -393,8 +419,9 @@ void main() {
       expect(find.text('正在下载更新...'), findsOneWidget);
     });
 
-    testWidgets('dialog cannot be dismissed by popping while installing',
-        (tester) async {
+    testWidgets('dialog cannot be dismissed by popping while installing', (
+      tester,
+    ) async {
       SharedPreferences.setMockInitialValues({});
       final notifier = _setupNotifier(
         state: UpdateState(
@@ -406,7 +433,7 @@ void main() {
           isInstalling: true,
           downloadedFilePath: '/tmp/test.exe',
         ),
-      ).notifier;
+      );
 
       await _showDialog(tester: tester, notifier: notifier);
 
@@ -424,40 +451,41 @@ void main() {
     });
 
     testWidgets(
-        'dialog does NOT auto-close after download complete with no error',
-        (tester) async {
-      SharedPreferences.setMockInitialValues({});
-      final notifier = _setupNotifier(
-        state: UpdateState(
-          updateAvailable: true,
-          latestVersion: '0.2.14',
-          downloadUrl:
-              'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.14/test.zip',
-          downloadComplete: true,
-          isDownloading: false,
-          isInstalling: false,
-          downloadError: null,
-          downloadedFilePath: '/tmp/test.exe',
-        ),
-      ).notifier;
+      'dialog does NOT auto-close after download complete with no error',
+      (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        final notifier = _setupNotifier(
+          state: UpdateState(
+            updateAvailable: true,
+            latestVersion: '0.2.14',
+            downloadUrl:
+                'https://github.com/JohnXu22786/Stroom/releases/download/v0.2.14/test.zip',
+            downloadComplete: true,
+            isDownloading: false,
+            isInstalling: false,
+            downloadError: null,
+            downloadedFilePath: '/tmp/test.exe',
+          ),
+        );
 
-      await _showDialog(tester: tester, notifier: notifier);
+        await _showDialog(tester: tester, notifier: notifier);
 
-      // Pump multiple frames to ensure any auto-close logic would have fired
-      await tester.pump();
-      await tester.pump(const Duration(seconds: 1));
-      await tester.pump();
-      await tester.pump();
+        // Pump multiple frames to ensure any auto-close logic would have fired
+        await tester.pump();
+        await tester.pump(const Duration(seconds: 1));
+        await tester.pump();
+        await tester.pump();
 
-      // Dialog should still be open with the "下载完成" message
-      expect(find.text('下载完成'), findsOneWidget);
-      expect(find.text('关闭'), findsOneWidget);
+        // Dialog should still be open with the "下载完成" message
+        expect(find.text('下载完成'), findsOneWidget);
+        expect(find.text('关闭'), findsOneWidget);
 
-      // User can close it manually
-      await tester.tap(find.text('关闭'));
-      await tester.pumpAndSettle();
-      expect(find.text('发现新版本'), findsNothing);
-    });
+        // User can close it manually
+        await tester.tap(find.text('关闭'));
+        await tester.pumpAndSettle();
+        expect(find.text('发现新版本'), findsNothing);
+      },
+    );
 
     testWidgets('tapping "打开安装包" calls retryInstall', (tester) async {
       SharedPreferences.setMockInitialValues({});
@@ -473,7 +501,7 @@ void main() {
           downloadError: null,
           downloadedFilePath: '/tmp/test.exe',
         ),
-      ).notifier;
+      );
 
       await _showDialog(tester: tester, notifier: notifier);
 
@@ -488,75 +516,81 @@ void main() {
   });
 
   group('UpdateDialog - Multi-version selection', () {
-    testWidgets('shows version selection list when multiple versions available',
-        (tester) async {
-      SharedPreferences.setMockInitialValues({});
-      final container = ProviderContainer(
-        overrides: [
-          updateProvider
-              .overrideWith((ref) => UpdateNotifier(dio: Dio(BaseOptions()))),
-        ],
-      );
-      final notifier = container.read(updateProvider.notifier);
-      notifier.state = UpdateState(
-        updateAvailable: true,
-        availableVersions: [
-          AvailableUpdate(
-            version: '0.2.16',
-            releaseNotes: 'Version 0.2.16',
-            downloadUrl: 'https://example.com/v0.2.16.zip',
-            isPreRelease: false,
-          ),
-          AvailableUpdate(
-            version: '0.2.15',
-            releaseNotes: 'Version 0.2.15',
-            downloadUrl: 'https://example.com/v0.2.15.zip',
-            isPreRelease: false,
-          ),
-        ],
-        selectedVersionIndex: 0,
-        latestVersion: '0.2.16',
-        releaseNotes: 'Version 0.2.16',
-        downloadUrl: 'https://example.com/v0.2.16.zip',
-      );
-
-      await tester.pumpWidget(
-        ProviderScope(
+    testWidgets(
+      'shows version selection list when multiple versions available',
+      (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        final container = ProviderContainer(
           overrides: [
-            updateProvider.overrideWith((ref) => notifier),
+            updateProvider.overrideWith(
+              (ref) => UpdateNotifier(dio: Dio(BaseOptions())),
+            ),
           ],
-          child: MaterialApp(
-            home: Builder(
-              builder: (context) {
-                Future.microtask(() {
-                  showDialog(
-                    context: context,
-                    builder: (_) => const UpdateDialog(),
-                  );
-                });
-                return const SizedBox();
-              },
+        );
+        final notifier = container.read(updateProvider.notifier);
+        notifier.state = UpdateState(
+          updateAvailable: true,
+          availableVersions: [
+            AvailableUpdate(
+              version: '0.2.16',
+              releaseNotes: 'Version 0.2.16',
+              downloadUrl: 'https://example.com/v0.2.16.zip',
+              isPreRelease: false,
+            ),
+            AvailableUpdate(
+              version: '0.2.15',
+              releaseNotes: 'Version 0.2.15',
+              downloadUrl: 'https://example.com/v0.2.15.zip',
+              isPreRelease: false,
+            ),
+          ],
+          selectedVersionIndex: 0,
+          latestVersion: '0.2.16',
+          releaseNotes: 'Version 0.2.16',
+          downloadUrl: 'https://example.com/v0.2.16.zip',
+        );
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [updateProvider.overrideWith((ref) => notifier)],
+            child: MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: Builder(
+                builder: (context) {
+                  Future.microtask(() {
+                    showDialog(
+                      context: context,
+                      builder: (_) => const UpdateDialog(),
+                    );
+                  });
+                  return const SizedBox();
+                },
+              ),
             ),
           ),
-        ),
-      );
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
 
-      // Should show version selection items (prefixed with 'v' in the list)
-      expect(find.text('v0.2.16'), findsOneWidget);
-      expect(find.text('v0.2.15'), findsOneWidget);
-      // Should show the currently selected version in header
-      expect(find.textContaining('0.2.16'), findsWidgets);
-    });
+        // Should show version selection items (prefixed with 'v' in the list)
+        expect(find.text('v0.2.16'), findsOneWidget);
+        expect(find.text('v0.2.15'), findsOneWidget);
+        // Should show the currently selected version in header
+        expect(find.textContaining('0.2.16'), findsWidgets);
+      },
+    );
 
-    testWidgets('tapping a version in list selects it and updates display',
-        (tester) async {
+    testWidgets('tapping a version in list selects it and updates display', (
+      tester,
+    ) async {
       SharedPreferences.setMockInitialValues({});
       final container = ProviderContainer(
         overrides: [
-          updateProvider
-              .overrideWith((ref) => UpdateNotifier(dio: Dio(BaseOptions()))),
+          updateProvider.overrideWith(
+            (ref) => UpdateNotifier(dio: Dio(BaseOptions())),
+          ),
         ],
       );
       final notifier = container.read(updateProvider.notifier);
@@ -584,10 +618,11 @@ void main() {
 
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [
-            updateProvider.overrideWith((ref) => notifier),
-          ],
+          overrides: [updateProvider.overrideWith((ref) => notifier)],
           child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
             home: Builder(
               builder: (context) {
                 Future.microtask(() {
@@ -618,13 +653,15 @@ void main() {
       expect(notifier.state.latestVersion, '0.2.15');
     });
 
-    testWidgets('single version dialog still works (backward compat)',
-        (tester) async {
+    testWidgets('single version dialog still works (backward compat)', (
+      tester,
+    ) async {
       SharedPreferences.setMockInitialValues({});
       final container = ProviderContainer(
         overrides: [
-          updateProvider
-              .overrideWith((ref) => UpdateNotifier(dio: Dio(BaseOptions()))),
+          updateProvider.overrideWith(
+            (ref) => UpdateNotifier(dio: Dio(BaseOptions())),
+          ),
         ],
       );
       final notifier = container.read(updateProvider.notifier);
@@ -646,10 +683,11 @@ void main() {
 
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [
-            updateProvider.overrideWith((ref) => notifier),
-          ],
+          overrides: [updateProvider.overrideWith((ref) => notifier)],
           child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
             home: Builder(
               builder: (context) {
                 Future.microtask(() {

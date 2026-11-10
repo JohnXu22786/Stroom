@@ -30,6 +30,14 @@ void chatPageGroup3() {
               isStreamingProvider('test-conv-id').overrideWith((ref) => true),
           ],
           child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
             navigatorKey: navKey,
             home: const Scaffold(body: Center(child: Text('Root Page'))),
           ),

@@ -1,8 +1,12 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+
+import '../l10n/app_localizations.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
+
 import 'home_shared.dart';
 
 import '../main.dart' as main_lib;
@@ -11,6 +15,7 @@ import 'files_page_shared.dart';
 import 'topic_selection_page.dart';
 import 'catcatch_page.dart';
 import 'unified_task_list_page.dart';
+import 'unified_task_list/media_preview_sheet.dart';
 import '../catcatch/providers/catcatch_provider.dart';
 import '../catcatch/models/catcatch_task.dart' as catcatch_task;
 import '../providers/task_provider.dart';
@@ -23,7 +28,9 @@ import 'asr_page.dart';
 import 'audio_separation_page.dart';
 import 'tts_create_page.dart';
 import 'mermaid_chart_page.dart';
+
 import 'package:visual_math/visual_math.dart';
+
 import 'anki_page.dart';
 
 import '../task_flow/pages/task_flow_list_page.dart';
@@ -101,6 +108,8 @@ class _HomePageState extends ConsumerState<HomePage> {
       if (!mounted) return;
       for (final task in next) {
         if (task.status.name == 'running' &&
+            task.metadata[catcatch_task.CatCatchTask.flowManagedSelectionKey] !=
+                'true' &&
             task.steps.any(
               (s) => s.type.name == 'userSelecting' && s.running,
             ) &&
@@ -161,7 +170,12 @@ class _HomePageState extends ConsumerState<HomePage> {
               child: IndexedStack(
                 index: selectedPage.index,
                 children: AppPage.values.map((page) {
-                  return _buildPageContent(page);
+                  final content = _buildPageContent(page);
+                  if (page != AppPage.chat) return content;
+                  return ChatTabVisibility(
+                    isVisible: selectedPage == AppPage.chat,
+                    child: content,
+                  );
                 }).toList(),
               ),
             ),

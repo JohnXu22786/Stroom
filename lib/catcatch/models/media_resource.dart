@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 /// 媒体资源模型
 ///
 /// 表示从 URL 分析或页面嗅探中发现的单个媒体资源。
@@ -41,6 +43,23 @@ class MediaResource {
   /// 视频高度（像素），通过探针获取
   final int? height;
 
+  /// HLS fragment byte range, when multiple fragments share one resource.
+  final int? byteRangeStart;
+  final int? byteRangeLength;
+
+  bool get hasByteRange => byteRangeStart != null || byteRangeLength != null;
+
+  /// Stable key for selection/counting, retaining URL identity except for
+  /// separate HLS byte ranges that share a URL.
+  String get selectionIdentity {
+    if (!hasByteRange) return url;
+    return '\u0000hls-range:${jsonEncode([
+          url,
+          byteRangeStart,
+          byteRangeLength
+        ])}';
+  }
+
   const MediaResource({
     required this.url,
     required this.name,
@@ -55,6 +74,8 @@ class MediaResource {
     this.isLikelySplitTrack = false,
     this.width,
     this.height,
+    this.byteRangeStart,
+    this.byteRangeLength,
   });
 
   // ---------------------------------------------------------------------------
@@ -62,7 +83,7 @@ class MediaResource {
   // ---------------------------------------------------------------------------
 
   /// 是否 HLS 播放列表
-  bool get isM3U8 => ext == 'm3u8' || ext == 'm3u';
+  bool get isM3U8 => ext.toLowerCase() == 'm3u8' || ext.toLowerCase() == 'm3u';
 
   /// 是否 DASH 播放列表
   bool get isMPD => ext == 'mpd';
@@ -79,7 +100,7 @@ class MediaResource {
         'flv',
         'ev1',
         'mpeg',
-        'mpg'
+        'mpg',
       ].contains(ext);
 
   /// 是否音频格式
@@ -91,6 +112,20 @@ class MediaResource {
 
   /// 是否 TS 分段
   bool get isTS => ext == 'ts';
+
+  /// Whether this resource was parsed from an HLS playlist.
+  bool get isPlaylistSegment {
+    if (isPlaylist && isM3U8) return false;
+
+    final initiatorPath = Uri.tryParse(initiator ?? '')?.path.toLowerCase();
+    return initiatorPath != null &&
+        (initiatorPath.endsWith('.m3u8') || initiatorPath.endsWith('.m3u'));
+  }
+
+  /// HLS manifests can be streamed directly; parsed fragments need their
+  /// playlist initialization context and are not standalone previews.
+  bool get canPreview =>
+      (isPlaylist && isM3U8) || (isPlayable && !isPlaylistSegment);
 
   // ---------------------------------------------------------------------------
   // 序列化
@@ -110,6 +145,8 @@ class MediaResource {
         'isLikelySplitTrack': isLikelySplitTrack,
         'width': width,
         'height': height,
+        'byteRangeStart': byteRangeStart,
+        'byteRangeLength': byteRangeLength,
       };
 
   factory MediaResource.fromMap(Map<String, dynamic> map) => MediaResource(
@@ -126,6 +163,8 @@ class MediaResource {
         isLikelySplitTrack: map['isLikelySplitTrack'] as bool? ?? false,
         width: map['width'] as int?,
         height: map['height'] as int?,
+        byteRangeStart: map['byteRangeStart'] as int?,
+        byteRangeLength: map['byteRangeLength'] as int?,
       );
 
   MediaResource copyWith({
@@ -142,6 +181,8 @@ class MediaResource {
     bool? isLikelySplitTrack,
     int? width,
     int? height,
+    int? byteRangeStart,
+    int? byteRangeLength,
     bool clearGroupId = false,
     bool clearIsLikelySplitTrack = false,
   }) =>
@@ -161,6 +202,8 @@ class MediaResource {
             : (isLikelySplitTrack ?? this.isLikelySplitTrack),
         width: width ?? this.width,
         height: height ?? this.height,
+        byteRangeStart: byteRangeStart ?? this.byteRangeStart,
+        byteRangeLength: byteRangeLength ?? this.byteRangeLength,
       );
 
   @override
@@ -176,8 +219,18 @@ class MediaResource {
           name == other.name &&
           ext == other.ext &&
           groupId == other.groupId &&
-          isLikelySplitTrack == other.isLikelySplitTrack;
+          isLikelySplitTrack == other.isLikelySplitTrack &&
+          byteRangeStart == other.byteRangeStart &&
+          byteRangeLength == other.byteRangeLength;
 
   @override
-  int get hashCode => Object.hash(url, name, ext, groupId, isLikelySplitTrack);
+  int get hashCode => Object.hash(
+        url,
+        name,
+        ext,
+        groupId,
+        isLikelySplitTrack,
+        byteRangeStart,
+        byteRangeLength,
+      );
 }

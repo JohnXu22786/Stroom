@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
+import 'package:flutter/widgets.dart' show Locale;
 import 'app_log_service.dart';
 
 /// 原生平台的 SSE 流式客户端
@@ -11,6 +12,7 @@ Stream<String> sseStream(
   Map<String, String> headers,
   String body, {
   CancelToken? cancelToken,
+  Locale? locale,
 
   /// Callback invoked with the initial HTTP response headers, if available.
   void Function(Map<String, List<String>> headers)? onResponseHeaders,
@@ -67,6 +69,7 @@ Stream<String> ssePostLines(
   Map<String, String> headers,
   String body, {
   CancelToken? cancelToken,
+  Locale? locale,
 
   /// Callback invoked with the initial HTTP response headers, if available.
   void Function(Map<String, List<String>> headers)? onResponseHeaders,
@@ -123,6 +126,7 @@ Stream<SseFrame> sseEventStream(
   Map<String, String> headers,
   String body, {
   CancelToken? cancelToken,
+  Locale? locale,
 
   /// Callback invoked with the initial HTTP response headers, if available.
   void Function(Map<String, List<String>> headers)? onResponseHeaders,
@@ -172,6 +176,7 @@ Stream<String> sseConnect(
   String url,
   Map<String, String> headers, {
   CancelToken? cancelToken,
+  Locale? locale,
 
   /// Callback invoked with the initial HTTP response headers, if available.
   void Function(Map<String, List<String>> headers)? onResponseHeaders,
@@ -211,6 +216,7 @@ Future<String> ssePost(
   Map<String, String> headers,
   String body, {
   CancelToken? cancelToken,
+  Locale? locale,
 }) async {
   final dio = Dio(BaseOptions(
     headers: headers,

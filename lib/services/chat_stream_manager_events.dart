@@ -11,45 +11,76 @@ extension _ChatStreamManagerEventsExt on ChatStreamManager {
           state.hasReceivedFirstToken = true;
           _pushToProvider(convId, streamingHasFirstTokenProvider, true);
         }
-        state.fullReply += e.text;
-        state.textChunks[state.textChunks.length - 1] += e.text;
+        if (!e.alreadyAccumulated) state.appendText(e.text);
         // 节流：最长200ms更新一次 provider
         final now = DateTime.now();
         if (now.difference(state.lastTextUpdate) >=
             ChatStreamManager._textThrottle) {
           state.lastTextUpdate = now;
-          // Set textSections first (no listener) so that when
-          // fullReply fires its listener and reads streamingTextSectionsProvider
-          // inside _rebuildLiveSegments, it sees the already-updated value.
-          _pushToProvider(convId, streamingTextSectionsProvider,
-              List<String>.from(state.textChunks));
-          _pushToProvider(convId, streamingFullReplyProvider, state.fullReply);
+          final hasMarkdownSyntax = state.currentChunkHasMarkdownSyntax;
+          final textDelta = state.takeTextDelta();
+          if (textDelta.isNotEmpty) {
+            _pushToProvider(
+              convId,
+              streamingTextAppendProvider,
+              StreamingTextAppend(
+                sequence: state.nextTextUpdateSequence,
+                chunkIndex: state.currentTextChunkIndex,
+                text: textDelta,
+                hasMarkdownSyntax: hasMarkdownSyntax,
+              ),
+            );
+          }
         }
 
       case ReasoningEvent e:
-        state.reasoningBuffer += e.text;
-        final sections = List<String>.from(state.reasoningSections);
-        if (sections.isNotEmpty) {
-          sections[sections.length - 1] = state.reasoningBuffer;
-        } else {
-          sections.add(state.reasoningBuffer);
-        }
-        state.reasoningSections = sections;
+        state.appendReasoning(e.text);
         // 节流
         final now = DateTime.now();
         if (now.difference(state.lastReasoningUpdate) >=
             ChatStreamManager._reasoningThrottle) {
           state.lastReasoningUpdate = now;
-          _pushToProvider(
-              convId, streamingReasoningProvider, state.reasoningBuffer);
-          _pushToProvider(convId, streamingReasoningSectionsProvider, sections);
+          final append = state.takeReasoningAppend();
+          if (append != null) {
+            _pushToProvider(convId, streamingReasoningAppendProvider, append);
+          }
         }
 
-      case ReasoningSectionEndEvent():
-        final sections = List<String>.from(state.reasoningSections);
-        sections.add('');
-        state.reasoningSections = sections;
-        state.reasoningBuffer = ''; // Reset for new reasoning section
+      case ReasoningSectionEndEvent e:
+        // Drain the last visible text delta before sealing this round. The
+        // service waits for this event before building the tool-chain message
+        // or requesting the next round.
+        final pendingText = state.takeTextDelta();
+        if (pendingText.isNotEmpty) {
+          final hasMarkdownSyntax = state.currentChunkHasMarkdownSyntax;
+          _pushToProvider(
+            convId,
+            streamingTextAppendProvider,
+            StreamingTextAppend(
+              sequence: state.nextTextUpdateSequence,
+              chunkIndex: state.currentTextChunkIndex,
+              text: pendingText,
+              hasMarkdownSyntax: hasMarkdownSyntax,
+            ),
+          );
+          if (hasMarkdownSyntax) {
+            // The text-section snapshot includes this drained tail. Publish
+            // the delta first so the live segment cannot append it twice.
+            _pushToProvider(
+                convId, streamingTextSectionsProvider, state.textChunks);
+          }
+        }
+        state.startTextChunkFromService();
+        // Preserve the sub-throttle tail before publishing the boundary.
+        final append = state.takeReasoningAppend();
+        if (append != null) {
+          _pushToProvider(convId, streamingReasoningAppendProvider, append);
+        }
+        final completedReasoning = state.reasoningBuffer;
+        state.setCompletedToolCallReasoning(completedReasoning);
+        state.endReasoningSection();
+        final sections = state.reasoningSections;
+        _pushToProvider(convId, streamingReasoningProvider, completedReasoning);
         // The service emits one ReasoningSectionEndEvent per tool round,
         // right before that round's ToolCallStartEvents. Mark that the
         // next tool call begins a new round: the reasoning-section
@@ -60,6 +91,7 @@ extension _ChatStreamManagerEventsExt on ChatStreamManager {
         // bottom of the message by _buildWithRounds' trailing loop.
         state.pendingRoundStart = true;
         _pushToProvider(convId, streamingReasoningSectionsProvider, sections);
+        e.onDelivered?.call();
 
       case ToolCallStartEvent e:
         final toolCallData = ToolCallData(
@@ -69,7 +101,7 @@ extension _ChatStreamManagerEventsExt on ChatStreamManager {
           status: ToolCallStatus.running,
         );
         state.toolCalls.add(toolCallData);
-        state.accumulatedToolCalls.add(toolCallData);
+        state.addAccumulatedToolCall(toolCallData);
         // Start a new text chunk at tool call boundary so that
         // assistant speech is interleaved between tool call rounds
         // rather than all appearing at the end.
@@ -82,10 +114,12 @@ extension _ChatStreamManagerEventsExt on ChatStreamManager {
         // Consecutive tool calls within the same assistant step (parallel
         // tools emitted in one response) don't satisfy any condition and
         // stay grouped in the same round.
-        if (state.pendingRoundStart ||
-            state.textChunks.last.isNotEmpty ||
+        final serviceStartedTextChunk = state.takeServiceStartedTextChunk();
+        if (serviceStartedTextChunk ||
+            state.pendingRoundStart ||
+            state.currentTextChunkIsNotEmpty ||
             state.textChunks.length == 1) {
-          state.textChunks.add('');
+          if (!serviceStartedTextChunk) state.startTextChunk();
           // Record that this tool call starts a new round.
           state.toolCallRoundStarts.add(state.toolCalls.length - 1);
         }
@@ -97,8 +131,8 @@ extension _ChatStreamManagerEventsExt on ChatStreamManager {
         // triggered by the toolCalls push reads the stale round boundary and
         // renders the new round's reasoning at the bottom until the first
         // complete event of the round.
-        _pushToProvider(convId, streamingTextSectionsProvider,
-            List<String>.from(state.textChunks));
+        _pushToProvider(
+            convId, streamingTextSectionsProvider, state.textChunks);
         _pushToProvider(convId, streamingToolCallRoundStartsProvider,
             List<int>.from(state.toolCallRoundStarts));
         _pushToProvider(convId, streamingToolCallsProvider,
@@ -114,16 +148,13 @@ extension _ChatStreamManagerEventsExt on ChatStreamManager {
             break;
           }
         }
-        for (var i = 0; i < state.accumulatedToolCalls.length; i++) {
-          if (state.accumulatedToolCalls[i].id == e.toolCallId) {
-            state.accumulatedToolCalls[i] =
-                state.accumulatedToolCalls[i].copyWith(
-              status: ToolCallStatus.completed,
-              result: e.result,
-            );
-            break;
-          }
-        }
+        state.updateAccumulatedToolCall(
+          e.toolCallId,
+          (call) => call.copyWith(
+            status: ToolCallStatus.completed,
+            result: e.result,
+          ),
+        );
         _pushToProvider(convId, streamingToolCallsProvider,
             List<ToolCallData>.from(state.toolCalls));
     }

@@ -46,32 +46,24 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
     // Legacy models without the isEffortParam flag fall back to the first
     // non-toggle param (pre-flag semantics).
     final effortParam = findEffortParam(widget.reasoningParams);
+    final hasUsableReasoningToggle = widget.reasoningParams.any(
+      (param) => param.isReasoningToggle && param.isFilledToggle,
+    );
 
-    // Determine reasoning chip label and color based on reasoning state.
-    // When reasoning is enabled AND effort toggle is on AND the effort param
-    // has a non-empty name AND a non-empty value has been selected: show that
-    // value (e.g. "high", "low"). Otherwise: show "推理" (purple when enabled,
-    // grey when disabled). 运行时状态以已选值为准，不检查配置的 enabled 标记。
+    // Show the selected effort whenever its independent control is enabled.
+    // Custom reasoning selections can activate the chip color independently
+    // from the global reasoning switch.
+    final hasActiveEffort =
+        reasoningEffortEnabled && effortParam?.isUsable == true;
     final String reasoningLabel;
-    if (reasoningEnabled &&
-        reasoningEffortEnabled &&
+    if (hasActiveEffort &&
         effortParam != null &&
         effortParam.paramName.trim().isNotEmpty &&
-        // 仅参数名（无选项值、非布尔）的力度参数不可用：即使 map 中
-        // 残留旧值也不显示（面板开关同样不可用，二者保持一致）。
-        effortParam.isUsable &&
         (reasoningParamValues[effortParam.paramName]?.isNotEmpty ?? false)) {
       reasoningLabel = reasoningParamValues[effortParam.paramName]!;
     } else {
-      reasoningLabel = '推理';
+      reasoningLabel = AppLocalizations.of(context)!.chatReasoning;
     }
-    // Reasoning chip color: purple only when reasoning is actually usable
-    // (a model with configured reasoning params AND the toggle on).
-    // 无任何可用推理参数（仅参数名/无选项值/非布尔）时与面板一致：
-    // 灰色不可用，开关即使残留开启状态也不显示为可用。
-    final hasReasoningParams = widget.reasoningParams.any((p) => p.isUsable);
-    final reasoningColor =
-        (reasoningEnabled && hasReasoningParams) ? Colors.purple : Colors.grey;
 
     // ═══════════════════════════════════════════════════════════
     // Tool chip: accent color (indigo) when tools enabled, grey when disabled
@@ -90,30 +82,57 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
         noToolsEnabled ? null : visibleEnabledTools.length;
 
     // ═══════════════════════════════════════════════════════════
-    // Custom params chip: independent color state driven by the session.
-    // A custom param (non-toggle, non-effort) counts as ACTIVE when its
-    // name is non-empty and a value has been selected for it — and
-    // reasoning is on (matching what the request actually sends). The
-    // selected-value map is the runtime on/off state (the panel writes/
-    // removes values on switch toggle), so param.enabled is not consulted
-    // here. The chip shows the accent color + badge with the active count;
-    // otherwise grey with no badge.
+    // Custom params chip reflects both configured CustomParam values and
+    // reasoning extras, which remain available in this same panel.
     // ═══════════════════════════════════════════════════════════
-    final int activeCustomParamsCount = reasoningEnabled
-        ? widget.reasoningParams
-            .where(
-              (p) =>
-                  p != effortParam &&
-                  !p.isReasoningToggle &&
-                  !p.isEffortParam &&
-                  p.paramName.trim().isNotEmpty &&
-                  // 不可用参数（仅参数名、无选项值、非布尔）不计入：
-                  // 面板无开关可选，残留值不会被请求发送。
-                  p.isUsable &&
-                  (reasoningParamValues[p.paramName]?.isNotEmpty ?? false),
-            )
-            .length
-        : 0;
+    final customParamValues = ref.watch(customParamValuesProvider);
+    final activeConfiguredCustomParamsCount = widget.customParams.where((
+      param,
+    ) {
+      final selected = customParamValues != null
+          ? customParamValues.containsKey(param.paramName)
+              ? param.type == 'json'
+                  ? param.defaultValue
+                  : customParamValues[param.paramName] ?? ''
+              : ''
+          : param.type == 'json'
+              ? param.defaultValue
+              : param.options.isNotEmpty
+                  ? param.options.first
+                  : param.optionOrder.isEmpty &&
+                          param.defaultValue.trim().isNotEmpty
+                      ? param.defaultValue
+                      : param.type == 'boolean'
+                          ? 'true'
+                          : '';
+      final isSelectable = param.options.isNotEmpty ||
+          param.optionOrder.isNotEmpty ||
+          param.type == 'boolean' ||
+          (param.optionOrder.isEmpty && param.defaultValue.trim().isNotEmpty);
+      return param.paramName.trim().isNotEmpty &&
+          isSelectable &&
+          selected.isNotEmpty;
+    }).length;
+    final activeReasoningCustomParamsCount = widget.reasoningParams
+        .where(
+          (param) =>
+              !param.isReasoningToggle &&
+              !param.isEffortParam &&
+              param.paramName.trim().isNotEmpty &&
+              param.isUsable &&
+              (reasoningParamValues[param.paramName]?.isNotEmpty ?? false),
+        )
+        .length;
+    final hasActiveReasoningCustomParams = activeReasoningCustomParamsCount > 0;
+    final hasActiveReasoningToggle =
+        reasoningEnabled && hasUsableReasoningToggle;
+    final reasoningColor = (hasActiveReasoningToggle ||
+            hasActiveEffort ||
+            hasActiveReasoningCustomParams)
+        ? Colors.purple
+        : Colors.grey;
+    final activeCustomParamsCount =
+        activeConfiguredCustomParamsCount + activeReasoningCustomParamsCount;
     final bool hasActiveCustomParams = activeCustomParamsCount > 0;
     final Color customParamsColor =
         hasActiveCustomParams ? toolAccentColor : Colors.grey;
@@ -149,7 +168,7 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
               ),
               _SettingsChip(
                 icon: Icons.build_outlined,
-                label: '工具',
+                label: AppLocalizations.of(context)!.chatTools,
                 color: toolColor,
                 onTap: _showToolsPanel,
                 badgeCount: toolBadgeCount,
@@ -167,7 +186,7 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
               // a panel that explains "当前模型未配置自定义参数".
               _SettingsChip(
                 icon: Icons.tune,
-                label: '自定义参数',
+                label: AppLocalizations.of(context)!.chatCustomParameters,
                 color: customParamsColor,
                 onTap: _showCustomParamsPanel,
                 enabled: true,
@@ -185,12 +204,7 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
   /// and fades in when it returns after the warning is dismissed.
   Widget _buildEditModeCapsule({required ColorScheme cs}) {
     return Padding(
-      padding: const EdgeInsets.only(
-        left: 12,
-        right: 12,
-        top: 6,
-        bottom: 0,
-      ),
+      padding: const EdgeInsets.only(left: 12, right: 12, top: 6, bottom: 0),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -209,21 +223,14 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
                   width: 1,
                 ),
               ),
-              padding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 4,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
-                    Icons.edit,
-                    size: 16,
-                    color: cs.primary,
-                  ),
+                  Icon(Icons.edit, size: 16, color: cs.primary),
                   const SizedBox(width: 6),
                   Text(
-                    '编辑消息',
+                    AppLocalizations.of(context)!.chatEditMessage,
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w500,
@@ -232,7 +239,7 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
                   ),
                   const SizedBox(width: 6),
                   Tooltip(
-                    message: '关闭',
+                    message: AppLocalizations.of(context)!.actionClose,
                     child: GestureDetector(
                       onTap: widget.onEditCancel,
                       // Small padding around the close icon for a slightly
@@ -270,12 +277,7 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
     required bool fadingOut,
   }) {
     return Padding(
-      padding: const EdgeInsets.only(
-        left: 12,
-        right: 12,
-        top: 6,
-        bottom: 0,
-      ),
+      padding: const EdgeInsets.only(left: 12, right: 12, top: 6, bottom: 0),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -315,7 +317,7 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
                     const SizedBox(width: 6),
                     Flexible(
                       child: Text(
-                        '重新编辑发送后下面所有的消息将丢失',
+                        AppLocalizations.of(context)!.chatEditWarning,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
@@ -327,7 +329,7 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
                     ),
                     const SizedBox(width: 6),
                     Tooltip(
-                      message: '关闭',
+                      message: AppLocalizations.of(context)!.actionClose,
                       child: GestureDetector(
                         onTap: _dismissEditWarning,
                         // Small padding around the close icon (see the
@@ -370,11 +372,8 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
       child: Row(
         children: [
           IconButton(
-            icon: Icon(
-              Icons.attach_file_outlined,
-              color: cs.onSurfaceVariant,
-            ),
-            tooltip: '附件',
+            icon: Icon(Icons.attach_file_outlined, color: cs.onSurfaceVariant),
+            tooltip: AppLocalizations.of(context)!.chatAttachment,
             onPressed: _showAttachmentPicker,
           ),
           const SizedBox(width: 4),
@@ -395,7 +394,7 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
               minLines: 1,
               maxLines: 4,
               decoration: InputDecoration(
-                hintText: '输入消息...',
+                hintText: AppLocalizations.of(context)!.chatMessageHint,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(24),
                   borderSide: BorderSide.none,
@@ -412,7 +411,7 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
                     size: 20,
                     color: cs.onSurfaceVariant,
                   ),
-                  tooltip: '全屏编辑',
+                  tooltip: AppLocalizations.of(context)!.chatFullscreenEdit,
                   onPressed: _showComposerFullscreenEditor,
                 ),
                 suffixIconConstraints: const BoxConstraints(
@@ -425,17 +424,14 @@ extension _ChatComposerBuildSectionsExt on ChatComposerWidgetState {
           const SizedBox(width: 4),
           if (isStreaming)
             IconButton(
-              icon: Icon(
-                Icons.stop_circle_outlined,
-                color: Colors.red[400],
-              ),
-              tooltip: '停止生成',
+              icon: Icon(Icons.stop_circle_outlined, color: Colors.red[400]),
+              tooltip: AppLocalizations.of(context)!.chatStopGeneration,
               onPressed: widget.onStop,
             )
           else
             IconButton(
               icon: Icon(Icons.send_rounded, color: cs.primary),
-              tooltip: '发送',
+              tooltip: AppLocalizations.of(context)!.actionSend,
               onPressed: (hasText || hasAttachments)
                   ? () => _handleSubmitted(_textController.text)
                   : null,

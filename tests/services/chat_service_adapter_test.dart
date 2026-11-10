@@ -4,6 +4,7 @@
 //
 // No naming conflicts between sources for this file.
 
+import 'package:flutter/widgets.dart' show Locale;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/models/assistant.dart';
 import 'package:stroom/models/mcp.dart';
@@ -14,6 +15,20 @@ import 'package:stroom/services/chat_service.dart';
 import 'package:stroom/services/http_tool_service.dart';
 
 void main() {
+  test('missing provider stream error follows the selected locale', () async {
+    var locale = const Locale('en', 'US');
+    await expectLater(
+      ChatAdapter(localeOverride: () => locale).sendStream('', history: []),
+      emitsError('Please configure a chat provider first'),
+    );
+
+    locale = const Locale('zh', 'CN');
+    await expectLater(
+      ChatAdapter(localeOverride: () => locale).sendStream('', history: []),
+      emitsError('请先配置聊天供应商'),
+    );
+  });
+
   // ====================================================================
   // From chat_adapter_model_selection_test.dart
   // ====================================================================
@@ -801,8 +816,9 @@ void main() {
       );
       final result = await HttpToolService.handleBraveSearch(
         {'query': 'test'},
+        locale: const Locale('en', 'US'),
       );
-      expect(result, contains('Brave Search API Key 未配置'));
+      expect(result, contains('Brave Search API key is not configured'));
     });
 
     test(

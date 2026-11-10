@@ -1,9 +1,10 @@
 // 供应商设置面板推理参数部分（从模型页完整移植）测试：
 // - 推理开关 / 推理力度 / 附加推理参数三段结构
-// - 无开关时推理力度添加按钮禁用
+// - 推理力度与附加参数可独立于推理开关配置
 // - 供应商级推理力度允许仅填参数名（选项值可选）
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/llm_model_config_shared.dart';
 import 'package:stroom/pages/provider_settings_panel.dart';
 import 'package:stroom/providers/provider_config.dart';
@@ -17,6 +18,9 @@ Future<ProviderConfigItem?> _openAndSave(
   ProviderConfigItem? saved;
   await tester.pumpWidget(
     MaterialApp(
+      locale: const Locale('zh', 'CN'),
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
       home: Scaffold(
         body: Builder(
           builder: (context) => Center(
@@ -35,6 +39,8 @@ Future<ProviderConfigItem?> _openAndSave(
       ),
     ),
   );
+  await tester.pumpAndSettle();
+  await tester.pumpAndSettle();
   await tester.tap(find.text('打开供应商设置'));
   await tester.pumpAndSettle();
 
@@ -57,8 +63,9 @@ ProviderConfigItem _baseConfig() => ProviderConfigItem(
 
 void main() {
   group('ProviderSettingsPanel reasoning section (ported from model page)', () {
-    testWidgets('trims surrounding whitespace from saved custom-param names',
-        (tester) async {
+    testWidgets('trims surrounding whitespace from saved custom-param names', (
+      tester,
+    ) async {
       final config = ProviderConfigItem(
         providerName: 'Test Provider',
         host: 'https://api.example.com/v1',
@@ -78,10 +85,10 @@ void main() {
       final saved = await _openAndSave(tester, config: config);
 
       expect(saved, isNotNull);
-      expect(
-        saved!.customParams.map((param) => param.paramName),
-        ['response_format', 'second'],
-      );
+      expect(saved!.customParams.map((param) => param.paramName), [
+        'response_format',
+        'second',
+      ]);
       final firstParam = saved.customParams.first;
       expect(firstParam.defaultValue, 'json');
       expect(firstParam.type, 'string');
@@ -95,18 +102,18 @@ void main() {
         host: 'https://api.example.com/v1',
         key: 'sk-test',
         customParams: [
-          CustomParam(
-            paramName: 'response_format',
-            options: ['', 'json'],
-          ),
+          CustomParam(paramName: 'response_format', options: ['', 'json']),
         ],
       );
 
       final saved = await _openAndSave(tester, config: config);
 
-      expect(saved, isNull,
-          reason: 'the first option is sent as the effective default');
-      expect(find.text('自定义参数的参数名和值不能为空'), findsOneWidget);
+      expect(
+        saved,
+        isNull,
+        reason: 'the first option is sent as the effective default',
+      );
+      expect(find.text('自定义参数的名称和值不能为空。'), findsOneWidget);
     });
 
     testWidgets('rejects invalid numeric custom-param options', (tester) async {
@@ -125,9 +132,12 @@ void main() {
 
       final saved = await _openAndSave(tester, config: config);
 
-      expect(saved, isNull,
-          reason: 'every selectable numeric option must parse before saving');
-      expect(find.text('参数 "top_k" 的值不是合法数字：oops'), findsOneWidget);
+      expect(
+        saved,
+        isNull,
+        reason: 'every selectable numeric option must parse before saving',
+      );
+      expect(find.text('参数“top_k”的值不是合法数字：oops'), findsOneWidget);
     });
 
     testWidgets('rejects blank numeric custom-param options', (tester) async {
@@ -136,19 +146,18 @@ void main() {
         host: 'https://api.example.com/v1',
         key: 'sk-test',
         customParams: [
-          CustomParam(
-            paramName: 'top_k',
-            type: 'number',
-            options: ['1', ''],
-          ),
+          CustomParam(paramName: 'top_k', type: 'number', options: ['1', '']),
         ],
       );
 
       final saved = await _openAndSave(tester, config: config);
 
-      expect(saved, isNull,
-          reason: 'blank numeric options are not valid values to coerce');
-      expect(find.text('参数 "top_k" 的数值选项不能为空'), findsOneWidget);
+      expect(
+        saved,
+        isNull,
+        reason: 'blank numeric options are not valid values to coerce',
+      );
+      expect(find.text('参数“top_k”的数值选项不能为空。'), findsOneWidget);
     });
 
     testWidgets('rejects an invalid numeric default value', (tester) async {
@@ -157,22 +166,19 @@ void main() {
         host: 'https://api.example.com/v1',
         key: 'sk-test',
         customParams: [
-          CustomParam(
-            paramName: 'top_k',
-            type: 'number',
-            defaultValue: 'oops',
-          ),
+          CustomParam(paramName: 'top_k', type: 'number', defaultValue: 'oops'),
         ],
       );
 
       final saved = await _openAndSave(tester, config: config);
 
       expect(saved, isNull);
-      expect(find.text('参数 "top_k" 的值不是合法数字：oops'), findsOneWidget);
+      expect(find.text('参数“top_k”的值不是合法数字：oops'), findsOneWidget);
     });
 
-    testWidgets('preserves valid integer and decimal custom-param options',
-        (tester) async {
+    testWidgets('preserves valid integer and decimal custom-param options', (
+      tester,
+    ) async {
       final config = ProviderConfigItem(
         providerName: 'Test Provider',
         host: 'https://api.example.com/v1',
@@ -192,8 +198,9 @@ void main() {
       expect(saved!.customParams.single.options, ['10', '0.25']);
     });
 
-    testWidgets('shows toggle, effort and additional param sections',
-        (tester) async {
+    testWidgets('shows toggle, effort and additional param sections', (
+      tester,
+    ) async {
       await _openAndSave(tester, config: _baseConfig(), tapSave: false);
 
       expect(find.text('推理参数'), findsOneWidget);
@@ -202,8 +209,9 @@ void main() {
       expect(find.text('添加推理参数'), findsOneWidget);
     });
 
-    testWidgets('effort add button disabled until a toggle exists',
-        (tester) async {
+    testWidgets('effort add button works without a toggle', (
+      tester,
+    ) async {
       await _openAndSave(tester, config: _baseConfig(), tapSave: false);
 
       final addEffortButton = tester.widget<TextButton>(
@@ -212,14 +220,68 @@ void main() {
           matching: find.byType(TextButton),
         ),
       );
-      expect(addEffortButton.onPressed, isNull, reason: '无推理开关时不可添加推理力度');
+      expect(addEffortButton.onPressed, isNotNull);
+      await tester.tap(find.text('添加推理力度'));
+      await tester.pumpAndSettle();
+      expect(find.byIcon(Icons.tune), findsOneWidget);
     });
 
-    testWidgets('provider-level effort param with name only is persisted',
-        (tester) async {
+    testWidgets('saves provider effort and extra params without a toggle', (
+      tester,
+    ) async {
+      final saved = await _openAndSave(
+        tester,
+        config: ProviderConfigItem(
+          providerName: 'Test Provider',
+          host: 'https://api.example.com/v1',
+          key: 'sk-test',
+          reasoningParams: [
+            ReasoningParam(
+              paramName: 'reasoning_effort',
+              isEffortParam: true,
+              options: ['low', 'high'],
+            ),
+            ReasoningParam(
+              paramName: 'thinking.budget',
+              options: ['1024', '4096'],
+            ),
+          ],
+        ),
+      );
+
+      expect(saved, isNotNull);
+      expect(saved!.reasoningParams.map((param) => param.paramName), [
+        'reasoning_effort',
+        'thinking.budget',
+      ]);
+    });
+
+    testWidgets('rejects an unusable extra param without a toggle', (
+      tester,
+    ) async {
+      final saved = await _openAndSave(
+        tester,
+        config: ProviderConfigItem(
+          providerName: 'Test Provider',
+          host: 'https://api.example.com/v1',
+          key: 'sk-test',
+          reasoningParams: [ReasoningParam(paramName: 'thinking.budget')],
+        ),
+      );
+
+      expect(saved, isNull);
+      expect(find.text('推理参数必须至少添加一个选项值。'), findsOneWidget);
+    });
+
+    testWidgets('provider-level effort param with name only is persisted', (
+      tester,
+    ) async {
       ProviderConfigItem? saved;
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Builder(
             builder: (context) => Center(
               child: ElevatedButton(
@@ -236,6 +298,7 @@ void main() {
           ),
         ),
       );
+      await tester.pumpAndSettle();
       await tester.tap(find.text('打开供应商设置'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('参数设置'));
@@ -275,8 +338,9 @@ void main() {
       expect(saved!.reasoningParams[1].options, isEmpty);
     });
 
-    testWidgets('provider effort values are sortable and the order is saved',
-        (tester) async {
+    testWidgets('provider effort values are sortable and the order is saved', (
+      tester,
+    ) async {
       final config = ProviderConfigItem(
         providerName: 'Test Provider',
         host: 'https://api.example.com/v1',
@@ -300,6 +364,9 @@ void main() {
       ProviderConfigItem? saved;
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Builder(
             builder: (context) => Center(
               child: ElevatedButton(
@@ -316,6 +383,7 @@ void main() {
           ),
         ),
       );
+      await tester.pumpAndSettle();
       await tester.tap(find.text('打开供应商设置'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('参数设置'));
@@ -343,8 +411,9 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(saved, isNotNull);
-      final effort = saved!.reasoningParams
-          .firstWhere((p) => p.paramName == 'reasoning_effort');
+      final effort = saved!.reasoningParams.firstWhere(
+        (p) => p.paramName == 'reasoning_effort',
+      );
       expect(effort.options, ['high', 'low', 'medium']);
     });
 
@@ -375,6 +444,9 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Builder(
             builder: (context) => Center(
               child: ElevatedButton(
@@ -389,6 +461,7 @@ void main() {
           ),
         ),
       );
+      await tester.pumpAndSettle();
       await tester.tap(find.text('打开供应商设置'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('参数设置'));
@@ -415,17 +488,21 @@ void main() {
 
       // 行内文本必须显示新顺序（第一行现在是 high，不再是 low）
       final firstRowText = tester
-          .widget<TextFormField>(find.descendant(
-            of: find.byType(SyncedValueField).first,
-            matching: find.byType(TextFormField),
-          ))
+          .widget<TextFormField>(
+            find.descendant(
+              of: find.byType(SyncedValueField).first,
+              matching: find.byType(TextFormField),
+            ),
+          )
           .controller!
           .text;
       final secondRowText = tester
-          .widget<TextFormField>(find.descendant(
-            of: find.byType(SyncedValueField).at(1),
-            matching: find.byType(TextFormField),
-          ))
+          .widget<TextFormField>(
+            find.descendant(
+              of: find.byType(SyncedValueField).at(1),
+              matching: find.byType(TextFormField),
+            ),
+          )
           .controller!
           .text;
       expect(firstRowText, 'high', reason: '拖拽后第一行应显示 high（旧实现会残留 low）');
@@ -433,93 +510,98 @@ void main() {
     });
 
     testWidgets(
-        'provider additional params are sortable and the order is saved',
-        (tester) async {
-      final config = ProviderConfigItem(
-        providerName: 'Test Provider',
-        host: 'https://api.example.com/v1',
-        key: 'sk-test',
-        reasoningParams: [
-          ReasoningParam(
-            paramName: 'thinking.type',
-            isReasoningToggle: true,
-            onValue: 'enabled',
-            offValue: 'disabled',
-          ),
-          ReasoningParam(
-            paramName: 'first_param',
-            enabled: true,
-            options: ['1'],
-          ),
-          ReasoningParam(
-            paramName: 'second_param',
-            enabled: true,
-            options: ['2'],
-          ),
-        ],
-      );
+      'provider additional params are sortable and the order is saved',
+      (tester) async {
+        final config = ProviderConfigItem(
+          providerName: 'Test Provider',
+          host: 'https://api.example.com/v1',
+          key: 'sk-test',
+          reasoningParams: [
+            ReasoningParam(
+              paramName: 'thinking.type',
+              isReasoningToggle: true,
+              onValue: 'enabled',
+              offValue: 'disabled',
+            ),
+            ReasoningParam(
+              paramName: 'first_param',
+              enabled: true,
+              options: ['1'],
+            ),
+            ReasoningParam(
+              paramName: 'second_param',
+              enabled: true,
+              options: ['2'],
+            ),
+          ],
+        );
 
-      ProviderConfigItem? saved;
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Builder(
-            builder: (context) => Center(
-              child: ElevatedButton(
-                onPressed: () async {
-                  saved = await showProviderSettingsPanel(
-                    context: context,
-                    config: config,
-                    providerType: 'llm',
-                  );
-                },
-                child: const Text('打开供应商设置'),
+        ProviderConfigItem? saved;
+        await tester.pumpWidget(
+          MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            home: Builder(
+              builder: (context) => Center(
+                child: ElevatedButton(
+                  onPressed: () async {
+                    saved = await showProviderSettingsPanel(
+                      context: context,
+                      config: config,
+                      providerType: 'llm',
+                    );
+                  },
+                  child: const Text('打开供应商设置'),
+                ),
               ),
             ),
           ),
-        ),
-      );
-      await tester.tap(find.text('打开供应商设置'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('参数设置'));
-      await tester.pumpAndSettle();
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('打开供应商设置'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('参数设置'));
+        await tester.pumpAndSettle();
 
-      // 滚动到附加参数区，第一个附加参数（first_param）向下拖
-      await tester.scrollUntilVisible(
-        find.text('first_param'),
-        200,
-        scrollable: find.byType(Scrollable).last,
-      );
-      await tester.pumpAndSettle();
-      final handle = find
-          .descendant(
-            of: find.ancestor(
-              of: find.text('first_param'),
-              matching: find.byType(Card),
-            ),
-            matching: find.byIcon(Icons.drag_handle),
-          )
-          .first;
-      await tester.ensureVisible(handle);
-      await tester.pumpAndSettle();
-      await tester.timedDrag(
-        handle,
-        const Offset(0, 300),
-        const Duration(milliseconds: 300),
-      );
-      await tester.pumpAndSettle();
+        // 滚动到附加参数区，第一个附加参数（first_param）向下拖
+        await tester.scrollUntilVisible(
+          find.text('first_param'),
+          200,
+          scrollable: find.byType(Scrollable).last,
+        );
+        await tester.pumpAndSettle();
+        final handle = find
+            .descendant(
+              of: find.ancestor(
+                of: find.text('first_param'),
+                matching: find.byType(Card),
+              ),
+              matching: find.byIcon(Icons.drag_handle),
+            )
+            .first;
+        await tester.ensureVisible(handle);
+        await tester.pumpAndSettle();
+        await tester.timedDrag(
+          handle,
+          const Offset(0, 300),
+          const Duration(milliseconds: 300),
+        );
+        await tester.pumpAndSettle();
 
-      await tester.tap(find.text('保存'));
-      await tester.pumpAndSettle();
+        await tester.tap(find.text('保存'));
+        await tester.pumpAndSettle();
 
-      expect(saved, isNotNull);
-      expect(
-        saved!.reasoningParams
-            .where((p) => !p.isReasoningToggle)
-            .map((p) => p.paramName)
-            .toList(),
-        ['second_param', 'first_param'],
-      );
-    });
+        expect(saved, isNotNull);
+        expect(
+          saved!.reasoningParams
+              .where((p) => !p.isReasoningToggle)
+              .map((p) => p.paramName)
+              .toList(),
+          ['second_param', 'first_param'],
+        );
+      },
+    );
 
     testWidgets(
         'boolean custom param saves with empty options after type '
@@ -543,6 +625,9 @@ void main() {
       ProviderConfigItem? saved;
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Builder(
             builder: (context) => Center(
               child: ElevatedButton(
@@ -559,6 +644,7 @@ void main() {
           ),
         ),
       );
+      await tester.pumpAndSettle();
       await tester.tap(find.text('打开供应商设置'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('参数设置'));
@@ -580,15 +666,17 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(saved, isNotNull);
-      final verbose =
-          saved!.customParams.firstWhere((p) => p.paramName == 'verbose');
+      final verbose = saved!.customParams.firstWhere(
+        (p) => p.paramName == 'verbose',
+      );
       expect(verbose.type, 'boolean');
       expect(verbose.options, isEmpty, reason: 'boolean 类型保存时清空残留 options');
       expect(verbose.defaultValue, isEmpty, reason: 'boolean 类型保存时清空旧类型的默认值');
     });
 
-    testWidgets('saving an existing boolean param clears a stale default',
-        (tester) async {
+    testWidgets('saving an existing boolean param clears a stale default', (
+      tester,
+    ) async {
       final config = ProviderConfigItem(
         providerName: 'Test Provider',
         host: 'https://api.example.com/v1',
@@ -605,13 +693,15 @@ void main() {
       final saved = await _openAndSave(tester, config: config);
 
       expect(saved, isNotNull);
-      final verbose =
-          saved!.customParams.firstWhere((p) => p.paramName == 'verbose');
+      final verbose = saved!.customParams.firstWhere(
+        (p) => p.paramName == 'verbose',
+      );
       expect(verbose.defaultValue, isEmpty);
     });
 
-    testWidgets('duplicate reasoning param name shows inline error',
-        (tester) async {
+    testWidgets('duplicate reasoning param name shows inline error', (
+      tester,
+    ) async {
       final config = ProviderConfigItem(
         providerName: 'Test Provider',
         host: 'https://api.example.com/v1',
@@ -637,7 +727,7 @@ void main() {
       await tester.enterText(fields.at(0), 'reasoning_effort');
       await tester.pump();
 
-      expect(find.text('已存在该参数'), findsOneWidget);
+      expect(find.text('参数已存在：reasoning_effort'), findsOneWidget);
     });
 
     testWidgets(
@@ -646,6 +736,9 @@ void main() {
       ProviderConfigItem? saved;
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Builder(
             builder: (context) => Center(
               child: ElevatedButton(
@@ -662,6 +755,7 @@ void main() {
           ),
         ),
       );
+      await tester.pumpAndSettle();
       await tester.tap(find.text('打开供应商设置'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('参数设置'));
@@ -681,7 +775,7 @@ void main() {
       // 与推理力度一致：无开/关值输入框
       expect(find.text('开启时值'), findsNothing);
       expect(find.text('关闭时值'), findsNothing);
-      expect(find.textContaining('无需配置参数值'), findsOneWidget);
+      expect(find.textContaining('布尔类型无需配置参数值，聊天面板提供开/关切换。'), findsOneWidget);
 
       // 添加名称式力度参数（boolean 开关只需参数名即可通过校验）
       await tester.scrollUntilVisible(
@@ -700,8 +794,9 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(saved, isNotNull);
-      final toggle =
-          saved!.reasoningParams.firstWhere((p) => p.isReasoningToggle);
+      final toggle = saved!.reasoningParams.firstWhere(
+        (p) => p.isReasoningToggle,
+      );
       expect(toggle.paramName, 'enable_reasoning');
       expect(toggle.type, 'boolean');
       expect(toggle.onValue, isEmpty);

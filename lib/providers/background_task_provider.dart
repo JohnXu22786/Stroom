@@ -3,12 +3,14 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
+import 'dart:ui' show Locale;
 
 import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:uuid/uuid.dart';
 import 'package:path/path.dart' as p;
 
+import '../l10n/app_localizations.dart';
 import '../models/ocr_batch_execution.dart';
 import '../services/storage_service.dart';
 import '../services/notification_service.dart';
@@ -18,18 +20,26 @@ import '../services/ocr_retry_storage.dart';
 import '../pages/ocr/ocr_retry_snapshot.dart';
 import '../utils/atomic_file.dart';
 import '../utils/ocr_diagnostics.dart';
+import 'locale_provider.dart';
 import 'task_provider.dart';
 
 const _unrestoredTaskRecordMarker = {'_unrestoredTaskRecord': true};
+
+bool _isBackgroundTaskCancellationError(String? error) =>
+    error == '已取消' || error == 'Canceled';
 
 Map<String, dynamic> _unrestoredTaskRecord({
   required bool retryAudioOwnershipKnown,
   Set<String> retryAudioIds = const {},
   bool retireAfterSnapshot = false,
+  bool ocrCacheOwnershipKnown = true,
+  String? ocrCacheTaskId,
 }) =>
     {
       '_unrestoredTaskRecord': true,
       'retryAudioOwnershipKnown': retryAudioOwnershipKnown,
+      'ocrCacheOwnershipKnown': ocrCacheOwnershipKnown,
+      if (ocrCacheTaskId != null) 'ocrCacheTaskId': ocrCacheTaskId,
       if (retryAudioIds.isNotEmpty)
         'retryAudioIds': retryAudioIds.toList()..sort(),
       if (retireAfterSnapshot) 'retireAfterSnapshot': true,
@@ -311,6 +321,40 @@ enum BackgroundTaskType {
     }
   }
 
+  String localizedLabel(AppLocalizations strings) => switch (this) {
+        BackgroundTaskType.ocr => strings.unifiedTaskTypeOcr,
+        BackgroundTaskType.asr => strings.unifiedTaskTypeAsr,
+        BackgroundTaskType.audioSeparation =>
+          strings.unifiedTaskTypeAudioSeparation,
+        BackgroundTaskType.chat => strings.unifiedTaskTypeChat,
+      };
+
+  List<String> localizedStepLabels(AppLocalizations strings) => switch (this) {
+        BackgroundTaskType.ocr => [
+            strings.bgStepConnectServer,
+            strings.bgStepUploadImage,
+            strings.bgStepWaitRecognition,
+            strings.bgStepParseResult,
+            strings.bgStepSaveFile,
+          ],
+        BackgroundTaskType.asr => [
+            strings.bgStepConnectServer,
+            strings.bgStepUploadAudio,
+            strings.bgStepTranscribing,
+            strings.bgStepReceiveResult,
+            strings.bgStepSaveFile,
+          ],
+        BackgroundTaskType.audioSeparation => [
+            strings.bgStepSeparateAudio,
+            strings.bgStepSaveToFile,
+          ],
+        BackgroundTaskType.chat => [
+            strings.bgStepSendRequest,
+            strings.bgStepWaitReply,
+            strings.bgStepReceiveResult,
+          ],
+      };
+
   /// Steps appropriate for each task type (used for step chain display).
   List<String> get stepLabels {
     switch (this) {
@@ -336,6 +380,327 @@ enum BackgroundTaskType {
 
 /// Simplified step status enum (without progress quantification).
 enum BgStepStatus { pending, running, completed, failed, skipped }
+
+String _localizeStoredBackgroundStep(String label, AppLocalizations strings) {
+  final baseLabel = switch (label) {
+    '连接服务器' || 'Connecting to server' => strings.bgStepConnectServer,
+    '上传图片' || 'Uploading images' => strings.bgStepUploadImage,
+    '等待识别结果' || 'Waiting for recognition' => strings.bgStepWaitRecognition,
+    '解析结果' || 'Parsing result' => strings.bgStepParseResult,
+    '保存文件' || 'Saving file' => strings.bgStepSaveFile,
+    '上传音频' || 'Uploading audio' => strings.bgStepUploadAudio,
+    '转写中' || 'Transcribing' => strings.bgStepTranscribing,
+    '接收结果' || 'Receiving result' => strings.bgStepReceiveResult,
+    '分离音频' || 'Separating audio' => strings.bgStepSeparateAudio,
+    '保存到文件' || 'Saving to file' => strings.bgStepSaveToFile,
+    '发送请求' || 'Sending request' => strings.bgStepSendRequest,
+    '等待回复' || 'Waiting for reply' => strings.bgStepWaitReply,
+    _ => null,
+  };
+  if (baseLabel != null) return baseLabel;
+
+  final ocrPercent = RegExp(r'^上传图片 (\d+)%$').firstMatch(label);
+  if (ocrPercent != null) {
+    return strings.bgTaskOcrUploadProgress(ocrPercent.group(1)!);
+  }
+  final englishOcrPercent =
+      RegExp(r'^Uploading images (\d+)%$').firstMatch(label);
+  if (englishOcrPercent != null) {
+    return strings.bgTaskOcrUploadProgress(englishOcrPercent.group(1)!);
+  }
+  final ocrPages = RegExp(
+    r'第 (\d+)/(\d+) 张图片 (\d+)%|Image (\d+)/(\d+) (\d+)%',
+  ).allMatches(label);
+  if (ocrPages.isNotEmpty) {
+    final details = ocrPages
+        .map((match) => strings.bgTaskOcrUploadPageProgress(
+              match.group(1) ?? match.group(4)!,
+              match.group(2) ?? match.group(5)!,
+              match.group(3) ?? match.group(6)!,
+            ))
+        .join(strings.localeName.startsWith('zh') ? '，' : ', ');
+    return strings.bgTaskOcrUploadPagesProgress(details);
+  }
+
+  final metricMatch = RegExp(
+    r' · 阶段 (\d+)ms · 请求 (\d+) · 已完成片段 (\d+)/(\d+)$|'
+    r' · phase (\d+) ms · (\d+) requests · (\d+)/(\d+) chunks completed$',
+  ).firstMatch(label);
+  String metricValue(int localizedIndex, int englishIndex) =>
+      metricMatch?.group(localizedIndex) ?? metricMatch!.group(englishIndex)!;
+  final metrics = metricMatch == null
+      ? ''
+      : strings.bgTaskProgressMetrics(
+          metricValue(1, 5),
+          metricValue(2, 6),
+          metricValue(3, 7),
+          metricValue(4, 8),
+        );
+  final core =
+      metricMatch == null ? label : label.substring(0, metricMatch.start);
+  final upload = RegExp(
+    r'^上传音频(?:（片段 (\d+)/(\d+)）)?(?: (\d+)% · (\d+) bytes)?$|'
+    r'^Uploading audio(?: \(chunk (\d+)/(\d+)\))?(?: (\d+)% · (\d+) bytes)?$',
+  ).firstMatch(core);
+  if (upload != null) {
+    final chunkIndex = upload.group(1) ?? upload.group(5);
+    final chunkCount = upload.group(2) ?? upload.group(6);
+    final percent = upload.group(3) ?? upload.group(7);
+    final bytes = upload.group(4) ?? upload.group(8);
+    final chunk = chunkIndex == null
+        ? ''
+        : strings.bgTaskAsrChunk(chunkIndex, chunkCount!);
+    if (percent == null) {
+      return strings.bgTaskAsrUploadChunk(chunk, metrics);
+    }
+    return strings.bgTaskAsrUploadProgress(
+      chunk,
+      percent,
+      bytes!,
+      metrics,
+    );
+  }
+  final transcribing = RegExp(
+    r'^转写中(?:（片段 (\d+)/(\d+)）)?$|'
+    r'^Transcribing(?: \(chunk (\d+)/(\d+)\))?$',
+  ).firstMatch(core);
+  if (transcribing != null) {
+    final chunkIndex = transcribing.group(1) ?? transcribing.group(3);
+    final chunkCount = transcribing.group(2) ?? transcribing.group(4);
+    if (chunkIndex == null) {
+      return strings.bgTaskAsrTranscribing(metrics);
+    }
+    return strings.bgTaskAsrTranscribingChunk(
+      chunkIndex,
+      chunkCount!,
+      metrics,
+    );
+  }
+  final receivingChunk = RegExp(r'^转写中（接收片段 (\d+)/(\d+)）$|'
+          r'^Transcribing \(receiving chunk (\d+)/(\d+)\)$')
+      .firstMatch(core);
+  if (receivingChunk != null) {
+    return strings.bgTaskAsrReceivingChunk(
+      receivingChunk.group(1) ?? receivingChunk.group(3)!,
+      receivingChunk.group(2) ?? receivingChunk.group(4)!,
+      metrics,
+    );
+  }
+  final completedChunks = RegExp(r'^转写中（已完成片段 (\d+)/(\d+)）$|'
+          r'^Transcribing \((\d+)/(\d+) chunks completed\)$')
+      .firstMatch(core);
+  if (completedChunks != null) {
+    return strings.bgTaskAsrCompletedChunks(
+      completedChunks.group(1) ?? completedChunks.group(3)!,
+      completedChunks.group(2) ?? completedChunks.group(4)!,
+      metrics,
+    );
+  }
+  final returnedChunk = RegExp(r'^转写中（片段 (\d+)/(\d+) 已返回）$|'
+          r'^Transcribing \(chunk (\d+)/(\d+) returned\)$')
+      .firstMatch(core);
+  if (returnedChunk != null) {
+    return strings.bgTaskAsrChunkReturned(
+      returnedChunk.group(1) ?? returnedChunk.group(3)!,
+      returnedChunk.group(2) ?? returnedChunk.group(4)!,
+      metrics,
+    );
+  }
+  final received = RegExp(r'^接收结果(?: (\d+)%)?$|^Receiving result(?: (\d+)%)?$')
+      .firstMatch(core);
+  if (received != null) {
+    final percent = received.group(1) ?? received.group(2);
+    return percent == null
+        ? '${strings.bgTaskAsrReceive}$metrics'
+        : strings.bgTaskAsrReceiveProgress(percent, metrics);
+  }
+  return label;
+}
+
+String? _localizeStoredBackgroundError(
+  String? error,
+  AppLocalizations strings,
+) {
+  if (error == null) return null;
+  if (error == '已取消' || error == 'Canceled') return strings.bgTaskCancelled;
+  if (error == 'OCR 错误详情已隐藏' || error == 'OCR error details were hidden') {
+    return strings.bgTaskOcrErrorDetailsHidden;
+  }
+  if (error == '错误详情已隐藏' || error == 'Error details were hidden') {
+    return strings.bgTaskErrorDetailsHidden;
+  }
+  if (error == '应用重启，已中断' || error == 'Interrupted when the app restarted') {
+    return strings.bgTaskInterruptedOnRestart;
+  }
+  if (error == '批次中的其他音频无法保存，已取消发送' ||
+      error == 'Another audio file could not be saved; sending was canceled') {
+    return strings.bgTaskAsrBatchAudioSaveError;
+  }
+  for (final wrapper in ['Bad state: ', 'Exception: ']) {
+    if (!error.startsWith(wrapper)) continue;
+    final nested = _localizeStoredBackgroundError(
+      error.substring(wrapper.length),
+      strings,
+    );
+    if (nested != error.substring(wrapper.length)) return '$wrapper$nested';
+  }
+  final incompleteDetail = _localizeStoredOcrIncompleteDetail(error, strings);
+  if (incompleteDetail != error) return incompleteDetail;
+  for (final (prefix, localize) in <(String, String Function(String))>[
+    for (final prefix in [
+      '音频转写失败: ',
+      '音频转写失败：',
+      'Speech transcription failed: ',
+    ])
+      (prefix, strings.bgTaskAsrError),
+    for (final prefix in [
+      '音频转写结果保存失败: ',
+      '音频转写结果保存失败：',
+      'Saving speech transcription failed: ',
+    ])
+      (prefix, strings.bgTaskAsrSaveError),
+    for (final prefix in ['OCR识别失败: ', 'OCR识别失败：', 'OCR failed: '])
+      (prefix, strings.bgTaskOcrError),
+    for (final prefix in [
+      'OCR结果保存失败: ',
+      'OCR结果保存失败：',
+      'Saving OCR results failed: ',
+    ])
+      (prefix, strings.bgTaskOcrSaveError),
+    for (final prefix in [
+      '无法保存 ASR 重试音频，任务未发送: ',
+      '无法保存 ASR 重试音频，任务未发送：',
+      'Could not save ASR retry audio; the task was not sent: ',
+    ])
+      (prefix, strings.bgTaskAsrRetryAudioSaveError),
+    for (final prefix in [
+      'ASR 分段恢复记录写入失败；当前请求结果可能不确定，任务已停止: ',
+      'ASR 分段恢复记录写入失败；当前请求结果可能不确定，任务已停止：',
+      'ASR recovery checkpoint could not be saved; the request outcome is uncertain and the task was stopped: ',
+    ])
+      (prefix, strings.bgTaskAsrCheckpointUncertain),
+    for (final prefix in [
+      'ASR 分段恢复记录写入失败；该片段尚未发送，可修复本地存储后重试: ',
+      'ASR 分段恢复记录写入失败；该片段尚未发送，可修复本地存储后重试：',
+      'ASR recovery checkpoint could not be saved; this chunk was not sent and can be retried after fixing local storage: ',
+    ])
+      (prefix, strings.bgTaskAsrCheckpointNotSent),
+    for (final prefix in [
+      'ASR 取消前的分段状态写入失败；该片段仍按结果不确定处理: ',
+      'ASR 取消前的分段状态写入失败；该片段仍按结果不确定处理：',
+      'ASR chunk state could not be saved before cancellation; this chunk outcome remains uncertain: ',
+    ])
+      (prefix, strings.bgTaskAsrCheckpointCancelled),
+  ]) {
+    if (error.startsWith(prefix)) {
+      final detail = error.substring(prefix.length);
+      return localize(
+          _localizeStoredBackgroundError(detail, strings) ?? detail);
+    }
+  }
+  for (final prefix in [
+    'OCR结果不完整: ',
+    'OCR结果不完整：',
+    'OCR result is incomplete: ',
+  ]) {
+    if (!error.startsWith(prefix)) continue;
+    final details = _localizeStoredOcrIncompleteDetail(
+      error.substring(prefix.length),
+      strings,
+    );
+    return strings.bgTaskOcrIncompleteError(details);
+  }
+  return error;
+}
+
+String _localizeStoredOcrIncompleteDetail(
+  String detail,
+  AppLocalizations strings,
+) {
+  final summary = _localizeStoredOcrPageFailureSummary(detail, strings);
+  if (summary != null) return summary;
+  const exceptionPrefix = 'Exception: ';
+  if (detail.startsWith(exceptionPrefix)) {
+    final nested = _localizeStoredOcrIncompleteDetail(
+      detail.substring(exceptionPrefix.length),
+      strings,
+    );
+    if (nested != detail.substring(exceptionPrefix.length)) {
+      return '$exceptionPrefix$nested';
+    }
+  }
+  for (final prefix in [
+    'OCR 返回了不完整结果（finish_reason=',
+    'OCR returned an incomplete result (finish_reason=',
+  ]) {
+    if (!detail.startsWith(prefix)) continue;
+    final closing = prefix.startsWith('OCR 返回') ? '）' : ')';
+    if (!detail.endsWith(closing)) return detail;
+    final finishReason = detail.substring(prefix.length, detail.length - 1);
+    return strings.bgTaskOcrResultIncomplete(finishReason);
+  }
+  return detail;
+}
+
+String? _localizeStoredOcrPageFailureSummary(
+  String error,
+  AppLocalizations strings,
+) {
+  for (final prefix in [
+    '部分图片 OCR 未完成：',
+    'Some images were not fully recognized: ',
+  ]) {
+    if (!error.startsWith(prefix)) continue;
+    final details = error.substring(prefix.length);
+    final pageFailures = RegExp(
+      r'第 (\d+) 张图片(结果不完整|识别失败)|'
+      r'Image (\d+): (incomplete result|recognition failed)',
+    );
+    final matches = pageFailures.allMatches(details).toList();
+    final unmatched = details
+        .replaceAll(pageFailures, '')
+        .replaceAll(RegExp(r'[；，;, ]+'), '');
+    if (matches.isEmpty || unmatched.isNotEmpty) return error;
+    final localizedDetails = matches.map((match) {
+      final index = match.group(1) ?? match.group(3)!;
+      final incomplete =
+          match.group(2) == '结果不完整' || match.group(4) == 'incomplete result';
+      return incomplete
+          ? strings.bgTaskOcrPageIncomplete(index)
+          : strings.bgTaskOcrPageFailed(index);
+    }).join(strings.bgTaskOcrPageFailureSeparator);
+    return strings.bgTaskOcrPagesIncomplete(localizedDetails);
+  }
+  return null;
+}
+
+BackgroundTask _localizeRestoredBackgroundTask(
+  BackgroundTask task,
+  AppLocalizations strings,
+) {
+  final error = _localizeStoredBackgroundError(task.error, strings);
+  var changed = error != task.error;
+  final steps = task.steps.map((step) {
+    final label = _localizeStoredBackgroundStep(step.label, strings);
+    final stepError = _localizeStoredBackgroundError(step.error, strings);
+    if (label != step.label || stepError != step.error) changed = true;
+    return step.copyWith(label: label, error: stepError);
+  }).toList(growable: false);
+  final outcomes = task.ocrPageOutcomes.map((outcome) {
+    final outcomeError = _localizeStoredBackgroundError(outcome.error, strings);
+    if (outcomeError != outcome.error) changed = true;
+    return OcrPageOutcome(
+      imageIndex: outcome.imageIndex,
+      status: outcome.status,
+      text: outcome.text,
+      error: outcomeError,
+    );
+  }).toList(growable: false);
+  if (!changed) {
+    return task;
+  }
+  return task.copyWith(error: error, steps: steps, ocrPageOutcomes: outcomes);
+}
 
 /// A single step in a background task's step chain.
 /// No progress bar — just shows status: pending, running, completed, failed, or skipped.
@@ -489,6 +854,37 @@ String? _sanitizeOcrTaskError(
     ..._legacyOcrCredentialValues(rawRequest),
     ...additionalCredentialValues,
   }.toList();
+  if (error != null) {
+    for (final locale in [const Locale('en', 'US'), const Locale('zh', 'CN')]) {
+      final strings = lookupAppLocalizations(locale);
+      for (final prefix in [
+        strings.bgTaskOcrError(''),
+        strings.bgTaskOcrSaveError(''),
+        strings.bgTaskOcrIncompleteError(''),
+      ]) {
+        if (!error.startsWith(prefix)) continue;
+        if (_legacyOcrTextContainsCredential(prefix, credentialValues)) {
+          return _localizedOcrHiddenTaskError(strings, credentialValues);
+        }
+        final details = error.substring(prefix.length);
+        final sanitizedDetails = OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+          details,
+          excludedValues: credentialValues,
+        );
+        const hiddenDetailsPrefix = 'OCR 错误详情已隐藏';
+        final localizedHiddenDetails =
+            _localizedOcrHiddenTaskError(strings, credentialValues);
+        final safeDetails =
+            sanitizedDetails?.startsWith(hiddenDetailsPrefix) == true
+                ? sanitizedDetails!.replaceFirst(
+                    hiddenDetailsPrefix,
+                    localizedHiddenDetails,
+                  )
+                : sanitizedDetails;
+        return '$prefix${safeDetails ?? ''}';
+      }
+    }
+  }
   if (error != null &&
       _legacyOcrTextContainsMaskedCredential(error, credentialValues)) {
     return 'OCR 错误详情已隐藏';
@@ -497,6 +893,22 @@ String? _sanitizeOcrTaskError(
     error,
     excludedValues: credentialValues,
   );
+}
+
+String _localizedOcrHiddenTaskError(
+  AppLocalizations strings,
+  Iterable<String> credentialValues,
+) {
+  for (final candidate in [
+    strings.bgTaskOcrErrorDetailsHidden,
+    strings.bgTaskErrorDetailsHidden,
+    '…',
+  ]) {
+    if (!_legacyOcrTextContainsCredential(candidate, credentialValues)) {
+      return candidate;
+    }
+  }
+  return '';
 }
 
 Iterable<String> _combinedOcrCredentialValues(
@@ -596,7 +1008,167 @@ bool _legacyOcrTextContainsCredential(
   )) {
     return true;
   }
+  if (_legacyOcrHasWhitespaceSplitMaskedDocumentationEcho(
+    text,
+    credentialValues,
+  )) {
+    return true;
+  }
   return _legacyOcrTextContainsMaskedCredential(text, credentialValues);
+}
+
+bool _legacyOcrHasWhitespaceSplitMaskedDocumentationEcho(
+  String text,
+  Iterable<String> credentialValues,
+) {
+  for (final value in credentialValues) {
+    final ellipsis = RegExp(r'\.\.\.|…').firstMatch(value);
+    if (ellipsis == null || value.substring(ellipsis.end).isNotEmpty) continue;
+    final prefix =
+        value.substring(0, ellipsis.start).trim().split(RegExp(r'\s+')).last;
+    if (prefix.toLowerCase() != 'documentation') continue;
+    final pattern = RegExp(
+      r'(^|[^a-zA-Z0-9])'
+      r'[dD][oO][cC][uU][mM][eE][nN][tT][aA][tT][iI][oO][nN]'
+      r'[ \t\r\n]+'
+      r'([a-zA-Z0-9_./+=~-]+(?:[ \t\r\n]+[a-zA-Z0-9_./+=~-]+)*)'
+      r'(?=$|[^a-zA-Z0-9_])',
+      caseSensitive: true,
+    );
+    for (final match in pattern.allMatches(text)) {
+      final naturalPromptLength =
+          _legacyOcrNaturalReadDocumentationBlueprintPromptLength(
+        text.substring(0, match.start),
+        match.group(2)!,
+      );
+      final echoSuffix = naturalPromptLength == null
+          ? match.group(2)!
+          : match.group(2)!.substring(naturalPromptLength);
+      if (_legacyOcrMaskedDocumentationCredentialEchoLength(
+            echoSuffix,
+            value,
+          ) >
+          0) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+int? _legacyOcrNaturalReadDocumentationBlueprintPromptLength(
+  String before,
+  String suffix,
+) {
+  if (!RegExp(r'\bread\s+the\s*$', caseSensitive: false).hasMatch(before)) {
+    return null;
+  }
+  return RegExp(r'^\s*blueprints\b', caseSensitive: false)
+      .firstMatch(suffix)
+      ?.end;
+}
+
+int _legacyOcrMaskedDocumentationCredentialEchoLength(
+  String suffix,
+  String maskedValue,
+) {
+  final chunks = RegExp(r'\S+').allMatches(suffix).toList();
+  var compactSuffix = '';
+  var credentialEnd = 0;
+  for (var chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
+    final chunk = chunks[chunkIndex];
+    final token = chunk.group(0)!.replaceFirst(RegExp(r'[.,!?;:]+$'), '');
+    if (token.isEmpty) break;
+    final alphaCount = RegExp(r'[a-zA-Z]').allMatches(token).length;
+    final hasExplicitMarker = alphaCount >= 4 &&
+        (RegExp(r'[-_./+=~]').hasMatch(token) ||
+            (token.length >= 8 && RegExp(r'[0-9]').hasMatch(token)));
+    final normalizedToken = token.toLowerCase();
+    final isNaturalContinuation = RegExp(
+          r'(?:ly|ing|ed|er|est|able|ary|aries|ation|ize|ise|ization|istic|based)$',
+        ).hasMatch(normalizedToken) ||
+        RegExp(
+          r'^(?:and|but|or|then|while|because|although|please|print|read|review|'
+          r'the|a|an|in|to|for|with|instructions?|ocr)$',
+          caseSensitive: false,
+        ).hasMatch(token);
+    if (isNaturalContinuation) break;
+    if (credentialEnd > 0) {
+      final hasNumericCredentialContinuation =
+          RegExp(r'^\d{3,}$').hasMatch(token) &&
+              RegExp(r'[0-9]').hasMatch(compactSuffix);
+      final hasStrongContinuationShape = hasExplicitMarker ||
+          hasNumericCredentialContinuation ||
+          (RegExp(r'^[A-Z]{5,}$').hasMatch(token) &&
+              _legacyOcrHasHighAlphabeticEntropy(
+                token.toLowerCase(),
+                minimumLength: 5,
+                minimumEntropy: 2,
+                maximumVowelRatio: 0.2,
+              )) ||
+          (RegExp(r'^[a-z]{7,}$').hasMatch(token) &&
+              _legacyOcrHasHighAlphabeticEntropy(
+                token,
+                minimumLength: 7,
+                minimumEntropy: 2.8,
+                maximumVowelRatio: 0.3,
+              ));
+      if (!hasStrongContinuationShape) break;
+      final extendedSuffix = '$compactSuffix$token';
+      if (!_legacyOcrTextContainsMaskedCredential(
+        'documentation$extendedSuffix',
+        [maskedValue],
+      )) {
+        break;
+      }
+      compactSuffix = extendedSuffix;
+      credentialEnd = chunk.start + token.length;
+      continue;
+    }
+    final hasStrongInitialCredentialShape = hasExplicitMarker ||
+        (RegExp(r'^[a-z]{8,}$').hasMatch(token) &&
+            _legacyOcrHasHighAlphabeticEntropy(
+              token,
+              minimumLength: 8,
+              minimumEntropy: 3,
+              maximumVowelRatio: 0.34,
+            )) ||
+        RegExp(r'^[a-z]{6,}xyz$').hasMatch(token) ||
+        (RegExp(r'^[A-Z]{6,}$').hasMatch(token) &&
+            _legacyOcrHasHighAlphabeticEntropy(
+              token.toLowerCase(),
+              minimumLength: 6,
+              minimumEntropy: 2,
+              maximumVowelRatio: 0.4,
+            ));
+    if (!hasStrongInitialCredentialShape) {
+      if (chunkIndex + 1 < chunks.length) {
+        final nextChunk = chunks[chunkIndex + 1];
+        final nextToken =
+            nextChunk.group(0)!.replaceFirst(RegExp(r'[.,!?;:]+$'), '');
+        final combinedToken = '$token$nextToken';
+        if (RegExp(r'^[a-z]{6,}xyz$').hasMatch(combinedToken) &&
+            _legacyOcrTextContainsMaskedCredential(
+              'documentation$combinedToken',
+              [maskedValue],
+            )) {
+          compactSuffix = combinedToken;
+          credentialEnd = nextChunk.start + nextToken.length;
+          chunkIndex++;
+          continue;
+        }
+      }
+      break;
+    }
+    compactSuffix += token;
+    if (_legacyOcrTextContainsMaskedCredential(
+      'documentation$compactSuffix',
+      [maskedValue],
+    )) {
+      credentialEnd = chunk.start + token.length;
+    }
+  }
+  return credentialEnd;
 }
 
 bool _legacyOcrHasAscendingAlphabetRun(String value) {
@@ -658,6 +1230,30 @@ bool _legacyOcrHasShortOpaqueAlphaKey(String value) =>
       minimumEntropy: 2.7,
       maximumVowelRatio: 0.1,
     );
+
+bool _legacyOcrHasInterleavedAlphaNumericCredentialShape(String value) {
+  final normalized = value.toLowerCase();
+  var letterCount = 0;
+  var digitCount = 0;
+  var categoryTransitions = 0;
+  var previousIsDigit = false;
+  for (var index = 0; index < normalized.length; index++) {
+    final codeUnit = normalized.codeUnitAt(index);
+    final isDigit = codeUnit >= 48 && codeUnit <= 57;
+    if (isDigit) {
+      digitCount++;
+    } else if (codeUnit >= 97 && codeUnit <= 122) {
+      letterCount++;
+    } else {
+      return false;
+    }
+    if (index > 0 && isDigit != previousIsDigit) categoryTransitions++;
+    previousIsDigit = isDigit;
+  }
+  if (letterCount < 4 || digitCount < 2) return false;
+
+  return categoryTransitions >= 4 && normalized.split('').toSet().length >= 6;
+}
 
 bool _legacyOcrHasLongConsonantRun(String value) =>
     RegExp(r'[bcdfghjklmnpqrstvwxz]{6,}', caseSensitive: false).hasMatch(value);
@@ -807,6 +1403,7 @@ bool _legacyOcrHasNaturalWordContinuation(String prefix, String suffix) {
     'handwriting',
     'handwritten',
     'messages',
+    'myprojectmanagement',
     'passwords',
     'passwordless',
     'passwordprotected',
@@ -827,6 +1424,7 @@ bool _legacyOcrHasNaturalWordContinuation(String prefix, String suffix) {
     'transcribe',
     'tokenize',
     'tokenization',
+    'tokenomics',
     'tokenizers',
     'tokenized',
     'tokenizing',
@@ -869,6 +1467,19 @@ bool _legacyOcrHasNaturalWordContinuation(String prefix, String suffix) {
 bool _legacyOcrCanRedactShortNaturalWordEcho(String word) =>
     const {'documentation', 'obfuscated'}.contains(word);
 
+bool _legacyOcrIsNaturalReadCharacterPrompt(
+        String naturalWord, String before) =>
+    const {
+      'characteristic',
+      'characteristics',
+      'characterization',
+      'characterizations',
+    }.contains(naturalWord) &&
+    RegExp(
+      r'\b(?:please\s+)?read(?:\s+the)?\s*$',
+      caseSensitive: false,
+    ).hasMatch(before);
+
 final _legacyOcrNaturalSourcePhrasePattern = RegExp(
   r'^\s*from (?:(?:the|this|that|these|those|a|an|my|your|our|their|his|her|its) )?(?!(?:(?:authorization|auth|api[\s_-]*key|keys?|credentials?|tokens?|secrets?|passwords?)(?=\s+(?:header|value|keys?|credentials?|tokens?|secrets?|passwords?|bearer)\b|\s*[,;:.!?]|$))\b)[\p{L}\p{M}\p{N}]+(?:[-_][\p{L}\p{M}\p{N}]+)*(?:\s+(?!(?:(?:authorization|auth|api[\s_-]*key|keys?|credentials?|tokens?|secrets?|passwords?)(?=\s+(?:header|value|keys?|credentials?|tokens?|secrets?|passwords?|bearer)\b|\s*[,;:.!?]|$))\b)[\p{L}\p{M}\p{N}]+(?:[-_][\p{L}\p{M}\p{N}]+)*)*(?=\s*[,;:.!?]|\s*$)',
   caseSensitive: false,
@@ -880,9 +1491,26 @@ bool _legacyOcrHasCredentialUseContext(
   Match match,
   String prefix,
   String suffix,
+) =>
+    _legacyOcrHasCredentialUseContextAt(
+      text,
+      match.start,
+      match.end,
+      match.group(0)!,
+      prefix,
+      suffix,
+    );
+
+bool _legacyOcrHasCredentialUseContextAt(
+  String text,
+  int matchStart,
+  int matchEnd,
+  String matchedText,
+  String prefix,
+  String suffix,
 ) {
-  final before = text.substring(0, match.start).trimRight();
-  final after = text.substring(match.end).trimLeft();
+  final before = text.substring(0, matchStart).trimRight();
+  final after = text.substring(matchEnd).trimLeft();
   final actionVerb = RegExp(
     r'\b(use|using|send|provide|enter|supply|pass|set|read|extract|identify|recognize|transcribe)$',
     caseSensitive: false,
@@ -913,21 +1541,21 @@ bool _legacyOcrHasCredentialUseContext(
       credentialHeaderTarget;
   final naturalWord =
       '$prefix$suffix'.replaceAll(RegExp(r'[^a-zA-Z]'), '').toLowerCase();
-  final matchedText = match.group(0)!;
   final matchedPrefix = RegExp(
     RegExp.escape(prefix),
     caseSensitive: false,
     unicode: true,
   ).firstMatch(matchedText);
   final absolutePrefixStart =
-      matchedPrefix == null ? -1 : match.start + matchedPrefix.start;
+      matchedPrefix == null ? -1 : matchStart + matchedPrefix.start;
   final maskPrefixIsEmbedded = absolutePrefixStart > 0 &&
       RegExp(
         r'[\p{L}\p{M}\p{N}_/+~-]',
         unicode: true,
       ).hasMatch(text.substring(absolutePrefixStart - 1, absolutePrefixStart));
-  final shortNaturalWordEcho =
-      prefix.length < 8 && _legacyOcrCanRedactShortNaturalWordEcho(naturalWord);
+  final shortNaturalWordEcho = prefix.length < 8 &&
+      _legacyOcrCanRedactShortNaturalWordEcho(naturalWord) &&
+      !explicitCredentialTarget;
   final isNaturalContinuation = _legacyOcrHasNaturalAlphaContinuation(suffix);
   final isNaturalWordContinuation = _legacyOcrHasNaturalWordContinuation(
     prefix,
@@ -939,7 +1567,12 @@ bool _legacyOcrHasCredentialUseContext(
   }.contains(actionVerb?.group(1)?.toLowerCase());
   final tokenRequestEchoContext = prefix.toLowerCase() == 'token' &&
       useVerb &&
-      requestTargetAfterConsumedConnector;
+      requestTargetAfterConsumedConnector &&
+      RegExp(
+        r'^\s*authorization\s*:\s*token\b',
+        caseSensitive: false,
+        multiLine: true,
+      ).hasMatch(text);
   final bareSecretBasedUseContext = useVerb &&
       prefix.toLowerCase() == 'secret' &&
       suffix.toLowerCase() == '-based' &&
@@ -989,7 +1622,7 @@ bool _legacyOcrHasCredentialUseContext(
           explicitCredentialTarget ||
           credentialHeaderTarget) &&
       RegExp(
-        r'^to (?:process|analyze|recognize|extract|upload|download|access|authenticate|connect|send|submit)\b',
+        r'^to (?:process|analyze|recognize|extract|upload|download|access|authenticate|connect|send|submit|ocr|decode)\b',
         caseSensitive: false,
       ).hasMatch(after);
   final useForReceiptContext = useVerb &&
@@ -1045,7 +1678,10 @@ bool _legacyOcrCanMatchOpenMaskPrefixWithinToken(String prefix) {
       _legacyOcrHasLongConsonantRun(prefix)) {
     return true;
   }
-  if (prefix.length == 9) return false;
+  if (prefix.length == 9) {
+    return _legacyOcrHasAscendingAlphabetRun(prefix) ||
+        _legacyOcrHasInterleavedAlphaNumericCredentialShape(prefix);
+  }
   return _legacyOcrHasShortOpaqueAlphaKey(prefix) ||
       _legacyOcrHasHighAlphabeticEntropy(
         prefix,
@@ -1231,17 +1867,65 @@ String _legacyOcrLineBreakContinuationAfterOpenMaskPrefix(
       _legacyOcrHasDocumentationCredentialEchoAcrossLineBreak(text, prefix)) {
     return r'(?:[\r\n]+[ \t]*(?=[a-zA-Z0-9]{4,}(?=$|[^a-zA-Z0-9])))?';
   }
+  if (prefix.toLowerCase() == 'password') {
+    // A common word can be a masked key prefix; only bridge a newline when
+    // the following token has a mixed alphanumeric credential shape.
+    return r'(?:[\r\n]+[ \t]*'
+        r'(?=(?=(?:[0-9]*[a-zA-Z]){2})'
+        r'(?=(?:[a-zA-Z]*[0-9]){2})'
+        r'[a-zA-Z0-9]{6,}(?=$|[^a-zA-Z0-9])))?';
+  }
   return '';
 }
 
 bool _legacyOcrHasDocumentationCredentialEchoAcrossLineBreak(
   String text,
   String prefix,
-) =>
-    prefix.toLowerCase() == 'documentation' &&
-    RegExp(
-      r'\bdocumentation[\r\n]+[ \t]*[a-zA-Z0-9]{4,}(?=$|[^a-zA-Z0-9])',
-    ).hasMatch(text);
+) {
+  if (prefix.toLowerCase() != 'documentation' ||
+      RegExp(
+        r'^\s*please\s+review\s+(?:all\s+)?the\s+documentation[\r\n]+\s*(?:carefully|visually)[.!?]?\s*$',
+        caseSensitive: false,
+      ).hasMatch(text)) {
+    return false;
+  }
+  return RegExp(
+    r'\bdocumentation[\r\n]+[ \t]*[a-zA-Z0-9]{4,}(?=$|[^a-zA-Z0-9])',
+  ).hasMatch(text);
+}
+
+String? _legacyOcrRedactPasswordCredentialEchoAcrossLineBreak(
+  String text,
+  Iterable<String> credentialValues,
+) {
+  for (final value in credentialValues) {
+    final ellipsis = RegExp(r'\.\.\.|…').firstMatch(value);
+    if (ellipsis == null || value.substring(ellipsis.end).isNotEmpty) continue;
+    final prefix =
+        value.substring(0, ellipsis.start).trim().split(RegExp(r'\s+')).last;
+    if (prefix.toLowerCase() != 'password') continue;
+    final pattern = RegExp(
+      '(^|[^a-zA-Z0-9])${RegExp.escape(prefix)}'
+      r'[\r\n]+[ \t]*'
+      r'([a-zA-Z0-9_./+=~-]{6,})(?=$|[^a-zA-Z0-9_./+=~-])',
+      caseSensitive: false,
+    );
+    final match = pattern.firstMatch(text);
+    final token = match?.group(2);
+    if (match != null &&
+        token != null &&
+        token.length >= 6 &&
+        RegExp(r'[a-zA-Z]').allMatches(token).length >= 2 &&
+        RegExp(r'[0-9]').allMatches(token).length >= 2) {
+      return text.replaceRange(
+        match.start,
+        match.end,
+        '${match.group(1)}[redacted]',
+      );
+    }
+  }
+  return null;
+}
 
 const _legacyOcrNaturalCarefulInstructionActions = {
   'add',
@@ -1297,19 +1981,26 @@ const _legacyOcrNaturalCarefulInstructionActions = {
   'write',
 };
 
-bool _legacyOcrIsNaturalCarefullyObjectPhrase(String prefix, String text) =>
-    const {'read', 'check'}.contains(
-      prefix.toLowerCase(),
-    ) &&
-    RegExp(
-      r'^(?:the|this|that|these|those|a|an|my|your|our|their|his|her|its)\s+'
-      r'(?!authorization\b|auth\b|api[\s_-]*key\b|keys?\b|credentials?\b|tokens?\b|secrets?\b|passwords?\b)'
-      r'[\p{L}\p{M}\p{N}]+(?:[-_][\p{L}\p{M}\p{N}]+)*'
-      r'(?:\s+(?!authorization\b|auth\b|api[\s_-]*key\b|keys?\b|credentials?\b|tokens?\b|secrets?\b|passwords?\b)'
-      r'[\p{L}\p{M}\p{N}]+(?:[-_][\p{L}\p{M}\p{N}]+)*)*[.!?]?$',
-      caseSensitive: false,
-      unicode: true,
-    ).hasMatch(text);
+bool _legacyOcrIsNaturalCarefullyObjectPhrase(String prefix, String text) {
+  if (!const {'read', 'check'}.contains(prefix.toLowerCase())) return false;
+
+  final isSecretLabel = RegExp(
+    r'^(?:(?:the|this|that|these|those|a|an|my|your|our|their|his|her|its)\s+)?'
+    r'secret\s+label\s+carefully[.!?]?$',
+    caseSensitive: false,
+    unicode: true,
+  ).hasMatch(text);
+  return isSecretLabel ||
+      RegExp(
+        r'^(?:the|this|that|these|those|a|an|my|your|our|their|his|her|its)\s+'
+        r'(?!authorization\b|auth\b|api[\s_-]*key\b|keys?\b|credentials?\b|tokens?\b|secrets?\b|passwords?\b)'
+        r'[\p{L}\p{M}\p{N}]+(?:[-_][\p{L}\p{M}\p{N}]+)*'
+        r'(?:\s+(?!authorization\b|auth\b|api[\s_-]*key\b|keys?\b|credentials?\b|tokens?\b|secrets?\b|passwords?\b)'
+        r'[\p{L}\p{M}\p{N}]+(?:[-_][\p{L}\p{M}\p{N}]+)*)*[.!?]?$',
+        caseSensitive: false,
+        unicode: true,
+      ).hasMatch(text);
+}
 
 bool _legacyOcrHasNaturalConnectorAfterLineBreak(
   String text,
@@ -1370,16 +2061,26 @@ bool _legacyOcrHasNaturalConnectorAfterLineBreak(
 
 String _legacyOcrOpenMaskPrefixPattern(String prefix) {
   final escapedPrefix = RegExp.escape(prefix);
-  if (!_legacyOcrCanBridgeLineBreakAfterOpenMaskPrefix(prefix) ||
-      !RegExp(r'[-_.=/+]$').hasMatch(prefix)) {
+  if (!_legacyOcrCanBridgeLineBreakAfterOpenMaskPrefix(prefix)) {
     return escapedPrefix;
   }
 
-  final delimiter = prefix.substring(prefix.length - 1);
-  final prefixWithoutDelimiter = prefix.substring(0, prefix.length - 1);
-  return '(?:$escapedPrefix|${RegExp.escape(prefixWithoutDelimiter)}'
+  final variants = <String>[escapedPrefix];
+  if (RegExp(r'^[a-zA-Z0-9]+$').hasMatch(prefix)) {
+    variants.add(
+      prefix.split('').map(RegExp.escape).join(r'(?:[\r\n]+[ \t]*)?'),
+    );
+  }
+  if (RegExp(r'[-_.=/+]$').hasMatch(prefix)) {
+    final delimiter = prefix.substring(prefix.length - 1);
+    final prefixWithoutDelimiter = prefix.substring(0, prefix.length - 1);
+    variants.add(
+      '${RegExp.escape(prefixWithoutDelimiter)}'
       r'[\r\n]+[ \t]*'
-      '${RegExp.escape(delimiter)})';
+      '${RegExp.escape(delimiter)}',
+    );
+  }
+  return '(?:${variants.join('|')})';
 }
 
 String _legacyOcrNormalizeNulsWithinMaskedPrefixes(
@@ -1439,6 +2140,13 @@ bool _legacyOcrTextContainsMaskedCredential(
   // edges before preserving any persisted text or diagnostic value.
   final compactedText = text.replaceAll(RegExp(r'\s+'), '');
   final textWithoutPartMarkers = text.replaceAll('\u0000', '');
+  if (_legacyOcrRedactWhitespaceSplitMaskedOpenPrefixEchoes(
+        textWithoutPartMarkers,
+        credentialValues,
+      ) !=
+      textWithoutPartMarkers) {
+    return true;
+  }
   final partBoundaryOffsets = <int>[];
   var cleanedTextOffset = 0;
   for (final codeUnit in text.codeUnits) {
@@ -1488,6 +2196,7 @@ bool _legacyOcrTextContainsMaskedCredential(
           final extendedPrefix = RegExp(
             '$leftBoundary${_legacyOcrOpenMaskPrefixPattern(prefix)}'
             '$lineBreakContinuation(\\S+)',
+            caseSensitive: false,
           );
           final prefixHasKeyMarker = RegExp(r'[0-9_]').hasMatch(prefix);
           for (final match in extendedPrefix.allMatches(
@@ -1542,17 +2251,29 @@ bool _legacyOcrTextContainsMaskedCredential(
             final naturalWord = '$prefix$suffix'
                 .replaceAll(RegExp(r'[^a-zA-Z]'), '')
                 .toLowerCase();
+            final beforePartBoundaryWord =
+                textWithoutPartMarkers.substring(0, match.start).trimRight();
+            final afterPartBoundaryWord =
+                textWithoutPartMarkers.substring(match.end).trimLeft();
+            final myProjectManagementCredentialRequest =
+                naturalWord == 'myprojectmanagement' &&
+                    RegExp(r'\buse$', caseSensitive: false)
+                        .hasMatch(beforePartBoundaryWord) &&
+                    RegExp(r'^for (?:the )?request\b', caseSensitive: false)
+                        .hasMatch(afterPartBoundaryWord);
             final ordinaryNaturalPromptContext =
                 _legacyOcrHasOrdinaryNaturalPromptContext(
               textWithoutPartMarkers,
               match,
               naturalWord,
-              hasCredentialUseContext: _legacyOcrHasCredentialUseContext(
-                textWithoutPartMarkers,
-                match,
-                prefix,
-                suffix,
-              ),
+              openMaskPrefix: prefix,
+              hasCredentialUseContext: myProjectManagementCredentialRequest ||
+                  _legacyOcrHasCredentialUseContext(
+                    textWithoutPartMarkers,
+                    match,
+                    prefix,
+                    suffix,
+                  ),
               isNaturalWordContinuation: naturalWordContinuation,
               isNaturalSecretPlural:
                   naturalWord == 'secrets' && suffix.toLowerCase() == 's',
@@ -1566,10 +2287,6 @@ bool _legacyOcrTextContainsMaskedCredential(
             final crossesPartBoundary = partBoundaryOffsets.any(
               (offset) => offset > match.start && offset < match.end,
             );
-            final beforePartBoundaryWord =
-                textWithoutPartMarkers.substring(0, match.start).trimRight();
-            final afterPartBoundaryWord =
-                textWithoutPartMarkers.substring(match.end).trimLeft();
             final hasNaturalInstructionAroundPartBoundary = RegExp(
                   r'\b(?:check|read|review|identify|recognize|describe|summarize|analyze|extract|inspect|scan|transcribe|translate|classify|explain|process)\s*$',
                   caseSensitive: false,
@@ -1619,17 +2336,19 @@ bool _legacyOcrTextContainsMaskedCredential(
             final repeatedStructuredHyphenatedSuffix = allowEmbeddedPrefix &&
                 _legacyOcrHasRepeatedHyphenatedAlphaComponent(prefix, suffix);
             final hasExplicitCredentialUseContext =
-                _legacyOcrHasCredentialUseContext(
-              textWithoutPartMarkers,
-              match,
-              prefix,
-              suffix,
-            );
+                myProjectManagementCredentialRequest ||
+                    _legacyOcrHasCredentialUseContext(
+                      textWithoutPartMarkers,
+                      match,
+                      prefix,
+                      suffix,
+                    );
             final looksCredentialLike = hasExplicitCredentialUseContext ||
                 unicodeOpaqueContinuation ||
                 prefixHasKeyMarker ||
                 suffixHasKeyMarker ||
-                _legacyOcrHasUncommonAlphaContinuation(suffix) ||
+                (_legacyOcrHasUncommonAlphaContinuation(suffix) &&
+                    !_legacyOcrHasKeyboardSequence(suffix)) ||
                 _legacyOcrHasCredentialWord(suffix) ||
                 _legacyOcrHasCredentialCompound(token) ||
                 shortUnclassifiedAlphaContinuation ||
@@ -1964,18 +2683,25 @@ bool _legacyOcrHasSafeRedactedInstruction(
   String text, {
   bool allowBareAction = false,
   bool allowReceiptUse = false,
+  bool allowShortDocumentationApiKeyTarget = false,
 }) {
   if (!text.contains('[redacted]')) return false;
   final safeActionLead = RegExp(
-    r'^\s*(?:for accurate OCR,\s*)?(?:(?:(?:can|could|would)\s+you\s+)?(?:please\s+)?)?(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|extract|interpret|count|find|search|locate|transcribe|translate|classify|explain|process|show|tell|check|look|scan|ocr|decode|record)\b.*\[redacted\]',
+    r'^\s*(?:for accurate OCR,\s*)?(?:(?:(?:can|could|would)\s+you\s+)?(?:please\s+)?)?(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|extract|interpret|count|find|search|locate|transcribe|translate|classify|calculate|explain|process|show|tell|check|look|scan|ocr|decode|record)\b.*\[redacted\]',
     caseSensitive: false,
     dotAll: true,
   ).hasMatch(text);
   final safeUseLead = RegExp(
-    r'^\s*(?:for page \d+,\s*)?(?:please\s+)?(?:use|pass|send|supply|authenticate\s+with)\b.*\[redacted\](?:\s+as\s+(?:(?:the|a|an|my|your|our|their|his|her|its)\s+)?(?:(?:oauth\s*[0-9]*(?:\.[0-9]+)?|oidc|openid\s+connect|secret|api|access|private|bearer)\s+)*(?:authorization|auth|api\s+key|key|credential|token|secret|password)\s+value)?\s+(?:to\s+(?:process|read|recognize|describe|summarize|analyze|extract|interpret|count|find|transcribe|translate|classify|identify)\b|for\s+(?:the\s+)?request\b)|^\s*(?:please\s+)?use\s+\[redacted\]\s*$|^\s*(?:please\s+)?supply\s+\[redacted\]\s+(?:the\s+)?(?:api\s+key|authorization)\s+header\b',
+    r'^\s*(?:for page \d+,\s*)?(?:please\s+)?(?:use|pass|send|supply|authenticate\s+with)\b.*\[redacted\](?:\s+as\s+(?:(?:the|a|an|my|your|our|their|his|her|its)\s+)?(?:(?:oauth\s*[0-9]*(?:\.[0-9]+)?|oidc|openid\s+connect|secret|api|access|private|bearer)\s+)*(?:authorization|auth|api\s+key|key|credential|token|secret|password)\s+value)?\s+(?:to\s+(?:process|read|recognize|describe|summarize|analyze|extract|interpret|count|find|transcribe|translate|classify|identify|ocr|decode)\b|for\s+(?:the\s+)?request\b)|^\s*(?:please\s+)?use\s+\[redacted\]\s*$|^\s*(?:please\s+)?supply\s+\[redacted\]\s+(?:the\s+)?(?:api\s+key|authorization)\s+header\b',
     caseSensitive: false,
     dotAll: true,
   ).hasMatch(text);
+  final safeShortDocumentationApiKeyTarget =
+      allowShortDocumentationApiKeyTarget &&
+          RegExp(
+            r'^\s*(?:please\s+)?use\s+\[redacted\]\s+as\s+the\s+api\s+key\s*[.!?]?\s*$',
+            caseSensitive: false,
+          ).hasMatch(text);
   final safeReceiptUseLead = RegExp(
     r'^\s*(?:please\s+)?use\s+\[redacted\].*\bfor (?:this|the) receipt\b',
     caseSensitive: false,
@@ -1997,21 +2723,49 @@ bool _legacyOcrHasSafeRedactedInstruction(
     caseSensitive: false,
     dotAll: true,
   ).hasMatch(text);
+  final safeReceiptContextAction = RegExp(
+    r'^\s*this\s+is\s+a\s+receipt[.!?]\s*(?:please\s+)?(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|extract|interpret|count|find|search|locate|transcribe|translate|classify|calculate|explain|process|show|tell|check|look|scan|ocr|decode|record)\b.*\[redacted\]',
+    caseSensitive: false,
+    dotAll: true,
+  ).hasMatch(text);
   final safeKeepLead = RegExp(
     r'^\s*(?:please\s+)?keep\b.*\[redacted\]',
     caseSensitive: false,
     dotAll: true,
   ).hasMatch(text);
   final bareRedactedAction = RegExp(
-    r'^\s*(?:please\s+)?(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|extract|interpret|count|find|search|locate|transcribe|translate|classify|explain|process|show|tell|check|look|scan|ocr|decode)\s+\[redacted\]\s*[.!?]?\s*$',
+    r'^\s*(?:please\s+)?(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|extract|interpret|count|find|search|locate|transcribe|translate|classify|calculate|explain|process|show|tell|check|look|scan|ocr|decode)\s+\[redacted\]\s*[.!?]?\s*$',
     caseSensitive: false,
   ).hasMatch(text);
   return (safeActionLead && (!bareRedactedAction || allowBareAction)) ||
       (safeUseLead && safeRequestUseLead) ||
+      safeShortDocumentationApiKeyTarget ||
       (allowReceiptUse && safeReceiptUseLead) ||
       safeScanContext ||
       safeImageContext ||
+      safeReceiptContextAction ||
       safeKeepLead;
+}
+
+bool _legacyOcrHasShortDocumentationApiKeyEcho(
+  String sourceText,
+  Iterable<String> credentialValues,
+) {
+  if (!RegExp(
+    r'^\s*(?:please\s+)?use\s+documentation\s+as\s+the\s+api\s+key\s*[.!?]?\s*$',
+    caseSensitive: false,
+  ).hasMatch(sourceText)) {
+    return false;
+  }
+  return credentialValues.any((value) {
+    final ellipsis = RegExp(r'\.\.\.|…').firstMatch(value);
+    if (ellipsis == null || value.substring(ellipsis.end).isNotEmpty) {
+      return false;
+    }
+    final prefix =
+        value.substring(0, ellipsis.start).trim().split(RegExp(r'\s+')).last;
+    return prefix.length < 8 && prefix.toLowerCase() == 'docu';
+  });
 }
 
 bool _legacyOcrHasStrongReceiptCredentialPrefix(
@@ -2192,26 +2946,61 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
       }
       return text.contains(candidate);
     });
-    if (containsUnmaskedExactCredential ||
-        _legacyOcrTextContainsCredential(
-          textWithoutNaturalPlural,
+    if (containsUnmaskedExactCredential) return false;
+    if (text.contains('[redacted]') &&
+        _legacyOcrHasWhitespaceSplitMaskedDocumentationEcho(
+          sourceText,
           credentialValues,
         )) {
+      // Validate the complete sanitized prompt while treating our literal
+      // replacement marker as neutral text. This preserves safe context around
+      // this scoped echo without allowing a second credential to survive.
+      final neutralizedText = text.replaceAll('[redacted]', 'placeholder');
+      if (_legacyOcrTextContainsCredential(
+            neutralizedText,
+            credentialValues,
+          ) ||
+          _legacyOcrTextContainsMaskedCredential(
+            neutralizedText,
+            credentialValues,
+          )) {
+        return false;
+      }
+      return _legacyOcrHasSafeRedactedInstruction(
+        text,
+        allowBareAction: _legacyOcrShouldPreserveBareRedactedAction(sourceText),
+        allowReceiptUse: _legacyOcrHasStrongReceiptCredentialPrefix(
+          sourceText,
+          credentialValues,
+        ),
+        allowShortDocumentationApiKeyTarget:
+            _legacyOcrHasShortDocumentationApiKeyEcho(
+          sourceText,
+          credentialValues,
+        ),
+      );
+    }
+    if (_legacyOcrTextContainsCredential(
+      textWithoutNaturalPlural,
+      credentialValues,
+    )) {
       return false;
     }
     if (preservesNaturalPlural) return true;
     if (!hadCredential) return true;
-    return text.contains('[redacted]') &&
-        _legacyOcrHasSafeRedactedInstruction(
-          text,
-          allowBareAction: _legacyOcrShouldPreserveBareRedactedAction(
-            sourceText,
-          ),
-          allowReceiptUse: _legacyOcrHasStrongReceiptCredentialPrefix(
-            sourceText,
-            credentialValues,
-          ),
-        );
+    return _legacyOcrHasSafeRedactedInstruction(
+      text,
+      allowBareAction: _legacyOcrShouldPreserveBareRedactedAction(sourceText),
+      allowReceiptUse: _legacyOcrHasStrongReceiptCredentialPrefix(
+        sourceText,
+        credentialValues,
+      ),
+      allowShortDocumentationApiKeyTarget:
+          _legacyOcrHasShortDocumentationApiKeyEcho(
+        sourceText,
+        credentialValues,
+      ),
+    );
   }).join('\u0000');
   final instruction = safeTextParts.replaceAll('\u0000', '\n');
   if (instruction.length > 10000 ||
@@ -2236,7 +3025,13 @@ String _legacyOcrRedactMaskedCredentialEchoes(
   Iterable<String> credentialValues,
 ) {
   final hasSentenceBoundary = RegExp(r'[.!?]\s+\S').hasMatch(text);
-  var sanitized = text;
+  var sanitized = _legacyOcrRedactWhitespaceSplitMaskedOpenPrefixEchoes(
+    _legacyOcrRedactWhitespaceSplitMaskedDocumentationEchoes(
+      text,
+      credentialValues,
+    ),
+    credentialValues,
+  );
   for (final value in credentialValues) {
     final ellipsis = RegExp(r'\.\.\.|…').firstMatch(value);
     if (ellipsis == null || value.substring(ellipsis.end).isNotEmpty) continue;
@@ -2261,6 +3056,7 @@ String _legacyOcrRedactMaskedCredentialEchoes(
       '$leftBoundary($tokenLead'
       '${_legacyOcrOpenMaskPrefixPattern(prefix)}'
       '$lineBreakContinuation$suffixPattern)',
+      caseSensitive: false,
     );
     sanitized = sanitized.replaceAllMapped(extendedPrefix, (match) {
       final boundaryLength = match.group(0)!.length - match.group(1)!.length;
@@ -2305,7 +3101,7 @@ String _legacyOcrRedactMaskedCredentialEchoes(
                 caseSensitive: false,
               ).hasMatch(beforeEcho);
       final hasSafeInstructionLead = RegExp(
-            r'^\s*(?:for accurate OCR,\s*)?(?:(?:can|could|would)\s+you\s+)?(?:please\s+)?(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|extract|interpret|count|find|search|transcribe|translate|classify|explain|process|show|tell|check|look|scan|ocr|decode)\s+(?:(?:the|this|that|these|those|a|an)\s+)?[a-z0-9]+\s+',
+            r'^\s*(?:for accurate OCR,\s*)?(?:(?:can|could|would)\s+you\s+)?(?:please\s+)?(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|extract|interpret|count|find|search|transcribe|translate|classify|calculate|explain|process|show|tell|check|look|scan|ocr|decode)\s+(?:(?:the|this|that|these|those|a|an)\s+)?[a-z0-9]+\s+',
             caseSensitive: false,
           ).hasMatch(beforeEcho) ||
           RegExp(
@@ -2315,7 +3111,7 @@ String _legacyOcrRedactMaskedCredentialEchoes(
           naturalCarefulInstructionLead ||
           readFromOcrSourcePrompt ||
           RegExp(
-            r'^\s*(?:for accurate OCR,\s*)?(?:(?:can|could|would)\s+you\s+)?(?:please\s+)?(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|extract|interpret|count|find|search|transcribe|translate|classify|explain|process|show|tell|check|look|scan|ocr|decode)\s*:\s*$',
+            r'^\s*(?:for accurate OCR,\s*)?(?:(?:can|could|would)\s+you\s+)?(?:please\s+)?(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|extract|interpret|count|find|search|transcribe|translate|classify|calculate|explain|process|show|tell|check|look|scan|ocr|decode)\s*:\s*$',
             caseSensitive: false,
           ).hasMatch(beforeEcho) ||
           RegExp(
@@ -2323,7 +3119,7 @@ String _legacyOcrRedactMaskedCredentialEchoes(
                 caseSensitive: false,
               ).hasMatch(beforeEcho) &&
               RegExp(
-                r'^\s+to\s+(?:process|read|recognize|describe|summarize|analyze|extract|interpret|count|find|transcribe|translate|classify|identify)\b',
+                r'^\s+to\s+(?:process|read|recognize|describe|summarize|analyze|extract|interpret|count|find|transcribe|translate|classify|identify|ocr|decode)\b',
                 caseSensitive: false,
               ).hasMatch(sanitized.substring(match.end));
       final rawEcho = match.group(1)!;
@@ -2335,7 +3131,7 @@ String _legacyOcrRedactMaskedCredentialEchoes(
           rawEcho.contains(RegExp(r'[\r\n]')) &&
           echo.replaceAll(RegExp(r'\s+'), '').toLowerCase() ==
               '${prefix.toLowerCase()}carefully';
-      final prefixOffset = echo.indexOf(prefix);
+      final prefixOffset = echo.toLowerCase().indexOf(prefix.toLowerCase());
       final echoSuffix =
           prefixOffset < 0 ? '' : echo.substring(prefixOffset + prefix.length);
       final splitEchoHasCredentialUseContext =
@@ -2353,6 +3149,13 @@ String _legacyOcrRedactMaskedCredentialEchoes(
             caseSensitive: false,
           ).hasMatch(beforeEcho.trimRight()) &&
           RegExp(r'^[.!?]*$').hasMatch(afterEcho.trim());
+      final myProjectManagementCredentialRequest =
+          prefix.toLowerCase() == 'myproject' &&
+              echoSuffix.toLowerCase() == 'management' &&
+              RegExp(r'\buse$', caseSensitive: false)
+                  .hasMatch(beforeEcho.trimRight()) &&
+              RegExp(r'^for (?:the )?request\b', caseSensitive: false)
+                  .hasMatch(afterEcho.trimLeft());
       final authenticateWithToProcessContext = RegExp(
             r'\bauthenticate with$',
             caseSensitive: false,
@@ -2365,7 +3168,8 @@ String _legacyOcrRedactMaskedCredentialEchoes(
           );
       final hasCredentialUseContext = splitEchoHasCredentialUseContext ||
           bareSecretBasedUseContext ||
-          authenticateWithToProcessContext;
+          authenticateWithToProcessContext ||
+          myProjectManagementCredentialRequest;
       final naturalReadInstructionsPrompt =
           _legacyOcrHasNaturalWordContinuation(prefix, echoSuffix) &&
               RegExp(
@@ -2376,8 +3180,12 @@ String _legacyOcrRedactMaskedCredentialEchoes(
                 r'^instructions?\b',
                 caseSensitive: false,
               ).hasMatch(afterEcho.trimLeft());
-      final ordinaryNaturalPromptContext =
-          naturalReadInstructionsPrompt && !hasCredentialUseContext;
+      final naturalReadCharacterPrompt = _legacyOcrIsNaturalReadCharacterPrompt(
+        '$prefix$echoSuffix'.replaceAll(RegExp(r'[^a-zA-Z]'), '').toLowerCase(),
+        beforeEcho,
+      );
+      final ordinaryNaturalPromptContext = !hasCredentialUseContext &&
+          (naturalReadInstructionsPrompt || naturalReadCharacterPrompt);
       if (ordinaryNaturalPromptContext) return match.group(0)!;
       final hasRepeatedStructuredSuffix = allowEmbeddedPrefix &&
           _legacyOcrHasRepeatedHyphenatedAlphaComponent(prefix, echoSuffix);
@@ -2452,10 +3260,128 @@ String _legacyOcrRedactMaskedCredentialEchoes(
   return sanitized;
 }
 
+String _legacyOcrRedactWhitespaceSplitMaskedDocumentationEchoes(
+  String text,
+  Iterable<String> credentialValues,
+) {
+  var sanitized = text;
+  for (final value in credentialValues) {
+    final ellipsis = RegExp(r'\.\.\.|…').firstMatch(value);
+    if (ellipsis == null || value.substring(ellipsis.end).isNotEmpty) continue;
+    final prefix =
+        value.substring(0, ellipsis.start).trim().split(RegExp(r'\s+')).last;
+    if (prefix.toLowerCase() != 'documentation') continue;
+    final pattern = RegExp(
+      r'(^|[^a-zA-Z0-9])'
+      r'([dD][oO][cC][uU][mM][eE][nN][tT][aA][tT][iI][oO][nN])'
+      r'([ \t\r\n]+)'
+      r'([a-zA-Z0-9_./+=~-]+(?:[ \t\r\n]+[a-zA-Z0-9_./+=~-]+)*)'
+      r'(?=$|[^a-zA-Z0-9_])',
+      caseSensitive: true,
+    );
+    sanitized = sanitized.replaceAllMapped(pattern, (match) {
+      final suffix = match.group(4)!;
+      final naturalPromptLength =
+          _legacyOcrNaturalReadDocumentationBlueprintPromptLength(
+        text.substring(0, match.start),
+        suffix,
+      );
+      final echoSuffix = naturalPromptLength == null
+          ? suffix
+          : suffix.substring(naturalPromptLength);
+      final credentialEnd = _legacyOcrMaskedDocumentationCredentialEchoLength(
+        echoSuffix,
+        value,
+      );
+      if (credentialEnd == 0) {
+        return match.group(0)!;
+      }
+      if (naturalPromptLength != null) {
+        final leadingWhitespace = echoSuffix.substring(
+          0,
+          echoSuffix.length - echoSuffix.trimLeft().length,
+        );
+        final safeTrailingText = echoSuffix.substring(credentialEnd);
+        return '${match.group(1)}${match.group(2)}${match.group(3)}'
+            '${suffix.substring(0, naturalPromptLength)}'
+            '$leadingWhitespace[redacted]$safeTrailingText';
+      }
+      final safeTrailingText = suffix.substring(credentialEnd);
+      return '${match.group(1)}[redacted]$safeTrailingText';
+    });
+  }
+  return sanitized;
+}
+
+String _legacyOcrRedactWhitespaceSplitMaskedOpenPrefixEchoes(
+  String text,
+  Iterable<String> credentialValues,
+) {
+  var sanitized = text;
+  for (final value in credentialValues) {
+    final ellipsis = RegExp(r'\.\.\.|…').firstMatch(value);
+    if (ellipsis == null || value.substring(ellipsis.end).isNotEmpty) continue;
+    final prefix =
+        value.substring(0, ellipsis.start).trim().split(RegExp(r'\s+')).last;
+    if (prefix.isEmpty || prefix.length >= 8) continue;
+
+    const token = r'[a-zA-Z0-9._/+~-]+';
+    final prefixPattern = RegExp(
+      '(^|[^a-zA-Z0-9])(${RegExp.escape(prefix)})'
+      '(?=[ \\t\\r\\n]+$token)',
+      caseSensitive: false,
+    );
+    final tokenPattern = RegExp(token);
+    final whitespacePattern = RegExp(r'[ \t\r\n]+');
+    for (final match in prefixPattern.allMatches(sanitized).toList().reversed) {
+      final boundary = match.group(1)!;
+      final prefixStart = match.start + boundary.length;
+      var cursor = prefixStart + prefix.length;
+      var suffix = '';
+      while (true) {
+        final whitespace = whitespacePattern.matchAsPrefix(sanitized, cursor);
+        if (whitespace == null) break;
+        final tokenMatch =
+            tokenPattern.matchAsPrefix(sanitized, whitespace.end);
+        if (tokenMatch == null) break;
+        suffix += tokenMatch.group(0)!;
+        final echoEnd = tokenMatch.end;
+        final hasCredentialShape = suffix.length >= 5 &&
+            (!_legacyOcrHasKeyboardSequence(suffix) ||
+                RegExp(r'[0-9_]').hasMatch(suffix)) &&
+            (RegExp(r'[0-9_]').hasMatch(suffix) ||
+                _legacyOcrHasUncommonAlphaContinuation(suffix) ||
+                _legacyOcrHasLongConsonantRun(suffix) ||
+                _legacyOcrHasShortOpaqueAlphaKey('$prefix$suffix'));
+        if (!hasCredentialShape ||
+            !_legacyOcrHasCredentialUseContextAt(
+              sanitized,
+              prefixStart,
+              echoEnd,
+              sanitized.substring(prefixStart, echoEnd),
+              prefix,
+              suffix,
+            )) {
+          cursor = echoEnd;
+          continue;
+        }
+        sanitized = sanitized.replaceRange(
+          match.start,
+          echoEnd,
+          '$boundary[redacted]',
+        );
+        break;
+      }
+    }
+  }
+  return sanitized;
+}
+
 bool _legacyOcrHasOrdinaryNaturalPromptContext(
   String text,
   Match match,
   String naturalWord, {
+  String openMaskPrefix = '',
   required bool hasCredentialUseContext,
   required bool isNaturalWordContinuation,
   required bool isNaturalSecretPlural,
@@ -2470,6 +3396,7 @@ bool _legacyOcrHasOrdinaryNaturalPromptContext(
         caseSensitive: false,
       ).hasMatch(after);
   final naturalImperativePrompt = const {
+        'accommodate',
         'recognize',
         'interpret',
         'calculate',
@@ -2477,12 +3404,15 @@ bool _legacyOcrHasOrdinaryNaturalPromptContext(
         'enumerate',
         'determine',
         'highlight',
+        'authenticate',
         'summarize',
         'translate',
         'transcribe',
         'understand',
       }.contains(naturalWord) &&
-      before.isEmpty &&
+      (naturalWord != 'authenticate' ||
+          openMaskPrefix.toLowerCase().startsWith('authenticat')) &&
+      RegExp(r'^(?:please\s*)?$', caseSensitive: false).hasMatch(before) &&
       RegExp(
         r'^(?:the|this|that|these|those|a|an)\b',
         caseSensitive: false,
@@ -2570,12 +3500,30 @@ bool _legacyOcrHasOrdinaryNaturalPromptContext(
         r'^(?:label|document|receipt|invoice|record|image|sign|form|chart|page|sheet|table|login|guide|instructions?)\b',
         caseSensitive: false,
       ).hasMatch(after);
+  final naturalReadCharacterPrompt =
+      _legacyOcrIsNaturalReadCharacterPrompt(naturalWord, before);
+  final naturalSecretaryInstructionPrompt =
+      const {'secretary', 'secretaries'}.contains(naturalWord) &&
+          RegExp(
+            r'\b(?:please\s+)?ask(?:\s+(?:the|this|that|these|those|a|an))?$',
+            caseSensitive: false,
+          ).hasMatch(before) &&
+          (after.isEmpty ||
+              RegExp(r'^[a-z]+\b', caseSensitive: false).hasMatch(after) ||
+              RegExp(r'^[.!?]$', caseSensitive: false).hasMatch(after));
   final naturalNounInstructionPrompt = RegExp(
         r'\b(?:please\s+)?(?:describe|review|examine|include|provide|extract|read\s+about|use)(?:\s+(?:the|this|that|these|those|a|an))?$',
         caseSensitive: false,
       ).hasMatch(before) &&
       (after.isEmpty ||
           RegExp(r'^[a-z]+\b', caseSensitive: false).hasMatch(after));
+  final naturalCooperateImperativePrompt = naturalWord == 'cooperate' &&
+      RegExp(r'^(?:please\s*)?$', caseSensitive: false).hasMatch(before) &&
+      (after.isEmpty ||
+          RegExp(
+            r'^(?:[.!?]|[a-z]+(?:\s+[a-z]+)*(?:[.!?])?)$',
+            caseSensitive: false,
+          ).hasMatch(after));
   final naturalSecretPluralKeepPrompt = isNaturalSecretPlural &&
       RegExp(r'\b(?:please\s+)?keep$', caseSensitive: false).hasMatch(before) &&
       (after.isEmpty ||
@@ -2610,11 +3558,14 @@ bool _legacyOcrHasOrdinaryNaturalPromptContext(
           readDocumentationCarefullyPrompt ||
           readAuthenticationDocumentationPrompt ||
           naturalReadFromOcrSourcePrompt ||
+          naturalReadCharacterPrompt ||
           naturalCredentialProcessInstructionPrompt ||
           readHandwritingInstructionPrompt ||
           readNaturalNounInstructionPrompt ||
           naturalImperativePrompt ||
+          naturalSecretaryInstructionPrompt ||
           naturalNounInstructionPrompt ||
+          naturalCooperateImperativePrompt ||
           naturalSecretPluralPrompt ||
           naturalDefinitionQuestion ||
           naturalNounSentence);
@@ -2676,6 +3627,7 @@ String _legacyOcrRedactNaturalWordCredentialEchoes(
         sanitized,
         match,
         naturalWord,
+        openMaskPrefix: prefix,
         hasCredentialUseContext: hasCredentialUseContext,
         isNaturalWordContinuation: _legacyOcrHasNaturalWordContinuation(
           prefix,
@@ -2778,20 +3730,6 @@ Iterable<String> _credentialValuesFromOcrRetryData(
   yield* valuesFrom(retryData);
 }
 
-dynamic _withoutOcrCredentialFields(dynamic value) {
-  if (value is Map) {
-    return {
-      for (final entry in value.entries)
-        if (!_isOcrCredentialField(entry.key))
-          entry.key: _withoutOcrCredentialFields(entry.value),
-    };
-  }
-  if (value is List) {
-    return [for (final item in value) _withoutOcrCredentialFields(item)];
-  }
-  return value;
-}
-
 Map<String, dynamic> _safeUnsupportedOcrRetryData(
   String taskId,
   Map<String, dynamic> malformedRetryData, {
@@ -2834,10 +3772,6 @@ Map<String, dynamic> _safeUnsupportedOcrRetryData(
     taskId: taskId,
     imageCount: imageCount,
   )['images'] as List;
-  final parsedImagesByIndex = <int, OcrRetryImage>{
-    for (var index = 0; index < snapshot.images.length; index++)
-      snapshot.imageEntryIndices[index]: snapshot.images[index],
-  };
   final images = <Map<String, dynamic>>[];
   for (var index = 0; index < imageCount; index++) {
     final rawImage =
@@ -2846,16 +3780,11 @@ Map<String, dynamic> _safeUnsupportedOcrRetryData(
         fallbackImages is List && index < fallbackImages.length
             ? fallbackImages[index]
             : null;
-    final parsedImage = parsedImagesByIndex[index];
     final placeholder =
         Map<String, dynamic>.from(unavailableImages[index] as Map);
     final image = <String, dynamic>{
-      if (parsedImage?.bytes != null)
-        'bytes': base64Encode(parsedImage!.bytes!),
-      if (parsedImage?.storageRef != null)
-        'storageRef': parsedImage!.storageRef,
-      'format': parsedImage?.format ?? 'jpeg',
-      if (parsedImage?.name != null) 'name': parsedImage!.name,
+      'storageRef': placeholder['storageRef'],
+      'format': 'jpeg',
     };
 
     final sourceImage = rawImage is Map ? rawImage : fallbackImage;
@@ -2875,10 +3804,6 @@ Map<String, dynamic> _safeUnsupportedOcrRetryData(
           !_legacyOcrTextContainsCredential(name, unsafeCredentialValues)) {
         image['name'] = name;
       }
-    }
-
-    if (parsedImage == null && image['storageRef'] == null) {
-      image['storageRef'] = placeholder['storageRef'];
     }
     images.add(image);
   }
@@ -2936,22 +3861,6 @@ Map<String, dynamic> _unavailableRetryDataFromMalformed(
       malformedSnapshot.version == 2 ||
       malformedSnapshot.version == OcrRetrySnapshot.currentVersion;
   if (!supportedVersion) {
-    if (malformedRetryData['version'] is int) {
-      final safeFutureData = _withoutCredentialEchoes(
-        _withoutOcrCredentialFields(malformedRetryData),
-        safeCredentialValues,
-      );
-      try {
-        // Keep forward-compatible fields opaque for future app versions. The
-        // integer version still prevents this app from treating them as
-        // executable retry input.
-        jsonEncode(safeFutureData);
-        return Map<String, dynamic>.from(safeFutureData as Map);
-      } on Object {
-        // Fall back to the known-safe subset if the future payload cannot be
-        // represented in persisted task JSON.
-      }
-    }
     return _safeUnsupportedOcrRetryData(
       taskId,
       malformedRetryData,
@@ -3146,9 +4055,30 @@ Map<String, dynamic>? _retryDataFromTaskMap(
           }
           retryData['modelRef'] = safeModelRef;
         }
-        return Map<String, dynamic>.from(
+        final sanitizedRetryData = Map<String, dynamic>.from(
           _withoutCredentialEchoes(retryData, credentialValues) as Map,
         );
+        final originalInstruction = rawRetryData['instructionContent'];
+        if (map['type'] == BackgroundTaskType.ocr.name &&
+            originalInstruction is String) {
+          final redactedPasswordEcho =
+              _legacyOcrRedactPasswordCredentialEchoAcrossLineBreak(
+            originalInstruction,
+            credentialValues,
+          );
+          if (redactedPasswordEcho != null &&
+              !_legacyOcrTextContainsCredential(
+                redactedPasswordEcho,
+                credentialValues,
+              ) &&
+              !_legacyOcrTextContainsMaskedCredential(
+                redactedPasswordEcho,
+                credentialValues,
+              )) {
+            sanitizedRetryData['instructionContent'] = redactedPasswordEcho;
+          }
+        }
+        return sanitizedRetryData;
       }
       malformedRetryData = retryData;
     } catch (_) {
@@ -3465,7 +4395,10 @@ class BackgroundTask {
       ocrDiagnosticCredentialValues: _ocrDiagnosticCredentialValues,
       ocrCredentialValuesForSanitization: ocrCredentialValuesForSanitization,
       retryData: clearRetryData ? null : (retryData ?? this.retryData),
-      retryDataAlreadySanitized: retryData == null,
+      retryDataAlreadySanitized: retryData == null &&
+          rawRequest == null &&
+          !clearRawRequest &&
+          ocrCredentialValuesForSanitization.isEmpty,
     );
     _generationTokens[copy] = _generationTokenFor(this);
     return copy;
@@ -3549,7 +4482,15 @@ class BackgroundTask {
 
 final backgroundTasksProvider =
     StateNotifierProvider<BackgroundTaskNotifier, List<BackgroundTask>>(
-  (ref) => BackgroundTaskNotifier(),
+  (ref) {
+    final notifier = BackgroundTaskNotifier(
+      localizationsResolver: () => appLocalizationsForLocale(
+        ref.read(localeProvider),
+      ),
+    );
+    ref.listen(localeProvider, (_, _) => notifier.refreshLocalizations());
+    return notifier;
+  },
 );
 
 class _TaskCancellationRegistration {
@@ -3566,6 +4507,26 @@ class _TaskCleanupRegistration {
 }
 
 class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
+  BackgroundTaskNotifier({AppLocalizations Function()? localizationsResolver})
+      : _localizationsResolver = localizationsResolver ??
+            (() => appLocalizationsForLocale(const Locale('zh'))),
+        super([]);
+
+  final AppLocalizations Function() _localizationsResolver;
+
+  AppLocalizations get localizations => _localizationsResolver();
+
+  void refreshLocalizations() {
+    final strings = localizations;
+    var changed = false;
+    final localizedTasks = state.map((task) {
+      final localized = _localizeRestoredBackgroundTask(task, strings);
+      if (!identical(localized, task)) changed = true;
+      return localized;
+    }).toList(growable: false);
+    if (changed) state = localizedTasks;
+  }
+
   final _uuid = const Uuid();
   final Map<String, _TaskCancellationRegistration> _cancellations = {};
   final Map<String, Map<Object, List<_TaskCleanupRegistration>>> _taskCleanups =
@@ -3576,6 +4537,9 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   // The last durable task snapshot remains authoritative until another write
   // replaces it, even when live retryData has already changed.
   final Set<String> _persistedRetryAudioIds = <String>{};
+  final Set<String> _persistedOcrCacheReferences = <String>{};
+  bool _ocrCacheOwnershipLoaded = false;
+  bool _ocrCacheCleanupSafe = false;
   List<dynamic> _unrestoredTaskRecords = [];
 
   /// Whether retry audio references are complete enough to authorize pruning.
@@ -3818,7 +4782,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     if (!mounted || taskById(taskId)?.hasSameGenerationAs(task) != true) {
       return;
     }
-    failTask(taskId, error: '已取消');
+    failTask(taskId, error: localizations.bgTaskCancelled);
   }
 
   /// 测试专用：覆盖持久化目录。
@@ -3852,8 +4816,6 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   static Future<void> Function(String taskId)?
       debugBeforeLegacyAsrRetryMigration;
 
-  BackgroundTaskNotifier() : super([]);
-
   @override
   void dispose() {
     for (final registration in _cancellations.values.toList()) {
@@ -3869,6 +4831,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   }
 
   /// Add a new background task and return its ID.
+  /// Caller-supplied [taskId] values must not belong to a live task.
   /// Initializes default step chain based on task type.
   /// [retryData] stores the original input parameters (images, audio, model, etc.)
   /// so the retry flow can pre-populate the form.
@@ -3882,9 +4845,20 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     String? taskId,
   }) {
     final id = taskId ?? _uuid.v4();
+    final existingTasks = state.where((task) => task.id == id).toList();
+    final removalOwnsId = _activeBatchRemovalAddedGenerations.any(
+      (removal) => removal.containsKey(id),
+    );
+    if (existingTasks.isNotEmpty && !removalOwnsId) {
+      throw ArgumentError.value(id, 'taskId', 'already belongs to a live task');
+    }
+    for (final existingTask in existingTasks) {
+      _queueTaskCleanupAfterRemoval(id, existingTask);
+    }
     _pendingRestoreTaskRemovals.remove(id);
     _pendingTaskRemovalReconciliations.remove(id);
-    final steps = type.stepLabels
+    final steps = type
+        .localizedStepLabels(localizations)
         .map((label) => BgTaskStep(label: label, status: BgStepStatus.pending))
         .toList();
     final task = BackgroundTask(
@@ -3899,7 +4873,10 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     for (final activeRemoval in _activeBatchRemovalAddedGenerations) {
       activeRemoval[id]?.add(generation);
     }
-    state = [task, ...state];
+    state = [
+      task,
+      ...state.where((existingTask) => existingTask.id != id),
+    ];
     _persistTasks(preserveSkippedEntries: true);
     _syncIosContinuedTask();
     return id;
@@ -3979,13 +4956,27 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     String? error,
     Map<String, dynamic>? rawRequest,
     Map<String, dynamic>? rawResponse,
+    Iterable<String> ocrCredentialValuesForSanitization = const [],
   }) {
+    final task = taskById(taskId);
+    if (task != null &&
+        task.type == BackgroundTaskType.ocr &&
+        task.retryData != null &&
+        (_pendingTaskRemovalReconciliations.containsKey(taskId) ||
+            (task.status == TaskStatus.waiting &&
+                _isBackgroundTaskCancellationError(task.error)))) {
+      // Cancellation callbacks and stale runners can report failure while
+      // removal is in progress or after rollback. Keep the retry task's
+      // cancellation outcome instead of notifying for a stale failure.
+      return;
+    }
     _updateTask(
       taskId,
       TaskStatus.failed,
       error: error,
       rawRequest: rawRequest,
       rawResponse: rawResponse,
+      ocrCredentialValuesForSanitization: ocrCredentialValuesForSanitization,
     );
   }
 
@@ -4082,6 +5073,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     String taskId, {
     Map<String, dynamic>? rawRequest,
     Map<String, dynamic>? rawResponse,
+    Iterable<String> ocrCredentialValuesForSanitization = const [],
   }) {
     state = state.map((t) {
       if (t.id != taskId) return t;
@@ -4151,8 +5143,8 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       // retry audio remains owned until its removal is durable.
       _pendingRestoreTaskRemovalOwnershipIds.add(taskId);
     }
-    _cancellations.remove(taskId)?.cancel();
     final originalSnapshot = List<BackgroundTask>.of(state);
+    _cancellations.remove(taskId)?.cancel();
     final removedTasks = state.where((task) => task.id == taskId).toList();
     for (final task in removedTasks) {
       _queueTaskCleanupAfterRemoval(taskId, task);
@@ -4160,7 +5152,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     final removed = removedTasks.firstOrNull;
     state = state.where((t) => t.id != taskId).toList();
     final Future<bool> persistence;
-    if (removed?.type == BackgroundTaskType.ocr && removed?.retryData != null) {
+    if (removed?.type == BackgroundTaskType.ocr) {
       final references = OcrRetryStorage.referencesFromSnapshot(
         removed!.retryData,
       );
@@ -4192,7 +5184,19 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       for (final id in removedIds) id: <Object>{},
     };
     _activeBatchRemovalAddedGenerations.add(addedTaskGenerations);
+    final suppressedNotificationGenerations = <Object>[];
     try {
+      for (final id in removedIds) {
+        final task = taskById(id);
+        if (task == null) continue;
+        final generation = BackgroundTask._generationTokenFor(task);
+        suppressedNotificationGenerations.add(generation);
+        _taskNotificationSuppressionGenerationCounts.update(
+          generation,
+          (count) => count + 1,
+          ifAbsent: () => 1,
+        );
+      }
       for (final id in removedIds) {
         cancelTask(id);
       }
@@ -4272,6 +5276,14 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       }
     } finally {
       _activeBatchRemovalAddedGenerations.remove(addedTaskGenerations);
+      for (final generation in suppressedNotificationGenerations) {
+        final count = _taskNotificationSuppressionGenerationCounts[generation];
+        if (count == 1) {
+          _taskNotificationSuppressionGenerationCounts.remove(generation);
+        } else if (count != null) {
+          _taskNotificationSuppressionGenerationCounts[generation] = count - 1;
+        }
+      }
     }
   }
 
@@ -4423,7 +5435,33 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       }
       // Tasks added while the removal was pending are newer and belong ahead
       // of the restored generation when no original neighbor survives.
-      restored.insert(restoreIndex ?? restored.length, task);
+      final wasRunningBeforeCancellation = originalSnapshot.any(
+        (original) =>
+            original.id == taskId &&
+            original.hasSameGenerationAs(task) &&
+            original.status == TaskStatus.running,
+      );
+      final canceledWhileRunning = task.status == TaskStatus.running ||
+          (wasRunningBeforeCancellation && task.status == TaskStatus.failed);
+      final taskToRestore = canceledWhileRunning
+          ? task.copyWith(
+              status: TaskStatus.waiting,
+              clearCompletedAt: true,
+              error: localizations.bgTaskCancelled,
+              steps: task.steps
+                  .map(
+                    (step) => step.copyWith(
+                      status: step.running
+                          ? BgStepStatus.failed
+                          : step.status == BgStepStatus.pending
+                              ? BgStepStatus.skipped
+                              : step.status,
+                    ),
+                  )
+                  .toList(),
+            )
+          : task;
+      restored.insert(restoreIndex ?? restored.length, taskToRestore);
       _taskSnapshotEpoch++;
       restoredTask = true;
       if (mounted) {
@@ -4510,13 +5548,13 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     bool? resultSavedAsPartial,
     Map<String, dynamic>? rawRequest,
     Map<String, dynamic>? rawResponse,
+    Iterable<String> ocrCredentialValuesForSanitization = const [],
   }) {
-    BackgroundTask? oldTask;
+    BackgroundTask? updatedTask;
     state = state.map((t) {
       if (t.id != taskId) return t;
-      oldTask = t;
       final shouldClearError = error == null && status == TaskStatus.completed;
-      return t.copyWith(
+      final updated = t.copyWith(
         status: status,
         error: error,
         clearError: shouldClearError,
@@ -4524,18 +5562,27 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         resultSavedAsPartial: resultSavedAsPartial,
         rawRequest: rawRequest,
         rawResponse: rawResponse,
+        ocrCredentialValuesForSanitization: ocrCredentialValuesForSanitization,
         completedAt:
             status == TaskStatus.completed || status == TaskStatus.failed
                 ? DateTime.now()
                 : null,
       );
+      updatedTask = updated;
+      return updated;
     }).toList();
     _persistTasks();
 
     // Send notification when task completes or fails
     if ((status == TaskStatus.completed || status == TaskStatus.failed) &&
-        oldTask != null) {
-      _sendTaskNotification(oldTask!, status, error);
+        updatedTask != null &&
+        !_taskNotificationSuppressionGenerationCounts.containsKey(
+          BackgroundTask._generationTokenFor(updatedTask!),
+        )) {
+      final notificationError = updatedTask!.type == BackgroundTaskType.ocr
+          ? updatedTask!.error
+          : error;
+      _sendTaskNotification(updatedTask!, status, notificationError);
     }
     _syncIosContinuedTask();
   }
@@ -4550,7 +5597,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       final future = NotificationService().showTaskCompletionNotification(
         taskId: task.id,
         title: task.title,
-        typeLabel: task.type.label,
+        typeLabel: task.type.localizedLabel(localizations),
         success: status == TaskStatus.completed,
         error: error,
       );
@@ -4601,7 +5648,11 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       _iosSyncInterval,
       (_) => _syncIosContinuedTask(),
     );
-    unawaited(IosContinuedTaskService.instance.submit());
+    unawaited(
+      IosContinuedTaskService.instance.submit(
+        title: localizations.iosContinuedTaskTitle,
+      ),
+    );
     final totalSteps = running.fold<int>(0, (sum, t) => sum + t.steps.length);
     final doneSteps = running.fold<int>(
       0,
@@ -4650,6 +5701,8 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   final Map<String, List<BackgroundTask>> _pendingTaskRemovalCleanupTasks =
       <String, List<BackgroundTask>>{};
   final List<Map<String, Set<Object>>> _activeBatchRemovalAddedGenerations = [];
+  final Map<Object, int> _taskNotificationSuppressionGenerationCounts =
+      <Object, int>{};
   Future<List<BackgroundTask>?>? _preRestorePersistedTasks;
   List<BackgroundTask>? _disposedSnapshot;
   Future<void>? _disposedPersistence;
@@ -4838,18 +5891,68 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     if (_taskSnapshotIncomplete && !canPreserveSkippedEntries) {
       return false;
     }
+    for (final task in currentSnapshot) {
+      if (task.type != BackgroundTaskType.asr ||
+          _ocrCacheReferencesInPersistedValue({
+            'rawRequest': task.rawRequest,
+            'rawResponse': task.rawResponse,
+          }).isEmpty ||
+          _unrestoredTaskRecords.any(
+            (record) =>
+                record is Map &&
+                record['ocrCacheOwnershipKnown'] == false &&
+                record['ocrCacheTaskId'] == task.id,
+          )) {
+        continue;
+      }
+      // ASR diagnostics are sanitized before serialization. Record their
+      // cache ownership while the raw fields are still available so the
+      // durable snapshot cannot make a live reference invisible.
+      _unrestoredTaskRecords.add(
+        _unrestoredTaskRecord(
+          retryAudioOwnershipKnown: true,
+          ocrCacheOwnershipKnown: false,
+          ocrCacheTaskId: task.id,
+        ),
+      );
+      _ocrCacheCleanupSafe = false;
+    }
     final skippedEntries = canPreserveSkippedEntries
         ? List<dynamic>.unmodifiable(_skippedTaskEntries)
         : const <dynamic>[];
     final retireUnrestoredRecords = _restoreGeneration > 0;
-    final unrestoredRecords = List<dynamic>.unmodifiable(
-      _unrestoredTaskRecords.where(
-        (record) =>
-            !retireUnrestoredRecords ||
+    // A durable replacement snapshot removes an unknown task row and all of
+    // its discarded fields. Keep its credential-free diagnostic marker while
+    // resolving OCR ownership; conservatively retain unknown audio ownership.
+    final unrestoredRecords = List<dynamic>.unmodifiable([
+      for (final record in _unrestoredTaskRecords)
+        if (!retireUnrestoredRecords ||
             record is! Map ||
-            record['retireAfterSnapshot'] != true,
-      ),
-    );
+            record['retireAfterSnapshot'] != true)
+          if (retireUnrestoredRecords &&
+              record is Map &&
+              record['ocrCacheOwnershipKnown'] == false &&
+              record['ocrCacheTaskId'] is String &&
+              !currentSnapshot.any(
+                (task) => task.id == record['ocrCacheTaskId'],
+              ) &&
+              !skippedEntries.any(
+                (entry) =>
+                    entry is Map && entry['id'] == record['ocrCacheTaskId'],
+              ))
+            _unrestoredTaskRecord(
+              retryAudioOwnershipKnown:
+                  record['retryAudioOwnershipKnown'] == true,
+              retryAudioIds: {
+                if (record['retryAudioIds'] is List)
+                  for (final id in record['retryAudioIds'] as List)
+                    if (id is String) id,
+              },
+              ocrCacheOwnershipKnown: true,
+            )
+          else
+            record,
+    ]);
     final preservedEntries = [...skippedEntries, ...unrestoredRecords];
     final saved = _hasCacheMigrations(currentSnapshot)
         ? await OcrRetryStorage.withCacheMaintenanceLock(
@@ -4884,6 +5987,9 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       );
     }
     if (saved) {
+      if (retireUnrestoredRecords) {
+        _unrestoredTaskRecords = List<dynamic>.of(unrestoredRecords);
+      }
       _persistedRetryAudioIds
         ..clear()
         ..addAll(_retryAudioIdsInSnapshot(currentSnapshot, preservedEntries));
@@ -4891,9 +5997,6 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       _pendingSanitizedAsrRetryAudioIds.clear();
       _pendingReplacedRestoreAsrRetryAudioIds.clear();
       if (retireUnrestoredRecords) {
-        _unrestoredTaskRecords.removeWhere(
-          (record) => record is Map && record['retireAfterSnapshot'] == true,
-        );
         _retryAudioCleanupSafe = _pendingCompletedLegacyAsrRetryAudioIds
                 .isEmpty &&
             !_hasUntrackedSkippedAsrAudioOwnership(_skippedTaskEntries) &&
@@ -4992,7 +6095,20 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       ...prepared.map((task) => task.toMap()),
       ...preservedEntries,
     ];
-    return _writeSnapshotData(data, dirOverride);
+    final saved = await _writeSnapshotData(data, dirOverride);
+    if (saved) {
+      _persistedOcrCacheReferences
+        ..clear()
+        ..addAll(
+          _ocrCacheReferencesFromTasksAndEntries(prepared, preservedEntries),
+        );
+      _ocrCacheOwnershipLoaded = true;
+      _ocrCacheCleanupSafe = _hasKnownOcrCacheOwnership(
+        prepared,
+        preservedEntries,
+      );
+    }
+    return saved;
   }
 
   List<BackgroundTask>? _prepareAsrRetriesForPersistence(
@@ -5105,6 +6221,27 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
           }
         }
       }
+      final rawPageOutcomes = entry['ocrPageOutcomes'];
+      if (rawPageOutcomes != null) {
+        if (rawPageOutcomes is! List) return false;
+        final pageOutcomeCredentialValues =
+            _credentialValuesFromOcrRetryData(entry);
+        for (final rawOutcome in rawPageOutcomes) {
+          if (rawOutcome is! Map) continue;
+          if (rawOutcome.keys.any((key) => key is! String)) return false;
+          final outcomeError = rawOutcome['error'];
+          if (outcomeError != null &&
+              (outcomeError is! String ||
+                  _sanitizeOcrTaskError(
+                        outcomeError,
+                        null,
+                        additionalCredentialValues: pageOutcomeCredentialValues,
+                      ) !=
+                      outcomeError)) {
+            return false;
+          }
+        }
+      }
       final entryType = entry['type'];
       if (entryType == BackgroundTaskType.asr.name) {
         if (!_canSafelyPreserveSkippedAsrEntry(entry)) return false;
@@ -5165,39 +6302,502 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     return true;
   }
 
-  Future<Set<String>?> _ocrCacheReferencesForCleanup() async {
-    final persisted = await _loadPersistedTasks();
-    if (!persisted.isReadable) return null;
+  /// Returns every safely known OCR cache owner, or null when the persisted
+  /// task snapshot cannot be read safely enough to authorize deletion.
+  Future<Set<String>?> ocrCacheReferencesForCleanup() =>
+      _ocrCacheReferencesForCleanup();
+
+  /// Uses the already loaded snapshot while OCR cache maintenance is locked.
+  Set<String>? ocrCacheReferencesFromLoadedSnapshotForCleanup() {
+    if (!_ocrCacheOwnershipLoaded || !_ocrCacheCleanupSafe) return null;
     final tasks = mounted ? state : (_disposedSnapshot ?? const []);
     return {
-      for (final task in tasks)
-        if (task.type == BackgroundTaskType.ocr)
-          ...OcrRetryStorage.referencesFromSnapshot(task.retryData),
-      for (final task in persisted.tasks)
-        if (task.type == BackgroundTaskType.ocr)
-          ...OcrRetryStorage.referencesFromSnapshot(task.retryData),
+      for (final task in tasks) ..._ocrCacheReferencesFromTask(task),
+      ..._persistedOcrCacheReferences,
       ..._referencesFromSkippedTaskEntries(),
-      ..._referencesFromSkippedTaskEntries(persisted.skippedEntries),
+      for (final removedTasks in _pendingTaskRemovalCleanupTasks.values)
+        for (final task in removedTasks) ..._ocrCacheReferencesFromTask(task),
     };
+  }
+
+  Set<String> _ocrCacheReferencesFromTask(BackgroundTask task) {
+    if (task.type == BackgroundTaskType.ocr) {
+      return OcrRetryStorage.referencesFromSnapshot(task.retryData);
+    }
+    return _ocrCacheReferencesInPersistedValue(task.toMap());
+  }
+
+  Future<Set<String>?> _ocrCacheReferencesForCleanup() async {
+    final persisted = await _loadPersistedTasks();
+    if (!persisted.isReadable || !persisted.ocrCacheCleanupSafe) return null;
+    final tasks = mounted ? state : (_disposedSnapshot ?? const []);
+    return _ocrCacheReferencesFromTasksAndEntries(
+      [...tasks, ...persisted.tasks],
+      [..._skippedTaskEntries, ...persisted.skippedEntries],
+    );
+  }
+
+  bool _canSafelyCollectSkippedOcrCacheReferences(Object? retryData) {
+    if (retryData == null) return true;
+    if (retryData is! Map) return false;
+    try {
+      final data = Map<String, dynamic>.from(retryData);
+      final type = data['type'];
+      if ((type != null && type != BackgroundTaskType.ocr.name) ||
+          data['images'] is! List) {
+        return false;
+      }
+      data['type'] ??= BackgroundTaskType.ocr.name;
+      final snapshot = OcrRetrySnapshot.fromMap(data);
+      final supportedVersion = snapshot.isLegacy ||
+          snapshot.version == 1 ||
+          snapshot.version == 2 ||
+          snapshot.version == OcrRetrySnapshot.currentVersion;
+      if (!supportedVersion) {
+        // A future version makes image execution unsupported, but its
+        // recognized image references still have known ownership. Unknown
+        // fields and malformed image metadata remain fail-closed.
+        return !snapshot.hasUnknownFields &&
+            !snapshot.hasInvalidImageMetadata &&
+            snapshot.imageEntryCount == snapshot.images.length;
+      }
+      return !snapshot.hasUnknownFields &&
+          !snapshot.hasInvalidImages &&
+          !snapshot.hasInvalidImageMetadata;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Set<String> _ocrCacheReferencesInPersistedValue(Object? value) {
+    final references = <String>{};
+    final pending = <Object?>[value];
+    final referencePattern = RegExp(r'ocr_retry_cache/[0-9a-f]{64}\.bin');
+    while (pending.isNotEmpty) {
+      final current = pending.removeLast();
+      if (current is Map) {
+        for (final entry in current.entries) {
+          pending
+            ..add(entry.key)
+            ..add(entry.value);
+        }
+      } else if (current is List) {
+        pending.addAll(current);
+      } else if (current is String) {
+        for (final match in referencePattern.allMatches(current)) {
+          final reference = match.group(0);
+          if (reference != null &&
+              OcrRetryImage.isValidStorageReference(reference)) {
+            references.add(reference);
+          }
+        }
+      }
+    }
+    return references;
+  }
+
+  bool _requiresDurableOcrCacheOwnershipMarker(Object? retryData) {
+    if (retryData is! Map) {
+      return _ocrCacheReferencesInPersistedValue(retryData).isNotEmpty;
+    }
+    try {
+      final data = Map<String, dynamic>.from(retryData);
+      final rawCacheReferences = _ocrCacheReferencesInPersistedValue(data);
+      final version = data['version'];
+      bool containsCacheReference(Object? value) =>
+          _ocrCacheReferencesInPersistedValue(value).isNotEmpty;
+      if (data['type'] != null && data['type'] != BackgroundTaskType.ocr.name) {
+        return rawCacheReferences.isNotEmpty;
+      }
+      if (version is int &&
+          version > OcrRetrySnapshot.currentVersion &&
+          rawCacheReferences.isNotEmpty) {
+        final futureData = {...data, 'type': BackgroundTaskType.ocr.name};
+        final snapshot = OcrRetrySnapshot.fromMap(futureData);
+        final rawImages = futureData['images'];
+        final referencesOutsideStorageRefs = <String>{
+          ..._ocrCacheReferencesInPersistedValue(
+            Map<String, dynamic>.from(futureData)..remove('images'),
+          ),
+          if (futureData.containsKey('images') && rawImages is! List)
+            ..._ocrCacheReferencesInPersistedValue(rawImages),
+          if (rawImages is List)
+            for (final image in rawImages)
+              ..._ocrCacheReferencesInPersistedValue(
+                image is Map
+                    ? (Map<dynamic, dynamic>.of(image)..remove('storageRef'))
+                    : image,
+              ),
+        };
+        // The unsupported-version migration discards every input image. Once
+        // that transformed snapshot is durable, its recognized storageRefs
+        // can be collected. Refs in unknown fields or malformed image shapes
+        // still require a durable owner marker until the task is removed.
+        return snapshot.hasUnknownFields ||
+            snapshot.hasInvalidImageMetadata ||
+            snapshot.imageEntryCount != snapshot.images.length ||
+            referencesOutsideStorageRefs.isNotEmpty;
+      }
+      final modelIndex = data['modelIndex'];
+      if (modelIndex != null &&
+          modelIndex is! int &&
+          containsCacheReference(modelIndex)) {
+        return true;
+      }
+      final instructionIndex = data['instructionIndex'];
+      if (instructionIndex != null &&
+          instructionIndex is! int &&
+          containsCacheReference(instructionIndex)) {
+        return true;
+      }
+      final instructionContent = data['instructionContent'];
+      if (instructionContent != null &&
+          instructionContent is! String &&
+          containsCacheReference(instructionContent)) {
+        return true;
+      }
+      final saveFolder = data['saveFolder'];
+      if (saveFolder != null &&
+          saveFolder is! String &&
+          containsCacheReference(saveFolder)) {
+        return true;
+      }
+      final batchMode = data['batchMode'];
+      if (batchMode != null &&
+          (batchMode is! String ||
+              (batchMode != OcrBatchMode.joint.name &&
+                  batchMode != OcrBatchMode.perImage.name)) &&
+          containsCacheReference(batchMode)) {
+        return true;
+      }
+      final perImageConcurrency = data['perImageConcurrency'];
+      if (perImageConcurrency != null &&
+          (perImageConcurrency is! int ||
+              perImageConcurrency < 1 ||
+              perImageConcurrency > 2) &&
+          containsCacheReference(perImageConcurrency)) {
+        return true;
+      }
+      final requestSizeBudgetBytes = data['requestSizeBudgetBytes'];
+      if (requestSizeBudgetBytes != null &&
+          (requestSizeBudgetBytes is! int || requestSizeBudgetBytes <= 0) &&
+          containsCacheReference(requestSizeBudgetBytes)) {
+        return true;
+      }
+
+      const snapshotFields = {
+        'type',
+        'version',
+        'modelRef',
+        'images',
+        'modelIndex',
+        'instructionContent',
+        'instructionIndex',
+        'saveFolder',
+        'batchMode',
+        'perImageConcurrency',
+        'requestSizeBudgetBytes',
+      };
+      // These historical extensions are known credential/inline-body fields;
+      // sanitizing them cannot discard another cache reference.
+      const sanitizedNonOwnershipFields = {'apiKey', 'imageData'};
+      for (final entry in data.entries) {
+        final key = entry.key;
+        if (key is! String) {
+          if (containsCacheReference(key) ||
+              containsCacheReference(entry.value)) {
+            return true;
+          }
+          continue;
+        }
+        if (snapshotFields.contains(key)) continue;
+        if (!sanitizedNonOwnershipFields.contains(key) ||
+            (entry.value != null && entry.value is! String)) {
+          if (containsCacheReference(key) ||
+              containsCacheReference(entry.value)) {
+            return true;
+          }
+          continue;
+        }
+        if (containsCacheReference(key) ||
+            containsCacheReference(entry.value)) {
+          return true;
+        }
+      }
+      final modelRef = data['modelRef'];
+      if (modelRef != null &&
+          modelRef is! Map &&
+          containsCacheReference(modelRef)) {
+        return true;
+      }
+      if (modelRef is Map) {
+        const modelReferenceFields = {'configId', 'modelId'};
+        for (final entry in modelRef.entries) {
+          if (entry.key is! String ||
+              !modelReferenceFields.contains(entry.key) ||
+              (entry.value != null && entry.value is! String)) {
+            if (containsCacheReference(entry.key) ||
+                containsCacheReference(entry.value)) {
+              return true;
+            }
+            continue;
+          }
+          if (containsCacheReference(entry.key) ||
+              containsCacheReference(entry.value)) {
+            return true;
+          }
+        }
+      }
+      final images = data['images'];
+      if (images != null && images is! List && containsCacheReference(images)) {
+        return true;
+      }
+      if (images is List) {
+        const imageFields = {'storageRef', 'format', 'name', 'bytes'};
+        for (final image in images) {
+          if (image is! Map) {
+            if (containsCacheReference(image)) return true;
+            continue;
+          }
+          for (final entry in image.entries) {
+            final key = entry.key;
+            if (key is! String) {
+              if (containsCacheReference(key) ||
+                  containsCacheReference(entry.value)) {
+                return true;
+              }
+              continue;
+            }
+            if (imageFields.contains(key)) continue;
+            if (!sanitizedNonOwnershipFields.contains(key) ||
+                (entry.value != null && entry.value is! String)) {
+              if (containsCacheReference(key) ||
+                  containsCacheReference(entry.value)) {
+                return true;
+              }
+              continue;
+            }
+            if (containsCacheReference(key) ||
+                containsCacheReference(entry.value)) {
+              return true;
+            }
+          }
+          final storageRef = image['storageRef'];
+          if (storageRef != null &&
+              (storageRef is! String ||
+                  !OcrRetryImage.isValidStorageReference(storageRef)) &&
+              containsCacheReference(storageRef)) {
+            return true;
+          }
+          final format = image['format'];
+          if (format != null &&
+              format is! String &&
+              containsCacheReference(format)) {
+            return true;
+          }
+          final name = image['name'];
+          if (name != null && name is! String && containsCacheReference(name)) {
+            return true;
+          }
+          final bytes = image['bytes'];
+          if (bytes != null &&
+              bytes is! String &&
+              containsCacheReference(bytes)) {
+            return true;
+          }
+        }
+      }
+      if (rawCacheReferences.isNotEmpty) {
+        final snapshot = OcrRetrySnapshot.fromMap(data);
+        final retainedReferences = {
+          for (final image in snapshot.images)
+            if (image.storageRef != null) image.storageRef!,
+        };
+        if (!retainedReferences.containsAll(rawCacheReferences)) {
+          return true;
+        }
+      }
+      return false;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  bool _hasUnserializedTaskOcrCacheReferences(Map<dynamic, dynamic> taskRow) {
+    bool containsCacheReference(Object? value) =>
+        _ocrCacheReferencesInPersistedValue(value).isNotEmpty;
+
+    if (taskRow['type'] != BackgroundTaskType.ocr.name &&
+        containsCacheReference(taskRow['retryData'])) {
+      // ASR persistence rebuilds supported retryData from a whitelist; an OCR
+      // cache ref in that non-OCR payload may be dropped by the sanitizer.
+      return true;
+    }
+
+    bool hasDroppedCollectionReferences(
+      Object? rawEntries,
+      Set<String> serializedFields,
+      bool Function(Map<dynamic, dynamic>) hasValidShape,
+    ) {
+      if (rawEntries == null) return false;
+      if (rawEntries is! List) return containsCacheReference(rawEntries);
+      for (final rawEntry in rawEntries) {
+        if (rawEntry is! Map) {
+          if (containsCacheReference(rawEntry)) return true;
+          continue;
+        }
+        if (!hasValidShape(rawEntry)) {
+          if (containsCacheReference(rawEntry)) return true;
+          continue;
+        }
+        for (final entry in rawEntry.entries) {
+          if ((entry.key is! String || !serializedFields.contains(entry.key)) &&
+              (containsCacheReference(entry.key) ||
+                  containsCacheReference(entry.value))) {
+            return true;
+          }
+        }
+      }
+      return false;
+    }
+
+    if (hasDroppedCollectionReferences(
+      taskRow['steps'],
+      const {'label', 'status', 'error'},
+      (step) =>
+          step['label'] is String &&
+          (step['status'] == null ||
+              (step['status'] is String &&
+                  BgStepStatus.values.any(
+                    (status) => status.name == step['status'],
+                  ))) &&
+          (step['error'] == null || step['error'] is String),
+    )) {
+      return true;
+    }
+    if (hasDroppedCollectionReferences(
+      taskRow['ocrPageOutcomes'],
+      const {'imageIndex', 'status', 'text', 'error'},
+      (outcome) =>
+          outcome['imageIndex'] is int &&
+          (outcome['imageIndex'] as int) >= 0 &&
+          outcome['status'] is String &&
+          OcrPageOutcomeStatus.values.any(
+            (status) => status.name == outcome['status'],
+          ) &&
+          (outcome['text'] == null || outcome['text'] is String) &&
+          (outcome['error'] == null || outcome['error'] is String),
+    )) {
+      return true;
+    }
+
+    const serializedTaskFields = {
+      'id',
+      'type',
+      'title',
+      'status',
+      'result',
+      'resultIsComplete',
+      'resultFolder',
+      'partialSaveRequested',
+      'resultSavedAsPartial',
+      'error',
+      'createdAt',
+      'completedAt',
+      'statusChangedAt',
+      'steps',
+      'downloadedFilePath',
+      'retryData',
+      'ocrPageOutcomes',
+    };
+    for (final entry in taskRow.entries) {
+      final isRawDiagnosticField =
+          entry.key == 'rawRequest' || entry.key == 'rawResponse';
+      final rawDiagnosticsAreSanitized =
+          taskRow['type'] == BackgroundTaskType.ocr.name ||
+              taskRow['type'] == BackgroundTaskType.asr.name;
+      final isDiscardedField = (!serializedTaskFields.contains(entry.key) &&
+              !(!rawDiagnosticsAreSanitized && isRawDiagnosticField)) ||
+          (rawDiagnosticsAreSanitized && isRawDiagnosticField);
+      if (isDiscardedField &&
+          (containsCacheReference(entry.key) ||
+              containsCacheReference(entry.value))) {
+        return true;
+      }
+    }
+    return false;
   }
 
   Set<String> _referencesFromSkippedTaskEntries([Iterable<dynamic>? entries]) {
     final references = <String>{};
     for (final entry in entries ?? _skippedTaskEntries) {
       if (entry is! Map) continue;
+      final serializedFields = Map<dynamic, dynamic>.of(entry)
+        ..remove('retryData');
+      references.addAll(_ocrCacheReferencesInPersistedValue(serializedFields));
       final retryData = entry['retryData'];
       if (retryData is! Map) continue;
       try {
-        references.addAll(
-          OcrRetryStorage.referencesFromSnapshot(
-            Map<String, dynamic>.from(retryData),
-          ),
-        );
+        final data = Map<String, dynamic>.from(retryData);
+        if (entry['type'] == BackgroundTaskType.ocr.name) {
+          data['type'] ??= BackgroundTaskType.ocr.name;
+          references.addAll(OcrRetryStorage.referencesFromSnapshot(data));
+        }
       } catch (_) {
         // Unknown persisted data must never expand the set of deletable paths.
       }
     }
     return references;
+  }
+
+  Set<String> _ocrCacheReferencesFromTasksAndEntries(
+    Iterable<BackgroundTask> tasks,
+    Iterable<dynamic> entries,
+  ) {
+    final references = <String>{};
+    for (final task in tasks) {
+      if (task.type == BackgroundTaskType.ocr) {
+        references.addAll(
+          OcrRetryStorage.referencesFromSnapshot(task.retryData),
+        );
+        // Cache ownership belongs to retry image references. Result text and
+        // other task fields may contain path-like text without owning a blob.
+        continue;
+      }
+      references.addAll(_ocrCacheReferencesInPersistedValue(task.toMap()));
+    }
+    references.addAll(_referencesFromSkippedTaskEntries(entries));
+    return references;
+  }
+
+  bool _hasKnownOcrCacheOwnership(
+    Iterable<BackgroundTask> tasks,
+    Iterable<dynamic> entries,
+  ) {
+    for (final task in tasks) {
+      if (task.type == BackgroundTaskType.ocr &&
+          _requiresDurableOcrCacheOwnershipMarker(task.retryData)) {
+        return false;
+      }
+    }
+    for (final entry in entries) {
+      if (entry is! Map) return false;
+      if (entry['_unrestoredTaskRecord'] == true) {
+        if (entry['ocrCacheOwnershipKnown'] != true) return false;
+        continue;
+      }
+      // Non-OCR rows may still carry cache owners in fields their task model
+      // would discard; preserved raw rows remain authoritative until removed.
+      if (_hasUnserializedTaskOcrCacheReferences(entry)) return false;
+      if (entry['type'] != BackgroundTaskType.ocr.name) continue;
+      final retryData = entry['retryData'];
+      if (!_canSafelyCollectSkippedOcrCacheReferences(retryData) ||
+          _requiresDurableOcrCacheOwnershipMarker(retryData) ||
+          _hasUnserializedTaskOcrCacheReferences(entry)) {
+        return false;
+      }
+    }
+    return true;
   }
 
   bool _hasCacheMigrations(List<BackgroundTask> snapshot) {
@@ -5539,6 +7139,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         bool isReadable,
         List<dynamic> skippedEntries,
         bool cleanupSafe,
+        bool ocrCacheCleanupSafe,
         List<dynamic> unrestoredRecords,
         bool hasUnsafeSkippedAsrData,
       })> _loadPersistedTasks({
@@ -5555,6 +7156,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
           isReadable: true,
           skippedEntries: <dynamic>[],
           cleanupSafe: true,
+          ocrCacheCleanupSafe: true,
           unrestoredRecords: <dynamic>[],
           hasUnsafeSkippedAsrData: false,
         );
@@ -5570,6 +7172,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
           isReadable: false,
           skippedEntries: <dynamic>[],
           cleanupSafe: false,
+          ocrCacheCleanupSafe: false,
           unrestoredRecords: <dynamic>[_unrestoredTaskRecordMarker],
           hasUnsafeSkippedAsrData: false,
         );
@@ -5586,6 +7189,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
           isReadable: false,
           skippedEntries: <dynamic>[],
           cleanupSafe: false,
+          ocrCacheCleanupSafe: false,
           unrestoredRecords: <dynamic>[_unrestoredTaskRecordMarker],
           hasUnsafeSkippedAsrData: false,
         );
@@ -5598,6 +7202,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
           isReadable: false,
           skippedEntries: <dynamic>[],
           cleanupSafe: false,
+          ocrCacheCleanupSafe: false,
           unrestoredRecords: <dynamic>[_unrestoredTaskRecordMarker],
           hasUnsafeSkippedAsrData: false,
         );
@@ -5609,6 +7214,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       var isComplete = true;
       var isCompleteExceptLegacyAsr = true;
       var cleanupSafe = true;
+      var ocrCacheCleanupSafe = true;
       var hasUnsafeSkippedAsrData = false;
       for (final m in list) {
         if (m is Map && m['_unrestoredTaskRecord'] == true) {
@@ -5623,6 +7229,8 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
             'retryAudioOwnershipKnown',
             'retryAudioIds',
             'retireAfterSnapshot',
+            'ocrCacheOwnershipKnown',
+            'ocrCacheTaskId',
           };
           final hasUnsafeMarkerFields = m.entries.any(
             (entry) =>
@@ -5637,7 +7245,12 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
               ) &&
               (rawIds == null || rawIds is List) &&
               (m['retireAfterSnapshot'] == null ||
-                  m['retireAfterSnapshot'] is bool);
+                  m['retireAfterSnapshot'] is bool) &&
+              (m['ocrCacheOwnershipKnown'] == null ||
+                  m['ocrCacheOwnershipKnown'] is bool) &&
+              (m['ocrCacheTaskId'] == null ||
+                  (m['ocrCacheTaskId'] is String &&
+                      (m['ocrCacheTaskId'] as String).isNotEmpty));
           if (rawIds is List) {
             for (final id in rawIds) {
               if (id is! String || !RegExp(r'^[a-f0-9]{32}$').hasMatch(id)) {
@@ -5647,18 +7260,29 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
               retryAudioIds.add(id);
             }
           }
+          final ocrCacheOwnershipKnown = m['ocrCacheOwnershipKnown'] == true;
           if (!markerValid || !ownershipKnown) cleanupSafe = false;
+          if (!markerValid || !ocrCacheOwnershipKnown) {
+            ocrCacheCleanupSafe = false;
+          }
           unrestoredRecords.add(
             _unrestoredTaskRecord(
               retryAudioOwnershipKnown: markerValid && ownershipKnown,
               retryAudioIds: markerValid ? retryAudioIds : const {},
               retireAfterSnapshot: markerValid && retireAfterSnapshot,
+              ocrCacheOwnershipKnown: markerValid && ocrCacheOwnershipKnown,
+              ocrCacheTaskId: markerValid && m['ocrCacheTaskId'] is String
+                  ? m['ocrCacheTaskId'] as String
+                  : null,
             ),
           );
           continue;
         }
         final rawMap = m is Map ? m : null;
         final rawRetryData = rawMap?['retryData'];
+        final hasNonOcrRetryCacheReferences = rawMap != null &&
+            rawMap['type'] != BackgroundTaskType.ocr.name &&
+            _ocrCacheReferencesInPersistedValue(rawRetryData).isNotEmpty;
         final hasAsrReferenceShape = rawRetryData is Map &&
             (rawRetryData.containsKey('audioReference') ||
                 rawRetryData.containsKey('audioReferences'));
@@ -5668,6 +7292,27 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
             BackgroundTaskType.values.any(
               (type) => type.name == rawMap?['type'],
             );
+        final hasUnserializedOcrCacheReferences = rawMap != null &&
+            (_hasUnserializedTaskOcrCacheReferences(rawMap) ||
+                hasNonOcrRetryCacheReferences);
+        var ocrCacheOwnershipMarkerRecorded = false;
+        void recordUnknownOcrCacheOwnership() {
+          if (ocrCacheOwnershipMarkerRecorded || rawMap == null) return;
+          unrestoredRecords.add(
+            _unrestoredTaskRecord(
+              retryAudioOwnershipKnown: true,
+              ocrCacheOwnershipKnown: false,
+              ocrCacheTaskId:
+                  rawMap['id'] is String ? rawMap['id'] as String : null,
+            ),
+          );
+          ocrCacheOwnershipMarkerRecorded = true;
+        }
+
+        if (hasUnserializedOcrCacheReferences) {
+          ocrCacheCleanupSafe = false;
+          recordUnknownOcrCacheOwnership();
+        }
         try {
           if (rawMap == null) {
             throw const FormatException('Task row is not an object');
@@ -5675,6 +7320,20 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
           var task = BackgroundTask.fromMap(
             Map<String, dynamic>.from(rawMap),
           );
+          if (task.type == BackgroundTaskType.ocr &&
+              !_canSafelyCollectSkippedOcrCacheReferences(rawRetryData)) {
+            // Keep cleanup fail-closed until retry data has been normalized.
+            ocrCacheCleanupSafe = false;
+          }
+          if (hasUnserializedOcrCacheReferences ||
+              (task.type == BackgroundTaskType.ocr &&
+                  _requiresDurableOcrCacheOwnershipMarker(rawRetryData))) {
+            // Unknown fields can contain cache owners outside the images list.
+            // Persist the sanitized task together with this marker so future
+            // writes cannot accidentally authorize cleanup; removing the task
+            // retires its marker in the same durable snapshot.
+            recordUnknownOcrCacheOwnership();
+          }
           if (task.type == BackgroundTaskType.asr) {
             final rawSteps = rawMap['steps'];
             final hasUnsafeParsedTaskDiagnostics = [
@@ -5790,6 +7449,11 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
                 _unrestoredTaskRecord(
                   retryAudioOwnershipKnown: retryAudioIds != null,
                   retryAudioIds: retryAudioIds ?? const {},
+                  ocrCacheOwnershipKnown: !hasUnserializedOcrCacheReferences,
+                  ocrCacheTaskId: hasUnserializedOcrCacheReferences &&
+                          rawMap['id'] is String
+                      ? rawMap['id'] as String
+                      : null,
                   retireAfterSnapshot: _canRetireAsrOwnershipAfterSnapshot(
                     rawMap,
                     rawRetryData,
@@ -5798,11 +7462,24 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
               );
             }
           } else if (isKnownNonAsrRecord) {
+            if (hasUnserializedOcrCacheReferences) {
+              recordUnknownOcrCacheOwnership();
+            }
+            if (rawMap?['type'] == BackgroundTaskType.ocr.name &&
+                !_canSafelyCollectSkippedOcrCacheReferences(rawRetryData)) {
+              ocrCacheCleanupSafe = false;
+            }
             skippedEntries.add(m);
           } else {
             cleanupSafe = false;
+            ocrCacheCleanupSafe = false;
             unrestoredRecords.add(
-              _unrestoredTaskRecord(retryAudioOwnershipKnown: false),
+              _unrestoredTaskRecord(
+                retryAudioOwnershipKnown: false,
+                ocrCacheOwnershipKnown: false,
+                ocrCacheTaskId:
+                    rawMap?['id'] is String ? rawMap!['id'] as String : null,
+              ),
             );
           }
           debugPrint(
@@ -5817,6 +7494,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         isReadable: true,
         skippedEntries: skippedEntries,
         cleanupSafe: cleanupSafe,
+        ocrCacheCleanupSafe: ocrCacheCleanupSafe,
         unrestoredRecords: unrestoredRecords,
         hasUnsafeSkippedAsrData: hasUnsafeSkippedAsrData,
       );
@@ -5829,6 +7507,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         isReadable: false,
         skippedEntries: <dynamic>[],
         cleanupSafe: false,
+        ocrCacheCleanupSafe: false,
         unrestoredRecords: <dynamic>[_unrestoredTaskRecordMarker],
         hasUnsafeSkippedAsrData: false,
       );
@@ -5875,6 +7554,16 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
 
   Future<bool> _restorePersistedTasks(Completer<void> restoreBarrier) async {
     final loaded = await _loadPersistedTasks();
+    _ocrCacheOwnershipLoaded = loaded.isReadable;
+    _ocrCacheCleanupSafe = loaded.isReadable && loaded.ocrCacheCleanupSafe;
+    _persistedOcrCacheReferences
+      ..clear()
+      ..addAll(
+        _ocrCacheReferencesFromTasksAndEntries(
+          loaded.tasks,
+          [...loaded.skippedEntries, ...loaded.unrestoredRecords],
+        ),
+      );
     _persistedRetryAudioIds
       ..clear()
       ..addAll(
@@ -5985,6 +7674,8 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         _pendingRestoreTaskRemovals.clear();
         await _cleanupOrphanedOcrCache();
       }
+      _ocrCacheOwnershipLoaded = loaded.isReadable;
+      _ocrCacheCleanupSafe = loaded.isReadable && loaded.ocrCacheCleanupSafe;
       return snapshotComplete;
     }
     final restored = <BackgroundTask>[];
@@ -6021,9 +7712,13 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
           );
         }
       }
+      task = _localizeRestoredBackgroundTask(task, localizations);
       restored.add(
         task.status == TaskStatus.running
-            ? task.copyWith(status: TaskStatus.failed, error: '应用重启，已中断')
+            ? task.copyWith(
+                status: TaskStatus.failed,
+                error: localizations.bgTaskInterruptedOnRestart,
+              )
             : task,
       );
     }
@@ -6079,6 +7774,13 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
             _pendingReplacedRestoreAsrRetryAudioIds.isNotEmpty)) {
       _retryAudioCleanupSafe = false;
     }
+    _ocrCacheOwnershipLoaded = loaded.isReadable;
+    _ocrCacheCleanupSafe = snapshotSaved
+        ? _hasKnownOcrCacheOwnership(
+            mounted ? state : (_disposedSnapshot ?? restored),
+            [..._skippedTaskEntries, ..._unrestoredTaskRecords],
+          )
+        : loaded.isReadable && loaded.ocrCacheCleanupSafe;
     // 恢复后没有运行中的任务（进程已重启），结束 iOS 常驻任务保护。
     _syncIosContinuedTask();
     if (snapshotComplete && snapshotSaved) {

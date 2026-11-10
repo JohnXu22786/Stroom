@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 
 import 'package:stroom/pages/unified_task_list/task_flow_card.dart';
 import 'package:stroom/providers/provider_config.dart';
@@ -44,6 +45,9 @@ void main() {
           taskFlowExecutionsProvider.overrideWith((ref) => executions),
         ],
         child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
             home: TaskFlowBuilderPage(flowId: flow.id, startInRunMode: true))));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).first, 'Hello');
@@ -74,6 +78,9 @@ void main() {
           taskFlowExecutionsProvider.overrideWith((ref) => executions),
         ],
         child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
             home: Scaffold(
                 body: TaskFlowCard(execution: executions.state.single)))));
     await tester.pumpAndSettle();
@@ -104,6 +111,9 @@ void main() {
           providerEntriesProvider.overrideWith((ref) => _Entries(entries)),
         ],
         child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
             home: Scaffold(
                 body: Builder(
                     builder: (context) => TextButton(

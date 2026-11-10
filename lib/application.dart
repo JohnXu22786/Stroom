@@ -9,11 +9,13 @@ import 'package:dynamic_color/dynamic_color.dart';
 import 'dart:async';
 import 'dart:io' show exit, Platform;
 
+import 'l10n/app_localizations.dart';
 import 'pages/home_page.dart';
 import 'pages/chat_page.dart';
 import 'pages/files_page.dart';
 import 'pages/settings_page.dart';
 import 'providers/theme_provider.dart';
+import 'providers/locale_provider.dart';
 import 'providers/update_provider.dart';
 import 'providers/notification_provider.dart';
 import 'providers/background_task_provider.dart';
@@ -76,6 +78,7 @@ class _ApplicationState extends ConsumerState<Application>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    unawaited(ref.read(localeProvider.notifier).load());
 
     // 桌面端：把「退出确认」注入托盘服务（关闭窗口/完全退出时使用），
     // 并在首帧后启用「关闭窗口 → 最小化到托盘」行为。
@@ -271,6 +274,9 @@ class _ApplicationState extends ConsumerState<Application>
       }
       if (!mounted) return;
 
+      final navigatorContext = _navigatorKey.currentContext;
+      if (navigatorContext == null || !navigatorContext.mounted) return;
+
       debugPrint('[Application] Warm resume after APK install detected — '
           'showing restart dialog (Kotlin handler may have failed)');
 
@@ -287,7 +293,7 @@ class _ApplicationState extends ConsumerState<Application>
       );
 
       showDialog<void>(
-        context: context,
+        context: navigatorContext,
         barrierDismissible: false,
         builder: (ctx) => AlertDialog(
           title: Row(
@@ -295,26 +301,24 @@ class _ApplicationState extends ConsumerState<Application>
               Icon(Icons.system_update,
                   color: Theme.of(ctx).colorScheme.primary),
               const SizedBox(width: 8),
-              const Text('更新检测'),
+              Text(AppLocalizations.of(ctx)!.updateRestartDialogTitle),
             ],
           ),
-          content: const Text(
-            '检测到应用已更新，建议重启应用以确保稳定性。',
-          ),
+          content: Text(AppLocalizations.of(ctx)!.updateRestartDialogBody),
           actions: [
             TextButton(
               onPressed: () {
                 Navigator.of(ctx).pop();
                 // User chose to continue — hope for the best
               },
-              child: const Text('稍后重启'),
+              child: Text(AppLocalizations.of(ctx)!.updateRestartDialogLater),
             ),
             FilledButton(
               onPressed: () {
                 Navigator.of(ctx).pop();
                 _exitApp();
               },
-              child: const Text('立即重启'),
+              child: Text(AppLocalizations.of(ctx)!.updateRestartDialogNow),
             ),
           ],
         ),
@@ -371,6 +375,9 @@ class _ApplicationState extends ConsumerState<Application>
   @override
   Widget build(BuildContext context) {
     final themeMode = ref.watch(themeProvider);
+    final locale = ref.watch(localeProvider);
+    NotificationService().updateLocaleOverride(locale);
+    DesktopAppService.instance.updateLocaleOverride(locale);
 
     return DynamicColorBuilder(
       builder: (lightDynamic, darkDynamic) {
@@ -506,6 +513,7 @@ class _ApplicationState extends ConsumerState<Application>
                 theme: ThemeData(
                   useMaterial3: true,
                   colorScheme: colorScheme,
+                  cardTheme: const CardThemeData(elevation: 0),
                   popupMenuTheme: StroomMenuStyle.popupMenu(colorScheme),
                   dropdownMenuTheme: DropdownMenuThemeData(
                     menuStyle: StroomMenuStyle.dropdownMenu(colorScheme),
@@ -520,6 +528,7 @@ class _ApplicationState extends ConsumerState<Application>
                 darkTheme: ThemeData(
                   useMaterial3: true,
                   colorScheme: darkColorScheme,
+                  cardTheme: const CardThemeData(elevation: 0),
                   popupMenuTheme: StroomMenuStyle.popupMenu(darkColorScheme),
                   dropdownMenuTheme: DropdownMenuThemeData(
                     menuStyle: StroomMenuStyle.dropdownMenu(darkColorScheme),
@@ -533,15 +542,15 @@ class _ApplicationState extends ConsumerState<Application>
                 ),
                 themeMode: themeMode,
                 localizationsDelegates: const [
+                  AppLocalizations.delegate,
                   GlobalMaterialLocalizations.delegate,
                   GlobalWidgetsLocalizations.delegate,
                   GlobalCupertinoLocalizations.delegate,
                 ],
-                supportedLocales: const [
-                  Locale('zh', 'CN'),
-                  Locale('en', 'US'),
-                ],
-                locale: const Locale('zh', 'CN'),
+                supportedLocales: supportedAppLocales,
+                locale: locale,
+                localeResolutionCallback: (deviceLocale, _) =>
+                    resolveSystemLocale(deviceLocale ?? const Locale('en')),
                 home: const HomePage(),
                 routes: {
                   '/home': (context) => const HomePage(),
@@ -599,6 +608,7 @@ class _InAppBannerOverlay extends ConsumerWidget {
       child: InAppNotificationBanner(
         key: ValueKey(payload.taskId),
         payload: payload,
+        locale: ref.watch(localeProvider),
         isDark: isDark,
         onDismiss: () {
           ref.read(inAppNotificationProvider.notifier).state = null;

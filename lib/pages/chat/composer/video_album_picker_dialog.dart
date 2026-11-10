@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/utils/video_manifest.dart';
 import 'package:stroom/widgets/app_media_picker_dialog.dart';
 
@@ -24,12 +25,13 @@ Future<List<VideoPickerResult>?> showAppVideoPickerDialog(
   BuildContext context, {
   bool multiSelect = true,
 }) async {
+  final l10n = AppLocalizations.of(context)!;
   final result = await showMediaPickerDialog<VideoRecord>(
     context,
     MediaPickerConfig<VideoRecord>(
-      title: '选择应用内视频',
+      title: l10n.chatVideoPickerTitle,
       emptyIcon: Icons.video_library_outlined,
-      emptyText: '暂无视频',
+      emptyText: l10n.chatVideoPickerEmpty,
       fileIcon: Icons.videocam,
       fileIconColor: Colors.indigo,
       multiSelect: multiSelect,
@@ -72,7 +74,7 @@ Future<List<VideoPickerResult>?> showAppVideoPickerDialog(
             ),
             const SizedBox(width: 6),
             Text(
-              _formatDuration(record.duration),
+              _formatDuration(context, record.duration),
               style: TextStyle(fontSize: 12, color: Colors.grey[600]),
             ),
           ],
@@ -146,9 +148,15 @@ String _formatSize(int bytes) {
   return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
 }
 
-String _formatDuration(int milliseconds) {
+String _formatDuration(BuildContext context, int milliseconds) {
+  final l10n = AppLocalizations.of(context)!;
   final seconds = milliseconds ~/ 1000;
-  if (seconds < 60) return '$seconds秒';
-  if (seconds < 3600) return '${seconds ~/ 60}分${seconds % 60}秒';
-  return '${seconds ~/ 3600}时${(seconds % 3600) ~/ 60}分';
+  if (seconds < 60) return l10n.unifiedDurationSeconds(seconds);
+  if (seconds < 3600) {
+    return l10n.unifiedDurationMinutesSeconds(seconds ~/ 60, seconds % 60);
+  }
+  return l10n.unifiedDurationHoursMinutes(
+    seconds ~/ 3600,
+    (seconds % 3600) ~/ 60,
+  );
 }

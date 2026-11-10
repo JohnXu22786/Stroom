@@ -8,6 +8,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:path/path.dart' as p;
 
+import '../l10n/app_localizations.dart';
 import '../providers/text_provider.dart';
 import '../utils/system_pick_utils.dart';
 import '../utils/file_picker_utils.dart';
@@ -94,6 +95,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
   // ====================================================================
 
   Future<void> _importTextFile() async {
+    final l10n = AppLocalizations.of(context)!;
     if (_isImporting) return;
     _isImporting = true;
     // 记录加载对话框是否弹出：异常发生在弹窗之前（如文件选择器/系统
@@ -137,8 +139,6 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
       var count = 0;
       for (final file in files) {
         final bytes = await file.readAsBytes();
-        if (bytes.isEmpty) continue;
-
         final content = utf8.decode(bytes);
         final hash = computeTextHash(bytes);
         final rawName = sanitizeFileName(file.name);
@@ -146,8 +146,8 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
         final format = ext.isNotEmpty ? ext : 'txt';
         if (!_supportedFormats.contains(format)) {
           if (mounted) {
-            ScaffoldMessenger.of(context)
-                .showSnackBar(SnackBar(content: Text('跳过不支持格式: $format')));
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                content: Text(l10n.textStorageSkipUnsupportedFormat(format))));
           }
           continue;
         }
@@ -184,7 +184,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
       if (mounted && count > 0) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('已导入 $count 个文本文件'),
+            content: Text(l10n.textStorageImportSuccess(count)),
             duration: const Duration(seconds: 2),
           ),
         );
@@ -198,7 +198,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('导入失败: $e'),
+            content: Text(l10n.textStorageImportFailed(e.toString())),
             backgroundColor: Colors.red,
             duration: const Duration(seconds: 3),
           ),
@@ -214,6 +214,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
   // ====================================================================
 
   Future<void> _createNewText() async {
+    final l10n = AppLocalizations.of(context)!;
     final result = await Navigator.push<String>(
       context,
       MaterialPageRoute(
@@ -226,7 +227,9 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
       await ref.read(textFolderListProvider.notifier).loadFolders();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('文本已保存'), duration: Duration(seconds: 2)),
+        SnackBar(
+            content: Text(l10n.textStorageSaved),
+            duration: const Duration(seconds: 2)),
       );
     }
   }
@@ -239,8 +242,8 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
     final content = await TextManifest.readText(file.storagePath);
     if (!mounted) return;
     if (content == null) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('无法加载文本内容')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(AppLocalizations.of(context)!.textStorageLoadFailed)));
       return;
     }
 
@@ -275,15 +278,16 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
   // ====================================================================
 
   Future<void> _exportFile(String id) async {
+    final l10n = AppLocalizations.of(context)!;
     try {
       final records = ref.read(textRecordsProvider);
       final file = records.firstWhere((r) => r.id == id);
 
       final content = await TextManifest.readText(file.storagePath);
-      if (content == null || content.isEmpty) {
+      if (content == null) {
         if (mounted) {
-          ScaffoldMessenger.of(context)
-              .showSnackBar(const SnackBar(content: Text('文件数据读取失败')));
+          ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(l10n.textStorageReadFailed)));
         }
         return;
       }
@@ -291,7 +295,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
       final exportName = '${file.name}.${file.format}';
       final data = Uint8List.fromList(utf8.encode(content));
       final outputUri = await saveFileWithType(
-        dialogTitle: '导出文本',
+        dialogTitle: l10n.textStorageExportTitle,
         fileName: exportName,
         extensions: [file.format],
         bytes: data,
@@ -301,7 +305,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
         final outputPath = filePickerLocationLabel(outputUri);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('已导出到: $outputPath'),
+            content: Text(l10n.textStorageExportedTo(outputPath)),
             duration: const Duration(seconds: 3),
           ),
         );
@@ -310,7 +314,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('导出失败: $e'),
+            content: Text(l10n.textStorageExportFailed(e.toString())),
             duration: const Duration(seconds: 3),
           ),
         );
@@ -321,6 +325,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
   /// 批量导出文件。返回用户最终使用的导出目录
   /// （用户取消目录选择或导出失败时返回 null；归档导出返回 ''）。
   Future<String?> _exportFiles(List<String> ids, String targetDirectory) async {
+    final l10n = AppLocalizations.of(context)!;
     try {
       final useArchive = kIsWeb || SystemPickDirectories.isNativeMobile;
       String? outputDir;
@@ -330,7 +335,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
         outputDir = targetDirectory.isNotEmpty ? targetDirectory : null;
         if (outputDir == null) {
           outputDir = await FilePicker.getDirectoryPath(
-            dialogTitle: '选择导出目录',
+            dialogTitle: l10n.textStorageChooseExportDirectory,
             initialDirectory: SystemPickDirectories.documents(),
           );
           if (outputDir == null) return null;
@@ -376,7 +381,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
 
       if (useArchive && exportedCount > 0) {
         final saved = await saveFileWithType(
-          dialogTitle: '导出文本',
+          dialogTitle: l10n.textStorageExportTitle,
           fileName: '文本导出.zip',
           extensions: const ['zip'],
           bytes: encodeUserVisibleExportArchive(files: archiveFiles),
@@ -392,7 +397,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('已导出 $exportedCount 个文件'),
+            content: Text(l10n.textStorageExportedFiles(exportedCount)),
             duration: const Duration(seconds: 2),
           ),
         );
@@ -402,7 +407,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('导出失败: $e'),
+            content: Text(l10n.textStorageExportFailed(e.toString())),
             duration: const Duration(seconds: 3),
           ),
         );
@@ -417,6 +422,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
     List<String> names,
     String targetDirectory,
   ) async {
+    final l10n = AppLocalizations.of(context)!;
     try {
       if (kIsWeb || SystemPickDirectories.isNativeMobile) {
         if (kIsWeb) {
@@ -424,18 +430,18 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
           final action = await showDialog<String>(
             context: context,
             builder: (ctx) => AlertDialog(
-              title: const Text('文件夹导出'),
-              content: const Text('浏览器无法选择导出目录，将下载保留文件夹层级的 ZIP 文件。'),
+              title: Text(l10n.textStorageFolderExportTitle),
+              content: Text(l10n.textStorageWebFolderExportInfo),
               actions: [
                 TextButton(
                   key: const Key('fm_web_export_cancel_btn'),
                   onPressed: () => Navigator.pop(ctx),
-                  child: const Text('取消'),
+                  child: Text(l10n.textStorageCancel),
                 ),
                 ElevatedButton(
                   key: const Key('fm_web_export_individual_btn'),
                   onPressed: () => Navigator.pop(ctx, 'exportFiles'),
-                  child: const Text('下载 ZIP 文件'),
+                  child: Text(l10n.textStorageDownloadZip),
                 ),
               ],
             ),
@@ -472,7 +478,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
         }
         exportedCount = archiveFiles.length;
         final saved = await saveFileWithType(
-          dialogTitle: '导出文本文件夹',
+          dialogTitle: l10n.textStorageExportFolderTitle,
           fileName: '文本文件夹导出.zip',
           extensions: const ['zip'],
           bytes: encodeUserVisibleExportArchive(
@@ -493,7 +499,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('已导出 $exportedCount 个文件'),
+              content: Text(l10n.textStorageExportedFiles(exportedCount)),
               duration: const Duration(seconds: 2),
             ),
           );
@@ -504,7 +510,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
       String? outputDir = targetDirectory.isNotEmpty ? targetDirectory : null;
       if (outputDir == null) {
         outputDir = await FilePicker.getDirectoryPath(
-          dialogTitle: '选择导出目录',
+          dialogTitle: l10n.textStorageChooseExportDirectory,
           initialDirectory: SystemPickDirectories.documents(),
         );
         if (outputDir == null) return null;
@@ -561,7 +567,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('已导出 $exportedCount 个文件'),
+            content: Text(l10n.textStorageExportedFiles(exportedCount)),
             duration: const Duration(seconds: 2),
           ),
         );
@@ -571,7 +577,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('导出失败: $e'),
+            content: Text(l10n.textStorageExportFailed(e.toString())),
             duration: const Duration(seconds: 3),
           ),
         );
@@ -589,6 +595,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
   // ====================================================================
 
   Future<void> _copyFile(String id, String selectedFolder) async {
+    final l10n = AppLocalizations.of(context)!;
     final records = ref.read(textRecordsProvider);
     try {
       final source = records.firstWhere((r) => r.id == id);
@@ -617,7 +624,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('复制失败: $e'),
+            content: Text(l10n.textStorageCopyFailed(e.toString())),
             duration: const Duration(seconds: 2),
           ),
         );
@@ -655,12 +662,12 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
                 onPressed: _createNewText,
                 style: ElevatedButton.styleFrom(
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                 ),
                 icon: const Icon(Icons.add_circle_outline, size: 20),
-                label: const Text(
-                  '新建',
+                label: Text(
+                  AppLocalizations.of(context)!.textStorageCreateNew,
                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
                 ),
               ),
@@ -674,12 +681,12 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
                 onPressed: _importTextFile,
                 style: ElevatedButton.styleFrom(
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                 ),
                 icon: const Icon(Icons.file_download_outlined, size: 20),
-                label: const Text(
-                  '导入',
+                label: Text(
+                  AppLocalizations.of(context)!.textStorageImport,
                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
                 ),
               ),
@@ -717,7 +724,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
 
     // FileManagerConfig
     final config = FileManagerConfig<TextRecord>(
-      title: '文本',
+      title: AppLocalizations.of(context)!.textStorageTitle,
       topActionBar: topActionBar,
       showThumbnailToggle: false,
       fileIconBuilder: fileIconBuilder,
@@ -733,11 +740,11 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
       renameFormatOptions: kTextFileFormats,
       extraPopupMenuItems: (file) => [
         // 默认菜单已包含「预览」，这里只补充页面特有的导出项
-        const PopupMenuItem(
+        PopupMenuItem(
           value: 'export',
           child: ListTile(
             leading: Icon(Icons.file_download, size: 20),
-            title: Text('导出到本地'),
+            title: Text(AppLocalizations.of(context)!.textStorageExportToLocal),
             dense: true,
             contentPadding: EdgeInsets.zero,
           ),

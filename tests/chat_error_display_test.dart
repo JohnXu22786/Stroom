@@ -33,7 +33,8 @@ void main() {
     test('returns network error message for Chinese 连接错误', () {
       final result = formatChatErrorMessage(Exception('连接错误'));
       expect(result, contains('错误:'));
-      expect(result, contains('连接错误'));
+      expect(result, contains('无法连接到服务器'));
+      expect(result, isNot(contains('连接错误')));
     });
 
     test('returns network error message for Connection refused', () {

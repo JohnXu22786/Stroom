@@ -4,6 +4,8 @@ import 'dart:ui' as ui;
 
 import 'package:extended_image/extended_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:stroom/pages/extended_image_editor_page.dart';
@@ -43,7 +45,8 @@ Future<void> pumpUntil(
       fail('Timed out waiting for condition');
     }
     await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 100)));
+      () => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
     await tester.pump(const Duration(milliseconds: 50));
   }
 }
@@ -58,25 +61,27 @@ Future<void> _pushEditor(
   ValueChanged<Uint8List?>? onPopResult,
   bool waitForEditorReady = true,
 }) async {
-  await tester.pumpWidget(MaterialApp(
-    home: Builder(
-      builder: (context) => ElevatedButton(
-        onPressed: () async {
-          final result = await Navigator.push<Uint8List>(
-            context,
-            MaterialPageRoute(
-              builder: (_) => ExtendedImageEditorPage(
-                imageBytes: imageBytes,
-                fileName: 'test.png',
+  await tester.pumpWidget(
+    _localizedMaterialApp(
+      home: Builder(
+        builder: (context) => ElevatedButton(
+          onPressed: () async {
+            final result = await Navigator.push<Uint8List>(
+              context,
+              MaterialPageRoute(
+                builder: (_) => ExtendedImageEditorPage(
+                  imageBytes: imageBytes,
+                  fileName: 'test.png',
+                ),
               ),
-            ),
-          );
-          onPopResult?.call(result);
-        },
-        child: const Text('Open'),
+            );
+            onPopResult?.call(result);
+          },
+          child: const Text('Open'),
+        ),
       ),
     ),
-  ));
+  );
 
   await tester.tap(find.text('Open'));
   await tester.pump();
@@ -91,7 +96,8 @@ Future<void> _pushEditor(
   } else {
     // Give the (failing) load a moment to settle either way.
     await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 300)));
+      () => Future<void>.delayed(const Duration(milliseconds: 300)),
+    );
     await tester.pump();
   }
 }
@@ -108,29 +114,43 @@ Uint8List _createSmallJpeg() {
   return img.encodeJpg(im, quality: 90);
 }
 
+Widget _localizedMaterialApp({required Widget home}) => MaterialApp(
+      locale: const Locale('zh', 'CN'),
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: home,
+    );
+
 void main() {
   group('ExtendedImageEditorPage', () {
     testWidgets('close button pops with null', (tester) async {
       Uint8List? result;
       final png = await tester.runAsync(createTestImage);
-      await tester.pumpWidget(MaterialApp(
-        home: Builder(
-          builder: (context) => ElevatedButton(
-            onPressed: () async {
-              result = await Navigator.push<Uint8List>(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => ExtendedImageEditorPage(
-                    imageBytes: png!,
-                    fileName: 'test.jpg',
+      await tester.pumpWidget(
+        _localizedMaterialApp(
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () async {
+                result = await Navigator.push<Uint8List>(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ExtendedImageEditorPage(
+                      imageBytes: png!,
+                      fileName: 'test.jpg',
+                    ),
                   ),
-                ),
-              );
-            },
-            child: const Text('Open'),
+                );
+              },
+              child: const Text('Open'),
+            ),
           ),
         ),
-      ));
+      );
 
       await tester.tap(find.text('Open'));
       await tester.pump();
@@ -152,187 +172,224 @@ void main() {
     // does the page pop back with the edited bytes. While processing, the
     // user cannot leave (system back / close / 保存 are all blocked).
     // ====================================================================
-    group('in-place processing: the page stays open until the image is done',
-        () {
-      testWidgets(
-          'tapping 保存 keeps the page alive with a processing overlay '
-          'while processing, then pops with the edited bytes', (tester) async {
-        final png = await tester.runAsync(createTestImage);
-        Uint8List? popResult;
-        await _pushEditor(
+    group(
+      'in-place processing: the page stays open until the image is done',
+      () {
+        testWidgets(
+            'tapping 保存 keeps the page alive with a processing overlay '
+            'while processing, then pops with the edited bytes', (
           tester,
-          imageBytes: png!,
-          onPopResult: (r) => popResult = r,
-        );
+        ) async {
+          final png = await tester.runAsync(createTestImage);
+          Uint8List? popResult;
+          await _pushEditor(
+            tester,
+            imageBytes: png!,
+            onPopResult: (r) => popResult = r,
+          );
 
-        // Tap 保存 — the page must NOT close: it processes in place.
-        await tester.tap(find.text('保存'));
-        await tester.pump();
+          // Tap 保存 — the page must NOT close: it processes in place.
+          await tester.tap(find.text('保存'));
+          await tester.pump();
 
-        // The editor page is still alive and shows a processing overlay.
-        expect(find.byType(ExtendedImageEditorPage), findsOneWidget,
-            reason: 'the editor must stay on screen while processing');
-        expect(find.byType(CircularProgressIndicator), findsOneWidget,
-            reason: 'a processing spinner must be visible');
-        expect(find.text('正在处理图片，请稍候…'), findsOneWidget,
-            reason: 'the processing overlay must show a status message');
-        expect(popResult, isNull,
-            reason: 'the page must not pop before processing finishes');
+          // The editor page is still alive and shows a processing overlay.
+          expect(
+            find.byType(ExtendedImageEditorPage),
+            findsOneWidget,
+            reason: 'the editor must stay on screen while processing',
+          );
+          expect(
+            find.byType(CircularProgressIndicator),
+            findsOneWidget,
+            reason: 'a processing spinner must be visible',
+          );
+          expect(
+            find.text('正在处理图片，请稍候…'),
+            findsOneWidget,
+            reason: 'the processing overlay must show a status message',
+          );
+          expect(
+            popResult,
+            isNull,
+            reason: 'the page must not pop before processing finishes',
+          );
 
-        // Only after the pipeline completes does the page pop with the
-        // edited bytes.
-        await pumpUntil(tester, () => popResult != null);
-        expect(popResult, isNotNull);
-        expect(popResult!.isNotEmpty, isTrue);
-      });
+          // Only after the pipeline completes does the page pop with the
+          // edited bytes.
+          await pumpUntil(tester, () => popResult != null);
+          expect(popResult, isNotNull);
+          expect(popResult!.isNotEmpty, isTrue);
+        });
 
-      testWidgets('delivered bytes decode to a valid image', (tester) async {
-        final png = await tester.runAsync(createTestImage);
-        Uint8List? popResult;
-        await _pushEditor(
+        testWidgets('delivered bytes decode to a valid image', (tester) async {
+          final png = await tester.runAsync(createTestImage);
+          Uint8List? popResult;
+          await _pushEditor(
+            tester,
+            imageBytes: png!,
+            onPopResult: (r) => popResult = r,
+          );
+
+          await tester.tap(find.text('保存'));
+          await tester.pump();
+          await pumpUntil(tester, () => popResult != null);
+
+          // The 8x8 input PNG should come back as a valid 8x8 image.
+          final codec = await tester.runAsync(
+            () => ui.instantiateImageCodec(popResult!),
+          );
+          final frame = await tester.runAsync(() => codec!.getNextFrame());
+          expect(frame!.image.width, 8);
+          expect(frame.image.height, 8);
+          frame.image.dispose();
+          codec!.dispose();
+        });
+
+        testWidgets('closing with X does not run the pipeline', (tester) async {
+          final png = await tester.runAsync(createTestImage);
+          Uint8List? popResult;
+          await _pushEditor(
+            tester,
+            imageBytes: png!,
+            onPopResult: (r) => popResult = r,
+          );
+
+          // Close the editor without confirming — no processing should run.
+          await tester.tap(find.byIcon(Icons.close));
+          await tester.pump();
+
+          // Closing must NOT flash the processing overlay — X runs no
+          // pipeline, so no "正在处理图片" feedback may appear.
+          expect(
+            find.text('正在处理图片，请稍候…'),
+            findsNothing,
+            reason: 'the processing overlay must not flash on close',
+          );
+
+          await tester.pumpAndSettle();
+
+          expect(popResult, isNull);
+          expect(find.byType(ExtendedImageEditorPage), findsNothing);
+        });
+
+        testWidgets(
+            'invalid image data shows an error snackbar and the page '
+            'stays on screen', (tester) async {
+          // Invalid image data — the editor image never loads, so the
+          // editor state is never created and confirming reports an error
+          // without starting the pipeline.
+          await _pushEditor(
+            tester,
+            imageBytes: Uint8List.fromList([1, 2, 3]),
+            // The image never loads — do not wait for an editor state.
+            waitForEditorReady: false,
+          );
+
+          await tester.tap(find.text('保存'));
+          await tester.pump();
+          await tester.pumpAndSettle();
+
+          expect(find.byType(SnackBar), findsOneWidget);
+          expect(
+            find.byType(ExtendedImageEditorPage),
+            findsOneWidget,
+            reason: 'a failed edit must not close the editor',
+          );
+        });
+
+        testWidgets('system back is blocked while the image processes', (
           tester,
-          imageBytes: png!,
-          onPopResult: (r) => popResult = r,
-        );
+        ) async {
+          final png = await tester.runAsync(createTestImage);
+          Uint8List? popResult;
+          await _pushEditor(
+            tester,
+            imageBytes: png!,
+            onPopResult: (r) => popResult = r,
+          );
 
-        await tester.tap(find.text('保存'));
-        await tester.pump();
-        await pumpUntil(tester, () => popResult != null);
+          await tester.tap(find.text('保存'));
+          await tester.pump();
 
-        // The 8x8 input PNG should come back as a valid 8x8 image.
-        final codec =
-            await tester.runAsync(() => ui.instantiateImageCodec(popResult!));
-        final frame = await tester.runAsync(() => codec!.getNextFrame());
-        expect(frame!.image.width, 8);
-        expect(frame.image.height, 8);
-        frame.image.dispose();
-        codec!.dispose();
-      });
+          // During processing a system back must not destroy the page.
+          await tester.binding.handlePopRoute();
+          await tester.pump();
+          expect(
+            find.byType(ExtendedImageEditorPage),
+            findsOneWidget,
+            reason: 'system back must be blocked while processing',
+          );
 
-      testWidgets('closing with X does not run the pipeline', (tester) async {
-        final png = await tester.runAsync(createTestImage);
-        Uint8List? popResult;
-        await _pushEditor(
+          // After the pipeline finishes the page pops with the bytes.
+          await pumpUntil(tester, () => popResult != null);
+          await pumpUntil(
+            tester,
+            () => find.byType(ExtendedImageEditorPage).evaluate().isEmpty,
+          );
+        });
+
+        testWidgets('close and 保存 are disabled while the image processes', (
           tester,
-          imageBytes: png!,
-          onPopResult: (r) => popResult = r,
-        );
+        ) async {
+          final png = await tester.runAsync(createTestImage);
+          await _pushEditor(tester, imageBytes: png!);
 
-        // Close the editor without confirming — no processing should run.
-        await tester.tap(find.byIcon(Icons.close));
-        await tester.pump();
+          await tester.tap(find.text('保存'));
+          await tester.pump();
 
-        // Closing must NOT flash the processing overlay — X runs no
-        // pipeline, so no "正在处理图片" feedback may appear.
-        expect(find.text('正在处理图片，请稍候…'), findsNothing,
-            reason: 'the processing overlay must not flash on close');
+          // The close button must be blocked so the user cannot leave
+          // mid-processing.
+          final closeBtn = tester.widget<IconButton>(
+            find.widgetWithIcon(IconButton, Icons.close),
+          );
+          expect(
+            closeBtn.onPressed,
+            isNull,
+            reason: 'close must be disabled while processing',
+          );
 
-        await tester.pumpAndSettle();
+          // 保存 is disabled too — the full-screen overlay shows the
+          // spinner instead of the button.
+          final saveBtn = tester.widget<TextButton>(
+            find.widgetWithText(TextButton, '保存'),
+          );
+          expect(
+            saveBtn.onPressed,
+            isNull,
+            reason: '保存 must be disabled while processing',
+          );
+        });
 
-        expect(popResult, isNull);
-        expect(find.byType(ExtendedImageEditorPage), findsNothing);
-      });
+        testWidgets(
+            'double-tapping close cannot pop the page below the '
+            'editor', (tester) async {
+          final png = await tester.runAsync(createTestImage);
+          Uint8List? popResult;
+          await _pushEditor(
+            tester,
+            imageBytes: png!,
+            onPopResult: (r) => popResult = r,
+          );
 
-      testWidgets(
-          'invalid image data shows an error snackbar and the page '
-          'stays on screen', (tester) async {
-        // Invalid image data — the editor image never loads, so the
-        // editor state is never created and confirming reports an error
-        // without starting the pipeline.
-        await _pushEditor(
-          tester,
-          imageBytes: Uint8List.fromList([1, 2, 3]),
-          // The image never loads — do not wait for an editor state.
-          waitForEditorReady: false,
-        );
+          // Close the editor — the first tap starts the exit transition.
+          await tester.tap(find.byIcon(Icons.close));
+          await tester.pump();
 
-        await tester.tap(find.text('保存'));
-        await tester.pump();
-        await tester.pumpAndSettle();
+          // A second tap during the exit transition must be a no-op — it
+          // must never pop the host page below the exiting editor.
+          await tester.tap(find.byIcon(Icons.close), warnIfMissed: false);
+          await tester.pump();
+          await tester.pumpAndSettle();
 
-        expect(find.byType(SnackBar), findsOneWidget);
-        expect(find.byType(ExtendedImageEditorPage), findsOneWidget,
-            reason: 'a failed edit must not close the editor');
-      });
-
-      testWidgets('system back is blocked while the image processes',
-          (tester) async {
-        final png = await tester.runAsync(createTestImage);
-        Uint8List? popResult;
-        await _pushEditor(
-          tester,
-          imageBytes: png!,
-          onPopResult: (r) => popResult = r,
-        );
-
-        await tester.tap(find.text('保存'));
-        await tester.pump();
-
-        // During processing a system back must not destroy the page.
-        await tester.binding.handlePopRoute();
-        await tester.pump();
-        expect(find.byType(ExtendedImageEditorPage), findsOneWidget,
-            reason: 'system back must be blocked while processing');
-
-        // After the pipeline finishes the page pops with the bytes.
-        await pumpUntil(tester, () => popResult != null);
-        await pumpUntil(
-          tester,
-          () => find.byType(ExtendedImageEditorPage).evaluate().isEmpty,
-        );
-      });
-
-      testWidgets('close and 保存 are disabled while the image processes',
-          (tester) async {
-        final png = await tester.runAsync(createTestImage);
-        await _pushEditor(tester, imageBytes: png!);
-
-        await tester.tap(find.text('保存'));
-        await tester.pump();
-
-        // The close button must be blocked so the user cannot leave
-        // mid-processing.
-        final closeBtn = tester.widget<IconButton>(
-          find.widgetWithIcon(IconButton, Icons.close),
-        );
-        expect(closeBtn.onPressed, isNull,
-            reason: 'close must be disabled while processing');
-
-        // 保存 is disabled too — the full-screen overlay shows the
-        // spinner instead of the button.
-        final saveBtn = tester.widget<TextButton>(
-          find.widgetWithText(TextButton, '保存'),
-        );
-        expect(saveBtn.onPressed, isNull,
-            reason: '保存 must be disabled while processing');
-      });
-
-      testWidgets(
-          'double-tapping close cannot pop the page below the '
-          'editor', (tester) async {
-        final png = await tester.runAsync(createTestImage);
-        Uint8List? popResult;
-        await _pushEditor(
-          tester,
-          imageBytes: png!,
-          onPopResult: (r) => popResult = r,
-        );
-
-        // Close the editor — the first tap starts the exit transition.
-        await tester.tap(find.byIcon(Icons.close));
-        await tester.pump();
-
-        // A second tap during the exit transition must be a no-op — it
-        // must never pop the host page below the exiting editor.
-        await tester.tap(find.byIcon(Icons.close), warnIfMissed: false);
-        await tester.pump();
-        await tester.pumpAndSettle();
-
-        expect(find.text('Open'), findsOneWidget,
-            reason: 'the host page must survive a double close tap');
-        expect(popResult, isNull);
-      });
-    });
+          expect(
+            find.text('Open'),
+            findsOneWidget,
+            reason: 'the host page must survive a double close tap',
+          );
+          expect(popResult, isNull);
+        });
+      },
+    );
 
     // ── 输出格式（回归：非 JPEG 源必须输出编码后的 PNG 而不是
     //    raw RGBA 像素；JPEG 源输出 JPEG q90 而非体积暴涨的 PNG）──
@@ -343,11 +400,17 @@ void main() {
         final png = await tester.runAsync(createTestImage);
         final bytes = await tester.runAsync(
           () => processQuickEditImage(
-              rawData: png!, cropRect: null, action: null),
+            rawData: png!,
+            cropRect: null,
+            action: null,
+          ),
         );
 
-        expect(img.decodeImage(bytes!), isNotNull,
-            reason: 'PNG 源编辑结果必须是可解码的图片（不能是 raw RGBA）');
+        expect(
+          img.decodeImage(bytes!),
+          isNotNull,
+          reason: 'PNG 源编辑结果必须是可解码的图片（不能是 raw RGBA）',
+        );
         expect(bytes[0], 0x89);
         expect(bytes[1], 0x50, reason: 'PNG 源应保持无损 PNG 输出');
       });
@@ -361,8 +424,11 @@ void main() {
           ),
         );
 
-        expect(img.decodeImage(bytes!), isNotNull,
-            reason: 'JPEG 源编辑结果必须是可解码的图片');
+        expect(
+          img.decodeImage(bytes!),
+          isNotNull,
+          reason: 'JPEG 源编辑结果必须是可解码的图片',
+        );
         expect(bytes[0], 0xFF);
         expect(bytes[1], 0xD8, reason: 'JPEG 照片源应输出 JPEG（旧实现输出 PNG 导致体积暴涨）');
       });
@@ -487,8 +553,9 @@ void main() {
         }
       });
 
-      testWidgets('裁剪 + 旋转 90°：裁剪框按旋转后坐标解释（与编辑器 getCropRect 一致）',
-          (tester) async {
+      testWidgets('裁剪 + 旋转 90°：裁剪框按旋转后坐标解释（与编辑器 getCropRect 一致）', (
+        tester,
+      ) async {
         // 8x6 右旋 90° 后框架是 6x8（顺时针：原图左上 → 框架右上）；
         // 旋转后裁剪框 (0,4,3,4) 对应原图右下象限（黄），输出 3x4。
         final bytes = await tester.runAsync(

@@ -6,6 +6,8 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:stroom/pages/chat/dialogs/mermaid_preview_dialog.dart';
 import 'package:stroom/widgets/mermaid_render_widget.dart';
 
@@ -23,7 +25,7 @@ void main() {
 
         expect(
           preview.webView.params.initialData?.data,
-          contains('No Mermaid code to preview'),
+          contains('没有可渲染的 Mermaid 代码'),
         );
         expect(preview.webView.controller.loadedUrls, isEmpty);
         expect(preview.webView.controller.storedSources, isEmpty);
@@ -73,6 +75,14 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () => showMermaidPreviewDialog(
@@ -350,6 +360,14 @@ Future<_CreatedWebPreviewHarness> _openPreviewWithCreatedWebView(
 
   await tester.pumpWidget(
     MaterialApp(
+      locale: const Locale('zh', 'CN'),
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       home: Builder(
         builder: (context) => ElevatedButton(
           onPressed: () => showMermaidPreviewDialog(

@@ -1,10 +1,12 @@
 import 'dart:convert';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/models/assistant.dart';
 import 'package:stroom/models/built_in_prompts.dart';
 import 'package:stroom/providers/assistant_provider.dart';
 import 'package:stroom/providers/conversation_provider.dart';
+import 'package:stroom/providers/locale_provider.dart';
 
 void main() {
   group('AssistantModel', () {
@@ -379,6 +381,66 @@ void main() {
   });
 
   group('AssistantProvider', () {
+    test(
+      'seeds a localized default assistant for the selected locale',
+      () async {
+        for (final locale in [
+          (
+            'en_US',
+            'General Assistant',
+            "You are a helpful AI assistant. Answer the user's questions clearly and helpfully.",
+          ),
+          (
+            'zh_CN',
+            '通用助手',
+            '你是一个有帮助的AI助手。请用中文回答用户的问题。',
+          ),
+        ]) {
+          SharedPreferences.setMockInitialValues({
+            localePreferenceKey: locale.$1,
+          });
+          final container = ProviderContainer();
+          addTearDown(container.dispose);
+
+          final notifier = container.read(assistantProvider.notifier);
+          await notifier.ready;
+
+          expect(notifier.state, hasLength(1));
+          expect(notifier.state.single.name, locale.$2);
+          expect(notifier.state.single.prompt, locale.$3);
+          final prefs = await SharedPreferences.getInstance();
+          final saved =
+              (jsonDecode(prefs.getString('assistants')!) as List).single;
+          expect(saved['name'], locale.$2);
+          expect(saved['prompt'], locale.$3);
+        }
+      },
+    );
+
+    test('keeps a stored assistant name and prompt unchanged', () async {
+      final stored = Assistant(
+        id: 'stored-assistant',
+        name: 'User assistant',
+        prompt: 'User-authored prompt',
+      );
+      SharedPreferences.setMockInitialValues({
+        localePreferenceKey: 'zh_CN',
+        'assistants': jsonEncode([stored.toMap()]),
+      });
+      final prefs = await SharedPreferences.getInstance();
+      final originalJson = prefs.getString('assistants');
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+
+      final notifier = container.read(assistantProvider.notifier);
+      await notifier.ready;
+
+      expect(notifier.state.single.id, stored.id);
+      expect(notifier.state.single.name, stored.name);
+      expect(notifier.state.single.prompt, stored.prompt);
+      expect(prefs.getString('assistants'), originalJson);
+    });
+
     test('updateAssistantDefaults can clear model and tool defaults', () {
       SharedPreferences.setMockInitialValues({});
       final notifier = AssistantsNotifier();
@@ -929,7 +991,9 @@ void main() {
     test(
         'migration creates default assistant when none exists and migrates conversations',
         () async {
-      SharedPreferences.setMockInitialValues({});
+      SharedPreferences.setMockInitialValues({
+        localePreferenceKey: 'zh_CN',
+      });
       final prefs = await SharedPreferences.getInstance();
 
       // Pre-populate with legacy conversations (no assistantId)
@@ -956,7 +1020,7 @@ void main() {
       final assistants =
           (jsonDecode(assistantsJson!) as List).cast<Map<String, dynamic>>();
       expect(assistants.length, 1);
-      expect(assistants[0]['name'], '默认助手');
+      expect(assistants[0]['name'], '通用助手');
 
       // Verify conversations have the new assistant's ID
       final conversationsJson = prefs.getString('conversations');
@@ -969,9 +1033,32 @@ void main() {
       expect(prefs.getBool('migrated_old_conversations'), isTrue);
     });
 
+    test('migration uses English for a new default assistant', () async {
+      SharedPreferences.setMockInitialValues({
+        localePreferenceKey: 'en_US',
+      });
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        'conversations',
+        jsonEncode([Conversation(title: 'Legacy conversation').toMap()]),
+      );
+
+      await migrateConversationsFromPrefs(prefs);
+
+      final assistants = (jsonDecode(prefs.getString('assistants')!) as List)
+          .cast<Map<String, dynamic>>();
+      expect(assistants.single['name'], 'General Assistant');
+      expect(
+        assistants.single['prompt'],
+        "You are a helpful AI assistant. Answer the user's questions clearly and helpfully.",
+      );
+    });
+
     test('migration creates default assistant with expected properties',
         () async {
-      SharedPreferences.setMockInitialValues({});
+      SharedPreferences.setMockInitialValues({
+        localePreferenceKey: 'zh_CN',
+      });
       final prefs = await SharedPreferences.getInstance();
 
       await prefs.setString(
@@ -987,10 +1074,13 @@ void main() {
       final assistants =
           (jsonDecode(assistantsJson!) as List).cast<Map<String, dynamic>>();
       expect(assistants.length, 1);
-      expect(assistants[0]['name'], '默认助手');
+      expect(assistants[0]['name'], '通用助手');
       expect(assistants[0]['emoji'], '🤖');
       expect(assistants[0]['description'], '');
-      expect(assistants[0]['prompt'], '你是一个有帮助的AI助手。请用中文回答用户的问题。');
+      expect(
+        assistants[0]['prompt'],
+        '你是一个有帮助的AI助手。请用中文回答用户的问题。',
+      );
     });
 
     test(
@@ -1029,6 +1119,8 @@ void main() {
           (jsonDecode(assistantsJson!) as List).cast<Map<String, dynamic>>();
       expect(assistants.length, 1);
       expect(assistants[0]['id'], existingAssistantId);
+      expect(assistants[0]['name'], existingAssistant.name);
+      expect(assistants[0]['prompt'], existingAssistant.prompt);
 
       // Verify conversation was migrated to the existing assistant
       final conversationsJson = prefs.getString('conversations');

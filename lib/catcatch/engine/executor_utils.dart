@@ -1,15 +1,21 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/widgets.dart' show Locale;
 import 'package:path/path.dart' as p;
 import 'package:dio/dio.dart';
+import '../../l10n/app_localizations.dart';
+import '../../providers/locale_provider.dart';
 import '../models/catcatch_task.dart';
 
-const String webDownloadHint = 'Web 端不支持直接下载媒体文件。\n'
-    '请安装浏览器扩展「CatCatch（猫抓）」后再试。\n'
-    '作者：笨笨猫（xifangczy），完全免费开源。\n'
-    '注意：请认准作者，避免下载到付费版/山寨版。\n'
-    'GitHub 地址: https://github.com/xifangczy/cat-catch';
+String webDownloadHint({Locale? locale}) {
+  final strings = appLocalizationsForLocale(locale);
+  return '${strings.catCatchWebDownloadHint}\n'
+      '${strings.catCatchWebInstallExtension}\n'
+      '${strings.catCatchWebAuthorAttribution}\n'
+      '${strings.catCatchWebOfficialWarning}\n'
+      '${strings.catCatchWebGitHubAddress}';
+}
 
 String formatExecutorDuration(Duration d) {
   final h = d.inHours.toString().padLeft(2, '0');
@@ -110,29 +116,30 @@ double? parseDurationToSeconds(String duration) {
   return double.tryParse(duration);
 }
 
-String formatDioError(DioException e) {
+String formatDioError(DioException e, {Locale? locale}) {
+  final strings = appLocalizationsForLocale(locale);
   final String originalMsg = e.message ?? '';
   String extra;
   if (originalMsg.isNotEmpty) {
-    extra = '\n原始错误: $originalMsg';
+    extra = '\n${strings.catCatchOriginalError(originalMsg)}';
   } else {
     extra = '';
   }
 
   switch (e.type) {
     case DioExceptionType.connectionTimeout:
-      return '连接超时，请检查网络或服务器状态$extra';
+      return '${strings.catCatchConnectionTimeout}$extra';
     case DioExceptionType.sendTimeout:
-      return '发送请求超时$extra';
+      return '${strings.catCatchSendTimeout}$extra';
     case DioExceptionType.receiveTimeout:
-      return '接收响应超时，服务器响应过慢$extra';
+      return '${strings.catCatchReceiveTimeout}$extra';
     case DioExceptionType.connectionError:
       if (kIsWeb) {
-        return '无法连接到服务器。\n\n$webDownloadHint';
+        return '${strings.catCatchCannotConnect}$extra\n\n${webDownloadHint(locale: locale)}';
       }
-      return '无法连接到服务器，请检查URL是否正确$extra';
+      return '${strings.catCatchConnectionError}$extra';
     case DioExceptionType.badCertificate:
-      return '服务器证书验证失败$extra';
+      return '${strings.catCatchBadCertificate}$extra';
     case DioExceptionType.badResponse:
       final code = e.response?.statusCode ?? 0;
       final body = e.response?.data;
@@ -146,10 +153,11 @@ String formatDioError(DioException e) {
       } else {
         bodyStr = body?.toString() ?? '';
       }
-      return '服务器返回错误 (HTTP $code)${bodyStr.isNotEmpty ? ": $bodyStr" : ""}$extra';
+      return '${strings.catCatchBadResponse(code)}${bodyStr.isNotEmpty ? ": $bodyStr" : ""}$extra';
     case DioExceptionType.cancel:
-      return '请求已取消$extra';
+      return '${strings.catCatchRequestCancelled}$extra';
     default:
-      return '网络错误: ${e.message ?? "未知错误"}';
+      return strings
+          .catCatchNetworkError(e.message ?? strings.catCatchUnknownError);
   }
 }

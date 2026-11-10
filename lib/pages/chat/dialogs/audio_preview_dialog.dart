@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:just_audio/just_audio.dart';
 
 /// Audio preview dialog — plays an audio file using [just_audio].
@@ -189,7 +190,7 @@ class _AudioPreviewDialogState extends State<AudioPreviewDialog> {
             const SizedBox(height: 8),
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('关闭'),
+              child: Text(AppLocalizations.of(context)!.chatAudioPreviewClose),
             ),
           ],
         ),

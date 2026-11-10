@@ -1,6 +1,9 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+
+import '../l10n/app_localizations.dart';
+
 import 'package:extended_image/extended_image.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
@@ -72,9 +75,12 @@ class ImagePreviewDialog extends StatelessWidget {
                       shape: BoxShape.circle,
                     ),
                     child: IconButton(
-                      icon:
-                          const Icon(Icons.crop, color: Colors.white, size: 24),
-                      tooltip: '裁剪',
+                      icon: const Icon(
+                        Icons.crop,
+                        color: Colors.white,
+                        size: 24,
+                      ),
+                      tooltip: AppLocalizations.of(context)!.imagePreviewCrop,
                       onPressed: () => Navigator.pop(context, true),
                     ),
                   ),
@@ -85,9 +91,12 @@ class ImagePreviewDialog extends StatelessWidget {
                       shape: BoxShape.circle,
                     ),
                     child: IconButton(
-                      icon:
-                          const Icon(Icons.edit, color: Colors.white, size: 24),
-                      tooltip: '编辑',
+                      icon: const Icon(
+                        Icons.edit,
+                        color: Colors.white,
+                        size: 24,
+                      ),
+                      tooltip: AppLocalizations.of(context)!.imagePreviewEdit,
                       onPressed: () => Navigator.pop(context, true),
                     ),
                   ),
@@ -115,13 +124,16 @@ class ImagePreviewDialog extends StatelessWidget {
   Widget _buildContent(BuildContext context) {
     final data = imageData;
     if (data == null || data.isEmpty) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(Icons.broken_image, size: 48, color: Colors.white54),
             SizedBox(height: 8),
-            Text('无法加载图片', style: TextStyle(color: Colors.white54)),
+            Text(
+              AppLocalizations.of(context)!.imagePreviewLoadFailed,
+              style: TextStyle(color: Colors.white54),
+            ),
           ],
         ),
       );
@@ -156,13 +168,16 @@ class ImagePreviewDialog extends StatelessWidget {
       ),
       loadStateChanged: (state) {
         if (state.extendedImageLoadState == LoadState.failed) {
-          return const Center(
+          return Center(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(Icons.broken_image, size: 48, color: Colors.white54),
                 SizedBox(height: 8),
-                Text('无法加载图片', style: TextStyle(color: Colors.white54)),
+                Text(
+                  AppLocalizations.of(context)!.imagePreviewLoadFailed,
+                  style: TextStyle(color: Colors.white54),
+                ),
               ],
             ),
           );

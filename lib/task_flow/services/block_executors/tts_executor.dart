@@ -22,6 +22,7 @@ Future<String> executeTtsBlock({
   required TaskListNotifier taskListNotifier,
   required ProviderEntriesState providerEntries,
   bool temporaryOutput = false,
+  String? taskFailedFallback,
 }) async {
   // Model-level selection, same granularity as the TTS page: the shared
   // flattened list (configs without host/key excluded).
@@ -148,7 +149,7 @@ Future<String> executeTtsBlock({
           TaskStatus.failed,
         );
         throw BlockExecutionException(
-          task.error ?? '任务失败',
+          task.error ?? taskFailedFallback ?? 'Task failed',
           blockType: def.typeKey.name,
           blockTitle: def.label,
         );

@@ -7,6 +7,9 @@ import 'package:flutter/foundation.dart'
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart' show SystemNavigator;
 
+import '../l10n/app_localizations.dart';
+import '../providers/locale_provider.dart';
+
 import 'app_restart.dart';
 import 'startup_sequence_controller.dart';
 import 'startup_page.dart';
@@ -34,14 +37,14 @@ import '../widgets/update_dialog.dart';
 ///
 /// Renders startup progress from [StartupSequenceController] and owns only
 /// UI actions such as the migration dialog and transition to the main app.
-class StartupApp extends StatefulWidget {
+class StartupApp extends ConsumerStatefulWidget {
   const StartupApp({super.key});
 
   @override
-  State<StartupApp> createState() => _StartupAppState();
+  ConsumerState<StartupApp> createState() => _StartupAppState();
 }
 
-class _StartupAppState extends State<StartupApp>
+class _StartupAppState extends ConsumerState<StartupApp>
     with SingleTickerProviderStateMixin {
   bool _checkingComplete = false;
   bool _applicationReady = false;
@@ -68,13 +71,15 @@ class _StartupAppState extends State<StartupApp>
   @override
   void initState() {
     super.initState();
+    unawaited(_loadLocaleAndRunStartup());
     _fadeController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 400),
     );
-    _fadeAnimation = Tween<double>(begin: 1.0, end: 0.0).animate(
-      CurvedAnimation(parent: _fadeController, curve: Curves.easeOut),
-    );
+    _fadeAnimation = Tween<double>(
+      begin: 1.0,
+      end: 0.0,
+    ).animate(CurvedAnimation(parent: _fadeController, curve: Curves.easeOut));
     _fadeController.addStatusListener((status) {
       if (status == AnimationStatus.completed && mounted) {
         setState(() {
@@ -83,7 +88,9 @@ class _StartupAppState extends State<StartupApp>
         });
       }
     });
-    _startupController = StartupSequenceController();
+    _startupController = StartupSequenceController(
+      localizations: () => appLocalizationsForLocale(ref.read(localeProvider)),
+    );
     _startupProgressSubscription = _startupController.progress.listen((event) {
       if (!mounted) return;
       setState(() {
@@ -93,7 +100,15 @@ class _StartupAppState extends State<StartupApp>
         _dataSafetyBlocked = event.blockedMessage;
       });
     });
-    _runStartupSequence();
+  }
+
+  Future<void> _loadLocaleAndRunStartup() async {
+    try {
+      await ref.read(localeProvider.notifier).load();
+    } catch (e) {
+      debugPrint('[StartupApp] Failed to load locale preference: $e');
+    }
+    if (mounted) await _runStartupSequence();
   }
 
   @override
@@ -164,6 +179,7 @@ class _StartupAppState extends State<StartupApp>
   Future<void> _showRestartDialog() async {
     final navContext = _overlayNavigatorKey.currentContext;
     if (navContext == null || !navContext.mounted) return;
+    final l10n = AppLocalizations.of(navContext)!;
     await showDialog<void>(
       context: navContext,
       barrierDismissible: false,
@@ -176,27 +192,24 @@ class _StartupAppState extends State<StartupApp>
             children: [
               Icon(Icons.check_circle, color: Colors.green.shade600, size: 24),
               const SizedBox(width: 8),
-              const Text('数据格式升级完成'),
+              Text(l10n.startupMigrationTitle),
             ],
           ),
-          content: const Text(
-            '数据已迁移到新版格式。'
-            '请重启应用以使用新版本。',
-          ),
+          content: Text(l10n.startupMigrationBody),
           actions: [
             TextButton(
               onPressed: () {
                 Navigator.of(dialogContext).pop();
                 _exitApp();
               },
-              child: const Text('退出应用'),
+              child: Text(l10n.startupMigrationExit),
             ),
             FilledButton(
               onPressed: () {
                 Navigator.of(dialogContext).pop();
                 restartApp();
               },
-              child: const Text('立即重启'),
+              child: Text(l10n.startupMigrationRestart),
             ),
           ],
         ),
@@ -220,15 +233,17 @@ class _StartupAppState extends State<StartupApp>
 
   @override
   Widget build(BuildContext context) {
+    final locale = ref.watch(localeProvider);
     // The startup screen owns rendering while checks run. The main app is
     // inserted only once those checks finish, then revealed by the fade.
     return Stack(
       textDirection: TextDirection.ltr,
       children: [
         if (_applicationReady)
-          const _AppErrorBoundary(
-            key: ValueKey('app_fade_boundary'),
-            child: Application(key: ValueKey('app_ready')),
+          StartupErrorBoundary(
+            key: const ValueKey('app_fade_boundary'),
+            locale: locale,
+            child: const Application(key: ValueKey('app_ready')),
           ),
 
         // 启动页覆盖层（检查完成后移除）
@@ -245,6 +260,11 @@ class _StartupAppState extends State<StartupApp>
               title: 'Stroom',
               debugShowCheckedModeBanner: false,
               navigatorKey: _overlayNavigatorKey,
+              locale: locale,
+              localeResolutionCallback: (deviceLocale, _) =>
+                  resolveSystemLocale(deviceLocale ?? const Locale('en')),
+              supportedLocales: AppLocalizations.supportedLocales,
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
               theme: ThemeData(
                 useMaterial3: true,
                 colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
@@ -254,10 +274,13 @@ class _StartupAppState extends State<StartupApp>
                       message: _dataSafetyBlocked!,
                       onExit: _exitApp,
                     )
-                  : StartupPage(
-                      isWorking: _isWorking,
-                      statusMessage: _statusMessage,
-                      progressDetail: _progressDetail,
+                  : TickerMode(
+                      enabled: !_isFadingOut,
+                      child: StartupPage(
+                        isWorking: _isWorking,
+                        statusMessage: _statusMessage,
+                        progressDetail: _progressDetail,
+                      ),
                     ),
             ),
           ),
@@ -282,16 +305,21 @@ class _StartupAppState extends State<StartupApp>
 /// check sequence completes but DURING the first render of the [Application]
 /// widget and its providers.  Once the error is handled, the user can press
 /// "重试" to rebuild the widget tree.
-class _AppErrorBoundary extends StatefulWidget {
+class StartupErrorBoundary extends StatefulWidget {
   final Widget child;
+  final Locale? locale;
 
-  const _AppErrorBoundary({super.key, required this.child});
+  const StartupErrorBoundary({
+    super.key,
+    required this.child,
+    required this.locale,
+  });
 
   @override
-  State<_AppErrorBoundary> createState() => _AppErrorBoundaryState();
+  State<StartupErrorBoundary> createState() => _StartupErrorBoundaryState();
 }
 
-class _AppErrorBoundaryState extends State<_AppErrorBoundary> {
+class _StartupErrorBoundaryState extends State<StartupErrorBoundary> {
   bool _hasError = false;
   String _errorMessage = '';
   int _retryGeneration = 0;
@@ -342,51 +370,60 @@ class _AppErrorBoundaryState extends State<_AppErrorBoundary> {
             // 兜底恢复界面，不会闪退
             child: MaterialApp(
               debugShowCheckedModeBanner: false,
+              locale: widget.locale,
+              localeResolutionCallback: (deviceLocale, _) =>
+                  resolveSystemLocale(deviceLocale ?? const Locale('en')),
+              supportedLocales: AppLocalizations.supportedLocales,
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
               theme: ThemeData(
                 useMaterial3: true,
                 colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
               ),
               home: Builder(
-                builder: (overlayContext) => Scaffold(
-                  body: Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.error_outline,
-                              size: 64, color: Colors.orange.shade400),
-                          const SizedBox(height: 16),
-                          Text(
-                            '应用启动异常',
-                            style: Theme.of(overlayContext)
-                                .textTheme
-                                .headlineSmall,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            _errorMessage.isNotEmpty
-                                ? _errorMessage
-                                : '启动过程中遇到数据格式问题，已自动修复，请重试。',
-                            textAlign: TextAlign.center,
-                            style: Theme.of(overlayContext)
-                                .textTheme
-                                .bodyMedium
-                                ?.copyWith(
-                                  color: Colors.grey.shade600,
-                                ),
-                          ),
-                          const SizedBox(height: 24),
-                          FilledButton.icon(
-                            onPressed: _onRetry,
-                            icon: const Icon(Icons.refresh),
-                            label: const Text('重试'),
-                          ),
-                        ],
+                builder: (overlayContext) {
+                  final l10n = AppLocalizations.of(overlayContext)!;
+                  return Scaffold(
+                    body: Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.error_outline,
+                              size: 64,
+                              color: Colors.orange.shade400,
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              l10n.startupRecoveryTitle,
+                              style: Theme.of(overlayContext)
+                                  .textTheme
+                                  .headlineSmall,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              _errorMessage.isNotEmpty
+                                  ? _errorMessage
+                                  : l10n.startupRecoveryFallbackMessage,
+                              textAlign: TextAlign.center,
+                              style: Theme.of(overlayContext)
+                                  .textTheme
+                                  .bodyMedium
+                                  ?.copyWith(color: Colors.grey.shade600),
+                            ),
+                            const SizedBox(height: 24),
+                            FilledButton.icon(
+                              onPressed: _onRetry,
+                              icon: const Icon(Icons.refresh),
+                              label: Text(l10n.startupRecoveryRetry),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                ),
+                  );
+                },
               ),
             ),
           ),
@@ -404,10 +441,7 @@ class _ErrorCatcher extends StatefulWidget {
   final Widget child;
   final Widget Function(Object error, StackTrace stack) onError;
 
-  const _ErrorCatcher({
-    required this.child,
-    required this.onError,
-  });
+  const _ErrorCatcher({required this.child, required this.onError});
 
   @override
   State<_ErrorCatcher> createState() => _ErrorCatcherState();
@@ -433,8 +467,9 @@ class _DataSafetyBlockPageState extends ConsumerState<_DataSafetyBlockPage> {
   bool _exporting = false;
 
   Future<void> _checkForUpdate() async {
+    final l10n = AppLocalizations.of(context)!;
     final snackBar = ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
+      SnackBar(
         content: Row(
           children: [
             SizedBox(
@@ -446,7 +481,7 @@ class _DataSafetyBlockPageState extends ConsumerState<_DataSafetyBlockPage> {
               ),
             ),
             SizedBox(width: 12),
-            Text('正在检查更新...'),
+            Text(l10n.startupSafetyCheckingUpdates),
           ],
         ),
         duration: Duration(days: 1),
@@ -473,8 +508,8 @@ class _DataSafetyBlockPageState extends ConsumerState<_DataSafetyBlockPage> {
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('已是最新版本'),
+        SnackBar(
+          content: Text(l10n.startupSafetyUpToDate),
           duration: Duration(seconds: 2),
         ),
       );
@@ -483,6 +518,7 @@ class _DataSafetyBlockPageState extends ConsumerState<_DataSafetyBlockPage> {
 
   Future<void> _exportData() async {
     if (_exporting) return;
+    final l10n = AppLocalizations.of(context)!;
     setState(() => _exporting = true);
     try {
       // 双平台统一路径：原生走 FilePicker 保存；Web 走内存构建 +
@@ -492,13 +528,11 @@ class _DataSafetyBlockPageState extends ConsumerState<_DataSafetyBlockPage> {
         selection: BackupSelection.all,
       );
       if (!mounted || !exported) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('数据导出完成')),
-      );
+      // BackupService already shows a localized success message with the saved path.
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('导出失败: $e')),
+        SnackBar(content: Text(l10n.backupServiceExportFailed(e.toString()))),
       );
     } finally {
       if (mounted) setState(() => _exporting = false);
@@ -507,6 +541,7 @@ class _DataSafetyBlockPageState extends ConsumerState<_DataSafetyBlockPage> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return PopScope(
       // 阻断页不允许返回键关闭（数据保护）
       canPop: false,
@@ -517,21 +552,24 @@ class _DataSafetyBlockPageState extends ConsumerState<_DataSafetyBlockPage> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.shield_outlined,
-                    size: 72, color: Colors.red.shade400),
+                Icon(
+                  Icons.shield_outlined,
+                  size: 72,
+                  color: Colors.red.shade400,
+                ),
                 const SizedBox(height: 16),
                 Text(
-                  '数据安全保护',
+                  l10n.startupSafetyTitle,
                   style: Theme.of(context).textTheme.headlineSmall,
                 ),
                 const SizedBox(height: 12),
                 Text(
                   widget.message,
                   textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Colors.grey.shade600,
-                        height: 1.6,
-                      ),
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodyMedium
+                      ?.copyWith(color: Colors.grey.shade600, height: 1.6),
                 ),
                 const SizedBox(height: 28),
                 Wrap(
@@ -539,9 +577,7 @@ class _DataSafetyBlockPageState extends ConsumerState<_DataSafetyBlockPage> {
                   spacing: 12,
                   runSpacing: 12,
                   children: [
-                    if (!kIsWeb) ...[
-                      _buildUpdateButton(),
-                    ],
+                    if (!kIsWeb) ...[_buildUpdateButton()],
                     OutlinedButton.icon(
                       onPressed: _exporting ? null : _exportData,
                       icon: _exporting
@@ -551,12 +587,12 @@ class _DataSafetyBlockPageState extends ConsumerState<_DataSafetyBlockPage> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : const Icon(Icons.save_alt),
-                      label: const Text('导出数据'),
+                      label: Text(l10n.startupSafetyExportButton),
                     ),
                     FilledButton.icon(
                       onPressed: widget.onExit ?? () => SystemNavigator.pop(),
                       icon: const Icon(Icons.exit_to_app),
-                      label: const Text('退出应用'),
+                      label: Text(l10n.startupSafetyExitButton),
                     ),
                   ],
                 ),
@@ -570,6 +606,7 @@ class _DataSafetyBlockPageState extends ConsumerState<_DataSafetyBlockPage> {
 
   Widget _buildUpdateButton() {
     final isChecking = ref.watch(updateProvider).isChecking;
+    final l10n = AppLocalizations.of(context)!;
     return OutlinedButton.icon(
       onPressed: isChecking ? null : _checkForUpdate,
       icon: isChecking
@@ -579,7 +616,7 @@ class _DataSafetyBlockPageState extends ConsumerState<_DataSafetyBlockPage> {
               child: CircularProgressIndicator(strokeWidth: 2),
             )
           : const Icon(Icons.update),
-      label: const Text('更新应用'),
+      label: Text(l10n.startupSafetyUpdateButton),
     );
   }
 }

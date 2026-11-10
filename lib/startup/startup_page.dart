@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../l10n/app_localizations.dart';
 import 'startup_backdrop_painter.dart';
 import 'startup_visual_style.dart';
 
@@ -147,7 +148,7 @@ class _StartupPageState extends State<StartupPage>
         decoration: BoxDecoration(
           color: _visualStyle.cardSurface.withValues(alpha: 0.24),
           border: Border.all(color: _visualStyle.cardBorder),
-          borderRadius: BorderRadius.circular(30),
+          borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
               color: _visualStyle.secondaryAccent.withValues(alpha: 0.12),
@@ -171,8 +172,11 @@ class _StartupPageState extends State<StartupPage>
                   ),
                 ),
                 const Spacer(),
-                Icon(Icons.more_horiz,
-                    color: _visualStyle.secondaryForeground, size: 22),
+                Icon(
+                  Icons.more_horiz,
+                  color: _visualStyle.secondaryForeground,
+                  size: 22,
+                ),
               ],
             ),
             const SizedBox(height: 22),
@@ -199,10 +203,8 @@ class _StartupPageState extends State<StartupPage>
             width: size,
             height: size,
             decoration: BoxDecoration(
-              color: _visualStyle.cardSurface.withValues(
-                alpha: 0.18,
-              ),
-              borderRadius: BorderRadius.circular(24),
+              color: _visualStyle.cardSurface.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(16),
               border: Border.all(color: _visualStyle.cardBorder),
               boxShadow: [
                 BoxShadow(
@@ -248,7 +250,7 @@ class _StartupPageState extends State<StartupPage>
 
   Widget _buildTagline({TextAlign textAlign = TextAlign.center}) {
     return Text(
-      '你的学习助理',
+      AppLocalizations.of(context)!.startupTagline,
       textAlign: textAlign,
       style: TextStyle(
         fontSize: 15,
@@ -301,14 +303,11 @@ class _StartupPageState extends State<StartupPage>
               ? CircularProgressIndicator(
                   strokeWidth: 2.5,
                   color: _visualStyle.accent,
-                  backgroundColor:
-                      _visualStyle.cardSurface.withValues(alpha: 0.8),
+                  backgroundColor: _visualStyle.cardSurface.withValues(
+                    alpha: 0.8,
+                  ),
                 )
-              : Icon(
-                  Icons.check_circle,
-                  color: _visualStyle.accent,
-                  size: 28,
-                ),
+              : Icon(Icons.check_circle, color: _visualStyle.accent, size: 28),
         ),
         const SizedBox(height: 18),
         if (widget.statusMessage.isNotEmpty)

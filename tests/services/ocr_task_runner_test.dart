@@ -2,10 +2,12 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:ui' show Locale;
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/models/ocr_batch_execution.dart';
 import 'package:stroom/providers/background_task_provider.dart';
@@ -31,7 +33,7 @@ class _ControlledAdapter implements HttpClientAdapter {
   Future<ResponseBody> fetch(RequestOptions options,
       Stream<Uint8List>? requestStream, Future<void>? cancelFuture) {
     calls++;
-    requested.complete(options);
+    if (!requested.isCompleted) requested.complete(options);
     // Deliberately permit a late response; the token must fence saving.
     return response.future;
   }
@@ -128,6 +130,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   late Directory directory;
   late BackgroundTaskNotifier notifier;
+  late Locale locale;
   late _ControlledAdapter adapter;
   late OcrTaskRunner runner;
   late String id;
@@ -143,7 +146,10 @@ void main() {
     TextManifest.invalidateCache();
     directory = await Directory.systemTemp.createTemp('ocr_owned_');
     BackgroundTaskNotifier.debugStorageDirectoryOverride = directory.path;
-    notifier = BackgroundTaskNotifier();
+    locale = const Locale('zh', 'CN');
+    notifier = BackgroundTaskNotifier(
+      localizationsResolver: () => lookupAppLocalizations(locale),
+    );
     id = notifier.addTask(type: BackgroundTaskType.ocr, title: 'owned');
     adapter = _ControlledAdapter();
     saves = 0;
@@ -182,6 +188,20 @@ void main() {
     await notifier.pendingPersistence;
     BackgroundTaskNotifier.debugStorageDirectoryOverride = null;
     await directory.delete(recursive: true);
+  });
+
+  test('mutating bytes read from images does not change the submitted image',
+      () async {
+    runner.images[0].$1[0] = 99;
+
+    final running = runner.run();
+    final request = await adapter.requested.future;
+    final body = request.data as Map;
+    final content = (body['messages'] as List)[1]['content'] as List;
+    expect(content[0]['image_url']['url'], 'data:image/png;base64,AQID');
+
+    adapter.succeed();
+    await running;
   });
 
   test('owned runner snapshots input and duplicate run submits only once',
@@ -229,6 +249,26 @@ void main() {
     expect(persistedDiagnostics, isNot(contains('choices')));
     expect((await TextManifest.loadRecords()).single.folder, 'captured folder');
     expect(adapter.closed, isTrue);
+  });
+
+  test('reentrant run from notifier listener submits and saves only once',
+      () async {
+    var reentered = false;
+    Future<void>? reentrantRun;
+    notifier.addListener((_) {
+      if (reentered) return;
+      reentered = true;
+      reentrantRun = runner.run();
+    });
+
+    final running = runner.run();
+    await adapter.requested.future;
+    adapter.succeed();
+    await running;
+    await reentrantRun;
+
+    expect(adapter.calls, 1);
+    expect(saves, 1);
   });
 
   test(
@@ -336,6 +376,46 @@ void main() {
       ]);
     },
   );
+
+  test('per-image result headings follow the current English locale', () async {
+    locale = const Locale('en', 'US');
+    final englishAdapter = _OutOfOrderAdapter();
+    final pageRunner = OcrTaskRunner(
+      taskId: id,
+      notifier: notifier,
+      config: _config,
+      images: [
+        (Uint8List.fromList([1]), 'png'),
+        (Uint8List.fromList([2]), 'png'),
+      ],
+      imageNames: ['scan.png', '  '],
+      executionMode: OcrBatchMode.perImage,
+      perImageConcurrency: 2,
+      title: 'owned',
+      folder: 'captured folder',
+      serviceFactory: (config) => OcrService(
+        config: config,
+        dio: Dio()..httpClientAdapter = englishAdapter,
+      ),
+      writeText: TextManifest.writeText,
+      onSaved: () {},
+    );
+
+    final running = pageRunner.run();
+    await englishAdapter.twoRequests.future.timeout(
+      const Duration(seconds: 2),
+    );
+    englishAdapter.complete(1, text: 'first page text');
+    englishAdapter.complete(2, text: 'second page text');
+    await running;
+
+    expect(
+      notifier.state.single.result,
+      '--- Image 1: scan.png ---\nfirst page text\n\n'
+      '--- Image 2 ---\nsecond page text',
+    );
+    expect(notifier.state.single.result, isNot(contains('第 ')));
+  });
 
   test('failed empty per-image batch stays incomplete', () async {
     final emptyFailedAdapter = _OutOfOrderAdapter();
@@ -501,6 +581,42 @@ void main() {
     progressAdapter.complete(2, text: 'second page text');
     await running;
     expect(notifier.state.single.status, TaskStatus.completed);
+  });
+
+  test('per-image upload label resets after upload completes', () async {
+    final progressAdapter = _OutOfOrderAdapter();
+    final progressRunner = OcrTaskRunner(
+      taskId: id,
+      notifier: notifier,
+      config: _config,
+      images: [
+        (Uint8List.fromList([1]), 'png')
+      ],
+      executionMode: OcrBatchMode.perImage,
+      perImageConcurrency: 1,
+      title: 'owned',
+      folder: 'captured folder',
+      serviceFactory: (config) => OcrService(
+        config: config,
+        dio: Dio()..httpClientAdapter = progressAdapter,
+      ),
+      writeText: TextManifest.writeText,
+      onSaved: () {},
+    );
+
+    final running = progressRunner.run();
+    await progressAdapter.firstRequest.future.timeout(
+      const Duration(seconds: 2),
+    );
+
+    final request = progressAdapter.requestOptionsByImageId[1]!;
+    request.onSendProgress!(10, 10);
+
+    expect(notifier.state.single.steps[2].running, isTrue);
+    expect(notifier.state.single.steps[1].label, '上传图片');
+
+    progressAdapter.complete(1, text: 'page text');
+    await running;
   });
 
   test(
@@ -1128,7 +1244,10 @@ void main() {
 
     expect(notifier.state.single.status, TaskStatus.failed);
     expect(notifier.state.single.result, '');
-    expect(notifier.state.single.error, startsWith('OCR结果保存失败:'));
+    expect(
+      notifier.state.single.error,
+      startsWith(notifier.localizations.bgTaskOcrSaveError('')),
+    );
     expect(await TextManifest.loadRecords(), isEmpty);
 
     final saver = OcrResultSaver(
@@ -1241,6 +1360,7 @@ void main() {
 
     final task = notifier.state.single;
     var failFirstPartialWrite = true;
+    locale = const Locale('en', 'US');
     final saver = OcrResultSaver(
       taskId: id,
       notifier: notifier,
@@ -1269,8 +1389,39 @@ void main() {
     expect(notifier.state.single.partialSaveRequested, isTrue);
     expect(notifier.state.single.resultSavedAsPartial, isTrue);
     final record = (await TextManifest.loadRecords()).single;
-    expect(record.name, 'owned（部分结果）');
+    expect(record.name, 'owned (partial result)');
     expect(await TextManifest.readText(record.storageFileName), 'owned text');
+  });
+
+  test('partial-save retry resolves the locale when it writes the record',
+      () async {
+    notifier.setResult(id, 'owned partial text', isComplete: false);
+    notifier.failTask(id, error: 'incomplete OCR result');
+    var failFirstWrite = true;
+    locale = const Locale('en', 'US');
+    final saver = OcrResultSaver(
+      taskId: id,
+      notifier: notifier,
+      title: 'owned',
+      folder: 'captured folder',
+      onSaved: () {},
+      writeText: (name, text, {beforeCommit}) async {
+        if (failFirstWrite) {
+          failFirstWrite = false;
+          throw const FileSystemException('injected partial write failure');
+        }
+        return TextManifest.writeText(name, text, beforeCommit: beforeCommit);
+      },
+    );
+
+    await expectLater(
+      saver.retryTaskResult(allowPartial: true),
+      throwsA(isA<FileSystemException>()),
+    );
+    locale = const Locale('zh', 'CN');
+    await saver.retryTaskResult();
+
+    expect((await TextManifest.loadRecords()).single.name, 'owned（部分结果）');
   });
 
   test(
@@ -2001,6 +2152,50 @@ void main() {
     expect(notifier.state.single.steps[4].running, isTrue);
     writeGate!.complete();
     await running;
+  });
+
+  test('OCR app-authored error prefix preserves its sanitized detail',
+      () async {
+    final englishStrings = lookupAppLocalizations(const Locale('en', 'US'));
+    final englishNotifier = BackgroundTaskNotifier(
+      localizationsResolver: () => englishStrings,
+    );
+    final englishTaskId = englishNotifier.addTask(
+      type: BackgroundTaskType.ocr,
+      title: 'localized failure',
+    );
+    final englishRunner = OcrTaskRunner(
+      taskId: englishTaskId,
+      notifier: englishNotifier,
+      config: _config,
+      images: [(input, 'png')],
+      executionMode: OcrBatchMode.perImage,
+      initialPageOutcomes: const [
+        OcrPageOutcome(
+          imageIndex: 0,
+          status: OcrPageOutcomeStatus.succeeded,
+          text: '',
+        ),
+      ],
+      title: 'localized failure',
+      folder: 'captured folder',
+      onSaved: () {},
+      writeText: (name, text, {beforeCommit}) async =>
+          throw Exception('preserved storage detail'),
+    );
+
+    await englishRunner.run();
+
+    expect(
+      englishNotifier.state.single.error,
+      startsWith('Saving OCR results failed: '),
+    );
+    expect(
+      englishNotifier.state.single.error,
+      contains('OCR 处理失败'),
+    );
+    englishNotifier.dispose();
+    await englishNotifier.pendingPersistence;
   });
 
   for (final timeout in [

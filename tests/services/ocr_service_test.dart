@@ -1,8 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/services/ocr_service.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:dio/dio.dart';
+
 import 'dart:typed_data';
 
 // ============================================================================
@@ -58,6 +61,23 @@ class _InterceptorWithCallback extends Interceptor {
   }
 }
 
+class _CountingAdapter implements HttpClientAdapter {
+  int requestCount = 0;
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    requestCount++;
+    return ResponseBody.fromString('{}', 200);
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
 const _testOcrConfig = OcrConfig(
   model: 'gpt-4o',
   apiKey: 'test-key',
@@ -104,7 +124,7 @@ void main() {
         },
       );
 
-      test('effectiveSystemPrompt uses default when null', () {
+      test('effectiveSystemPrompt retains legacy Chinese default', () {
         const config = OcrConfig(
           model: 'gpt-4o',
           apiKey: 'key',
@@ -155,10 +175,47 @@ void main() {
         expect(service.receiveTimeout, const Duration(minutes: 60));
       });
 
-      test('injected Dio sends configured auth and keeps caller options',
-          () async {
+      test(
+        'injected Dio sends configured auth and keeps caller options',
+        () async {
+          final requests = <RequestOptions>[];
+          final dio = Dio(BaseOptions(headers: {'X-Client-Option': 'kept'}))
+            ..interceptors.add(
+              _InterceptorWithCallback(
+                callback: (options, handler) {
+                  requests.add(options);
+                  handler.resolve(
+                    Response(
+                      requestOptions: options,
+                      statusCode: 200,
+                      data: {
+                        'choices': [
+                          {
+                            'message': {'content': 'recognized'},
+                          },
+                        ],
+                      },
+                    ),
+                  );
+                },
+              ),
+            );
+          final service = OcrService(config: _testOcrConfig, dio: dio);
+
+          await service.recognize(
+            imageBytes: Uint8List.fromList([1, 2, 3]),
+            imageFormat: 'jpeg',
+          );
+
+          expect(requests, hasLength(1));
+          expect(requests.single.headers['Authorization'], 'Bearer test-key');
+          expect(requests.single.headers['X-Client-Option'], 'kept');
+        },
+      );
+
+      test('injected Dio request uses its configured send timeout', () async {
         final requests = <RequestOptions>[];
-        final dio = Dio(BaseOptions(headers: {'X-Client-Option': 'kept'}))
+        final dio = Dio(BaseOptions(sendTimeout: const Duration(seconds: 5)))
           ..interceptors.add(
             _InterceptorWithCallback(
               callback: (options, handler) {
@@ -179,17 +236,91 @@ void main() {
               },
             ),
           );
-        final service = OcrService(config: _testOcrConfig, dio: dio);
 
-        await service.recognize(
+        await OcrService(config: _testOcrConfig, dio: dio).recognize(
           imageBytes: Uint8List.fromList([1, 2, 3]),
           imageFormat: 'jpeg',
         );
 
-        expect(requests, hasLength(1));
-        expect(requests.single.headers['Authorization'], 'Bearer test-key');
-        expect(requests.single.headers['X-Client-Option'], 'kept');
+        expect(requests.single.sendTimeout, const Duration(seconds: 5));
       });
+
+      test(
+        'explicit OCR send timeout overrides injected Dio timeout',
+        () async {
+          final requests = <RequestOptions>[];
+          final dio = Dio(BaseOptions(sendTimeout: const Duration(seconds: 5)))
+            ..interceptors.add(
+              _InterceptorWithCallback(
+                callback: (options, handler) {
+                  requests.add(options);
+                  handler.resolve(
+                    Response(
+                      requestOptions: options,
+                      statusCode: 200,
+                      data: {
+                        'choices': [
+                          {
+                            'message': {'content': 'recognized'},
+                          },
+                        ],
+                      },
+                    ),
+                  );
+                },
+              ),
+            );
+
+          await OcrService(
+            config: _testOcrConfig,
+            dio: dio,
+            sendTimeout: const Duration(seconds: 9),
+          ).recognize(
+            imageBytes: Uint8List.fromList([1, 2, 3]),
+            imageFormat: 'jpeg',
+          );
+
+          expect(requests.single.sendTimeout, const Duration(seconds: 9));
+        },
+      );
+
+      test(
+        'injected Dio without a send timeout keeps size-aware timeout',
+        () async {
+          final requests = <RequestOptions>[];
+          final dio = Dio()
+            ..interceptors.add(
+              _InterceptorWithCallback(
+                callback: (options, handler) {
+                  requests.add(options);
+                  handler.resolve(
+                    Response(
+                      requestOptions: options,
+                      statusCode: 200,
+                      data: {
+                        'choices': [
+                          {
+                            'message': {'content': 'recognized'},
+                          },
+                        ],
+                      },
+                    ),
+                  );
+                },
+              ),
+            );
+
+          await OcrService(config: _testOcrConfig, dio: dio).recognize(
+            imageBytes: Uint8List(2 * 1024 * 1024),
+            imageFormat: 'png',
+          );
+
+          expect(
+            requests.single.sendTimeout,
+            const Duration(minutes: 1, seconds: 4),
+          );
+        },
+      );
 
       test('injected Dio uses the key from each current OCR config', () async {
         final authorizationHeaders = <Object?>[];
@@ -230,32 +361,33 @@ void main() {
 
       test('injected Dio preserves an explicit caller auth header', () async {
         Object? authorizationHeader;
-        final dio = Dio(
-          BaseOptions(headers: {'Authorization': 'Bearer caller-key'}),
-        )..interceptors.add(
-            _InterceptorWithCallback(
-              callback: (options, handler) {
-                authorizationHeader = options.headers['Authorization'];
-                handler.resolve(
-                  Response(
-                    requestOptions: options,
-                    statusCode: 200,
-                    data: {
-                      'choices': [
-                        {
-                          'message': {'content': 'recognized'},
+        final dio =
+            Dio(BaseOptions(headers: {'Authorization': 'Bearer caller-key'}))
+              ..interceptors.add(
+                _InterceptorWithCallback(
+                  callback: (options, handler) {
+                    authorizationHeader = options.headers['Authorization'];
+                    handler.resolve(
+                      Response(
+                        requestOptions: options,
+                        statusCode: 200,
+                        data: {
+                          'choices': [
+                            {
+                              'message': {'content': 'recognized'},
+                            },
+                          ],
                         },
-                      ],
-                    },
-                  ),
-                );
-              },
-            ),
-          );
+                      ),
+                    );
+                  },
+                ),
+              );
 
-        await OcrService(config: _testOcrConfig, dio: dio).recognize(
-          imageBytes: Uint8List.fromList([1, 2, 3]),
-        );
+        await OcrService(
+          config: _testOcrConfig,
+          dio: dio,
+        ).recognize(imageBytes: Uint8List.fromList([1, 2, 3]));
 
         expect(authorizationHeader, 'Bearer caller-key');
       });
@@ -264,11 +396,30 @@ void main() {
         const config = OcrConfig(model: 'gpt-4o', apiKey: 'test-key', host: '');
         final service = OcrService(config: config);
         expect(
-          () =>
-              service.recognize(imageBytes: Uint8List(0), imageFormat: 'jpeg'),
+          () => service.recognize(
+            imageBytes: Uint8List.fromList([1]),
+            imageFormat: 'jpeg',
+          ),
           throwsA(isA<Exception>()),
         );
       });
+
+      test(
+        'recognize rejects empty image bytes before sending a request',
+        () async {
+          final adapter = _CountingAdapter();
+          final dio = Dio()..httpClientAdapter = adapter;
+          final service = OcrService(config: _testOcrConfig, dio: dio);
+
+          await expectLater(
+            service.recognize(imageBytes: Uint8List(0), imageFormat: 'jpeg'),
+            throwsA(isA<ArgumentError>()),
+          );
+
+          expect(adapter.requestCount, 0);
+          service.close();
+        },
+      );
 
       test('recognizeBatch throws on empty list', () async {
         const config = OcrConfig(
@@ -283,77 +434,89 @@ void main() {
         );
       });
       test(
-        'encoded JSON request budget accepts its boundary and rejects one byte over before send',
+        'recognizeBatch rejects an empty image before sending a request',
         () async {
-          final bytes = Uint8List.fromList([1, 2, 3, 4]);
-          final baseConfig = _testOcrConfig.copyWith(
-            typeConfig: {'userInstruction': '识别页码：一'},
-          );
-          final measuringService = OcrService(config: baseConfig);
-          final encodedBytes = measuringService.encodedRequestSizeBytes(
-            imageBytesList: [(bytes, 'png')],
-          );
-          measuringService.close();
+          final adapter = _CountingAdapter();
+          final dio = Dio()..httpClientAdapter = adapter;
+          final service = OcrService(config: _testOcrConfig, dio: dio);
 
-          expect(encodedBytes, greaterThan(0));
-          expect(
-            const OcrConfig(
-              apiKey: 'key',
-              host: 'https://ocr.test',
-            ).requestSizeBudgetBytes,
-            20 * 1024 * 1024,
-          );
-
-          var requests = 0;
-          Dio dioForRequests() => Dio()
-            ..interceptors.add(
-              _InterceptorWithCallback(
-                callback: (options, handler) {
-                  requests++;
-                  handler.resolve(
-                    Response(
-                      requestOptions: options,
-                      statusCode: 200,
-                      data: {
-                        'choices': [
-                          {
-                            'message': {'content': 'page text'},
-                          },
-                        ],
-                      },
-                    ),
-                  );
-                },
-              ),
-            );
-
-          final boundaryService = OcrService(
-            config: baseConfig.copyWith(requestSizeBudgetBytes: encodedBytes),
-            dio: dioForRequests(),
-          );
-          await boundaryService.recognize(
-            imageBytes: bytes,
-            imageFormat: 'png',
-          );
-          expect(requests, 1);
-
-          final overBudgetService = OcrService(
-            config: baseConfig.copyWith(
-              requestSizeBudgetBytes: encodedBytes - 1,
-            ),
-            dio: dioForRequests(),
-          );
           await expectLater(
-            overBudgetService.recognize(imageBytes: bytes, imageFormat: 'png'),
-            throwsA(isA<OcrRequestTooLargeException>()),
+            service.recognizeBatch(
+              imageBytesList: [(Uint8List(0), 'jpeg')],
+            ),
+            throwsA(isA<ArgumentError>()),
           );
-          expect(
-            requests,
-            1,
-            reason: 'oversized JSON must be rejected preflight',
-          );
+
+          expect(adapter.requestCount, 0);
+          service.close();
         },
       );
+      test(
+          'encoded JSON request budget accepts its boundary and rejects one byte over before send',
+          () async {
+        final bytes = Uint8List.fromList([1, 2, 3, 4]);
+        final baseConfig = _testOcrConfig.copyWith(
+          typeConfig: {'userInstruction': '识别页码：一'},
+        );
+        final measuringService = OcrService(config: baseConfig);
+        final encodedBytes = measuringService.encodedRequestSizeBytes(
+          imageBytesList: [(bytes, 'png')],
+        );
+        measuringService.close();
+
+        expect(encodedBytes, greaterThan(0));
+        expect(
+          const OcrConfig(
+            apiKey: 'key',
+            host: 'https://ocr.test',
+          ).requestSizeBudgetBytes,
+          20 * 1024 * 1024,
+        );
+
+        var requests = 0;
+        Dio dioForRequests() => Dio()
+          ..interceptors.add(
+            _InterceptorWithCallback(
+              callback: (options, handler) {
+                requests++;
+                handler.resolve(
+                  Response(
+                    requestOptions: options,
+                    statusCode: 200,
+                    data: {
+                      'choices': [
+                        {
+                          'message': {'content': 'page text'},
+                        },
+                      ],
+                    },
+                  ),
+                );
+              },
+            ),
+          );
+
+        final boundaryService = OcrService(
+          config: baseConfig.copyWith(requestSizeBudgetBytes: encodedBytes),
+          dio: dioForRequests(),
+        );
+        await boundaryService.recognize(imageBytes: bytes, imageFormat: 'png');
+        expect(requests, 1);
+
+        final overBudgetService = OcrService(
+          config: baseConfig.copyWith(requestSizeBudgetBytes: encodedBytes - 1),
+          dio: dioForRequests(),
+        );
+        await expectLater(
+          overBudgetService.recognize(imageBytes: bytes, imageFormat: 'png'),
+          throwsA(isA<OcrRequestTooLargeException>()),
+        );
+        expect(
+          requests,
+          1,
+          reason: 'oversized JSON must be rejected preflight',
+        );
+      });
     });
 
     group('OcrService response parsing', () {
@@ -942,30 +1105,29 @@ void main() {
       });
 
       test(
-        'recognizeBatch retains text and marks a content-filtered result incomplete',
-        () async {
-          final dio = _mockDioWithSuccess({
-            'choices': [
-              {
-                'finish_reason': 'content_filter',
-                'message': {'content': 'filtered batch OCR text'},
-              },
-            ],
-          });
-          final service = OcrService(config: _testOcrConfig, dio: dio);
+          'recognizeBatch retains text and marks a content-filtered result incomplete',
+          () async {
+        final dio = _mockDioWithSuccess({
+          'choices': [
+            {
+              'finish_reason': 'content_filter',
+              'message': {'content': 'filtered batch OCR text'},
+            },
+          ],
+        });
+        final service = OcrService(config: _testOcrConfig, dio: dio);
 
-          final result = await service.recognizeBatch(
-            imageBytesList: [
-              (Uint8List.fromList([1, 2, 3]), 'jpeg'),
-              (Uint8List.fromList([4, 5, 6]), 'png'),
-            ],
-          );
+        final result = await service.recognizeBatch(
+          imageBytesList: [
+            (Uint8List.fromList([1, 2, 3]), 'jpeg'),
+            (Uint8List.fromList([4, 5, 6]), 'png'),
+          ],
+        );
 
-          expect(result.text, 'filtered batch OCR text');
-          expect(result.isComplete, isFalse);
-          expect(result.finishReason, 'content_filter');
-        },
-      );
+        expect(result.text, 'filtered batch OCR text');
+        expect(result.isComplete, isFalse);
+        expect(result.finishReason, 'content_filter');
+      });
 
       for (final finishReason in ['tool_calls', 'function_call']) {
         test(
@@ -996,31 +1158,29 @@ void main() {
       }
 
       test(
-        'recognizeBatch retains text and marks an unlisted finish reason '
-        'incomplete',
-        () async {
-          final dio = _mockDioWithSuccess({
-            'choices': [
-              {
-                'finish_reason': 'max_tokens',
-                'message': {'content': 'partial batch OCR text'},
-              },
-            ],
-          });
-          final service = OcrService(config: _testOcrConfig, dio: dio);
+          'recognizeBatch retains text and marks an unlisted finish reason '
+          'incomplete', () async {
+        final dio = _mockDioWithSuccess({
+          'choices': [
+            {
+              'finish_reason': 'max_tokens',
+              'message': {'content': 'partial batch OCR text'},
+            },
+          ],
+        });
+        final service = OcrService(config: _testOcrConfig, dio: dio);
 
-          final result = await service.recognizeBatch(
-            imageBytesList: [
-              (Uint8List.fromList([1, 2, 3]), 'jpeg'),
-              (Uint8List.fromList([4, 5, 6]), 'png'),
-            ],
-          );
+        final result = await service.recognizeBatch(
+          imageBytesList: [
+            (Uint8List.fromList([1, 2, 3]), 'jpeg'),
+            (Uint8List.fromList([4, 5, 6]), 'png'),
+          ],
+        );
 
-          expect(result.text, 'partial batch OCR text');
-          expect(result.isComplete, isFalse);
-          expect(result.finishReason, 'max_tokens');
-        },
-      );
+        expect(result.text, 'partial batch OCR text');
+        expect(result.isComplete, isFalse);
+        expect(result.finishReason, 'max_tokens');
+      });
 
       test('recognizeBatch keeps explicit stop responses complete', () async {
         final dio = _mockDioWithSuccess({
@@ -1216,92 +1376,98 @@ void main() {
         },
       );
 
-      test('enabled invalid built-in parameters fail before dispatch',
-          () async {
-        var requests = 0;
-        final dio = Dio()
-          ..interceptors.add(
-            _InterceptorWithCallback(
-              callback: (options, handler) {
-                requests++;
-                handler.resolve(Response(
-                  requestOptions: options,
-                  statusCode: 200,
-                  data: {
-                    'choices': [
-                      {
-                        'message': {'content': 'test'},
+      test(
+        'enabled invalid built-in parameters fail before dispatch',
+        () async {
+          var requests = 0;
+          final dio = Dio()
+            ..interceptors.add(
+              _InterceptorWithCallback(
+                callback: (options, handler) {
+                  requests++;
+                  handler.resolve(
+                    Response(
+                      requestOptions: options,
+                      statusCode: 200,
+                      data: {
+                        'choices': [
+                          {
+                            'message': {'content': 'test'},
+                          },
+                        ],
                       },
-                    ],
-                  },
-                ));
-              },
-            ),
-          );
-        final invalidConfigs = [
-          {'enableMaxTokens': true},
-          {'enableMaxTokens': true, 'maxTokens': -1},
-          {'enableMaxTokens': true, 'maxTokens': 3.5},
-          {'enableMaxTokens': true, 'maxTokens': '3'},
-          {'enableTemperature': true},
-          {'enableTemperature': true, 'temperature': -0.1},
-          {'enableTemperature': true, 'temperature': 2.1},
-          {'enableTemperature': true, 'temperature': '1'},
-          {'enableTopP': true},
-          {'enableTopP': true, 'topP': -0.1},
-          {'enableTopP': true, 'topP': 1.1},
-          {'enableTopP': true, 'topP': '0.5'},
-        ];
+                    ),
+                  );
+                },
+              ),
+            );
+          final invalidConfigs = [
+            {'enableMaxTokens': true},
+            {'enableMaxTokens': true, 'maxTokens': -1},
+            {'enableMaxTokens': true, 'maxTokens': 3.5},
+            {'enableMaxTokens': true, 'maxTokens': '3'},
+            {'enableTemperature': true},
+            {'enableTemperature': true, 'temperature': -0.1},
+            {'enableTemperature': true, 'temperature': 2.1},
+            {'enableTemperature': true, 'temperature': '1'},
+            {'enableTopP': true},
+            {'enableTopP': true, 'topP': -0.1},
+            {'enableTopP': true, 'topP': 1.1},
+            {'enableTopP': true, 'topP': '0.5'},
+          ];
 
-        for (final typeConfig in invalidConfigs) {
+          for (final typeConfig in invalidConfigs) {
+            final service = OcrService(
+              config: OcrConfig(
+                apiKey: 'key',
+                host: 'https://api.test.com',
+                typeConfig: typeConfig,
+              ),
+              dio: dio,
+            );
+
+            await expectLater(
+              service.recognize(imageBytes: Uint8List.fromList([1, 2, 3])),
+              throwsArgumentError,
+            );
+          }
+
+          expect(requests, 0);
+        },
+      );
+
+      test(
+        'enabled built-in parameter boundaries are sent unchanged',
+        () async {
           final service = OcrService(
             config: OcrConfig(
               apiKey: 'key',
               host: 'https://api.test.com',
-              typeConfig: typeConfig,
-            ),
-            dio: dio,
-          );
-
-          await expectLater(
-            service.recognize(imageBytes: Uint8List.fromList([1, 2, 3])),
-            throwsArgumentError,
-          );
-        }
-
-        expect(requests, 0);
-      });
-
-      test('enabled built-in parameter boundaries are sent unchanged',
-          () async {
-        final service = OcrService(
-          config: OcrConfig(
-            apiKey: 'key',
-            host: 'https://api.test.com',
-            typeConfig: {
-              'enableMaxTokens': true,
-              'maxTokens': 1,
-              'enableTemperature': true,
-              'temperature': 2,
-              'enableTopP': true,
-              'topP': 0,
-            },
-          ),
-          dio: _mockDioWithSuccess({
-            'choices': [
-              {
-                'message': {'content': 'test'},
+              typeConfig: {
+                'enableMaxTokens': true,
+                'maxTokens': 1,
+                'enableTemperature': true,
+                'temperature': 2,
+                'enableTopP': true,
+                'topP': 0,
               },
-            ],
-          }),
-        );
+            ),
+            dio: _mockDioWithSuccess({
+              'choices': [
+                {
+                  'message': {'content': 'test'},
+                },
+              ],
+            }),
+          );
 
-        await service.recognize(imageBytes: Uint8List.fromList([1, 2, 3]));
+          await service.recognize(imageBytes: Uint8List.fromList([1, 2, 3]));
 
-        expect(service.lastRequestBody?['max_tokens'], 1);
-        expect(service.lastRequestBody?['temperature'], 2);
-        expect(service.lastRequestBody?['top_p'], 0);
-      });
+          expect(service.lastRequestBody?['max_tokens'], 1);
+          expect(service.lastRequestBody?['temperature'], 2);
+          expect(service.lastRequestBody?['top_p'], 0);
+        },
+      );
 
       test('disabled invalid built-in parameters remain omitted', () async {
         final service = OcrService(
@@ -1654,10 +1820,7 @@ void main() {
                 ),
                 CustomParam(paramName: 'temperature', defaultValue: '1.5'),
                 CustomParam(paramName: 'top_p', defaultValue: '0.1'),
-                CustomParam(
-                  paramName: 'response_format',
-                  defaultValue: 'json',
-                ),
+                CustomParam(paramName: 'response_format', defaultValue: 'json'),
               ],
             ),
             dio: _mockDioWithSuccess({
@@ -1678,45 +1841,39 @@ void main() {
         },
       );
 
-      test(
-        'custom params cannot enable disabled built-in fields',
-        () async {
-          final service = OcrService(
-            config: OcrConfig(
-              apiKey: 'key',
-              host: 'https://api.test.com',
-              typeConfig: {
-                'enableMaxTokens': false,
-                'enableTemperature': false,
-                'enableTopP': false,
+      test('custom params cannot enable disabled built-in fields', () async {
+        final service = OcrService(
+          config: OcrConfig(
+            apiKey: 'key',
+            host: 'https://api.test.com',
+            typeConfig: {
+              'enableMaxTokens': false,
+              'enableTemperature': false,
+              'enableTopP': false,
+            },
+            customParams: [
+              CustomParam(paramName: 'max_tokens', defaultValue: '4096'),
+              CustomParam(paramName: 'temperature', defaultValue: '0.5'),
+              CustomParam(paramName: 'top_p', defaultValue: '0.9'),
+              CustomParam(paramName: 'response_format', defaultValue: 'json'),
+            ],
+          ),
+          dio: _mockDioWithSuccess({
+            'choices': [
+              {
+                'message': {'content': 'test'},
               },
-              customParams: [
-                CustomParam(paramName: 'max_tokens', defaultValue: '4096'),
-                CustomParam(paramName: 'temperature', defaultValue: '0.5'),
-                CustomParam(paramName: 'top_p', defaultValue: '0.9'),
-                CustomParam(
-                  paramName: 'response_format',
-                  defaultValue: 'json',
-                ),
-              ],
-            ),
-            dio: _mockDioWithSuccess({
-              'choices': [
-                {
-                  'message': {'content': 'test'},
-                },
-              ],
-            }),
-          );
+            ],
+          }),
+        );
 
-          await service.recognize(imageBytes: Uint8List.fromList([1, 2, 3]));
+        await service.recognize(imageBytes: Uint8List.fromList([1, 2, 3]));
 
-          expect(service.lastRequestBody?.containsKey('max_tokens'), isFalse);
-          expect(service.lastRequestBody?.containsKey('temperature'), isFalse);
-          expect(service.lastRequestBody?.containsKey('top_p'), isFalse);
-          expect(service.lastRequestBody?['response_format'], 'json');
-        },
-      );
+        expect(service.lastRequestBody?.containsKey('max_tokens'), isFalse);
+        expect(service.lastRequestBody?.containsKey('temperature'), isFalse);
+        expect(service.lastRequestBody?.containsKey('top_p'), isFalse);
+        expect(service.lastRequestBody?['response_format'], 'json');
+      });
 
       test(
         'custom params use the first option when default value is empty',
@@ -1748,6 +1905,38 @@ void main() {
           await service.recognize(imageBytes: Uint8List.fromList([1, 2, 3]));
 
           expect(service.lastRequestBody?['top_k'], equals(50));
+        },
+      );
+
+      test(
+        'custom params send the first option when it differs from default value',
+        () async {
+          final service = OcrService(
+            config: OcrConfig(
+              model: 'gpt-4o',
+              apiKey: 'key',
+              host: 'https://api.test.com',
+              customParams: [
+                CustomParam(
+                  paramName: 'scale',
+                  type: 'number',
+                  defaultValue: '0.5',
+                  options: ['1.5', '2.0'],
+                ),
+              ],
+            ),
+            dio: _mockDioWithSuccess({
+              'choices': [
+                {
+                  'message': {'content': 'test'},
+                },
+              ],
+            }),
+          );
+
+          await service.recognize(imageBytes: Uint8List.fromList([1, 2, 3]));
+
+          expect(service.lastRequestBody?['scale'], 1.5);
         },
       );
 
@@ -2019,7 +2208,7 @@ void main() {
           await expectLater(
             service.recognizeBatch(
               imageBytesList: [
-                (Uint8List.fromList([1, 2, 3]), 'jpeg')
+                (Uint8List.fromList([1, 2, 3]), 'jpeg'),
               ],
             ),
             throwsA(
@@ -2035,11 +2224,83 @@ void main() {
         },
       );
 
+      test('recognize keeps wrapping non-cancellation Dio failures', () async {
+        final service = OcrService(
+          config: _testOcrConfig,
+          dio: Dio()
+            ..interceptors.add(
+              _InterceptorWithCallback(
+                callback: (options, handler) => handler.reject(
+                  DioException(
+                    requestOptions: options,
+                    type: DioExceptionType.badResponse,
+                    response: Response(
+                      requestOptions: options,
+                      statusCode: 503,
+                      data: {
+                        'error': {'message': 'service unavailable'},
+                        'api_key': 'opaque-response-secret-96',
+                        'request_id': 'opaque-response-secret-96',
+                        'requestId': 'req-safe-after-response-body-96',
+                        'choices': [
+                          {'finish_reason': 'stop'},
+                        ],
+                      },
+                      headers: Headers.fromMap({
+                        'x-api-key': ['opaque-response-header-secret-96'],
+                        'x-request-id': [
+                          'opaque-response-header-secret-96',
+                          'req-safe-after-response-header-96',
+                        ],
+                      }),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        );
+
+        await expectLater(
+          service.recognize(imageBytes: Uint8List.fromList([1, 2, 3])),
+          throwsA(
+            isA<Exception>().having(
+              (error) => error.toString(),
+              'message',
+              allOf(contains('HTTP 503'), contains('service unavailable')),
+            ),
+          ),
+        );
+
+        expect(service.lastResponseStatusCode, 503);
+        expect(service.diagnosticResponse()['errorType'], 'badResponse');
+        expect(service.diagnosticResponse()['finishReason'], 'stop');
+        expect(
+          service.diagnosticResponse()['requestId'],
+          'req-safe-after-response-header-96',
+        );
+        expect(
+          jsonEncode(service.diagnosticResponse()),
+          isNot(contains('opaque-response-secret-96')),
+        );
+        expect(
+          jsonEncode(service.diagnosticResponse()),
+          isNot(contains('opaque-response-header-secret-96')),
+        );
+      });
+
       test(
-        'recognize keeps wrapping non-cancellation Dio failures',
+        'error diagnostics exclude credentials in JSON string response bodies',
         () async {
+          const safeRequestId = 'req-safe-after-string-response-97';
+          final echoedRequestId = 'req-${List.filled(146, 'x').join()}';
+          final credential =
+              '${List.filled(2300, 'a').join()}$echoedRequestId-${List.filled(80, 'b').join()}';
           final service = OcrService(
-            config: _testOcrConfig,
+            config: const OcrConfig(
+              model: 'gpt-4o',
+              apiKey: '',
+              host: 'https://api.test.com/v1',
+            ),
             dio: Dio()
               ..interceptors.add(
                 _InterceptorWithCallback(
@@ -2049,10 +2310,11 @@ void main() {
                       type: DioExceptionType.badResponse,
                       response: Response(
                         requestOptions: options,
-                        statusCode: 503,
-                        data: {
-                          'error': {'message': 'service unavailable'}
-                        },
+                        statusCode: 401,
+                        data: jsonEncode({'api_key': credential}),
+                        headers: Headers.fromMap({
+                          'x-request-id': [echoedRequestId, safeRequestId],
+                        }),
                       ),
                     ),
                   ),
@@ -2062,17 +2324,13 @@ void main() {
 
           await expectLater(
             service.recognize(imageBytes: Uint8List.fromList([1, 2, 3])),
-            throwsA(
-              isA<Exception>().having(
-                (error) => error.toString(),
-                'message',
-                allOf(contains('HTTP 503'), contains('service unavailable')),
-              ),
-            ),
+            throwsA(isA<Exception>()),
           );
 
-          expect(service.lastResponseStatusCode, 503);
-          expect(service.diagnosticResponse()['errorType'], 'badResponse');
+          final diagnostics = jsonEncode(service.diagnosticResponse());
+          expect(service.diagnosticResponse()['requestId'], safeRequestId);
+          expect(diagnostics, isNot(contains(credential)));
+          expect(diagnostics, isNot(contains(echoedRequestId)));
         },
       );
 
@@ -2145,6 +2403,390 @@ void main() {
         expect(service.diagnosticRequest['requestId'], isNull);
         expect(service.diagnosticResponse()['requestId'], isNull);
       });
+
+      test(
+        'diagnostics exclude injected Dio Authorization credentials',
+        () async {
+          const safeRequestId = 'req-safe-after-injected-credential-91';
+          final cases = [
+            (
+              'Authorization',
+              'Bearer injected-dio-secret-91',
+              'injected-dio-secret-91',
+            ),
+            (
+              'authorization',
+              'bEaReR injected-dio-secret-92',
+              'injected-dio-secret-92',
+            ),
+            (
+              'AUTHORIZATION',
+              'Basic injected-dio-secret-93',
+              'injected-dio-secret-93',
+            ),
+          ];
+
+          for (final (headerName, headerValue, credential) in cases) {
+            final dio = Dio(BaseOptions(headers: {headerName: headerValue}))
+              ..interceptors.add(
+                _InterceptorWithCallback(
+                  callback: (options, handler) {
+                    handler.resolve(
+                      Response(
+                        requestOptions: options,
+                        statusCode: 200,
+                        data: {
+                          'request_id': credential,
+                          'id': safeRequestId,
+                          'choices': [
+                            {
+                              'message': {'content': 'recognized'},
+                            },
+                          ],
+                        },
+                        headers: Headers.fromMap({
+                          'x-request-id': [credential, safeRequestId],
+                        }),
+                      ),
+                    );
+                  },
+                ),
+              );
+            final service = OcrService(config: _testOcrConfig, dio: dio);
+
+            await service.recognize(
+              imageBytes: Uint8List.fromList([1, 2, 3]),
+              imageFormat: 'jpeg',
+            );
+            dio.options.headers.clear();
+
+            final diagnostics = jsonEncode({
+              'request': service.diagnosticRequest,
+              'response': service.diagnosticResponse(),
+            });
+            expect(service.diagnosticResponse()['requestId'], safeRequestId);
+            expect(
+              service.lastRequestHeaders.toString(),
+              isNot(contains(credential)),
+            );
+            expect(diagnostics, isNot(contains(credential)));
+          }
+        },
+      );
+
+      test(
+        'diagnostic response does not re-expose interceptor credentials',
+        () async {
+          const credential = 'req-interceptor-secret-credential-94';
+          final dio = Dio()
+            ..interceptors.add(
+              _InterceptorWithCallback(
+                callback: (options, handler) {
+                  options.headers['Authorization'] = 'Bearer $credential';
+                  handler.resolve(
+                    Response(
+                      requestOptions: options,
+                      statusCode: 401,
+                      data: {
+                        'request_id': credential,
+                        'choices': [
+                          {
+                            'message': {'content': 'recognized'},
+                          },
+                        ],
+                      },
+                      headers: Headers.fromMap({
+                        'x-request-id': [credential],
+                      }),
+                    ),
+                  );
+                },
+              ),
+            );
+          final service = OcrService(config: _testOcrConfig, dio: dio);
+
+          await service.recognize(
+            imageBytes: Uint8List.fromList([1, 2, 3]),
+            imageFormat: 'jpeg',
+          );
+
+          expect(service.diagnosticResponse()['requestId'], isNull);
+          expect(
+            jsonEncode(service.diagnosticResponse()),
+            isNot(contains(credential)),
+          );
+        },
+      );
+
+      test(
+        'overlapping OCR requests keep their Authorization exclusions paired',
+        () async {
+          const firstCredential = 'overlapping-dio-secret-a-91';
+          const secondCredential = 'overlapping-dio-secret-b-91';
+          const safeRequestId = 'req-safe-after-overlapping-credential-91';
+          final firstRequestStarted = Completer<void>();
+          final finishFirstRequest = Completer<void>();
+          final dio = Dio(
+            BaseOptions(
+              headers: {'Authorization': 'Bearer $firstCredential'},
+            ),
+          )..interceptors.add(
+              _InterceptorWithCallback(
+                callback: (options, handler) {
+                  final isFirstRequest = options.headers['Authorization'] ==
+                      'Bearer $firstCredential';
+                  final response = Response(
+                    requestOptions: options,
+                    statusCode: 200,
+                    data: {
+                      'request_id':
+                          isFirstRequest ? firstCredential : secondCredential,
+                      'id': safeRequestId,
+                      'choices': [
+                        {
+                          'message': {'content': 'recognized'},
+                        },
+                      ],
+                    },
+                    headers: Headers.fromMap({
+                      'x-request-id': [
+                        isFirstRequest ? firstCredential : secondCredential,
+                        safeRequestId,
+                      ],
+                    }),
+                  );
+                  if (isFirstRequest) {
+                    firstRequestStarted.complete();
+                    finishFirstRequest.future.then(
+                      (_) => handler.resolve(response),
+                    );
+                  } else {
+                    handler.resolve(response);
+                  }
+                },
+              ),
+            );
+          final service = OcrService(config: _testOcrConfig, dio: dio);
+          final imageBytes = Uint8List.fromList([1, 2, 3]);
+
+          final firstRequest = service.recognize(imageBytes: imageBytes);
+          await firstRequestStarted.future;
+          dio.options.headers['Authorization'] = 'Bearer $secondCredential';
+          await service.recognize(imageBytes: imageBytes);
+          finishFirstRequest.complete();
+          await firstRequest;
+
+          final diagnostics = jsonEncode(service.diagnosticResponse());
+          expect(service.diagnosticResponse()['requestId'], safeRequestId);
+          expect(diagnostics, isNot(contains(firstCredential)));
+        },
+      );
+
+      test(
+        'overlapping OCR requests keep body credential exclusions paired',
+        () async {
+          const firstCredential = 'req-overlapping-body-credential-a-95';
+          const secondCredential = 'req-overlapping-body-credential-b-95';
+          const safeRequestId = 'req-safe-after-overlapping-body-credential-95';
+          final customParam = CustomParam(
+            paramName: 'api_key',
+            defaultValue: firstCredential,
+          );
+          final firstRequestStarted = Completer<void>();
+          final finishFirstRequest = Completer<void>();
+          final dio = Dio()
+            ..interceptors.add(
+              _InterceptorWithCallback(
+                callback: (options, handler) {
+                  final body = options.data as Map;
+                  final isFirstRequest = body['api_key'] == firstCredential;
+                  final credential =
+                      isFirstRequest ? firstCredential : secondCredential;
+                  final response = Response(
+                    requestOptions: options,
+                    statusCode: 200,
+                    data: {
+                      'request_id': credential,
+                      'id': safeRequestId,
+                      'choices': [
+                        {
+                          'message': {'content': 'recognized'},
+                        },
+                      ],
+                    },
+                    headers: Headers.fromMap({
+                      'x-request-id': [credential, safeRequestId],
+                    }),
+                  );
+                  if (isFirstRequest) {
+                    firstRequestStarted.complete();
+                    finishFirstRequest.future.then(
+                      (_) => handler.resolve(response),
+                    );
+                  } else {
+                    handler.resolve(response);
+                  }
+                },
+              ),
+            );
+          final service = OcrService(
+            config: _testOcrConfig.copyWith(customParams: [customParam]),
+            dio: dio,
+          );
+          final imageBytes = Uint8List.fromList([1, 2, 3]);
+
+          final firstRequest = service.recognize(imageBytes: imageBytes);
+          await firstRequestStarted.future;
+          customParam.defaultValue = secondCredential;
+          await service.recognize(imageBytes: imageBytes);
+          finishFirstRequest.complete();
+          await firstRequest;
+
+          final diagnostics = jsonEncode(service.diagnosticResponse());
+          expect(service.diagnosticResponse()['requestId'], safeRequestId);
+          expect(diagnostics, isNot(contains(firstCredential)));
+        },
+      );
+
+      test(
+          'diagnostics exclude Authorization credentials added by Dio interceptors',
+          () async {
+        const safeRequestId = 'req-safe-after-interceptor-91';
+        final cases = [
+          (
+            'authorization',
+            'Bearer interceptor-secret-91',
+            'interceptor-secret-91',
+          ),
+          (
+            'AUTHORIZATION',
+            'Token interceptor-secret-92',
+            'interceptor-secret-92',
+          ),
+          (
+            'Authorization',
+            'Digest username="user", realm="ocr", response="digest-secret-93", nonce="n"',
+            'digest-secret-93',
+          ),
+          (
+            'Authorization',
+            'Digest response="digest,secret-94", nonce="n"',
+            'digest,secret-94',
+          ),
+        ];
+
+        for (final (headerName, headerValue, credential) in cases) {
+          final dio = Dio()
+            ..interceptors.add(
+              _InterceptorWithCallback(
+                callback: (options, handler) {
+                  options.headers[headerName] = headerValue;
+                  handler.resolve(
+                    Response(
+                      requestOptions: options,
+                      statusCode: 200,
+                      data: {
+                        'request_id': credential,
+                        'id': safeRequestId,
+                        'choices': [
+                          {
+                            'message': {'content': 'recognized'},
+                          },
+                        ],
+                      },
+                      headers: Headers.fromMap({
+                        'x-request-id': [credential, safeRequestId],
+                      }),
+                    ),
+                  );
+                },
+              ),
+            );
+          final service = OcrService(
+            config: const OcrConfig(
+              model: 'gpt-4o',
+              apiKey: '',
+              host: 'https://api.test.com/v1',
+            ),
+            dio: dio,
+          );
+
+          await service.recognize(imageBytes: Uint8List.fromList([1, 2, 3]));
+
+          final diagnostics = jsonEncode(service.diagnosticResponse());
+          expect(service.diagnosticResponse()['requestId'], safeRequestId);
+          expect(diagnostics, isNot(contains(credential)));
+        }
+      });
+
+      test(
+        'diagnostics exclude credentials added to request data by Dio interceptors',
+        () async {
+          const safeRequestId = 'req-safe-after-interceptor-body-95';
+          final echoedRequestId = 'req-${List.filled(146, 'x').join()}';
+          final credential =
+              '${List.filled(2300, 'a').join()}$echoedRequestId-${List.filled(80, 'b').join()}';
+          for (final isError in [false, true]) {
+            final dio = Dio()
+              ..interceptors.add(
+                _InterceptorWithCallback(
+                  callback: (options, handler) {
+                    (options.data as Map)['api_key'] = credential;
+                    final response = Response(
+                      requestOptions: options,
+                      statusCode: isError ? 401 : 200,
+                      data: {
+                        'request_id': echoedRequestId,
+                        'id': safeRequestId,
+                        'choices': [
+                          {
+                            'message': {'content': 'recognized'},
+                          },
+                        ],
+                      },
+                    );
+                    if (isError) {
+                      handler.reject(
+                        DioException(
+                          requestOptions: options,
+                          response: response,
+                          type: DioExceptionType.badResponse,
+                        ),
+                      );
+                    } else {
+                      handler.resolve(response);
+                    }
+                  },
+                ),
+              );
+            final service = OcrService(
+              config: const OcrConfig(
+                model: 'gpt-4o',
+                apiKey: '',
+                host: 'https://api.test.com/v1',
+              ),
+              dio: dio,
+            );
+
+            final recognize = service.recognize(
+              imageBytes: Uint8List.fromList([1, 2, 3]),
+            );
+            if (isError) {
+              await expectLater(recognize, throwsA(isA<Exception>()));
+            } else {
+              await recognize;
+            }
+
+            final diagnostics = jsonEncode({
+              'request': service.diagnosticRequest,
+              'response': service.diagnosticResponse(),
+            });
+            expect(service.diagnosticResponse()['requestId'], safeRequestId);
+            expect(diagnostics, isNot(contains(credential)));
+            expect(diagnostics, isNot(contains(echoedRequestId)));
+          }
+        },
+      );
 
       test(
         'success diagnostics omit image signatures in provider metadata',
@@ -2362,59 +3004,57 @@ void main() {
         expect(jsonEncode(diagnostic), isNot(contains(apiKey)));
       });
 
-      test('diagnostics exclude credentials embedded in the request URL',
-          () async {
-        for (final entry in [
-          (
-            'https://ocr.test/v1?key=opaque-query-secret-87',
-            'opaque-query-secret-87',
-          ),
-          (
-            'https://user:oauth-userinfo-secret@ocr.test/v1',
-            'oauth-userinfo-secret',
-          ),
-          (
-            'https://ocr.test/v1?access_token=opaque-token-secret-87',
-            'opaque-token-secret-87',
-          ),
-          (
-            'https://ocr.test/v1?secretKey=opaque-secret-key-191',
-            'opaque-secret-key-191',
-          ),
-          (
-            'https://ocr.test/v1?privateKey=opaque-private-key-191',
-            'opaque-private-key-191',
-          ),
-        ]) {
-          final dio = _mockDioWithSuccess({
-            'id': entry.$2,
-            'choices': [
-              {
-                'message': {'content': 'test text'},
-              },
-            ],
-          });
-          final service = OcrService(
-            config: OcrConfig(
-              model: 'gpt-4o',
-              apiKey: '',
-              host: entry.$1,
+      test(
+        'diagnostics exclude credentials embedded in the request URL',
+        () async {
+          for (final entry in [
+            (
+              'https://ocr.test/v1?key=opaque-query-secret-87',
+              'opaque-query-secret-87',
             ),
-            dio: dio,
-          );
+            (
+              'https://user:oauth-userinfo-secret@ocr.test/v1',
+              'oauth-userinfo-secret',
+            ),
+            (
+              'https://ocr.test/v1?access_token=opaque-token-secret-87',
+              'opaque-token-secret-87',
+            ),
+            (
+              'https://ocr.test/v1?secretKey=opaque-secret-key-191',
+              'opaque-secret-key-191',
+            ),
+            (
+              'https://ocr.test/v1?privateKey=opaque-private-key-191',
+              'opaque-private-key-191',
+            ),
+          ]) {
+            final dio = _mockDioWithSuccess({
+              'id': entry.$2,
+              'choices': [
+                {
+                  'message': {'content': 'test text'},
+                },
+              ],
+            });
+            final service = OcrService(
+              config: OcrConfig(model: 'gpt-4o', apiKey: '', host: entry.$1),
+              dio: dio,
+            );
 
-          await service.recognize(
-            imageBytes: Uint8List.fromList([1, 2, 3]),
-            imageFormat: 'jpeg',
-          );
+            await service.recognize(
+              imageBytes: Uint8List.fromList([1, 2, 3]),
+              imageFormat: 'jpeg',
+            );
 
-          final diagnostics = jsonEncode({
-            'request': service.diagnosticRequest,
-            'response': service.diagnosticResponse(),
-          });
-          expect(diagnostics, isNot(contains(entry.$2)), reason: entry.$1);
-        }
-      });
+            final diagnostics = jsonEncode({
+              'request': service.diagnosticRequest,
+              'response': service.diagnosticResponse(),
+            });
+            expect(diagnostics, isNot(contains(entry.$2)), reason: entry.$1);
+          }
+        },
+      );
 
       test(
         'diagnostic finish reason excludes the configured API key',

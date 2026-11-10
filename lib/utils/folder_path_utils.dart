@@ -7,6 +7,8 @@ class FolderPathUtils {
   /// 原生端导出时会直接失败，因此在校验阶段就拒绝
   static const Set<String> _reservedWindowsNames = {
     'CON',
+    r'CONIN$',
+    r'CONOUT$',
     'PRN',
     'AUX',
     'NUL',
@@ -43,7 +45,8 @@ class FolderPathUtils {
   static String? _validateName(String name, String kind, int maxLength) {
     final trimmed = name.trim();
     if (trimmed.isEmpty) return '$kind不能为空';
-    if (trimmed.length > maxLength) return '$kind不能超过$maxLength个字符';
+    if (name != name.trimRight()) return '$kind不能以空白结尾';
+    if (name.length > maxLength) return '$kind不能超过$maxLength个字符';
     if (_illegalChars.hasMatch(name)) {
       return '$kind不能包含 Windows 非法字符';
     }

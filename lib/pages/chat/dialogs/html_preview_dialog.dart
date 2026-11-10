@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:stroom/widgets/html_code_block_widget.dart';
 
@@ -168,7 +169,7 @@ class _HtmlPreviewDialogContentState extends State<_HtmlPreviewDialogContent> {
                         ),
                         const SizedBox(height: 12),
                         Text(
-                          '加载 HTML 预览...',
+                          AppLocalizations.of(context)!.chatHtmlLoading,
                           style: TextStyle(
                             fontSize: 14,
                             color: cs.onSurfaceVariant,
@@ -196,7 +197,7 @@ class _HtmlPreviewDialogContentState extends State<_HtmlPreviewDialogContent> {
                         ),
                         const SizedBox(height: 12),
                         Text(
-                          '加载失败',
+                          AppLocalizations.of(context)!.chatPreviewLoadFailed,
                           style: TextStyle(
                             fontSize: 16,
                             color: cs.onSurface,
@@ -227,7 +228,7 @@ class _HtmlPreviewDialogContentState extends State<_HtmlPreviewDialogContent> {
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: Text(
-                      'HTML 预览',
+                      AppLocalizations.of(context)!.chatHtmlPreview,
                       style: TextStyle(
                         fontSize: 13,
                         color: cs.onSurface,
@@ -247,7 +248,7 @@ class _HtmlPreviewDialogContentState extends State<_HtmlPreviewDialogContent> {
                       ),
                       child: IconButton(
                         icon: const Icon(Icons.close, size: 24),
-                        tooltip: '关闭预览',
+                        tooltip: AppLocalizations.of(context)!.chatPreviewClose,
                         color: cs.onSurface,
                         onPressed: () => Navigator.pop(context),
                       ),

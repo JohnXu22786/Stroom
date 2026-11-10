@@ -5,6 +5,7 @@ import 'package:extended_image/extended_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/chat/composer/chat_file_picker_dialog.dart';
 import 'package:stroom/pages/chat/composer/file_picker_shared.dart';
 import 'package:stroom/pages/extended_image_editor_page.dart';
@@ -57,6 +58,61 @@ void main() {
     TextManifest.invalidateCache();
   });
 
+  testWidgets('empty text files can be selected while missing files error',
+      (tester) async {
+    await tester.runAsync(() async {
+      await TextManifest.writeText('empty-note.txt', '');
+      await TextManifest.addRecord(TextRecord(
+        name: 'empty-note',
+        hash: 'empty-note',
+        size: 0,
+        createdAt: DateTime.now(),
+      ));
+      await TextManifest.addRecord(TextRecord(
+        name: 'missing-note',
+        hash: 'missing-note',
+        size: 10,
+        createdAt: DateTime.now(),
+      ));
+    });
+
+    List<MapEntry<String, Uint8List>>? pickerResult;
+    await tester.pumpWidget(MaterialApp(
+      locale: const Locale('en', 'US'),
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      home: Builder(
+        builder: (context) => ElevatedButton(
+          onPressed: () async {
+            pickerResult = await showAppFilePickerDialog(context);
+          },
+          child: const Text('Open Picker'),
+        ),
+      ),
+    ));
+    await tester.tap(find.text('Open Picker'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    await tester.tap(find.text('empty-note.txt'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.byType(PreviewChip), findsOneWidget);
+    expect(find.text('Could not read file'), findsNothing);
+
+    await tester.tap(find.text('missing-note.txt'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('Could not read file'), findsOneWidget);
+    expect(find.byType(PreviewChip), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('file_picker_confirm_btn')));
+    await tester.pump();
+    expect(pickerResult, hasLength(1));
+    expect(pickerResult!.single.key, 'empty-note.txt');
+    expect(pickerResult!.single.value, isEmpty);
+  });
+
   // ====================================================================
   // Quick-edit flow: the editor processes the image in place (the page
   // stays open while processing) and the selection is updated with the
@@ -88,6 +144,9 @@ void main() {
 
       List<MapEntry<String, Uint8List>>? pickerResult;
       await tester.pumpWidget(MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
         home: Builder(
           builder: (context) => ElevatedButton(
             onPressed: () async {
@@ -183,6 +242,9 @@ void main() {
     testWidgets('preview bar is not shown when no files are selected',
         (tester) async {
       await tester.pumpWidget(MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
         home: Builder(
           builder: (context) => ElevatedButton(
             onPressed: () => showAppFilePickerDialog(context),
@@ -238,6 +300,9 @@ void main() {
     /// finish loading its records.
     Future<void> openPicker(WidgetTester tester) async {
       await tester.pumpWidget(MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
         home: Builder(
           builder: (context) => ElevatedButton(
             onPressed: () => showAppFilePickerDialog(context),
@@ -305,6 +370,9 @@ void main() {
         (tester) async {
       List<MapEntry<String, Uint8List>>? pickerResult;
       await tester.pumpWidget(MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
         home: Builder(
           builder: (context) => ElevatedButton(
             onPressed: () async {
@@ -346,5 +414,73 @@ void main() {
       expect(find.text('选择文件'), findsNothing,
           reason: 'the explicit close button must always close the picker');
     });
+  });
+
+  group('AppFilePickerDialog localization', () {
+    for (final (locale, title, textTab, imageTab, confirm, unreadable) in [
+      (
+        const Locale('en', 'US'),
+        'Choose files',
+        'Text',
+        'Images',
+        'Done',
+        'Could not read file',
+      ),
+      (
+        const Locale('zh', 'CN'),
+        '选择文件',
+        '文本',
+        '图片',
+        '确定',
+        '无法读取文件',
+      ),
+    ]) {
+      testWidgets('$locale localizes picker chrome and read errors', (
+        tester,
+      ) async {
+        await TextManifest.addRecord(TextRecord(
+          name: 'missing-note',
+          hash: 'missing-note-hash',
+          size: 10,
+          createdAt: DateTime.now(),
+        ));
+
+        await tester.pumpWidget(MaterialApp(
+          locale: locale,
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showAppFilePickerDialog(context),
+              child: const Text('Open Picker'),
+            ),
+          ),
+        ));
+        await tester.tap(find.text('Open Picker'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+
+        expect(find.text(title), findsOneWidget);
+        expect(find.text(textTab), findsOneWidget);
+        expect(find.text(imageTab), findsOneWidget);
+        expect(find.text('missing-note.txt'), findsOneWidget);
+        expect(
+          tester
+              .widget<Text>(
+                find.descendant(
+                  of: find.byKey(const Key('file_picker_confirm_btn')),
+                  matching: find.byType(Text),
+                ),
+              )
+              .data,
+          confirm,
+        );
+
+        await tester.tap(find.text('missing-note.txt'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+        expect(find.text(unreadable), findsOneWidget);
+      });
+    }
   });
 }

@@ -23,12 +23,27 @@ jobs:
           flutter-version: 3.47.8
           cache: true
           pub-cache: true
-      - run: flutter pub get --enforce-lockfile
+      - run: flutter pub get
       - uses: actions/setup-node@v4
         with:
           node-version: 22
       - run: node --test tests/widgets/mermaid_render_widget_js_test.cjs
       - run: node --test tests/catcatch/js_hook_script_test.cjs
+
+  ocr-benchmark:
+    name: "OCR Benchmark Validation"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate macOS native menu localizations
+        run: python3 tools/ci/validate_macos_menu_localization.py
+      - name: Verify OCR benchmark fixtures
+        run: python3 tools/ocr_benchmark/evaluate.py --verify-fixtures
+      - name: Test OCR benchmark evaluator
+        run: python3 -m unittest discover -s tools/ocr_benchmark -p 'test_*.py' -v
 
   format:
     name: "Format Check"
@@ -40,7 +55,10 @@ jobs:
           flutter-version: 3.47.8
           cache: true
           pub-cache: true
-      - run: flutter pub get --enforce-lockfile
+      - run: flutter pub get
+      - name: Format generated localization code
+        # Flutter regenerates localization Dart files with the current SDK formatter.
+        run: dart format --language-version=3.0 lib/l10n/app_localizations.dart
       - name: Check Dart formatting
         # Preserve the repo's Dart 3.0 formatting baseline after raising its SDK minimum.
         run: dart format --language-version=3.0 --set-exit-if-changed .
@@ -58,7 +76,7 @@ jobs:
           flutter-version: 3.47.8
           cache: true
           pub-cache: true
-      - run: flutter pub get --enforce-lockfile
+      - run: flutter pub get
       - name: Run Dart analyzer
         run: flutter analyze --no-fatal-warnings --no-fatal-infos
       - name: Check changed files have tests
@@ -93,6 +111,14 @@ jobs:
           while IFS= read -r file; do
             [ -z "$file" ] && continue
             case "$file" in
+              lib/l10n/app_localizations.dart|\
+              lib/l10n/app_localizations_en.dart|\
+              lib/l10n/app_localizations_zh.dart)
+                test_f="tests/services/ocr_task_runner_test.dart"
+                ;;
+              lib/services/ocr_result_saver.dart)
+                test_f="tests/services/ocr_task_runner_test.dart"
+                ;;
               lib/catcatch/engine/js_hook_script.dart)
                 test_f="tests/catcatch/js_hook_script_test.cjs"
                 ;;
@@ -102,11 +128,30 @@ jobs:
               lib/services/data_integrity_json_parser_web.dart)
                 test_f="tests/startup/startup_check_service_web.dart"
                 ;;
+              lib/services/sse_client_web_error.dart|\
+              lib/services/sse_client_io.dart)
+                test_f="tests/services/sse_client_web_test.dart"
+                ;;
               lib/pages/gallery_page.dart|\
               lib/pages/tts_page.dart|\
               lib/pages/video_gallery_page.dart|\
               lib/utils/file_picker_utils.dart)
                 test_f="tests/utils/file_picker_utils_test.dart"
+                ;;
+              lib/pages/voice_editor_page.dart)
+                test_f="tests/task_flow/tts_voice_save_propagation_test.dart"
+                ;;
+              lib/pages/voice_editor_shared.dart)
+                test_f="tests/pages/voice_editor_shared_test.dart"
+                ;;
+              lib/pages/model_config_shared.dart)
+                test_f="tests/pages/settings/provider_config_detail_page_test.dart"
+                ;;
+              lib/pages/provider_config_tool_dialogs.dart)
+                test_f="tests/widgets/mcp_config_card_style_test.dart"
+                ;;
+              lib/widgets/version_info_dialog.dart)
+                test_f="tests/pages/settings/settings_page_test.dart"
                 ;;
               lib/pages/chat/dialogs/mermaid_preview_web_controls.dart|\
               lib/pages/chat/dialogs/mermaid_preview_web_controls_stub.dart|\
@@ -246,7 +291,7 @@ jobs:
         run: |
           sudo apt-get update -y
           sudo apt-get install -y pkg-config libgtk-3-dev libx11-dev libxi-dev
-      - run: flutter pub get --enforce-lockfile
+      - run: flutter pub get
       - uses: browser-actions/setup-chrome@v1
         id: setup-chrome
         if: matrix.suite == 'application-shared' || matrix.suite == 'chat-ai-ui'

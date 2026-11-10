@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
+
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
@@ -11,7 +13,7 @@ import 'package:mime/mime.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/providers/provider_config.dart'
-    show ReasoningParam, findEffortParam;
+    show CustomParam, ReasoningParam, findEffortParam;
 import 'package:stroom/providers/chat_stream_provider.dart';
 import 'package:stroom/services/attachment_storage.dart';
 import 'package:stroom/utils/system_pick_utils.dart';
@@ -24,6 +26,7 @@ import 'package:stroom/pages/extended_image_editor_page.dart';
 import 'package:stroom/models/tool_call.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/services/chat_protocol.dart';
+
 import 'chat_setting_panels.dart';
 import 'chat_file_picker_dialog.dart';
 import 'composer_shared.dart';
@@ -62,6 +65,7 @@ class ChatComposerWidget extends ConsumerStatefulWidget {
   final List<Attachment> initialDraftAttachments;
   final ValueChanged<List<String>>? onModelsReordered;
   final List<ReasoningParam> reasoningParams;
+  final List<CustomParam> customParams;
 
   // ── Edit mode support ──
   /// When non-null, the composer enters edit mode for the given message.
@@ -78,7 +82,10 @@ class ChatComposerWidget extends ConsumerStatefulWidget {
   /// Passes the message id, edited text, and all pending attachments
   /// (original + newly added, minus any removed).
   final void Function(
-      String messageId, String text, List<Attachment> attachments)? onEditSend;
+    String messageId,
+    String text,
+    List<Attachment> attachments,
+  )? onEditSend;
 
   /// Called when user taps X on the edit capsule to cancel editing.
   final VoidCallback? onEditCancel;
@@ -113,6 +120,7 @@ class ChatComposerWidget extends ConsumerStatefulWidget {
     this.initialDraftAttachments = const [],
     this.onModelsReordered,
     this.reasoningParams = const [],
+    this.customParams = const [],
     this.editingMessageId,
     this.editingMessageText,
     this.editingMessageAttachments,
@@ -153,8 +161,9 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
   Timer? _editWarningFadeOutTimer;
 
   /// How long the pill's fade-in lasts on entry (clearly visible fade).
-  static const Duration _editWarningFadeInDuration =
-      Duration(milliseconds: 300);
+  static const Duration _editWarningFadeInDuration = Duration(
+    milliseconds: 300,
+  );
 
   /// How long the warning stays fully visible before auto-hiding. The
   /// countdown starts only after the fade-in completes, so the pill is
@@ -162,8 +171,9 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
   static const Duration _editWarningAutoHideDelay = Duration(seconds: 2);
 
   /// How long the pill's fade-out (and the capsule's fade-in) lasts.
-  static const Duration _editWarningFadeOutDuration =
-      Duration(milliseconds: 200);
+  static const Duration _editWarningFadeOutDuration = Duration(
+    milliseconds: 200,
+  );
 
   /// How long after dismissal the pill stays in the tree before being
   /// removed: slightly longer than the fade-out, so the removal never
@@ -380,7 +390,8 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
           } catch (e) {
             // 帧后组件可能已销毁：草稿保存 best-effort
             debugPrint(
-                '[ChatComposer] failed to save old-conversation draft: $e');
+              '[ChatComposer] failed to save old-conversation draft: $e',
+            );
           }
         });
 
@@ -516,8 +527,9 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
           key: _composerKey,
           decoration: BoxDecoration(
             color: cs.surfaceContainerLow,
-            border:
-                Border(top: BorderSide(color: cs.outlineVariant, width: 0.5)),
+            border: Border(
+              top: BorderSide(color: cs.outlineVariant, width: 0.5),
+            ),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -526,10 +538,7 @@ class ChatComposerWidgetState extends ConsumerState<ChatComposerWidget>
               // ── Pending attachments row (reorderable) ──
               if (hasAttachments) _buildPendingAttachmentsRow(),
               // ── Settings row (model, tools, reasoning) ──
-              _buildChipsSettingsRow(
-                cs: cs,
-                hasAttachments: hasAttachments,
-              ),
+              _buildChipsSettingsRow(cs: cs, hasAttachments: hasAttachments),
               // ── Edit mode capsule / data-loss warning pill ──
               // The warning replaces the capsule in its row while visible;
               // dismissal fades the pill out before the capsule fades back

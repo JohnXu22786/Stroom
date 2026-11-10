@@ -359,27 +359,34 @@ void main() {
       // Create segment parts dir (naming: .{mergedFilename}_parts/)
       final downloadDir = Directory(p.join(appDir, 'catcatch', 'downloads'));
       await downloadDir.create(recursive: true);
-      // For playlist with name='playlist' and ext='m3u8', buildDownloadFileName returns
-      // 'playlist.m3u8', basenameWithoutExtension = 'playlist', so merged file is
-      // 'playlist_merged.ts' and parts dir is '.playlist_merged.ts_parts'
-      final partsDir =
-          Directory(p.join(downloadDir.path, '.playlist_merged.ts_parts'));
+      // Playlist merges can use either TS or fMP4 based on the manifest.
+      final partsDirs = [
+        Directory(p.join(downloadDir.path, '.playlist_merged.ts_parts')),
+        Directory(p.join(downloadDir.path, '.playlist_merged.mp4_parts')),
+      ];
+      final partsDir = partsDirs.first;
       await partsDir.create(recursive: true);
       await File(p.join(partsDir.path, 'part_0')).writeAsString('data');
 
-      // Create merged playlist file
-      await File(p.join(downloadDir.path, 'playlist_merged.ts'))
-          .writeAsString('data');
+      for (final dir in partsDirs.skip(1)) {
+        await dir.create(recursive: true);
+        await File(p.join(dir.path, 'part_0')).writeAsString('data');
+      }
+      final mergedFiles = [
+        File(p.join(downloadDir.path, 'playlist_merged.ts')),
+        File(p.join(downloadDir.path, 'playlist_merged.mp4')),
+      ];
+      for (final file in mergedFiles) {
+        await file.writeAsString('data');
+      }
 
-      expect(partsDir.existsSync(), isTrue);
-      expect(File(p.join(downloadDir.path, 'playlist_merged.ts')).existsSync(),
-          isTrue);
+      expect(partsDirs.every((dir) => dir.existsSync()), isTrue);
+      expect(mergedFiles.every((file) => file.existsSync()), isTrue);
 
       await CatCatchNotifier.cleanupTaskFiles(task, appDirPath: appDir);
 
-      expect(partsDir.existsSync(), isFalse);
-      expect(File(p.join(downloadDir.path, 'playlist_merged.ts')).existsSync(),
-          isFalse);
+      expect(partsDirs.every((dir) => !dir.existsSync()), isTrue);
+      expect(mergedFiles.every((file) => !file.existsSync()), isTrue);
     });
 
     test('deletes converted file for playlist downloads (merged naming)',

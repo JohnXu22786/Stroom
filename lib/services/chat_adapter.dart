@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
+import 'package:flutter/widgets.dart' show Locale;
 
 import '../models/assistant.dart'
     show Assistant, AssistantSettings, CustomParameter;
@@ -9,6 +10,7 @@ import '../models/chat_message.dart';
 import '../models/mcp.dart';
 import '../models/tool_call.dart';
 import '../providers/chat_api_provider.dart';
+import '../providers/locale_provider.dart';
 import '../providers/provider_config.dart';
 import '../utils/provider_models.dart' show resolveProviderModel;
 import 'chat_protocol.dart';
@@ -77,6 +79,11 @@ class AvailableModel {
 
 /// 桥接层：将我们的供应商/模型配置系统适配到 flutter_chat_ui 的流式调用
 class ChatAdapter {
+  final Locale? Function()? _localeOverride;
+
+  ChatAdapter({Locale? Function()? localeOverride})
+      : _localeOverride = localeOverride;
+
   /// Per-conversation ChatService instances, keyed by conversation ID.
   /// Each conversation gets its own independent HTTP connection, enabling
   /// multiple conversations to stream concurrently without interference.
@@ -104,6 +111,15 @@ class ChatAdapter {
 
   /// 当前缓存的模型配置（供上下文管理估算用）。
   ModelConfig? get modelConfig => _cachedModelConfig;
+
+  /// Custom parameters visible to the chat composer, with model entries
+  /// inheriting provider type/default values unless explicitly overridden.
+  List<CustomParam> get customParams {
+    return mergeCustomParams(
+      _cachedProviderConfig?.customParams ?? const [],
+      _cachedModelConfig?.customParams ?? const [],
+    );
+  }
 
   /// Stable identity of the endpoint used for an unbound assistant's next
   /// request. Flow launches capture it before their execution is queued.
@@ -266,6 +282,7 @@ class ChatAdapter {
                   baseUrl: config.host,
                   apiKey: config.key,
                   endpointType: endpointType,
+                  localeOverride: _localeOverride,
                 ),
                 model,
                 config,
@@ -302,6 +319,7 @@ class ChatAdapter {
           baseUrl: config.host,
           apiKey: config.key,
           endpointType: endpointType,
+          localeOverride: _localeOverride,
         );
         return _activeServices.putIfAbsent(convId, () {
           return _buildService(
@@ -347,6 +365,7 @@ class ChatAdapter {
       modelConfig: modelConfig,
       providerConfig: providerConfig,
       endpointType: endpointType,
+      localeOverride: _localeOverride,
     );
     // Apply the assistant prompt/settings (explicit assistant wins over
     // the global cached assistant template).
@@ -481,6 +500,7 @@ class ChatAdapter {
         baseUrl: config.host,
         apiKey: config.key,
         endpointType: endpointType,
+        localeOverride: _localeOverride,
       );
       svc = _buildTransientService(
         provider,
@@ -515,6 +535,7 @@ class ChatAdapter {
       modelConfig: modelConfig,
       providerConfig: providerConfig,
       endpointType: endpointType,
+      localeOverride: _localeOverride,
     );
     if (_cachedAssistantPrompt != null) {
       svc.setAssistantPrompt(_cachedAssistantPrompt);
@@ -619,6 +640,7 @@ class ChatAdapter {
       baseUrl: config.host,
       apiKey: config.key,
       endpointType: endpointType,
+      localeOverride: _localeOverride,
     );
     _cachedProvider = provider;
     _cachedModelConfig = modelConfig;
@@ -685,6 +707,7 @@ class ChatAdapter {
       baseUrl: config.host,
       apiKey: config.key,
       endpointType: endpointType,
+      localeOverride: _localeOverride,
     );
     _cachedProvider = provider;
     _cachedModelConfig = modelConfig;
@@ -781,12 +804,15 @@ class ChatAdapter {
     bool reasoning = false,
     String reasoningEffort = 'medium',
     Map<String, String> reasoningParamValues = const {},
+    Map<String, String>? customParamValues,
     String convId = '',
   }) {
     final svc =
         convId.isNotEmpty ? getOrCreateService(convId) : currentChatService;
     if (svc == null) {
-      return Stream.error('请先配置聊天供应商');
+      return Stream.error(
+        appLocalizationsForLocale(_localeOverride?.call()).chatMissingProvider,
+      );
     }
     return svc.sendStream(
       text,
@@ -794,6 +820,7 @@ class ChatAdapter {
       reasoning: reasoning,
       reasoningEffort: reasoningEffort,
       reasoningParamValues: reasoningParamValues,
+      customParamValues: customParamValues,
     );
   }
 
@@ -803,28 +830,44 @@ class ChatAdapter {
   Stream<ChatEvent> sendStreamWithTools(
     String text, {
     required List<ChatMessage> history,
+    RequestContentCache? contentCache,
     bool reasoning = false,
     String reasoningEffort = 'medium',
     Map<String, String> reasoningParamValues = const {},
+    Map<String, String>? customParamValues,
     List<ToolDefinition> tools = const [],
     String convId = '',
     Assistant? assistant,
     ProviderEntriesState? entriesState,
+    void Function()? onToolCallIntent,
+    void Function(String text)? onTextDelta,
+    void Function(Map<String, dynamic> body)? onRequestBody,
+    String? Function()? takeCompletedToolCallRound,
+    String? Function()? takeCompletedToolCallReasoning,
   }) {
     final svc = convId.isNotEmpty
         ? getOrCreateService(convId,
             assistant: assistant, entriesState: entriesState)
         : currentChatService;
     if (svc == null) {
-      return Stream.error('请先配置聊天供应商');
+      return Stream.error(
+        appLocalizationsForLocale(_localeOverride?.call()).chatMissingProvider,
+      );
     }
     return svc.sendStreamWithTools(
       text,
       history: history,
+      contentCache: contentCache,
       reasoning: reasoning,
       reasoningEffort: reasoningEffort,
       reasoningParamValues: reasoningParamValues,
+      customParamValues: customParamValues,
       tools: tools,
+      onToolCallIntent: onToolCallIntent,
+      onTextDelta: onTextDelta,
+      onRequestBody: onRequestBody,
+      takeCompletedToolCallRound: takeCompletedToolCallRound,
+      takeCompletedToolCallReasoning: takeCompletedToolCallReasoning,
     );
   }
 

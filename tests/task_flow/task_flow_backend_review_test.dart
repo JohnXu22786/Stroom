@@ -70,10 +70,12 @@ class _ManualDownloads extends CatCatchNotifier {
       {String videoFolder = '',
       String audioFolder = '',
       String? taskId,
+      bool flowManagedSelection = false,
       bool deferSingleResourceSelection = false}) {
     final id = taskId!;
     idsByUrl[url] = id;
     final confirming = url.endsWith('/confirm');
+    final recovering = url.endsWith('/recovery');
     state = [
       ...state,
       catcatch.CatCatchTask(
@@ -81,10 +83,16 @@ class _ManualDownloads extends CatCatchNotifier {
         url: url,
         expectedDurationSec: expectedDurationSec,
         createdAt: DateTime(2026),
+        status: recovering
+            ? catcatch.TaskStatus.paused
+            : catcatch.TaskStatus.running,
         detectedMedia: [
-          const MediaResource(
-              url: 'https://x/one.mp4', name: 'one', ext: 'mp4'),
-          if (!url.endsWith('/single'))
+          url.endsWith('/unclassified')
+              ? const MediaResource(
+                  url: 'https://x/one.bin', name: 'one', ext: 'bin')
+              : const MediaResource(
+                  url: 'https://x/one.mp4', name: 'one', ext: 'mp4'),
+          if (!url.endsWith('/single') && !url.endsWith('/unclassified'))
             const MediaResource(
                 url: 'https://x/two.mp4', name: 'two', ext: 'mp4'),
         ],
@@ -92,11 +100,21 @@ class _ManualDownloads extends CatCatchNotifier {
             ? const MediaResource(
                 url: 'https://x/one.mp4', name: 'one', ext: 'mp4')
             : null,
-        metadata: confirming ? {'pendingConfirm': 'special_format'} : {},
+        metadata: {
+          if (flowManagedSelection)
+            catcatch.CatCatchTask.flowManagedSelectionKey: 'true',
+          if (confirming) 'pendingConfirm': 'special_format',
+          if (recovering)
+            catcatch.CatCatchTask.webViewRecoveryRequiredKey: 'true',
+          if (deferSingleResourceSelection)
+            'deferSingleResourceSelection': 'true',
+        },
         steps: [
           catcatch.StepStatus.running(confirming
               ? catcatch.StepType.converting
-              : (url.endsWith('/first') || url.endsWith('/single'))
+              : (url.endsWith('/first') ||
+                      url.endsWith('/single') ||
+                      url.endsWith('/unclassified'))
                   ? catcatch.StepType.userSelecting
                   : catcatch.StepType.fetching),
         ],
@@ -167,6 +185,21 @@ class _GatedNotifier extends TaskFlowExecutionNotifier {
   }
 }
 
+class _FailNextRunningPersistNotifier extends TaskFlowExecutionNotifier {
+  bool failNextRunningPersist = false;
+
+  @override
+  Future<bool> persist() {
+    if (failNextRunningPersist &&
+        state.any(
+            (execution) => execution.status == FlowExecutionStatus.running)) {
+      failNextRunningPersist = false;
+      return Future.value(false);
+    }
+    return super.persist();
+  }
+}
+
 class _Tasks extends TaskListNotifier {
   _Tasks(super.ref);
   ProviderConfigItem? resumedConfig;
@@ -233,12 +266,15 @@ class _Manager extends ChatStreamManager {
       {required String text,
       required String convId,
       required List<ChatMessage> history,
+      List<ChatMessage>? requestHistoryOverride,
+      List<ChatMessage>? historyOnSuccess,
       List<ToolDefinition> tools = const [],
       bool reasoning = false,
       String reasoningEffort = 'medium',
       Map<String, String> reasoningParamValues = const {},
       String? streamingMsgId,
       Assistant? assistant,
+      Map<String, String>? customParamValues,
       ProviderEntriesState? entriesStateOverride}) async {
     assistants.add(assistant);
     entries.add(entriesStateOverride);
@@ -955,6 +991,198 @@ void main() {
     expect(await selecting.timeout(const Duration(seconds: 3)), isTrue);
     expect(heldAtSelection, [true]);
     expect(downloads.selected, [firstTaskId]);
+  });
+
+  test('browser recovery wait releases its slot and Continue reacquires it',
+      () async {
+    flow = TaskFlowDefinition(
+      id: 'flow',
+      blocks: [TaskFlowBlock(typeKey: BlockType.catcatch)],
+    );
+    _ManualDownloads? downloads;
+    final container = make(
+      scheduler: TaskFlowScheduler(coreCount: 2),
+      downloads: (ref) {
+        downloads = _ManualDownloads(ref);
+        return downloads!;
+      },
+    );
+    final service = container.read(taskFlowExecutionServiceProvider);
+    final scheduler = container.read(taskFlowSchedulerProvider);
+    final id = (await service.launchFlowMany(
+      'flow',
+      [const FlowRunInput(text: 'https://example.com/recovery')],
+    ))
+        .single;
+    await _waitFor(
+      () =>
+          downloads?.idsByUrl.containsKey('https://example.com/recovery') ??
+          false,
+      'browser recovery CatCatch task creation',
+    );
+    final taskId = downloads!.idsByUrl['https://example.com/recovery']!;
+    await _waitFor(
+      () => !scheduler.holds(id),
+      'browser recovery wait releases the flow slot',
+    );
+    await _waitFor(
+      () =>
+          container
+              .read(taskFlowExecutionsProvider.notifier)
+              .execution(id)
+              ?.status ==
+          FlowExecutionStatus.paused,
+      'browser recovery marks the live flow paused while waiting',
+    );
+
+    final continued = await service.performManualCatCatchAction(
+      taskId,
+      false,
+      (notifier) => (notifier as _ManualDownloads).finish(taskId),
+    );
+
+    expect(continued, isTrue);
+    expect(scheduler.holds(id), isTrue);
+    expect(
+      container.read(taskFlowExecutionsProvider.notifier).execution(id)!.status,
+      isNot(FlowExecutionStatus.paused),
+    );
+    await _waitFor(
+      () => container
+          .read(taskFlowExecutionsProvider.notifier)
+          .execution(id)!
+          .isTerminal,
+      'browser recovery flow completes',
+    );
+  });
+
+  test('browser recovery Continue does not act if flow resume cannot persist',
+      () async {
+    flow = TaskFlowDefinition(
+      id: 'flow',
+      blocks: [TaskFlowBlock(typeKey: BlockType.catcatch)],
+    );
+    final notifier = _FailNextRunningPersistNotifier();
+    _ManualDownloads? downloads;
+    final container = make(
+      notifier: notifier,
+      scheduler: TaskFlowScheduler(coreCount: 2),
+      downloads: (ref) {
+        downloads = _ManualDownloads(ref);
+        return downloads!;
+      },
+    );
+    final service = container.read(taskFlowExecutionServiceProvider);
+    final scheduler = container.read(taskFlowSchedulerProvider);
+    final id = (await service.launchFlowMany(
+      'flow',
+      [const FlowRunInput(text: 'https://example.com/recovery')],
+    ))
+        .single;
+    await _waitFor(
+      () =>
+          downloads?.idsByUrl.containsKey('https://example.com/recovery') ??
+          false,
+      'browser recovery CatCatch task creation',
+    );
+    final taskId = downloads!.idsByUrl['https://example.com/recovery']!;
+    await _waitFor(
+      () => !scheduler.holds(id),
+      'browser recovery wait releases the flow slot',
+    );
+    await _waitFor(
+      () =>
+          container
+              .read(taskFlowExecutionsProvider.notifier)
+              .execution(id)
+              ?.status ==
+          FlowExecutionStatus.paused,
+      'browser recovery marks the live flow paused while waiting',
+    );
+
+    notifier.failNextRunningPersist = true;
+    var actionCalled = false;
+    final continued = await service.performManualCatCatchAction(
+      taskId,
+      false,
+      (notifier) {
+        actionCalled = true;
+        (notifier as _ManualDownloads).finish(taskId);
+      },
+    );
+
+    expect(continued, isFalse);
+    expect(actionCalled, isFalse);
+    expect(scheduler.holds(id), isFalse);
+    expect(
+      container.read(taskFlowExecutionsProvider.notifier).execution(id)!.status,
+      FlowExecutionStatus.paused,
+    );
+    expect(
+      downloads!.tasksForTest.firstWhere((task) => task.id == taskId).status,
+      catcatch.TaskStatus.paused,
+    );
+  });
+
+  test('deferred single unclassified resource can be selected', () async {
+    flow = TaskFlowDefinition(
+      id: 'flow',
+      blocks: [
+        TaskFlowBlock(
+          typeKey: BlockType.catcatch,
+          params: {
+            'resourceSelectionPolicy': 'automaticWithPrompt',
+            'outputPolicy': 'followDownstream',
+          },
+        ),
+      ],
+    );
+    _ManualDownloads? downloads;
+    final container = make(
+      scheduler: TaskFlowScheduler(coreCount: 4),
+      downloads: (ref) {
+        downloads = _ManualDownloads(ref);
+        return downloads!;
+      },
+    );
+    final service = container.read(taskFlowExecutionServiceProvider);
+    final scheduler = container.read(taskFlowSchedulerProvider);
+    final id = (await service.launchFlowMany(
+      'flow',
+      [const FlowRunInput(text: 'https://example.com/unclassified')],
+    ))
+        .single;
+    await _waitFor(
+      () =>
+          downloads?.idsByUrl.containsKey('https://example.com/unclassified') ??
+          false,
+      'unclassified CatCatch task creation',
+    );
+    final activeDownloads = downloads!;
+    final taskId =
+        activeDownloads.idsByUrl['https://example.com/unclassified']!;
+    await _waitFor(
+        () => scheduler.holds(id), 'CatCatch worker acquires its slot');
+    await _waitFor(() => !scheduler.holds(id), 'deferred resource picker');
+
+    var heldDuringSelection = false;
+    activeDownloads.onSelect = (_) => heldDuringSelection = scheduler.holds(id);
+    const media =
+        MediaResource(url: 'https://x/one.bin', name: 'one', ext: 'bin');
+    expect(
+      await service.performManualCatCatchAction(
+        taskId,
+        true,
+        (notifier) => notifier.selectMedia(taskId, media),
+        selectedMediaUrl: media.url,
+        selectedMediaIdentity: media.selectionIdentity,
+        selectedMediaHasByteRange: media.hasByteRange,
+      ),
+      isTrue,
+    );
+    expect(heldDuringSelection, isTrue);
+    expect(activeDownloads.selected, [taskId]);
+    await service.cancelExecution(id);
   });
 
   test('special-format confirmation also yields and reacquires its slot',

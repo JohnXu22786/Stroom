@@ -1,12 +1,14 @@
-import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 
 import '../../../models/ocr_batch_execution.dart';
+import '../../../l10n/app_localizations.dart';
+import '../../../providers/locale_provider.dart';
 import '../../../providers/background_task_provider.dart';
 import '../../../providers/provider_config.dart';
 import '../../../providers/task_provider_shared.dart';
@@ -15,6 +17,7 @@ import '../../../utils/http_timeout.dart';
 import '../../../utils/ocr_image_payload.dart';
 import '../../../utils/ocr_diagnostics.dart';
 import '../../../utils/provider_models.dart';
+import '../../../utils/web_file_store.dart';
 import '../../models/flow_payload.dart';
 import '../../models/block_type_definition.dart';
 import '../../models/task_flow_execution.dart';
@@ -22,14 +25,6 @@ import '../../models/task_flow_definition.dart';
 import '../../models/task_flow_exception.dart';
 import '../../providers/task_flow_execution_provider.dart';
 import 'shared_helpers.dart';
-
-/// Approximate length of the JSON request body: the base64 data-URI is the
-/// dominant term (~1.33x the raw image bytes) plus a fixed envelope.
-int _encodedBodyLength(Uint8List imageBytes, String imageFormat) {
-  final b64 = base64Encode(imageBytes).length;
-  final dataUri = 'data:image/$imageFormat;base64,'.length + b64;
-  return dataUri + 512; // JSON envelope overhead (model, messages, etc.)
-}
 
 Future<Uint8List> _readInputBytesUpTo(File file, int maxBytes) async {
   final bytes = BytesBuilder(copy: false);
@@ -48,6 +43,7 @@ Future<String> executeOcrBlock({
   required FlowSubTask flowSubTask,
   required BackgroundTaskNotifier bgNotifier,
   required ProviderEntriesState providerEntries,
+  AppLocalizations? localizations,
   CancelToken? cancelToken,
 
   /// Allows the response to be held and released in cancellation tests.
@@ -62,6 +58,7 @@ Future<String> executeOcrBlock({
   final inputBasename = p.basename(input);
   final title = '文字识别_${p.basenameWithoutExtension(inputBasename)}';
   final saveFolder = asStringParam(block.params, 'saveFolder', '');
+  final strings = localizations ?? appLocalizationsForLocale(null);
 
   final taskId = const Uuid().v4();
   execNotifier.updateSubTaskId(execId, flowSubTask.id, taskId);
@@ -75,8 +72,19 @@ Future<String> executeOcrBlock({
   Uint8List imageBytes;
   String imageFormat;
   final file = File(input);
+  late final bool usesWebFileStore;
+  late final bool inputExists;
   try {
-    if (!await file.exists()) {
+    if (kIsWeb) {
+      usesWebFileStore = true;
+      inputExists = await WebFileStore.exists(input);
+    } else {
+      final existsInWebFileStore =
+          WebFileStore.isTestMode && await WebFileStore.exists(input);
+      usesWebFileStore = existsInWebFileStore;
+      inputExists = existsInWebFileStore || await file.exists();
+    }
+    if (!inputExists) {
       failSubTask(
         bgNotifier,
         taskId,
@@ -137,6 +145,7 @@ Future<String> executeOcrBlock({
     host: config.host,
     apiKey: config.key,
     model: model.modelId,
+    systemPrompt: strings.ocrDefaultSystemPrompt,
     requestSizeBudgetBytes: requestSizeBudgetBytes,
     typeConfig: model.typeConfig,
     customParams: model.customParams,
@@ -197,15 +206,38 @@ Future<String> executeOcrBlock({
   }
 
   try {
-    final inputLength = await file.length();
-    if (inputLength > maxInputBytes) {
-      throw oversizedInputException();
+    if (usesWebFileStore) {
+      final storedBytes =
+          await WebFileStore.read(input, maxBytes: maxInputBytes);
+      if (storedBytes == null) {
+        failSubTask(
+          bgNotifier,
+          taskId,
+          execNotifier,
+          execId,
+          flowSubTask.id,
+          '输入文件不存在: $input',
+        );
+        throw BlockExecutionException(
+          '输入文件不存在',
+          blockType: def.typeKey.name,
+          blockTitle: def.label,
+        );
+      }
+      imageBytes = storedBytes;
+    } else {
+      final inputLength = await file.length();
+      if (inputLength > maxInputBytes) {
+        throw oversizedInputException();
+      }
+      imageBytes =
+          await (readInputBytes ?? _readInputBytesUpTo)(file, maxInputBytes);
     }
-    imageBytes =
-        await (readInputBytes ?? _readInputBytesUpTo)(file, maxInputBytes);
     if (imageBytes.length > maxInputBytes) {
       throw oversizedInputException();
     }
+  } on WebFileStoreReadLimitExceededException {
+    throw oversizedInputException();
   } catch (e) {
     if (e is BlockExecutionException) rethrow;
     failSubTask(
@@ -247,6 +279,15 @@ Future<String> executeOcrBlock({
   imageBytes = payload.bytes;
   imageFormat = payload.format;
 
+  if (!isFlowExecutionActive(execNotifier, execId)) {
+    bgNotifier.removeTask(taskId);
+    throw BlockExecutionException(
+      '任务流已结束或删除',
+      blockType: def.typeKey.name,
+      blockTitle: def.label,
+    );
+  }
+
   try {
     bgNotifier.updateStep(taskId, 0, running: true);
     final String result;
@@ -258,7 +299,9 @@ Future<String> executeOcrBlock({
         dio: ocrDio,
         connectTimeout: connectTimeoutDefault,
         sendTimeout: sendTimeoutForBytes(
-          _encodedBodyLength(imageBytes, imageFormat),
+          sizeEstimator.encodedRequestSizeBytes(
+            imageBytesList: [(imageBytes, imageFormat)],
+          ),
         ),
         receiveTimeout: receiveTimeoutFallback,
       );
@@ -280,8 +323,10 @@ Future<String> executeOcrBlock({
             blockTitle: def.label,
           );
         }
-        bgNotifier.setResult(taskId, ocrResult.text);
-        final error = 'OCR 返回了不完整结果（finish_reason=${ocrResult.finishReason}）';
+        bgNotifier.setResult(taskId, ocrResult.text, isComplete: false);
+        final error = strings.bgTaskOcrResultIncomplete(
+          ocrResult.finishReason ?? 'null',
+        );
         bgNotifier.updateStep(taskId, 0, failed: true, error: error);
         failSubTask(
           bgNotifier,

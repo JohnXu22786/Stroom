@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/asr_page.dart';
 import 'package:stroom/providers/background_task_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
@@ -322,6 +323,9 @@ void main() {
           audioRecordsProvider.overrideWith((ref) => AudioRecordsNotifier()),
         ],
         child: MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Builder(
             builder: (context) => Scaffold(
               body: TextButton(
@@ -360,6 +364,16 @@ void main() {
       );
       await tester.pump();
     }
+  }
+
+  Future<void> waitForAudioCount(WidgetTester tester, int count) async {
+    final audioCount = find.text('已选择 $count 个音频文件');
+    for (var attempt = 0;
+        attempt < 20 && audioCount.evaluate().isEmpty;
+        attempt++) {
+      await tester.pump(const Duration(milliseconds: 10));
+    }
+    expect(audioCount, findsOneWidget);
   }
 
   test(
@@ -1590,7 +1604,7 @@ void main() {
       expect(find.textContaining('重新选择音频'), findsOneWidget);
       expect(serviceCalls, 0);
       expect(tester.takeException(), isNull);
-      await tester.pageBack();
+      Navigator.of(tester.element(find.byType(AsrPage))).pop();
       await tester.pumpAndSettle();
     }
   });
@@ -1644,7 +1658,7 @@ void main() {
         await tester.pumpAndSettle();
         expect(serviceCalls, 0);
         expect(tester.takeException(), isNull);
-        await tester.pageBack();
+        Navigator.of(tester.element(find.byType(AsrPage))).pop();
         await tester.pumpAndSettle();
       }
     },
@@ -1670,7 +1684,7 @@ void main() {
       await tester.tap(find.text('打开 ASR'));
       await tester.pumpAndSettle();
 
-      expect(find.text('已选择 1 个音频文件'), findsOneWidget);
+      await waitForAudioCount(tester, 1);
       expect(find.textContaining('旧版重试音频不可用'), findsOneWidget);
       expect(serviceCalls, 0);
       expect(tester.takeException(), isNull);
@@ -1711,7 +1725,7 @@ void main() {
       await tester.tap(find.text('打开 ASR'));
       await tester.pumpAndSettle();
 
-      expect(find.text('已选择 1 个音频文件'), findsOneWidget);
+      await waitForAudioCount(tester, 1);
       expect(find.textContaining('旧版重试音频不可用'), findsOneWidget);
       await tester.tap(find.text('开始识别'));
       await tester.pump();
@@ -1761,7 +1775,7 @@ void main() {
     await tester.tap(find.text('打开 ASR'));
     await tester.pumpAndSettle();
 
-    expect(find.text('已选择 2 个音频文件'), findsOneWidget);
+    await waitForAudioCount(tester, 2);
     expect(find.text('1. one.wav'), findsOneWidget);
     await tester.drag(find.byType(ListView).last, const Offset(0, -400));
     await tester.pumpAndSettle();

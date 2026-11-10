@@ -1,17 +1,24 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
+import 'package:flutter/foundation.dart'
+    show debugPrint, kIsWeb, visibleForTesting;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
+import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 import '../models/assistant.dart';
 import '../models/chat_message.dart';
+import '../models/tool_call.dart';
 import '../services/app_log_service.dart';
 import '../services/attachment_storage.dart';
+import '../services/storage_service.dart';
+import '../utils/web_file_store.dart';
 import 'assistant_provider.dart';
+import 'locale_provider.dart';
 
 part 'conversation_notifier_persistence.dart';
 part 'conversation_notifier_mutations.dart';
@@ -93,9 +100,12 @@ Future<String?> _resolveDefaultAssistantId(SharedPreferences prefs) async {
   }
 
   // No assistants exist yet - create a default one
+  final localizations = appLocalizationsForLocale(
+    localeFromCode(prefs.getString(localePreferenceKey)),
+  );
   final defaultAssistant = Assistant(
-    name: '默认助手',
-    prompt: '你是一个有帮助的AI助手。请用中文回答用户的问题。',
+    name: localizations.builtInPromptGeneralName,
+    prompt: localizations.assistantDefaultPrompt,
     emoji: '🤖',
   );
   await prefs.setString('assistants', jsonEncode([defaultAssistant.toMap()]));
@@ -178,6 +188,10 @@ class Conversation {
   /// 该对话记录模型的供应商名称（绝对身份的一部分）。
   String? lastUsedProviderName;
 
+  /// Most recently read assistant message, used to keep conversation previews
+  /// unread only until the user opens that conversation.
+  String? lastReadMessageId;
+
   /// 最近一次请求的实际输入 token 数（来自 API 返回的 usage，非估算）。
   /// 用于标题栏下方的上下文显示与压缩触发判断。null = 尚无计量。
   int? lastInputTokens;
@@ -225,6 +239,7 @@ class Conversation {
     this.lastUsedModelName,
     this.lastUsedModelId,
     this.lastUsedProviderName,
+    this.lastReadMessageId,
     this.lastInputTokens,
     this.lastOutputTokens,
     this.totalCost = 0,
@@ -272,6 +287,7 @@ class Conversation {
           'lastUsedModelId': lastUsedModelId,
         if (lastUsedProviderName != null && lastUsedProviderName!.isNotEmpty)
           'lastUsedProviderName': lastUsedProviderName,
+        if (lastReadMessageId != null) 'lastReadMessageId': lastReadMessageId,
         if (lastInputTokens != null) 'lastInputTokens': lastInputTokens,
         if (lastOutputTokens != null) 'lastOutputTokens': lastOutputTokens,
         if (totalCost > 0) 'totalCost': totalCost,
@@ -375,6 +391,17 @@ class Conversation {
     final lastUsedModel = lastUsedRaw is String ? lastUsedRaw : null;
     final lastUsedIdRaw = map['lastUsedModelId'];
     final lastUsedProviderRaw = map['lastUsedProviderName'];
+    final lastReadMessageIdRaw = map['lastReadMessageId'];
+    var lastReadMessageId =
+        lastReadMessageIdRaw is String ? lastReadMessageIdRaw : null;
+    if (lastReadMessageIdRaw is! String) {
+      for (final message in messages.reversed) {
+        if (message.role == 'assistant' && !message.isStreaming) {
+          lastReadMessageId = message.id;
+          break;
+        }
+      }
+    }
 
     // 数值字段统一用 num 兼容（web 端 JSON 大整数可能反序列化为
     // double，如 sortOrder 存成 3.0）；类型不匹配时给默认值而非
@@ -432,6 +459,7 @@ class Conversation {
       lastUsedModelId: lastUsedIdRaw is String ? lastUsedIdRaw : null,
       lastUsedProviderName:
           lastUsedProviderRaw is String ? lastUsedProviderRaw : null,
+      lastReadMessageId: lastReadMessageId,
       lastInputTokens: lastInputRaw is num ? lastInputRaw.toInt() : null,
       lastOutputTokens: lastOutputRaw is num ? lastOutputRaw.toInt() : null,
       totalCost:
@@ -494,6 +522,11 @@ final conversationsProvider =
   return notifier;
 });
 
+/// Completes after conversations have been read from persistence.
+final conversationsInitialLoadProvider = FutureProvider<void>((ref) async {
+  await ref.watch(conversationsProvider.notifier).ready;
+});
+
 class ConversationsNotifier extends StateNotifier<List<Conversation>> {
   final Ref _ref;
   List<dynamic> _unparsedConversationRecords = [];
@@ -505,6 +538,25 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
   /// Preserve write order when an immediate removal follows a pending create
   /// or message save. The later deletion must be the last value on disk.
   Future<void> _persistQueue = Future<void>.value();
+
+  /// A single queued periodic stream save may be updated until an explicit
+  /// persistence operation establishes an ordering barrier.
+  _CoalescedStreamPersist? _coalescedStreamPersist;
+
+  /// Message IDs with checkpoint records that still need to be replayed or
+  /// invalidated by an explicit history edit.
+  final Set<String> _streamCheckpointKeys = <String>{};
+  bool _streamCheckpointKeyIndexIsCurrent = false;
+  bool _streamJournalPresent = false;
+  bool _streamCheckpointReplayInProgress = false;
+  final Map<String, Set<String>> _pendingMessageDeletionIds = {};
+  final Map<String, Set<String>> _pendingUnindexedMessageDeletionIds = {};
+  final Map<String, Set<String>> _pendingMessageRestorationIds = {};
+
+  /// Conversations whose deletion rollback marker could not be appended.
+  /// Persist their creation timestamps so replay can keep the matching
+  /// restored records until the journal is successfully cleared.
+  final Map<String, String> _pendingRestoredConversations = <String, String>{};
 
   /// Resolves when saved conversations have been merged into memory. Producers
   /// using a deterministic ID must wait before replacing a prior attempt.
@@ -552,6 +604,7 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
 
   Future<void> _checkTemporaryExpiry() async {
     final now = DateTime.now();
+    final original = List<Conversation>.from(state);
     final expired = state
         .where(
           (c) =>
@@ -566,6 +619,20 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
     }
     final expiredIds = expired.map((c) => c.id).toSet();
     state = state.where((c) => !expiredIds.contains(c.id)).toList();
+    try {
+      await _appendJournalBarrier({
+        'kind': 'conversationsDeleted',
+        'conversationIds':
+            expired.map((conversation) => conversation.id).toList(),
+        'deletedAt': DateTime.now().toIso8601String(),
+      });
+    } catch (error) {
+      state = _restoreDeletedConversationOrder(original, expired);
+      _syncTemporaryTimer();
+      debugPrint('Failed to record expired conversation deletion: $error');
+      return;
+    }
+    if (!mounted) return;
     if (expiredIds.contains(_ref.read(activeConversationIdProvider))) {
       _ref.read(activeConversationIdProvider.notifier).state = null;
     }
@@ -625,9 +692,12 @@ Future<List<Conversation>?> migrateConversationsFromPrefs(
 
     final assistantsJson = prefs.getString('assistants');
     if (assistantsJson == null || assistantsJson.isEmpty) {
+      final localizations = appLocalizationsForLocale(
+        localeFromCode(prefs.getString(localePreferenceKey)),
+      );
       final defaultAssistant = Assistant(
-        name: '默认助手',
-        prompt: '你是一个有帮助的AI助手。请用中文回答用户的问题。',
+        name: localizations.builtInPromptGeneralName,
+        prompt: localizations.assistantDefaultPrompt,
         emoji: '🤖',
       );
       await prefs.setString(

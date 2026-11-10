@@ -1,16 +1,48 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../catcatch/models/media_resource.dart';
+import '../../catcatch/models/catcatch_step_detail_localizer.dart';
+import '../../l10n/app_localizations.dart';
 import '../../catcatch/providers/catcatch_provider.dart';
 import '../../catcatch/models/catcatch_task.dart' as catcatch;
 import '../../task_flow/services/task_flow_execution_service.dart';
 import '../../utils/audio_utils.dart';
 import '../catcatch_page.dart';
+import '../browser_page.dart';
 import 'task_utils.dart';
 import 'file_opener.dart';
 import 'media_preview_sheet.dart';
 import '../../widgets/running_elapsed_label.dart';
+
+String _localizedCatCatchStatus(
+  catcatch.TaskStatus status,
+  AppLocalizations strings,
+) =>
+    switch (status) {
+      catcatch.TaskStatus.running => strings.catcatchStatusRunning,
+      catcatch.TaskStatus.completed => strings.catcatchStatusCompleted,
+      catcatch.TaskStatus.failed => strings.catcatchStatusFailed,
+      catcatch.TaskStatus.paused => strings.catcatchStatusPaused,
+      catcatch.TaskStatus.waiting => strings.catcatchStatusWaiting,
+    };
+
+String _localizedCatCatchStep(
+  catcatch.StepType type,
+  AppLocalizations strings,
+) =>
+    switch (type) {
+      catcatch.StepType.fetching => strings.catcatchStepFetching,
+      catcatch.StepType.analyzing => strings.catcatchStepAnalyzing,
+      catcatch.StepType.parsingPlaylist => strings.catcatchStepParsingPlaylist,
+      catcatch.StepType.filtering => strings.catcatchStepFiltering,
+      catcatch.StepType.userSelecting => strings.catcatchStepUserSelecting,
+      catcatch.StepType.downloading => strings.catcatchStepDownloading,
+      catcatch.StepType.converting => strings.catcatchStepConverting,
+      catcatch.StepType.saving => strings.catcatchStepSaving,
+    };
 
 // =============================================================================
 // CatCatch 任务卡片
@@ -20,12 +52,14 @@ class CatCatchTaskCard extends ConsumerStatefulWidget {
   final catcatch.CatCatchTask task;
   final bool isUnread;
   final bool isFlowManaged;
+  final double? taskListViewportHeight;
 
   const CatCatchTaskCard({
     super.key,
     required this.task,
     this.isUnread = false,
     this.isFlowManaged = false,
+    this.taskListViewportHeight,
   });
 
   @override
@@ -35,26 +69,90 @@ class CatCatchTaskCard extends ConsumerStatefulWidget {
 class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
   bool _expanded = false;
   final Set<int> _expandedSteps = {};
-  final Map<String, Set<String>> _selectedMediaUrls = {};
+  final Map<String, Set<String>> _selectedMediaIdentities = {};
   final Map<String, String?> _mergeAudioUrls = {};
   final Set<String> _pendingFlowActions = {};
+  final Set<String> _expandedSegments = {};
+  bool _recoveryPageOpened = false;
+
+  void _openRecoveryPageWhenReady() {
+    if (_recoveryPageOpened ||
+        widget.task.status != catcatch.TaskStatus.paused ||
+        widget.task
+                .metadata[catcatch.CatCatchTask.webViewRecoveryRequiredKey] !=
+            'true') {
+      return;
+    }
+    _recoveryPageOpened = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _openRecoveryPage();
+    });
+  }
+
+  Future<void> _openRecoveryPage() async {
+    final result = await Navigator.push<BrowserRecoveryResult>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => BrowserPage(
+          initialUrl: widget.task.url,
+          recoveryMode: true,
+        ),
+      ),
+    );
+    if (!mounted || result == null || result.mediaUrls.isEmpty) return;
+    final notifier = ref.read(catcatchTasksProvider.notifier);
+    final action =
+        (CatCatchNotifier current) => current.continueAfterBrowserRecovery(
+              widget.task.id,
+              mediaUrls: result.mediaUrls,
+              mimeTypesByUrl: result.mimeTypesByUrl,
+              initiatorsByUrl: result.initiatorsByUrl,
+              pageUrl: result.pageUrl,
+              pageTitle: result.pageTitle,
+              cookieHeadersByUrl: result.cookieHeadersByUrl,
+            );
+    if (widget.isFlowManaged) {
+      await _performFlowAction(widget.task.id, false, action);
+    } else {
+      action(notifier);
+    }
+  }
 
   bool _isFlowActionPending(String taskId) =>
       widget.isFlowManaged && _pendingFlowActions.contains(taskId);
 
-  Future<void> _performFlowAction(String taskId, bool selecting,
-      void Function(CatCatchNotifier) action) async {
+  Future<void> _performFlowAction(
+    String taskId,
+    bool selecting,
+    void Function(CatCatchNotifier) action, {
+    String? selectedMediaUrl,
+    String? selectedMediaIdentity,
+    bool selectedMediaHasByteRange = false,
+  }) async {
     if (!_pendingFlowActions.add(taskId)) return;
     setState(() {});
     try {
       final started = await ref
           .read(taskFlowExecutionServiceProvider)
-          .performManualCatCatchAction(taskId, selecting, action);
+          .performManualCatCatchAction(
+            taskId,
+            selecting,
+            action,
+            selectedMediaUrl: selectedMediaUrl,
+            selectedMediaIdentity: selectedMediaIdentity,
+            selectedMediaHasByteRange: selectedMediaHasByteRange,
+          );
       if (!started && mounted) {
-        _showFlowActionError('任务流操作未执行，请检查流程状态后重试');
+        _showFlowActionError(
+          AppLocalizations.of(context)!.catcatchFlowActionNotStarted,
+        );
       }
     } catch (error) {
-      if (mounted) _showFlowActionError('任务流操作失败：$error');
+      if (mounted)
+        _showFlowActionError(
+          AppLocalizations.of(context)!
+              .catcatchFlowActionFailed(error.toString()),
+        );
     } finally {
       _pendingFlowActions.remove(taskId);
       if (mounted) setState(() {});
@@ -66,21 +164,21 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
         .showSnackBar(SnackBar(content: Text(message)));
   }
 
-  Set<String> _getSelectedUrls(String taskId) =>
-      _selectedMediaUrls.putIfAbsent(taskId, () => {});
+  Set<String> _getSelectedIdentities(String taskId) =>
+      _selectedMediaIdentities.putIfAbsent(taskId, () => {});
 
-  bool _isSelected(String taskId, String url) =>
-      _getSelectedUrls(taskId).contains(url);
+  bool _isSelected(String taskId, String identity) =>
+      _getSelectedIdentities(taskId).contains(identity);
 
-  void _toggleSelection(String taskId, String url) {
+  void _toggleSelection(String taskId, String identity) {
     if (_isFlowActionPending(taskId)) return;
     setState(() {
-      final urls = _getSelectedUrls(taskId);
-      if (urls.contains(url)) {
-        urls.remove(url);
+      final identities = _getSelectedIdentities(taskId);
+      if (identities.contains(identity)) {
+        identities.remove(identity);
       } else {
-        if (widget.isFlowManaged) urls.clear();
-        urls.add(url);
+        if (widget.isFlowManaged) identities.clear();
+        identities.add(identity);
       }
       if (widget.isFlowManaged) _mergeAudioUrls[taskId] = null;
     });
@@ -90,6 +188,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
   void initState() {
     super.initState();
     _expanded = widget.task.status == catcatch.TaskStatus.running;
+    _openRecoveryPageWhenReady();
   }
 
   @override
@@ -99,13 +198,23 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
         oldWidget.task.status != catcatch.TaskStatus.running) {
       setState(() => _expanded = true);
     }
+    _openRecoveryPageWhenReady();
   }
 
   @override
   Widget build(BuildContext context) {
     final task = widget.task;
     final colorScheme = Theme.of(context).colorScheme;
-
+    final isSelectingMedia = task.status == catcatch.TaskStatus.running &&
+        task.steps.any(
+          (s) => s.type == catcatch.StepType.userSelecting && s.running,
+        ) &&
+        task.detectedMedia.isNotEmpty;
+    final viewportHeight = widget.taskListViewportHeight;
+    final resourceViewportHeight =
+        viewportHeight != null && viewportHeight.isFinite && viewportHeight > 0
+            ? viewportHeight * (2 / 3)
+            : MediaQuery.sizeOf(context).height * (2 / 3);
     Color statusColor;
     IconData statusIcon;
     switch (task.status) {
@@ -135,13 +244,40 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         side: BorderSide(color: colorScheme.outlineVariant, width: 0.5),
       ),
       child: Column(
         children: [
+          if (task.metadata[catcatch.CatCatchTask.webViewRecoveryRequiredKey] ==
+              'true')
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    AppLocalizations.of(context)!
+                        .catcatchWebViewRecoveryGuidance,
+                    style: TextStyle(color: colorScheme.onSurfaceVariant),
+                  ),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: () {
+                        _recoveryPageOpened = true;
+                        _openRecoveryPage();
+                      },
+                      icon: const Icon(Icons.open_in_browser),
+                      label: Text(AppLocalizations.of(context)!
+                          .browserRecoveryOpenPage),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           InkWell(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(16),
             onTap: () => setState(() => _expanded = !_expanded),
             child: Padding(
               padding: const EdgeInsets.all(12),
@@ -183,10 +319,11 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          '${task.status.label} · ${task.progress}%',
-                          style: Theme.of(
-                            context,
-                          ).textTheme.bodySmall?.copyWith(color: statusColor),
+                          '${_localizedCatCatchStatus(task.status, AppLocalizations.of(context)!)} · ${task.progress}%',
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(color: statusColor),
                         ),
                         if (task.status == catcatch.TaskStatus.running) ...[
                           const SizedBox(height: 2),
@@ -242,18 +379,44 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
           ),
           if (_expanded) ...[
             const Divider(height: 1, indent: 12, endIndent: 12),
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: _buildStepTimeline(task, colorScheme),
-            ),
-            if (task.metadata['pendingConfirm'] == 'special_format')
-              _buildSpecialFormatConfirm(task, colorScheme),
-            if (task.status == catcatch.TaskStatus.running &&
-                task.steps.any(
-                  (s) => s.type == catcatch.StepType.userSelecting && s.running,
-                ) &&
-                task.detectedMedia.isNotEmpty) ...[
-              _buildMediaSelection(task, colorScheme),
+            if (isSelectingMedia)
+              SizedBox(
+                key: const Key('catcatch_task_resource_viewport'),
+                height: resourceViewportHeight,
+                child: Column(
+                  children: [
+                    if (_expandedSegments.contains(task.id) &&
+                        _getMediaSelectionData(task)
+                            .selectableMedia
+                            .any((media) => media.isPlaylistSegment))
+                      _buildSegmentCollapseControl(task),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        child: Column(
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              child: _buildStepTimeline(task, colorScheme),
+                            ),
+                            if (task.metadata['pendingConfirm'] ==
+                                'special_format')
+                              _buildSpecialFormatConfirm(task, colorScheme),
+                            _buildMediaSelection(task, colorScheme),
+                          ],
+                        ),
+                      ),
+                    ),
+                    _buildMediaSelectionAction(task),
+                  ],
+                ),
+              )
+            else ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: _buildStepTimeline(task, colorScheme),
+              ),
+              if (task.metadata['pendingConfirm'] == 'special_format')
+                _buildSpecialFormatConfirm(task, colorScheme),
             ],
             const Divider(height: 1, indent: 12, endIndent: 12),
             _buildActionButtons(task, colorScheme),
@@ -273,7 +436,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Text(
-          '等待开始...',
+          AppLocalizations.of(context)!.unifiedTaskWaitingStart,
           style: TextStyle(color: colorScheme.onSurfaceVariant),
         ),
       );
@@ -337,7 +500,10 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                           children: [
                             Expanded(
                               child: Text(
-                                step.type.label,
+                                _localizedCatCatchStep(
+                                  step.type,
+                                  AppLocalizations.of(context)!,
+                                ),
                                 style: Theme.of(context)
                                     .textTheme
                                     .bodyMedium
@@ -375,10 +541,13 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
                               color: colorScheme.surfaceContainerLow,
-                              borderRadius: BorderRadius.circular(6),
+                              borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
-                              step.detail!,
+                              localizeCatCatchStepDetail(
+                                step.detail!,
+                                AppLocalizations.of(context)!,
+                              ),
                               style: TextStyle(
                                 fontSize: 12,
                                 color: colorScheme.onSurfaceVariant,
@@ -389,7 +558,10 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                         ] else if (hasDetail && !isDetailExpanded) ...[
                           const SizedBox(height: 2),
                           Text(
-                            step.detail!,
+                            localizeCatCatchStepDetail(
+                              step.detail!,
+                              AppLocalizations.of(context)!,
+                            ),
                             style: TextStyle(
                               fontSize: 11,
                               color: colorScheme.onSurfaceVariant,
@@ -401,7 +573,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                         if (step.skipped && step.detail == null) ...[
                           const SizedBox(height: 4),
                           Text(
-                            '已跳过（无需处理）',
+                            AppLocalizations.of(context)!.catcatchSkipped,
                             style: TextStyle(
                               fontSize: 11,
                               color: Colors.orange.shade400,
@@ -411,7 +583,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                         if (step.running && step.progress > 0) ...[
                           const SizedBox(height: 4),
                           ClipRRect(
-                            borderRadius: BorderRadius.circular(4),
+                            borderRadius: BorderRadius.circular(8),
                             child: LinearProgressIndicator(
                               value: step.progress / 100.0,
                               minHeight: 4,
@@ -447,8 +619,8 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                                     .retryStep(task.id, step.type);
                               },
                               icon: const Icon(Icons.refresh, size: 16),
-                              label: const Text(
-                                '重试此步骤',
+                              label: Text(
+                                AppLocalizations.of(context)!.catcatchRetryStep,
                                 style: TextStyle(fontSize: 12),
                               ),
                               style: TextButton.styleFrom(
@@ -474,21 +646,122 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
     );
   }
 
+  ({
+    List<MediaResource> mediaList,
+    Map<String, List<MediaResource>> splitGroups,
+    List<MediaResource> selectableMedia,
+  }) _getMediaSelectionData(catcatch.CatCatchTask task) {
+    final encodedCandidates = widget.isFlowManaged
+        ? task.metadata[catcatch.CatCatchTask.flowSelectionCandidatesKey]
+        : null;
+    final allowedIdentities = encodedCandidates == null
+        ? null
+        : (jsonDecode(encodedCandidates) as List).cast<String>().toSet();
+    final identityVersioned = task.metadata.containsKey(
+      catcatch.CatCatchTask.flowSelectionCandidatesIdentityVersionKey,
+    );
+    final mediaList = allowedIdentities == null
+        ? task.detectedMedia
+        : task.detectedMedia
+            .where(
+              (media) => catcatch.CatCatchTask.flowSelectionCandidateAllowed(
+                candidates: allowedIdentities,
+                identity: media.selectionIdentity,
+                url: media.url,
+                hasByteRange: media.hasByteRange,
+                identityVersioned: identityVersioned,
+              ),
+            )
+            .toList();
+
+    final splitGroups = <String, List<MediaResource>>{};
+    for (final media in mediaList) {
+      if (media.groupId != null && media.isLikelySplitTrack) {
+        splitGroups.putIfAbsent(media.groupId!, () => []).add(media);
+      }
+    }
+    final splitUrls = allowedIdentities == null
+        ? splitGroups.values
+            .expand((group) => group.map((media) => media.selectionIdentity))
+            .toSet()
+        : <String>{
+            for (final group in splitGroups.values)
+              if (group.any((media) => media.isAudio) &&
+                  group.any((media) => media.isVideo))
+                ...group.map((media) => media.selectionIdentity),
+          };
+
+    return (
+      mediaList: mediaList,
+      splitGroups: splitGroups,
+      selectableMedia: mediaList
+          .where((media) => !splitUrls.contains(media.selectionIdentity))
+          .toList(),
+    );
+  }
+
+  Widget _buildSegmentCollapseControl(catcatch.CatCatchTask task) {
+    final segments = _getMediaSelectionData(task)
+        .selectableMedia
+        .where((media) => media.isPlaylistSegment)
+        .toList();
+    final segmentsExpanded = _expandedSegments.contains(task.id);
+    return Padding(
+      padding: const EdgeInsets.only(left: 16),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: TextButton.icon(
+          key: const Key('m3u8_segments_toggle'),
+          onPressed: () => setState(() {
+            if (segmentsExpanded) {
+              _expandedSegments.remove(task.id);
+            } else {
+              _expandedSegments.add(task.id);
+            }
+          }),
+          icon: Icon(segmentsExpanded ? Icons.expand_less : Icons.expand_more),
+          label: Text(
+            segmentsExpanded
+                ? AppLocalizations.of(context)!
+                    .catcatchCollapseSegments(segments.length)
+                : AppLocalizations.of(context)!
+                    .catcatchShowSegments(segments.length),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildMediaSelection(
     catcatch.CatCatchTask task,
     ColorScheme colorScheme,
   ) {
-    final mediaList = task.detectedMedia;
+    final selection = _getMediaSelectionData(task);
+    final mediaList = selection.mediaList;
+    final splitGroups = selection.splitGroups;
     if (mediaList.isEmpty) return const SizedBox.shrink();
 
-    final splitGroups = <String, List<MediaResource>>{};
-    for (final m in mediaList) {
-      if (m.groupId != null && m.isLikelySplitTrack) {
-        splitGroups.putIfAbsent(m.groupId!, () => []).add(m);
-      }
-    }
-
-    final selectedUrls = _getSelectedUrls(task.id);
+    final selectedIdentities = _getSelectedIdentities(task.id);
+    final rawPageTitle = task.metadata['pageTitle'];
+    final pageTitle = rawPageTitle is String && rawPageTitle.trim().isNotEmpty
+        ? rawPageTitle.trim()
+        : task.title.trim();
+    final isSegment = (MediaResource media) => media.isPlaylistSegment;
+    final selectableMedia = selection.selectableMedia;
+    final segments = selectableMedia.where(isSegment).toList();
+    final segmentsExpanded = _expandedSegments.contains(task.id);
+    final visibleResources = segments.isEmpty || segmentsExpanded
+        ? selectableMedia
+        : selectableMedia.where((media) => !isSegment(media)).toList();
+    // Keep a nested resource viewport so the task action remains reachable.
+    final scrollPosition = Scrollable.maybeOf(context)?.position;
+    final viewportHeight = scrollPosition?.hasViewportDimension == true
+        ? scrollPosition!.viewportDimension
+        : null;
+    final resourceHeight =
+        viewportHeight != null && viewportHeight.isFinite && viewportHeight > 0
+            ? viewportHeight * (2 / 3)
+            : MediaQuery.sizeOf(context).height / 3;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
@@ -496,13 +769,32 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            selectedUrls.isNotEmpty
-                ? '已选 ${selectedUrls.length}/${mediaList.length} 个资源'
-                : '检测到 ${mediaList.length} 个媒体资源'
-                    '${widget.isFlowManaged ? '（选择一个资源或合并一组音视频）' : '（点击选择，可多选）'}',
-            style: Theme.of(
-              context,
-            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+            pageTitle.isNotEmpty ? pageTitle : truncateUrl(task.url),
+            key: const Key('catcatch_selection_title'),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context)
+                .textTheme
+                .titleMedium
+                ?.copyWith(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            selectedIdentities.isNotEmpty
+                ? AppLocalizations.of(context)!.catcatchSelectedResources(
+                    selectedIdentities.length,
+                    mediaList.length,
+                  )
+                : AppLocalizations.of(context)!
+                        .catcatchDetectedMediaResources(mediaList.length) +
+                    (widget.isFlowManaged
+                        ? AppLocalizations.of(context)!
+                            .catcatchFlowSelectOrCombine
+                        : AppLocalizations.of(context)!.catcatchSelectMultiple),
+            style: Theme.of(context)
+                .textTheme
+                .titleSmall
+                ?.copyWith(fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 8),
           if (splitGroups.isNotEmpty) ...[
@@ -510,56 +802,112 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
               _buildSplitTrackGroup(context, task, entry.value, colorScheme),
             const SizedBox(height: 12),
           ],
-          ..._buildGroupedMediaList(task, mediaList, colorScheme),
-          const SizedBox(height: 8),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: selectedUrls.isNotEmpty &&
-                      !_isFlowActionPending(task.id) &&
-                      (!widget.isFlowManaged ||
-                          task.status == catcatch.TaskStatus.running)
-                  ? () async {
-                      final selectedMediaList = mediaList
-                          .where((m) => selectedUrls.contains(m.url))
-                          .toList();
-                      if (selectedMediaList.isEmpty) return;
-                      final notifier = ref.read(catcatchTasksProvider.notifier);
-                      final mergeAudio = _mergeAudioUrls[task.id];
-                      if (widget.isFlowManaged) {
-                        await _performFlowAction(
-                            task.id,
-                            true,
-                            (notifier) => notifier.selectMedia(
-                                task.id, selectedMediaList.first,
-                                mergeAudioUrl: mergeAudio));
-                      } else {
-                        notifier.batchSelectMedia(
-                          task.id,
-                          selectedMediaList,
-                          mergeAudioUrl: mergeAudio,
-                        );
-                      }
-                    }
-                  : null,
-              icon: Icon(_isFlowActionPending(task.id)
-                  ? Icons.hourglass_top
-                  : Icons.download),
-              label: Text(
-                _isFlowActionPending(task.id)
-                    ? '正在等待任务流资源'
-                    : selectedUrls.isNotEmpty
-                        ? '下载选中的 ${selectedUrls.length} 个资源'
-                        : '请选择要下载的资源',
-              ),
-              style: FilledButton.styleFrom(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+          if (segments.isNotEmpty && !segmentsExpanded)
+            _buildSegmentCollapseControl(task),
+          if (visibleResources.isNotEmpty)
+            SizedBox(
+              height: resourceHeight,
+              child: ListView.builder(
+                key: const Key('catcatch_resource_list'),
+                itemCount: visibleResources.length,
+                itemBuilder: (context, index) =>
+                    _buildMediaItem(visibleResources[index], task, colorScheme),
               ),
             ),
-          ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildMediaSelectionAction(catcatch.CatCatchTask task) {
+    final selectedIdentities = _getSelectedIdentities(task.id);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      child: SizedBox(
+        width: double.infinity,
+        child: FilledButton.icon(
+          onPressed: selectedIdentities.isNotEmpty &&
+                  !_isFlowActionPending(task.id) &&
+                  (!widget.isFlowManaged ||
+                      task.status == catcatch.TaskStatus.running)
+              ? () async {
+                  final encodedCandidates = widget.isFlowManaged
+                      ? task.metadata[
+                          catcatch.CatCatchTask.flowSelectionCandidatesKey]
+                      : null;
+                  final allowedIdentities = encodedCandidates == null
+                      ? null
+                      : (jsonDecode(encodedCandidates) as List)
+                          .cast<String>()
+                          .toSet();
+                  final identityVersioned = task.metadata.containsKey(
+                    catcatch
+                        .CatCatchTask.flowSelectionCandidatesIdentityVersionKey,
+                  );
+                  final selectedMediaList = task.detectedMedia
+                      .where(
+                        (media) =>
+                            (allowedIdentities == null ||
+                                catcatch.CatCatchTask
+                                    .flowSelectionCandidateAllowed(
+                                  candidates: allowedIdentities,
+                                  identity: media.selectionIdentity,
+                                  url: media.url,
+                                  hasByteRange: media.hasByteRange,
+                                  identityVersioned: identityVersioned,
+                                )) &&
+                            selectedIdentities.contains(
+                              media.selectionIdentity,
+                            ),
+                      )
+                      .toList();
+                  if (selectedMediaList.isEmpty) return;
+                  final notifier = ref.read(catcatchTasksProvider.notifier);
+                  final mergeAudio = _mergeAudioUrls[task.id];
+                  if (widget.isFlowManaged) {
+                    await _performFlowAction(
+                      task.id,
+                      true,
+                      (notifier) => notifier.selectMedia(
+                        task.id,
+                        selectedMediaList.first,
+                        mergeAudioUrl: mergeAudio,
+                      ),
+                      selectedMediaUrl: selectedMediaList.first.url,
+                      selectedMediaIdentity:
+                          selectedMediaList.first.selectionIdentity,
+                      selectedMediaHasByteRange:
+                          selectedMediaList.first.hasByteRange,
+                    );
+                  } else {
+                    notifier.batchSelectMedia(
+                      task.id,
+                      selectedMediaList,
+                      mergeAudioUrl: mergeAudio,
+                    );
+                  }
+                }
+              : null,
+          icon: Icon(
+            _isFlowActionPending(task.id)
+                ? Icons.hourglass_top
+                : Icons.download,
+          ),
+          label: Text(
+            _isFlowActionPending(task.id)
+                ? AppLocalizations.of(context)!.catcatchWaitingForResources
+                : selectedIdentities.isNotEmpty
+                    ? AppLocalizations.of(context)!
+                        .catcatchDownloadSelected(selectedIdentities.length)
+                    : AppLocalizations.of(context)!.catcatchSelectResources,
+          ),
+          style: FilledButton.styleFrom(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -582,7 +930,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.amber.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(color: Colors.amber.shade300),
       ),
       child: Column(
@@ -594,7 +942,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  '⚠ 疑似音视频分离',
+                  AppLocalizations.of(context)!.catcatchPossibleSplit,
                   style: TextStyle(
                     fontWeight: FontWeight.w600,
                     color: Colors.amber.shade900,
@@ -606,14 +954,13 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
           ),
           const SizedBox(height: 4),
           Text(
-            '检测到此组资源可能是同一个视频的音频和视频分离的流，'
-            '您可以选择合并音视频，或仅下载其中一种。',
+            AppLocalizations.of(context)!.catcatchSplitExplanation,
             style: TextStyle(fontSize: 12, color: Colors.amber.shade800),
           ),
           const SizedBox(height: 12),
           if (audioResources.isNotEmpty) ...[
             Text(
-              '🎵 音频流',
+              AppLocalizations.of(context)!.catcatchAudioStream,
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
@@ -634,7 +981,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
           const SizedBox(height: 8),
           if (videoResources.isNotEmpty) ...[
             Text(
-              '🎬 视频流',
+              AppLocalizations.of(context)!.catcatchVideoStream,
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
@@ -663,17 +1010,22 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                     : () {
                         final primaryVideo = videoResources.first;
                         setState(() {
-                          final urls = _getSelectedUrls(task.id);
-                          if (widget.isFlowManaged) urls.clear();
-                          urls.add(primaryVideo.url);
+                          final identities = _getSelectedIdentities(task.id);
+                          if (widget.isFlowManaged) identities.clear();
+                          identities.add(primaryVideo.selectionIdentity);
                           if (!widget.isFlowManaged) {
-                            urls.add(audioResources.first.url);
+                            identities.add(
+                              audioResources.first.selectionIdentity,
+                            );
                           }
                           _mergeAudioUrls[task.id] = audioResources.first.url;
                         });
                       },
                 icon: const Icon(Icons.merge, size: 18),
-                label: const Text('合并音视频', style: TextStyle(fontSize: 12)),
+                label: Text(
+                  AppLocalizations.of(context)!.catcatchMergeAudioVideo,
+                  style: TextStyle(fontSize: 12),
+                ),
                 style: FilledButton.styleFrom(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 12,
@@ -688,21 +1040,24 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                     ? null
                     : () {
                         setState(() {
-                          final urls = _getSelectedUrls(task.id);
+                          final identities = _getSelectedIdentities(task.id);
                           if (widget.isFlowManaged) {
-                            urls
+                            identities
                               ..clear()
-                              ..add(videoResources.first.url);
+                              ..add(videoResources.first.selectionIdentity);
                           } else {
                             for (final v in videoResources) {
-                              urls.add(v.url);
+                              identities.add(v.selectionIdentity);
                             }
                           }
                           _mergeAudioUrls[task.id] = null;
                         });
                       },
                 icon: const Icon(Icons.videocam, size: 18),
-                label: const Text('仅视频', style: TextStyle(fontSize: 12)),
+                label: Text(
+                  AppLocalizations.of(context)!.catcatchVideoOnly,
+                  style: TextStyle(fontSize: 12),
+                ),
                 style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 12,
@@ -717,21 +1072,24 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                     ? null
                     : () {
                         setState(() {
-                          final urls = _getSelectedUrls(task.id);
+                          final identities = _getSelectedIdentities(task.id);
                           if (widget.isFlowManaged) {
-                            urls
+                            identities
                               ..clear()
-                              ..add(audioResources.first.url);
+                              ..add(audioResources.first.selectionIdentity);
                           } else {
                             for (final a in audioResources) {
-                              urls.add(a.url);
+                              identities.add(a.selectionIdentity);
                             }
                           }
                           _mergeAudioUrls[task.id] = null;
                         });
                       },
                 icon: const Icon(Icons.audiotrack, size: 18),
-                label: const Text('仅音频', style: TextStyle(fontSize: 12)),
+                label: Text(
+                  AppLocalizations.of(context)!.catcatchAudioOnly,
+                  style: TextStyle(fontSize: 12),
+                ),
                 style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 12,
@@ -755,7 +1113,8 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
     ColorScheme colorScheme, {
     required bool isAudio,
   }) {
-    final isSelected = _isSelected(task.id, media.url);
+    final identity = media.selectionIdentity;
+    final isSelected = _isSelected(task.id, identity);
 
     return Card(
       elevation: 0,
@@ -774,7 +1133,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
         borderRadius: BorderRadius.circular(8),
         onTap: _isFlowActionPending(task.id)
             ? null
-            : () => _toggleSelection(task.id, media.url),
+            : () => _toggleSelection(task.id, identity),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
           child: Row(
@@ -801,7 +1160,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                 ),
               ),
               Text(
-                formatSize(media.size),
+                formatSize(media.size, AppLocalizations.of(context)!),
                 style: TextStyle(
                   fontSize: 11,
                   color: colorScheme.onSurfaceVariant,
@@ -812,12 +1171,17 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                 icon: Icon(
                   Icons.play_circle_filled,
                   size: 20,
-                  color: media.isPlayable
+                  color: media.canPreview
                       ? colorScheme.primary
                       : Colors.grey.shade300,
                 ),
-                tooltip: isAudio ? '预览音频' : '预览视频',
-                onPressed: media.isPlayable
+                tooltip: media.isPlaylistSegment
+                    ? AppLocalizations.of(context)!
+                        .catcatchSegmentsPlaylistPreview
+                    : isAudio
+                        ? AppLocalizations.of(context)!.catcatchPreviewAudio
+                        : AppLocalizations.of(context)!.catcatchPreviewVideo,
+                onPressed: media.canPreview
                     ? () => showMediaPreview(
                           context,
                           media,
@@ -839,16 +1203,25 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
   List<Widget> _buildGroupedMediaList(
     catcatch.CatCatchTask task,
     List<MediaResource> mediaList,
-    ColorScheme colorScheme,
-  ) {
+    ColorScheme colorScheme, {
+    bool allowPartialSplitTracks = false,
+  }) {
     if (mediaList.isEmpty) return [];
 
-    final splitIds = <String>{};
+    final splitGroups = <String, List<MediaResource>>{};
     for (final m in mediaList) {
       if (m.groupId != null && m.isLikelySplitTrack) {
-        splitIds.add(m.url);
+        splitGroups.putIfAbsent(m.groupId!, () => []).add(m);
       }
     }
+    final splitIds = allowPartialSplitTracks
+        ? <String>{
+            for (final group in splitGroups.values)
+              if (group.any((media) => media.isAudio) &&
+                  group.any((media) => media.isVideo))
+                ...group.map((media) => media.url),
+          }
+        : splitGroups.values.expand((group) => group.map((m) => m.url)).toSet();
     final remaining =
         mediaList.where((m) => !splitIds.contains(m.url)).toList();
     if (remaining.isEmpty) return [];
@@ -883,7 +1256,10 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
           (lastDurationSec == null || (currSec - lastDurationSec).abs() > 5);
       if (showLabel) {
         lastDurationSec = currSec;
-        final durationLabel = formatDurationSimple(media.duration!);
+        final durationLabel = formatDurationSimple(
+          media.duration!,
+          AppLocalizations.of(context)!,
+        );
         widgets.add(
           Padding(
             padding: const EdgeInsets.only(top: 4, bottom: 4),
@@ -896,7 +1272,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                 ),
                 const SizedBox(width: 4),
                 Text(
-                  '时长: $durationLabel',
+                  AppLocalizations.of(context)!.catcatchDuration(durationLabel),
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
@@ -930,16 +1306,9 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
     catcatch.CatCatchTask task,
     ColorScheme colorScheme,
   ) {
-    final isSelected = _isSelected(task.id, media.url);
-    final ext = media.ext.toLowerCase();
-    final isAudioType = [
-      'mp3',
-      'wav',
-      'm4a',
-      'aac',
-      'opus',
-      'weba',
-    ].contains(ext);
+    final identity = media.selectionIdentity;
+    final isSelected = _isSelected(task.id, identity);
+    final isAudioType = isAudioPreviewResource(media);
 
     return Card(
       elevation: 0,
@@ -955,7 +1324,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
         borderRadius: BorderRadius.circular(8),
         onTap: _isFlowActionPending(task.id)
             ? null
-            : () => _toggleSelection(task.id, media.url),
+            : () => _toggleSelection(task.id, identity),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
           child: Row(
@@ -978,19 +1347,36 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      '${media.name}.${media.ext}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            fontWeight: FontWeight.w500,
+                    Row(
+                      children: [
+                        _ResourceKindBadge(
+                          label: media.isPlaylistSegment
+                              ? AppLocalizations.of(context)!.catcatchSegment
+                              : media.isPlaylist
+                                  ? AppLocalizations.of(context)!
+                                      .catcatchPlaylist
+                                  : AppLocalizations.of(context)!
+                                      .catcatchFullVideo,
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            '${media.name}.${media.ext}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(fontWeight: FontWeight.w500),
                           ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 2),
                     Row(
                       children: [
                         Text(
-                          '${formatSize(media.size)} · ${media.mimeType ?? formatDisplayName(media.ext)}',
+                          '${formatSize(media.size, AppLocalizations.of(context)!)} · ${media.mimeType ?? formatDisplayName(media.ext)}',
                           style: Theme.of(context)
                               .textTheme
                               .bodySmall
@@ -1005,7 +1391,8 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                           ),
                           const SizedBox(width: 2),
                           Text(
-                            '分轨',
+                            AppLocalizations.of(context)!
+                                .catcatchSeparateTracks,
                             style: TextStyle(
                               fontSize: 10,
                               color: Colors.amber.shade600,
@@ -1017,13 +1404,15 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                   ],
                 ),
               ),
-              if (media.isPlayable)
+              if (media.canPreview)
                 IconButton(
                   icon: Icon(
                     Icons.play_circle_filled,
                     color: colorScheme.primary,
                   ),
-                  tooltip: isAudioType ? '预览音频' : '预览视频',
+                  tooltip: isAudioType
+                      ? AppLocalizations.of(context)!.catcatchPreviewAudio
+                      : AppLocalizations.of(context)!.catcatchPreviewVideo,
                   onPressed: () {
                     showMediaPreview(
                       context,
@@ -1038,7 +1427,11 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                   child: Text(
-                    '不支持预览',
+                    media.isPlaylistSegment
+                        ? AppLocalizations.of(context)!
+                            .catcatchPreviewPlaylistOnly
+                        : AppLocalizations.of(context)!
+                            .catcatchPreviewUnsupported,
                     style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
                   ),
                 ),
@@ -1053,7 +1446,8 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
     catcatch.CatCatchTask task,
     ColorScheme colorScheme,
   ) {
-    final format = task.metadata['pendingConfirmFormat'] ?? '未知格式';
+    final format = task.metadata['pendingConfirmFormat'] ??
+        AppLocalizations.of(context)!.catcatchUnknownFormat;
     final isPlaylist = task.selectedMedia?.isPlaylist ?? false;
     final pending = _isFlowActionPending(task.id);
     final flowPaused =
@@ -1066,7 +1460,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: Colors.blue.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(8),
           border: Border.all(color: Colors.blue.shade200),
         ),
         child: Column(
@@ -1082,7 +1476,11 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    isPlaylist ? '需要处理播放列表' : '检测到特殊格式',
+                    isPlaylist
+                        ? AppLocalizations.of(context)!
+                            .catcatchNeedPlaylistProcessing
+                        : AppLocalizations.of(context)!
+                            .catcatchSpecialFormatDetected,
                     style: TextStyle(
                       fontWeight: FontWeight.w600,
                       color: Colors.blue.shade800,
@@ -1094,8 +1492,8 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
             const SizedBox(height: 8),
             Text(
               isPlaylist
-                  ? '该资源是一个播放列表（$format），需要自动解析并下载所有分段后合并为可播放的视频文件。'
-                  : '下载的文件格式为 $format，并不是标准的 MP4 格式。将使用内置的纯 Dart 转封装引擎转换为 MP4（TS/FLV/EV1 免外部依赖）。',
+                  ? AppLocalizations.of(context)!.catcatchPlaylistInfo(format)
+                  : AppLocalizations.of(context)!.catcatchFormatInfo(format),
               style: TextStyle(
                 fontSize: 13,
                 color: colorScheme.onSurfaceVariant,
@@ -1103,8 +1501,10 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
               ),
             ),
             const SizedBox(height: 12),
-            if (flowPaused) const Text('请先继续流程，再确认格式处理'),
-            if (pending) const Text('正在等待任务流资源'),
+            if (flowPaused)
+              Text(AppLocalizations.of(context)!.catcatchContinueBeforeConfirm),
+            if (pending)
+              Text(AppLocalizations.of(context)!.catcatchWaitingForResources),
             Row(
               children: [
                 Expanded(
@@ -1113,10 +1513,11 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                         ? () async {
                             if (widget.isFlowManaged) {
                               await _performFlowAction(
-                                  task.id,
-                                  false,
-                                  (notifier) =>
-                                      notifier.confirmAndContinue(task.id));
+                                task.id,
+                                false,
+                                (notifier) =>
+                                    notifier.confirmAndContinue(task.id),
+                              );
                             } else {
                               ref
                                   .read(catcatchTasksProvider.notifier)
@@ -1125,7 +1526,10 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                           }
                         : null,
                     icon: const Icon(Icons.auto_fix_high, size: 18),
-                    label: const Text('自动处理', style: TextStyle(fontSize: 13)),
+                    label: Text(
+                      AppLocalizations.of(context)!.catcatchAutoProcess,
+                      style: TextStyle(fontSize: 13),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -1135,10 +1539,10 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                         ? () async {
                             if (widget.isFlowManaged) {
                               await _performFlowAction(
-                                  task.id,
-                                  false,
-                                  (notifier) =>
-                                      notifier.skipConversion(task.id));
+                                task.id,
+                                false,
+                                (notifier) => notifier.skipConversion(task.id),
+                              );
                             } else {
                               ref
                                   .read(catcatchTasksProvider.notifier)
@@ -1147,7 +1551,10 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                           }
                         : null,
                     icon: const Icon(Icons.save_alt, size: 18),
-                    label: const Text('保留原始格式', style: TextStyle(fontSize: 13)),
+                    label: Text(
+                      AppLocalizations.of(context)!.catcatchKeepOriginalFormat,
+                      style: TextStyle(fontSize: 13),
+                    ),
                   ),
                 ),
               ],
@@ -1187,7 +1594,10 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                   ),
                   const SizedBox(width: 4),
                   Text(
-                    resumeSupported ? '支持断点续传' : '该站点不支持断点续传',
+                    resumeSupported
+                        ? AppLocalizations.of(context)!.catcatchResumeSupported
+                        : AppLocalizations.of(context)!
+                            .catcatchResumeUnsupported,
                     style: TextStyle(
                       fontSize: 11,
                       color: resumeSupported ? Colors.green : Colors.grey,
@@ -1204,7 +1614,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                   task.status == catcatch.TaskStatus.running) ...[
                 _actionButton(
                   icon: Icons.pause,
-                  label: '暂停下载',
+                  label: AppLocalizations.of(context)!.catcatchPauseDownload,
                   color: Colors.orange,
                   onPressed: () => ref
                       .read(catcatchTasksProvider.notifier)
@@ -1212,7 +1622,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                 ),
                 _actionButton(
                   icon: Icons.delete_outline,
-                  label: '删除',
+                  label: AppLocalizations.of(context)!.unifiedTaskDelete,
                   color: Colors.red,
                   onPressed: () => ref
                       .read(catcatchTasksProvider.notifier)
@@ -1223,7 +1633,9 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                   task.status == catcatch.TaskStatus.paused) ...[
                 _actionButton(
                   icon: Icons.play_arrow,
-                  label: resumeSupported ? '继续下载' : '重新下载',
+                  label: resumeSupported
+                      ? AppLocalizations.of(context)!.catcatchResumeDownload
+                      : AppLocalizations.of(context)!.catcatchRestartDownload,
                   color: Colors.blue,
                   onPressed: () => ref
                       .read(catcatchTasksProvider.notifier)
@@ -1231,7 +1643,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                 ),
                 _actionButton(
                   icon: Icons.delete_outline,
-                  label: '删除',
+                  label: AppLocalizations.of(context)!.unifiedTaskDelete,
                   color: Colors.red,
                   onPressed: () => ref
                       .read(catcatchTasksProvider.notifier)
@@ -1242,7 +1654,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                 if (task.downloadedFilePath != null)
                   _actionButton(
                     icon: Icons.folder_open,
-                    label: '打开文件',
+                    label: AppLocalizations.of(context)!.unifiedTaskOpenFile,
                     color: Colors.green,
                     onPressed: () =>
                         openFile(task.downloadedFilePath!, context),
@@ -1250,7 +1662,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                 if (!widget.isFlowManaged)
                   _actionButton(
                     icon: Icons.delete_outline,
-                    label: '删除',
+                    label: AppLocalizations.of(context)!.unifiedTaskDelete,
                     color: Colors.red,
                     onPressed: () => ref
                         .read(catcatchTasksProvider.notifier)
@@ -1261,7 +1673,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                   task.status == catcatch.TaskStatus.failed) ...[
                 _actionButton(
                   icon: Icons.refresh,
-                  label: '重试',
+                  label: AppLocalizations.of(context)!.unifiedTaskRetry,
                   color: Colors.blue,
                   onPressed: () => Navigator.push(
                     context,
@@ -1275,7 +1687,7 @@ class _CatCatchTaskCardState extends ConsumerState<CatCatchTaskCard> {
                 ),
                 _actionButton(
                   icon: Icons.delete_outline,
-                  label: '删除',
+                  label: AppLocalizations.of(context)!.unifiedTaskDelete,
                   color: Colors.red,
                   onPressed: () => ref
                       .read(catcatchTasksProvider.notifier)
@@ -1324,6 +1736,34 @@ class _SpinningIcon extends StatefulWidget {
 
   @override
   State<_SpinningIcon> createState() => _SpinningIconState();
+}
+
+class _ResourceKindBadge extends StatelessWidget {
+  final String label;
+
+  const _ResourceKindBadge({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = label == AppLocalizations.of(context)!.catcatchSegment
+        ? Colors.orange
+        : Colors.teal;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 10,
+          color: color.shade700,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
 }
 
 class _SpinningIconState extends State<_SpinningIcon>

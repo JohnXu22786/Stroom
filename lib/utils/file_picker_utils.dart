@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/foundation.dart'
     show TargetPlatform, defaultTargetPlatform, kIsWeb;
+import 'package:unorm_dart/unorm_dart.dart' as unorm;
 
 /// Opens a save dialog filtered to [extensions] and writes [bytes] to the
 /// selected location.
@@ -65,6 +66,12 @@ void validateUserVisibleExportPaths({
   required Iterable<String> files,
   Iterable<String> folders = const [],
 }) {
+  final reservedWindowsName = RegExp(
+    r'^(CON|CONIN\$|CONOUT\$|PRN|AUX|NUL|COM[1-9¹²³]|LPT[1-9¹²³])$',
+    caseSensitive: false,
+  );
+  final invalidWindowsCharacter = RegExp(r'[<>:"|?*\x00-\x1F]');
+
   String safePath(String path) {
     final segments = path.replaceAll('\\', '/').split('/');
     if (segments.any(
@@ -72,16 +79,56 @@ void validateUserVisibleExportPaths({
     )) {
       throw ArgumentError.value(path, 'path', 'Invalid export path');
     }
+    if (segments.any((segment) => segment != segment.trimRight())) {
+      throw ArgumentError.value(path, 'path', 'Invalid export path');
+    }
+    if (segments.any((segment) => segment.endsWith('.'))) {
+      throw ArgumentError.value(path, 'path', 'Invalid export path');
+    }
+    if (segments.any(invalidWindowsCharacter.hasMatch)) {
+      throw ArgumentError.value(path, 'path', 'Invalid export path');
+    }
+    if (segments.any(
+      (segment) => reservedWindowsName.hasMatch(
+        segment.split(RegExp(r'[.:]')).first,
+      ),
+    )) {
+      throw ArgumentError.value(path, 'path', 'Invalid export path');
+    }
     return segments.join('/');
   }
 
+  // Normalize canonical Unicode equivalents and case variants to one key.
+  // Decomposition exposes Greek iota-subscript case folds.
+  // Avoid uppercase expansions elsewhere when they merge distinct names.
+  String comparisonPath(String path) => unorm.nfc(
+        unorm.nfd(path).runes.map((rune) {
+          if (rune == 0x0345) return 'ι';
+          final character = String.fromCharCode(rune);
+          final uppercase = character.toUpperCase();
+          final expands = uppercase.runes.length > 1;
+          final isGreek = rune >= 0x1F00 && rune <= 0x1FFF;
+          return expands && !isGreek
+              ? character.toLowerCase()
+              : uppercase.toLowerCase();
+        }).join(),
+      );
+
   final filePaths = <String>{};
   final directoryPaths = <String>{};
+  final directoryNamesByComparisonPath = <String, String>{};
 
   void addDirectoryAndAncestors(String path) {
     final segments = path.split('/');
     for (var i = 1; i <= segments.length; i++) {
-      directoryPaths.add(segments.take(i).join('/'));
+      final directoryPath = segments.take(i).join('/');
+      final comparison = comparisonPath(directoryPath);
+      final existingPath = directoryNamesByComparisonPath[comparison];
+      if (existingPath != null && existingPath != directoryPath) {
+        throw StateError('Duplicate export folder path: $directoryPath');
+      }
+      directoryNamesByComparisonPath[comparison] = directoryPath;
+      directoryPaths.add(comparison);
     }
   }
 
@@ -90,7 +137,7 @@ void validateUserVisibleExportPaths({
   }
   for (final file in files) {
     final path = safePath(file);
-    if (!filePaths.add(path)) {
+    if (!filePaths.add(comparisonPath(path))) {
       throw StateError('Duplicate export file path: $path');
     }
     final segments = path.split('/');

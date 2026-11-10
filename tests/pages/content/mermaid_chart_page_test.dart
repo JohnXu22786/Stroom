@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/mermaid_chart_page.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/mermaid_folder_name_lock.dart';
@@ -35,6 +36,8 @@ Widget _buildTestApp({
 }) {
   return ProviderScope(
     child: MaterialApp(
+      locale: const Locale('zh', 'CN'),
+      supportedLocales: AppLocalizations.supportedLocales,
       home: MermaidChartPage(
         initialCode: initialCode,
         existingRecord: existingRecord,
@@ -43,10 +46,7 @@ Widget _buildTestApp({
         testOnlyAfterChartNameAllocation: testOnlyAfterChartNameAllocation,
         testOnlyBeforeChartRecordUpdate: testOnlyBeforeChartRecordUpdate,
       ),
-      localizationsDelegates: [
-        DefaultMaterialLocalizations.delegate,
-        DefaultWidgetsLocalizations.delegate,
-      ],
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
     ),
   );
 }
@@ -87,6 +87,8 @@ Widget _buildSavedChartNavigationTestApp({
 }) {
   return ProviderScope(
     child: MaterialApp(
+      locale: const Locale('zh', 'CN'),
+      supportedLocales: AppLocalizations.supportedLocales,
       home: Builder(
         builder: (context) => Scaffold(
           body: Center(
@@ -107,10 +109,7 @@ Widget _buildSavedChartNavigationTestApp({
           ),
         ),
       ),
-      localizationsDelegates: [
-        DefaultMaterialLocalizations.delegate,
-        DefaultWidgetsLocalizations.delegate,
-      ],
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
     ),
   );
 }
@@ -118,6 +117,8 @@ Widget _buildSavedChartNavigationTestApp({
 Widget _buildNewChartNavigationTestApp() {
   return ProviderScope(
     child: MaterialApp(
+      locale: const Locale('zh', 'CN'),
+      supportedLocales: AppLocalizations.supportedLocales,
       home: Builder(
         builder: (context) => Scaffold(
           body: Center(
@@ -134,10 +135,7 @@ Widget _buildNewChartNavigationTestApp() {
           ),
         ),
       ),
-      localizationsDelegates: [
-        DefaultMaterialLocalizations.delegate,
-        DefaultWidgetsLocalizations.delegate,
-      ],
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
     ),
   );
 }
@@ -417,14 +415,13 @@ void main() {
       await tester.pumpWidget(
         const ProviderScope(
           child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
             home: MermaidChartPage(
               initialCode: initialCode,
               initialShowPreview: false,
             ),
-            localizationsDelegates: [
-              DefaultMaterialLocalizations.delegate,
-              DefaultWidgetsLocalizations.delegate,
-            ],
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
           ),
         ),
       );
@@ -481,14 +478,13 @@ void main() {
       await tester.pumpWidget(
         const ProviderScope(
           child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
             home: MermaidChartPage(
               initialCode: initialCode,
               initialShowPreview: false,
             ),
-            localizationsDelegates: [
-              DefaultMaterialLocalizations.delegate,
-              DefaultWidgetsLocalizations.delegate,
-            ],
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
           ),
         ),
       );
@@ -2048,14 +2044,13 @@ void main() {
         await tester.pumpWidget(
           const ProviderScope(
             child: MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              supportedLocales: AppLocalizations.supportedLocales,
               home: MermaidChartPage(
                 initialCode: initialCode,
                 initialShowPreview: false,
               ),
-              localizationsDelegates: [
-                DefaultMaterialLocalizations.delegate,
-                DefaultWidgetsLocalizations.delegate,
-              ],
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
             ),
           ),
         );
@@ -2087,14 +2082,13 @@ void main() {
         await tester.pumpWidget(
           const ProviderScope(
             child: MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              supportedLocales: AppLocalizations.supportedLocales,
               home: MermaidChartPage(
                 initialCode: initialCode,
                 initialShowPreview: false,
               ),
-              localizationsDelegates: [
-                DefaultMaterialLocalizations.delegate,
-                DefaultWidgetsLocalizations.delegate,
-              ],
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
             ),
           ),
         );
@@ -2124,14 +2118,13 @@ void main() {
       await tester.pumpWidget(
         const ProviderScope(
           child: MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
             home: MermaidChartPage(
               initialCode: initialCode,
               initialShowPreview: false,
             ),
-            localizationsDelegates: [
-              DefaultMaterialLocalizations.delegate,
-              DefaultWidgetsLocalizations.delegate,
-            ],
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
           ),
         ),
       );
@@ -2168,14 +2161,13 @@ sequenceDiagram
         await tester.pumpWidget(
           const ProviderScope(
             child: MaterialApp(
+              locale: const Locale('zh', 'CN'),
+              supportedLocales: AppLocalizations.supportedLocales,
               home: MermaidChartPage(
                 initialCode: initialCode,
                 initialShowPreview: false,
               ),
-              localizationsDelegates: [
-                DefaultMaterialLocalizations.delegate,
-                DefaultWidgetsLocalizations.delegate,
-              ],
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
             ),
           ),
         );

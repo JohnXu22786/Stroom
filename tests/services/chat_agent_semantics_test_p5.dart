@@ -200,7 +200,7 @@ void chatAgentSemanticsGroup5() {
       expect(local['inputTokens'], 125);
     });
 
-    test('message_delta：输出 token + 重复上报 cost 取较大值避免双计', () {
+    test('message_delta：输出 token + cost 快照替换旧值而不累加', () {
       final local = <String, dynamic>{};
       AnthropicChatProvider.mergeAnthropicUsage(local, {'input_tokens': 100});
       AnthropicChatProvider.mergeAnthropicUsage(local, {
@@ -209,12 +209,12 @@ void chatAgentSemanticsGroup5() {
       });
       expect(local['outputTokens'], 30);
       expect(local['cost'], closeTo(0.0000456, 1e-12));
-      // 两端点重复上报较小 cost 不覆盖已记录值
+      // 后到的请求级快照可以修正较早的成本值。
       AnthropicChatProvider.mergeAnthropicUsage(local, {
         'output_tokens': 31,
         'total_cost': 0.00001,
       });
-      expect(local['cost'], closeTo(0.0000456, 1e-12));
+      expect(local['cost'], closeTo(0.00001, 1e-12));
       expect(local['outputTokens'], 31);
     });
 

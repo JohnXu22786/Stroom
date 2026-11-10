@@ -12,7 +12,24 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
     required String convId,
     required Object? streamError,
     required ChatService? snappedChatService,
+    required List<String> finalTextChunks,
   }) async {
+    // Deliver any sub-throttle reasoning tail before the stream state is
+    // cleared. Normal section-end events flush this same delta earlier.
+    final reasoningTail = state.takeReasoningAppend();
+    if (reasoningTail != null) {
+      _pushToProvider(convId, streamingReasoningAppendProvider, reasoningTail);
+    }
+
+    // Timer cancellation prevents future callbacks but does not wait for a
+    // partial write already in progress. Let it finish before building the
+    // full-history snapshot so the two large saves do not overlap.
+    try {
+      await state._periodicPersistFuture;
+    } catch (e) {
+      debugPrint('[ChatStreamManager] 等待定期持久化失败: $e');
+    }
+
     // Capture request/response raw data from the ChatService instance
     // that was active when this stream started (snapped above). Using
     // the snapped reference is critical: adapter.currentChatService may
@@ -21,7 +38,7 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
     Map<String, dynamic>? rawRequestCapture;
     Map<String, dynamic>? rawResponseCapture;
     try {
-      final reqBody = snappedChatService?.lastRequestBody;
+      final reqBody = state.requestBodySnapshot;
       final headers = snappedChatService?.lastRequestHeaders;
       final url = snappedChatService?.lastRequestUrl;
       if (reqBody != null || headers != null || url != null) {
@@ -30,6 +47,11 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
         if (headers != null) rawRequestCapture['headers'] = headers;
         if (reqBody != null) rawRequestCapture['body'] = reqBody;
       }
+      if (rawRequestCapture != null) {
+        rawRequestCapture = ChatMessage.compactRawRequest(rawRequestCapture);
+      }
+      snappedChatService?.releaseLastRequestBody(reqBody);
+      state.requestBodySnapshot = null;
       final respData = snappedChatService?.lastResponseData;
       final statusCode = snappedChatService?.lastResponseStatusCode;
       final respHeaders = snappedChatService?.lastResponseHeaders;
@@ -65,6 +87,18 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
     // Align with the catch clause in startStreaming, which folds the error
     // text into fullReply for ANY thrown object (not just Exception/Error).
     final hadStreamError = streamError != null;
+    if (!wasCancelled && !hadStreamError && state.historyOnSuccess != null) {
+      final storedMessagesById = <String, ChatMessage>{};
+      for (final storedMessage in state.history) {
+        storedMessagesById.putIfAbsent(
+          storedMessage.id,
+          () => storedMessage,
+        );
+      }
+      state.history = state.historyOnSuccess!
+          .map((message) => storedMessagesById[message.id] ?? message)
+          .toList();
+    }
 
     // 中断工具标记：取消或流错误时，把仍未完成的工具结果标记为中断占位，
     // 避免 UI 与持久化中工具永远停留在 running 状态。
@@ -97,43 +131,57 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
       debugPrint('[ChatStreamManager] 中断工具标记失败: $e');
     }
 
+    // Keep ordinary stream text section-backed. The persisted message and UI
+    // can materialize content when needed, while TaskFlow's fullReply getter
+    // joins only when that consumer explicitly asks for a String. Synthetic
+    // error replies are not represented by text sections and stay explicit.
+    final fullReply = state.hasSyntheticErrorReply ? state.fullReply : null;
+    final textChunks =
+        state.hasSyntheticErrorReply ? <String>[] : finalTextChunks;
+    final hasTextContent = textChunks.any((chunk) => chunk.isNotEmpty);
     try {
       // 纯工具轮取消时 fullReply 为空但 accumulatedToolCalls 非空：
       // 仍要持久化 assistant 消息，否则中断标记（[工具执行被中断]）
       // 从 UI 与存储中丢失。同理，纯推理轮取消（fullReply 与工具
       // 均空但 reasoningSections 非空）：已流出的推理内容也要落库，
       // 否则用户看到的思考过程在崩溃/重进后消失。
-      final hasContent = state.fullReply.isNotEmpty ||
+      final hasContent = wasCancelled ||
+          (fullReply?.isNotEmpty ?? hasTextContent) ||
           state.accumulatedToolCalls.isNotEmpty ||
           state.reasoningSections.any((s) => s.isNotEmpty);
       if (hasContent) {
         // 用显式错误标志而非文本前缀判断：模型正常回复以"错误:"开头
         // 时不应被误标为错误消息。
-        final isError = hadStreamError;
+        final isError = hadStreamError || wasCancelled;
         final blocks = legacyToBlocks(
           reasoningSections: state.reasoningSections,
-          textChunks: state.textChunks,
+          textChunks: textChunks,
           toolCalls: state.accumulatedToolCalls,
           toolCallRoundStarts: state.toolCallRoundStarts,
         );
-        if (hadStreamError &&
-            (state.textChunks.any((chunk) => chunk.isNotEmpty) ||
+        if (wasCancelled) {
+          final cancelledMessage =
+              appLocalizationsForLocale(_ref?.read(localeProvider))
+                  .chatErrorCancelled;
+          blocks.add(ErrorBlock(message: cancelledMessage));
+        } else if (hadStreamError &&
+            (textChunks.any((chunk) => chunk.isNotEmpty) ||
                 state.reasoningSections.any((section) => section.isNotEmpty))) {
-          blocks.add(ErrorBlock(
-            message: formatChatErrorMessage(streamError),
-          ));
+          final errorMessage = _ref == null
+              ? formatChatErrorMessage(streamError)
+              : formatChatErrorMessage(
+                  streamError,
+                  locale: _ref?.read(localeProvider),
+                );
+          blocks.add(ErrorBlock(message: errorMessage));
         }
-        // reasoningContent 用全量累计（sections 拼接）：ReasoningSectionEndEvent
-        // 会重置 reasoningBuffer，后者只含最后一轮——OpenAI 协议历史重建
-        // 回放 reasoning_content 时，中间轮推理会丢失（深度推理模型
-        // 上下文质量下降）。sections 是权威存储，二者不同源。
-        final fullReasoning = state.reasoningSections.join('\n');
         final msg = ChatMessage(
           role: 'assistant',
-          content: state.fullReply,
+          content: fullReply ?? '',
+          contentFromTextSections:
+              !state.hasSyntheticErrorReply && hasTextContent,
           id: state.streamingMsgId ?? '',
           isError: isError,
-          reasoningContent: fullReasoning.isNotEmpty ? fullReasoning : null,
           rawRequest: rawRequestCapture,
           rawResponse: rawResponseCapture,
           toolCalls: state.accumulatedToolCalls.isNotEmpty
@@ -142,12 +190,12 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
           reasoningSections: state.reasoningSections.isNotEmpty
               ? List<String>.from(state.reasoningSections)
               : null,
-          textSections: state.textChunks.any((c) => c.isNotEmpty)
-              ? List<String>.from(state.textChunks)
+          textSections: textChunks.any((c) => c.isNotEmpty)
+              ? List<String>.from(textChunks)
               : null,
           toolCallRoundStarts: state.toolCallRoundStarts.isNotEmpty
               ? List<int>.from(state.toolCallRoundStarts)
-              : null,
+              : (state.accumulatedToolCalls.isNotEmpty ? [0] : null),
           blocks: blocks,
         );
         state.history.add(msg);
@@ -197,15 +245,15 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
       result = StreamResult(
         history: List.from(state.history),
         assistantMessage: assistantMessage,
-        fullReply: state.fullReply,
+        fullReply: fullReply,
         reasoningBuffer: state.reasoningBuffer,
         reasoningSections: List.from(state.reasoningSections),
-        textSections: List.from(state.textChunks),
+        textSections: List.from(textChunks),
         toolCalls: List.from(state.accumulatedToolCalls),
         toolCallRoundStarts: List.from(state.toolCallRoundStarts),
         blocks: legacyToBlocks(
           reasoningSections: state.reasoningSections,
-          textChunks: state.textChunks,
+          textChunks: textChunks,
           toolCalls: state.accumulatedToolCalls,
           toolCallRoundStarts: state.toolCallRoundStarts,
         ),
@@ -215,7 +263,7 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
       debugPrint('[ChatStreamManager] 结果构造失败: $e\n$s');
       result = StreamResult(
         history: List.from(state.history),
-        fullReply: state.fullReply,
+        fullReply: fullReply ?? finalTextChunks.join(),
         cancelled: wasCancelled,
       );
     }
@@ -245,6 +293,7 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
       _setProvider(streamingMsgIdProvider(convId), null);
       _setProvider(streamingHasFirstTokenProvider(convId), false);
       _setProvider(streamingReasoningProvider(convId), '');
+      _setProvider(streamingReasoningAppendProvider(convId), null);
     }
 
     // Remove this conversation from the streaming set ONLY if no new
@@ -274,15 +323,17 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
       }
     }
 
-    // Do NOT clear segment-related providers here (streamingFullReplyProvider,
-    // streamingTextSectionsProvider, streamingReasoningSectionsProvider,
-    // streamingToolCallsProvider, streamingToolCallRoundStartsProvider).
-    // The chat_page's post-stream code in _startStreaming handles provider
-    // cleanup AFTER updating _history and calling _buildFinalSegments.
-    // Clearing segment providers prematurely triggers _rebuildLiveSegments
-    // with empty data, overwriting the correct segments (including reasoning
-    // with isStreaming=true that should have been replaced by
-    // _buildFinalSegments with isStreaming=false).
+    // Keep segment providers while any page is displaying this completed
+    // message: its post-stream path builds finalized segments before clearing
+    // them, and a re-entered page reloads the saved message on completion.
+    // If the originating page was disposed and no page re-entered, release
+    // the large stream buffers now instead of retaining them indefinitely.
+    final streamingMsgId = state.streamingMsgId;
+    if (!replaced &&
+        (streamingMsgId == null ||
+            !_hasAttachedStreamPage(convId, streamingMsgId))) {
+      _clearCompletedSegmentProviders(convId);
+    }
 
     return result;
   }

@@ -5,7 +5,6 @@ extension _ChatPageBuildersExt on _ChatPageState {
   Widget _buildChatWidget({
     required bool isDark,
     required bool isStreaming,
-    required String streamingFullReply,
     required String? streamingMsgId,
     required String? activeId,
     required InMemoryChatController controller,
@@ -72,7 +71,7 @@ extension _ChatPageBuildersExt on _ChatPageState {
             textMessageBuilder: (context, message, index,
                     {required bool isSentByMe,
                     MessageGroupStatus? groupStatus}) =>
-                _buildTextMessage(
+                _buildStreamingMessage(
               context,
               message,
               index,
@@ -81,24 +80,84 @@ extension _ChatPageBuildersExt on _ChatPageState {
               isDark: isDark,
               isStreaming: isStreaming,
               activeId: activeId,
+              controller: controller,
             ),
             textStreamMessageBuilder: (context, message, index,
                     {required bool isSentByMe,
                     MessageGroupStatus? groupStatus}) =>
-                _buildTextStreamMessage(
+                _buildStreamingMessage(
               context,
               message,
               index,
               isSentByMe: isSentByMe,
               groupStatus: groupStatus,
-              isStreaming: isStreaming,
-              streamingFullReply: streamingFullReply,
-              streamingMsgId: streamingMsgId,
               isDark: isDark,
+              isStreaming: isStreaming,
+              activeId: activeId,
+              controller: controller,
             ),
           ),
         ),
       ),
+    );
+  }
+
+  /// Keeps live updates inside the active message's subtree. ChatAnimatedList
+  /// updates its indexed message data without rebuilding that item.
+  Widget _buildStreamingMessage(
+    BuildContext context,
+    Message initialMessage,
+    int index, {
+    required bool isSentByMe,
+    MessageGroupStatus? groupStatus,
+    required bool isDark,
+    required bool isStreaming,
+    required String? activeId,
+    required InMemoryChatController controller,
+  }) {
+    Widget buildMessage(Message message) {
+      if (message is TextMessage) {
+        return _buildTextMessage(
+          context,
+          message,
+          index,
+          isSentByMe: isSentByMe,
+          groupStatus: groupStatus,
+          isDark: isDark,
+          isStreaming: isStreaming,
+          activeId: activeId,
+        );
+      }
+      if (message is TextStreamMessage) {
+        return _buildTextStreamMessage(
+          context,
+          message,
+          index,
+          isSentByMe: isSentByMe,
+          groupStatus: groupStatus,
+          isStreaming: isStreaming,
+          activeId: activeId,
+          streamingMsgId: _streamingMsgId,
+          isDark: isDark,
+        );
+      }
+      return const SizedBox.shrink();
+    }
+
+    // The provider-backed ID can lag the local ID when the placeholder is
+    // inserted, so use page state to attach the notifier on its first build.
+    if (initialMessage.id != _streamingMsgId) {
+      return buildMessage(initialMessage);
+    }
+    return ValueListenableBuilder<int>(
+      valueListenable: _streamingBubbleRevision,
+      builder: (context, _, __) {
+        final latestMessage = controller.messages
+                .where((message) => message.id == initialMessage.id)
+                .firstOrNull ??
+            initialMessage;
+        return buildMessage(latestMessage);
+      },
     );
   }
 
@@ -169,14 +228,17 @@ extension _ChatPageBuildersExt on _ChatPageState {
   /// state cannot keep a phantom spinner visible either.
   Widget _buildLoadMoreIndicator() {
     if (!_isLoadingMore) return const SizedBox.shrink();
-    return const Padding(
-      key: ValueKey('chat-load-more-indicator'),
-      padding: EdgeInsets.symmetric(vertical: 12),
-      child: Center(
-        child: SizedBox(
-          width: 20,
-          height: 20,
-          child: CircularProgressIndicator(strokeWidth: 2),
+    return TickerMode(
+      enabled: TickerMode.of(context) && ChatTabVisibility.of(context),
+      child: const Padding(
+        key: ValueKey('chat-load-more-indicator'),
+        padding: EdgeInsets.symmetric(vertical: 12),
+        child: Center(
+          child: SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
         ),
       ),
     );
@@ -194,7 +256,7 @@ extension _ChatPageBuildersExt on _ChatPageState {
         padding: const EdgeInsets.symmetric(vertical: 10),
         child: Center(
           child: Text(
-            '没有更多内容了',
+            AppLocalizations.of(context)!.chatNoMoreHistory,
             style: TextStyle(
               fontSize: 12,
               color: isDark ? Colors.grey[400] : Colors.grey[600],
@@ -222,10 +284,7 @@ extension _ChatPageBuildersExt on _ChatPageState {
     if (isAi) {
       final chatMsg = _history.where((m) => m.id == message.id).firstOrNull;
       final hasStructuredPartialError = chatMsg?.isError == true &&
-          chatMsg!.blocks?.any((block) => block is ErrorBlock) == true &&
-          (chatMsg.content.isNotEmpty ||
-              chatMsg.reasoningSections?.any((section) => section.isNotEmpty) ==
-                  true);
+          chatMsg!.blocks?.any((block) => block is ErrorBlock) == true;
       if (!hasStructuredPartialError &&
           ((chatMsg?.isError == true) || message.text.startsWith('错误:'))) {
         messageBubble = _buildErrorMessageBubble(
@@ -307,26 +366,42 @@ extension _ChatPageBuildersExt on _ChatPageState {
     required bool isSentByMe,
     MessageGroupStatus? groupStatus,
     required bool isStreaming,
-    required String streamingFullReply,
+    required String? activeId,
     required String? streamingMsgId,
     required bool isDark,
   }) {
     // If the message has accumulated content (e.g.,
     // after page restoration from background streaming),
     // render it as regular text instead of a spinner.
-    // Uses captured [streamingFullReply] from build()
-    // which is updated reactively via ref.watch.
-    if (streamingFullReply.isNotEmpty && message.id == streamingMsgId) {
+    // Read the latest reply when this message item is rebuilt. The active
+    // bubble's notifier triggers that rebuild without rebuilding the page.
+    // The legacy full-reply provider remains a fallback for old direct
+    // writers. Manager-driven streams render from live segments and do not
+    // keep a second growing full-text provider value.
+    final streamingFullReply =
+        activeId == null ? '' : ref.read(streamingFullReplyProvider(activeId));
+    final hasIncrementalLegacyReply = activeId != null &&
+        _legacyFullReplySnapshots.containsKey('$activeId:${message.id}');
+    final segments = _chatSegments[message.id];
+    if (streamingFullReply.isNotEmpty &&
+        !hasIncrementalLegacyReply &&
+        (segments == null || segments.isEmpty) &&
+        message.id == streamingMsgId) {
       // This is the message currently being generated, so the streaming
       // markdown config applies (mermaid blocks show "正在生成..." while
       // the reply is still being produced — only while their fence is
       // still open; closed blocks render immediately).
+      final streamingFenceInfoCache = _streamingFenceInfoCaches.putIfAbsent(
+        '${message.id}:textstream',
+        StreamingFenceInfoCache.new,
+      );
       final config = buildMessageMarkdownConfig(
         isDark: isDark,
         conversationIsStreaming: isStreaming,
         streamingMsgId: streamingMsgId,
         messageId: message.id,
         streamingText: streamingFullReply,
+        streamingFenceInfoCache: streamingFenceInfoCache,
       );
       return Padding(
         padding: const EdgeInsets.all(12),
@@ -347,7 +422,6 @@ extension _ChatPageBuildersExt on _ChatPageState {
     // here, so a model that thought and then called tools without any
     // text showed a pile of "思考完成" buttons and hid the tool calls
     // until the first text token converted the message to a text message.
-    final segments = _chatSegments[message.id];
     if (segments != null && segments.isNotEmpty) {
       return Padding(
         padding: const EdgeInsets.all(12),
@@ -397,13 +471,16 @@ extension _ChatPageBuildersExt on _ChatPageState {
         ),
       );
     }
-    return const Padding(
-      padding: EdgeInsets.all(12),
-      child: SizedBox(
-        width: 20,
-        height: 20,
-        child: CircularProgressIndicator(
-          strokeWidth: 2,
+    return TickerMode(
+      enabled: TickerMode.of(context) && ChatTabVisibility.of(context),
+      child: const Padding(
+        padding: EdgeInsets.all(12),
+        child: SizedBox(
+          width: 20,
+          height: 20,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+          ),
         ),
       ),
     );

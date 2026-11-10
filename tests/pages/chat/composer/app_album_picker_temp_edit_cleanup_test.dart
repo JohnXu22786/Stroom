@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/chat/composer/album_picker_shared.dart';
 import 'package:stroom/pages/chat/composer/chat_album_picker_dialog.dart';
 import 'package:stroom/services/manifest_database.dart';
@@ -96,6 +97,9 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         child: MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
           home: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () => showAppAlbumPickerDialog(context),
@@ -189,6 +193,56 @@ void main() {
       );
       expect(editedFiles, isEmpty);
       expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'the newest concurrent edit remains selected when the older write finishes first',
+    (tester) async {
+      final files = <File>[];
+      final writeGates = <Completer<void>>[];
+      final editedVersions = <Uint8List>[
+        Uint8List.fromList([10, 20, 30]),
+        Uint8List.fromList([40, 50, 60]),
+      ];
+      var editCount = 0;
+      var completedWriteCount = 0;
+      beforeAppAlbumPickerTempWriteForTesting = (file, bytes) async {
+        files.add(file);
+        final gate = Completer<void>();
+        writeGates.add(gate);
+        await gate.future;
+        await file.writeAsBytes(bytes);
+        completedWriteCount++;
+      };
+      appAlbumPickerEditImageForTesting =
+          (_, _) async => editedVersions[editCount++];
+
+      await openPickerWithSelectedImage(tester);
+      await tester.tap(find.byType(AlbumPreviewChip));
+      await tester.pump();
+      await tester.tap(find.byType(AlbumPreviewChip));
+      await tester.pump();
+      await _pumpUntil(tester, () => files.length == 2);
+
+      writeGates.first.complete();
+      await _pumpUntil(tester, () => completedWriteCount == 1);
+      writeGates.last.complete();
+      await _pumpUntil(tester, () => completedWriteCount == 2);
+
+      expect(
+        tester.widget<AlbumPreviewChip>(find.byType(AlbumPreviewChip)).bytes,
+        orderedEquals(editedVersions.last),
+      );
+
+      await tester.tap(
+        find.descendant(
+          of: find.widgetWithText(AppBar, '应用内相册'),
+          matching: find.byIcon(Icons.close),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await _pumpUntil(tester, () => files.every((file) => !file.existsSync()));
     },
   );
 

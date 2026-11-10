@@ -1,11 +1,12 @@
 {
-    "name": "stroom",
-    "short_name": "stroom",
+    "lang": "en-US",
+    "name": "Stroom",
+    "short_name": "Stroom",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "An AI study workspace for organizing learning materials, understanding content, and preparing for review.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

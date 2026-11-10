@@ -5,6 +5,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_math_fork/flutter_math.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/widgets/code_block_source_widget.dart';
 import 'package:stroom/widgets/html_code_block_widget.dart';
 import 'package:stroom/widgets/markdown_extensions.dart';
@@ -32,6 +33,7 @@ List<m.Node> _parseLikeMarkdownGenerator(String text) {
     extensionSet: m.ExtensionSet.gitHubFlavored,
     encodeHtml: false,
     inlineSyntaxes: [LatexSyntax(), BrSyntax(), USyntax()],
+    blockSyntaxes: [DisplayMathBlockSyntax()],
   );
   return doc.parse(text);
 }
@@ -106,6 +108,98 @@ void main() {
   // ===========================================================================
   // 1. markdown_extensions_test.dart
   // ===========================================================================
+  group('DisplayMathBlockSyntax - cross-line display math', () {
+    test('keeps list-looking formula lines inside a display math block', () {
+      const input = r'''Before
+
+$$
+\text{地面有效辐射}
+- \text{地面吸收的大气逆辐射}
+$$
+
+After''';
+      final nodes = _parseLikeMarkdownGenerator(input);
+      final latex = _findElement(nodes, 'latex');
+
+      expect(latex, isNotNull);
+      expect(latex!.attributes['content'],
+          r'\text{地面有效辐射}' '\n' r'- \text{地面吸收的大气逆辐射}');
+      expect(latex.attributes['isInline'], 'false');
+      expect(_findElement(nodes, 'ul'), isNull);
+
+      final streamingNodes = _parseLikeMarkdownGenerator(r'$$' '\n- x');
+      final openMath = _findElement(streamingNodes, 'latex');
+      expect(openMath, isNotNull);
+      expect(openMath!.attributes['content'], isNull);
+      expect(_findElement(streamingNodes, 'ul'), isNull);
+
+      final codeNodes = _parseLikeMarkdownGenerator(r'''    $$
+    x
+    $$''');
+      expect(_findElement(codeNodes, 'latex'), isNull);
+      expect(_findElement(codeNodes, 'pre'), isNotNull);
+
+      final fencedCodeNodes = _parseLikeMarkdownGenerator(r'''$$
+x
+```
+$$
+```''');
+      expect(_findElement(fencedCodeNodes, 'latex'), isNull);
+      expect(_findElement(fencedCodeNodes, 'pre'), isNotNull);
+
+      final tabClosedFenceNodes = _parseLikeMarkdownGenerator(
+        r'$$'
+        '\nx\n```\n'
+        r'$$'
+        '\n```\t\n'
+        r'$$',
+      );
+      final tabClosedFenceMath = _findElement(tabClosedFenceNodes, 'latex');
+      expect(tabClosedFenceMath, isNotNull);
+      expect(
+        tabClosedFenceMath!.attributes['content'],
+        'x\n```\n'
+        r'$$'
+        '\n```\t',
+      );
+    });
+  });
+
+  group('MarkdownGenerator.buildPlainTextPreview - Markdown constructs', () {
+    test('renders display math and bold in the bounded streaming preview', () {
+      final widgets = markdownGenerator.buildPlainTextPreview(
+        [
+          r'''$$
+\text{地面有效辐射}
+- \text{地面吸收的大气逆辐射}
+$$
+
+**不一定。** and **也可能是**''',
+        ],
+      );
+      final spans = [
+        for (final widget in widgets)
+          if (widget is Padding && widget.child is Text)
+            (widget.child as Text).textSpan!,
+      ];
+      TextSpan? findSpan(String text) {
+        for (final span in spans) {
+          final found = _leafSpanWithText(span, text);
+          if (found != null) return found;
+        }
+        return null;
+      }
+
+      expect(findSpan('不一定。')?.style?.fontWeight, FontWeight.bold);
+      expect(findSpan('也可能是')?.style?.fontWeight, FontWeight.bold);
+      expect(_widgetsFromInlineSpans(widgets), isNotEmpty);
+      final renderedText = spans.map((span) => span.toPlainText()).join();
+      expect(renderedText, isNot(contains('**')));
+      expect(renderedText, isNot(contains(r'$$')));
+      expect(renderedText, isNot(contains(r'\text')));
+    });
+  });
+
   group('LatexSyntax - inline math \$...\$', () {
     test('parses simple inline math', () {
       final regex = RegExp(LatexSyntax.latexPattern);
@@ -233,6 +327,121 @@ void main() {
     });
   });
 
+  group('LatexSyntax - additional math forms', () {
+    test('parses parenthesized and bracketed delimiters', () {
+      final nodes = _parseWithLatex(r'Inline \(x^2\), display \[y^2\].');
+      final elements = <m.Element>[];
+      void collect(List<m.Node> nodes) {
+        for (final node in nodes) {
+          if (node is m.Element && node.tag == 'latex') elements.add(node);
+          if (node is m.Element) collect(node.children ?? []);
+        }
+      }
+
+      collect(nodes);
+      expect(elements.map((e) => e.attributes['content']), ['x^2', 'y^2']);
+      expect(elements.map((e) => e.attributes['isInline']), ['true', 'false']);
+    });
+
+    test('parses equation, align, and gather environments as display math', () {
+      final nodes = _parseWithLatex(
+        r'\begin{equation}x=1\end{equation}'
+        '\n\n'
+        r'\begin{align}x&=1\\y&=2\end{align}'
+        '\n\n'
+        r'\begin{gather}x=1\\y=2\end{gather}',
+      );
+      final elements = <m.Element>[];
+      void collect(List<m.Node> nodes) {
+        for (final node in nodes) {
+          if (node is m.Element && node.tag == 'latex') elements.add(node);
+          if (node is m.Element) collect(node.children ?? []);
+        }
+      }
+
+      collect(nodes);
+      expect(elements, hasLength(3));
+      expect(
+          elements.every((e) => e.attributes['isInline'] == 'false'), isTrue);
+    });
+
+    test('escaped and incomplete delimiters stay literal', () {
+      const source = r'Escaped \$x$ and \(y plus \[z plus $unfinished';
+      final nodes = _parseWithLatex(source);
+      expect(_findElement(nodes, 'latex'), isNull);
+      expect(
+        _collectPlainText(nodes).join(),
+        source.replaceFirst(r'\$', r'$'),
+      );
+    });
+
+    test('escaped dollar inside math does not end the formula', () {
+      final nodes = _parseWithLatex(r'$a\$b$');
+      final formula = _findElement(nodes, 'latex');
+      expect(formula, isNotNull);
+      expect(formula!.attributes['content'], r'a\$b');
+    });
+
+    test('escaped dollar-like text does not consume the next formula', () {
+      final nodes = _parseWithLatex(r'\$x$ plus $y$');
+      final elements = <m.Element>[];
+      void collect(List<m.Node> nodes) {
+        for (final node in nodes) {
+          if (node is m.Element && node.tag == 'latex') elements.add(node);
+          if (node is m.Element) collect(node.children ?? []);
+        }
+      }
+
+      collect(nodes);
+      expect(elements, hasLength(1));
+      expect(elements.single.attributes['content'], 'y');
+    });
+
+    test('escaped dollar text before an adjacent formula stays literal', () {
+      final nodes = _parseWithLatex(r'\$x$y$');
+      final elements = <m.Element>[];
+      void collect(List<m.Node> nodes) {
+        for (final node in nodes) {
+          if (node is m.Element && node.tag == 'latex') elements.add(node);
+          if (node is m.Element) collect(node.children ?? []);
+        }
+      }
+
+      collect(nodes);
+      expect(elements, hasLength(1));
+      expect(elements.single.attributes['content'], 'y');
+    });
+
+    test('math-like content in inline and fenced code stays code', () {
+      final nodes = _parseLikeMarkdownGenerator(
+        r'`$x$`' '\n\n````\n' r'\(y\)' '\n````',
+      );
+      expect(_findElement(nodes, 'latex'), isNull);
+      expect(_findElement(nodes, 'code'), isNotNull);
+      expect(_findElement(nodes, 'pre'), isNotNull);
+    });
+
+    testWidgets('math, latex, and tex fences render through math widgets',
+        (WidgetTester tester) async {
+      const md = '```math\nx^2\n```\n\n'
+          '~~~latex\ny^2\n~~~\n\n'
+          '```tex\nz^2\n```';
+      final widgets = markdownGenerator.buildWidgets(
+        md,
+        config: buildMarkdownConfig(isDark: false),
+      );
+      await tester.pumpWidget(MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: Scaffold(body: Column(children: widgets)),
+      ));
+
+      expect(find.byType(Math), findsNWidgets(3));
+      expect(find.byType(CodeBlockSourceView), findsNothing);
+    });
+  });
+
   group('LatexNode', () {
     testWidgets('build returns WidgetSpan for inline math',
         (WidgetTester tester) async {
@@ -277,6 +486,38 @@ void main() {
       final span = node.build();
       expect(span, isA<WidgetSpan>());
     });
+
+    testWidgets('parse error keeps red source and opens its detail on tap',
+        (WidgetTester tester) async {
+      final node = LatexNode(
+        {'content': r'\frac{1}{', 'isInline': 'true'},
+        r'$\frac{1}{$',
+        MarkdownConfig.defaultConfig,
+      );
+      await tester.pumpWidget(MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: Scaffold(body: Text.rich(node.build())),
+      ));
+
+      final fallback = find.text(r'$\frac{1}{$', findRichText: true);
+      expect(fallback, findsOneWidget);
+      final fallbackText = find.byWidgetPredicate(
+        (widget) => widget is Text && widget.data == r'$\frac{1}{$',
+      );
+      expect(tester.widget<Text>(fallbackText).style?.color, Colors.red);
+      await tester.tap(fallback);
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsOneWidget);
+      final parserError = find.byWidgetPredicate(
+        (widget) =>
+            widget is SelectableText &&
+            widget.data?.contains('Parser Error') == true &&
+            widget.data?.contains('Expected') == true,
+      );
+      expect(parserError, findsOneWidget);
+    });
   });
 
   group('LatexNode - mhchem \\ce support', () {
@@ -296,6 +537,9 @@ void main() {
 
       final span = node.build() as WidgetSpan;
       await tester.pumpWidget(MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
         home: Scaffold(
           body: Center(
             child: Text.rich(TextSpan(children: [span])),
@@ -321,6 +565,9 @@ void main() {
       final span = node.build() as WidgetSpan;
       final child = (span.child as Container).child!;
       await tester.pumpWidget(MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
         home: Scaffold(
           body: Center(
             child: Text.rich(TextSpan(children: [WidgetSpan(child: child)])),
@@ -345,6 +592,9 @@ void main() {
 
       final span = node.build() as WidgetSpan;
       await tester.pumpWidget(MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
         home: Scaffold(
           body: Center(
             child: Text.rich(TextSpan(children: [span])),
@@ -371,6 +621,9 @@ void main() {
 
       final span = node.build() as WidgetSpan;
       await tester.pumpWidget(MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
         home: Scaffold(
           body: Center(
             child: Text.rich(TextSpan(children: [span])),
@@ -429,6 +682,9 @@ void main() {
       final config = MarkdownConfig.defaultConfig;
 
       Widget richTextWith(WidgetSpan span) => MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
             home: Scaffold(
               body: Center(
                 child: KeyedSubtree(
@@ -463,6 +719,9 @@ void main() {
       // linearly with fontSize, so the block formula (20.8px) is exactly
       // 1.3x this height.
       await tester.pumpWidget(MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
         home: Scaffold(
           body: Center(child: inlineMath),
         ),
@@ -2033,6 +2292,9 @@ void main() {
       final config = buildMarkdownConfig(isDark: false);
       final widgets = markdownGenerator.buildWidgets(md, config: config);
       await tester.pumpWidget(MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
         home: Scaffold(
           body: Column(children: widgets),
         ),
@@ -2049,6 +2311,9 @@ void main() {
       final config = buildMarkdownConfig(isDark: false);
       final widgets = markdownGenerator.buildWidgets(md, config: config);
       await tester.pumpWidget(MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
         home: Scaffold(
           body: Column(children: widgets),
         ),
@@ -2142,6 +2407,9 @@ void main() {
       final config = buildMarkdownConfig(isDark: false);
       final widgets = markdownGenerator.buildWidgets(md, config: config);
       await tester.pumpWidget(MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
         home: Scaffold(
           body: Column(children: widgets),
         ),
@@ -2171,6 +2439,9 @@ void main() {
       final config = buildMarkdownConfig(isDark: false);
       final widgets = markdownGenerator.buildWidgets(md, config: config);
       await tester.pumpWidget(MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
         home: Scaffold(
           body: Column(children: widgets),
         ),

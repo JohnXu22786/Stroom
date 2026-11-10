@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -16,6 +17,59 @@ class AppStorage {
   AppStorage._();
 
   static String? _resolved;
+
+  /// Appends one durable line to a native storage file, adding a separator if
+  /// an interrupted prior write left the file without a trailing newline.
+  static Future<void> appendDurableLine(String path, String line) async {
+    final file = File(path);
+    await file.parent.create(recursive: true);
+    final separator = await _needsLineSeparator(file) ? '\n' : '';
+    await file.writeAsString(
+      '$separator$line\n',
+      mode: FileMode.append,
+      flush: true,
+    );
+  }
+
+  /// Reads valid UTF-8 lines from a native storage file. Malformed bytes are
+  /// replaced so a torn final record does not hide earlier complete lines.
+  static Future<int?> durableFileLength(String path) async {
+    final file = File(path);
+    if (!await file.exists()) return null;
+    return file.length();
+  }
+
+  static Future<Stream<String>?> readDurableLines(
+    String path, {
+    int? end,
+  }) async {
+    final file = File(path);
+    if (!await file.exists()) return null;
+    return file
+        .openRead(0, end)
+        .transform(const Utf8Decoder(allowMalformed: true))
+        .transform(const LineSplitter());
+  }
+
+  static Future<bool> deleteStorageFile(String path) async {
+    final file = File(path);
+    if (!await file.exists()) return true;
+    await file.delete();
+    return true;
+  }
+
+  static Future<bool> _needsLineSeparator(File file) async {
+    if (!await file.exists()) return false;
+    final length = await file.length();
+    if (length == 0) return false;
+    final handle = await file.open();
+    try {
+      await handle.setPosition(length - 1);
+      return await handle.readByte() != 10;
+    } finally {
+      await handle.close();
+    }
+  }
 
   /// Returns the path to the application documents directory.
   ///

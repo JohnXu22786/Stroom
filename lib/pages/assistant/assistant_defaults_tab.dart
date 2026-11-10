@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -116,8 +117,10 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
     final v = widget.maxToolOutputChars;
     if (v < ChatService.kToolOutputMaxCharsMin ||
         v > ChatService.kToolOutputMaxCharsMax) {
-      _lengthError =
-          '有效范围：${ChatService.kToolOutputMaxCharsMin}~${ChatService.kToolOutputMaxCharsMax} 字符';
+      _lengthError = AppLocalizations.of(context)!.assistantCharacterRange(
+        ChatService.kToolOutputMaxCharsMin.toString(),
+        ChatService.kToolOutputMaxCharsMax.toString(),
+      );
     }
   }
 
@@ -163,10 +166,10 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
           ];
     final seen = <String>{};
     final tools = <ToolDefinition>[];
-    for (final t in filterMcpSearchToolDefinitions(
-      [...builtins, ...adapter.mcpToolDefinitions],
-      mcpEnabled: isMcpMasterSwitchEnabled(entriesState),
-    )) {
+    for (final t in filterMcpSearchToolDefinitions([
+      ...builtins,
+      ...adapter.mcpToolDefinitions,
+    ], mcpEnabled: isMcpMasterSwitchEnabled(entriesState))) {
       if (!disabledNames.contains(t.name) && seen.add(t.name)) tools.add(t);
     }
     return tools;
@@ -188,10 +191,9 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
     // 顺序（model_order，与聊天页/供应商页共享），已保存的名字按保存顺序
     // 前置，未保存的新模型按配置添加顺序追加在末尾——而不是默认的
     // 配置添加顺序。
-    final displayNames = applySavedOrder(
-      [for (final m in models) m.displayName],
-      _savedModelOrder,
-    );
+    final displayNames = applySavedOrder([
+      for (final m in models) m.displayName,
+    ], _savedModelOrder);
     final orderedModels = [
       for (final name in displayNames)
         models.firstWhere((m) => m.displayName == name),
@@ -260,11 +262,11 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      '以下默认模型与默认工具仅应用于在该助手下新建的话题；'
-                      '已存在的话题保留各自的模型与工具设置，不受影响。'
-                      '工具结果截断应用于该助手的全部话题。',
+                      AppLocalizations.of(context)!.assistantDefaultsScopeHelp,
                       style: TextStyle(
-                          fontSize: 12, color: cs.onTertiaryContainer),
+                        fontSize: 12,
+                        color: cs.onTertiaryContainer,
+                      ),
                     ),
                   ),
                 ],
@@ -276,8 +278,8 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
           // ── 默认模型 ──
           _SectionCard(
             icon: Icons.smart_toy_outlined,
-            title: '默认模型',
-            subtitle: '新建话题使用的模型；未设置时暂不指定默认模型。',
+            title: AppLocalizations.of(context)!.assistantDefaultModelTitle,
+            subtitle: AppLocalizations.of(context)!.assistantDefaultModelHelp,
             child: RadioGroup<String>(
               groupValue: effectiveModelName ?? _notSetSentinel,
               onChanged: (value) {
@@ -299,7 +301,7 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
                     contentPadding: EdgeInsets.zero,
                     value: _notSetSentinel,
                     title: Text(
-                      '暂不设置',
+                      AppLocalizations.of(context)!.assistantNoDefault,
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: effectiveModelName == null
@@ -313,9 +315,12 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
                     Padding(
                       padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
                       child: Text(
-                        '暂无可用模型，请在设置中配置 LLM 供应商',
-                        style:
-                            TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                        AppLocalizations.of(context)!
+                            .assistantNoModelsAvailable,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: cs.onSurfaceVariant,
+                        ),
                       ),
                     )
                   else
@@ -348,10 +353,10 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
           // 开关仍在下方列表中。
           _SectionCard(
             icon: Icons.build_outlined,
-            title: '默认启用工具',
+            title: AppLocalizations.of(context)!.assistantDefaultToolsTitle,
             subtitle: isToolsConfigured
-                ? '未启用的工具，在该助手的新话题中不会自动开启。'
-                : '尚未配置默认工具，新话题将自动启用全部工具。',
+                ? AppLocalizations.of(context)!.assistantDisabledToolsHelp
+                : AppLocalizations.of(context)!.assistantUnconfiguredToolsHelp,
             trailing: tools.isEmpty
                 ? null
                 : Wrap(
@@ -364,11 +369,15 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
                         TextButton(
                           onPressed: () =>
                               widget.onDefaultToolsChanged(validToolNames),
-                          child: const Text('全部启用'),
+                          child: Text(
+                            AppLocalizations.of(context)!.assistantEnableAll,
+                          ),
                         ),
                       TextButton(
                         onPressed: () => widget.onDefaultToolsChanged(const {}),
-                        child: const Text('全部关闭'),
+                        child: Text(
+                          AppLocalizations.of(context)!.assistantDisableAll,
+                        ),
                       ),
                     ],
                   ),
@@ -376,9 +385,11 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
                 ? Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8),
                     child: Text(
-                      '暂无可用工具',
-                      style:
-                          TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                      AppLocalizations.of(context)!.chatNoToolsAvailable,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: cs.onSurfaceVariant,
+                      ),
                     ),
                   )
                 : Column(
@@ -437,8 +448,9 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
           // 不是"新建话题才生效"的默认值——subtitle 里已说明。
           _SectionCard(
             icon: Icons.content_cut_outlined,
-            title: '工具结果截断',
-            subtitle: '发送给模型前，单个工具结果的字符数上限；应用于该助手的全部话题（含已存在的）。',
+            title: AppLocalizations.of(context)!.assistantTruncateToolOutput,
+            subtitle:
+                AppLocalizations.of(context)!.assistantTruncateToolOutputHelp,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -446,7 +458,7 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
                   dense: true,
                   contentPadding: EdgeInsets.zero,
                   title: Text(
-                    '启用截断',
+                    AppLocalizations.of(context)!.assistantEnableTruncation,
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w500,
@@ -455,12 +467,11 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
                   ),
                   subtitle: Text(
                     widget.enableMaxToolOutputChars
-                        ? '超长结果截断至 ${widget.maxToolOutputChars} 字符'
-                        : '不截断，完整发送（仍受 50KB 存储上限约束）',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: cs.onSurfaceVariant,
-                    ),
+                        ? AppLocalizations.of(context)!.assistantTruncatedTo(
+                            widget.maxToolOutputChars.toString(),
+                          )
+                        : AppLocalizations.of(context)!.assistantSendFullResult,
+                    style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
                   ),
                   value: widget.enableMaxToolOutputChars,
                   activeThumbColor: cs.primary,
@@ -472,12 +483,18 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
                     child: TextField(
                       controller: _truncationLengthController,
                       decoration: InputDecoration(
-                        labelText: '最大字符数',
+                        labelText: AppLocalizations.of(context)!
+                            .assistantMaxCharacters,
                         // 明确"字符"单位：避免用户按 token/字节理解。
-                        helperText:
-                            _lengthError == null ? '单位：字符（不是 token）' : null,
+                        helperText: _lengthError == null
+                            ? AppLocalizations.of(context)!
+                                .assistantCharactersNotTokens
+                            : null,
                         errorText: _lengthError,
-                        hintText: '默认 $kToolOutputMaxChars',
+                        hintText: AppLocalizations.of(context)!
+                            .assistantDefaultCharacterCount(
+                          kToolOutputMaxChars.toString(),
+                        ),
                         border: const OutlineInputBorder(),
                         isDense: true,
                       ),
@@ -494,7 +511,13 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
                           _lengthError = (v.isNotEmpty &&
                                   !inRange &&
                                   v.length >= 3)
-                              ? '有效范围：${ChatService.kToolOutputMaxCharsMin}~${ChatService.kToolOutputMaxCharsMax} 字符'
+                              ? AppLocalizations.of(
+                                  context,
+                                )!
+                                  .assistantCharacterRange(
+                                  ChatService.kToolOutputMaxCharsMin.toString(),
+                                  ChatService.kToolOutputMaxCharsMax.toString(),
+                                )
                               : null;
                         });
                         // 越界/非法输入：不写入 vars（保存落库的必是
@@ -518,7 +541,7 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: cs.secondaryContainer.withValues(alpha: 0.35),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(8),
                 border: Border.all(
                   color: cs.outlineVariant.withValues(alpha: 0.5),
                 ),
@@ -528,11 +551,15 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.visibility_outlined,
-                          size: 16, color: cs.secondary),
+                      Icon(
+                        Icons.visibility_outlined,
+                        size: 16,
+                        color: cs.secondary,
+                      ),
                       const SizedBox(width: 8),
                       Text(
-                        '新建话题效果',
+                        AppLocalizations.of(context)!
+                            .assistantNewConversationPreview,
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
@@ -543,19 +570,28 @@ class _AssistantDefaultsTabState extends ConsumerState<AssistantDefaultsTab> {
                   ),
                   const SizedBox(height: 8),
                   _SummaryRow(
-                    label: '模型',
-                    value: effectiveModelName ?? '暂不设置',
+                    label: AppLocalizations.of(context)!.ocrModelLabel,
+                    value: effectiveModelName ??
+                        AppLocalizations.of(context)!.assistantNoDefault,
                   ),
                   const SizedBox(height: 6),
                   _SummaryRow(
-                    label: '工具',
+                    label: AppLocalizations.of(context)!.chatTools,
                     value: tools.isEmpty
-                        ? '暂无可用工具'
+                        ? AppLocalizations.of(context)!.chatNoToolsAvailable
                         : isToolsConfigured
                             // 只统计当前仍存在的工具，避免已失效的工具名
                             // 使摘要数量与上方开关不一致。
-                            ? '已启用 ${effectiveToolNames.intersection(allToolNames).length} / ${tools.length}'
-                            : '全部自动启用（未配置）',
+                            ? AppLocalizations.of(context)!
+                                .assistantEnabledToolCount(
+                                effectiveToolNames
+                                    .intersection(allToolNames)
+                                    .length
+                                    .toString(),
+                                tools.length.toString(),
+                              )
+                            : AppLocalizations.of(context)!
+                                .assistantAllToolsAutoEnabled,
                   ),
                 ],
               ),
@@ -598,7 +634,7 @@ class _SectionCard extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Card(
         margin: EdgeInsets.zero,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(8, 12, 8, 8),
           child: Column(
@@ -613,7 +649,7 @@ class _SectionCard extends StatelessWidget {
                     height: 28,
                     decoration: BoxDecoration(
                       color: cs.tertiary.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(6),
+                      borderRadius: BorderRadius.circular(8),
                     ),
                     child: Icon(icon, size: 18, color: cs.tertiary),
                   ),
@@ -645,9 +681,7 @@ class _SectionCard extends StatelessWidget {
                     const SizedBox(width: 8),
                     // Expanded + Wrap：按钮占满标题行剩余空间，右对齐；
                     // 空间不足时按钮换行，避免 RenderFlex 溢出。
-                    Expanded(
-                      child: trailing!,
-                    ),
+                    Expanded(child: trailing!),
                   ],
                 ],
               ),
@@ -673,10 +707,7 @@ class _SummaryRow extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     return Row(
       children: [
-        Text(
-          label,
-          style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
-        ),
+        Text(label, style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
         const SizedBox(width: 12),
         Expanded(
           child: Text(

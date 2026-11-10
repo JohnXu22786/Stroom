@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 
 import '../catcatch/providers/catcatch_provider.dart';
 import '../utils/duration_parser.dart';
@@ -71,6 +72,8 @@ class CatCatchPage extends ConsumerStatefulWidget {
 }
 
 class _CatCatchPageState extends ConsumerState<CatCatchPage> {
+  AppLocalizations get _l10n => AppLocalizations.of(context)!;
+
   final List<_TaskEntry> _tasks = [];
   String _videoFolder = '';
   String _audioFolder = '';
@@ -148,8 +151,8 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
     final trimmed = captured.trim();
     if (!_isValidUrl(trimmed)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('捕获的URL无效'),
+        SnackBar(
+          content: Text(_l10n.catCatchInvalidCapturedUrl),
           duration: Duration(seconds: 2),
           behavior: SnackBarBehavior.floating,
         ),
@@ -159,7 +162,7 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
     _addTaskEntry(initialUrl: trimmed);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('已从浏览器捕获: ${_shortName(trimmed)}'),
+        content: Text(_l10n.catCatchCapturedFromBrowser(_shortName(trimmed))),
         duration: const Duration(seconds: 2),
         behavior: SnackBarBehavior.floating,
       ),
@@ -221,7 +224,7 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
     if (validEntries.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('请至少输入一个有效的URL'),
+          content: Text(_l10n.catCatchEnterValidUrl),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -253,12 +256,14 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            successCount == 1 ? '任务已添加' : '已添加 $successCount 个任务',
+            successCount == 1
+                ? _l10n.catCatchTaskAdded
+                : _l10n.catCatchTasksAdded(successCount),
           ),
           duration: const Duration(seconds: 2),
           behavior: SnackBarBehavior.floating,
           action: SnackBarAction(
-            label: '查看任务列表',
+            label: _l10n.catCatchViewTaskList,
             onPressed: () {
               Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const UnifiedTaskListPage()),
@@ -280,7 +285,7 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('下载网页资源'),
+        title: Text(_l10n.catCatchPageTitle),
         backgroundColor: colorScheme.surface,
         foregroundColor: colorScheme.onSurface,
         elevation: 0,
@@ -289,12 +294,12 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
           IconButton(
             key: const Key('catcatch_add_task'),
             icon: const Icon(Icons.add, size: 22),
-            tooltip: '添加任务',
+            tooltip: _l10n.catCatchAddTask,
             onPressed: () => _addTaskEntry(),
           ),
           IconButton(
             icon: const Icon(Icons.language, size: 20),
-            tooltip: '内置浏览器',
+            tooltip: _l10n.catCatchOpenBrowser,
             onPressed: _openBrowser,
           ),
         ],
@@ -328,7 +333,7 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
           ),
           const SizedBox(height: 16),
           Text(
-            '暂无下载任务',
+            _l10n.catCatchEmptyState,
             style: TextStyle(
               fontSize: 16,
               color: colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
@@ -336,7 +341,7 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
           ),
           const SizedBox(height: 8),
           Text(
-            '点击右上角 + 添加下载任务',
+            _l10n.catCatchEmptyStateHint,
             style: TextStyle(
               fontSize: 13,
               color: colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
@@ -378,7 +383,7 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
       child: Card(
         elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
           side: BorderSide(
             color: colorScheme.outlineVariant.withValues(alpha: 0.5),
           ),
@@ -398,10 +403,10 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
                     child: TextFormField(
                       controller: task.urlController,
                       decoration: InputDecoration(
-                        hintText: '请输入视频/音频网页URL',
+                        hintText: _l10n.catCatchUrlHint,
                         prefixIcon: const Icon(Icons.link, size: 20),
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(8),
                         ),
                         filled: true,
                         fillColor: colorScheme.surface,
@@ -426,7 +431,7 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
                         color: colorScheme.error,
                       ),
                       onPressed: () => _removeTaskEntry(index),
-                      tooltip: '删除此任务',
+                      tooltip: _l10n.catCatchDeleteTask,
                       padding: EdgeInsets.zero,
                     ),
                   ),
@@ -443,10 +448,10 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
                     child: TextFormField(
                       controller: task.hourController,
                       decoration: InputDecoration(
-                        labelText: '时',
+                        labelText: _l10n.catCatchHour,
                         hintText: '0',
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(8),
                         ),
                         filled: true,
                         fillColor: colorScheme.surface,
@@ -465,10 +470,10 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
                     child: TextFormField(
                       controller: task.minuteController,
                       decoration: InputDecoration(
-                        labelText: '分',
+                        labelText: _l10n.catCatchMinute,
                         hintText: '0',
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(8),
                         ),
                         filled: true,
                         fillColor: colorScheme.surface,
@@ -487,10 +492,10 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
                     child: TextFormField(
                       controller: task.secondController,
                       decoration: InputDecoration(
-                        labelText: '秒',
+                        labelText: _l10n.catCatchSecond,
                         hintText: '0',
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(8),
                         ),
                         filled: true,
                         fillColor: colorScheme.surface,
@@ -521,7 +526,7 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      '预览: ',
+                      _l10n.catCatchDurationPreview,
                       style: TextStyle(
                         fontSize: 13,
                         color: colorScheme.onSurfaceVariant,
@@ -538,7 +543,7 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
                     ),
                     const Spacer(),
                     Text(
-                      '时:分:秒',
+                      _l10n.catCatchDurationFormat,
                       style: TextStyle(
                         fontSize: 11,
                         color: colorScheme.onSurfaceVariant.withValues(
@@ -552,7 +557,7 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
               Padding(
                 padding: const EdgeInsets.only(top: 2, left: 4),
                 child: Text(
-                  '可选：按时长筛选视频资源。留空则展示全部资源供选择',
+                  _l10n.catCatchDurationFilterHint,
                   style: TextStyle(
                     fontSize: 12,
                     color: colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
@@ -595,7 +600,7 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
             _buildFolderSelector(
               colorScheme: colorScheme,
               icon: Icons.videocam,
-              label: '视频保存至',
+              label: _l10n.catCatchVideoSaveTo,
               currentFolder: _videoFolder,
               onTap: () => _pickVideoFolder(),
             ),
@@ -604,7 +609,7 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
             _buildFolderSelector(
               colorScheme: colorScheme,
               icon: Icons.audio_file,
-              label: '音频保存至',
+              label: _l10n.catCatchAudioSaveTo,
               currentFolder: _audioFolder,
               onTap: () => _pickAudioFolder(),
             ),
@@ -622,7 +627,7 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      '已添加 $taskCount 个任务',
+                      _l10n.catCatchTaskCount(taskCount),
                       style: TextStyle(
                         fontSize: 12,
                         color: colorScheme.onSurfaceVariant,
@@ -638,8 +643,8 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
               child: FilledButton.icon(
                 onPressed: hasValidUrl ? _startTask : null,
                 icon: const Icon(Icons.search, size: 20),
-                label: const Text(
-                  '开始分析',
+                label: Text(
+                  _l10n.catCatchStartAnalysis,
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
@@ -664,7 +669,7 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
       context,
       currentFolder: _videoFolder,
       availableFolders: folders,
-      title: '视频保存至文件夹',
+      title: _l10n.catCatchVideoFolderTitle,
       onCreateFolder: (name) async {
         await VideoManifest.addFolder(name);
         return null;
@@ -683,7 +688,7 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
       context,
       currentFolder: _audioFolder,
       availableFolders: folders,
-      title: '音频保存至文件夹',
+      title: _l10n.catCatchAudioFolderTitle,
       onCreateFolder: (name) async {
         await FileManifest.addFolder(name);
         return null;
@@ -705,13 +710,13 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
     return Container(
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainerLow.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(
           color: colorScheme.outlineVariant.withValues(alpha: 0.4),
         ),
       ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(8),
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -728,7 +733,9 @@ class _CatCatchPageState extends ConsumerState<CatCatchPage> {
               ),
               const SizedBox(width: 4),
               Text(
-                currentFolder.isEmpty ? '根目录' : currentFolder,
+                currentFolder.isEmpty
+                    ? _l10n.catCatchRootFolder
+                    : currentFolder,
                 style: TextStyle(
                   fontSize: 12,
                   color: colorScheme.primary,

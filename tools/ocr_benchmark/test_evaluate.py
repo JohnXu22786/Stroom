@@ -1,5 +1,6 @@
 import hashlib
 import json
+import os
 import shutil
 import struct
 import subprocess
@@ -69,6 +70,93 @@ def predictions(results):
 
 
 class EvaluateTests(unittest.TestCase):
+    def test_ragged_pipe_table_annotation_is_rejected(self):
+        for table in ("A | B\nx | y | z", "A | B\n| C |"):
+            with self.subTest(table=table):
+                manifest = {
+                    "fixtures": [
+                        {
+                            "id": "ragged-table",
+                            "gold_text": table,
+                            "table_text": table,
+                            "categories": ["english", "table"],
+                        }
+                    ]
+                }
+
+                with self.assertRaisesRegex(
+                    EvaluationError, "table_text rows must have consistent columns"
+                ):
+                    evaluate_predictions(
+                        manifest,
+                        predictions([{"fixture_id": "ragged-table", "text": table}]),
+                    )
+
+    def test_rectangular_pipe_table_annotation_scores_exact_prediction(self):
+        for table in ("A | B\nx | y", "A | B\nA | B |"):
+            with self.subTest(table=table):
+                report = evaluate_predictions(
+                    {
+                        "fixtures": [
+                            {
+                                "id": "rectangular-table",
+                                "gold_text": table,
+                                "table_text": table,
+                                "categories": ["english", "table"],
+                            }
+                        ]
+                    },
+                    predictions(
+                        [{"fixture_id": "rectangular-table", "text": table}]
+                    ),
+                )
+
+                self.assertEqual(report["metrics"]["table_fidelity"]["value"], 1)
+
+    def test_markdown_formula_annotation_scores_exact_prediction(self):
+        input_data = predictions(
+            [{"fixture_id": "markdown-formula", "text": "The formula is **x**."}]
+        )
+        input_data["run"]["output_format"] = "markdown"
+
+        report = evaluate_predictions(
+            {
+                "fixtures": [
+                    {
+                        "id": "markdown-formula",
+                        "gold_text": "The formula is **x**.",
+                        "formula_text": "**x**",
+                        "categories": ["english", "formula"],
+                    }
+                ]
+            },
+            input_data,
+        )
+
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 1)
+
+    def test_markdown_formula_annotation_rejects_mismatched_prediction(self):
+        input_data = predictions(
+            [{"fixture_id": "markdown-formula", "text": "The formula is **y**."}]
+        )
+        input_data["run"]["output_format"] = "markdown"
+
+        report = evaluate_predictions(
+            {
+                "fixtures": [
+                    {
+                        "id": "markdown-formula",
+                        "gold_text": "The formula is **x**.",
+                        "formula_text": "**x**",
+                        "categories": ["english", "formula"],
+                    }
+                ]
+            },
+            input_data,
+        )
+
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 0)
+
     def _run_cli_with_output(self, directory, output_path):
         directory_path = Path(directory)
         manifest_path = directory_path / "manifest.json"
@@ -114,7 +202,496 @@ class EvaluateTests(unittest.TestCase):
             report = json.loads(output_path.read_text(encoding="utf-8"))
             self.assertEqual(report["status"], "pending")
 
-    def test_reading_order_uses_a_valid_later_repeated_anchor_occurrence(self):
+    def test_cli_stdout_uses_utf8_when_locale_encoding_is_ascii(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest_path = root / "manifest.json"
+            predictions_path = root / "predictions.json"
+            manifest_path.write_text(json.dumps(small_manifest()), encoding="utf-8")
+            input_data = predictions([])
+            input_data["run"]["model_id"] = "识别📄"
+            predictions_path.write_text(json.dumps(input_data), encoding="utf-8")
+            for errors in ("strict", "backslashreplace"):
+                with self.subTest(errors=errors):
+                    environment = dict(os.environ)
+                    environment["PYTHONIOENCODING"] = f"ascii:{errors}"
+
+                    result = subprocess.run(
+                        [
+                            sys.executable,
+                            str(ROOT / "evaluate.py"),
+                            "--manifest",
+                            str(manifest_path),
+                            "--predictions",
+                            str(predictions_path),
+                        ],
+                        capture_output=True,
+                        text=True,
+                        encoding="utf-8",
+                        env=environment,
+                        check=False,
+                    )
+
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(result.stderr, "")
+                    self.assertNotIn("Traceback", result.stderr)
+                    report = json.loads(result.stdout)
+                    self.assertEqual(report["run"]["model_id"], "识别📄")
+
+    def test_cli_rejects_output_that_is_the_predictions_file(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest_path = root / "manifest.json"
+            predictions_path = root / "predictions.json"
+            manifest_path.write_text(json.dumps(small_manifest()), encoding="utf-8")
+            original_predictions = json.dumps(predictions([]))
+            predictions_path.write_text(original_predictions, encoding="utf-8")
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "evaluate.py"),
+                    "--manifest",
+                    str(manifest_path),
+                    "--predictions",
+                    str(predictions_path),
+                    "--output",
+                    str(predictions_path),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("output path conflicts with input file", result.stderr)
+            self.assertEqual(predictions_path.read_text(encoding="utf-8"), original_predictions)
+
+    def test_cli_rejects_output_symlink_to_predictions_file(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest_path = root / "manifest.json"
+            predictions_path = root / "predictions.json"
+            output_alias = root / "report.json"
+            manifest_path.write_text(json.dumps(small_manifest()), encoding="utf-8")
+            original_predictions = json.dumps(predictions([]))
+            predictions_path.write_text(original_predictions, encoding="utf-8")
+            output_alias.symlink_to(predictions_path)
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "evaluate.py"),
+                    "--manifest",
+                    str(manifest_path),
+                    "--predictions",
+                    str(predictions_path),
+                    "--output",
+                    str(output_alias),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("output path conflicts with input file", result.stderr)
+            self.assertEqual(predictions_path.read_text(encoding="utf-8"), original_predictions)
+
+    def test_cli_rejects_output_alias_of_manifest_when_verifying_fixtures(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest_path = root / "manifest.json"
+            alias_path = root / "manifest-alias.json"
+            manifest_path.write_text(json.dumps(small_manifest()), encoding="utf-8")
+            alias_path.symlink_to(manifest_path)
+            original_manifest = manifest_path.read_text(encoding="utf-8")
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "evaluate.py"),
+                    "--manifest",
+                    str(manifest_path),
+                    "--verify-fixtures",
+                    "--output",
+                    str(alias_path),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("output path conflicts with input file", result.stderr)
+            self.assertEqual(manifest_path.read_text(encoding="utf-8"), original_manifest)
+
+    def test_cli_rejects_fixture_image_as_verification_output(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            shutil.copytree(ROOT / "fixtures", root / "fixtures")
+            shutil.copyfile(ROOT / "manifest.json", root / "manifest.json")
+            manifest_path = root / "manifest.json"
+            fixture_entry = json.loads(
+                manifest_path.read_text(encoding="utf-8")
+            )["fixtures"][0]
+            fixture_path = root / fixture_entry["image"]
+            original_fixture = fixture_path.read_bytes()
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "evaluate.py"),
+                    "--manifest",
+                    str(manifest_path),
+                    "--verify-fixtures",
+                    "--output",
+                    str(fixture_path),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn(
+                "output path conflicts with input file fixture image", result.stderr
+            )
+            self.assertEqual(fixture_path.read_bytes(), original_fixture)
+
+            report_path = root / "report.json"
+            report_result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "evaluate.py"),
+                    "--manifest",
+                    str(manifest_path),
+                    "--verify-fixtures",
+                    "--output",
+                    str(report_path),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(report_result.returncode, 0, report_result.stderr)
+            self.assertEqual(
+                json.loads(report_path.read_text(encoding="utf-8"))["status"],
+                "fixtures_verified",
+            )
+
+    def test_cli_rejects_output_that_is_the_baseline_file(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest_path = root / "manifest.json"
+            predictions_path = root / "predictions.json"
+            baseline_path = root / "baseline.json"
+            manifest_path.write_text(json.dumps(small_manifest()), encoding="utf-8")
+            predictions_path.write_text(json.dumps(predictions([])), encoding="utf-8")
+            original_baseline = json.dumps(predictions([]))
+            baseline_path.write_text(original_baseline, encoding="utf-8")
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "evaluate.py"),
+                    "--manifest",
+                    str(manifest_path),
+                    "--predictions",
+                    str(predictions_path),
+                    "--baseline",
+                    str(baseline_path),
+                    "--output",
+                    str(baseline_path),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("output path conflicts with input file", result.stderr)
+            self.assertEqual(baseline_path.read_text(encoding="utf-8"), original_baseline)
+
+    def test_cli_rejects_lone_surrogate_prediction_without_traceback_or_report(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest_path = root / "manifest.json"
+            predictions_path = root / "predictions.json"
+            manifest_path.write_text(json.dumps(small_manifest()), encoding="utf-8")
+            predictions_path.write_text(
+                json.dumps(
+                    predictions(
+                        [{"fixture_id": "ordered-lines", "text": "\ud800"}]
+                    )
+                ),
+                encoding="utf-8",
+            )
+
+            for output_path in (None, root / "report.json"):
+                with self.subTest(output_path=output_path):
+                    args = [
+                        sys.executable,
+                        str(ROOT / "evaluate.py"),
+                        "--manifest",
+                        str(manifest_path),
+                        "--predictions",
+                        str(predictions_path),
+                    ]
+                    if output_path is not None:
+                        args.extend(["--output", str(output_path)])
+                    result = subprocess.run(
+                        args, capture_output=True, text=True, check=False
+                    )
+
+                    self.assertEqual(result.returncode, 2)
+                    self.assertIn("evaluation error:", result.stderr)
+                    self.assertIn("valid Unicode scalar values", result.stderr)
+                    self.assertNotIn("Traceback", result.stderr)
+                    self.assertEqual(result.stdout, "")
+                    if output_path is not None:
+                        self.assertFalse(output_path.exists())
+
+    def test_cli_rejects_lone_surrogates_in_manifest_text_without_traceback(self):
+        invalid_fields = {
+            "gold_text": "gold_text",
+            "table_text": "table_text",
+            "formula_text": "formula_text",
+            "reading_order": "reading_order[0]",
+        }
+        for source_field, error_field in invalid_fields.items():
+            with self.subTest(field=source_field), TemporaryDirectory() as directory:
+                root = Path(directory)
+                fixture = {
+                    "id": "bad-unicode",
+                    "gold_text": (
+                        "text with invalid scalar \ud800"
+                        if source_field == "gold_text"
+                        else "valid text"
+                    ),
+                    "categories": ["english"],
+                }
+                if source_field == "table_text":
+                    fixture[source_field] = "invalid \ud800"
+                elif source_field == "formula_text":
+                    fixture[source_field] = "invalid \ud800"
+                elif source_field == "reading_order":
+                    fixture[source_field] = ["invalid \ud800"]
+                manifest_path = root / "manifest.json"
+                predictions_path = root / "predictions.json"
+                manifest_path.write_text(
+                    json.dumps({"fixtures": [fixture]}), encoding="utf-8"
+                )
+                predictions_path.write_text(
+                    json.dumps(predictions([])), encoding="utf-8"
+                )
+
+                result = subprocess.run(
+                    [
+                        sys.executable,
+                        str(ROOT / "evaluate.py"),
+                        "--manifest",
+                        str(manifest_path),
+                        "--predictions",
+                        str(predictions_path),
+                    ],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+
+                self.assertEqual(result.returncode, 2)
+                self.assertIn("bad-unicode", result.stderr)
+                self.assertIn(error_field, result.stderr)
+                self.assertIn("valid Unicode scalar values", result.stderr)
+                self.assertNotIn("Traceback", result.stderr)
+                self.assertEqual(result.stdout, "")
+
+    def test_valid_non_bmp_manifest_text_is_accepted(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "supplementary-unicode",
+                    "gold_text": "😀 table formula",
+                    "table_text": "table",
+                    "formula_text": "formula",
+                    "reading_order": ["😀"],
+                    "categories": ["english"],
+                }
+            ]
+        }
+
+        report = evaluate_predictions(
+            manifest,
+            predictions(
+                [{"fixture_id": "supplementary-unicode", "text": "😀 table formula"}]
+            ),
+        )
+
+        self.assertEqual(report["metrics"]["character_error_rate"]["value"], 0)
+
+    def test_cli_reports_lone_surrogate_in_report_metadata_without_traceback(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest_path = root / "manifest.json"
+            predictions_path = root / "predictions.json"
+            manifest_path.write_text(json.dumps(small_manifest()), encoding="utf-8")
+            input_data = predictions([])
+            input_data["run"]["model_id"] = "\ud800"
+            predictions_path.write_text(json.dumps(input_data), encoding="utf-8")
+
+            output_path = root / "report.json"
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "evaluate.py"),
+                    "--manifest",
+                    str(manifest_path),
+                    "--predictions",
+                    str(predictions_path),
+                    "--output",
+                    str(output_path),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("evaluation error:", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+        self.assertEqual(result.stdout, "")
+        self.assertFalse(output_path.exists())
+
+    def test_reading_order_does_not_score_independently_chosen_repeated_occurrences(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "repeated-three-anchor",
+                    "gold_text": "A B C",
+                    "reading_order": ["A", "B", "C"],
+                    "categories": ["english"],
+                }
+            ]
+        }
+
+        report = evaluate_predictions(
+            manifest,
+            predictions(
+                [
+                    {
+                        "fixture_id": "repeated-three-anchor",
+                        "text": "C B A C B A",
+                    }
+                ]
+            ),
+        )
+
+        self.assertEqual(report["metrics"]["reading_order_score"]["value"], 0)
+
+    def test_reading_order_scores_all_pairs_for_three_anchors_in_order(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "three-anchor-order",
+                    "gold_text": "A B C",
+                    "reading_order": ["A", "B", "C"],
+                    "categories": ["english"],
+                }
+            ]
+        }
+
+        report = evaluate_predictions(
+            manifest,
+            predictions([{"fixture_id": "three-anchor-order", "text": "A B C"}]),
+        )
+
+        self.assertEqual(report["metrics"]["reading_order_score"]["value"], 1)
+
+    def test_reading_order_scores_no_pairs_for_three_anchors_reversed(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "three-anchor-reverse",
+                    "gold_text": "A B C",
+                    "reading_order": ["A", "B", "C"],
+                    "categories": ["english"],
+                }
+            ]
+        }
+
+        report = evaluate_predictions(
+            manifest,
+            predictions(
+                [{"fixture_id": "three-anchor-reverse", "text": "C B A"}]
+            ),
+        )
+
+        self.assertEqual(report["metrics"]["reading_order_score"]["value"], 0)
+
+    def test_reading_order_scores_pairs_from_one_assignment_when_partially_reversed(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "partially-reversed",
+                    "gold_text": "A B C",
+                    "reading_order": ["A", "B", "C"],
+                    "categories": ["english"],
+                }
+            ]
+        }
+
+        report = evaluate_predictions(
+            manifest,
+            predictions([{"fixture_id": "partially-reversed", "text": "B A C"}]),
+        )
+
+        self.assertEqual(report["metrics"]["reading_order_score"]["value"], 2 / 3)
+
+    def test_reading_order_handles_many_anchors(self):
+        anchors = [f"<anchor-{index:02}>" for index in range(32)]
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "many-anchors",
+                    "gold_text": " ".join(anchors),
+                    "reading_order": anchors,
+                    "categories": ["english"],
+                }
+            ]
+        }
+
+        report = evaluate_predictions(
+            manifest,
+            predictions(
+                [{"fixture_id": "many-anchors", "text": " ".join(anchors)}]
+            ),
+        )
+
+        self.assertEqual(report["metrics"]["reading_order_score"]["value"], 1)
+
+    def test_reading_order_keeps_missing_anchor_pairs_incorrect(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "missing-middle-anchor",
+                    "gold_text": "A B C",
+                    "reading_order": ["A", "B", "C"],
+                    "categories": ["english"],
+                }
+            ]
+        }
+
+        report = evaluate_predictions(
+            manifest,
+            predictions(
+                [{"fixture_id": "missing-middle-anchor", "text": "A C"}]
+            ),
+        )
+
+        self.assertEqual(report["metrics"]["reading_order_score"]["value"], 1 / 3)
+
+    def test_reading_order_uses_first_occurrence_for_repeated_anchors(self):
         manifest = {
             "fixtures": [
                 {
@@ -133,7 +710,7 @@ class EvaluateTests(unittest.TestCase):
             ),
         )
 
-        self.assertEqual(report["metrics"]["reading_order_score"]["value"], 1)
+        self.assertEqual(report["metrics"]["reading_order_score"]["value"], 0)
 
     def test_reading_order_rejects_repeated_anchors_in_genuinely_reversed_order(self):
         manifest = {
@@ -185,6 +762,21 @@ class EvaluateTests(unittest.TestCase):
         )
         self.assertEqual(blank_report["metrics"]["page_omission_rate"]["value"], 0)
 
+    def test_nonempty_gold_is_rejected_for_blank_fixture(self):
+        manifest = {
+            "fixtures": [
+                {"id": "blank", "gold_text": "text", "categories": ["blank"]}
+            ]
+        }
+
+        with self.assertRaisesRegex(
+            EvaluationError, "blank fixture needs empty gold_text"
+        ):
+            evaluate_predictions(
+                manifest,
+                predictions([{"fixture_id": "blank", "text": "text"}]),
+            )
+
     def test_cli_reports_invalid_utf8_prediction_without_traceback(self):
         with TemporaryDirectory() as directory:
             root = Path(directory)
@@ -206,6 +798,31 @@ class EvaluateTests(unittest.TestCase):
 
         self.assertEqual(exit_code, 2)
         self.assertIn("evaluation error: cannot read", stderr.getvalue())
+        self.assertNotIn("Traceback", stderr.getvalue())
+
+    def test_cli_reports_excessive_json_nesting_without_traceback(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest_path = root / "manifest.json"
+            predictions_path = root / "predictions.json"
+            manifest_path.write_text(json.dumps(small_manifest()), encoding="utf-8")
+            predictions_path.write_text(
+                "[" * 10000 + "0" + "]" * 10000, encoding="utf-8"
+            )
+
+            stderr = StringIO()
+            with redirect_stderr(stderr):
+                exit_code = main(
+                    [
+                        "--manifest",
+                        str(manifest_path),
+                        "--predictions",
+                        str(predictions_path),
+                    ]
+                )
+
+        self.assertEqual(exit_code, 2)
+        self.assertIn("JSON nesting exceeds parser limit", stderr.getvalue())
         self.assertNotIn("Traceback", stderr.getvalue())
 
     def test_cli_reports_invalid_utf8_fixture_manifest_without_traceback(self):
@@ -371,7 +988,7 @@ class EvaluateTests(unittest.TestCase):
         input_data["run"]["settings"] = {
             "temperature": 0.2,
             "region": "test-region",
-            "endpoint": "https://host.example/?region=west",
+            "endpoint": "https://host.example/?%2572egion=west",
             "monkey": "ordinary-word",
             "token_budget": 8192,
             "max_tokens": 2048,
@@ -380,6 +997,27 @@ class EvaluateTests(unittest.TestCase):
         report = evaluate_predictions(small_manifest(), input_data)
 
         self.assertEqual(report["run"]["settings"], input_data["run"]["settings"])
+
+    def test_excessively_nested_run_settings_are_rejected(self):
+        input_data = predictions([])
+        nested_setting = "leaf"
+        for _ in range(65):
+            nested_setting = [nested_setting]
+        input_data["run"]["settings"] = {"nested": nested_setting}
+
+        with self.assertRaisesRegex(
+            EvaluationError, "settings exceeds maximum nesting depth"
+        ):
+            evaluate_predictions(small_manifest(), input_data)
+
+    def test_double_encoded_credential_like_query_key_is_rejected(self):
+        input_data = predictions([])
+        input_data["run"]["settings"] = {
+            "endpoint": "https://host.example/?%2574oken=redacted-test-value"
+        }
+
+        with self.assertRaises(EvaluationError):
+            evaluate_predictions(small_manifest(), input_data)
 
     def test_credential_like_setting_values_are_rejected(self):
         for value in (
@@ -438,6 +1076,93 @@ class EvaluateTests(unittest.TestCase):
         self.assertEqual(metrics["table_fidelity"]["pending"], 0)
         self.assertEqual(metrics["formula_fidelity"]["value"], 0)
         self.assertEqual(metrics["formula_fidelity"]["pending"], 0)
+
+    def test_unstructured_single_cell_table_requires_exact_prediction(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "single-cell-table",
+                    "gold_text": "xy",
+                    "table_text": "xy",
+                    "categories": ["table"],
+                }
+            ]
+        }
+
+        for output_format in ("plain_text", "markdown", "table", "latex"):
+            cases = [
+                ("xy", 1),
+                ("xyz", 0),
+                ("prefix xy suffix", 0),
+            ]
+            if output_format in {"markdown", "table"}:
+                cases.append(("| xy |", 1))
+            for text, expected_fidelity in cases:
+                with self.subTest(output_format=output_format, text=text):
+                    input_data = predictions(
+                        [{"fixture_id": "single-cell-table", "text": text}]
+                    )
+                    input_data["run"]["output_format"] = output_format
+
+                    report = evaluate_predictions(manifest, input_data)
+
+                    self.assertEqual(
+                        report["metrics"]["table_fidelity"]["value"],
+                        expected_fidelity,
+                    )
+
+    def test_unstructured_single_cell_table_ignores_annotated_formula(self):
+        table = "xy"
+        formula = "x = 1"
+        report = evaluate_predictions(
+            {
+                "fixtures": [
+                    {
+                        "id": "single-cell-table-with-formula",
+                        "gold_text": f"{table}\n{formula}",
+                        "table_text": table,
+                        "formula_text": formula,
+                        "categories": ["table", "formula"],
+                    }
+                ]
+            },
+            predictions(
+                [
+                    {
+                        "fixture_id": "single-cell-table-with-formula",
+                        "text": f"{table}\n{formula}",
+                    }
+                ]
+            ),
+        )
+
+        self.assertEqual(report["metrics"]["table_fidelity"]["value"], 1)
+
+    def test_unstructured_single_cell_table_can_match_annotated_formula(self):
+        table_and_formula = "x = 1"
+        report = evaluate_predictions(
+            {
+                "fixtures": [
+                    {
+                        "id": "single-cell-formula-table",
+                        "gold_text": table_and_formula,
+                        "table_text": table_and_formula,
+                        "formula_text": table_and_formula,
+                        "categories": ["table", "formula"],
+                    }
+                ]
+            },
+            predictions(
+                [
+                    {
+                        "fixture_id": "single-cell-formula-table",
+                        "text": table_and_formula,
+                    }
+                ]
+            ),
+        )
+
+        self.assertEqual(report["metrics"]["table_fidelity"]["value"], 1)
 
     def test_missing_or_null_prediction_text_keeps_content_metrics_pending(self):
         report = evaluate_predictions(
@@ -724,6 +1449,156 @@ class EvaluateTests(unittest.TestCase):
         )
 
         self.assertEqual(report["metrics"]["table_fidelity"]["value"], 0)
+
+    def test_table_fidelity_rejects_labeled_row_after_table(self):
+        expected = "Name | Value\nFirst | 1\nSecond | 2"
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "table-with-trailing-labeled-row",
+                    "gold_text": expected,
+                    "table_text": expected,
+                    "categories": ["english", "table"],
+                }
+            ]
+        }
+
+        valid_report = evaluate_predictions(
+            manifest,
+            predictions(
+                [
+                    {
+                        "fixture_id": "table-with-trailing-labeled-row",
+                        "text": expected,
+                    }
+                ]
+            ),
+        )
+        extra_row_report = evaluate_predictions(
+            manifest,
+            predictions(
+                [
+                    {
+                        "fixture_id": "table-with-trailing-labeled-row",
+                        "text": f"{expected}\nStatus: Ready | 99",
+                    }
+                ]
+            ),
+        )
+
+        self.assertEqual(valid_report["metrics"]["table_fidelity"]["value"], 1)
+        self.assertEqual(
+            extra_row_report["metrics"]["table_fidelity"]["value"], 0
+        )
+
+    def test_table_fidelity_rejects_trailing_labeled_text_row_with_matching_shape(
+        self,
+    ):
+        expected = "Name | Status\nFirst | Active\nSecond | Ready"
+        report = evaluate_predictions(
+            {
+                "fixtures": [
+                    {
+                        "id": "table-with-trailing-labeled-text-row",
+                        "gold_text": expected,
+                        "table_text": expected,
+                        "categories": ["english", "table"],
+                    }
+                ]
+            },
+            predictions(
+                [
+                    {
+                        "fixture_id": "table-with-trailing-labeled-text-row",
+                        "text": f"{expected}\nStatus: Current | Done",
+                    }
+                ]
+            ),
+        )
+
+        self.assertEqual(report["metrics"]["table_fidelity"]["value"], 0)
+
+    def test_table_fidelity_rejects_compact_trailing_labeled_text_row(self):
+        expected = "Name | Status\nFirst | Active\nSecond | Ready"
+        for output_format in ("plain_text", "markdown", "table"):
+            with self.subTest(output_format=output_format):
+                prediction_data = predictions(
+                    [
+                        {
+                            "fixture_id": "table-with-compact-trailing-label",
+                            "text": f"{expected}\nStatus: Current|Done",
+                        }
+                    ]
+                )
+                prediction_data["run"]["output_format"] = output_format
+                report = evaluate_predictions(
+                    {
+                        "fixtures": [
+                            {
+                                "id": "table-with-compact-trailing-label",
+                                "gold_text": expected,
+                                "table_text": expected,
+                                "categories": ["english", "table"],
+                            }
+                        ]
+                    },
+                    prediction_data,
+                )
+
+                self.assertEqual(report["metrics"]["table_fidelity"]["value"], 0)
+
+    def test_table_fidelity_accepts_annotated_trailing_labeled_row(self):
+        expected = "Name | Status\nFirst | Active\nStatus: Current | Done"
+        report = evaluate_predictions(
+            {
+                "fixtures": [
+                    {
+                        "id": "table-with-annotated-trailing-labeled-row",
+                        "gold_text": expected,
+                        "table_text": expected,
+                        "categories": ["english", "table"],
+                    }
+                ]
+            },
+            predictions(
+                [
+                    {
+                        "fixture_id": "table-with-annotated-trailing-labeled-row",
+                        "text": expected,
+                    }
+                ]
+            ),
+        )
+
+        self.assertEqual(report["metrics"]["table_fidelity"]["value"], 1)
+
+    def test_table_fidelity_ignores_annotated_labeled_prose_after_text_table(
+        self,
+    ):
+        table = "Name | Status\nFirst | Active\nSecond | Ready"
+        prose = "Set relation: x | y"
+        report = evaluate_predictions(
+            {
+                "fixtures": [
+                    {
+                        "id": "text-table-with-labeled-prose",
+                        "gold_text": f"{table}\n{prose}",
+                        "table_text": table,
+                        "categories": ["english", "table"],
+                    }
+                ]
+            },
+            predictions(
+                [
+                    {
+                        "fixture_id": "text-table-with-labeled-prose",
+                        "text": f"{table}\n{prose}",
+                    }
+                ]
+            ),
+        )
+
+        self.assertEqual(report["metrics"]["table_fidelity"]["value"], 1)
 
     def test_table_fidelity_rejects_extra_compact_row_with_wrong_width(self):
         expected = "A|B\nx|y"
@@ -1082,6 +1957,30 @@ class EvaluateTests(unittest.TestCase):
 
         self.assertEqual(report["metrics"]["table_fidelity"]["value"], 1)
 
+    def test_plain_text_tsv_annotation_requires_table_structure(self):
+        expected = "A\tB\nx\ty"
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "table",
+                    "gold_text": expected,
+                    "table_text": expected,
+                    "categories": ["english", "table"],
+                }
+            ]
+        }
+
+        def report_for(actual):
+            input_data = predictions([{"fixture_id": "table", "text": actual}])
+            input_data["run"]["output_format"] = "plain_text"
+            return evaluate_predictions(manifest, input_data)
+
+        flattened = report_for("A B x y")
+        structured = report_for(expected)
+
+        self.assertEqual(flattened["metrics"]["table_fidelity"]["value"], 0)
+        self.assertEqual(structured["metrics"]["table_fidelity"]["value"], 1)
+
     def test_plain_text_tsv_table_scores_table_fidelity(self):
         expected = "Code | Count\nP-12 | 3"
         manifest = {
@@ -1105,6 +2004,37 @@ class EvaluateTests(unittest.TestCase):
 
         self.assertEqual(complete_table["metrics"]["table_fidelity"]["value"], 1)
         self.assertEqual(missing_cell["metrics"]["table_fidelity"]["value"], 0)
+
+    def test_plain_text_tsv_table_ignores_tab_separated_prose_after_table(self):
+        expected = "Code | Count\nP-12 | 3"
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "table",
+                    "gold_text": expected,
+                    "table_text": expected,
+                    "categories": ["english", "table"],
+                }
+            ]
+        }
+        input_data = predictions(
+            [
+                {
+                    "fixture_id": "table",
+                    "text": (
+                        "Code\tCount\n"
+                        "P-12\t3\n"
+                        "The invoice notes\tthat totals may exclude tax."
+                    ),
+                }
+            ]
+        )
+        input_data["run"]["output_format"] = "plain_text"
+
+        report = evaluate_predictions(manifest, input_data)
+
+        self.assertEqual(report["metrics"]["table_fidelity"]["value"], 1)
+
 
     def test_markdown_formatting_does_not_inflate_character_error_rate(self):
         manifest = {
@@ -1788,6 +2718,89 @@ class EvaluateTests(unittest.TestCase):
         )
         self.assertEqual(report["metrics"]["table_fidelity"]["value"], 0)
 
+    def test_plain_text_cer_preserves_pipe_in_unframed_prose(self):
+        table_text = "Name | Value\nFirst | 1"
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "table-with-pipe-prose",
+                    "gold_text": f"{table_text}\nSet relation x | y",
+                    "table_text": table_text,
+                    "categories": ["english", "table"],
+                }
+            ]
+        }
+        input_data = predictions(
+            [
+                {
+                    "fixture_id": "table-with-pipe-prose",
+                    "text": f"{table_text}\nSet relation x y",
+                }
+            ]
+        )
+        input_data["run"]["output_format"] = "plain_text"
+
+        report = evaluate_predictions(manifest, input_data)
+
+        self.assertEqual(
+            report["metrics"]["character_error_rate"]["edit_distance"], 2
+        )
+
+    def test_plain_text_cer_normalizes_structurally_matching_extra_table_row(self):
+        expected = "Name | Value\nFirst | 1"
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "table-with-extra-row",
+                    "gold_text": expected,
+                    "table_text": expected,
+                    "categories": ["english", "table"],
+                }
+            ]
+        }
+        input_data = predictions(
+            [
+                {
+                    "fixture_id": "table-with-extra-row",
+                    "text": expected + "\nSecond | 2",
+                }
+            ]
+        )
+        input_data["run"]["output_format"] = "plain_text"
+
+        report = evaluate_predictions(manifest, input_data)
+
+        self.assertEqual(
+            report["metrics"]["character_error_rate"]["edit_distance"],
+            len(" Second 2"),
+        )
+
+    def test_plain_text_cer_keeps_normalizing_annotated_table_rows(self):
+        expected = "Name | Value\nFirst | 1"
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "table-row-framing",
+                    "gold_text": expected,
+                    "table_text": expected,
+                    "categories": ["english", "table"],
+                }
+            ]
+        }
+        input_data = predictions(
+            [
+                {
+                    "fixture_id": "table-row-framing",
+                    "text": "| Name | Value |\n| First | 1 |",
+                }
+            ]
+        )
+        input_data["run"]["output_format"] = "plain_text"
+
+        report = evaluate_predictions(manifest, input_data)
+
+        self.assertEqual(report["metrics"]["character_error_rate"]["value"], 0)
+
     def test_extra_table_row_reduces_table_fidelity(self):
         expected = "Code | Count | Total\nP-12 | 3 | 15.00\nQ-07 | 2 | 8.00"
         manifest = {
@@ -1901,6 +2914,78 @@ class EvaluateTests(unittest.TestCase):
                 self.assertEqual(
                     report["metrics"]["table_fidelity"]["value"], 1
                 )
+
+    def test_unannotated_pipe_prose_after_table_does_not_reduce_fidelity(self):
+        table = "Name | Value\nFirst | 1"
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "table-with-unannotated-pipe-prose",
+                    "gold_text": f"{table}\nThe relation is a | b",
+                    "table_text": table,
+                    "categories": ["english", "table"],
+                }
+            ]
+        }
+        for output_format, text in (
+            ("plain_text", f"{table}\nThe relation is a | b"),
+            (
+                "markdown",
+                "| Name | Value |\n"
+                "| --- | --- |\n"
+                "| First | 1 |\n"
+                "The relation is a | b",
+            ),
+            ("table", f"{table}\nThe relation is a | b"),
+        ):
+            with self.subTest(output_format=output_format):
+                input_data = predictions(
+                    [
+                        {
+                            "fixture_id": "table-with-unannotated-pipe-prose",
+                            "text": text,
+                        }
+                    ]
+                )
+                input_data["run"]["output_format"] = output_format
+
+                report = evaluate_predictions(manifest, input_data)
+
+                self.assertEqual(
+                    report["metrics"]["table_fidelity"]["value"], 1
+                )
+
+    def test_framed_extra_row_matching_unannotated_prose_is_rejected(self):
+        table = "Name | Value\nFirst | 1"
+        input_data = predictions(
+            [
+                {
+                    "fixture_id": "table-with-framed-extra-prose-row",
+                    "text": (
+                        "| Name | Value |\n"
+                        "| --- | --- |\n"
+                        "| First | 1 |\n"
+                        "| The relation is a | b |"
+                    ),
+                }
+            ]
+        )
+        input_data["run"]["output_format"] = "markdown"
+        report = evaluate_predictions(
+            {
+                "fixtures": [
+                    {
+                        "id": "table-with-framed-extra-prose-row",
+                        "gold_text": f"{table}\nThe relation is a | b",
+                        "table_text": table,
+                        "categories": ["english", "table"],
+                    }
+                ]
+            },
+            input_data,
+        )
+
+        self.assertEqual(report["metrics"]["table_fidelity"]["value"], 0)
 
     def test_one_word_label_in_pipe_prose_after_table_does_not_reduce_fidelity(self):
         table = "Code | Count\nP-12 | 3"
@@ -2164,6 +3249,61 @@ class EvaluateTests(unittest.TestCase):
         self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 1)
         self.assertEqual(report["metrics"]["character_error_rate"]["value"], 0)
 
+    def test_latex_unbraced_square_root_is_scored_against_its_display_transcription(
+        self,
+    ):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "unbraced-square-root",
+                    "gold_text": "Square root of x\n√x",
+                    "formula_text": "√x",
+                    "categories": ["english", "formula"],
+                }
+            ]
+        }
+        input_data = predictions(
+            [
+                {
+                    "fixture_id": "unbraced-square-root",
+                    "text": r"Square root of x $\sqrt x$",
+                }
+            ]
+        )
+        input_data["run"]["output_format"] = "latex"
+
+        report = evaluate_predictions(manifest, input_data)
+
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 1)
+        self.assertEqual(report["metrics"]["character_error_rate"]["value"], 0)
+
+    def test_latex_unbraced_square_root_preserves_fraction_operand_grouping(self):
+        formula = "√(1/2)"
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "unbraced-fraction-square-root",
+                    "gold_text": formula,
+                    "formula_text": formula,
+                    "categories": ["formula"],
+                }
+            ]
+        }
+        input_data = predictions(
+            [
+                {
+                    "fixture_id": "unbraced-fraction-square-root",
+                    "text": r"$\sqrt\frac{1}{2}$",
+                }
+            ]
+        )
+        input_data["run"]["output_format"] = "latex"
+
+        report = evaluate_predictions(manifest, input_data)
+
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 1)
+        self.assertEqual(report["metrics"]["character_error_rate"]["value"], 0)
+
     def test_latex_compound_square_root_preserves_operand_grouping(self):
         formula = "√(x+1)"
         manifest = {
@@ -2251,6 +3391,58 @@ class EvaluateTests(unittest.TestCase):
         }
         input_data = predictions(
             [{"fixture_id": "compound-fraction", "text": r"$\frac{x+1}{2}$"}]
+        )
+        input_data["run"]["output_format"] = "latex"
+
+        report = evaluate_predictions(manifest, input_data)
+
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 1)
+        self.assertEqual(report["metrics"]["character_error_rate"]["value"], 0)
+
+    def test_latex_fraction_keeps_grouping_for_parenthesized_compound_operand(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "parenthesized-compound-fraction",
+                    "gold_text": "((a)+(b))/c",
+                    "formula_text": "((a)+(b))/c",
+                    "categories": ["formula"],
+                }
+            ]
+        }
+        input_data = predictions(
+            [
+                {
+                    "fixture_id": "parenthesized-compound-fraction",
+                    "text": r"$\frac{(a)+(b)}{c}$",
+                }
+            ]
+        )
+        input_data["run"]["output_format"] = "latex"
+
+        report = evaluate_predictions(manifest, input_data)
+
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 1)
+        self.assertEqual(report["metrics"]["character_error_rate"]["value"], 0)
+
+    def test_latex_sqrt_keeps_grouping_for_parenthesized_compound_operand(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "parenthesized-compound-root",
+                    "gold_text": "√((a)+(b))",
+                    "formula_text": "√((a)+(b))",
+                    "categories": ["formula"],
+                }
+            ]
+        }
+        input_data = predictions(
+            [
+                {
+                    "fixture_id": "parenthesized-compound-root",
+                    "text": r"$\sqrt{(a)+(b)}$",
+                }
+            ]
         )
         input_data["run"]["output_format"] = "latex"
 
@@ -3713,6 +4905,47 @@ class EvaluateTests(unittest.TestCase):
             }.issubset(summary["categories"])
         )
 
+    def test_fixture_verification_reports_self_referential_symlink_as_evaluation_error(self):
+        with TemporaryDirectory() as directory:
+            fixture_root = Path(directory)
+            shutil.copytree(ROOT / "fixtures", fixture_root / "fixtures")
+            manifest = json.loads((ROOT / "manifest.json").read_text())
+            fixture = manifest["fixtures"][0]
+            fixture["image"] = "fixtures/self-loop.png"
+            (fixture_root / fixture["image"]).symlink_to("self-loop.png")
+            manifest_path = fixture_root / "manifest.json"
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "evaluate.py"),
+                    "--manifest",
+                    str(manifest_path),
+                    "--verify-fixtures",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+        self.assertEqual(result.returncode, 2)
+        self.assertRegex(result.stderr, r"^evaluation error: .*cannot resolve")
+        self.assertNotIn("Traceback", result.stderr)
+
+    def test_fixture_verification_rejects_image_path_outside_fixture_root(self):
+        with TemporaryDirectory() as directory:
+            fixture_root = Path(directory)
+            shutil.copytree(ROOT / "fixtures", fixture_root / "fixtures")
+            manifest = json.loads((ROOT / "manifest.json").read_text())
+            fixture = manifest["fixtures"][0]
+            fixture["image"] = "../outside.png"
+            manifest_path = fixture_root / "manifest.json"
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            with self.assertRaisesRegex(EvaluationError, "image path escapes fixture root"):
+                verify_fixtures(manifest_path)
+
     def test_fixture_verification_rejects_truncated_png_with_matching_digest(self):
         image_bytes = (ROOT / "fixtures" / "mixed-zh-en-01.png").read_bytes()[:24]
         self._assert_fixture_png_rejected(image_bytes)
@@ -3810,6 +5043,16 @@ class EvaluateTests(unittest.TestCase):
         )
         self._assert_fixture_png_rejected(malformed_png)
 
+    def test_fixture_verification_rejects_chromaticity_pair_sum_above_png_range(self):
+        malformed_png = (
+            b"\x89PNG\r\n\x1a\n"
+            + png_chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0))
+            + png_chunk(b"cHRM", struct.pack(">IIIIIIII", 80000, 80000, 1, 1, 1, 1, 1, 1))
+            + png_chunk(b"IDAT", zlib.compress(b"\x00\x00\x00\x00"))
+            + png_chunk(b"IEND", b"")
+        )
+        self._assert_fixture_png_rejected(malformed_png)
+
     def test_fixture_verification_rejects_unsupported_exif_chunk(self):
         malformed_png = (
             b"\x89PNG\r\n\x1a\n"
@@ -3824,7 +5067,7 @@ class EvaluateTests(unittest.TestCase):
         valid_png = (
             b"\x89PNG\r\n\x1a\n"
             + png_chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 1, 3, 0, 0, 0))
-            + png_chunk(b"cHRM", struct.pack(">IIIIIIII", *([1] * 8)))
+            + png_chunk(b"cHRM", struct.pack(">IIIIIIII", *([50000] * 8)))
             + png_chunk(b"gAMA", struct.pack(">I", 100000))
             + png_chunk(b"sBIT", b"\x08\x08\x08")
             + png_chunk(b"sRGB", b"\x00")

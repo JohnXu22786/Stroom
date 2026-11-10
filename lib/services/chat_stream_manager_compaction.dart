@@ -23,6 +23,7 @@ extension _ChatStreamManagerCompactionExt on ChatStreamManager {
     required String convId,
     required List<ToolDefinition> tools,
     required List<ChatMessage> requestHistory,
+    required RequestContentCache contentCache,
   }) async {
     final ref = _ref;
     if (ref == null) return false;
@@ -61,6 +62,7 @@ extension _ChatStreamManagerCompactionExt on ChatStreamManager {
       requestHistory,
       assistantPrompt: _adapter.assistantPrompt,
       tools: tools,
+      contentCache: contentCache,
       // 与发送侧同一截断上限（字符数）：估算"实际会发送的内容"，
       // 关闭截断时 0 = 不截断，与协议层渲染一致。
       toolOutputMaxChars: ChatService.getEffectiveToolOutputMaxChars(
@@ -76,8 +78,12 @@ extension _ChatStreamManagerCompactionExt on ChatStreamManager {
     // 2. 解析压缩任务：提示词（自定义优先，默认内置）+ 模型
     //    （配置了独立模型就用它，否则跟随对话页当前模型）
     final settings = ref.read(systemAssistantSettingsProvider);
-    final compactionPrompt = resolveSystemAssistantPrompt(settings.compaction,
-        defaultAssistantId: kBuiltInCompactionAssistantId);
+    final strings = appLocalizationsForLocale(ref.read(localeProvider));
+    final compactionPrompt = resolveSystemAssistantPrompt(
+      settings.compaction,
+      defaultAssistantId: kBuiltInCompactionAssistantId,
+      strings: strings,
+    );
     if (compactionPrompt == null) return false;
 
     // 3. 划分头部（可压缩）与尾部（保留原文）。
@@ -91,11 +97,9 @@ extension _ChatStreamManagerCompactionExt on ChatStreamManager {
       if (idx >= 0) headStart = idx;
     }
     if (headStart >= tailStart) return false; // 无新增可压缩内容
-    final head = state.history
-        .sublist(headStart, tailStart)
-        // 压缩转写剥离附件（媒体不进摘要请求）
-        .map((m) => m.attachments.isEmpty ? m : m.copyWith(attachments: []))
-        .toList();
+    // The summary prompt below reads only text/tool results; keep originals
+    // so attachment-bearing messages do not retain copied full text.
+    final head = state.history.sublist(headStart, tailStart);
     final tail = state.history.sublist(tailStart);
     if (head.isEmpty) return false;
 
@@ -109,10 +113,12 @@ extension _ChatStreamManagerCompactionExt on ChatStreamManager {
       sb.writeln('</previous-summary>');
       sb.writeln();
     }
-    sb.writeln('以下是需要压缩的对话历史：');
+    sb.writeln(strings.contextCompactionHistoryIntro);
     for (final m in head) {
-      final role = m.role == 'user' ? '用户' : '助手';
-      final content = m.content.trim();
+      final role = m.role == 'user'
+          ? strings.contextCompactionUserRole
+          : strings.contextCompactionAssistantRole;
+      final content = contentCache.contentFor(m).trim();
       if (content.isNotEmpty) {
         sb.writeln('$role: $content');
       }
@@ -130,12 +136,14 @@ extension _ChatStreamManagerCompactionExt on ChatStreamManager {
           final result = rebuildToolResultText(tc);
           final trimmed =
               result.length > 200 ? '${result.substring(0, 200)}…' : result;
-          sb.writeln('$role 调用了工具 ${tc.name}: $trimmed');
+          sb.writeln(
+            strings.contextCompactionToolCall(trimmed, role, tc.name),
+          );
         }
       }
     }
     sb.writeln();
-    sb.writeln('请将以上对话历史压缩为锚定摘要，严格按模板输出。');
+    sb.writeln(strings.contextCompactionFinalInstruction);
 
     // 5. 执行压缩请求（轻量、无工具、maxTokens 适中）
     //    独立 task service：此前 getOrCreateService 让压缩与主请求
@@ -151,8 +159,14 @@ extension _ChatStreamManagerCompactionExt on ChatStreamManager {
       convId: convId,
     );
     if (requestSvc == null) return false;
-    requestSvc.onUsageEvent = (usage, {required bool recordInput}) {
-      _commitUsage(convId, usage, recordInput: recordInput);
+    // The compaction transcript now owns its assembled text. Drop cached
+    // copies for the summarized head before the network wait; keep the tail
+    // entries that the ensuing main request may reuse.
+    contentCache.retainOnly(tail);
+    requestSvc.onUsageEvent =
+        (usage, {required bool recordInput, double? costIncrement}) {
+      _commitUsage(convId, usage,
+          recordInput: recordInput, costIncrementOverride: costIncrement);
     };
     String summary;
     try {

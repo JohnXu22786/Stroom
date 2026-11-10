@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../l10n/app_localizations.dart';
+import '../l10n/locale_name_catalog.dart';
+import '../providers/locale_provider.dart';
 import '../providers/theme_provider.dart';
 
 class ThemeDisplaySettingsPage extends ConsumerStatefulWidget {
@@ -13,10 +16,6 @@ class ThemeDisplaySettingsPage extends ConsumerStatefulWidget {
 
 class _ThemeDisplaySettingsPageState
     extends ConsumerState<ThemeDisplaySettingsPage> {
-  static const _languages = [
-    _LanguageOption(displayName: '简体中文', nativeName: '简体中文', id: 'zh-cn'),
-  ];
-
   final _languageSearchController = TextEditingController();
   String _languageQuery = '';
 
@@ -30,17 +29,35 @@ class _ThemeDisplaySettingsPageState
   Widget build(BuildContext context) {
     final themeMode = ref.watch(themeProvider);
     final themeNotifier = ref.read(themeProvider.notifier);
+    final selectedLocale = ref.watch(localeProvider);
+    final strings = AppLocalizations.of(context)!;
     final normalizedQuery = _languageQuery.trim().toLowerCase();
-    final matchingLanguages = _languages.where((language) {
-      return language.searchText.contains(normalizedQuery);
-    }).toList();
+    final matchingLanguages = supportedAppLocales
+        .map(
+          (locale) => _LanguageOption(
+            locale: locale,
+            displayName: localeDisplayName(strings, locale),
+            nativeName: localeNativeName(locale),
+            id: localeIdTag(locale),
+          ),
+        )
+        .where((language) => language.searchText.contains(normalizedQuery))
+        .toList();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('主题与显示'), centerTitle: true),
+      appBar: AppBar(
+        title: Text(strings.themeDisplaySettingsTitle),
+        centerTitle: true,
+      ),
       body: ListView(
+        key: const Key('theme-display-settings-list'),
         padding: const EdgeInsets.all(16),
         children: [
-          _buildSectionHeader(context, '主题'),
+          _buildSectionHeader(
+            context,
+            strings.themeDisplayThemeSection,
+            key: const Key('theme-display-settings-theme-header'),
+          ),
           Card(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -49,7 +66,7 @@ class _ThemeDisplaySettingsPageState
                   _buildThemeModeTile(
                     icon: Icons.light_mode,
                     iconColor: Colors.amber,
-                    title: '浅色模式',
+                    title: strings.themeModeLight,
                     value: ThemeMode.light,
                     groupValue: themeMode,
                     onSelected: themeNotifier.setLight,
@@ -58,7 +75,7 @@ class _ThemeDisplaySettingsPageState
                   _buildThemeModeTile(
                     icon: Icons.dark_mode,
                     iconColor: Colors.indigo,
-                    title: '深色模式',
+                    title: strings.themeModeDark,
                     value: ThemeMode.dark,
                     groupValue: themeMode,
                     onSelected: themeNotifier.setDark,
@@ -67,7 +84,7 @@ class _ThemeDisplaySettingsPageState
                   _buildThemeModeTile(
                     icon: Icons.settings_suggest,
                     iconColor: Colors.grey,
-                    title: '跟随系统',
+                    title: strings.themeModeSystem,
                     value: ThemeMode.system,
                     groupValue: themeMode,
                     onSelected: themeNotifier.setSystem,
@@ -77,7 +94,7 @@ class _ThemeDisplaySettingsPageState
             ),
           ),
           const SizedBox(height: 24),
-          _buildSectionHeader(context, '语言'),
+          _buildSectionHeader(context, strings.languageSettingsTitle),
           Card(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -89,23 +106,37 @@ class _ThemeDisplaySettingsPageState
                     onChanged: (query) =>
                         setState(() => _languageQuery = query),
                     decoration: InputDecoration(
-                      hintText: '搜索语言',
+                      hintText: strings.languageSearchHint,
                       prefixIcon: const Icon(Icons.search),
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(8),
                       ),
                       isDense: true,
                     ),
                   ),
                   const Divider(height: 24),
+                  _buildLocaleTile(
+                    title: strings.followSystemLanguage,
+                    selected: selectedLocale == null,
+                    onTap: () =>
+                        ref.read(localeProvider.notifier).followSystem(),
+                  ),
+                  const Divider(height: 1),
                   if (matchingLanguages.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 16),
-                      child: Text('没有匹配的语言'),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      child: Text(strings.languageNoMatches),
                     )
                   else
                     for (final language in matchingLanguages)
-                      _buildLanguageTile(context, language),
+                      _buildLanguageTile(
+                        context,
+                        language,
+                        selected: selectedLocale == language.locale,
+                        onTap: () => ref
+                            .read(localeProvider.notifier)
+                            .setLocaleCode(localeCode(language.locale)),
+                      ),
                 ],
               ),
             ),
@@ -115,32 +146,59 @@ class _ThemeDisplaySettingsPageState
     );
   }
 
-  Widget _buildLanguageTile(BuildContext context, _LanguageOption language) {
-    final colorScheme = Theme.of(context).colorScheme;
+  Widget _buildLocaleTile({
+    required String title,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
     return ListTile(
       leading: const Icon(Icons.language, color: Colors.teal),
-      title: Text('${language.displayName}（${language.nativeName}）'),
-      trailing: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        decoration: BoxDecoration(
-          color: colorScheme.secondaryContainer,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Text(
-          language.id,
-          style: TextStyle(
-            color: colorScheme.onSecondaryContainer,
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ),
+      title: Text(title),
+      trailing: selected ? const Icon(Icons.check) : null,
+      onTap: onTap,
       contentPadding: EdgeInsets.zero,
     );
   }
 
-  Widget _buildSectionHeader(BuildContext context, String title) {
+  Widget _buildLanguageTile(
+    BuildContext context,
+    _LanguageOption language, {
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return ListTile(
+      leading: const Icon(Icons.language, color: Colors.teal),
+      title: Text('${language.displayName}（${language.nativeName}）'),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (selected) ...[const Icon(Icons.check), const SizedBox(width: 8)],
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: colorScheme.secondaryContainer,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              language.id,
+              style: TextStyle(
+                color: colorScheme.onSecondaryContainer,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+      onTap: onTap,
+      contentPadding: EdgeInsets.zero,
+    );
+  }
+
+  Widget _buildSectionHeader(BuildContext context, String title, {Key? key}) {
     return Padding(
+      key: key,
       padding: const EdgeInsets.only(bottom: 12),
       child: Text(
         title,
@@ -177,20 +235,15 @@ class _ThemeDisplaySettingsPageState
   }
 }
 
-/// A language row is shown as `displayName（nativeName）`, followed by a
-/// separate badge for `id`. `displayName` is the locale's name translated into
-/// the app's currently selected display language. `nativeName` is the
-/// language's own self-name (autonym), written in that language and shown in
-/// parentheses. `id` is its canonical BCP-47 locale identifier, shown in the
-/// badge after both names. Keep this order fixed; for zh-cn the values are
-/// `简体中文`, `简体中文`, and `zh-cn`.
 class _LanguageOption {
   const _LanguageOption({
+    required this.locale,
     required this.displayName,
     required this.nativeName,
     required this.id,
   });
 
+  final Locale locale;
   final String displayName;
   final String nativeName;
   final String id;

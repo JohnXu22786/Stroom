@@ -36,8 +36,12 @@ extension _ChatStreamManagerTitleExt on ChatStreamManager {
       // 解析标题任务：提示词（自定义优先，默认内置）+ 模型
       // （配置了独立模型就用它，否则跟随对话页当前模型）
       final settings = ref.read(systemAssistantSettingsProvider);
-      final titlePrompt = resolveSystemAssistantPrompt(settings.title,
-          defaultAssistantId: kBuiltInTitleAssistantId);
+      final strings = appLocalizationsForLocale(ref.read(localeProvider));
+      final titlePrompt = resolveSystemAssistantPrompt(
+        settings.title,
+        defaultAssistantId: kBuiltInTitleAssistantId,
+        strings: strings,
+      );
       if (titlePrompt == null) return;
 
       final svc = _adapter.createTransientServiceForModel(
@@ -52,8 +56,10 @@ extension _ChatStreamManagerTitleExt on ChatStreamManager {
       // 该对话的计费事实：usage 数据返回后立即累加（事件驱动、
       // per-request 隔离，不会与主请求张冠李戴）。输入/输出计量不写入
       // （标题输入仅一条消息，写入会污染上下文显示与压缩触发判断）。
-      svc.onUsageEvent = (usage, {required bool recordInput}) {
-        _commitUsage(convId, usage, recordInput: recordInput);
+      svc.onUsageEvent =
+          (usage, {required bool recordInput, double? costIncrement}) {
+        _commitUsage(convId, usage,
+            recordInput: recordInput, costIncrementOverride: costIncrement);
       };
 
       String title;

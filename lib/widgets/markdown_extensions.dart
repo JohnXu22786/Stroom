@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
+
+import '../l10n/app_localizations.dart';
+
 import 'package:flutter_math_fork/flutter_math.dart';
 import 'package:markdown/markdown.dart' as m;
 import 'package:markdown_widget/markdown_widget.dart';
 import 'package:flutter_highlight/themes/dracula.dart';
+
 import '../utils/mhchem_syntax.dart';
 import 'code_block_source_widget.dart';
 import 'html_code_block_widget.dart';
@@ -110,6 +114,90 @@ final SpanNodeGeneratorWithTag latexGenerator = SpanNodeGeneratorWithTag(
       LatexNode(e.attributes, e.textContent, config),
 );
 
+/// Parses standalone `$$` display-math blocks before Markdown can interpret
+/// their formula lines as separate paragraphs or list items.
+class DisplayMathBlockSyntax extends m.BlockSyntax {
+  // CommonMark reserves four leading spaces for indented code blocks.
+  static final RegExp _delimiter = RegExp(r'^ {0,3}\$\$\s*$');
+  static final RegExp _fenceOpening = RegExp(r'^ {0,3}(`{3,}|~{3,})(.*)$');
+
+  @override
+  RegExp get pattern => _delimiter;
+
+  @override
+  bool canParse(m.BlockParser parser) {
+    if (!super.canParse(parser)) return false;
+    final search = _findClosingDelimiter(
+      parser,
+      parser.lines.indexWhere((line) => identical(line, parser.current)),
+    );
+    return search.closingIndex != null || !search.foundFence;
+  }
+
+  @override
+  m.Node parse(m.BlockParser parser) {
+    final currentIndex =
+        parser.lines.indexWhere((line) => identical(line, parser.current));
+    final search = _findClosingDelimiter(parser, currentIndex);
+    assert(search.closingIndex != null || !search.foundFence);
+    final closingIndex = search.closingIndex;
+    parser.advance();
+    final content = <String>[];
+    final contentEnd = closingIndex ?? parser.lines.length;
+    for (var i = currentIndex + 1; i < contentEnd; i++) {
+      content.add(parser.current.content);
+      parser.advance();
+    }
+
+    if (closingIndex == null) {
+      final source = parser.lines
+          .sublist(currentIndex, parser.lines.length)
+          .map((line) => line.content)
+          .join('\n');
+      return m.Element.text('latex', source);
+    }
+    parser.advance();
+
+    final formula = content.join('\n');
+    final element = m.Element.text('latex', '\$\$$formula\$\$');
+    element.attributes['content'] = formula;
+    element.attributes['isInline'] = 'false';
+    return element;
+  }
+
+  ({int? closingIndex, bool foundFence}) _findClosingDelimiter(
+    m.BlockParser parser,
+    int openingIndex,
+  ) {
+    String? fenceMarker;
+    var fenceLength = 0;
+    var foundFence = false;
+    for (var i = openingIndex + 1; i < parser.lines.length; i++) {
+      final line = parser.lines[i].content;
+      if (fenceMarker != null) {
+        final closingFence = RegExp(
+          '^ {0,3}${RegExp.escape(fenceMarker)}{$fenceLength,}[ \\t]*\$',
+        );
+        if (closingFence.hasMatch(line)) fenceMarker = null;
+        continue;
+      }
+
+      final fence = _fenceOpening.firstMatch(line);
+      if (fence != null &&
+          (fence.group(1)![0] != '`' || !fence.group(2)!.contains('`'))) {
+        foundFence = true;
+        fenceMarker = fence.group(1)![0];
+        fenceLength = fence.group(1)!.length;
+        continue;
+      }
+      if (_delimiter.hasMatch(line)) {
+        return (closingIndex: i, foundFence: foundFence);
+      }
+    }
+    return (closingIndex: null, foundFence: foundFence);
+  }
+}
+
 /// [SpanNodeGeneratorWithTag] that creates [UNode] instances when
 /// the markdown parser encounters a `u` (underline) element.
 final SpanNodeGeneratorWithTag uGenerator = SpanNodeGeneratorWithTag(
@@ -117,36 +205,72 @@ final SpanNodeGeneratorWithTag uGenerator = SpanNodeGeneratorWithTag(
   generator: (e, config, visitor) => UNode(),
 );
 
-/// Custom [m.InlineSyntax] that parses LaTeX math expressions written
-/// as `$...$` (inline) or `$$...$$` (block/display).
+/// Custom [m.InlineSyntax] that parses dollar, parenthesized, bracketed, and
+/// common equation-environment math expressions in Markdown text.
 ///
-/// Block syntax (`$$...$$`) is checked first so it takes priority over
-/// inline syntax when both `$$` delimiters are present.
+/// Dollar display syntax (`$$...$$`) is checked before inline dollar syntax.
 class LatexSyntax extends m.InlineSyntax {
-  /// The regex pattern used to match LaTeX expressions.
-  /// Matches `$$...$$` (block) or `$...$` (inline).
-  static const String latexPattern = r'(\$\$[\s\S]+?\$\$)|(\$.+?\$)';
+  /// Matches existing dollar forms and the common LaTeX display/inline
+  /// delimiters. Markdown handles code spans and fences before this syntax.
+  static const String latexPattern = r'(\$\$(?:(?:\\.)|[^\\])+?\$\$)|'
+      r'(\\\((?:(?:\\.)|[^\\])+?\\\))|'
+      r'(\\\[(?:(?:\\.)|[^\\])+?\\\])|'
+      r'(\\begin\{(equation|align|gather)\}[\s\S]+?\\end\{\5\})|'
+      r'(\$(?!\$)(?:(?:\\.)|[^\\$\n])+?\$(?!\$))|'
+      // Preserve unmatched math openers as literal text instead of letting
+      // Markdown's EscapeSyntax remove their leading backslash.
+      r'(\\\()|'
+      r'(\\\[)';
 
-  LatexSyntax()
-      : super(
-          latexPattern,
-        );
+  LatexSyntax() : super(latexPattern);
+
+  @override
+  bool tryMatch(m.InlineParser parser, [int? startMatchPos]) {
+    final position = startMatchPos ?? parser.pos;
+    final match = pattern.matchAsPrefix(parser.source, position);
+    if (match != null &&
+        !_hasEscapedBackslash(parser.source, position) &&
+        match[0]!.startsWith(r'$') &&
+        !match[0]!.startsWith(r'$$') &&
+        _isCrossPairedInlineDollar(parser.source, position, match[0]!)) {
+      parser.writeText();
+      parser.addNode(m.Text(r'$'));
+      parser.consume(1);
+      return true;
+    }
+    return super.tryMatch(parser, startMatchPos);
+  }
 
   @override
   bool onMatch(m.InlineParser parser, Match match) {
     final input = match.input;
     final matchValue = input.substring(match.start, match.end);
-
-    String content = '';
-    bool isInline = true;
-
     const blockSyntax = r'$$';
     const inlineSyntax = r'$';
+
+    if (_hasEscapedBackslash(input, match.start)) {
+      parser.addNode(m.Text(matchValue));
+      return true;
+    }
+    if (matchValue == r'\(' || matchValue == r'\[') {
+      parser.addNode(m.Text(matchValue));
+      return true;
+    }
+    String content = '';
+    bool isInline = true;
 
     if (matchValue.startsWith(blockSyntax) &&
         matchValue.endsWith(blockSyntax) &&
         matchValue != blockSyntax) {
       content = matchValue.substring(2, matchValue.length - 2);
+      isInline = false;
+    } else if (matchValue.startsWith(r'\(') && matchValue.endsWith(r'\)')) {
+      content = matchValue.substring(2, matchValue.length - 2);
+    } else if (matchValue.startsWith(r'\[') && matchValue.endsWith(r'\]')) {
+      content = matchValue.substring(2, matchValue.length - 2);
+      isInline = false;
+    } else if (matchValue.startsWith(r'\begin{')) {
+      content = matchValue;
       isInline = false;
     } else if (matchValue.startsWith(inlineSyntax) &&
         matchValue.endsWith(inlineSyntax) &&
@@ -162,10 +286,59 @@ class LatexSyntax extends m.InlineSyntax {
   }
 }
 
+bool _hasEscapedBackslash(String input, int index) {
+  var count = 0;
+  for (var i = index - 1; i >= 0 && input[i] == r'\'; i--) {
+    count++;
+  }
+  return count.isOdd;
+}
+
+bool _isCrossPairedInlineDollar(String input, int index, String matchValue) {
+  if (index == 0) return false;
+  final previousDollar = input.lastIndexOf(r'$', index - 1);
+  if (previousDollar < 0 || !_hasEscapedBackslash(input, previousDollar)) {
+    return false;
+  }
+  final precedingContent = input.substring(previousDollar + 1, index);
+  final formulaContent = matchValue.substring(1, matchValue.length - 1);
+  return precedingContent.isNotEmpty &&
+      precedingContent.trim() == precedingContent &&
+      formulaContent.trimLeft() != formulaContent;
+}
+
+String _prepareMathEnvironment(String content) {
+  const equationStart = r'\begin{equation}';
+  const equationEnd = r'\end{equation}';
+  if (content.startsWith(equationStart) && content.endsWith(equationEnd)) {
+    return content
+        .substring(equationStart.length, content.length - equationEnd.length)
+        .trim();
+  }
+  const alignStart = r'\begin{align}';
+  const alignEnd = r'\end{align}';
+  if (content.startsWith(alignStart) && content.endsWith(alignEnd)) {
+    return r'\begin{aligned}' +
+        content.substring(alignStart.length, content.length - alignEnd.length) +
+        r'\end{aligned}';
+  }
+  const gatherStart = r'\begin{gather}';
+  const gatherEnd = r'\end{gather}';
+  if (content.startsWith(gatherStart) && content.endsWith(gatherEnd)) {
+    return r'\begin{gathered}' +
+        content.substring(
+          gatherStart.length,
+          content.length - gatherEnd.length,
+        ) +
+        r'\end{gathered}';
+  }
+  return content;
+}
+
 /// A [SpanNode] that renders LaTeX math content using [flutter_math_fork].
 ///
-/// Inline math (`$...$`) is rendered as an inline [WidgetSpan] with
-/// [PlaceholderAlignment.middle]. Block math (`$$...$$`) is rendered
+/// Inline math is rendered as an inline [WidgetSpan] with
+/// [PlaceholderAlignment.middle]. Display math is rendered
 /// centered in a full-width container with vertical margin.
 class LatexNode extends SpanNode {
   final Map<String, String> attributes;
@@ -203,14 +376,30 @@ class LatexNode extends SpanNode {
     // mhchem (`\ce{...}`, `\pu{...}`) is expanded to plain KaTeX first;
     // flutter_math_fork does not load the mhchem extension.
     final latex = Math.tex(
-      preprocessMhchem(content),
+      preprocessMhchem(_prepareMathEnvironment(content)),
       textStyle: mathTextStyle,
       textScaleFactor: 1,
       mathStyle: MathStyle.text,
       onErrorFallback: (error) {
-        return Text(
-          textContent,
-          style: style.copyWith(color: Colors.red),
+        return Builder(
+          builder: (context) => InkWell(
+            onTap: () => showDialog<void>(
+              context: context,
+              builder: (dialogContext) => AlertDialog(
+                title: Text(AppLocalizations.of(dialogContext)!.mathParseError),
+                content: SingleChildScrollView(
+                  child: SelectableText(error.messageWithType),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(dialogContext).pop(),
+                    child: Text(AppLocalizations.of(dialogContext)!.mathClose),
+                  ),
+                ],
+              ),
+            ),
+            child: Text(textContent, style: style.copyWith(color: Colors.red)),
+          ),
         );
       },
     );
@@ -254,7 +443,7 @@ class _MermaidLoadingWidget extends StatelessWidget {
           width: 0.5,
         ),
       ),
-      child: const Center(
+      child: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -265,7 +454,7 @@ class _MermaidLoadingWidget extends StatelessWidget {
             ),
             SizedBox(height: 8),
             Text(
-              '正在生成...',
+              AppLocalizations.of(context)!.markdownGenerating,
               style: TextStyle(fontSize: 12),
             ),
           ],
@@ -302,6 +491,7 @@ bool _isCodeBlockStillGenerating({
   required bool isStreaming,
   String? streamingText,
   int? mermaidFenceIndex,
+  int? fenceIndex,
   required String code,
   _MermaidFenceInfo? fenceInfo,
 }) {
@@ -312,6 +502,7 @@ bool _isCodeBlockStillGenerating({
     code,
     fenceInfo ?? _unclosedFenceInfo(streamingText),
     mermaidFenceIndex: mermaidFenceIndex,
+    fenceIndex: fenceIndex,
   );
 }
 
@@ -343,8 +534,21 @@ Widget _buildCodeBlock(
   bool isStreaming = false,
   String? streamingText,
   int? mermaidFenceIndex,
+  int? fenceIndex,
   _MermaidFenceInfo? fenceInfo,
 }) {
+  if (const {'math', 'latex', 'tex'}.contains(language.trim().toLowerCase())) {
+    final node = LatexNode(
+      {'content': code, 'isInline': 'false'},
+      code,
+      MarkdownConfig.defaultConfig,
+    )..style = preConfig.textStyle;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Center(child: RichText(text: node.build())),
+    );
+  }
+
   if (language.toLowerCase() == 'mermaid') {
     // During streaming, show a loading animation only while the block's
     // fence is still open. The markdown parser strips backtick fences from
@@ -357,6 +561,7 @@ Widget _buildCodeBlock(
       isStreaming: isStreaming,
       streamingText: streamingText,
       mermaidFenceIndex: mermaidFenceIndex,
+      fenceIndex: fenceIndex,
       code: code,
       fenceInfo: fenceInfo,
     )) {
@@ -376,6 +581,7 @@ Widget _buildCodeBlock(
         isStreaming: isStreaming,
         streamingText: streamingText,
         code: code,
+        fenceIndex: fenceIndex,
         fenceInfo: fenceInfo,
       ),
     );
@@ -400,6 +606,7 @@ Widget _buildCodeBlock(
       isStreaming: isStreaming,
       streamingText: streamingText,
       code: code,
+      fenceIndex: fenceIndex,
       fenceInfo: fenceInfo,
     ),
   );
@@ -424,42 +631,299 @@ String? unclosedFenceTail(String text) {
   return _unclosedFenceInfo(text).tail;
 }
 
+class _SegmentedText {
+  _SegmentedText([String initialText = '']) {
+    append(initialText);
+  }
+
+  static const int _chunkSize = 4096;
+  final List<String> _completeChunks = [];
+  StringBuffer _pendingChunk = StringBuffer();
+
+  Iterable<String> get segments sync* {
+    yield* _completeChunks;
+    if (_pendingChunk.length > 0) yield _pendingChunk.toString();
+  }
+
+  void append(String text) {
+    var offset = 0;
+    while (offset < text.length) {
+      final available = _chunkSize - _pendingChunk.length;
+      final remaining = text.length - offset;
+      final length = remaining < available ? remaining : available;
+      _pendingChunk.write(text.substring(offset, offset + length));
+      offset += length;
+      if (_pendingChunk.length == _chunkSize) {
+        _completeChunks.add(_pendingChunk.toString());
+        _pendingChunk = StringBuffer();
+      }
+    }
+  }
+
+  void appendCodeUnit(int codeUnit) {
+    _pendingChunk.writeCharCode(codeUnit);
+    if (_pendingChunk.length == _chunkSize) {
+      _completeChunks.add(_pendingChunk.toString());
+      _pendingChunk = StringBuffer();
+    }
+  }
+
+  void writeTo(StringBuffer target) {
+    for (final chunk in _completeChunks) {
+      target.write(chunk);
+    }
+    target.write(_pendingChunk);
+  }
+
+  void clear() {
+    _completeChunks.clear();
+    _pendingChunk = StringBuffer();
+  }
+
+  @override
+  String toString() {
+    final text = StringBuffer();
+    writeTo(text);
+    return text.toString();
+  }
+}
+
+class _NormalizedContainerTailSource {
+  _NormalizedContainerTailSource(
+    String initialText,
+    this.quoteDepth,
+    this.listIndent,
+    this.innerQuoteDepth,
+    this.fenceIndent,
+  ) {
+    append(initialText);
+  }
+
+  final int quoteDepth;
+  final int listIndent;
+  final int innerQuoteDepth;
+  final int fenceIndent;
+  final _SegmentedText _completeLines = _SegmentedText();
+  final _SegmentedText _pendingPrefix = _SegmentedText();
+  _SegmentedText _pendingLine = _SegmentedText();
+  String _transformedPendingPrefix = '';
+  bool _pendingPrefixResolved = false;
+  int _pendingQuoteMarkers = 0;
+
+  Iterable<String> get segments sync* {
+    yield* _completeLines.segments;
+    yield* _pendingSegments();
+  }
+
+  void append(String text) {
+    var start = 0;
+    while (start < text.length) {
+      final newline = text.indexOf('\n', start);
+      if (newline == -1) {
+        _appendPending(text.substring(start));
+        return;
+      }
+      if (newline > start) _appendPending(text.substring(start, newline));
+      _completeLines.append(_stripPendingContainerPrefix());
+      _completeLines.append('\n');
+      _pendingPrefix.clear();
+      _pendingLine.clear();
+      _transformedPendingPrefix = '';
+      _pendingPrefixResolved = false;
+      _pendingQuoteMarkers = 0;
+      start = newline + 1;
+    }
+  }
+
+  void _appendPending(String text) {
+    if (_pendingPrefixResolved) {
+      _pendingLine.append(text);
+      return;
+    }
+    for (var offset = 0; offset < text.length; offset++) {
+      final codeUnit = text.codeUnitAt(offset);
+      _pendingPrefix.appendCodeUnit(codeUnit);
+      if (_isTrimWhitespace(codeUnit)) continue;
+      if (codeUnit == 0x3e) {
+        _pendingQuoteMarkers++;
+        if (_pendingQuoteMarkers < quoteDepth + innerQuoteDepth) continue;
+      }
+      final prefixText = _pendingPrefix.toString();
+      if (_hasIncompleteContainerPrefix(
+        prefixText,
+        quoteDepth,
+        listIndent,
+        innerQuoteDepth,
+      )) {
+        continue;
+      }
+      final transformed = _stripFenceContainerPrefix(
+        prefixText,
+        quoteDepth,
+        listIndent,
+        innerQuoteDepth,
+        fenceIndent,
+      );
+      if (!transformed.codeUnits.any((unit) => !_isTrimWhitespace(unit))) {
+        continue;
+      }
+      _transformedPendingPrefix = transformed;
+      _pendingPrefixResolved = true;
+      if (offset + 1 < text.length) {
+        _pendingLine.append(text.substring(offset + 1));
+      }
+      return;
+    }
+  }
+
+  Iterable<String> _pendingSegments() sync* {
+    if (!_pendingPrefixResolved) return;
+    yield _transformedPendingPrefix;
+    yield* _pendingLine.segments;
+  }
+
+  String _stripPendingContainerPrefix() {
+    final line = StringBuffer();
+    _pendingPrefix.writeTo(line);
+    _pendingLine.writeTo(line);
+    return _stripFenceContainerPrefix(
+        line.toString(), quoteDepth, listIndent, innerQuoteDepth, fenceIndent);
+  }
+}
+
+bool _hasIncompleteContainerPrefix(
+  String line,
+  int quoteDepth,
+  int listIndent,
+  int innerQuoteDepth,
+) {
+  bool hasIncompleteQuotePrefix(String text, int depth) {
+    var remaining = text;
+    var matchedDepth = 0;
+    while (matchedDepth < depth) {
+      final stripped = _stripOneBlockQuotePrefix(remaining);
+      if (!stripped.matched) {
+        return matchedDepth > 0 && _isMarkdownBlankLine(remaining);
+      }
+      matchedDepth++;
+      remaining = stripped.line;
+    }
+    return false;
+  }
+
+  if (hasIncompleteQuotePrefix(line, quoteDepth)) return true;
+  final outerQuoteStripped = _stripBlockQuoteDepth(line, quoteDepth);
+  if (listIndent > 0 &&
+      _isMarkdownBlankLine(outerQuoteStripped) &&
+      _leadingIndentColumns(outerQuoteStripped) < listIndent) {
+    return true;
+  }
+  final listStripped = _stripListItemIndent(outerQuoteStripped, listIndent);
+  return hasIncompleteQuotePrefix(listStripped, innerQuoteDepth);
+}
+
 typedef _MermaidFenceInfo = ({
   String? tail,
+  String? tailSource,
+  _SegmentedText? normalizedTailSource,
+  _NormalizedContainerTailSource? normalizedContainerTailSource,
+  bool isCached,
+  bool hasUnfencedIndentedCode,
+  int? openFenceIndex,
   int? mermaidFenceIndex,
   int mermaidFenceCount,
+  int tailStart,
+  int tailSourceStart,
+  String? fenceChar,
+  int fenceLength,
+  int fenceQuoteDepth,
+  int fenceInnerQuoteDepth,
+  int fenceListIndent,
+  int fenceIndent,
+  bool trailingLineClosedFence,
   int mermaidFenceQuoteDepth,
   int mermaidFenceInnerQuoteDepth,
   int mermaidFenceListIndent,
   int mermaidFenceIndent,
+  _FenceScanCheckpoint? scanCheckpoint,
+  _SegmentedText pendingLine,
 });
 
-_MermaidFenceInfo _unclosedFenceInfo(String text) {
-  final normalized = text.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+typedef _FenceScanCheckpoint = ({
+  bool inFence,
+  String? fenceChar,
+  int fenceLength,
+  int fenceQuoteDepth,
+  int fenceInnerQuoteDepth,
+  int fenceListIndent,
+  int fenceIndent,
+  int fenceCount,
+  int? openFenceIndex,
+  List<int> listContentIndents,
+  int listQuoteDepth,
+  int listInnerQuoteDepth,
+  int mermaidFenceCount,
+  int? openMermaidFenceIndex,
+  int openMermaidFenceQuoteDepth,
+  int openMermaidFenceInnerQuoteDepth,
+  int openMermaidFenceListIndent,
+  int openMermaidFenceIndent,
+  RegExp? htmlBlockTerminator,
+  bool htmlBlockUntilBlank,
+  int htmlBlockQuoteDepth,
+  int htmlBlockListIndent,
+  int htmlBlockInnerQuoteDepth,
+  bool paragraphOpen,
+  bool hasUnfencedIndentedCode,
+  int tailStart,
+  int offset,
+  bool trailingLineClosedFence,
+});
+
+_MermaidFenceInfo _unclosedFenceInfo(
+  String text, {
+  bool includeTail = true,
+  String? normalizedText,
+  _FenceScanCheckpoint? resume,
+  String? resumeText,
+}) {
+  final normalized = normalizedText ??
+      (resume == null
+          ? text.replaceAll('\r\n', '\n').replaceAll('\r', '\n')
+          : resumeText!);
+  final normalizedLength =
+      resume == null ? normalized.length : resume.offset + normalized.length;
   final lines = normalized.split('\n');
-  var inFence = false;
-  String? fenceChar;
-  var fenceLength = 0;
-  var fenceQuoteDepth = 0;
-  var fenceInnerQuoteDepth = 0;
-  var fenceListIndent = 0;
-  final listContentIndents = <int>[];
-  var listQuoteDepth = 0;
-  var listInnerQuoteDepth = 0;
-  var mermaidFenceCount = 0;
-  int? openMermaidFenceIndex;
-  var openMermaidFenceQuoteDepth = 0;
-  var openMermaidFenceInnerQuoteDepth = 0;
-  var openMermaidFenceListIndent = 0;
-  var openMermaidFenceIndent = 0;
-  RegExp? htmlBlockTerminator;
-  var htmlBlockUntilBlank = false;
-  var htmlBlockQuoteDepth = 0;
-  var htmlBlockListIndent = 0;
-  var htmlBlockInnerQuoteDepth = 0;
-  var paragraphOpen = false;
-  var tailStart = 0;
-  var offset = 0;
+  var inFence = resume?.inFence ?? false;
+  String? fenceChar = resume?.fenceChar;
+  var fenceLength = resume?.fenceLength ?? 0;
+  var fenceQuoteDepth = resume?.fenceQuoteDepth ?? 0;
+  var fenceInnerQuoteDepth = resume?.fenceInnerQuoteDepth ?? 0;
+  var fenceListIndent = resume?.fenceListIndent ?? 0;
+  var fenceIndent = resume?.fenceIndent ?? 0;
+  var fenceCount = resume?.fenceCount ?? 0;
+  int? openFenceIndex = resume?.openFenceIndex;
+  final listContentIndents = [...?resume?.listContentIndents];
+  var listQuoteDepth = resume?.listQuoteDepth ?? 0;
+  var listInnerQuoteDepth = resume?.listInnerQuoteDepth ?? 0;
+  var mermaidFenceCount = resume?.mermaidFenceCount ?? 0;
+  int? openMermaidFenceIndex = resume?.openMermaidFenceIndex;
+  var openMermaidFenceQuoteDepth = resume?.openMermaidFenceQuoteDepth ?? 0;
+  var openMermaidFenceInnerQuoteDepth =
+      resume?.openMermaidFenceInnerQuoteDepth ?? 0;
+  var openMermaidFenceListIndent = resume?.openMermaidFenceListIndent ?? 0;
+  var openMermaidFenceIndent = resume?.openMermaidFenceIndent ?? 0;
+  RegExp? htmlBlockTerminator = resume?.htmlBlockTerminator;
+  var htmlBlockUntilBlank = resume?.htmlBlockUntilBlank ?? false;
+  var htmlBlockQuoteDepth = resume?.htmlBlockQuoteDepth ?? 0;
+  var htmlBlockListIndent = resume?.htmlBlockListIndent ?? 0;
+  var htmlBlockInnerQuoteDepth = resume?.htmlBlockInnerQuoteDepth ?? 0;
+  var paragraphOpen = resume?.paragraphOpen ?? false;
+  var hasUnfencedIndentedCode = resume?.hasUnfencedIndentedCode ?? false;
+  var tailStart = resume?.tailStart ?? 0;
+  var offset = resume?.offset ?? 0;
+  var trailingLineClosedFence = resume?.trailingLineClosedFence ?? false;
+  _FenceScanCheckpoint? scanCheckpoint;
 
   void clearHtmlBlock() {
     htmlBlockTerminator = null;
@@ -476,6 +940,8 @@ _MermaidFenceInfo _unclosedFenceInfo(String text) {
     fenceQuoteDepth = 0;
     fenceInnerQuoteDepth = 0;
     fenceListIndent = 0;
+    fenceIndent = 0;
+    openFenceIndex = null;
     openMermaidFenceIndex = null;
     openMermaidFenceQuoteDepth = 0;
     openMermaidFenceInnerQuoteDepth = 0;
@@ -483,7 +949,41 @@ _MermaidFenceInfo _unclosedFenceInfo(String text) {
     openMermaidFenceIndent = 0;
   }
 
-  for (final line in lines) {
+  for (var lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+    if (lineIndex == lines.length - 1) {
+      scanCheckpoint = (
+        inFence: inFence,
+        fenceChar: fenceChar,
+        fenceLength: fenceLength,
+        fenceQuoteDepth: fenceQuoteDepth,
+        fenceInnerQuoteDepth: fenceInnerQuoteDepth,
+        fenceListIndent: fenceListIndent,
+        fenceIndent: fenceIndent,
+        fenceCount: fenceCount,
+        openFenceIndex: openFenceIndex,
+        listContentIndents: [...listContentIndents],
+        listQuoteDepth: listQuoteDepth,
+        listInnerQuoteDepth: listInnerQuoteDepth,
+        mermaidFenceCount: mermaidFenceCount,
+        openMermaidFenceIndex: openMermaidFenceIndex,
+        openMermaidFenceQuoteDepth: openMermaidFenceQuoteDepth,
+        openMermaidFenceInnerQuoteDepth: openMermaidFenceInnerQuoteDepth,
+        openMermaidFenceListIndent: openMermaidFenceListIndent,
+        openMermaidFenceIndent: openMermaidFenceIndent,
+        htmlBlockTerminator: htmlBlockTerminator,
+        htmlBlockUntilBlank: htmlBlockUntilBlank,
+        htmlBlockQuoteDepth: htmlBlockQuoteDepth,
+        htmlBlockListIndent: htmlBlockListIndent,
+        htmlBlockInnerQuoteDepth: htmlBlockInnerQuoteDepth,
+        paragraphOpen: paragraphOpen,
+        hasUnfencedIndentedCode: hasUnfencedIndentedCode,
+        tailStart: tailStart,
+        offset: offset,
+        trailingLineClosedFence: trailingLineClosedFence,
+      );
+    }
+    final line = lines[lineIndex];
+    trailingLineClosedFence = false;
     final trimmed = _trimMarkdownTrailingWhitespace(line);
     if (htmlBlockTerminator != null || htmlBlockUntilBlank) {
       final htmlContainer = _stripActiveContainerPrefixes(
@@ -515,12 +1015,9 @@ _MermaidFenceInfo _unclosedFenceInfo(String text) {
         fenceInnerQuoteDepth,
       );
       if (fenceContainer.matches) {
-        if (_isClosingFenceLine(
-          fenceContainer.line,
-          fenceChar!,
-          fenceLength,
-        )) {
+        if (_isClosingFenceLine(fenceContainer.line, fenceChar!, fenceLength)) {
           clearFence();
+          trailingLineClosedFence = true;
         }
         paragraphOpen = false;
         offset += line.length + 1;
@@ -531,6 +1028,9 @@ _MermaidFenceInfo _unclosedFenceInfo(String text) {
     }
 
     final quotedLine = _stripLeadingBlockQuotes(trimmed);
+    if (_leadingIndentColumns(quotedLine.line) >= 4) {
+      hasUnfencedIndentedCode = true;
+    }
     if (quotedLine.depth != listQuoteDepth) {
       final lazyParagraphContinuation =
           quotedLine.depth < listQuoteDepth && paragraphOpen;
@@ -577,6 +1077,9 @@ _MermaidFenceInfo _unclosedFenceInfo(String text) {
       listInnerQuoteDepth = innerQuotedLine.depth;
       if (!lazyParagraphContinuation) paragraphOpen = false;
     }
+    if (_leadingIndentColumns(innerQuotedLine.line) >= 4) {
+      hasUnfencedIndentedCode = true;
+    }
     final htmlBlock = _htmlBlockStart(innerQuotedLine.line);
     if (htmlBlock != null &&
         (htmlBlock.canInterruptParagraph || !paragraphOpen)) {
@@ -600,11 +1103,13 @@ _MermaidFenceInfo _unclosedFenceInfo(String text) {
     if (opening != null) {
       paragraphOpen = false;
       inFence = true;
+      openFenceIndex = fenceCount++;
       fenceChar = opening.fenceChar;
       fenceLength = opening.fenceLength;
       fenceQuoteDepth = quotedLine.depth;
       fenceInnerQuoteDepth = innerQuotedLine.depth;
       fenceListIndent = listItemIndent;
+      fenceIndent = opening.indent;
       if (_isMermaidFenceLanguage(
         opening.infoString,
         fenceChar: opening.fenceChar,
@@ -636,26 +1141,399 @@ _MermaidFenceInfo _unclosedFenceInfo(String text) {
   if (!inFence) {
     return (
       tail: null,
+      tailSource: null,
+      normalizedTailSource: null,
+      normalizedContainerTailSource: null,
+      isCached: !includeTail,
+      hasUnfencedIndentedCode: hasUnfencedIndentedCode,
+      openFenceIndex: null,
       mermaidFenceIndex: null,
       mermaidFenceCount: mermaidFenceCount,
+      tailStart: tailStart,
+      tailSourceStart: 0,
+      fenceChar: null,
+      fenceLength: 0,
+      fenceQuoteDepth: 0,
+      fenceInnerQuoteDepth: 0,
+      fenceListIndent: 0,
+      fenceIndent: 0,
+      trailingLineClosedFence: trailingLineClosedFence,
       mermaidFenceQuoteDepth: 0,
       mermaidFenceInnerQuoteDepth: 0,
       mermaidFenceListIndent: 0,
       mermaidFenceIndent: 0,
+      scanCheckpoint: scanCheckpoint,
+      pendingLine: _SegmentedText(lines.last),
     );
   }
-  final tail =
-      tailStart >= normalized.length ? '' : normalized.substring(tailStart);
+  final shouldCacheTail = !includeTail && hasUnfencedIndentedCode;
+  final needsContainerTransform = openMermaidFenceIndex != null &&
+      (openMermaidFenceQuoteDepth != 0 ||
+          openMermaidFenceListIndent != 0 ||
+          openMermaidFenceInnerQuoteDepth != 0 ||
+          openMermaidFenceIndent != 0);
+  final normalizedTail = includeTail || shouldCacheTail
+      ? tailStart >= normalizedLength
+          ? ''
+          : resume == null
+              ? normalized.substring(tailStart)
+              : tailStart >= resume.offset
+                  ? normalized.substring(tailStart - resume.offset)
+                  : null
+      : null;
+  final tail = includeTail ? normalizedTail : null;
+  final normalizedTailSource =
+      shouldCacheTail && !needsContainerTransform && normalizedTail != null
+          ? _SegmentedText(normalizedTail)
+          : null;
+  final normalizedContainerTailSource =
+      shouldCacheTail && needsContainerTransform && normalizedTail != null
+          ? _NormalizedContainerTailSource(
+              normalizedTail,
+              openMermaidFenceQuoteDepth,
+              openMermaidFenceListIndent,
+              openMermaidFenceInnerQuoteDepth,
+              openMermaidFenceIndent,
+            )
+          : null;
   return (
     tail: tail,
+    tailSource: !includeTail && hasUnfencedIndentedCode ? text : null,
+    normalizedTailSource: normalizedTailSource,
+    normalizedContainerTailSource: normalizedContainerTailSource,
+    isCached: !includeTail,
+    hasUnfencedIndentedCode: hasUnfencedIndentedCode,
+    openFenceIndex: openFenceIndex,
     mermaidFenceIndex: openMermaidFenceIndex,
     mermaidFenceCount: mermaidFenceCount,
+    tailStart: tailStart,
+    tailSourceStart: 0,
+    fenceChar: fenceChar,
+    fenceLength: fenceLength,
+    fenceQuoteDepth: fenceQuoteDepth,
+    fenceInnerQuoteDepth: fenceInnerQuoteDepth,
+    fenceListIndent: fenceListIndent,
+    fenceIndent: fenceIndent,
+    trailingLineClosedFence: trailingLineClosedFence,
     mermaidFenceQuoteDepth: openMermaidFenceQuoteDepth,
     mermaidFenceInnerQuoteDepth: openMermaidFenceInnerQuoteDepth,
     mermaidFenceListIndent: openMermaidFenceListIndent,
     mermaidFenceIndent: openMermaidFenceIndent,
+    scanCheckpoint: scanCheckpoint,
+    pendingLine: _SegmentedText(lines.last),
   );
 }
+
+/// Reuses parser state while an active streaming section grows.
+///
+/// The trailing partial line is kept beside a checkpoint from before that
+/// line. New chunks resume there, so fence transitions process only the
+/// pending line and appended text instead of rescanning the accumulated
+/// message.
+class StreamingFenceInfoCache {
+  _MermaidFenceInfo? _info;
+  int _textLength = 0;
+  int _pendingLineStart = 0;
+  bool _textEndedWithCarriageReturn = false;
+  String _markerSuffix = '';
+  bool _pendingLineCanCloseFence = false;
+  int _pendingFenceLeadingSpaces = 0;
+  int _pendingFenceMarkerRun = 0;
+  bool _pendingFenceHasMarker = false;
+  bool _pendingFenceTrailingWhitespace = false;
+  bool _pendingFencePrefixInvalid = false;
+
+  _MermaidFenceInfo _infoFor(String text) {
+    final cached = _info;
+    if (cached == null || text.length < _textLength) {
+      final updated = _scanFromStart(text);
+      _setPendingLineFenceState(
+        updated.pendingLine,
+        updated.fenceChar,
+        updated.fenceLength,
+      );
+      return updated;
+    }
+    if (text.length == _textLength) return cached;
+
+    final rawAppended = text.substring(_textLength);
+    var appended = rawAppended;
+    final splitCarriageReturnLineFeed =
+        _textEndedWithCarriageReturn && appended.startsWith('\n');
+    if (splitCarriageReturnLineFeed) {
+      // The CR was already normalized at the previous chunk boundary.
+      appended = appended.substring(1);
+    }
+    final normalizedAppended =
+        appended.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+    final checkpoint = cached.scanCheckpoint!;
+    final canReuseFenceState = cached.fenceChar == null ||
+        (checkpoint.inFence &&
+            cached.fenceQuoteDepth == 0 &&
+            cached.fenceListIndent == 0 &&
+            cached.fenceInnerQuoteDepth == 0);
+    final markerCannotCloseFence = cached.fenceChar != null &&
+        checkpoint.inFence &&
+        cached.fenceQuoteDepth == 0 &&
+        cached.fenceListIndent == 0 &&
+        cached.fenceInnerQuoteDepth == 0 &&
+        !_pendingLineCanCloseFence;
+    final pendingFencePrefixCanClose =
+        canReuseFenceState && _pendingLineCanCloseFence;
+    if ((!_mayContainFenceMarker('$_markerSuffix$normalizedAppended') ||
+            markerCannotCloseFence ||
+            pendingFencePrefixCanClose) &&
+        !normalizedAppended.contains('\n') &&
+        !cached.trailingLineClosedFence &&
+        canReuseFenceState) {
+      if (cached.fenceChar != null && cached.hasUnfencedIndentedCode) {
+        cached.normalizedTailSource?.append(normalizedAppended);
+        cached.normalizedContainerTailSource?.append(normalizedAppended);
+      }
+      if (canReuseFenceState) {
+        _extendPendingLineFenceState(
+          normalizedAppended,
+          cached.fenceChar,
+          cached.fenceLength,
+        );
+      }
+      _markerSuffix = _suffixAfterAppend(_markerSuffix, normalizedAppended);
+      final updated = _copyWithPendingLine(cached, text);
+      _info = updated;
+      _pendingLineStart = _trailingLineStartAfterAppend(
+        rawAppended,
+        _textLength,
+        _pendingLineStart,
+      );
+      _textLength = text.length;
+      _textEndedWithCarriageReturn = text.endsWith('\r');
+      return updated;
+    }
+    final resumedText = '${_previousPendingLine(text)}$normalizedAppended';
+    final updated = _scanFromStart(
+      text,
+      resume: checkpoint,
+      resumeText: resumedText,
+      cached: cached,
+      normalizedAppended: normalizedAppended,
+      rawAppended: rawAppended,
+    );
+    _markerSuffix = _lastTwoRawCharacters(text);
+    _setPendingLineFenceState(
+      updated.pendingLine,
+      updated.fenceChar,
+      updated.fenceLength,
+    );
+    return updated;
+  }
+
+  void _setPendingLineFenceState(
+    _SegmentedText line,
+    String? fenceChar,
+    int fenceLength,
+  ) {
+    _pendingFenceLeadingSpaces = 0;
+    _pendingFenceMarkerRun = 0;
+    _pendingFenceHasMarker = false;
+    _pendingFenceTrailingWhitespace = false;
+    _pendingFencePrefixInvalid = fenceChar == null;
+    _pendingLineCanCloseFence = fenceChar != null;
+    if (fenceChar != null) {
+      for (final segment in line.segments) {
+        _extendPendingLineFenceState(segment, fenceChar, fenceLength);
+      }
+    }
+    // Fence state above is sufficient for incremental checks. Keeping this
+    // full trailing line duplicates text already held by the streaming body.
+    line.clear();
+  }
+
+  String _previousPendingLine(String text) {
+    return text
+        .substring(_pendingLineStart, _textLength)
+        .replaceAll('\r\n', '\n')
+        .replaceAll('\r', '\n');
+  }
+
+  void _extendPendingLineFenceState(
+    String appended,
+    String? fenceChar,
+    int fenceLength,
+  ) {
+    if (fenceChar == null || _pendingFencePrefixInvalid) return;
+    final markerCodeUnit = fenceChar.codeUnitAt(0);
+    for (var offset = 0; offset < appended.length; offset++) {
+      final codeUnit = appended.codeUnitAt(offset);
+      if (!_pendingFenceHasMarker) {
+        if (codeUnit == 0x20 && _pendingFenceLeadingSpaces < 4) {
+          _pendingFenceLeadingSpaces++;
+        } else if (_pendingFenceLeadingSpaces > 3 ||
+            codeUnit != markerCodeUnit) {
+          _pendingFencePrefixInvalid = true;
+        } else {
+          _pendingFenceHasMarker = true;
+          _pendingFenceMarkerRun = 1;
+        }
+      } else if (codeUnit == markerCodeUnit &&
+          !_pendingFenceTrailingWhitespace) {
+        if (_pendingFenceMarkerRun < fenceLength) _pendingFenceMarkerRun++;
+      } else if (_isTrimWhitespace(codeUnit) &&
+          _pendingFenceMarkerRun >= fenceLength) {
+        _pendingFenceTrailingWhitespace = true;
+      } else {
+        _pendingFencePrefixInvalid = true;
+      }
+    }
+    _pendingLineCanCloseFence = !_pendingFencePrefixInvalid;
+  }
+
+  _MermaidFenceInfo _scanFromStart(
+    String text, {
+    _FenceScanCheckpoint? resume,
+    String? resumeText,
+    _MermaidFenceInfo? cached,
+    String normalizedAppended = '',
+    String? rawAppended,
+  }) {
+    final info = _unclosedFenceInfo(
+      text,
+      includeTail: false,
+      normalizedText: resumeText,
+      resume: resume,
+      resumeText: resumeText,
+    );
+    final continuesSameFence = cached != null &&
+        info.openFenceIndex == cached.openFenceIndex &&
+        info.tailStart == cached.tailStart &&
+        info.fenceChar != null;
+    if (continuesSameFence && info.hasUnfencedIndentedCode) {
+      cached.normalizedTailSource?.append(normalizedAppended);
+      cached.normalizedContainerTailSource?.append(normalizedAppended);
+      _info = (
+        tail: info.tail,
+        tailSource: text,
+        normalizedTailSource: cached.normalizedTailSource,
+        normalizedContainerTailSource: cached.normalizedContainerTailSource,
+        isCached: info.isCached,
+        hasUnfencedIndentedCode: info.hasUnfencedIndentedCode,
+        openFenceIndex: info.openFenceIndex,
+        mermaidFenceIndex: info.mermaidFenceIndex,
+        mermaidFenceCount: info.mermaidFenceCount,
+        tailStart: info.tailStart,
+        tailSourceStart: cached.tailSourceStart,
+        fenceChar: info.fenceChar,
+        fenceLength: info.fenceLength,
+        fenceQuoteDepth: info.fenceQuoteDepth,
+        fenceInnerQuoteDepth: info.fenceInnerQuoteDepth,
+        fenceListIndent: info.fenceListIndent,
+        fenceIndent: info.fenceIndent,
+        trailingLineClosedFence: info.trailingLineClosedFence,
+        mermaidFenceQuoteDepth: info.mermaidFenceQuoteDepth,
+        mermaidFenceInnerQuoteDepth: info.mermaidFenceInnerQuoteDepth,
+        mermaidFenceListIndent: info.mermaidFenceListIndent,
+        mermaidFenceIndent: info.mermaidFenceIndent,
+        scanCheckpoint: info.scanCheckpoint,
+        pendingLine: info.pendingLine,
+      );
+    } else {
+      _info = info;
+    }
+    _textLength = text.length;
+    _pendingLineStart = resume == null
+        ? _trailingLineStart(text)
+        : _trailingLineStartAfterAppend(
+            rawAppended!,
+            _textLength - rawAppended.length,
+            _pendingLineStart,
+          );
+    _textEndedWithCarriageReturn = text.endsWith('\r');
+    _markerSuffix = _lastTwoRawCharacters(text);
+    return _info!;
+  }
+
+  _MermaidFenceInfo _copyWithPendingLine(
+    _MermaidFenceInfo info,
+    String text,
+  ) =>
+      (
+        tail: info.tail,
+        tailSource: info.tailSource == null ? null : text,
+        normalizedTailSource: info.normalizedTailSource,
+        normalizedContainerTailSource: info.normalizedContainerTailSource,
+        isCached: info.isCached,
+        hasUnfencedIndentedCode: info.hasUnfencedIndentedCode,
+        openFenceIndex: info.openFenceIndex,
+        mermaidFenceIndex: info.mermaidFenceIndex,
+        mermaidFenceCount: info.mermaidFenceCount,
+        tailStart: info.tailStart,
+        tailSourceStart: info.tailSourceStart,
+        fenceChar: info.fenceChar,
+        fenceLength: info.fenceLength,
+        fenceQuoteDepth: info.fenceQuoteDepth,
+        fenceInnerQuoteDepth: info.fenceInnerQuoteDepth,
+        fenceListIndent: info.fenceListIndent,
+        fenceIndent: info.fenceIndent,
+        trailingLineClosedFence: info.trailingLineClosedFence,
+        mermaidFenceQuoteDepth: info.mermaidFenceQuoteDepth,
+        mermaidFenceInnerQuoteDepth: info.mermaidFenceInnerQuoteDepth,
+        mermaidFenceListIndent: info.mermaidFenceListIndent,
+        mermaidFenceIndent: info.mermaidFenceIndent,
+        scanCheckpoint: info.scanCheckpoint,
+        pendingLine: info.pendingLine,
+      );
+
+  static String _suffixAfterAppend(String suffix, String appended) {
+    final newline = appended.lastIndexOf('\n');
+    final currentLine =
+        newline == -1 ? '$suffix$appended' : appended.substring(newline + 1);
+    return currentLine.length <= 2
+        ? currentLine
+        : currentLine.substring(currentLine.length - 2);
+  }
+
+  static String _lastTwoRawCharacters(String text) =>
+      text.length <= 2 ? text : text.substring(text.length - 2);
+
+  static int _trailingLineStart(String text) {
+    final lastLineFeed = text.lastIndexOf('\n');
+    final lastCarriageReturn = text.lastIndexOf('\r');
+    return (lastLineFeed > lastCarriageReturn
+            ? lastLineFeed
+            : lastCarriageReturn) +
+        1;
+  }
+
+  static int _trailingLineStartAfterAppend(
+    String appended,
+    int previousTextLength,
+    int previousLineStart,
+  ) {
+    final lastLineFeed = appended.lastIndexOf('\n');
+    final lastCarriageReturn = appended.lastIndexOf('\r');
+    final lastLineBreak =
+        lastLineFeed > lastCarriageReturn ? lastLineFeed : lastCarriageReturn;
+    return lastLineBreak < 0
+        ? previousLineStart
+        : previousTextLength + lastLineBreak + 1;
+  }
+}
+
+bool _mayContainFenceMarker(String text) =>
+    text.contains('```') || text.contains('~~~');
+
+bool _isTrimWhitespace(int codeUnit) =>
+    (codeUnit >= 0x0009 && codeUnit <= 0x000d) ||
+    codeUnit == 0x0020 ||
+    codeUnit == 0x0085 ||
+    codeUnit == 0x00a0 ||
+    codeUnit == 0x1680 ||
+    (codeUnit >= 0x2000 && codeUnit <= 0x200a) ||
+    codeUnit == 0x2028 ||
+    codeUnit == 0x2029 ||
+    codeUnit == 0x202f ||
+    codeUnit == 0x205f ||
+    codeUnit == 0x3000 ||
+    codeUnit == 0xfeff;
 
 /// True when [code] is the still-open trailing fenced code block of the
 /// streaming [text] (see [unclosedFenceTail]).
@@ -681,11 +1559,88 @@ bool isStreamingMermaidTail(
   );
 }
 
+bool _matchesTrimmedNormalizedSource(
+  String text,
+  String source,
+  int sourceOffset,
+) {
+  final expected = text.trim();
+  var expectedOffset = 0;
+  var started = false;
+  for (var offset = sourceOffset; offset < source.length; offset++) {
+    var codeUnit = source.codeUnitAt(offset);
+    if (codeUnit == 0x0d) {
+      codeUnit = 0x0a;
+      if (offset + 1 < source.length && source.codeUnitAt(offset + 1) == 0x0a) {
+        offset++;
+      }
+    }
+    if (!started && _isTrimWhitespace(codeUnit)) continue;
+    started = true;
+    if (expectedOffset == expected.length) {
+      if (!_isTrimWhitespace(codeUnit)) return false;
+      continue;
+    }
+    if (codeUnit != expected.codeUnitAt(expectedOffset)) return false;
+    expectedOffset++;
+  }
+  return expectedOffset == expected.length;
+}
+
+bool _matchesTrimmedSegments(String text, Iterable<String> segments) {
+  final expected = text.trim();
+  var expectedOffset = 0;
+  var started = false;
+  for (final segment in segments) {
+    for (var offset = 0; offset < segment.length; offset++) {
+      final codeUnit = segment.codeUnitAt(offset);
+      if (!started && _isTrimWhitespace(codeUnit)) continue;
+      started = true;
+      if (expectedOffset == expected.length) {
+        if (!_isTrimWhitespace(codeUnit)) return false;
+        continue;
+      }
+      if (codeUnit != expected.codeUnitAt(expectedOffset)) return false;
+      expectedOffset++;
+    }
+  }
+  return expectedOffset == expected.length;
+}
+
 bool _isStreamingMermaidTailWithInfo(
   String code,
   _MermaidFenceInfo fenceInfo, {
   int? mermaidFenceIndex,
+  int? fenceIndex,
 }) {
+  if (fenceInfo.isCached) {
+    final tailSource = fenceInfo.tailSource;
+    if (tailSource != null) {
+      if (mermaidFenceIndex != null) {
+        return mermaidFenceIndex == fenceInfo.mermaidFenceIndex;
+      }
+      final normalizedTailSource = fenceInfo.normalizedTailSource;
+      final matchesTail = normalizedTailSource != null
+          ? _matchesTrimmedSegments(code, normalizedTailSource.segments)
+          : _matchesTrimmedNormalizedSource(
+              code,
+              tailSource,
+              fenceInfo.tailSourceStart,
+            );
+      if (!matchesTail) return false;
+      return true;
+    }
+    if (fenceIndex == null || fenceIndex != fenceInfo.openFenceIndex) {
+      return false;
+    }
+    if (mermaidFenceIndex != null) {
+      return mermaidFenceIndex == fenceInfo.mermaidFenceIndex;
+    }
+    return fenceInfo.fenceQuoteDepth == 0 &&
+        fenceInfo.fenceListIndent == 0 &&
+        fenceInfo.fenceInnerQuoteDepth == 0 &&
+        fenceInfo.fenceIndent == 0;
+  }
   var tail = fenceInfo.tail;
   if (mermaidFenceIndex != null &&
       mermaidFenceIndex == fenceInfo.mermaidFenceIndex) {
@@ -752,10 +1707,7 @@ final _htmlRawTagStart = RegExp(
 final _htmlCommentStart = RegExp(r'^ {0,3}<!--');
 final _htmlProcessingInstructionStart = RegExp(r'^ {0,3}<\?');
 final _htmlDeclarationStart = RegExp(r'^ {0,3}<![a-z]', caseSensitive: false);
-final _htmlCdataStart = RegExp(
-  r'^ {0,3}<!\[CDATA\[',
-  caseSensitive: false,
-);
+final _htmlCdataStart = RegExp(r'^ {0,3}<!\[CDATA\[', caseSensitive: false);
 final _htmlBlockTagStart = RegExp(
   r'^ {0,3}</?(?:address|article|aside|base|basefont|blockquote|body|'
   r'caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|'
@@ -819,10 +1771,7 @@ final _standaloneHtmlTag = RegExp(
   return null;
 }
 
-bool _isParagraphBoundaryLine(
-  String line, {
-  required bool paragraphOpen,
-}) {
+bool _isParagraphBoundaryLine(String line, {required bool paragraphOpen}) {
   if (!paragraphOpen && _leadingIndentColumns(line) >= 4) return true;
   if (RegExp(r'^ {0,3}#{1,6}(?:[ \t\x0b\x0c]|$)').hasMatch(line) ||
       (!paragraphOpen && _isLinkReferenceDefinitionStart(line)) ||
@@ -881,9 +1830,14 @@ String _stripFenceContainerPrefix(
   }
   return text.split('\n').map((line) {
     final outerQuoteStripped = _stripBlockQuoteDepth(line, quoteDepth);
-    final listStripped = _stripListItemIndent(outerQuoteStripped, listIndent);
-    final innerQuoteStripped =
-        _stripBlockQuoteDepth(listStripped, innerQuoteDepth);
+    final listStripped = _stripListItemIndent(
+      outerQuoteStripped,
+      listIndent,
+    );
+    final innerQuoteStripped = _stripBlockQuoteDepth(
+      listStripped,
+      innerQuoteDepth,
+    );
     return _stripFenceContentIndent(innerQuoteStripped, fenceIndent);
   }).join('\n');
 }
@@ -961,8 +1915,10 @@ String _stripBlockQuoteDepth(String line, int depth) {
       !blankLineInList) {
     return (line: line, matches: false);
   }
-  final innerQuoteStripped =
-      _stripBlockQuoteDepth(listStripped, innerQuoteDepth);
+  final innerQuoteStripped = _stripBlockQuoteDepth(
+    listStripped,
+    innerQuoteDepth,
+  );
   if (innerQuoteDepth > 0 && innerQuoteStripped == listStripped) {
     return (line: line, matches: false);
   }
@@ -1100,10 +2056,7 @@ String _expandLeadingTabs(String line, int column) {
       sourceColumnOffset + consumedIndent,
     );
   }
-  return (
-    line: contentLine,
-    indent: consumedIndent,
-  );
+  return (line: contentLine, indent: consumedIndent);
 }
 
 String _stripListItemIndent(String line, int indent) {
@@ -1195,6 +2148,7 @@ PreConfig codeBlockPreConfig({
   required bool isDark,
   bool isStreaming = false,
   String? streamingText,
+  StreamingFenceInfoCache? streamingFenceInfoCache,
 }) {
   final baseConfig = PreConfig(
     theme: draculaTheme,
@@ -1203,11 +2157,11 @@ PreConfig codeBlockPreConfig({
       borderRadius: BorderRadius.all(Radius.circular(8.0)),
     ),
   );
-  final streamingFenceInfo = isStreaming && streamingText != null
-      ? _unclosedFenceInfo(streamingText)
-      : null;
-  final mermaidFenceCount = streamingFenceInfo?.mermaidFenceCount ?? 0;
+  _MermaidFenceInfo? streamingFenceInfo;
+  var hasStreamingFenceInfo = false;
+  var mermaidFenceCount = 0;
   var nextMermaidFenceIndex = 0;
+  var nextFenceIndex = 0;
   // Use a builder so mermaid and html code blocks get rendered via WebView
   // while all other code blocks still get syntax highlighting.
   return PreConfig(
@@ -1219,6 +2173,13 @@ PreConfig codeBlockPreConfig({
     styleNotMatched: baseConfig.styleNotMatched,
     language: baseConfig.language,
     builder: (code, language) {
+      final fenceIndex = nextFenceIndex++;
+      if (isStreaming && streamingText != null && !hasStreamingFenceInfo) {
+        streamingFenceInfo = streamingFenceInfoCache?._infoFor(streamingText) ??
+            _unclosedFenceInfo(streamingText);
+        mermaidFenceCount = streamingFenceInfo!.mermaidFenceCount;
+        hasStreamingFenceInfo = true;
+      }
       int? mermaidFenceIndex;
       if (language.trim().toLowerCase() == 'mermaid') {
         if (mermaidFenceCount > 0 &&
@@ -1234,6 +2195,7 @@ PreConfig codeBlockPreConfig({
         isStreaming: isStreaming,
         streamingText: streamingText,
         mermaidFenceIndex: mermaidFenceIndex,
+        fenceIndex: fenceIndex,
         fenceInfo: streamingFenceInfo,
       );
     },
@@ -1256,6 +2218,7 @@ PreConfig codeBlockPreConfig({
 /// [MarkdownWidget] build.
 final MarkdownGenerator markdownGenerator = MarkdownGenerator(
   inlineSyntaxList: [LatexSyntax(), BrSyntax(), USyntax()],
+  blockSyntaxList: [DisplayMathBlockSyntax()],
   generators: [latexGenerator, uGenerator],
 );
 
@@ -1359,9 +2322,7 @@ String stripSearchIrrelevantMarkdown(String text) {
 /// The markdown parser's inline code pattern (see `CodeSyntax`): a run of
 /// backticks, non-greedy content ending in a non-backtick, then a
 /// same-length run of backticks.
-final RegExp _codeSpanPattern = RegExp(
-  r'(`+(?!`))((?:.|\n)*?[^`])\1(?!`)',
-);
+final RegExp _codeSpanPattern = RegExp(r'(`+(?!`))((?:.|\n)*?[^`])\1(?!`)');
 
 /// Display math (`$$...$$`) pattern used by the search stripper.
 final RegExp _displayMathPattern = RegExp(r'\$\$[\s\S]*?\$\$');
@@ -1486,6 +2447,7 @@ MarkdownGenerator buildSearchMarkdownGenerator({
   var counter = occurrenceOffset;
   return MarkdownGenerator(
     inlineSyntaxList: [LatexSyntax(), BrSyntax()],
+    blockSyntaxList: [DisplayMathBlockSyntax()],
     generators: [
       latexGenerator,
       // Inline/fenced code must not be counted or highlighted: the library's
@@ -1568,28 +2530,30 @@ MarkdownConfig buildMarkdownConfig({
   required bool isDark,
   bool isStreaming = false,
   String? streamingText,
+  StreamingFenceInfoCache? streamingFenceInfoCache,
 }) {
   final base =
       isDark ? MarkdownConfig.darkConfig : MarkdownConfig.defaultConfig;
-  return base.copy(configs: [
-    codeBlockPreConfig(
-      isDark: isDark,
-      isStreaming: isStreaming,
-      streamingText: streamingText,
-    ),
-    TableConfig(
-      wrapper: _wrapTableWithHorizontalScroll,
-    ),
-    if (isDark) ...[
-      NoDividerH1Config(style: H1Config.darkConfig.style),
-      NoDividerH2Config(style: H2Config.darkConfig.style),
-      NoDividerH3Config(style: H3Config.darkConfig.style),
-    ] else ...[
-      const NoDividerH1Config(),
-      const NoDividerH2Config(),
-      const NoDividerH3Config(),
+  return base.copy(
+    configs: [
+      codeBlockPreConfig(
+        isDark: isDark,
+        isStreaming: isStreaming,
+        streamingText: streamingText,
+        streamingFenceInfoCache: streamingFenceInfoCache,
+      ),
+      TableConfig(wrapper: _wrapTableWithHorizontalScroll),
+      if (isDark) ...[
+        NoDividerH1Config(style: H1Config.darkConfig.style),
+        NoDividerH2Config(style: H2Config.darkConfig.style),
+        NoDividerH3Config(style: H3Config.darkConfig.style),
+      ] else ...[
+        const NoDividerH1Config(),
+        const NoDividerH2Config(),
+        const NoDividerH3Config(),
+      ],
     ],
-  ]);
+  );
 }
 
 /// Builds the [MarkdownConfig] used to render a single chat message.
@@ -1612,6 +2576,7 @@ MarkdownConfig buildMessageMarkdownConfig({
   required String? streamingMsgId,
   required String messageId,
   String? streamingText,
+  StreamingFenceInfoCache? streamingFenceInfoCache,
 }) {
   final isThisMessageStreaming =
       conversationIsStreaming && streamingMsgId == messageId;
@@ -1619,5 +2584,7 @@ MarkdownConfig buildMessageMarkdownConfig({
     isDark: isDark,
     isStreaming: isThisMessageStreaming,
     streamingText: isThisMessageStreaming ? streamingText : null,
+    streamingFenceInfoCache:
+        isThisMessageStreaming ? streamingFenceInfoCache : null,
   );
 }

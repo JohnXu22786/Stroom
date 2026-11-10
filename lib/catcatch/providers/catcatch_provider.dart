@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:path/path.dart' as p;
 import '../../services/storage_service.dart';
+import '../../providers/locale_provider.dart';
 import '../../services/background_service.dart';
 import 'package:uuid/uuid.dart';
 import 'package:dio/dio.dart' show CancelToken;
@@ -13,6 +14,7 @@ import '../models/catcatch_task.dart';
 import 'catcatch_provider_shared.dart';
 import '../models/media_resource.dart';
 import '../engine/task_executor.dart';
+import '../engine/sniffing_engine.dart';
 import '../config/default_rules.dart';
 import '../engine/executor_save.dart';
 import '../../utils/atomic_file.dart';
@@ -122,11 +124,13 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
       {String videoFolder = '',
       String audioFolder = '',
       String? taskId,
+      bool flowManagedSelection = false,
       bool deferSingleResourceSelection = false}) {
     return _addTask(url, expectedDurationSec,
         videoFolder: videoFolder,
         audioFolder: audioFolder,
         taskId: taskId,
+        flowManagedSelection: flowManagedSelection,
         deferSingleResourceSelection: deferSingleResourceSelection);
   }
 
@@ -136,11 +140,13 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
       {String? taskId,
       required String executionId,
       required String blockId,
+      bool flowManagedSelection = false,
       bool deferSingleResourceSelection = false}) {
     return _addTask(url, expectedDurationSec,
         taskId: taskId,
         temporaryExecutionId: executionId,
         temporaryBlockId: blockId,
+        flowManagedSelection: flowManagedSelection,
         deferSingleResourceSelection: deferSingleResourceSelection);
   }
 
@@ -150,6 +156,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
       String? taskId,
       String? temporaryExecutionId,
       String? temporaryBlockId,
+      bool flowManagedSelection = false,
       bool deferSingleResourceSelection = false}) {
     final id = taskId ?? const Uuid().v4();
     final metadata = <String, String>{
@@ -158,6 +165,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
       if (temporaryExecutionId != null)
         flowTemporaryExecutionIdKey: temporaryExecutionId,
       if (temporaryBlockId != null) flowTemporaryBlockIdKey: temporaryBlockId,
+      if (flowManagedSelection) CatCatchTask.flowManagedSelectionKey: 'true',
       if (deferSingleResourceSelection) 'deferSingleResourceSelection': 'true',
     };
     final task = CatCatchTask(
@@ -258,6 +266,39 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
       // 所有步骤都已完成的极端情况，从头执行
       _executeTask(updated);
     }
+  }
+
+  /// Returns resources found in the interactive browser to the same paused
+  /// CatCatch task and continues after the fetch step.
+  void continueAfterBrowserRecovery(
+    String id, {
+    required List<String> mediaUrls,
+    Map<String, String> mimeTypesByUrl = const {},
+    Map<String, String> initiatorsByUrl = const {},
+    String? pageUrl,
+    String? pageTitle,
+    Map<String, String> cookieHeadersByUrl = const {},
+  }) {
+    final index = state.lastIndexWhere((task) => task.id == id);
+    if (index < 0) return;
+    final task = state[index];
+    final resources = recoveredBrowserMediaResources(
+      mediaUrls: mediaUrls,
+      fallbackInitiator: pageUrl ?? task.url,
+      initiatorsByUrl: initiatorsByUrl,
+      mimeTypesByUrl: mimeTypesByUrl,
+    );
+    final updated = task.resumeAfterBrowserRecovery(
+      recoveredMedia: resources,
+      pageTitle: pageTitle,
+      cookieHeadersByUrl: cookieHeadersByUrl,
+    );
+    if (updated == null) return;
+    state = [
+      for (var i = 0; i < state.length; i++)
+        if (i == index) updated else state[i],
+    ];
+    _executeTaskFrom(updated, StepType.parsingPlaylist);
   }
 
   /// 重试失败的任务（从头开始）
@@ -508,9 +549,9 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
     final fileName = buildDownloadFileName(media, task.metadata);
     final downloadDir = p.join(appDir, 'catcatch', 'downloads');
     final convertDir = p.join(appDir, 'catcatch', 'converted');
-    final mergedName = '${p.basenameWithoutExtension(fileName)}_merged.ts';
+    final mergedBaseName = '${p.basenameWithoutExtension(fileName)}_merged';
     final convertBase = media.isPlaylist
-        ? p.basenameWithoutExtension(mergedName)
+        ? mergedBaseName
         : p.basenameWithoutExtension(fileName);
     // The downloader writes the non-dot temp file while the executor checks
     // the dot-prefixed variant when resuming.
@@ -519,9 +560,11 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
       File(p.join(downloadDir, '$fileName$tempSuffix')),
       File(p.join(downloadDir, '.$fileName$tempSuffix')),
       File(p.join(downloadDir, fileName)),
-      File(p.join(downloadDir, mergedName)),
-      Directory(p.join(downloadDir, '.${mergedName}_parts')),
-      // Playlists convert the merged TS, so their output uses its basename.
+      for (final extension in ['ts', 'mp4']) ...[
+        File(p.join(downloadDir, '$mergedBaseName.$extension')),
+        Directory(p.join(downloadDir, '.$mergedBaseName.${extension}_parts')),
+      ],
+      // Playlist conversions use the merged file basename for the output.
       File(p.join(convertDir, '$convertBase.mp4')),
     ];
   }
@@ -594,6 +637,24 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
       {String? mergeAudioUrl}) {
     final index = state.lastIndexWhere((t) => t.id == taskId);
     if (index < 0) return;
+    final encodedCandidates =
+        state[index].metadata[CatCatchTask.flowSelectionCandidatesKey];
+    if (encodedCandidates != null) {
+      final candidates =
+          (jsonDecode(encodedCandidates) as List).cast<String>().toSet();
+      final identityVersioned = state[index].metadata.containsKey(
+            CatCatchTask.flowSelectionCandidatesIdentityVersionKey,
+          );
+      if (!CatCatchTask.flowSelectionCandidateAllowed(
+        candidates: candidates,
+        identity: media.selectionIdentity,
+        url: media.url,
+        hasByteRange: media.hasByteRange,
+        identityVersioned: identityVersioned,
+      )) {
+        return;
+      }
+    }
 
     // 标记 userSelecting 步骤为已完成
     final steps = state[index].steps.map((s) {
@@ -605,6 +666,8 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
 
     // 如果传入了合并音频 URL，存入任务元数据
     Map<String, String> metadata = Map.from(state[index].metadata);
+    metadata.remove(CatCatchTask.flowSelectionCandidatesKey);
+    metadata.remove(CatCatchTask.flowSelectionCandidatesIdentityVersionKey);
     if (mergeAudioUrl != null && mergeAudioUrl.isNotEmpty) {
       metadata['mergeAudioUrl'] = mergeAudioUrl;
       metadata['mergeMode'] = 'audio_video';
@@ -626,6 +689,27 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
 
     // 从 downloading 步骤继续
     _executeTaskFrom(task, StepType.downloading);
+  }
+
+  /// Narrows the task-flow ambiguity picker without changing CatCatch's
+  /// detected resource list. The allow-list rejects stale UI selections.
+  void setFlowSelectionCandidates(
+      String taskId, List<MediaResource> candidates) {
+    final index = state.lastIndexWhere((task) => task.id == taskId);
+    if (index < 0) return;
+    final task = state[index];
+    final metadata = Map<String, String>.from(task.metadata)
+      ..[CatCatchTask.flowManagedSelectionKey] = 'true'
+      ..[CatCatchTask.flowSelectionCandidatesIdentityVersionKey] =
+          CatCatchTask.flowSelectionCandidatesIdentityVersion
+      ..[CatCatchTask.flowSelectionCandidatesKey] = jsonEncode(
+          candidates.map((media) => media.selectionIdentity).toList());
+    final updated = task.copyWith(metadata: metadata);
+    state = [
+      for (int i = 0; i < state.length; i++)
+        if (i == index) updated else state[i],
+    ];
+    unawaited(_persistTasks());
   }
 
   /// 批量选择多个媒体资源进行下载
@@ -858,6 +942,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
         task: task,
         onUpdate: onUpdate,
         cancelToken: cancelToken,
+        locale: ref.read(localeProvider),
       );
 
   @visibleForTesting
@@ -872,6 +957,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
         fromStep: fromStep,
         onUpdate: onUpdate,
         cancelToken: cancelToken,
+        locale: ref.read(localeProvider),
       );
 
   void _markTaskFailedAfterBackgroundServiceStartup(String taskId) {
@@ -1230,4 +1316,48 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
     }
     return File(p.join(catcatchDir.path, 'tasks.json'));
   }
+}
+
+List<MediaResource> recoveredBrowserMediaResources({
+  required List<String> mediaUrls,
+  required String fallbackInitiator,
+  Map<String, String> initiatorsByUrl = const {},
+  Map<String, String> mimeTypesByUrl = const {},
+}) {
+  final resources = <MediaResource>[];
+  final seen = <String>{};
+  for (final url in mediaUrls) {
+    if (!url.startsWith('http') || !seen.add(url)) continue;
+    resources.add(recoveredBrowserMediaResource(
+      url: url,
+      initiator: initiatorsByUrl[url] ?? fallbackInitiator,
+      mimeType: mimeTypesByUrl[url],
+    ));
+  }
+  return resources;
+}
+
+MediaResource recoveredBrowserMediaResource({
+  required String url,
+  required String initiator,
+  String? mimeType,
+}) {
+  final (name, ext) = SniffingEngine.parseFileName(url);
+  final normalizedMimeType = mimeType?.split(';').first.trim().toLowerCase();
+  final isPlaylist = ['m3u8', 'm3u', 'mpd'].contains(ext) ||
+      normalizedMimeType == 'application/vnd.apple.mpegurl' ||
+      normalizedMimeType == 'application/x-mpegurl' ||
+      normalizedMimeType == 'application/dash+xml';
+  final isPlayableByMime = normalizedMimeType?.startsWith('audio/') == true ||
+      normalizedMimeType?.startsWith('video/') == true;
+  return MediaResource(
+    url: url,
+    name: name,
+    ext: ext,
+    mimeType: mimeType,
+    initiator: initiator,
+    isPlayable: !isPlaylist &&
+        (isPlayableByMime || (ext.isNotEmpty && !['ts', 'ev1'].contains(ext))),
+    isPlaylist: isPlaylist,
+  );
 }

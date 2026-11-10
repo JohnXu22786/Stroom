@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:stroom/pages/chat/dialogs/error_detail_dialog.dart';
 
 void main() {
@@ -8,6 +10,14 @@ void main() {
         (tester) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () => showDataDetailDialog(
@@ -25,13 +35,64 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('数据详情'), findsOneWidget);
-      expect(find.text('No detail data available'), findsOneWidget);
+      expect(find.text('暂无详细信息'), findsOneWidget);
+    });
+
+    testWidgets('section labels are localized', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showDataDetailDialog(
+                context: context,
+                rawRequest: {
+                  'url': 'https://example.com',
+                  'headers': {'Accept': 'application/json'},
+                  'body': {'query': 'hello'},
+                },
+                rawResponse: {
+                  'statusCode': 200,
+                  'headers': {'Content-Type': 'application/json'},
+                  'data': {'ok': true},
+                },
+              ),
+              child: const Text('Show'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Show'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('请求 URL'), findsOneWidget);
+      expect(find.text('请求标头'), findsOneWidget);
+      expect(find.text('请求正文'), findsOneWidget);
+      expect(find.text('状态码'), findsOneWidget);
+      expect(find.text('响应标头'), findsOneWidget);
+      expect(find.text('响应正文'), findsOneWidget);
     });
 
     testWidgets('OCR diagnostics show safe summary fields only',
         (tester) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () => showDataDetailDialog(
@@ -65,9 +126,9 @@ void main() {
       await tester.tap(find.text('Show'));
       await tester.pumpAndSettle();
 
-      expect(find.text('OCR Diagnostics'), findsOneWidget);
-      expect(find.text('Request Body'), findsNothing);
-      await tester.tap(find.text('OCR Diagnostics'));
+      expect(find.text('OCR 诊断'), findsOneWidget);
+      expect(find.text('请求正文'), findsNothing);
+      await tester.tap(find.text('OCR 诊断'));
       await tester.pumpAndSettle();
 
       final displayed =
@@ -87,6 +148,14 @@ void main() {
       const credential = 'opaque-user-secret-173';
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () => showDataDetailDialog(
@@ -109,7 +178,7 @@ void main() {
 
       await tester.tap(find.text('Show'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('OCR Diagnostics'));
+      await tester.tap(find.text('OCR 诊断'));
       await tester.pumpAndSettle();
 
       final displayed =
@@ -124,6 +193,14 @@ void main() {
       const credential = 'opaque-secret-key-191';
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () => showDataDetailDialog(
@@ -145,7 +222,7 @@ void main() {
 
       await tester.tap(find.text('Show'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('OCR Diagnostics'));
+      await tester.tap(find.text('OCR 诊断'));
       await tester.pumpAndSettle();
 
       final displayed =
@@ -154,11 +231,63 @@ void main() {
       expect(displayed.data, contains('401'));
     });
 
+    testWidgets(
+        'OCR diagnostics exclude URL credentials with a malformed query component',
+        (tester) async {
+      const credential = 'opaque-secret';
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showDataDetailDialog(
+                context: context,
+                rawRequest: {
+                  'url': 'https://ocr.test/v1?api_key=$credential&other=%FF',
+                },
+                rawResponse: {
+                  'statusCode': 502,
+                  'requestId': credential,
+                },
+                isOcrDiagnostics: true,
+              ),
+              child: const Text('Show'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Show'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('OCR 诊断'));
+      await tester.pumpAndSettle();
+
+      final displayed =
+          tester.widget<SelectableText>(find.byType(SelectableText));
+      expect(displayed.data, contains('502'));
+      expect(displayed.data, isNot(contains(credential)));
+    });
+
     testWidgets('OCR diagnostics redact legacy masked Authorization keys',
         (tester) async {
       const credential = 'opaque-user-secret-174';
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () => showDataDetailDialog(
@@ -181,7 +310,7 @@ void main() {
 
       await tester.tap(find.text('Show'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('OCR Diagnostics'));
+      await tester.tap(find.text('OCR 诊断'));
       await tester.pumpAndSettle();
 
       final displayed =
@@ -196,6 +325,14 @@ void main() {
       const credential = 'abcd123456789';
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () => showDataDetailDialog(
@@ -217,7 +354,7 @@ void main() {
 
       await tester.tap(find.text('Show'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('OCR Diagnostics'));
+      await tester.tap(find.text('OCR 诊断'));
       await tester.pumpAndSettle();
 
       final displayed =
@@ -232,6 +369,14 @@ void main() {
       const safeRequestId = 'req-safe-after-tiny-mask';
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () => showDataDetailDialog(
@@ -254,7 +399,7 @@ void main() {
 
       await tester.tap(find.text('Show'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('OCR Diagnostics'));
+      await tester.tap(find.text('OCR 诊断'));
       await tester.pumpAndSettle();
 
       final displayed =
@@ -269,6 +414,14 @@ void main() {
       const credential = 'opaque-user-secret-192';
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () => showDataDetailDialog(
@@ -290,7 +443,7 @@ void main() {
 
       await tester.tap(find.text('Show'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('OCR Diagnostics'));
+      await tester.tap(find.text('OCR 诊断'));
       await tester.pumpAndSettle();
 
       final displayed =
@@ -303,6 +456,14 @@ void main() {
         (tester) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () => showDataDetailDialog(
@@ -333,12 +494,12 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('数据详情'), findsOneWidget);
-      expect(find.text('Request URL'), findsOneWidget);
-      expect(find.text('Request Headers'), findsOneWidget);
-      expect(find.text('Request Body'), findsOneWidget);
-      expect(find.text('Status Code'), findsOneWidget);
-      expect(find.text('Response Headers'), findsOneWidget);
-      expect(find.text('Response Body'), findsOneWidget);
+      expect(find.text('请求 URL'), findsOneWidget);
+      expect(find.text('请求标头'), findsOneWidget);
+      expect(find.text('请求正文'), findsOneWidget);
+      expect(find.text('状态码'), findsOneWidget);
+      expect(find.text('响应标头'), findsOneWidget);
+      expect(find.text('响应正文'), findsOneWidget);
     });
 
     testWidgets('tapping Request URL shows detail and back button works', (
@@ -346,6 +507,14 @@ void main() {
     ) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () => showDataDetailDialog(
@@ -365,19 +534,19 @@ void main() {
       await tester.tap(find.text('Show'));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Request URL'));
+      await tester.tap(find.text('请求 URL'));
       await tester.pumpAndSettle();
 
       expect(find.text('https://api.example.com/chat'), findsOneWidget);
-      expect(find.text('Request URL'), findsAtLeastNWidgets(1));
+      expect(find.text('请求 URL'), findsAtLeastNWidgets(1));
 
       expect(find.byIcon(Icons.arrow_back), findsOneWidget);
 
       await tester.tap(find.byIcon(Icons.arrow_back));
       await tester.pumpAndSettle();
 
-      expect(find.text('Request URL'), findsOneWidget);
-      expect(find.text('Status Code'), findsOneWidget);
+      expect(find.text('请求 URL'), findsOneWidget);
+      expect(find.text('状态码'), findsOneWidget);
     });
 
     testWidgets('tapping Response Headers shows headers as JSON', (
@@ -385,6 +554,14 @@ void main() {
     ) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () => showDataDetailDialog(
@@ -408,10 +585,10 @@ void main() {
       await tester.tap(find.text('Show'));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Response Headers'));
+      await tester.tap(find.text('响应标头'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Response Headers'), findsAtLeastNWidgets(1));
+      expect(find.text('响应标头'), findsAtLeastNWidgets(1));
       expect(find.textContaining('content-type'), findsOneWidget);
       expect(find.textContaining('x-request-id'), findsOneWidget);
     });
@@ -419,6 +596,14 @@ void main() {
     testWidgets('tapping Response Body shows data as JSON', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () => showDataDetailDialog(
@@ -445,10 +630,10 @@ void main() {
       await tester.tap(find.text('Show'));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Response Body'));
+      await tester.tap(find.text('响应正文'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Response Body'), findsAtLeastNWidgets(1));
+      expect(find.text('响应正文'), findsAtLeastNWidgets(1));
       expect(find.textContaining('choices'), findsOneWidget);
       expect(find.textContaining('Hello'), findsOneWidget);
     });
@@ -458,6 +643,14 @@ void main() {
     ) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () => showDataDetailDialog(
@@ -480,7 +673,7 @@ void main() {
       await tester.tap(find.text('Show'));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Request Headers'));
+      await tester.tap(find.text('请求标头'));
       await tester.pumpAndSettle();
 
       expect(find.textContaining('Authorization'), findsOneWidget);
@@ -490,6 +683,14 @@ void main() {
     testWidgets('Response Body shows when data is a Map', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () => showDataDetailDialog(
@@ -514,9 +715,9 @@ void main() {
       await tester.tap(find.text('Show'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Response Body'), findsOneWidget);
+      expect(find.text('响应正文'), findsOneWidget);
 
-      await tester.tap(find.text('Response Body'));
+      await tester.tap(find.text('响应正文'));
       await tester.pumpAndSettle();
 
       expect(find.textContaining('Bad Request'), findsOneWidget);
@@ -527,6 +728,14 @@ void main() {
     ) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () => showDataDetailDialog(
@@ -549,9 +758,9 @@ void main() {
       await tester.tap(find.text('Show'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Response Body'), findsOneWidget);
+      expect(find.text('响应正文'), findsOneWidget);
 
-      await tester.tap(find.text('Response Body'));
+      await tester.tap(find.text('响应正文'));
       await tester.pumpAndSettle();
 
       expect(find.textContaining('bad request'), findsOneWidget);
@@ -562,6 +771,14 @@ void main() {
         (tester) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () => showDataDetailDialog(
@@ -586,7 +803,7 @@ void main() {
       await tester.tap(find.text('Show'));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Response Body'));
+      await tester.tap(find.text('响应正文'));
       await tester.pumpAndSettle();
 
       // The raw JSON string body is parsed and pretty-printed:
@@ -601,6 +818,14 @@ void main() {
       final longValue = '错' * 500;
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () => showDataDetailDialog(
@@ -625,7 +850,7 @@ void main() {
       await tester.tap(find.text('Show'));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Response Body'));
+      await tester.tap(find.text('响应正文'));
       await tester.pumpAndSettle();
 
       // Full content is present, no "..." truncation suffix.
@@ -636,6 +861,14 @@ void main() {
     testWidgets('Response Body hidden when data key is absent', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () => showDataDetailDialog(
@@ -657,9 +890,9 @@ void main() {
       await tester.tap(find.text('Show'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Response Body'), findsNothing);
-      expect(find.text('Response Headers'), findsOneWidget);
-      expect(find.text('Status Code'), findsOneWidget);
+      expect(find.text('响应正文'), findsNothing);
+      expect(find.text('响应标头'), findsOneWidget);
+      expect(find.text('状态码'), findsOneWidget);
     });
 
     testWidgets('network error shows Response Body from error field', (
@@ -667,6 +900,14 @@ void main() {
     ) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () => showDataDetailDialog(
@@ -686,10 +927,10 @@ void main() {
       await tester.pumpAndSettle();
 
       // Network error should show as Response Body (not as Error section)
-      expect(find.text('Response Body'), findsOneWidget);
+      expect(find.text('响应正文'), findsOneWidget);
       // Status Code, Response Headers should NOT be visible (no HTTP response data)
-      expect(find.text('Status Code'), findsNothing);
-      expect(find.text('Response Headers'), findsNothing);
+      expect(find.text('状态码'), findsNothing);
+      expect(find.text('响应标头'), findsNothing);
     });
 
     testWidgets('network error detail shows error string via Response Body', (
@@ -697,6 +938,14 @@ void main() {
     ) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () => showDataDetailDialog(
@@ -715,7 +964,7 @@ void main() {
       await tester.tap(find.text('Show'));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Response Body'));
+      await tester.tap(find.text('响应正文'));
       await tester.pumpAndSettle();
 
       expect(find.textContaining('DioException'), findsOneWidget);
@@ -727,6 +976,14 @@ void main() {
       (tester) async {
         await tester.pumpWidget(
           MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
             home: Builder(
               builder: (context) => ElevatedButton(
                 onPressed: () => showDataDetailDialog(
@@ -743,18 +1000,26 @@ void main() {
         await tester.tap(find.text('Show'));
         await tester.pumpAndSettle();
 
-        expect(find.text('Request URL'), findsOneWidget);
-        expect(find.text('Status Code'), findsOneWidget);
-        expect(find.text('Request Headers'), findsNothing);
-        expect(find.text('Request Body'), findsNothing);
-        expect(find.text('Response Headers'), findsNothing);
-        expect(find.text('Response Body'), findsNothing);
+        expect(find.text('请求 URL'), findsOneWidget);
+        expect(find.text('状态码'), findsOneWidget);
+        expect(find.text('请求标头'), findsNothing);
+        expect(find.text('请求正文'), findsNothing);
+        expect(find.text('响应标头'), findsNothing);
+        expect(find.text('响应正文'), findsNothing);
       },
     );
 
     testWidgets('Status Code detail shows the numeric code', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () => showDataDetailDialog(
@@ -771,7 +1036,7 @@ void main() {
       await tester.tap(find.text('Show'));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Status Code'));
+      await tester.tap(find.text('状态码'));
       await tester.pumpAndSettle();
 
       expect(find.text('429'), findsOneWidget);
@@ -780,6 +1045,14 @@ void main() {
     testWidgets('Request Body detail shows formatted JSON', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () => showDataDetailDialog(
@@ -799,7 +1072,7 @@ void main() {
       await tester.tap(find.text('Show'));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Request Body'));
+      await tester.tap(find.text('请求正文'));
       await tester.pumpAndSettle();
 
       expect(find.textContaining('gpt-4'), findsOneWidget);
@@ -809,6 +1082,14 @@ void main() {
     testWidgets('multiple back/forth navigation works', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () => showDataDetailDialog(
@@ -831,21 +1112,21 @@ void main() {
       await tester.tap(find.text('Show'));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Request URL'));
+      await tester.tap(find.text('请求 URL'));
       await tester.pumpAndSettle();
       expect(find.text('https://api.example.com'), findsOneWidget);
 
       await tester.tap(find.byIcon(Icons.arrow_back));
       await tester.pumpAndSettle();
-      expect(find.text('Request Headers'), findsOneWidget);
+      expect(find.text('请求标头'), findsOneWidget);
 
-      await tester.tap(find.text('Status Code'));
+      await tester.tap(find.text('状态码'));
       await tester.pumpAndSettle();
       expect(find.text('401'), findsOneWidget);
 
       await tester.tap(find.byIcon(Icons.arrow_back));
       await tester.pumpAndSettle();
-      expect(find.text('Request URL'), findsOneWidget);
+      expect(find.text('请求 URL'), findsOneWidget);
     });
 
     // ── UNIFIED PANEL TESTS ──
@@ -855,6 +1136,14 @@ void main() {
     ) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () => showDataDetailDialog(
@@ -880,6 +1169,14 @@ void main() {
     ) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () => showDataDetailDialog(
@@ -906,6 +1203,14 @@ void main() {
     testWidgets('no 消息内容 section anywhere', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () => showDataDetailDialog(
@@ -930,6 +1235,14 @@ void main() {
     ) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () => showDataDetailDialog(
@@ -952,8 +1265,8 @@ void main() {
       await tester.pumpAndSettle();
 
       // Should show Response Body from 'data' key, not 'error' key
-      expect(find.text('Response Body'), findsOneWidget);
-      expect(find.text('Status Code'), findsOneWidget);
+      expect(find.text('响应正文'), findsOneWidget);
+      expect(find.text('状态码'), findsOneWidget);
     });
 
     testWidgets(
@@ -961,6 +1274,14 @@ void main() {
       (tester) async {
         await tester.pumpWidget(
           MaterialApp(
+            locale: const Locale('zh', 'CN'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
             home: Builder(
               builder: (context) => ElevatedButton(
                 onPressed: () => showDataDetailDialog(
@@ -979,9 +1300,9 @@ void main() {
         await tester.tap(find.text('Show'));
         await tester.pumpAndSettle();
 
-        expect(find.text('Response Body'), findsOneWidget);
+        expect(find.text('响应正文'), findsOneWidget);
 
-        await tester.tap(find.text('Response Body'));
+        await tester.tap(find.text('响应正文'));
         await tester.pumpAndSettle();
 
         expect(find.textContaining('DioException'), findsOneWidget);
@@ -994,6 +1315,14 @@ void main() {
     Future<void> openDialog(WidgetTester tester) async {
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () => showDataDetailDialog(
@@ -1028,7 +1357,7 @@ void main() {
         await openDialog(tester);
 
         // Enter level 2 (detail view).
-        await tester.tap(find.text('Request URL'));
+        await tester.tap(find.text('请求 URL'));
         await tester.pumpAndSettle();
         expect(find.text('https://api.example.com/chat'), findsOneWidget);
 
@@ -1038,8 +1367,8 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.text('数据详情'), findsOneWidget);
-        expect(find.text('Request URL'), findsOneWidget);
-        expect(find.text('Status Code'), findsOneWidget);
+        expect(find.text('请求 URL'), findsOneWidget);
+        expect(find.text('状态码'), findsOneWidget);
       },
     );
 
@@ -1062,7 +1391,7 @@ void main() {
       (tester) async {
         await openDialog(tester);
 
-        await tester.tap(find.text('Request URL'));
+        await tester.tap(find.text('请求 URL'));
         await tester.pumpAndSettle();
         expect(find.text('https://api.example.com/chat'), findsOneWidget);
 
@@ -1070,7 +1399,7 @@ void main() {
         await tester.binding.handlePopRoute();
         await tester.pumpAndSettle();
         expect(find.text('数据详情'), findsOneWidget);
-        expect(find.text('Status Code'), findsOneWidget);
+        expect(find.text('状态码'), findsOneWidget);
 
         // Second back: level 1 → close (same as X button).
         await tester.binding.handlePopRoute();
@@ -1086,7 +1415,7 @@ void main() {
         await openDialog(tester);
 
         // Enter level 2 (detail view).
-        await tester.tap(find.text('Request URL'));
+        await tester.tap(find.text('请求 URL'));
         await tester.pumpAndSettle();
         expect(find.text('https://api.example.com/chat'), findsOneWidget);
 
@@ -1096,8 +1425,8 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.text('数据详情'), findsOneWidget);
-        expect(find.text('Request URL'), findsOneWidget);
-        expect(find.text('Status Code'), findsOneWidget);
+        expect(find.text('请求 URL'), findsOneWidget);
+        expect(find.text('状态码'), findsOneWidget);
       },
     );
   });

@@ -265,6 +265,28 @@ void main() {
       );
     });
 
+    test('does not duplicate an add already present in the stored list',
+        () async {
+      final added = OcrInstruction(name: '已保存', content: '同一条指令');
+      SharedPreferences.setMockInitialValues({
+        'ocr_instructions': jsonEncode([added.toMap()]),
+      });
+      // Resolve the preferences singleton first. Provider creation starts its
+      // load synchronously; adding immediately then runs before that load's
+      // first await resumes, reproducing the actual startup race.
+      await SharedPreferences.getInstance();
+
+      final container = _containerWithEntries([]);
+      addTearDown(container.dispose);
+      final notifier = container.read(ocrInstructionsProvider.notifier);
+      await notifier.add(added.name, added.content);
+      await notifier.load();
+
+      expect(container.read(ocrInstructionsProvider), [added]);
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('ocr_instructions'), jsonEncode([added.toMap()]));
+    });
+
     test('seeds from legacy per-model instructions when store is empty',
         () async {
       final container = _containerWithEntries([

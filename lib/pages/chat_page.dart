@@ -5,6 +5,9 @@ import 'dart:io';
 import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, setEquals, visibleForTesting;
 import 'package:flutter/material.dart';
+
+import '../l10n/app_localizations.dart';
+
 import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
@@ -29,7 +32,7 @@ import '../utils/text_manifest.dart';
 
 import '../models/chat_event.dart';
 import '../models/chat_message.dart';
-import '../models/message_block.dart' show ErrorBlock;
+import '../models/message_block.dart' show ErrorBlock, ToolCallBlock;
 import '../models/tool_call.dart' show ToolCallData;
 import '../models/assistant.dart' show Assistant;
 import '../services/app_log_service.dart';
@@ -37,7 +40,8 @@ import '../services/chat_adapter.dart';
 import '../providers/conversation_provider.dart';
 import '../providers/chat_stream_provider.dart';
 import '../providers/chat_manager_provider.dart';
-import '../services/chat_stream_manager.dart' show StreamResult;
+import '../services/chat_stream_manager.dart'
+    show ChatStreamManager, StreamResult;
 import '../providers/provider_config.dart';
 import '../providers/assistant_provider.dart'
     show
@@ -54,6 +58,7 @@ import 'files_page_shared.dart' show filesRefreshSignalProvider;
 import 'chat/dialogs/message_save_destination_dialog.dart'
     show MessageSaveDestination, showMessageSaveDestinationDialog;
 import 'message_search_page.dart';
+import 'assistant_selection_page.dart' show ChatTabVisibility;
 import 'provider_config_page.dart';
 
 import 'chat/chat_types.dart';
@@ -193,6 +198,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// - true + streaming = "推理过程" (reasoning done, text being streamed)
   final Map<String, bool> _isReasoningCompletedForMsg = {};
 
+  /// Message IDs whose streaming placeholder has already been converted to a
+  /// normal text message by the live text-section listener.
+  final Set<String> _convertedStreamingPlaceholderIds = {};
+
   /// 是否展开"上下文已压缩"banner 的摘要预览。
   bool _showCompactionSummary = false;
 
@@ -204,7 +213,26 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
   final Map<String, List<MessageSegment>> _chatSegments = {};
 
+  /// Widget trees for sealed streaming text sections. Reusing the exact
+  /// widget instance lets unchanged Markdown sections keep their parsed tree
+  /// while the final section continues to grow.
+  final Map<String, _CachedStreamingMarkdown> _streamingMarkdownCache = {};
+  final Map<String, StreamingFenceInfoCache> _streamingFenceInfoCaches = {};
+  final Map<String, _StreamingSearchOccurrenceCount>
+      _streamingSearchOccurrenceCache = {};
+  final Map<String, _LiveMarkdownSearchPreview> _liveMarkdownSearchPreviews =
+      {};
+  final Map<String, int> _liveMarkdownAppendCounts = {};
+  final Map<String, List<String>> _livePlainTextFragments = {};
+  final Map<String, String> _legacyFullReplySnapshots = {};
+  final Map<String, int> _legacyFullReplySequences = {};
+  final Map<String, int> _legacyFullReplyGenerations = {};
+
   String? _streamingMsgId;
+  final Object _streamPageOwner = Object();
+  ChatStreamManager? _attachedStreamManager;
+  String? _attachedStreamConvId;
+  String? _attachedStreamMsgId;
 
   /// 防止快速连点保存按钮时弹出多个保存面板。
   bool _isSavingMarkdown = false;
@@ -240,6 +268,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// load. While true, the message list is hidden (offstage) so the
   /// positioning pass is never visible to the user.
   bool _pendingInitialScrollAdjustment = false;
+
+  /// Keeps the first chat entry visibly loading until history has been
+  /// restored and its initial positioning pass is ready to reveal the list.
+  bool _isInitialChatLoadPending = true;
 
   /// ID of the conversation whose messages are currently shown in
   /// [_history]. Used to distinguish entry/conversation switches (which
@@ -302,9 +334,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
   SearchMode _searchMode = SearchMode.current;
   String _searchQuery = '';
   final List<SearchMatch> _searchMatches = [];
+  final Map<String, int> _searchMatchFirstIndexByMessageId = {};
   int _currentMatchIndex = 0;
   final TextEditingController _searchTextController = TextEditingController();
   final Map<String, GlobalKey> _messageKeys = {};
+  final ValueNotifier<int> _streamingBubbleRevision = ValueNotifier(0);
 
   /// In-flight search navigation (may be loading older paginated messages).
   /// Serializes rapid up/down taps so a newer tap waits for the previous
@@ -426,6 +460,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
     _chatScrollController.removeListener(_onChatScroll);
     _chatScrollController.dispose();
     _overlayMetricsTick.dispose();
+    _streamingBubbleRevision.dispose();
+    _detachStreamPage(clearIfCompleted: true);
     super.dispose();
   }
 
@@ -490,8 +526,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
     final activeId = ref.watch(activeConversationIdProvider);
     final streamingConvs = ref.watch(streamingConversationsProvider);
     final isStreaming = activeId != null && streamingConvs.contains(activeId);
-    final streamingFullReply =
-        activeId != null ? ref.watch(streamingFullReplyProvider(activeId)) : '';
     final streamingMsgId =
         activeId != null ? ref.watch(streamingMsgIdProvider(activeId)) : null;
 
@@ -526,7 +560,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
     // Get conversation title
     final conversations = ref.watch(conversationsProvider);
-    String title = '新对话';
+    String title = AppLocalizations.of(context)!.conversationNew;
     String currentDraftText = '';
     List<Attachment> currentDraftAttachments = const [];
     Conversation? currentConversation;
@@ -561,58 +595,72 @@ class _ChatPageState extends ConsumerState<ChatPage>
               Expanded(
                 child: controller == null
                     ? const SizedBox.shrink()
-                    : Visibility(
-                        // While the initial positioning pass runs the list is
-                        // kept mounted and laid out (message positions are
-                        // measured from render boxes) but hidden, so the
-                        // pass itself is never visible to the user.
-                        visible: !_pendingInitialScrollAdjustment,
-                        maintainState: true,
-                        // The message list is part of the composer's tap
-                        // region group ([chatComposerTapRegionGroupId]): with
-                        // the app-wide tap-outside blur, touching the list to
-                        // scroll while composing must NOT unfocus the
-                        // composer — the keyboard stays up while the user
-                        // reads/scrolls (dismissed via the keyboard's own
-                        // close key or the page's keyboard-dismiss button).
-                        child: TextFieldTapRegion(
-                          groupId: chatComposerTapRegionGroupId,
-                          child: Stack(
-                            children: [
-                              _buildChatWidget(
-                                isDark: isDark,
-                                isStreaming: isStreaming,
-                                streamingFullReply: streamingFullReply,
-                                streamingMsgId: streamingMsgId,
-                                activeId: activeId,
-                                controller: controller,
+                    : Stack(
+                        children: [
+                          Visibility(
+                            // While the initial positioning pass runs the list is
+                            // kept mounted and laid out (message positions are
+                            // measured from render boxes) but hidden, so the
+                            // pass itself is never visible to the user.
+                            visible: !_pendingInitialScrollAdjustment,
+                            maintainState: true,
+                            // The message list is part of the composer's tap
+                            // region group ([chatComposerTapRegionGroupId]): with
+                            // the app-wide tap-outside blur, touching the list to
+                            // scroll while composing must NOT unfocus the
+                            // composer — the keyboard stays up while the user
+                            // reads/scrolls (dismissed via the keyboard's own
+                            // close key or the page's keyboard-dismiss button).
+                            child: TextFieldTapRegion(
+                              groupId: chatComposerTapRegionGroupId,
+                              child: Stack(
+                                children: [
+                                  _buildChatWidget(
+                                    isDark: isDark,
+                                    isStreaming: isStreaming,
+                                    streamingMsgId: streamingMsgId,
+                                    activeId: activeId,
+                                    controller: controller,
+                                  ),
+                                  // ── Overlay buttons (scroll-to-bottom +
+                                  // keyboard-dismiss) ──
+                                  // A self-contained widget: it owns BOTH
+                                  // buttons' visibility state (keyboard state
+                                  // via its own WidgetsBindingObserver reading
+                                  // the view insets; scroll-button state
+                                  // recomputed from the current list metrics).
+                                  // Keyboard transitions and at-bottom flips
+                                  // therefore rebuild ONLY this small overlay
+                                  // — never the message list (whose markdown
+                                  // messages re-parse on every rebuild, which
+                                  // dropped frames during the keyboard
+                                  // animation).
+                                  Positioned.fill(
+                                    child: ChatOverlayButtons(
+                                      scrollController: _chatScrollController,
+                                      metricsTick: _overlayMetricsTick,
+                                      isDark: isDark,
+                                      onScrollToBottomTap: _onScrollToBottomTap,
+                                      onKeyboardDismissTap: () =>
+                                          FocusScope.of(context).unfocus(),
+                                    ),
+                                  ),
+                                ],
                               ),
-                              // ── Overlay buttons (scroll-to-bottom +
-                              // keyboard-dismiss) ──
-                              // A self-contained widget: it owns BOTH
-                              // buttons' visibility state (keyboard state
-                              // via its own WidgetsBindingObserver reading
-                              // the view insets; scroll-button state
-                              // recomputed from the current list metrics).
-                              // Keyboard transitions and at-bottom flips
-                              // therefore rebuild ONLY this small overlay
-                              // — never the message list (whose markdown
-                              // messages re-parse on every rebuild, which
-                              // dropped frames during the keyboard
-                              // animation).
-                              Positioned.fill(
-                                child: ChatOverlayButtons(
-                                  scrollController: _chatScrollController,
-                                  metricsTick: _overlayMetricsTick,
-                                  isDark: isDark,
-                                  onScrollToBottomTap: _onScrollToBottomTap,
-                                  onKeyboardDismissTap: () =>
-                                      FocusScope.of(context).unfocus(),
+                            ),
+                          ),
+                          if (_isInitialChatLoadPending ||
+                              _pendingInitialScrollAdjustment)
+                            Positioned.fill(
+                              child: TickerMode(
+                                enabled: TickerMode.of(context) &&
+                                    ChatTabVisibility.of(context),
+                                child: const Center(
+                                  child: CircularProgressIndicator(),
                                 ),
                               ),
-                            ],
-                          ),
-                        ),
+                            ),
+                        ],
                       ),
               ),
               // ── Chat composer (below chat, in Column flow) ──

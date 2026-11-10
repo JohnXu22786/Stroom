@@ -373,6 +373,12 @@ class TextManifest {
   /// file reference counts after rechecking authoritative rows.
   static Future<List<TextRecord>> loadRecords() =>
       _withRecordMutationLock(() => _ops.loadRecords());
+
+  /// Loads records while preserving read failures for callers that display them.
+  static Future<List<TextRecord>> loadRecordsStrict() =>
+      _withRecordMutationLock(
+        () => _ops.loadRecords(forceRefresh: true, throwOnError: true),
+      );
   static Future<List<TextRecord>> loadRecordsUncached() =>
       _ops.loadRecordsUncached();
   static Future<void> addRecord(
@@ -459,6 +465,20 @@ class TextManifest {
       _withRecordMutationLock(() => _ops.renameRecord(id, newName));
   static Future<void> moveRecord(String id, String targetFolder) =>
       _withRecordMutationLock(() => _ops.moveRecord(id, targetFolder));
+  static Future<bool> moveRecordIfFolder(
+    String id,
+    String expectedFolder,
+    String targetFolder, {
+    void Function()? onMoved,
+  }) =>
+      _withRecordMutationLock(
+        () => _ops.moveRecordIfFolder(
+          id,
+          expectedFolder,
+          targetFolder,
+          onMoved: onMoved,
+        ),
+      );
 
   static Future<String> writeFile(String fileName, Uint8List data) =>
       _ops.writeFile(fileName, data);
@@ -535,6 +555,9 @@ class TextManifest {
 
   static Future<void> removeFolderFromCache(String folderPath) =>
       _withRecordMutationLock(() => _ops.removeFolderFromCache(folderPath));
+  static Future<void> removeFolderMetadataFromCache(String folderPath) =>
+      _withRecordMutationLock(
+          () => _ops.removeFolderMetadataFromCache(folderPath));
   static void invalidateCache() {
     unawaited(
       _withRecordMutationLock(() async {

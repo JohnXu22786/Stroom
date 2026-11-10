@@ -1,15 +1,20 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
-import 'package:flutter/foundation.dart' show visibleForTesting;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
 
+import '../l10n/app_localizations.dart';
 import '../catcatch/engine/js_hook_script.dart';
+import '../catcatch/engine/webview_sniffer.dart'
+    show HeadedRecoveryAttemptSchedule, WebViewSniffer;
 import '../catcatch/widgets/draggable_floating_panel.dart';
 import '../services/browser_cookie_service.dart';
+import '../services/userscript_http.dart';
 
 const _scriptsKey = 'browser_user_scripts';
 const _ambiguousMainFrameErrorTimeout = Duration(seconds: 5);
@@ -165,31 +170,97 @@ InAppWebViewSettings _buildSettings({required bool isDesktopMode}) {
 }
 
 class UserScript {
+  final String id;
   final String name;
   final String code;
-  final List<String> matches;
+  final bool enabled;
 
-  UserScript({required this.name, required this.code, required this.matches});
+  /// `manual` for user-authored scripts, or the source URL for imports.
+  final String origin;
+
+  UserScript({
+    String? id,
+    required this.name,
+    required String code,
+    List<String>? matches,
+    this.enabled = true,
+    this.origin = 'manual',
+  })  : id = id ?? const Uuid().v4(),
+        code = matches == null ? code : _migrateLegacyMatches(code, matches);
+
+  String? get version => _userscriptMetadataValue(code, 'version');
+
+  /// Match rules declared in the userscript metadata block.
+  ///
+  /// An empty list means the script has no `@match` restrictions and runs on
+  /// every page.
+  List<String> get matches => _parseMatchMetadata(code);
+
+  bool shouldRunAt(String url) => enabled && code.isNotEmpty && matchesUrl(url);
 
   Map<String, dynamic> toMap() => {
+        'id': id,
         'name': name,
         'code': code,
-        'matches': matches,
+        'enabled': enabled,
+        'origin': origin,
       };
 
-  factory UserScript.fromMap(Map<String, dynamic> map) => UserScript(
-        name: map['name'] as String? ?? '',
-        code: map['code'] as String? ?? '',
-        matches: (map['matches'] as List?)?.cast<String>() ?? [],
-      );
+  factory UserScript.fromMap(Map<String, dynamic> map) {
+    final legacyMatches = map['matches'];
+    return UserScript(
+      id: map['id'] is String ? map['id'] as String : null,
+      name: map['name'] is String ? map['name'] as String : '',
+      code: map['code'] is String ? map['code'] as String : '',
+      enabled: map['enabled'] is bool ? map['enabled'] as bool : true,
+      origin: map['origin'] is String && (map['origin'] as String).isNotEmpty
+          ? map['origin'] as String
+          : 'manual',
+      matches: legacyMatches is List
+          ? legacyMatches.whereType<String>().toList()
+          : null,
+    );
+  }
+
+  static List<String> _parseMatchMetadata(String code) {
+    final start = code.indexOf('// ==UserScript==');
+    if (start < 0) return const [];
+    final end = code.indexOf('// ==/UserScript==', start);
+    if (end < 0) return const [];
+    final header = code.substring(start, end);
+    final matchLine = RegExp(r'^//[ \t]*@match(?:[ \t]+(.*?))?[ \t]*$');
+    final patterns = <String>[];
+    for (final line in header.split('\n')) {
+      final match = matchLine.firstMatch(line.trim());
+      if (match != null) patterns.add(match.group(1)?.trim() ?? '');
+    }
+    return patterns;
+  }
+
+  static String _migrateLegacyMatches(String code, List<String> matches) {
+    final additions = matches.map((match) => match.trim()).toList();
+
+    final start = code.indexOf('// ==UserScript==');
+    final end = start < 0 ? -1 : code.indexOf('// ==/UserScript==', start);
+    final metadata = additions.map((match) => '// @match $match').join('\n');
+    if (start >= 0 && end >= 0) {
+      if (metadata.isEmpty) return code;
+      return '${code.substring(0, end)}\n$metadata\n${code.substring(end)}';
+    }
+    if (additions.isEmpty) return code;
+
+    final header = '// ==UserScript==\n$metadata\n// ==/UserScript==\n';
+    return '$header${code.isEmpty ? '' : '\n$code'}';
+  }
 
   /// Whether [url] matches any of this script's match patterns
   /// (e.g. `*://*.example.com/*`).
   ///
-  /// An empty match list — or an empty pattern — means "run everywhere".
+  /// No `@match` metadata — or an empty `@match` value — means "run everywhere".
   bool matchesUrl(String url) {
-    if (matches.isEmpty) return true;
-    for (final pattern in matches) {
+    final patterns = matches;
+    if (patterns.isEmpty) return true;
+    for (final pattern in patterns) {
       final trimmed = pattern.trim();
       if (trimmed.isEmpty) return true;
       if (_urlMatchesPattern(url, trimmed)) return true;
@@ -267,8 +338,97 @@ class UserScript {
   }
 }
 
+@visibleForTesting
+List<UserScript> scriptsToInjectAfterManagerChange({
+  required List<UserScript> previous,
+  required List<UserScript> updated,
+  required String currentUrl,
+}) {
+  final previousById = {for (final script in previous) script.id: script};
+  return updated.where((script) {
+    final prior = previousById[script.id];
+    return script.shouldRunAt(currentUrl) &&
+        (prior == null || !prior.enabled || prior.code != script.code);
+  }).toList();
+}
+
+String? _userscriptMetadataValue(String code, String key) {
+  final start = code.indexOf('// ==UserScript==');
+  if (start < 0) return null;
+  final end = code.indexOf('// ==/UserScript==', start);
+  if (end < 0) return null;
+  final header = code.substring(start, end);
+  final linePattern =
+      RegExp('^//[ \\t]*@${RegExp.escape(key)}(?:[ \\t]+(.*?))?[ \\t]*\$');
+  for (final line in header.split('\n')) {
+    final value = linePattern.firstMatch(line.trim())?.group(1)?.trim();
+    if (value != null && value.isNotEmpty) return value;
+  }
+  return null;
+}
+
+String? _userscriptMetadataName(String code) {
+  final start = code.indexOf('// ==UserScript==');
+  if (start < 0) return null;
+  final end = code.indexOf('// ==/UserScript==', start);
+  if (end < 0) return null;
+  final header = code.substring(start, end);
+  final nameLine =
+      RegExp(r'^//[ \t]*@name(?::[A-Za-z0-9-]+)?(?:[ \t]+(.*?))?[ \t]*$');
+  for (final line in header.split('\n')) {
+    final match = nameLine.firstMatch(line.trim());
+    final name = match?.group(1)?.trim();
+    if (name != null && name.isNotEmpty) return name;
+  }
+  return null;
+}
+
+Future<String> _fetchUserscript(String sourceUrl) async {
+  var uri = Uri.parse(normalizeUserscriptUrl(sourceUrl));
+  bool isTrustedUri(Uri candidate) {
+    final host = candidate.host.toLowerCase();
+    return candidate.scheme == 'https' &&
+        candidate.port == 443 &&
+        candidate.userInfo.isEmpty &&
+        (host == 'greasyfork.org' ||
+            host == 'www.greasyfork.org' ||
+            host == 'update.greasyfork.org' ||
+            host == 'raw.githubusercontent.com');
+  }
+
+  UserscriptHttpResponse? response;
+  for (var redirects = 0; redirects <= 5; redirects++) {
+    response = await fetchUserscriptHttp(uri.toString());
+    if (response.responseUrl != uri) {
+      if (!isTrustedUri(response.responseUrl)) {
+        throw const FormatException('redirectedUrl');
+      }
+      uri = response.responseUrl;
+    }
+    if (!response.isRedirect) break;
+    final location = response.location;
+    if (location == null || redirects == 5) {
+      throw const FormatException('redirectedUrl');
+    }
+    try {
+      uri = uri.resolve(location);
+    } on FormatException {
+      throw const FormatException('redirectedUrl');
+    }
+    if (!isTrustedUri(uri)) throw const FormatException('redirectedUrl');
+  }
+  if (response == null || !response.isSuccess || !isTrustedUri(uri)) {
+    throw const FormatException('redirectedUrl');
+  }
+  final source = response.body;
+  if (source == null) throw const FormatException('notScript');
+  validateUserscriptResponse(source, contentType: response.contentType);
+  return source;
+}
+
 class BrowserPage extends StatefulWidget {
   final String initialUrl;
+  final bool recoveryMode;
 
   /// Builds a test body with the real capture callback, without a native WebView.
   @visibleForTesting
@@ -277,11 +437,30 @@ class BrowserPage extends StatefulWidget {
   const BrowserPage({
     super.key,
     this.initialUrl = 'https://www.google.com',
+    this.recoveryMode = false,
     this.testBodyBuilder,
   });
 
   @override
   State<BrowserPage> createState() => _BrowserPageState();
+}
+
+class BrowserRecoveryResult {
+  final List<String> mediaUrls;
+  final Map<String, String> mimeTypesByUrl;
+  final Map<String, String> initiatorsByUrl;
+  final String pageUrl;
+  final String? pageTitle;
+  final Map<String, String> cookieHeadersByUrl;
+
+  const BrowserRecoveryResult({
+    required this.mediaUrls,
+    required this.mimeTypesByUrl,
+    required this.initiatorsByUrl,
+    required this.pageUrl,
+    required this.cookieHeadersByUrl,
+    this.pageTitle,
+  });
 }
 
 class _BrowserPageState extends State<BrowserPage> {
@@ -290,8 +469,18 @@ class _BrowserPageState extends State<BrowserPage> {
   bool _isLoading = false;
   double _progress = 0;
   Timer? _mainFrameErrorTimer;
+  Timer? _recoveryTimeoutTimer;
+  Timer? _recoveryNavigationFallbackTimer;
+  final _recoveryAttempts = HeadedRecoveryAttemptSchedule();
+  bool _recoveryCanContinue = false;
+  bool _recoveryContinuationInProgress = false;
+  bool _recoveryRetriesPaused = false;
+  bool _recoveryReloadAwaitingNavigation = false;
   String? _pendingMainFrameErrorUrl;
   List<UserScript> _scripts = [];
+  final ValueNotifier<Set<String>> _scriptRuntimeErrors =
+      ValueNotifier<Set<String>>({});
+  final Set<String> _scriptInjectionsInFlight = {};
 
   /// Whether to use desktop user agent.
   bool _isDesktopMode = false;
@@ -302,6 +491,8 @@ class _BrowserPageState extends State<BrowserPage> {
 
   /// URLs detected by the JS hook in the WebView.
   final List<String> _detectedUrls = [];
+  final Map<String, String> _recoveryMimeTypesByUrl = {};
+  final Map<String, String> _recoveryInitiatorsByUrl = {};
 
   /// Whether the cat-catch hook has been injected for the current page.
   bool _catCatchHookInjected = false;
@@ -375,12 +566,122 @@ class _BrowserPageState extends State<BrowserPage> {
   @override
   void dispose() {
     _cancelPendingMainFrameError();
+    _recoveryTimeoutTimer?.cancel();
+    _recoveryNavigationFallbackTimer?.cancel();
     _urlController.dispose();
+    _scriptRuntimeErrors.dispose();
 
-    // Queue the final preference decision after any in-flight toggle.
     unawaited(BrowserCookieService.handleBrowserClose());
 
     super.dispose();
+  }
+
+  void _startRecoveryTimeout() {
+    if (!widget.recoveryMode ||
+        _recoveryRetriesPaused ||
+        _recoveryTimeoutTimer != null ||
+        !_recoveryAttempts.hasRemainingAttempts) {
+      return;
+    }
+    final attemptIndex = _recoveryAttempts.startNextAttempt()!;
+    final timeout = WebViewSniffer.headedRecoveryTimeouts[attemptIndex];
+    _recoveryTimeoutTimer = Timer(timeout, () async {
+      if (!mounted) return;
+      _recoveryTimeoutTimer = null;
+      if (_recoveryRetriesPaused) return;
+      if (_recoveryAttempts.hasRemainingAttempts) {
+        _recoveryReloadAwaitingNavigation = true;
+        try {
+          await _webViewController?.reload();
+        } catch (e) {
+          debugPrint('[BrowserPage] recovery reload failed: $e');
+        }
+        // Give the platform a short window to report the new load. The normal
+        // timeout starts in onLoadStart; this fallback bounds reloads that do
+        // not produce a navigation callback. A late callback restarts the same
+        // attempt's full timeout from its actual start.
+        if (mounted && _recoveryReloadAwaitingNavigation) {
+          _recoveryNavigationFallbackTimer = Timer(
+            const Duration(seconds: 2),
+            () {
+              _recoveryNavigationFallbackTimer = null;
+              if (mounted &&
+                  !_recoveryRetriesPaused &&
+                  _recoveryReloadAwaitingNavigation) {
+                _startRecoveryTimeout();
+              }
+            },
+          );
+        }
+      } else {
+        setState(() => _recoveryCanContinue = true);
+      }
+    });
+  }
+
+  void _pauseRecoveryRetriesForUserAction() {
+    if (!widget.recoveryMode || _recoveryRetriesPaused) return;
+    _recoveryRetriesPaused = true;
+    _recoveryTimeoutTimer?.cancel();
+    _recoveryTimeoutTimer = null;
+    _recoveryNavigationFallbackTimer?.cancel();
+    _recoveryNavigationFallbackTimer = null;
+    _recoveryReloadAwaitingNavigation = false;
+  }
+
+  Future<void> _continueRecovery({String? selectedMediaUrl}) async {
+    if (_recoveryContinuationInProgress) return;
+    setState(() => _recoveryContinuationInProgress = true);
+    final controller = _webViewController;
+    final pageUrl = _currentUrl.isEmpty ? widget.initialUrl : _currentUrl;
+    final detectedMediaUrls = List<String>.of(_detectedUrls);
+    final mediaUrls = selectedMediaUrl == null
+        ? detectedMediaUrls
+        : detectedMediaUrls.where((url) => url == selectedMediaUrl).toList();
+    final mimeTypesByUrl = Map<String, String>.of(_recoveryMimeTypesByUrl)
+      ..removeWhere((url, _) => !mediaUrls.contains(url));
+    final initiatorsByUrl = Map<String, String>.of(_recoveryInitiatorsByUrl)
+      ..removeWhere((url, _) => !mediaUrls.contains(url));
+    String? title;
+    final cookieHeadersByUrl = <String, String>{};
+    if (controller != null) {
+      try {
+        title = await controller.getTitle();
+      } catch (_) {}
+    }
+    for (final mediaUrl in mediaUrls) {
+      final mediaUri = Uri.tryParse(mediaUrl);
+      if (mediaUri == null ||
+          !mediaUri.hasAuthority ||
+          !{'http', 'https'}.contains(mediaUri.scheme) ||
+          cookieHeadersByUrl.containsKey(mediaUrl)) {
+        continue;
+      }
+      try {
+        final cookies = await CookieManager.instance().getCookies(
+          url: WebUri(mediaUrl),
+        );
+        if (cookies.isNotEmpty) {
+          cookieHeadersByUrl[mediaUrl] = cookies
+              .map((cookie) => '${cookie.name}=${cookie.value}')
+              .join('; ');
+        }
+      } catch (e) {
+        debugPrint('[BrowserPage] recovery cookie read failed: $e');
+      }
+    }
+    if (!mounted) return;
+    Navigator.pop(
+      context,
+      BrowserRecoveryResult(
+        mediaUrls: List<String>.unmodifiable(mediaUrls),
+        mimeTypesByUrl: Map.unmodifiable(mimeTypesByUrl),
+        initiatorsByUrl: Map.unmodifiable(initiatorsByUrl),
+        pageUrl: pageUrl,
+        pageTitle: title,
+        cookieHeadersByUrl: Map.unmodifiable(cookieHeadersByUrl),
+      ),
+    );
   }
 
   Future<void> _loadScripts() async {
@@ -390,10 +691,19 @@ class _BrowserPageState extends State<BrowserPage> {
       if (raw == null) return;
       final decoded = jsonDecode(raw);
       if (decoded is! List) return;
+      final needsMigration = decoded.any(
+        (entry) =>
+            entry is Map &&
+            (entry.containsKey('matches') ||
+                !entry.containsKey('id') ||
+                !entry.containsKey('enabled') ||
+                !entry.containsKey('origin')),
+      );
       _scripts = decoded
           .whereType<Map<String, dynamic>>()
           .map(UserScript.fromMap)
           .toList();
+      if (needsMigration) await _saveScripts();
     } catch (e) {
       debugPrint('_loadScripts failed: $e');
     }
@@ -412,12 +722,102 @@ class _BrowserPageState extends State<BrowserPage> {
   /// Injects all user scripts whose match rules apply to [_currentUrl].
   /// An empty match list means "run everywhere".
   void _injectScripts() {
-    if (_webViewController == null) return;
+    Future<void> injectionChain = Future.value();
     for (final script in _scripts) {
-      if (script.code.isEmpty) continue;
-      if (!script.matchesUrl(_currentUrl)) continue;
-      _safeEvaluate(script.code);
+      if (!script.shouldRunAt(_currentUrl)) continue;
+      injectionChain = injectionChain.then((_) => _injectUserScript(script));
     }
+    unawaited(injectionChain);
+  }
+
+  Future<void> _injectUserScript(UserScript script) async {
+    final controller = _webViewController;
+    if (controller == null || !script.shouldRunAt(_currentUrl)) return;
+    final injectionUrl = _currentUrl;
+    final injectionKey = '${script.id}\n$injectionUrl';
+    if (!_scriptInjectionsInFlight.add(injectionKey)) return;
+    final errorSource = 'stroom-userscript-${script.id}.js';
+    String? evaluatedCode;
+    final monitor = '''
+(function() {
+  var errorScriptId = ${jsonEncode(script.id)};
+  var errorSource = ${jsonEncode(errorSource)};
+  var listeners = window.__stroomUserScriptErrorListeners ||
+      (window.__stroomUserScriptErrorListeners = {});
+  function reportError() {
+    try {
+      window.flutter_inappwebview.callHandler('UserScriptError', errorScriptId);
+    } catch (_) {}
+  }
+  if (!listeners[errorScriptId]) {
+    var onError = function(event) {
+      if (event.filename === errorSource) reportError();
+    };
+    var onUnhandledRejection = function(event) {
+      var reason = event.reason;
+      var stack = reason && reason.stack ? String(reason.stack) : '';
+      if (stack.indexOf(errorSource) >= 0) reportError();
+    };
+    window.addEventListener('error', onError);
+    window.addEventListener('unhandledrejection', onUnhandledRejection);
+    listeners[errorScriptId] = true;
+  }
+})();
+''';
+    try {
+      await controller.evaluateJavascript(source: monitor);
+      UserScript? currentScript;
+      for (final candidate in _scripts) {
+        if (candidate.id == script.id) {
+          currentScript = candidate;
+          break;
+        }
+      }
+      if (controller != _webViewController ||
+          injectionUrl != _currentUrl ||
+          currentScript == null ||
+          !currentScript.shouldRunAt(_currentUrl)) {
+        return;
+      }
+      evaluatedCode = currentScript.code;
+      await controller.evaluateJavascript(
+        source: '$evaluatedCode\n//# sourceURL=$errorSource',
+      );
+      _clearScriptRuntimeError(script.id);
+    } catch (_) {
+      debugPrint('[BrowserPage] user-script evaluation failed');
+      if (injectionUrl == _currentUrl && controller == _webViewController) {
+        _markScriptRuntimeError(script.id);
+      }
+    } finally {
+      _scriptInjectionsInFlight.remove(injectionKey);
+      UserScript? latestScript;
+      for (final candidate in _scripts) {
+        if (candidate.id == script.id) {
+          latestScript = candidate;
+          break;
+        }
+      }
+      if (injectionUrl == _currentUrl &&
+          latestScript != null &&
+          latestScript.shouldRunAt(_currentUrl) &&
+          evaluatedCode != latestScript.code) {
+        unawaited(_injectUserScript(latestScript));
+      }
+    }
+  }
+
+  void _markScriptRuntimeError(String scriptId) {
+    if (!mounted) return;
+    if (_scriptRuntimeErrors.value.contains(scriptId)) return;
+    _scriptRuntimeErrors.value = {..._scriptRuntimeErrors.value, scriptId};
+  }
+
+  void _clearScriptRuntimeError(String scriptId) {
+    if (!mounted) return;
+    if (!_scriptRuntimeErrors.value.contains(scriptId)) return;
+    _scriptRuntimeErrors.value = {..._scriptRuntimeErrors.value}
+      ..remove(scriptId);
   }
 
   /// Runs [source] in the WebView, swallowing errors that occur when the
@@ -425,8 +825,8 @@ class _BrowserPageState extends State<BrowserPage> {
   void _safeEvaluate(String source) {
     final controller = _webViewController;
     if (controller == null) return;
-    controller.evaluateJavascript(source: source).catchError((Object e) {
-      debugPrint('[BrowserPage] evaluateJavascript error: $e');
+    controller.evaluateJavascript(source: source).catchError((_) {
+      debugPrint('[BrowserPage] evaluateJavascript failed');
     });
   }
 
@@ -461,6 +861,8 @@ class _BrowserPageState extends State<BrowserPage> {
       final data = jsonDecode(message) as Map<String, dynamic>;
       final url = data['url'] as String?;
       if (url == null || url.isEmpty) return;
+      final mimeType = data['mimeType'] as String?;
+      final initiator = data['initiator'] as String?;
 
       debugPrint('[BrowserPage] CatCatch sniffed: $url');
       setState(() {
@@ -468,7 +870,18 @@ class _BrowserPageState extends State<BrowserPage> {
         if (!_detectedUrls.contains(url)) {
           _detectedUrls.add(url);
         }
+        if (widget.recoveryMode && mimeType != null && mimeType.isNotEmpty) {
+          _recoveryMimeTypesByUrl.putIfAbsent(url, () => mimeType);
+        }
+        if (widget.recoveryMode && initiator != null && initiator.isNotEmpty) {
+          _recoveryInitiatorsByUrl.putIfAbsent(url, () => initiator);
+        }
+        if (widget.recoveryMode) _recoveryCanContinue = true;
       });
+      if (widget.recoveryMode) {
+        _recoveryTimeoutTimer?.cancel();
+        _recoveryTimeoutTimer = null;
+      }
     } catch (e) {
       debugPrint('[BrowserPage] CatCatch message parse error: $e');
     }
@@ -476,24 +889,29 @@ class _BrowserPageState extends State<BrowserPage> {
 
   /// User tapped "Confirm Capture" on the floating panel.
   ///
-  /// Contract: the captured URL is handed back to the page that pushed this
-  /// one via `Navigator.pop(selectedUrl)`. The caller (catcatch_page) is
-  /// expected to await the push result and pre-fill the download form.
+  /// Recovery routes return a typed recovery result; normal browser routes
+  /// return the selected URL so their caller can pre-fill the download form.
   void _onConfirmCapture(String selectedUrl) {
     debugPrint('[BrowserPage] User confirmed capture: $selectedUrl');
+    if (widget.recoveryMode) {
+      _pauseRecoveryRetriesForUserAction();
+      unawaited(_continueRecovery(selectedMediaUrl: selectedUrl));
+      return;
+    }
     final navigator = Navigator.of(context);
     if (navigator.canPop()) {
       navigator.pop<String>(selectedUrl);
     }
   }
 
-  /// Reset detected URLs for a new page load.
+  /// Reset per-page detection state for a new page load.
   /// The panel visibility is NOT reset here — it persists across page
   /// navigations until the user manually closes it. The detection epoch
-  /// bumps so the panel drops any selection from the previous page.
+  /// bumps so the panel drops any selection from the previous page. Recovery
+  /// URLs stay available across sign-in redirects and manual navigation.
   void _resetDetection() {
     setState(() {
-      _detectedUrls.clear();
+      if (!widget.recoveryMode) _detectedUrls.clear();
       _catCatchHookInjected = false;
       _detectionEpoch++;
     });
@@ -541,6 +959,7 @@ class _BrowserPageState extends State<BrowserPage> {
   }
 
   Future<void> _goToUrl(String url) async {
+    _pauseRecoveryRetriesForUserAction();
     final controller = _webViewController;
     if (controller == null) return;
     final previousAddress = _urlController.text;
@@ -559,8 +978,9 @@ class _BrowserPageState extends State<BrowserPage> {
       onNavigationFailure: () {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('页面导航失败，地址已恢复'),
+          SnackBar(
+            content:
+                Text(AppLocalizations.of(context)!.browserNavigationFailed),
             backgroundColor: Colors.red,
           ),
         );
@@ -590,15 +1010,17 @@ class _BrowserPageState extends State<BrowserPage> {
     }
 
     final colorScheme = Theme.of(context).colorScheme;
+    final l10n = AppLocalizations.of(context)!;
 
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 4,
         title: TextField(
           controller: _urlController,
+          onChanged: (_) => _pauseRecoveryRetriesForUserAction(),
           style: const TextStyle(fontSize: 14),
           decoration: InputDecoration(
-            hintText: '输入网址',
+            hintText: l10n.browserAddressHint,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(20),
               borderSide: BorderSide.none,
@@ -617,12 +1039,42 @@ class _BrowserPageState extends State<BrowserPage> {
           onSubmitted: _goToUrl,
         ),
         actions: [
+          if (widget.recoveryMode)
+            TextButton.icon(
+              onPressed: _recoveryCanContinue &&
+                      _detectedUrls.isNotEmpty &&
+                      !_recoveryContinuationInProgress
+                  ? _continueRecovery
+                  : null,
+              icon: const Icon(Icons.play_arrow),
+              label: Text(l10n.browserRecoveryContinue),
+            ),
           IconButton(
             icon: const Icon(Icons.extension, size: 20),
-            tooltip: '用户脚本',
-            onPressed: _showScriptManager,
+            tooltip: l10n.browserUserScripts,
+            onPressed: () {
+              _pauseRecoveryRetriesForUserAction();
+              _showScriptManager();
+            },
           ),
         ],
+        bottom: widget.recoveryMode
+            ? PreferredSize(
+                preferredSize: const Size.fromHeight(44),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      l10n.catcatchWebViewRecoveryGuidance,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+                ),
+              )
+            : null,
       ),
       body: LayoutBuilder(
         builder: (context, constraints) {
@@ -636,90 +1088,126 @@ class _BrowserPageState extends State<BrowserPage> {
                 children: [
                   if (_isLoading) LinearProgressIndicator(value: _progress),
                   Expanded(
-                    child: InAppWebView(
-                      // The initial page is loaded explicitly in onWebViewCreated
-                      // after the native cookie store is prepared for the selected
-                      // retention mode.
-                      initialUrlRequest: null,
-                      initialSettings:
-                          _buildSettings(isDesktopMode: _isDesktopMode),
-                      onWebViewCreated: (controller) async {
-                        _webViewController = controller;
+                    child: Listener(
+                      onPointerDown: (_) =>
+                          _pauseRecoveryRetriesForUserAction(),
+                      child: InAppWebView(
+                        // The initial page is loaded explicitly in onWebViewCreated
+                        // after the native cookie store is prepared for the selected
+                        // retention mode.
+                        initialUrlRequest: null,
+                        initialSettings:
+                            _buildSettings(isDesktopMode: _isDesktopMode),
+                        onWebViewCreated: (controller) async {
+                          _webViewController = controller;
 
-                        // Register JavaScript handler for CatCatchChannel.
-                        // The web platform of flutter_inappwebview does not
-                        // implement addJavaScriptHandler (UnimplementedError);
-                        // guard it so the initial URL load below still runs
-                        // on web — only the message bridge is unavailable.
-                        try {
-                          controller.addJavaScriptHandler(
-                            handlerName: 'CatCatchChannel',
-                            callback: (args) {
-                              if (args.isNotEmpty && args.first is String) {
-                                _onCatCatchMessage(args.first as String);
-                              }
-                            },
-                          );
-                        } catch (e) {
-                          debugPrint(
-                              '[BrowserPage] JS handler bridge unavailable: $e');
-                        }
+                          // Register JavaScript handler for CatCatchChannel.
+                          // The web platform of flutter_inappwebview does not
+                          // implement addJavaScriptHandler (UnimplementedError);
+                          // guard it so the initial URL load below still runs
+                          // on web — only the message bridge is unavailable.
+                          try {
+                            controller.addJavaScriptHandler(
+                              handlerName: 'CatCatchChannel',
+                              callback: (args) {
+                                if (args.isNotEmpty && args.first is String) {
+                                  _onCatCatchMessage(args.first as String);
+                                }
+                              },
+                            );
+                          } catch (e) {
+                            debugPrint(
+                                '[BrowserPage] JS handler bridge unavailable: $e');
+                          }
 
-                        // Clear stale native cookies when retention is disabled,
-                        // or restore persisted cookies when it is enabled, before
-                        // the first page load. If native cleanup fails, skip the
-                        // first navigation rather than sending stale cookies.
-                        try {
-                          await navigateBrowserPageAfterCookiePreparation(
-                            prepareCookies: _ensureCookieStorePrepared,
-                            loadUrl: () async {
-                              if (!mounted) return;
-                              await controller.loadUrl(
-                                urlRequest:
-                                    URLRequest(url: WebUri(widget.initialUrl)),
-                              );
-                            },
-                          );
-                        } catch (e) {
-                          debugPrint('[BrowserPage] initial load failed: $e');
-                        }
-                      },
-                      onLoadStart: (controller, url) {
-                        final urlString = url.toString();
-                        _cancelPendingMainFrameError();
-                        // Record the requested host before a redirect replaces
-                        // it with the final URL reported by onLoadStop.
-                        noteBrowserPageNavigationUrl(urlString);
-                        _activeNavigationUrl = urlString;
-                        setState(() {
-                          _isLoading = true;
-                          _progress = 0;
-                        });
-                        _currentUrl = urlString;
-                        _urlController.text = urlString;
-                        // Reset detection for new page
-                        _resetDetection();
-                        // Inject cat-catch hook as early as possible
-                        _injectCatCatchHook(urlString);
-                      },
-                      onLoadStop: (controller, url) {
-                        _cancelPendingMainFrameError();
-                        setState(() => _isLoading = false);
-                        _currentUrl = url.toString();
-                        // Track the host so cookies can be persisted/displayed
-                        // even on platforms without CookieManager.getAllCookies.
-                        noteBrowserPageNavigationUrl(url.toString());
-                        _injectScripts();
-                        // Re-inject cat-catch hook if somehow missed or if an
-                        // earlier injection was for a previous page
-                        if (!_catCatchHookInjected ||
-                            _catCatchHookInjectedFor != url.toString()) {
-                          _injectCatCatchHook(url.toString());
-                        }
-                        // Persist cookies after page load (if retention enabled)
-                        _persistCookies();
-                        // Also run a DOM scan after page load
-                        _safeEvaluate('''
+                          try {
+                            controller.addJavaScriptHandler(
+                              handlerName: 'UserScriptError',
+                              callback: (args) {
+                                if (args.isNotEmpty && args.first is String) {
+                                  _markScriptRuntimeError(args.first as String);
+                                }
+                              },
+                            );
+                          } catch (e) {
+                            debugPrint(
+                                '[BrowserPage] User-script error bridge unavailable: $e');
+                          }
+
+                          // Clear stale native cookies when retention is disabled,
+                          // or restore persisted cookies when it is enabled, before
+                          // the first page load. If native cleanup fails, skip the
+                          // first navigation rather than sending stale cookies.
+                          try {
+                            await navigateBrowserPageAfterCookiePreparation(
+                              prepareCookies: _ensureCookieStorePrepared,
+                              loadUrl: () async {
+                                if (!mounted) return;
+                                await controller.loadUrl(
+                                  urlRequest: URLRequest(
+                                      url: WebUri(widget.initialUrl)),
+                                );
+                              },
+                            );
+                          } catch (e) {
+                            debugPrint('[BrowserPage] initial load failed: $e');
+                          }
+                        },
+                        onLoadStart: (controller, url) {
+                          final urlString = url.toString();
+                          _cancelPendingMainFrameError();
+                          // Record the requested host before a redirect replaces
+                          // it with the final URL reported by onLoadStop.
+                          noteBrowserPageNavigationUrl(urlString);
+                          _activeNavigationUrl = urlString;
+                          setState(() {
+                            _isLoading = true;
+                            _progress = 0;
+                          });
+                          _currentUrl = urlString;
+                          _urlController.text = urlString;
+                          if (_recoveryReloadAwaitingNavigation) {
+                            _recoveryReloadAwaitingNavigation = false;
+                            _recoveryNavigationFallbackTimer?.cancel();
+                            _recoveryNavigationFallbackTimer = null;
+                          }
+                          // A new load consumes the next headed recovery
+                          // attempt. Redirects while an attempt is active keep
+                          // its original timeout instead of replaying it.
+                          _startRecoveryTimeout();
+                          // Reset detection for new page
+                          _resetDetection();
+                          // Inject cat-catch hook as early as possible
+                          _injectCatCatchHook(urlString);
+                        },
+                        onLoadStop: (controller, url) {
+                          _cancelPendingMainFrameError();
+                          setState(() {
+                            _isLoading = false;
+                            if (widget.recoveryMode &&
+                                _detectedUrls.isNotEmpty) {
+                              _recoveryCanContinue = true;
+                            }
+                          });
+                          if (_detectedUrls.isNotEmpty) {
+                            _recoveryTimeoutTimer?.cancel();
+                            _recoveryTimeoutTimer = null;
+                          }
+                          _currentUrl = url.toString();
+                          // Track the host so cookies can be persisted/displayed
+                          // even on platforms without CookieManager.getAllCookies.
+                          noteBrowserPageNavigationUrl(url.toString());
+                          _injectScripts();
+                          // Re-inject cat-catch hook if somehow missed or if an
+                          // earlier injection was for a previous page
+                          if (!_catCatchHookInjected ||
+                              _catCatchHookInjectedFor != url.toString()) {
+                            _injectCatCatchHook(url.toString());
+                          }
+                          // Persist cookies after page load (if retention enabled)
+                          _persistCookies();
+                          // Also run a DOM scan after page load
+                          _safeEvaluate('''
 (function() {
   document.querySelectorAll('video, audio').forEach(function(el) {
     var src = el.currentSrc || el.src || '';
@@ -734,31 +1222,32 @@ class _BrowserPageState extends State<BrowserPage> {
   });
 })();
 ''');
-                      },
-                      onReceivedError: (controller, request, error) {
-                        _handleMainFrameError(request);
-                      },
-                      onReceivedHttpError: (controller, request, response) {
-                        // HTTP error responses can still load a body; progress
-                        // is completed by onLoadStop.
-                      },
-                      shouldOverrideUrlLoading: (controller, action) async {
-                        if (action.isForMainFrame) {
-                          _cancelPendingMainFrameError();
-                          _activeNavigationUrl = trackBrowserPageRedirectUrl(
-                            action.request.url?.toString(),
-                          );
-                        }
-                        return NavigationActionPolicy.ALLOW;
-                      },
-                      onProgressChanged: (controller, progress) {
-                        final nextProgress = progress / 100.0;
-                        if (nextProgress > _progress &&
-                            _pendingMainFrameErrorUrl != null) {
-                          _scheduleMainFrameErrorTimeout();
-                        }
-                        setState(() => _progress = nextProgress);
-                      },
+                        },
+                        onReceivedError: (controller, request, error) {
+                          _handleMainFrameError(request);
+                        },
+                        onReceivedHttpError: (controller, request, response) {
+                          // HTTP error responses can still load a body; progress
+                          // is completed by onLoadStop.
+                        },
+                        shouldOverrideUrlLoading: (controller, action) async {
+                          if (action.isForMainFrame) {
+                            _cancelPendingMainFrameError();
+                            _activeNavigationUrl = trackBrowserPageRedirectUrl(
+                              action.request.url?.toString(),
+                            );
+                          }
+                          return NavigationActionPolicy.ALLOW;
+                        },
+                        onProgressChanged: (controller, progress) {
+                          final nextProgress = progress / 100.0;
+                          if (nextProgress > _progress &&
+                              _pendingMainFrameErrorUrl != null) {
+                            _scheduleMainFrameErrorTimeout();
+                          }
+                          setState(() => _progress = nextProgress);
+                        },
+                      ),
                     ),
                   ),
                 ],
@@ -780,13 +1269,14 @@ class _BrowserPageState extends State<BrowserPage> {
                   child: DraggableFloatingPanel(
                     key: const ValueKey('catcatch_panel'),
                     visible: true,
+                    confirmEnabled: !_recoveryContinuationInProgress,
                     detectionEpoch: _detectionEpoch,
                     detectedUrls: _detectedUrls,
                     onConfirmCapture: _onConfirmCapture,
                     onClose: () {
                       setState(() {
                         _catCatchPanelVisible = false;
-                        _detectedUrls.clear();
+                        if (!widget.recoveryMode) _detectedUrls.clear();
                       });
                     },
                     onDragUpdate: (delta) {
@@ -824,15 +1314,24 @@ class _BrowserPageState extends State<BrowserPage> {
           children: [
             IconButton(
               icon: const Icon(Icons.arrow_back),
-              onPressed: () => _webViewController?.goBack(),
+              onPressed: () {
+                _pauseRecoveryRetriesForUserAction();
+                _webViewController?.goBack();
+              },
             ),
             IconButton(
               icon: const Icon(Icons.arrow_forward),
-              onPressed: () => _webViewController?.goForward(),
+              onPressed: () {
+                _pauseRecoveryRetriesForUserAction();
+                _webViewController?.goForward();
+              },
             ),
             IconButton(
               icon: const Icon(Icons.refresh),
-              onPressed: () => _webViewController?.reload(),
+              onPressed: () {
+                _pauseRecoveryRetriesForUserAction();
+                _webViewController?.reload();
+              },
             ),
             // Desktop / Mobile UA toggle
             IconButton(
@@ -840,8 +1339,11 @@ class _BrowserPageState extends State<BrowserPage> {
                 _isDesktopMode ? Icons.phone_android : Icons.desktop_windows,
                 size: 20,
               ),
-              tooltip: _isDesktopMode ? '切换到手机版' : '切换到电脑版',
+              tooltip: _isDesktopMode
+                  ? l10n.browserSwitchToMobile
+                  : l10n.browserSwitchToDesktop,
               onPressed: () async {
+                _pauseRecoveryRetriesForUserAction();
                 final controller = _webViewController;
                 if (controller == null) return;
                 final messenger = ScaffoldMessenger.of(context);
@@ -867,7 +1369,9 @@ class _BrowserPageState extends State<BrowserPage> {
                 messenger.showSnackBar(
                   SnackBar(
                     content: Text(
-                      _isDesktopMode ? '已切换到电脑版UA' : '已切换到手机版UA',
+                      _isDesktopMode
+                          ? l10n.browserUaSwitchedDesktop
+                          : l10n.browserUaSwitchedMobile,
                     ),
                     duration: const Duration(seconds: 1),
                   ),
@@ -883,8 +1387,8 @@ class _BrowserPageState extends State<BrowserPage> {
                     : Theme.of(context).colorScheme.onSurfaceVariant,
               ),
               tooltip: _cookieRetentionEnabled
-                  ? 'Cookies持久化(已开启)'
-                  : 'Cookies持久化(已关闭)',
+                  ? l10n.browserCookieRetentionOnTooltip
+                  : l10n.browserCookieRetentionOffTooltip,
               onPressed: () async {
                 final messenger = ScaffoldMessenger.of(context);
                 final newValue =
@@ -894,7 +1398,9 @@ class _BrowserPageState extends State<BrowserPage> {
                 messenger.showSnackBar(
                   SnackBar(
                     content: Text(
-                      newValue ? '已启用Cookies持久化' : '已关闭Cookies持久化',
+                      newValue
+                          ? l10n.browserCookiePersistenceEnabled
+                          : l10n.browserCookiePersistenceDisabled,
                     ),
                     duration: const Duration(seconds: 1),
                   ),
@@ -914,7 +1420,9 @@ class _BrowserPageState extends State<BrowserPage> {
                   BlendMode.srcIn,
                 ),
               ),
-              tooltip: _catCatchPanelVisible ? '隐藏嗅探面板' : '显示嗅探面板',
+              tooltip: _catCatchPanelVisible
+                  ? l10n.browserSniffPanelHideTooltip
+                  : l10n.browserSniffPanelShowTooltip,
               onPressed: () {
                 setState(() {
                   _catCatchPanelVisible = !_catCatchPanelVisible;
@@ -933,10 +1441,27 @@ class _BrowserPageState extends State<BrowserPage> {
       isScrollControlled: true,
       builder: (ctx) => _ScriptManagerSheet(
         scripts: _scripts,
+        runtimeErrors: _scriptRuntimeErrors,
         onScriptsChanged: (scripts) {
+          final updatedById = {for (final script in scripts) script.id: script};
+          for (final previous in _scripts) {
+            final updated = updatedById[previous.id];
+            if (updated == null ||
+                !updated.enabled ||
+                updated.code != previous.code) {
+              _clearScriptRuntimeError(previous.id);
+            }
+          }
+          final scriptsToInject = scriptsToInjectAfterManagerChange(
+            previous: _scripts,
+            updated: scripts,
+            currentUrl: _currentUrl,
+          );
           setState(() => _scripts = scripts);
           _saveScripts();
-          _injectScripts();
+          for (final script in scriptsToInject) {
+            unawaited(_injectUserScript(script));
+          }
         },
       ),
     );
@@ -944,15 +1469,38 @@ class _BrowserPageState extends State<BrowserPage> {
 }
 
 // =============================================================================
-// Script Manager (unchanged from original)
+// Script Manager
 // =============================================================================
+
+Future<bool?> confirmBrowserUserScriptDeletion(BuildContext context) {
+  final l10n = AppLocalizations.of(context)!;
+  return showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text(l10n.browserDeleteScriptTitle),
+      content: Text(l10n.browserDeleteScriptConfirmation),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: Text(l10n.browserCancel),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, true),
+          child: Text(l10n.browserScriptDelete),
+        ),
+      ],
+    ),
+  );
+}
 
 class _ScriptManagerSheet extends StatefulWidget {
   final List<UserScript> scripts;
+  final ValueListenable<Set<String>> runtimeErrors;
   final void Function(List<UserScript>) onScriptsChanged;
 
   const _ScriptManagerSheet({
     required this.scripts,
+    required this.runtimeErrors,
     required this.onScriptsChanged,
   });
 
@@ -971,6 +1519,7 @@ class _ScriptManagerSheetState extends State<_ScriptManagerSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Padding(
       padding: EdgeInsets.only(
         bottom: MediaQuery.of(context).viewInsets.bottom,
@@ -980,40 +1529,83 @@ class _ScriptManagerSheetState extends State<_ScriptManagerSheet> {
         child: Column(
           children: [
             AppBar(
-              title: const Text('用户脚本'),
+              title: Text(l10n.browserUserScripts),
               automaticallyImplyLeading: false,
               actions: [
                 TextButton.icon(
                   icon: const Icon(Icons.add, size: 18),
-                  label: const Text('添加'),
+                  label: Text(l10n.browserAdd),
                   onPressed: _addScript,
                 ),
               ],
             ),
             Expanded(
-              child: _scripts.isEmpty
-                  ? const Center(
-                      child: Text('暂无脚本，点击"添加"创建'),
-                    )
-                  : ListView.builder(
-                      itemCount: _scripts.length,
-                      itemBuilder: (ctx, i) {
-                        final s = _scripts[i];
-                        return ListTile(
-                          title: Text(s.name.isNotEmpty ? s.name : '未命名脚本'),
-                          subtitle: Text('${s.matches.length} 个匹配规则'),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.delete_outline,
-                                color: Colors.red),
-                            onPressed: () {
-                              setState(() => _scripts.removeAt(i));
-                              _notifyChanged();
-                            },
-                          ),
-                          onTap: () => _editScript(i),
-                        );
-                      },
-                    ),
+              child: ValueListenableBuilder<Set<String>>(
+                valueListenable: widget.runtimeErrors,
+                builder: (context, runtimeErrors, _) => _scripts.isEmpty
+                    ? Center(
+                        child: Text(l10n.browserNoScripts),
+                      )
+                    : ListView.builder(
+                        itemCount: _scripts.length,
+                        itemBuilder: (ctx, i) {
+                          final s = _scripts[i];
+                          final details = <String>[
+                            if (runtimeErrors.contains(s.id))
+                              l10n.browserScriptRuntimeError,
+                            s.enabled
+                                ? l10n.browserScriptEnabled
+                                : l10n.browserScriptDisabled,
+                            s.origin == 'manual'
+                                ? l10n.browserScriptOriginManual
+                                : s.origin,
+                            if (s.version != null)
+                              l10n.browserScriptVersion(s.version!),
+                            l10n.browserScriptMatchCount(s.matches.length),
+                          ];
+                          return ListTile(
+                            title: Text(s.name.isNotEmpty
+                                ? s.name
+                                : l10n.browserUnnamedScript),
+                            subtitle: Text(
+                              details.join(' · '),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: runtimeErrors.contains(s.id)
+                                  ? TextStyle(
+                                      color:
+                                          Theme.of(context).colorScheme.error)
+                                  : null,
+                            ),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Switch(
+                                  value: s.enabled,
+                                  onChanged: (enabled) {
+                                    setState(() => _scripts[i] = UserScript(
+                                          id: s.id,
+                                          name: s.name,
+                                          code: s.code,
+                                          enabled: enabled,
+                                          origin: s.origin,
+                                        ));
+                                    _notifyChanged();
+                                  },
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.delete_outline,
+                                      color: Colors.red),
+                                  tooltip: l10n.browserScriptDelete,
+                                  onPressed: () => _confirmDeleteScript(i),
+                                ),
+                              ],
+                            ),
+                            onTap: () => _editScript(i),
+                          );
+                        },
+                      ),
+              ),
             ),
           ],
         ),
@@ -1022,7 +1614,67 @@ class _ScriptManagerSheetState extends State<_ScriptManagerSheet> {
   }
 
   void _addScript() {
-    _editScript(-1);
+    final l10n = AppLocalizations.of(context)!;
+    showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l10n.browserAddScriptMethod),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(l10n.browserCancel),
+          ),
+        ],
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.link),
+              title: Text(l10n.browserImportFromUrl),
+              onTap: () => Navigator.pop(context, 'url'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.edit),
+              title: Text(l10n.browserEnterManually),
+              onTap: () => Navigator.pop(context, 'manual'),
+            ),
+          ],
+        ),
+      ),
+    ).then((method) {
+      if (!mounted) return;
+      if (method == 'manual') _editScript(-1);
+      if (method == 'url') _importScriptFromUrl();
+    });
+  }
+
+  Future<void> _importScriptFromUrl() async {
+    final l10n = AppLocalizations.of(context)!;
+    final trusted = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l10n.browserScriptTrustWarningTitle),
+        content: Text(l10n.browserScriptTrustWarning),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(l10n.browserCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(l10n.browserContinue),
+          ),
+        ],
+      ),
+    );
+    if (trusted != true || !mounted) return;
+    final imported = await showDialog<UserScript>(
+      context: context,
+      builder: (context) => const _ScriptImportDialog(),
+    );
+    if (imported == null || !mounted) return;
+    setState(() => _scripts.add(imported));
+    _notifyChanged();
   }
 
   Future<void> _editScript(int index) async {
@@ -1048,6 +1700,13 @@ class _ScriptManagerSheetState extends State<_ScriptManagerSheet> {
   void _notifyChanged() {
     widget.onScriptsChanged(List.from(_scripts));
   }
+
+  Future<void> _confirmDeleteScript(int index) async {
+    final confirmed = await confirmBrowserUserScriptDeletion(context);
+    if (confirmed != true || !mounted) return;
+    setState(() => _scripts.removeAt(index));
+    _notifyChanged();
+  }
 }
 
 class _ScriptEditDialog extends StatefulWidget {
@@ -1062,29 +1721,26 @@ class _ScriptEditDialog extends StatefulWidget {
 class _ScriptEditDialogState extends State<_ScriptEditDialog> {
   late TextEditingController _nameCtrl;
   late TextEditingController _codeCtrl;
-  late TextEditingController _matchesCtrl;
 
   @override
   void initState() {
     super.initState();
     _nameCtrl = TextEditingController(text: widget.script.name);
     _codeCtrl = TextEditingController(text: widget.script.code);
-    _matchesCtrl =
-        TextEditingController(text: widget.script.matches.join('\n'));
   }
 
   @override
   void dispose() {
     _nameCtrl.dispose();
     _codeCtrl.dispose();
-    _matchesCtrl.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return AlertDialog(
-      title: const Text('编辑脚本'),
+      title: Text(l10n.browserEditScript),
       content: SizedBox(
         width: 400,
         child: SingleChildScrollView(
@@ -1094,8 +1750,8 @@ class _ScriptEditDialogState extends State<_ScriptEditDialog> {
             children: [
               TextField(
                 controller: _nameCtrl,
-                decoration: const InputDecoration(
-                  labelText: '脚本名称',
+                decoration: InputDecoration(
+                  labelText: l10n.browserScriptName,
                   border: OutlineInputBorder(),
                   isDense: true,
                 ),
@@ -1104,24 +1760,13 @@ class _ScriptEditDialogState extends State<_ScriptEditDialog> {
               TextField(
                 controller: _codeCtrl,
                 maxLines: 8,
-                decoration: const InputDecoration(
-                  labelText: '脚本代码 (JavaScript)',
+                decoration: InputDecoration(
+                  labelText: l10n.browserManualUserscriptLabel,
                   border: OutlineInputBorder(),
                   hintText:
-                      '// ==UserScript==\n// @name\n// @match *://*/*\n// ==/UserScript==\n\nconsole.log("hello");',
+                      '// ==UserScript==\n// @name Example\n// @match *://*.example.com/*\n// ==/UserScript==\n\nconsole.log("hello");',
                 ),
                 style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _matchesCtrl,
-                maxLines: 3,
-                decoration: const InputDecoration(
-                  labelText: '匹配网址 (每行一个)',
-                  border: OutlineInputBorder(),
-                  hintText: '*://*.example.com/*',
-                  isDense: true,
-                ),
               ),
             ],
           ),
@@ -1130,24 +1775,181 @@ class _ScriptEditDialogState extends State<_ScriptEditDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
+          child: Text(l10n.browserCancel),
         ),
         FilledButton(
           onPressed: () {
             Navigator.pop(
               context,
               UserScript(
-                name: _nameCtrl.text,
+                name: _userscriptMetadataName(_codeCtrl.text) ??
+                    (_nameCtrl.text.trim().isNotEmpty
+                        ? _nameCtrl.text.trim()
+                        : l10n.browserUnnamedScript),
                 code: _codeCtrl.text,
-                matches: _matchesCtrl.text
-                    .split('\n')
-                    .map((l) => l.trim())
-                    .where((l) => l.isNotEmpty)
-                    .toList(),
+                id: widget.script.id,
+                enabled: widget.script.enabled,
+                origin: widget.script.origin,
               ),
             );
           },
-          child: const Text('保存'),
+          child: Text(l10n.browserSave),
+        ),
+      ],
+    );
+  }
+}
+
+class _ScriptImportDialog extends StatefulWidget {
+  const _ScriptImportDialog();
+
+  @override
+  State<_ScriptImportDialog> createState() => _ScriptImportDialogState();
+}
+
+class _ScriptImportDialogState extends State<_ScriptImportDialog> {
+  final _urlCtrl = TextEditingController();
+  String? _source;
+  String? _error;
+  bool _loading = false;
+
+  String _displayName(String source, AppLocalizations l10n) {
+    final metadataName = _userscriptMetadataName(source);
+    if (metadataName != null) return metadataName;
+    final path = Uri.tryParse(_urlCtrl.text.trim())?.pathSegments;
+    return path != null && path.isNotEmpty
+        ? path.last
+        : l10n.browserUnnamedScript;
+  }
+
+  @override
+  void dispose() {
+    _urlCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _fetch() async {
+    setState(() {
+      _loading = true;
+      _source = null;
+      _error = null;
+    });
+    try {
+      final source = await _fetchUserscript(_urlCtrl.text);
+      if (!mounted) return;
+      setState(() => _source = source);
+    } on FormatException catch (e) {
+      if (!mounted) return;
+      final l10n = AppLocalizations.of(context)!;
+      setState(() {
+        _error = switch (e.message) {
+          'invalidUrl' => l10n.browserScriptImportInvalidUrl,
+          'unsupportedUrl' => l10n.browserScriptImportUnsupportedUrl,
+          'redirectedUrl' => l10n.browserScriptImportRedirectedUrl,
+          _ => l10n.browserScriptImportNotScript,
+        };
+      });
+    } on UserscriptHttpException catch (e) {
+      if (!mounted) return;
+      final l10n = AppLocalizations.of(context)!;
+      setState(
+          () => _error = l10n.browserScriptImportHttpError('${e.statusCode}'));
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _error =
+          AppLocalizations.of(context)!.browserScriptImportNetworkError);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final source = _source;
+    final name = source == null ? null : _displayName(source, l10n);
+    return AlertDialog(
+      title: Text(l10n.browserImportFromUrl),
+      content: SizedBox(
+        width: 560,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: _urlCtrl,
+                keyboardType: TextInputType.url,
+                readOnly: _loading,
+                decoration: InputDecoration(
+                  labelText: l10n.browserScriptImportUrl,
+                  hintText: 'https://greasyfork.org/scripts/…/script.user.js',
+                  border: const OutlineInputBorder(),
+                ),
+                onChanged: (_) => setState(() {
+                  _source = null;
+                  _error = null;
+                }),
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 8),
+                Text(_error!,
+                    style:
+                        TextStyle(color: Theme.of(context).colorScheme.error)),
+              ],
+              if (source != null) ...[
+                const SizedBox(height: 12),
+                Text('${l10n.browserScriptName}: $name',
+                    style: const TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                InputDecorator(
+                  decoration: InputDecoration(
+                    labelText: l10n.browserScriptPreview,
+                    border: const OutlineInputBorder(),
+                  ),
+                  child: SizedBox(
+                    height: 180,
+                    child: SingleChildScrollView(
+                      child: SelectableText(source,
+                          style: const TextStyle(
+                              fontSize: 12, fontFamily: 'monospace')),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(l10n.browserCancel),
+        ),
+        TextButton.icon(
+          onPressed: _loading ? null : _fetch,
+          icon: _loading
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.download),
+          label: Text(l10n.browserScriptImportFetch),
+        ),
+        FilledButton(
+          onPressed: source == null
+              ? null
+              : () => Navigator.pop(
+                    context,
+                    UserScript(
+                      name: name!,
+                      code: source,
+                      enabled: false,
+                      origin: _urlCtrl.text.trim(),
+                    ),
+                  ),
+          child: Text(l10n.browserSave),
         ),
       ],
     );

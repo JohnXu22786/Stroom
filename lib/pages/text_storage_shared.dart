@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:stroom/widgets/stroom_menu_style.dart';
 
+import '../l10n/app_localizations.dart';
 import '../utils/text_manifest.dart';
 
 /// 文本文件可切换的格式（新建与重命名下拉框共用同一份列表）
@@ -37,7 +38,8 @@ class TextCreatePageState extends State<TextCreatePage> {
 
     if (title.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请输入标题')),
+        SnackBar(
+            content: Text(AppLocalizations.of(context)!.textCreateEnterTitle)),
       );
       return;
     }
@@ -70,7 +72,8 @@ class TextCreatePageState extends State<TextCreatePage> {
         setState(() => _isSaving = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('保存失败: $e'),
+            content: Text(AppLocalizations.of(context)!
+                .textCreateSaveFailed(e.toString())),
             backgroundColor: Colors.red,
           ),
         );
@@ -82,7 +85,7 @@ class TextCreatePageState extends State<TextCreatePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('新建'),
+        title: Text(AppLocalizations.of(context)!.textCreateNewTitle),
         actions: [
           TextButton(
             onPressed: _isSaving ? null : _save,
@@ -92,7 +95,7 @@ class TextCreatePageState extends State<TextCreatePage> {
                     height: 20,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Text('保存'),
+                : Text(AppLocalizations.of(context)!.textCreateSave),
           ),
         ],
       ),
@@ -105,9 +108,11 @@ class TextCreatePageState extends State<TextCreatePage> {
                 Expanded(
                   child: TextField(
                     controller: _titleController,
-                    decoration: const InputDecoration(
-                      labelText: '标题',
-                      hintText: '输入文本标题',
+                    decoration: InputDecoration(
+                      labelText:
+                          AppLocalizations.of(context)!.textCreateTitleLabel,
+                      hintText:
+                          AppLocalizations.of(context)!.textCreateTitleHint,
                       border: OutlineInputBorder(),
                     ),
                   ),
@@ -119,8 +124,9 @@ class TextCreatePageState extends State<TextCreatePage> {
                     dropdownColor: StroomMenuStyle.surface(context),
                     borderRadius: StroomMenuStyle.borderRadius,
                     initialValue: _selectedFormat,
-                    decoration: const InputDecoration(
-                      labelText: '格式',
+                    decoration: InputDecoration(
+                      labelText:
+                          AppLocalizations.of(context)!.textCreateFormatLabel,
                       border: OutlineInputBorder(),
                       contentPadding:
                           EdgeInsets.symmetric(horizontal: 12, vertical: 14),
@@ -143,9 +149,10 @@ class TextCreatePageState extends State<TextCreatePage> {
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
               child: TextField(
                 controller: _contentController,
-                decoration: const InputDecoration(
-                  labelText: '文本内容',
-                  hintText: '输入文本内容...',
+                decoration: InputDecoration(
+                  labelText:
+                      AppLocalizations.of(context)!.textCreateContentLabel,
+                  hintText: AppLocalizations.of(context)!.textCreateContentHint,
                   border: OutlineInputBorder(),
                   alignLabelWithHint: true,
                 ),

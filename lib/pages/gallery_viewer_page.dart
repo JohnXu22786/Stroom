@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:extended_image/extended_image.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:photo_view/photo_view.dart';
@@ -136,7 +137,9 @@ class _GalleryViewerPageState extends State<GalleryViewerPage> {
       ),
       loadStateChanged: (state) {
         if (state.extendedImageLoadState == LoadState.failed) {
-          return _buildErrorWidget('Cannot load image');
+          return _buildErrorWidget(
+            AppLocalizations.of(context)!.imagePreviewLoadFailed,
+          );
         }
         // 全分辨率解码完成前统一显示加载圈，不显示缩略图 —— 进入查看器时
         // 先看到的是加载动画，而不是低分辨率的缩略图占位
@@ -150,9 +153,7 @@ class _GalleryViewerPageState extends State<GalleryViewerPage> {
 
   /// 加载占位：全图字节读取/解码完成前统一显示加载圈，不显示缩略图。
   Widget _buildLoadingPlaceholder() {
-    return const Center(
-      child: CircularProgressIndicator(color: Colors.white),
-    );
+    return const Center(child: CircularProgressIndicator(color: Colors.white));
   }
 
   Widget _buildSvgPage(Uint8List bytes) {
@@ -226,9 +227,7 @@ class _GalleryViewerPageState extends State<GalleryViewerPage> {
 
       final result = await Navigator.push<ImageEditorResult>(
         context,
-        MaterialPageRoute(
-          builder: (_) => ImageEditorPage(imageBytes: bytes),
-        ),
+        MaterialPageRoute(builder: (_) => ImageEditorPage(imageBytes: bytes)),
       );
 
       if (result != null && mounted) {
@@ -251,49 +250,55 @@ class _GalleryViewerPageState extends State<GalleryViewerPage> {
     try {
       final newHash = computeImageHash(editedBytes);
       final newFileName = '$newHash.${file.format}';
-      await ImageManifest.writeFile(newFileName, editedBytes);
-
-      ImageRecord newRecord;
-
-      if (isSaveAs) {
-        newRecord = ImageRecord(
-          name: '${file.name}_edited',
-          hash: newHash,
-          format: file.format,
-          createdAt: DateTime.now(),
-          size: editedBytes.length,
-          folder: file.folder,
-        );
-        await ImageManifest.addRecord(newRecord);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Image saved as copy'),
-              duration: Duration(seconds: 2),
-            ),
-          );
-        }
-      } else {
-        await ImageManifest.deleteFile(file.storagePath);
-        await ImageManifest.deleteRecord(file.id);
-        newRecord = ImageRecord(
-          name: file.name,
-          hash: newHash,
-          format: file.format,
-          createdAt: file.createdAt,
-          size: editedBytes.length,
-          folder: file.folder,
-        );
-        await ImageManifest.addRecord(newRecord);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Image updated'),
-              duration: Duration(seconds: 2),
-            ),
-          );
-        }
-      }
+      late ImageRecord newRecord;
+      await ImageManifest.withFolderReadLock(
+        file.folder,
+        () => ImageManifest.withSaveLocks([newHash, file.hash], () async {
+          await ImageManifest.writeFile(newFileName, editedBytes);
+          if (isSaveAs) {
+            newRecord = ImageRecord(
+              name: '${file.name}_edited',
+              hash: newHash,
+              format: file.format,
+              createdAt: DateTime.now(),
+              size: editedBytes.length,
+              folder: file.folder,
+            );
+            await ImageManifest.addRecord(newRecord);
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    AppLocalizations.of(context)!.imageViewerImageSavedAsCopy,
+                  ),
+                  duration: Duration(seconds: 2),
+                ),
+              );
+            }
+          } else {
+            newRecord = ImageRecord(
+              name: file.name,
+              hash: newHash,
+              format: file.format,
+              createdAt: file.createdAt,
+              size: editedBytes.length,
+              folder: file.folder,
+            );
+            await ImageManifest.addRecord(newRecord);
+            await ImageManifest.deleteRecord(file.id);
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    AppLocalizations.of(context)!.imageViewerImageUpdated,
+                  ),
+                  duration: Duration(seconds: 2),
+                ),
+              );
+            }
+          }
+        }),
+      );
 
       // Update in-memory cache and widget data so the current page shows
       // the new image immediately without requiring a manual refresh.
@@ -328,7 +333,9 @@ class _GalleryViewerPageState extends State<GalleryViewerPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Save failed: $e'),
+            content: Text(
+              AppLocalizations.of(context)!.imageViewerSaveFailed(e.toString()),
+            ),
             backgroundColor: Colors.red,
           ),
         );
@@ -352,7 +359,11 @@ class _GalleryViewerPageState extends State<GalleryViewerPage> {
             },
             itemBuilder: (context, index) {
               if (index < 0 || index >= widget.images.length) {
-                return const Center(child: Text('Invalid index'));
+                return Center(
+                  child: Text(
+                    AppLocalizations.of(context)!.imageViewerInvalidIndex,
+                  ),
+                );
               }
               final record = widget.images[index];
               // 字节已缓存：同步构建页面，避免 FutureBuilder 闪加载态
@@ -368,7 +379,9 @@ class _GalleryViewerPageState extends State<GalleryViewerPage> {
                   }
                   final bytes = snapshot.data;
                   if (bytes == null || bytes.isEmpty) {
-                    return _buildErrorWidget('Cannot load image');
+                    return _buildErrorWidget(
+                      AppLocalizations.of(context)!.imagePreviewLoadFailed,
+                    );
                   }
                   return _buildImagePageContent(record, bytes);
                 },
@@ -406,9 +419,12 @@ class _GalleryViewerPageState extends State<GalleryViewerPage> {
                       shape: BoxShape.circle,
                     ),
                     child: IconButton(
-                      icon:
-                          const Icon(Icons.crop, color: Colors.white, size: 24),
-                      tooltip: 'Crop',
+                      icon: const Icon(
+                        Icons.crop,
+                        color: Colors.white,
+                        size: 24,
+                      ),
+                      tooltip: AppLocalizations.of(context)!.imagePreviewCrop,
                       onPressed: _onCrop,
                     ),
                   ),
@@ -419,9 +435,12 @@ class _GalleryViewerPageState extends State<GalleryViewerPage> {
                       shape: BoxShape.circle,
                     ),
                     child: IconButton(
-                      icon:
-                          const Icon(Icons.edit, color: Colors.white, size: 24),
-                      tooltip: 'Edit',
+                      icon: const Icon(
+                        Icons.edit,
+                        color: Colors.white,
+                        size: 24,
+                      ),
+                      tooltip: AppLocalizations.of(context)!.imagePreviewEdit,
                       onPressed: _onEdit,
                     ),
                   ),
@@ -438,8 +457,10 @@ class _GalleryViewerPageState extends State<GalleryViewerPage> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: const Color(0x66000000),
                     borderRadius: BorderRadius.circular(16),

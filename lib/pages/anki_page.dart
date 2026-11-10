@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/widgets/stroom_menu_style.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../anki/providers/anki_provider.dart';
@@ -17,21 +18,22 @@ class AnkiDroidPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context)!;
     final decksAsync = ref.watch(ankiDeckListProvider);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Anki闪卡'),
+        title: Text(l10n.ankiPageTitle),
         centerTitle: true,
         actions: [
           IconButton(
             icon: const Icon(Icons.bar_chart),
-            tooltip: '学习统计',
+            tooltip: l10n.ankiStatsTooltip,
             onPressed: () => Navigator.push(context,
                 MaterialPageRoute(builder: (_) => const AnkiStatsPage())),
           ),
           IconButton(
             icon: const Icon(Icons.search),
-            tooltip: '浏览卡片',
+            tooltip: l10n.ankiBrowseCardsTooltip,
             onPressed: () {
               Navigator.push(context,
                   MaterialPageRoute(builder: (_) => const AnkiCardBrowser()));
@@ -39,7 +41,7 @@ class AnkiDroidPage extends ConsumerWidget {
           ),
           IconButton(
             icon: const Icon(Icons.cloud_sync),
-            tooltip: 'AnkiWeb 同步',
+            tooltip: l10n.ankiSyncTooltip,
             onPressed: () {
               Navigator.push(
                 context,
@@ -49,14 +51,18 @@ class AnkiDroidPage extends ConsumerWidget {
           ),
           IconButton(
             icon: const Icon(Icons.add),
-            tooltip: '新建牌组',
+            tooltip: l10n.ankiNewDeckTooltip,
             onPressed: () => _showCreateDeckDialog(context, ref),
           ),
         ],
       ),
       body: decksAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('加载失败: $e')),
+        error: (e, _) => Center(
+          child: Text(e is AnkiStatsUnsupportedException
+              ? l10n.ankiWebDecksUnsupportedPlatform
+              : l10n.ankiDeckLoadError(e.toString())),
+        ),
         data: (decks) => decks.isEmpty
             ? _buildEmptyState(context, ref)
             : _buildDeckList(context, ref, decks),
@@ -65,6 +71,7 @@ class AnkiDroidPage extends ConsumerWidget {
   }
 
   Widget _buildEmptyState(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context)!;
     final cs = Theme.of(context).colorScheme;
     return Center(
       child: Padding(
@@ -75,18 +82,18 @@ class AnkiDroidPage extends ConsumerWidget {
             Icon(Icons.auto_stories,
                 size: 64, color: cs.primary.withValues(alpha: 0.5)),
             const SizedBox(height: 16),
-            Text('还没有牌组',
+            Text(l10n.ankiEmptyDecksTitle,
                 style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w600,
                     color: cs.onSurface)),
             const SizedBox(height: 8),
-            Text('创建一个牌组开始学习',
+            Text(l10n.ankiEmptyDecksDescription,
                 style: TextStyle(fontSize: 14, color: cs.onSurfaceVariant)),
             const SizedBox(height: 24),
             FilledButton.icon(
               icon: const Icon(Icons.add),
-              label: const Text('新建牌组'),
+              label: Text(l10n.ankiNewDeckTitle),
               onPressed: () => _showCreateDeckDialog(context, ref),
             ),
           ],
@@ -130,19 +137,21 @@ class AnkiDroidPage extends ConsumerWidget {
   }
 
   void _showCreateDeckDialog(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context)!;
     final c = TextEditingController();
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('新建牌组'),
+        title: Text(l10n.ankiNewDeckTitle),
         content: TextField(
             controller: c,
             autofocus: true,
-            decoration: const InputDecoration(
-                hintText: '牌组名称', border: OutlineInputBorder())),
+            decoration: InputDecoration(
+                hintText: l10n.ankiDeckNameHint, border: OutlineInputBorder())),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+              onPressed: () => Navigator.pop(ctx),
+              child: Text(l10n.actionCancel)),
           FilledButton(
             onPressed: () {
               if (c.text.trim().isNotEmpty) {
@@ -150,7 +159,7 @@ class AnkiDroidPage extends ConsumerWidget {
                 Navigator.pop(ctx);
               }
             },
-            child: const Text('创建'),
+            child: Text(l10n.ankiCreateDeck),
           ),
         ],
       ),
@@ -159,18 +168,20 @@ class AnkiDroidPage extends ConsumerWidget {
 
   void _showRenameDialog(
       BuildContext context, WidgetRef ref, int did, String name) {
+    final l10n = AppLocalizations.of(context)!;
     final c = TextEditingController(text: name);
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('重命名'),
+        title: Text(l10n.ankiRenameDeck),
         content: TextField(
             controller: c,
             autofocus: true,
             decoration: const InputDecoration(border: OutlineInputBorder())),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+              onPressed: () => Navigator.pop(ctx),
+              child: Text(l10n.actionCancel)),
           FilledButton(
             onPressed: () {
               if (c.text.trim().isNotEmpty) {
@@ -178,7 +189,7 @@ class AnkiDroidPage extends ConsumerWidget {
                 Navigator.pop(ctx);
               }
             },
-            child: const Text('确定'),
+            child: Text(l10n.ankiConfirm),
           ),
         ],
       ),
@@ -187,14 +198,16 @@ class AnkiDroidPage extends ConsumerWidget {
 
   void _confirmDeleteDeck(
       BuildContext context, WidgetRef ref, int did, String name) {
+    final l10n = AppLocalizations.of(context)!;
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('删除牌组'),
-        content: Text('确定删除"$name"及其所有卡片吗？'),
+        title: Text(l10n.ankiDeleteDeckTitle),
+        content: Text(l10n.ankiDeleteDeckConfirmation(name)),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+              onPressed: () => Navigator.pop(ctx),
+              child: Text(l10n.actionCancel)),
           FilledButton(
             style: FilledButton.styleFrom(
                 backgroundColor: Theme.of(context).colorScheme.error),
@@ -202,7 +215,7 @@ class AnkiDroidPage extends ConsumerWidget {
               ref.read(ankiActionsProvider).removeDeck(did);
               Navigator.pop(ctx);
             },
-            child: const Text('删除'),
+            child: Text(l10n.actionDelete),
           ),
         ],
       ),
@@ -215,11 +228,12 @@ class AnkiDroidPage extends ConsumerWidget {
   }
 
   void _showAddCardDialog(BuildContext context, WidgetRef ref, int did) {
+    final l10n = AppLocalizations.of(context)!;
     final fc = TextEditingController();
     final bc = TextEditingController();
     final tc = TextEditingController();
     int selectedModelId = 1;
-    String hintText = '正面 (问题)';
+    String hintText = AppLocalizations.of(context)!.ankiFrontQuestionHint;
 
     // Load models synchronously from the last known value.
     // If not ready, fall back to Basic model id 1.
@@ -231,7 +245,7 @@ class AnkiDroidPage extends ConsumerWidget {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) {
           return AlertDialog(
-            title: const Text('添加卡片'),
+            title: Text(AppLocalizations.of(ctx)!.ankiAddCardTitle),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -240,8 +254,9 @@ class AnkiDroidPage extends ConsumerWidget {
                     dropdownColor: StroomMenuStyle.surface(context),
                     borderRadius: StroomMenuStyle.borderRadius,
                     value: selectedModelId,
-                    decoration: const InputDecoration(
-                        labelText: '笔记类型', border: OutlineInputBorder()),
+                    decoration: InputDecoration(
+                        labelText: AppLocalizations.of(ctx)!.ankiNoteTypeLabel,
+                        border: OutlineInputBorder()),
                     items: models
                         .map((m) =>
                             DropdownMenuItem(value: m.id, child: Text(m.name)))
@@ -252,8 +267,9 @@ class AnkiDroidPage extends ConsumerWidget {
                         selectedModelId = v;
                         final m = models.firstWhere((x) => x.id == v);
                         hintText = m.name == 'Cloze'
-                            ? '正文 (用 {{c1::答案}} 标记挖空)'
-                            : '正面 (问题)';
+                            ? AppLocalizations.of(ctx)!
+                                .ankiClozeTextHint('{{c1::答案}}')
+                            : AppLocalizations.of(ctx)!.ankiFrontQuestionHint;
                       });
                     },
                   ),
@@ -269,20 +285,22 @@ class AnkiDroidPage extends ConsumerWidget {
                 TextField(
                     controller: bc,
                     maxLines: 3,
-                    decoration: const InputDecoration(
-                        labelText: '背面/额外', border: OutlineInputBorder())),
+                    decoration: InputDecoration(
+                        labelText: AppLocalizations.of(ctx)!.ankiBackExtraLabel,
+                        border: OutlineInputBorder())),
                 const SizedBox(height: 12),
                 TextField(
                     controller: tc,
-                    decoration: const InputDecoration(
-                        labelText: '标签 (空格分隔)',
+                    decoration: InputDecoration(
+                        labelText: AppLocalizations.of(ctx)!.ankiTagsLabel,
                         border: OutlineInputBorder(),
-                        hintText: '例如: 数学 物理')),
+                        hintText: AppLocalizations.of(ctx)!.ankiTagsHint)),
               ],
             ),
             actions: [
               TextButton(
-                  onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+                  onPressed: () => Navigator.pop(ctx),
+                  child: Text(l10n.actionCancel)),
               FilledButton(
                 onPressed: () {
                   if (fc.text.trim().isNotEmpty && bc.text.trim().isNotEmpty) {
@@ -292,7 +310,7 @@ class AnkiDroidPage extends ConsumerWidget {
                     Navigator.pop(ctx);
                   }
                 },
-                child: const Text('添加'),
+                child: Text(AppLocalizations.of(ctx)!.ankiAdd),
               ),
             ],
           );
@@ -319,6 +337,7 @@ class _DeckCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context)!;
     final cs = Theme.of(context).colorScheme;
     final statsAsync = ref.watch(ankiDeckStatsProvider(deckId));
 
@@ -340,7 +359,7 @@ class _DeckCard extends ConsumerWidget {
                   height: 44,
                   decoration: BoxDecoration(
                       color: cs.primaryContainer,
-                      borderRadius: BorderRadius.circular(12)),
+                      borderRadius: BorderRadius.circular(8)),
                   child: Icon(Icons.auto_stories,
                       color: cs.onPrimaryContainer, size: 22)),
               const SizedBox(width: 12),
@@ -359,16 +378,18 @@ class _DeckCard extends ConsumerWidget {
                       error: (_, __) => const SizedBox.shrink(),
                       data: (s) => Row(children: [
                         _StatChip(
-                            count: s.newCount, label: '新', color: Colors.blue),
+                            count: s.newCount,
+                            label: l10n.ankiStatNew,
+                            color: Colors.blue),
                         const SizedBox(width: 6),
                         _StatChip(
                             count: s.learningCount,
-                            label: '学',
+                            label: l10n.ankiStatLearning,
                             color: Colors.orange),
                         const SizedBox(width: 6),
                         _StatChip(
                             count: s.reviewCount,
-                            label: '复习',
+                            label: l10n.ankiStatReview,
                             color: Colors.green),
                       ]),
                     ),
@@ -384,12 +405,15 @@ class _DeckCard extends ConsumerWidget {
                   _ => null
                 },
                 itemBuilder: (_) => [
-                  const PopupMenuItem(value: 'add', child: Text('添加卡片')),
-                  const PopupMenuItem(value: 'rename', child: Text('重命名')),
+                  PopupMenuItem(
+                      value: 'add', child: Text(l10n.ankiAddCardAction)),
+                  PopupMenuItem(
+                      value: 'rename', child: Text(l10n.ankiRenameAction)),
                   const PopupMenuDivider(),
-                  const PopupMenuItem(
+                  PopupMenuItem(
                       value: 'delete',
-                      child: Text('删除', style: TextStyle(color: Colors.red))),
+                      child: Text(l10n.ankiDeleteAction,
+                          style: const TextStyle(color: Colors.red))),
                 ],
               ),
             ],
@@ -478,33 +502,34 @@ class _AnkiStudyPageState extends ConsumerState<AnkiStudyPage> {
     await _load();
   }
 
-  String get _frontText {
-    if (_note == null || _note!.fields.isEmpty) return '(无内容)';
+  String _frontText(String noCardContent) {
+    if (_note == null || _note!.fields.isEmpty) return noCardContent;
     return _note!.fields[0];
   }
 
-  String get _backText {
-    if (_note == null || _note!.fields.length < 2) return '(无内容)';
+  String _backText(String noCardContent) {
+    if (_note == null || _note!.fields.length < 2) return noCardContent;
     return _note!.fields[1];
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final cs = Theme.of(context).colorScheme;
     final deckAsync = ref.watch(ankiDeckByIdProvider(widget.deckId));
 
     return Scaffold(
       appBar: AppBar(
         title: deckAsync.when(
-            data: (d) => Text(d?.name ?? '学习'),
-            loading: () => const Text('学习'),
-            error: (_, __) => const Text('学习')),
+            data: (d) => Text(d?.name ?? l10n.ankiStudy),
+            loading: () => Text(l10n.ankiStudy),
+            error: (_, __) => Text(l10n.ankiStudy)),
         centerTitle: true,
         actions: [
           IconButton(
             icon: Icon(_whiteboardOn ? Icons.brush : Icons.brush_outlined,
                 color: _whiteboardOn ? Colors.orange : null),
-            tooltip: '白板',
+            tooltip: l10n.ankiWhiteboardTooltip,
             onPressed: () => setState(() {
               _whiteboardOn = !_whiteboardOn;
               if (!_whiteboardOn) _strokes.clear();
@@ -514,14 +539,14 @@ class _AnkiStudyPageState extends ConsumerState<AnkiStudyPage> {
       ),
       body: _studying && _current != null
           ? Stack(children: [
-              _buildContent(cs),
+              _buildContent(context, cs),
               if (_whiteboardOn) _buildWhiteboard(),
             ])
-          : _buildDone(cs),
+          : _buildDone(context, cs),
     );
   }
 
-  Widget _buildContent(ColorScheme cs) {
+  Widget _buildContent(BuildContext context, ColorScheme cs) {
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -534,9 +559,10 @@ class _AnkiStudyPageState extends ConsumerState<AnkiStudyPage> {
               child: Center(
                   child: SingleChildScrollView(
             child: Card(
-              elevation: 2,
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20)),
+                borderRadius: BorderRadius.circular(16),
+                side: BorderSide(color: cs.outlineVariant, width: 0.5),
+              ),
               child: Container(
                 width: double.infinity,
                 constraints: const BoxConstraints(minHeight: 300),
@@ -544,26 +570,30 @@ class _AnkiStudyPageState extends ConsumerState<AnkiStudyPage> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text('正面',
+                    Text(AppLocalizations.of(context)!.ankiFrontLabel,
                         style: TextStyle(
                             fontSize: 12,
                             color: cs.primary,
                             fontWeight: FontWeight.w600,
                             letterSpacing: 1)),
                     const SizedBox(height: 16),
-                    Text(_frontText,
+                    Text(
+                        _frontText(
+                            AppLocalizations.of(context)!.ankiNoCardContent),
                         style: const TextStyle(fontSize: 22),
                         textAlign: TextAlign.center),
                     if (_showAnswer) ...[
                       const Divider(height: 32),
-                      Text('背面',
+                      Text(AppLocalizations.of(context)!.ankiBackLabel,
                           style: TextStyle(
                               fontSize: 12,
                               color: cs.tertiary,
                               fontWeight: FontWeight.w600,
                               letterSpacing: 1)),
                       const SizedBox(height: 16),
-                      Text(_backText,
+                      Text(
+                          _backText(
+                              AppLocalizations.of(context)!.ankiNoCardContent),
                           style: const TextStyle(fontSize: 20),
                           textAlign: TextAlign.center),
                     ],
@@ -580,20 +610,36 @@ class _AnkiStudyPageState extends ConsumerState<AnkiStudyPage> {
                   style: FilledButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16)),
                   onPressed: () => setState(() => _showAnswer = true),
-                  child: const Text('显示答案', style: TextStyle(fontSize: 16)),
+                  child: Text(AppLocalizations.of(context)!.ankiShowAnswer,
+                      style: const TextStyle(fontSize: 16)),
                 ))
           else ...[
             Row(children: [
-              Expanded(child: _RatingBtn('忘记', Colors.red, () => _answer(1))),
+              Expanded(
+                  child: _RatingBtn(
+                      AppLocalizations.of(context)!.ankiRatingAgain,
+                      Colors.red,
+                      () => _answer(1))),
               const SizedBox(width: 8),
               Expanded(
-                  child: _RatingBtn('困难', Colors.orange, () => _answer(2))),
+                  child: _RatingBtn(
+                      AppLocalizations.of(context)!.ankiRatingHard,
+                      Colors.orange,
+                      () => _answer(2))),
             ]),
             const SizedBox(height: 8),
             Row(children: [
-              Expanded(child: _RatingBtn('良好', Colors.green, () => _answer(3))),
+              Expanded(
+                  child: _RatingBtn(
+                      AppLocalizations.of(context)!.ankiRatingGood,
+                      Colors.green,
+                      () => _answer(3))),
               const SizedBox(width: 8),
-              Expanded(child: _RatingBtn('简单', Colors.blue, () => _answer(4))),
+              Expanded(
+                  child: _RatingBtn(
+                      AppLocalizations.of(context)!.ankiRatingEasy,
+                      Colors.blue,
+                      () => _answer(4))),
             ]),
           ],
           const SizedBox(height: 8),
@@ -602,26 +648,26 @@ class _AnkiStudyPageState extends ConsumerState<AnkiStudyPage> {
     );
   }
 
-  Widget _buildDone(ColorScheme cs) {
+  Widget _buildDone(BuildContext context, ColorScheme cs) {
     return Center(
         child: Padding(
       padding: const EdgeInsets.all(32),
       child: Column(mainAxisSize: MainAxisSize.min, children: [
         Icon(Icons.celebration, size: 72, color: cs.primary),
         const SizedBox(height: 16),
-        Text('当前没有待学习的卡片',
+        Text(AppLocalizations.of(context)!.ankiNoCardsToStudy,
             style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.w600,
                 color: cs.onSurface)),
         const SizedBox(height: 8),
-        Text('你可以添加新卡片或稍后再来',
+        Text(AppLocalizations.of(context)!.ankiNoCardsHint,
             style: TextStyle(fontSize: 14, color: cs.onSurfaceVariant),
             textAlign: TextAlign.center),
         const SizedBox(height: 32),
         FilledButton.icon(
             icon: const Icon(Icons.arrow_back),
-            label: const Text('返回'),
+            label: Text(AppLocalizations.of(context)!.ankiBack),
             onPressed: () => Navigator.pop(context)),
       ]),
     ));
@@ -697,7 +743,7 @@ class _RatingBtn extends StatelessWidget {
           backgroundColor: color.withValues(alpha: 0.12),
           foregroundColor: color,
           shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(16),
               side: BorderSide(color: color.withValues(alpha: 0.3))),
         ),
         onPressed: onTap,

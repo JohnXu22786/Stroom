@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import '../utils/format_chat_error.dart';
 import '../../../utils/ocr_diagnostics.dart';
 
@@ -113,7 +114,7 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
                     width: double.infinity,
                     child: OutlinedButton(
                       onPressed: () => Navigator.pop(context),
-                      child: const Text('关闭'),
+                      child: Text(AppLocalizations.of(context)!.actionClose),
                     ),
                   ),
                 ),
@@ -149,7 +150,7 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
               },
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(),
-              tooltip: '返回',
+              tooltip: AppLocalizations.of(context)!.chatErrorBack,
             ),
           if (_selectedSectionId != null) const SizedBox(width: 8),
           Icon(
@@ -161,7 +162,7 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
           Text(
             _selectedSectionId != null
                 ? _findSectionLabel(_selectedSectionId!)
-                : '数据详情',
+                : AppLocalizations.of(context)!.chatDataDetails,
             style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w600,
@@ -195,6 +196,7 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
     final sections = <_DataSection>[];
     final req = widget.rawRequest ?? {};
     final resp = widget.rawResponse ?? {};
+    final l10n = AppLocalizations.of(context)!;
 
     if (widget.isOcrDiagnostics) {
       final credentialValues =
@@ -233,7 +235,7 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
       return [
         _DataSection(
           id: 'ocr_diagnostics',
-          label: 'OCR Diagnostics',
+          label: l10n.chatErrorDetailOcrDiagnostics,
           icon: Icons.info_outline,
           value: diagnostics,
         ),
@@ -244,7 +246,7 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
     if (req.containsKey('url') && req['url'] != null) {
       sections.add(_DataSection(
         id: 'request_url',
-        label: 'Request URL',
+        label: l10n.chatErrorDetailRequestUrl,
         icon: Icons.link,
         value: req['url'],
       ));
@@ -254,7 +256,7 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
     if (req.containsKey('headers') && req['headers'] != null) {
       sections.add(_DataSection(
         id: 'request_headers',
-        label: 'Request Headers',
+        label: l10n.chatErrorDetailRequestHeaders,
         icon: Icons.code,
         value: req['headers'],
       ));
@@ -264,7 +266,7 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
     if (req.containsKey('body') && req['body'] != null) {
       sections.add(_DataSection(
         id: 'request_body',
-        label: 'Request Body',
+        label: l10n.chatErrorDetailRequestBody,
         icon: Icons.code,
         value: req['body'],
       ));
@@ -274,7 +276,7 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
     if (resp.containsKey('statusCode') && resp['statusCode'] != null) {
       sections.add(_DataSection(
         id: 'status_code',
-        label: 'Status Code',
+        label: l10n.chatErrorDetailStatusCode,
         icon: Icons.info_outline,
         value: resp['statusCode'],
       ));
@@ -284,7 +286,7 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
     if (resp.containsKey('headers') && resp['headers'] != null) {
       sections.add(_DataSection(
         id: 'response_headers',
-        label: 'Response Headers',
+        label: l10n.chatErrorDetailResponseHeaders,
         icon: Icons.code,
         value: resp['headers'],
       ));
@@ -294,14 +296,14 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
     if (resp.containsKey('data') && resp['data'] != null) {
       sections.add(_DataSection(
         id: 'response_body',
-        label: 'Response Body',
+        label: l10n.chatErrorDetailResponseBody,
         icon: Icons.code,
         value: resp['data'],
       ));
     } else if (resp.containsKey('error') && resp['error'] != null) {
       sections.add(_DataSection(
         id: 'response_body',
-        label: 'Response Body',
+        label: l10n.chatErrorDetailResponseBody,
         icon: Icons.code,
         value: resp['error'],
       ));
@@ -312,12 +314,12 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
 
   /// Builds the empty state shown when no data is available.
   Widget _buildEmptyState() {
-    return const Padding(
-      padding: EdgeInsets.all(24),
+    return Padding(
+      padding: const EdgeInsets.all(24),
       child: Center(
         child: Text(
-          'No detail data available',
-          style: TextStyle(
+          AppLocalizations.of(context)!.chatErrorDetailEmpty,
+          style: const TextStyle(
             color: Colors.grey,
             fontStyle: FontStyle.italic,
           ),

@@ -518,7 +518,9 @@ class AsrTaskScheduler {
         allowUncertainToBeResolved: chunk.status == AsrChunkStatus.failed,
       );
     } catch (error) {
-      throw StateError('ASR 分段恢复记录写入失败；当前请求结果可能不确定，任务已停止: $error');
+      throw StateError(
+        notifier.localizations.bgTaskAsrCheckpointUncertain('$error'),
+      );
     }
     await _writeRetryData(job);
   }
@@ -723,7 +725,9 @@ class AsrTaskScheduler {
         configuredApiKey: config.apiKey,
       );
     } catch (error) {
-      throw StateError('ASR 分段恢复记录写入失败；该片段尚未发送，可修复本地存储后重试: $error');
+      throw StateError(
+        notifier.localizations.bgTaskAsrCheckpointNotSent('$error'),
+      );
     }
 
     final task = notifier.taskById(job.taskId);
@@ -753,7 +757,9 @@ class AsrTaskScheduler {
         );
         job.chunks = resolvedChunks;
       } catch (error) {
-        throw StateError('ASR 取消前的分段状态写入失败；该片段仍按结果不确定处理: $error');
+        throw StateError(
+          notifier.localizations.bgTaskAsrCheckpointCancelled('$error'),
+        );
       }
     }
     _checkActive(job);
@@ -820,7 +826,9 @@ class AsrTaskScheduler {
   }
 
   void _cancel(_AsrTaskJob job) {
-    if (!job.cancelToken.isCancelled) job.cancelToken.cancel('已取消');
+    if (!job.cancelToken.isCancelled) {
+      job.cancelToken.cancel(notifier.localizations.bgTaskCancelled);
+    }
     job.service?.close(force: true);
   }
 
@@ -870,8 +878,12 @@ class AsrTaskScheduler {
         )) {
           notifier.failTask(
             job.taskId,
-            error:
-                '无法保存 ASR 重试音频，任务未发送: ${AsrRetryConfigSnapshot.sanitizeDiagnosticText('$error', configuredApiKey: config.apiKey)}',
+            error: notifier.localizations.bgTaskAsrRetryAudioSaveError(
+              AsrRetryConfigSnapshot.sanitizeDiagnosticText(
+                '$error',
+                configuredApiKey: config.apiKey,
+              ),
+            ),
           );
         }
         _unregisterCancellation(job);
@@ -893,7 +905,10 @@ class AsrTaskScheduler {
           job.taskId,
           job.taskGeneration,
         )) {
-          notifier.failTask(job.taskId, error: '批次中的其他音频无法保存，已取消发送');
+          notifier.failTask(
+            job.taskId,
+            error: notifier.localizations.bgTaskAsrBatchAudioSaveError,
+          );
         }
         _unregisterCancellation(job);
       }
@@ -1005,8 +1020,10 @@ class AsrTaskScheduler {
           await _writeRetryData(job);
         } catch (_) {}
       }
+      final formattedError =
+          formatAsrTaskFailure(error, notifier.localizations);
       final safeError = AsrRetryConfigSnapshot.sanitizeDiagnosticText(
-        '$error',
+        formattedError,
         configuredApiKey: config.apiKey,
       );
       for (var index = 0; index < task.steps.length; index++) {
@@ -1054,7 +1071,9 @@ class AsrTaskScheduler {
       };
       notifier.failTask(
         job.taskId,
-        error: hasResult ? '音频转写结果保存失败: $safeError' : '音频转写失败: $safeError',
+        error: hasResult
+            ? notifier.localizations.bgTaskAsrSaveError(safeError)
+            : notifier.localizations.bgTaskAsrError(safeError),
         rawRequest: rawRequest,
         rawResponse: rawResponse,
       );
@@ -1069,50 +1088,90 @@ class AsrTaskScheduler {
 
   void _reportProgress(_AsrTaskJob job, AsrRequestProgress event) {
     _checkActive(job);
+    final strings = notifier.localizations;
     final chunk = event.chunkCount > 1
-        ? '（片段 ${event.chunkIndex}/${event.chunkCount}）'
+        ? strings.bgTaskAsrChunk(
+            event.chunkIndex.toString(),
+            event.chunkCount.toString(),
+          )
         : '';
-    final metrics =
-        ' · 阶段 ${event.phaseElapsedMs}ms · 请求 ${event.completedRequestCount} '
-        '· 已完成片段 ${event.completedChunkCount}/${event.chunkCount}';
+    final metrics = strings.bgTaskProgressMetrics(
+      event.phaseElapsedMs.toString(),
+      event.completedRequestCount.toString(),
+      event.completedChunkCount.toString(),
+      event.chunkCount.toString(),
+    );
     switch (event.phase) {
       case AsrRequestPhase.uploading:
         notifier.updateStep(job.taskId, 0, completed: true);
         final label = event.totalSendBytes > 0
-            ? '上传音频$chunk ${((event.sentBytes * 100) ~/ event.totalSendBytes).clamp(0, 100)}% · ${event.totalSendBytes} bytes$metrics'
-            : '上传音频$chunk';
+            ? strings.bgTaskAsrUploadProgress(
+                chunk,
+                ((event.sentBytes * 100) ~/ event.totalSendBytes)
+                    .clamp(0, 100)
+                    .toString(),
+                event.totalSendBytes.toString(),
+                metrics,
+              )
+            : strings.bgTaskAsrUploadChunk(chunk, '');
         notifier.updateStep(job.taskId, 1, running: true, label: label);
       case AsrRequestPhase.waiting:
         notifier.updateStep(job.taskId, 0, completed: true);
         notifier.updateStep(job.taskId, 1, completed: true);
         final label = event.chunkCount > 1
-            ? '转写中（片段 ${event.chunkIndex}/${event.chunkCount}）$metrics'
-            : '转写中$metrics';
+            ? strings.bgTaskAsrTranscribingChunk(
+                event.chunkIndex.toString(),
+                event.chunkCount.toString(),
+                metrics,
+              )
+            : strings.bgTaskAsrTranscribing(metrics);
         notifier.updateStep(job.taskId, 2, running: true, label: label);
       case AsrRequestPhase.receiving:
         if (event.chunkIndex == event.chunkCount) {
           notifier.updateStep(job.taskId, 2, completed: true);
           final label = event.totalReceiveBytes > 0
-              ? '接收结果 ${((event.receivedBytes * 100) ~/ event.totalReceiveBytes).clamp(0, 100)}%$metrics'
-              : '接收结果$metrics';
+              ? strings.bgTaskAsrReceiveProgress(
+                  ((event.receivedBytes * 100) ~/ event.totalReceiveBytes)
+                      .clamp(0, 100)
+                      .toString(),
+                  metrics,
+                )
+              : '${strings.bgTaskAsrReceive}$metrics';
           notifier.updateStep(job.taskId, 3, running: true, label: label);
         } else {
           notifier.updateStep(
             job.taskId,
             2,
             running: true,
-            label: '转写中（接收片段 ${event.chunkIndex}/${event.chunkCount}）$metrics',
+            label: strings.bgTaskAsrReceivingChunk(
+              event.chunkIndex.toString(),
+              event.chunkCount.toString(),
+              metrics,
+            ),
           );
         }
       case AsrRequestPhase.responseReceived:
       case AsrRequestPhase.chunkCompleted:
         if (event.chunkIndex == event.chunkCount) {
           notifier.updateStep(job.taskId, 2, completed: true);
-          notifier.updateStep(job.taskId, 3, running: true, label: '接收结果');
+          notifier.updateStep(
+            job.taskId,
+            3,
+            running: true,
+            label: strings.bgTaskAsrReceive,
+          );
         } else {
           final label = event.phase == AsrRequestPhase.chunkCompleted
-              ? '转写中（已完成片段 ${event.chunkIndex}/${event.chunkCount}）$metrics'
-              : '转写中（片段 ${event.chunkIndex}/${event.chunkCount} 已返回）$metrics';
+              ? strings.bgTaskAsrCompletedChunks(
+                  event.chunkIndex.toString(),
+                  event.chunkCount.toString(),
+                  metrics,
+                )
+              : strings.bgTaskAsrChunkReturned(
+                  event.chunkIndex.toString(),
+                  event.chunkCount.toString(),
+                  metrics,
+                );
           notifier.updateStep(job.taskId, 2, running: true, label: label);
         }
     }

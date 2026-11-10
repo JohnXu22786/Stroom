@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:uuid/uuid.dart';
@@ -18,6 +19,7 @@ import '../../providers/assistant_provider.dart';
 import '../../providers/background_task_provider.dart';
 import '../../providers/chat_manager_provider.dart';
 import '../../providers/conversation_provider.dart';
+import '../../providers/locale_provider.dart';
 import '../../providers/provider_config.dart';
 import '../../providers/task_provider.dart';
 import '../../providers/tts_state_provider.dart';
@@ -195,11 +197,18 @@ class TaskFlowExecutionService {
         .read(catcatchTasksProvider)
         .where((task) => task.id == taskId)
         .firstOrNull;
-    if (task == null || task.status != catcatch.TaskStatus.running) {
+    final awaitingBrowserRecovery =
+        task?.status == catcatch.TaskStatus.paused &&
+            task?.metadata[catcatch.CatCatchTask.webViewRecoveryRequiredKey] ==
+                'true';
+    if (task == null ||
+        (task.status != catcatch.TaskStatus.running &&
+            !(awaitingBrowserRecovery && !selecting))) {
       return null;
     }
     final awaitingSelection = task.selectedMedia == null &&
-        task.detectedMedia.length > 1 &&
+        (task.detectedMedia.length > 1 ||
+            task.metadata['deferSingleResourceSelection'] == 'true') &&
         task.steps.any((step) =>
             step.type == catcatch.StepType.userSelecting &&
             step.running &&
@@ -207,9 +216,18 @@ class TaskFlowExecutionService {
             !step.skipped);
     final awaitingConfirmation =
         task.metadata['pendingConfirm'] == 'special_format';
-    if (selecting ? !awaitingSelection : !awaitingConfirmation) return null;
+    if (selecting
+        ? !awaitingSelection
+        : !awaitingConfirmation && !awaitingBrowserRecovery) {
+      return null;
+    }
     return _notifier.executions.where((execution) {
-      return execution.status == FlowExecutionStatus.running &&
+      final isBrowserRecoveryContinuation = !selecting &&
+          awaitingBrowserRecovery &&
+          _manualCatCatchWaits[taskId] == execution.id &&
+          execution.status == FlowExecutionStatus.paused;
+      return (execution.status == FlowExecutionStatus.running ||
+              isBrowserRecoveryContinuation) &&
           _activeBlockTypes[execution.id] == BlockType.catcatch &&
           execution.subTasks.any((step) =>
               step.subTaskType == 'catcatch' &&
@@ -230,10 +248,45 @@ class TaskFlowExecutionService {
 
   /// Called by flow-managed CatCatch cards before an action starts engine work.
   /// Only one tap per task may wait in the scheduler queue at a time.
-  Future<bool> performManualCatCatchAction(String taskId, bool selecting,
-      void Function(CatCatchNotifier) action) async {
+  Future<bool> performManualCatCatchAction(
+      String taskId, bool selecting, void Function(CatCatchNotifier) action,
+      {String? selectedMediaUrl,
+      String? selectedMediaIdentity,
+      bool selectedMediaHasByteRange = false}) async {
     final execution = _manualCatCatchExecution(taskId, selecting);
-    if (execution == null || !_manualCatCatchActions.add(taskId)) return false;
+    if (execution == null || _manualCatCatchActions.contains(taskId))
+      return false;
+    if (selecting) {
+      final task = _ref
+          .read(catcatchTasksProvider)
+          .where((task) => task.id == taskId)
+          .firstOrNull;
+      final encoded =
+          task?.metadata[catcatch.CatCatchTask.flowSelectionCandidatesKey];
+      if (encoded != null) {
+        final candidates = (jsonDecode(encoded) as List).cast<String>().toSet();
+        final identityVersioned = task?.metadata.containsKey(
+              catcatch.CatCatchTask.flowSelectionCandidatesIdentityVersionKey,
+            ) ??
+            false;
+        final allowed = selectedMediaIdentity == null
+            ? !identityVersioned &&
+                selectedMediaUrl != null &&
+                candidates.contains(selectedMediaUrl)
+            : selectedMediaUrl != null &&
+                catcatch.CatCatchTask.flowSelectionCandidateAllowed(
+                  candidates: candidates,
+                  identity: selectedMediaIdentity,
+                  url: selectedMediaUrl,
+                  hasByteRange: selectedMediaHasByteRange,
+                  identityVersioned: identityVersioned,
+                );
+        if (!allowed) {
+          return false;
+        }
+      }
+    }
+    if (!_manualCatCatchActions.add(taskId)) return false;
     final id = execution.id;
     var acquired = false;
     try {
@@ -249,10 +302,31 @@ class TaskFlowExecutionService {
         }
         acquired = true;
       }
-      if (_manualCatCatchExecution(taskId, selecting)?.id != id ||
-          !_scheduler.holds(id)) {
+      final currentExecution = _manualCatCatchExecution(taskId, selecting);
+      if (currentExecution?.id != id || !_scheduler.holds(id)) {
         if (acquired) _scheduler.release(id);
         return false;
+      }
+      if (currentExecution!.status == FlowExecutionStatus.paused) {
+        // Browser recovery marks the CatCatch subtask paused while its live
+        // block runner waits for a manual Continue. Reopen that execution
+        // only after Continue has reacquired its scheduler slot.
+        _notifier.setExecutionStatus(id, FlowExecutionStatus.running);
+        final stepId = currentExecution.subTasks
+            .firstWhere((step) => step.subTaskId == taskId)
+            .id;
+        _notifier.updateSubTaskStatus(id, stepId, TaskStatus.running);
+        if (!await _notifier.persist()) {
+          _notifier.setExecutionStatus(id, FlowExecutionStatus.paused,
+              error: '继续状态无法保存');
+          _notifier.updateSubTaskStatus(id, stepId, TaskStatus.paused);
+          _scheduler.release(id);
+          return false;
+        }
+        action(_ref.read(catcatchTasksProvider.notifier));
+        _pauseGates.remove(id)?.complete();
+        _manualCatCatchWaits.remove(taskId);
+        return true;
       }
       action(_ref.read(catcatchTasksProvider.notifier));
       _manualCatCatchWaits.remove(taskId);
@@ -266,7 +340,7 @@ class TaskFlowExecutionService {
   }
 
   void cancelActiveRequest(String id) {
-    final token = _activeRequestCancelTokens.remove(id);
+    final token = _activeRequestCancelTokens[id];
     if (token != null && !token.isCancelled) token.cancel();
   }
 
@@ -1257,7 +1331,8 @@ class TaskFlowExecutionService {
     }
     switch (def.typeKey) {
       case BlockType.catcatch:
-        var actualType = def.outputType;
+        IOType? actualType =
+            block.outputTypesForNext(nextInputType).singleOrNull;
         FlowPayload? outputPayload;
         final result = await executeCatCatchBlock(
           def: def,
@@ -1270,15 +1345,43 @@ class TaskFlowExecutionService {
           videoFolder: temporaryOutput ? '' : block.params['videoFolder'] ?? '',
           audioFolder: temporaryOutput ? '' : block.params['audioFolder'] ?? '',
           temporaryOutput: temporaryOutput,
+          taskFailedFallback: appLocalizationsForLocale(
+            _ref.read(localeProvider),
+          ).notificationBannerTaskFailedHeading,
           // Per-run duration from the run-mode input box wins over the
           // block's configured duration (0 = use the configured value).
           durationSecOverride: inputDurationSec,
           nextInputType: nextInputType,
           onManualWait: (taskId) => _releaseManualCatCatchSlot(execId, taskId),
+          onManualActionInProgress: (taskId) =>
+              _manualCatCatchActions.contains(taskId),
+          onManualWaitWithCandidates: (taskId, candidates) {
+            catcatchNotifier.setFlowSelectionCandidates(taskId, candidates);
+          },
           onOutputType: (type) => actualType = type,
           onOutputPayload: (payload) => outputPayload = payload,
         );
-        return outputPayload ?? FlowPayload.fromValue(result, actualType);
+        final payload = outputPayload;
+        if (payload != null) {
+          if (payload.type != IOType.audio && payload.type != IOType.video) {
+            throw BlockExecutionException(
+              '下载任务未产生具体的音频或视频输出',
+              blockType: def.typeKey.name,
+              blockTitle: def.label,
+            );
+          }
+          return payload;
+        }
+        final resolvedType = actualType;
+        if (resolvedType == null ||
+            (resolvedType != IOType.audio && resolvedType != IOType.video)) {
+          throw BlockExecutionException(
+            '下载任务未能解析为具体的音频或视频输出',
+            blockType: def.typeKey.name,
+            blockTitle: def.label,
+          );
+        }
+        return FlowPayload.fromValue(result, resolvedType);
       case BlockType.audioSeparation:
         return FlowPayload.fromValue(
             await executeAudioSeparationBlock(
@@ -1304,6 +1407,8 @@ class TaskFlowExecutionService {
               bgNotifier: bgNotifier,
               providerEntries: providerEntries,
               cancelToken: _activeRequestCancelTokens[execId],
+              localizations:
+                  appLocalizationsForLocale(_ref.read(localeProvider)),
             ),
             def.outputType);
       case BlockType.ocr:
@@ -1317,6 +1422,8 @@ class TaskFlowExecutionService {
               flowSubTask: flowSubTask,
               bgNotifier: bgNotifier,
               providerEntries: providerEntries,
+              localizations:
+                  appLocalizationsForLocale(_ref.read(localeProvider)),
               cancelToken: _activeRequestCancelTokens[execId],
             ),
             def.outputType);
@@ -1332,6 +1439,9 @@ class TaskFlowExecutionService {
               taskListNotifier: taskListNotifier,
               providerEntries: providerEntries,
               temporaryOutput: temporaryOutput,
+              taskFailedFallback: appLocalizationsForLocale(
+                _ref.read(localeProvider),
+              ).notificationBannerTaskFailedHeading,
             ),
             def.outputType);
       case BlockType.chat:

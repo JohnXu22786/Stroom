@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 
 import '../models/tool_call.dart';
 import '../providers/provider_config.dart';
@@ -101,7 +102,9 @@ class _HttpToolConfigDialogState extends State<HttpToolConfigDialog> {
           (url.scheme != 'http' && url.scheme != 'https') ||
           !url.hasAuthority ||
           url.host.isEmpty) {
-        setState(() => _urlError = '请输入有效的 HTTP 或 HTTPS 地址');
+        setState(
+          () => _urlError = AppLocalizations.of(context)!.toolInvalidHttpUrl,
+        );
         return;
       }
     }
@@ -120,15 +123,17 @@ class _HttpToolConfigDialogState extends State<HttpToolConfigDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('接入类型：HTTP 搜索'),
+              Text(AppLocalizations.of(context)!.toolHttpSearchType),
               if (definition != null) ...[
                 const SizedBox(height: 12),
-                Text('工具接口：${definition.name}'),
+                Text(
+                  AppLocalizations.of(context)!.toolInterface(definition.name),
+                ),
                 const SizedBox(height: 4),
                 Text(definition.description),
                 const SizedBox(height: 12),
-                const Text(
-                  '参数定义',
+                Text(
+                  AppLocalizations.of(context)!.toolParameterDefinitions,
                   style: TextStyle(fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 4),
@@ -146,7 +151,7 @@ class _HttpToolConfigDialogState extends State<HttpToolConfigDialog> {
                 controller: _urlController,
                 readOnly: !_allowsCustomUrl,
                 decoration: InputDecoration(
-                  labelText: 'HTTP 接口地址',
+                  labelText: AppLocalizations.of(context)!.toolHttpAddress,
                   border: const OutlineInputBorder(),
                   errorText: _urlError,
                 ),
@@ -159,10 +164,12 @@ class _HttpToolConfigDialogState extends State<HttpToolConfigDialog> {
                 controller: _apiKeyController,
                 obscureText: _obscureApiKey,
                 decoration: InputDecoration(
-                  labelText: 'API Key',
+                  labelText: AppLocalizations.of(context)!.mcpApiKey,
                   border: const OutlineInputBorder(),
                   suffixIcon: IconButton(
-                    tooltip: _obscureApiKey ? '显示密钥' : '隐藏密钥',
+                    tooltip: _obscureApiKey
+                        ? AppLocalizations.of(context)!.mcpShowKey
+                        : AppLocalizations.of(context)!.mcpHideKey,
                     icon: Icon(
                       _obscureApiKey ? Icons.visibility_off : Icons.visibility,
                     ),
@@ -178,9 +185,12 @@ class _HttpToolConfigDialogState extends State<HttpToolConfigDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
+          child: Text(AppLocalizations.of(context)!.batchDlgCancel),
         ),
-        FilledButton(onPressed: _save, child: const Text('保存')),
+        FilledButton(
+          onPressed: _save,
+          child: Text(AppLocalizations.of(context)!.mermaidSaveButton),
+        ),
       ],
     );
   }
@@ -191,8 +201,120 @@ class BuiltinToolDetailsDialog extends StatelessWidget {
 
   const BuiltinToolDetailsDialog({required this.definition});
 
+  static const _englishDescriptions = <String, Map<String, String>>{
+    'todowrite': {
+      'description':
+          'Create, read, and manage a to-do list. Passing todos replaces the full list; omitting it reads the current list. Each item has content, status (pending, in_progress, completed, or cancelled), and priority (high, medium, or low). Use it to manage complex tasks with three or more steps.',
+      'properties.todos.description':
+          'Complete replacement of the to-do list. Omit this parameter to read the current list.',
+      'properties.todos.items.properties.content.description':
+          'Task description.',
+      'properties.todos.items.properties.status.description':
+          'Task status: pending, in_progress, completed, or cancelled.',
+      'properties.todos.items.properties.priority.description':
+          'Priority: high, medium, or low.',
+    },
+    'web_search': {
+      'description':
+          'Search the web for current information. Choose Google, Bing, or Baidu with the source parameter (Google is the default). If the preferred engine is unavailable or returns no usable results, the tool tries other engines automatically. No API key is required. Each result includes a title, link, and summary.',
+      'properties.query.description': 'Search terms.',
+      'properties.source.description':
+          'Preferred search engine: google, bing, or baidu. The tool switches automatically if it is unavailable.',
+      'properties.count.description':
+          'Number of results to return (maximum 10).',
+    },
+  };
+
+  static const _chineseDescriptions = <String, Map<String, String>>{
+    'todowrite': {
+      'description':
+          '创建、读取并管理待办事项列表。传入 todos（完整的待办事项列表）时覆盖写入，系统将替换所有现有事项；省略 todos 参数时读取当前待办事项列表。各事项包含：content（任务描述）、status（状态：pending/in_progress/completed/cancelled）、priority（优先级：high/medium/low）。适用于 3 个以上步骤的复杂任务管理。',
+      'properties.todos.description': '待办事项列表（全量替换）。省略该参数时读取当前待办列表。',
+      'properties.todos.items.properties.content.description': '任务描述',
+      'properties.todos.items.properties.status.description':
+          '任务状态：pending（待处理）、in_progress（进行中）、completed（已完成）、cancelled（已取消）',
+      'properties.todos.items.properties.priority.description':
+          '优先级：high（高）、medium（中）、low（低）',
+    },
+    'web_search': {
+      'description':
+          '通过网络搜索获取实时信息。支持 Google、Bing、百度三个搜索引擎，通过 source 参数选择首选引擎（默认 google）；首选引擎不可用或未返回可解析结果时会自动尝试其他引擎。无需 API Key，免费使用。每个结果包含标题、链接和内容摘要。',
+      'properties.query.description': '搜索关键词',
+      'properties.source.description':
+          '首选搜索引擎：google（谷歌）、bing（必应）、baidu（百度）；不可用时会自动切换',
+      'properties.count.description': '返回结果数量（最大 10）',
+    },
+  };
+
+  Map<String, String>? _httpDescriptions(AppLocalizations strings) {
+    final description = switch (definition.name) {
+      'brave_web_search' => strings.httpToolBraveDescription,
+      'bocha_web_search' => strings.httpToolBochaDescription,
+      'querit_search' => strings.httpToolQueritDescription,
+      'searxng_search' => strings.httpToolSearxngDescription,
+      _ => null,
+    };
+    if (description == null) return null;
+    return {
+      'description': description,
+      'properties.query.description': strings.httpToolSearchQueryDescription,
+      'properties.count.description': definition.name == 'brave_web_search'
+          ? strings.httpToolSearchCountMax20Description
+          : strings.httpToolSearchCountDescription,
+    };
+  }
+
+  Map<String, String>? _localizedDescriptions(
+    Locale locale,
+    AppLocalizations strings,
+  ) {
+    return _httpDescriptions(strings) ??
+        (locale.languageCode == 'en'
+            ? _englishDescriptions[definition.name]
+            : locale.languageCode == 'zh'
+                ? _chineseDescriptions[definition.name]
+                : null);
+  }
+
+  Map<String, dynamic> _localizedParameters(
+    Locale locale,
+    AppLocalizations strings,
+  ) {
+    final translations = _localizedDescriptions(locale, strings);
+    if (translations == null) return definition.parameters;
+
+    dynamic localize(dynamic value, String path) {
+      if (value is Map) {
+        return <String, dynamic>{
+          for (final entry in value.entries)
+            entry.key as String: entry.key == 'description'
+                ? translations[
+                        path.isEmpty ? 'description' : '$path.description'] ??
+                    entry.value
+                : localize(
+                    entry.value,
+                    path.isEmpty ? entry.key as String : '$path.${entry.key}',
+                  ),
+        };
+      }
+      if (value is List) {
+        return value.map((item) => localize(item, path)).toList();
+      }
+      return value;
+    }
+
+    return localize(definition.parameters, '') as Map<String, dynamic>;
+  }
+
+  String _localizedDescription(Locale locale, AppLocalizations strings) {
+    final translations = _localizedDescriptions(locale, strings);
+    return translations?['description'] ?? definition.description;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final locale = Localizations.localeOf(context);
+    final strings = AppLocalizations.of(context)!;
     return AlertDialog(
       title: Text(definition.name),
       content: ConstrainedBox(
@@ -202,15 +324,18 @@ class BuiltinToolDetailsDialog extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('接入类型：Stroom 内置工具'),
+              Text(strings.toolBuiltinType),
               const SizedBox(height: 8),
-              Text(definition.description),
+              Text(_localizedDescription(locale, strings)),
               const SizedBox(height: 12),
-              const Text('参数定义', style: TextStyle(fontWeight: FontWeight.w600)),
+              Text(
+                strings.toolParameterDefinitions,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
               const SizedBox(height: 4),
               SelectableText(
                 const JsonEncoder.withIndent('  ')
-                    .convert(definition.parameters),
+                    .convert(_localizedParameters(locale, strings)),
                 style: Theme.of(context)
                     .textTheme
                     .bodySmall
@@ -218,7 +343,7 @@ class BuiltinToolDetailsDialog extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               Text(
-                '是否在助手中启用，由该助手的默认工具设置管理。',
+                strings.toolBuiltinEnableHelp,
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ],
@@ -228,7 +353,7 @@ class BuiltinToolDetailsDialog extends StatelessWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('关闭'),
+          child: Text(strings.mathClose),
         ),
       ],
     );

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 
 import 'package:stroom/widgets/quit_confirmation_dialog.dart';
 
@@ -10,6 +11,9 @@ void main() {
   }) async {
     late Future<bool?> result;
     await tester.pumpWidget(MaterialApp(
+      locale: const Locale('zh', 'CN'),
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
       home: Builder(
         builder: (context) => Center(
           child: ElevatedButton(

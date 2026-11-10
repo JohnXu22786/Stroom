@@ -132,12 +132,50 @@ extension _ChatComposerPanelsExt on ChatComposerWidgetState {
   }
 
   void _showCustomParamsPanel() {
-    final reasoningParamValues = ref.read(reasoningParamValuesProvider);
-    final reasoningEnabled = ref.read(reasoningEnabledProvider);
+    Map<String, String> defaultValues() => {
+          for (final param in widget.customParams)
+            if (param.paramName.trim().isNotEmpty &&
+                (param.type == 'json'
+                    ? param.defaultValue.trim().isNotEmpty
+                    : param.options.isNotEmpty ||
+                        (param.optionOrder.isEmpty &&
+                            param.defaultValue.trim().isNotEmpty) ||
+                        param.type == 'boolean'))
+              param.paramName: param.type == 'json'
+                  ? param.defaultValue
+                  : param.options.isNotEmpty
+                      ? param.options.first
+                      : param.optionOrder.isEmpty &&
+                              param.defaultValue.trim().isNotEmpty
+                          ? param.defaultValue
+                          : 'true',
+        };
+    final storedCustomValues = ref.read(customParamValuesProvider);
+    final customParamValues = Map<String, String>.from(
+      storedCustomValues ?? defaultValues(),
+    );
+    var normalizedJsonValues = false;
+    for (final param in widget.customParams.where((p) => p.type == 'json')) {
+      if (customParamValues.containsKey(param.paramName)) {
+        if (param.defaultValue.trim().isEmpty) {
+          customParamValues.remove(param.paramName);
+          normalizedJsonValues = true;
+        } else if (customParamValues[param.paramName] != param.defaultValue) {
+          customParamValues[param.paramName] = param.defaultValue;
+          normalizedJsonValues = true;
+        }
+      }
+    }
+    // Once the panel opens, store the visible defaults as its runtime state;
+    // subsequent switches then form the complete set sent with requests.
+    if (storedCustomValues == null || normalizedJsonValues) {
+      ref.read(customParamValuesProvider.notifier).state =
+          Map<String, String>.from(customParamValues);
+    }
     showCustomReasoningParamsPanel(
       context: context,
-      reasoningEnabled: reasoningEnabled,
-      reasoningParamSelections: reasoningParamValues,
+      reasoningEnabled: ref.read(reasoningEnabledProvider),
+      reasoningParamSelections: ref.read(reasoningParamValuesProvider),
       reasoningParams: widget.reasoningParams,
       onReasoningParamChanged: (paramName, value) {
         final current = Map<String, String>.from(
@@ -149,30 +187,59 @@ extension _ChatComposerPanelsExt on ChatComposerWidgetState {
           (prefs) => prefs.setString('reasoning_params', current.toString()),
         );
       },
-      onCustomParamToggle: (param, enabled) {
-        if (param.paramName.trim().isEmpty) return;
+      onCustomParamToggle: (ReasoningParam param, enabled) {
         final current = Map<String, String>.from(
           ref.read(reasoningParamValuesProvider),
         );
         if (enabled) {
-          // Write the default option so the param is actually sent and the
-          // chip reflects the enabled state (matches the panel's default
-          // highlight of the first option). Write even when a (possibly
-          // stale, pre-fix) value already exists — the provider change is
-          // what triggers the chip rebuild; keep the existing selection.
-          // boolean 类型参数无选项：开启即写入 'true'。
           if (param.options.isNotEmpty) {
             current.putIfAbsent(param.paramName, () => param.options.first);
-            ref.read(reasoningParamValuesProvider.notifier).state = current;
           } else if (param.type == 'boolean') {
             current[param.paramName] = 'true';
-            ref.read(reasoningParamValuesProvider.notifier).state = current;
           }
         } else {
-          if (current.remove(param.paramName) != null) {
-            ref.read(reasoningParamValuesProvider.notifier).state = current;
-          }
+          current.remove(param.paramName);
         }
+        ref.read(reasoningParamValuesProvider.notifier).state = current;
+        SharedPreferences.getInstance().then(
+          (prefs) => prefs.setString('reasoning_params', current.toString()),
+        );
+      },
+      configuredCustomParams: widget.customParams,
+      configuredCustomParamSelections: customParamValues,
+      onConfiguredCustomParamChanged: (paramName, value) {
+        final current = Map<String, String>.from(
+          ref.read(customParamValuesProvider) ?? customParamValues,
+        );
+        current[paramName] = value;
+        ref.read(customParamValuesProvider.notifier).state = current;
+      },
+      onConfiguredCustomParamToggle: (param, enabled) {
+        if (param.paramName.trim().isEmpty) return;
+        final current = Map<String, String>.from(
+          ref.read(customParamValuesProvider) ?? customParamValues,
+        );
+        if (enabled) {
+          if (param.type == 'json' && param.defaultValue.trim().isNotEmpty) {
+            current[param.paramName] = param.defaultValue;
+          } else {
+            final options = param.optionOrder.isNotEmpty
+                ? param.optionOrder
+                : param.options;
+            if (options.isNotEmpty) {
+              if (!options.contains(current[param.paramName])) {
+                current[param.paramName] = options.first;
+              }
+            } else if (param.type == 'boolean') {
+              current[param.paramName] = 'true';
+            } else if (param.defaultValue.trim().isNotEmpty) {
+              current[param.paramName] = param.defaultValue;
+            }
+          }
+        } else {
+          current.remove(param.paramName);
+        }
+        ref.read(customParamValuesProvider.notifier).state = current;
       },
     );
   }

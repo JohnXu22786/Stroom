@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
+import 'package:stroom/l10n/app_localizations_en.dart';
+import 'package:stroom/l10n/app_localizations_zh.dart';
 import 'package:stroom/pages/task_list_page.dart';
 import 'package:stroom/pages/unified_task_list_page.dart';
 import 'package:stroom/providers/provider_config.dart';
@@ -71,7 +74,8 @@ TaskFlowExecution _flow(String id, String name, SynthesisTask child) =>
 Future<_RecordingTasks> _pumpList(WidgetTester tester,
     List<SynthesisTask> tasks, List<TaskFlowExecution> flows,
     {FlowExecutionRestoreStatus restoreStatus =
-        FlowExecutionRestoreStatus.ready}) async {
+        FlowExecutionRestoreStatus.ready,
+    Locale locale = const Locale('zh', 'CN')}) async {
   late _RecordingTasks notifier;
   final executions = _SeededExecutions(flows);
   await tester.pumpWidget(
@@ -85,7 +89,12 @@ Future<_RecordingTasks> _pumpList(WidgetTester tester,
         taskFlowExecutionRestoreStatusProvider
             .overrideWith((ref) => restoreStatus),
       ],
-      child: const MaterialApp(home: TaskListPage()),
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        locale: locale,
+        home: TaskListPage(),
+      ),
     ),
   );
   await tester.pump();
@@ -93,6 +102,29 @@ Future<_RecordingTasks> _pumpList(WidgetTester tester,
 }
 
 void main() {
+  test('localized clear messages keep dynamic error details verbatim', () {
+    final english = AppLocalizationsEnUs();
+    final chinese = AppLocalizationsZhCn();
+    const dynamicError = 'Provider timeout: request id 42';
+
+    expect(
+      english.unifiedTaskListClearIncomplete(dynamicError),
+      'Clear incomplete: $dynamicError',
+    );
+    expect(
+      chinese.unifiedTaskListClearIncomplete(dynamicError),
+      '清除未完成：$dynamicError',
+    );
+    expect(
+      english.unifiedTaskListCancellationSaveFailed,
+      'Could not save the task flow cancellation state. Please retry clearing.',
+    );
+    expect(
+      chinese.unifiedTaskListCancellationSaveFailed,
+      '无法保存任务流的取消状态，请重试清除。',
+    );
+  });
+
   testWidgets('task controls stay locked until flow ownership is restored',
       (tester) async {
     final flowChild = _task('flow-child', TaskStatus.paused);
@@ -140,7 +172,11 @@ void main() {
         taskFlowExecutionRestoreStatusProvider
             .overrideWith((ref) => FlowExecutionRestoreStatus.restoring),
       ],
-      child: const MaterialApp(home: UnifiedTaskListPage()),
+      child: const MaterialApp(
+          locale: Locale('zh', 'CN'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          home: UnifiedTaskListPage()),
     ));
     await tester.pump();
     final container = ProviderScope.containerOf(
@@ -250,5 +286,29 @@ void main() {
       'resume:standalone-paused',
       'remove:standalone-paused',
     ]);
+  });
+
+  testWidgets('shared task card status and actions follow the selected locale',
+      (tester) async {
+    final task = _task('english-running', TaskStatus.running);
+    await _pumpList(
+      tester,
+      [task],
+      [],
+      locale: const Locale('en', 'US'),
+    );
+
+    expect(find.text('Running'), findsOneWidget);
+    await tester.tap(find.descendant(
+      of: find.ancestor(
+        of: find.text('任务 english-running'),
+        matching: find.byType(Card),
+      ),
+      matching: find.byType(PopupMenuButton<String>),
+    ));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(find.text('Pause'), findsOneWidget);
+    expect(find.text('Clear task'), findsOneWidget);
   });
 }

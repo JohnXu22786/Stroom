@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/models/assistant.dart';
@@ -48,6 +50,14 @@ Widget createChatFlowTestApp({
       }),
     ],
     child: MaterialApp(
+      locale: const Locale('zh', 'CN'),
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       home: Navigator(
         initialRoute: '/assistant-selection',
         // Mirror production (home_page_navigation.dart): generate only the
@@ -87,6 +97,11 @@ Widget createChatFlowTestApp({
       ),
     ),
   );
+}
+
+Finder _localizedBackButton(WidgetTester tester) {
+  final context = tester.element(find.byType(AppBar).first);
+  return find.byTooltip(AppLocalizations.of(context)!.actionBack);
 }
 
 void main() {
@@ -229,7 +244,7 @@ void main() {
       expect(find.text('新对话'), findsWidgets);
 
       // Tap back button
-      final backButtons = find.byTooltip('Back');
+      final backButtons = _localizedBackButton(tester);
       await tester.tap(backButtons.first);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
@@ -256,7 +271,7 @@ void main() {
       expect(find.text('选择对话'), findsOneWidget);
 
       // Press back using tooltip
-      await tester.tap(find.byTooltip('Back'));
+      await tester.tap(_localizedBackButton(tester));
       await tester.pumpAndSettle();
 
       // Should be back on assistant selection page
@@ -282,8 +297,9 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('选择对话'), findsOneWidget);
 
-      // Use system back button to return
-      await tester.pageBack();
+      // The test app uses MaterialPageRoute, so exercise its localized AppBar
+      // back button rather than WidgetTester.pageBack's Cupertino-only lookup.
+      await tester.tap(_localizedBackButton(tester));
       await tester.pumpAndSettle();
 
       // Should be back on assistant selection page

@@ -4,15 +4,22 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/models/assistant.dart';
 import 'package:stroom/models/built_in_prompts.dart';
+import 'package:stroom/pages/assistant/assistant_defaults_tab.dart';
+import 'package:stroom/pages/assistant/assistant_shared.dart'
+    as assistant_shared;
 import 'package:stroom/pages/assistant_selection_page.dart';
 import 'package:stroom/providers/assistant_provider.dart';
+import 'package:stroom/utils/emojis.dart'
+    show EmojiCategories, EmojiCategoryType;
 import 'package:stroom/widgets/llm/assistant_avatar.dart';
 
 /// Creates a test app wrapped in ProviderScope with optional overrides.
 Widget createTestApp({
   List<Assistant>? assistants,
+  Locale locale = const Locale('zh', 'CN'),
 }) {
   SharedPreferences.setMockInitialValues({});
   return ProviderScope(
@@ -31,13 +38,120 @@ Widget createTestApp({
           return notifier;
         }),
     ],
-    child: const MaterialApp(
+    child: MaterialApp(
+      locale: locale,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: AssistantSelectionPage(),
     ),
   );
 }
 
+Widget _localizedAssistantSelectionApp() => MaterialApp(
+      locale: const Locale('zh', 'CN'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: const AssistantSelectionPage(),
+    );
+
+BuiltInPrompt _firstLocalizedPrompt(WidgetTester tester) {
+  final context = tester.element(find.byType(AssistantSelectionPage));
+  return localizedBuiltInPrompts(AppLocalizations.of(context)!).first;
+}
+
 void main() {
+  testWidgets('emoji category tabs follow the selected locale', (tester) async {
+    expect(
+      EmojiCategories.categories.map((category) => category.type).toList(),
+      EmojiCategoryType.values,
+    );
+
+    for (final locale in [
+      (
+        const Locale('en', 'US'),
+        [
+          'Smileys',
+          'People',
+          'Animals',
+          'Food',
+          'Activities',
+          'Travel',
+          'Objects',
+          'Symbols',
+          'Flags',
+        ],
+        ['表情', '人物', '动物', '食物', '活动', '旅行', '物品', '符号', '旗帜'],
+      ),
+      (
+        const Locale('zh', 'CN'),
+        ['表情', '人物', '动物', '食物', '活动', '旅行', '物品', '符号', '旗帜'],
+        [
+          'Smileys',
+          'People',
+          'Animals',
+          'Food',
+          'Activities',
+          'Travel',
+          'Objects',
+          'Symbols',
+          'Flags',
+        ],
+      ),
+    ]) {
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: locale.$1,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            body: assistant_shared.CategorizedEmojiPicker(
+              selectedEmoji: '',
+              onEmojiSelected: (_) {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      for (final label in locale.$2) {
+        expect(find.text(label), findsOneWidget);
+      }
+      for (final label in locale.$3) {
+        expect(find.text(label), findsNothing);
+      }
+    }
+  });
+
+  group('New assistant default prompt localization', () {
+    for (final locale in [const Locale('en', 'US'), const Locale('zh', 'CN')]) {
+      testWidgets('uses the localized seed for $locale', (tester) async {
+        await tester.pumpWidget(createTestApp(locale: locale));
+        await tester.pumpAndSettle();
+
+        final selectionContext = tester.element(
+          find.byType(AssistantSelectionPage),
+        );
+        await tester.tap(
+          find.byTooltip(
+            AppLocalizations.of(selectionContext)!.assistantCreateNew,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final dialogContext = tester.element(find.byType(AlertDialog));
+        final expectedSeed =
+            AppLocalizations.of(dialogContext)!.assistantDefaultPrompt;
+        expect(
+          find.byWidgetPredicate(
+            (widget) =>
+                widget is TextField && widget.controller?.text == expectedSeed,
+          ),
+          findsOneWidget,
+        );
+      });
+    }
+  });
+
   group('EmojiPicker adaptive width', () {
     /// Find the emoji GridView inside the dialog (padding EdgeInsets.only(top: 4))
     Finder findEmojiGrid() {
@@ -68,8 +182,11 @@ void main() {
 
         // The picker now lives behind the small emoji square in 基本设置:
         // tapping the square opens the picker panel dialog.
-        expect(findEmojiGrid(), findsNothing,
-            reason: 'picker is no longer inline in the edit dialog');
+        expect(
+          findEmojiGrid(),
+          findsNothing,
+          reason: 'picker is no longer inline in the edit dialog',
+        );
         await tester.tap(find.byType(EmojiAvatarButton));
         await tester.pumpAndSettle();
         expect(find.text('选择表情'), findsOneWidget);
@@ -143,8 +260,11 @@ void main() {
       // The panel closes on selection and the edit dialog is still working
       expect(find.text('编辑助手'), findsOneWidget);
       expect(find.text('保存'), findsOneWidget);
-      expect(findEmojiGrid(), findsNothing,
-          reason: 'picker panel should close after picking');
+      expect(
+        findEmojiGrid(),
+        findsNothing,
+        reason: 'picker panel should close after picking',
+      );
 
       // The square now shows the picked emoji
       final square = tester.widget<EmojiAvatarButton>(
@@ -176,63 +296,75 @@ void main() {
       // The prompt field must be a growing field, not a fixed 4-line box
       final promptField = find.widgetWithText(TextField, '系统提示词');
       final promptWidget = tester.widget<TextField>(promptField);
-      expect(promptWidget.maxLines, isNull,
-          reason: 'system prompt must not have a fixed line count');
-      expect(promptWidget.expands, isTrue,
-          reason: 'system prompt must expand into the remaining space');
+      expect(
+        promptWidget.maxLines,
+        isNull,
+        reason: 'system prompt must not have a fixed line count',
+      );
+      expect(
+        promptWidget.expands,
+        isTrue,
+        reason: 'system prompt must expand into the remaining space',
+      );
 
       // Geometry: it should occupy most of the dialog height — far taller
       // than the 2-line description field — and end right above the buttons
       // (no fixed-height stub in the middle of the dialog).
       final promptRect = tester.getRect(promptField);
-      final descRect = tester.getRect(
-        find.widgetWithText(TextField, '描述（可选）'),
+      final descRect = tester.getRect(find.widgetWithText(TextField, '描述（可选）'));
+      final saveRect = tester.getRect(find.widgetWithText(FilledButton, '保存'));
+      expect(
+        promptRect.height,
+        greaterThan(descRect.height * 3),
+        reason: 'prompt field should fill the remaining dialog space',
       );
-      final saveRect = tester.getRect(
-        find.widgetWithText(FilledButton, '保存'),
+      expect(
+        promptRect.bottom,
+        lessThan(saveRect.top),
+        reason: 'prompt field must not overlap the action buttons',
       );
-      expect(promptRect.height, greaterThan(descRect.height * 3),
-          reason: 'prompt field should fill the remaining dialog space');
-      expect(promptRect.bottom, lessThan(saveRect.top),
-          reason: 'prompt field must not overlap the action buttons');
-      expect(saveRect.top - promptRect.bottom, lessThan(80),
-          reason: 'prompt field should end right above the action buttons');
+      expect(
+        saveRect.top - promptRect.bottom,
+        lessThan(80),
+        reason: 'prompt field should end right above the action buttons',
+      );
     });
 
-    testWidgets('create dialog system prompt field fills the remaining height',
-        (
-      tester,
-    ) async {
-      tester.view.physicalSize = const Size(800, 900);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.reset);
+    testWidgets(
+      'create dialog system prompt field fills the remaining height',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
 
-      await tester.pumpWidget(
-        createTestApp(
-          assistants: [Assistant(name: '测试助手', prompt: 'P1', emoji: '🤖')],
-        ),
-      );
-      await tester.pumpAndSettle();
+        await tester.pumpWidget(
+          createTestApp(
+            assistants: [Assistant(name: '测试助手', prompt: 'P1', emoji: '🤖')],
+          ),
+        );
+        await tester.pumpAndSettle();
 
-      // Tap the add button in the app bar to open create dialog
-      await tester.tap(find.byIcon(Icons.add));
-      await tester.pumpAndSettle();
+        // Tap the add button in the app bar to open create dialog
+        await tester.tap(find.byIcon(Icons.add));
+        await tester.pumpAndSettle();
 
-      final promptField = find.widgetWithText(TextField, '系统提示词');
-      final promptWidget = tester.widget<TextField>(promptField);
-      expect(promptWidget.maxLines, isNull);
-      expect(promptWidget.expands, isTrue);
+        final promptField = find.widgetWithText(TextField, '系统提示词');
+        final promptWidget = tester.widget<TextField>(promptField);
+        expect(promptWidget.maxLines, isNull);
+        expect(promptWidget.expands, isTrue);
 
-      final promptRect = tester.getRect(promptField);
-      final descRect = tester.getRect(
-        find.widgetWithText(TextField, '描述（可选）'),
-      );
-      final createRect =
-          tester.getRect(find.widgetWithText(FilledButton, '创建'));
-      expect(promptRect.height, greaterThan(descRect.height * 3));
-      expect(promptRect.bottom, lessThan(createRect.top));
-      expect(createRect.top - promptRect.bottom, lessThan(80));
-    });
+        final promptRect = tester.getRect(promptField);
+        final descRect = tester.getRect(
+          find.widgetWithText(TextField, '描述（可选）'),
+        );
+        final createRect = tester.getRect(
+          find.widgetWithText(FilledButton, '创建'),
+        );
+        expect(promptRect.height, greaterThan(descRect.height * 3));
+        expect(promptRect.bottom, lessThan(createRect.top));
+        expect(createRect.top - promptRect.bottom, lessThan(80));
+      },
+    );
 
     testWidgets(
         'edit dialog on a very short window falls back to a scrollable '
@@ -280,9 +412,7 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
       tester.platformDispatcher.textScaleFactorTestValue = 2.0;
-      addTearDown(
-        tester.platformDispatcher.clearTextScaleFactorTestValue,
-      );
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
 
       await tester.pumpWidget(
         createTestApp(
@@ -325,13 +455,17 @@ void main() {
       // 基本设置 layout: emoji square first, name field to its right,
       // both on the same row.
       final squareRect = tester.getRect(find.byType(EmojiAvatarButton));
-      final nameRect = tester.getRect(
-        find.widgetWithText(TextField, '助手编辑'),
+      final nameRect = tester.getRect(find.widgetWithText(TextField, '助手编辑'));
+      expect(
+        squareRect.right,
+        lessThan(nameRect.left),
+        reason: 'emoji square should be before (left of) the name field',
       );
-      expect(squareRect.right, lessThan(nameRect.left),
-          reason: 'emoji square should be before (left of) the name field');
-      expect((squareRect.center.dy - nameRect.center.dy).abs(), lessThan(30),
-          reason: 'emoji square and name field should be on the same row');
+      expect(
+        (squareRect.center.dy - nameRect.center.dy).abs(),
+        lessThan(30),
+        reason: 'emoji square and name field should be on the same row',
+      );
     });
   });
 
@@ -378,7 +512,9 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final cardRect = tester.getRect(find.byType(AssistantCard));
+      final cardRect = tester.getRect(
+        find.byType(assistant_shared.AssistantCard),
+      );
       final avatarRect = tester.getRect(find.byType(AssistantAvatar));
       expect(
         (avatarRect.center.dx - cardRect.center.dx).abs(),
@@ -421,44 +557,47 @@ void main() {
     });
 
     testWidgets(
-        'long-press dragging a card reorders the assistants and persists',
-        (tester) async {
-      await tester.pumpWidget(
-        createTestApp(
-          assistants: [
-            Assistant(name: '助手甲', prompt: 'P1', emoji: '🤖'),
-            Assistant(name: '助手乙', prompt: 'P2', emoji: '😊'),
-            Assistant(name: '助手丙', prompt: 'P3', emoji: '🎉'),
-            Assistant(name: '助手丁', prompt: 'P4', emoji: '🔥'),
-          ],
-        ),
-      );
-      await tester.pumpAndSettle();
+      'long-press dragging a card reorders the assistants and persists',
+      (tester) async {
+        await tester.pumpWidget(
+          createTestApp(
+            assistants: [
+              Assistant(name: '助手甲', prompt: 'P1', emoji: '🤖'),
+              Assistant(name: '助手乙', prompt: 'P2', emoji: '😊'),
+              Assistant(name: '助手丙', prompt: 'P3', emoji: '🎉'),
+              Assistant(name: '助手丁', prompt: 'P4', emoji: '🔥'),
+            ],
+          ),
+        );
+        await tester.pumpAndSettle();
 
-      // 长按第一张卡片（助手甲，第 1 列），向右拖进第 2 列 → 与助手乙换位
-      final gesture =
-          await tester.startGesture(tester.getCenter(find.text('助手甲')));
-      await tester.pump(const Duration(milliseconds: 850));
-      await gesture.moveBy(const Offset(195, 0));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 250));
-      await gesture.up();
-      await tester.pumpAndSettle();
+        // 长按第一张卡片（助手甲，第 1 列），向右拖进第 2 列 → 与助手乙换位
+        final gesture = await tester.startGesture(
+          tester.getCenter(find.text('助手甲')),
+        );
+        await tester.pump(const Duration(milliseconds: 850));
+        await gesture.moveBy(const Offset(195, 0));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 250));
+        await gesture.up();
+        await tester.pumpAndSettle();
 
-      final container = ProviderScope.containerOf(
-        tester.element(find.byType(AssistantSelectionPage)),
-      );
-      final order =
-          container.read(assistantProvider).map((a) => a.name).toList();
-      expect(order, ['助手乙', '助手甲', '助手丙', '助手丁'], reason: '长按拖动应重排助手列表');
+        final container = ProviderScope.containerOf(
+          tester.element(find.byType(AssistantSelectionPage)),
+        );
+        final order =
+            container.read(assistantProvider).map((a) => a.name).toList();
+        expect(order, ['助手乙', '助手甲', '助手丙', '助手丁'], reason: '长按拖动应重排助手列表');
 
-      // 顺序持久化：prefs 里保存的是重排后的顺序
-      final prefs = await SharedPreferences.getInstance();
-      final json = prefs.getString('assistants');
-      expect(json, isNotNull);
-      final decoded = (jsonDecode(json!) as List).cast<Map<String, dynamic>>();
-      expect((decoded.first['name'] as String), '助手乙');
-    });
+        // 顺序持久化：prefs 里保存的是重排后的顺序
+        final prefs = await SharedPreferences.getInstance();
+        final json = prefs.getString('assistants');
+        expect(json, isNotNull);
+        final decoded =
+            (jsonDecode(json!) as List).cast<Map<String, dynamic>>();
+        expect((decoded.first['name'] as String), '助手乙');
+      },
+    );
 
     testWidgets('long-press starts drag: no menu popup and no navigation', (
       tester,
@@ -474,8 +613,9 @@ void main() {
       await tester.pumpAndSettle();
 
       // 长按卡片（此前是弹菜单）——现在应只启动拖拽，松手不弹菜单也不跳转
-      final gesture =
-          await tester.startGesture(tester.getCenter(find.text('拖拽卡')));
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.text('拖拽卡')),
+      );
       await tester.pump(const Duration(milliseconds: 850));
       await gesture.up();
       await tester.pumpAndSettle();
@@ -487,10 +627,10 @@ void main() {
       final container = ProviderScope.containerOf(
         tester.element(find.byType(AssistantSelectionPage)),
       );
-      expect(
-        container.read(assistantProvider).map((a) => a.name).toList(),
-        ['拖拽卡', '另一卡'],
-      );
+      expect(container.read(assistantProvider).map((a) => a.name).toList(), [
+        '拖拽卡',
+        '另一卡',
+      ]);
     });
 
     testWidgets('menu button opens the edit/delete sheet', (tester) async {
@@ -517,9 +657,7 @@ void main() {
     testWidgets('market dialog shows prompt cards', (tester) async {
       await tester.pumpWidget(
         createTestApp(
-          assistants: [
-            Assistant(name: '助手1', prompt: 'P1', emoji: '🤖'),
-          ],
+          assistants: [Assistant(name: '助手1', prompt: 'P1', emoji: '🤖')],
         ),
       );
       await tester.pumpAndSettle();
@@ -529,16 +667,14 @@ void main() {
       await tester.pumpAndSettle();
 
       // Should show the first built-in prompt's name
-      final firstPrompt = builtInPrompts.first;
+      final firstPrompt = _firstLocalizedPrompt(tester);
       expect(find.text(firstPrompt.name), findsOneWidget);
     });
 
     testWidgets('market cards have no text editing fields', (tester) async {
       await tester.pumpWidget(
         createTestApp(
-          assistants: [
-            Assistant(name: '助手1', prompt: 'P1', emoji: '🤖'),
-          ],
+          assistants: [Assistant(name: '助手1', prompt: 'P1', emoji: '🤖')],
         ),
       );
       await tester.pumpAndSettle();
@@ -556,9 +692,7 @@ void main() {
     ) async {
       await tester.pumpWidget(
         createTestApp(
-          assistants: [
-            Assistant(name: '助手1', prompt: 'P1', emoji: '🤖'),
-          ],
+          assistants: [Assistant(name: '助手1', prompt: 'P1', emoji: '🤖')],
         ),
       );
       await tester.pumpAndSettle();
@@ -569,7 +703,7 @@ void main() {
 
       // The prompt code must NOT be visible on the card; only the
       // description is shown by default
-      final firstPrompt = builtInPrompts.first;
+      final firstPrompt = _firstLocalizedPrompt(tester);
       expect(find.text(firstPrompt.prompt), findsNothing);
       expect(find.text(firstPrompt.description), findsOneWidget);
 
@@ -593,9 +727,7 @@ void main() {
       SharedPreferences.setMockInitialValues({});
       await tester.pumpWidget(
         createTestApp(
-          assistants: [
-            Assistant(name: '助手1', prompt: 'P1', emoji: '🤖'),
-          ],
+          assistants: [Assistant(name: '助手1', prompt: 'P1', emoji: '🤖')],
         ),
       );
       await tester.pumpAndSettle();
@@ -605,7 +737,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Tap the first card — this must NOT import directly
-      final firstPrompt = builtInPrompts.first;
+      final firstPrompt = _firstLocalizedPrompt(tester);
       await tester.tap(find.text(firstPrompt.name).first);
       await tester.pumpAndSettle();
 
@@ -629,45 +761,42 @@ void main() {
     });
 
     testWidgets(
-        'importing from the detail panel creates assistant and closes dialogs',
-        (
-      tester,
-    ) async {
-      SharedPreferences.setMockInitialValues({});
-      await tester.pumpWidget(
-        createTestApp(
-          // The override starts with an empty notifier; no default assistant
-          // is auto-created, so the grid shows the empty state.
-          assistants: [],
-        ),
-      );
-      await tester.pumpAndSettle();
+      'importing from the detail panel creates assistant and closes dialogs',
+      (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        await tester.pumpWidget(
+          createTestApp(
+            // The override starts with an empty notifier; no default assistant
+            // is auto-created, so the grid shows the empty state.
+            assistants: [],
+          ),
+        );
+        await tester.pumpAndSettle();
 
-      // Open the dialog
-      await tester.tap(find.byIcon(Icons.storefront));
-      await tester.pumpAndSettle();
+        // Open the dialog
+        await tester.tap(find.byIcon(Icons.storefront));
+        await tester.pumpAndSettle();
 
-      // Open the detail panel of the first prompt
-      final firstPrompt = builtInPrompts.first;
-      await tester.tap(find.text(firstPrompt.name).first);
-      await tester.pumpAndSettle();
+        // Open the detail panel of the first prompt
+        final firstPrompt = _firstLocalizedPrompt(tester);
+        await tester.tap(find.text(firstPrompt.name).first);
+        await tester.pumpAndSettle();
 
-      // Import from the detail panel
-      await tester.tap(find.text('添加助手'));
-      await tester.pumpAndSettle();
+        // Import from the detail panel
+        await tester.tap(find.text('添加助手'));
+        await tester.pumpAndSettle();
 
-      // Both dialogs should be closed and the new assistant appears
-      expect(find.text('助手市场'), findsNothing);
-      expect(find.text(firstPrompt.name), findsOneWidget);
-    });
+        // Both dialogs should be closed and the new assistant appears
+        expect(find.text('助手市场'), findsNothing);
+        expect(find.text(firstPrompt.name), findsOneWidget);
+      },
+    );
 
     testWidgets('card 添加 button imports the prompt directly', (tester) async {
       SharedPreferences.setMockInitialValues({});
       await tester.pumpWidget(
         createTestApp(
-          assistants: [
-            Assistant(name: '助手1', prompt: 'P1', emoji: '🤖'),
-          ],
+          assistants: [Assistant(name: '助手1', prompt: 'P1', emoji: '🤖')],
         ),
       );
       await tester.pumpAndSettle();
@@ -677,7 +806,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Tap the 添加 button on the first card (not the card itself)
-      final firstPrompt = builtInPrompts.first;
+      final firstPrompt = _firstLocalizedPrompt(tester);
       await tester.tap(find.widgetWithText(FilledButton, '添加').first);
       await tester.pumpAndSettle();
 
@@ -692,9 +821,7 @@ void main() {
       SharedPreferences.setMockInitialValues({});
       await tester.pumpWidget(
         createTestApp(
-          assistants: [
-            Assistant(name: '助手1', prompt: 'P1', emoji: '🤖'),
-          ],
+          assistants: [Assistant(name: '助手1', prompt: 'P1', emoji: '🤖')],
         ),
       );
       await tester.pumpAndSettle();
@@ -702,7 +829,7 @@ void main() {
       // Open the market dialog and the detail panel of the first prompt
       await tester.tap(find.byIcon(Icons.storefront));
       await tester.pumpAndSettle();
-      final firstPrompt = builtInPrompts.first;
+      final firstPrompt = _firstLocalizedPrompt(tester);
       await tester.tap(find.text(firstPrompt.name).first);
       await tester.pumpAndSettle();
 
@@ -738,9 +865,7 @@ void main() {
       SharedPreferences.setMockInitialValues({});
       await tester.pumpWidget(
         createTestApp(
-          assistants: [
-            Assistant(name: '现有助手', prompt: 'P1', emoji: '🤖'),
-          ],
+          assistants: [Assistant(name: '现有助手', prompt: 'P1', emoji: '🤖')],
         ),
       );
       await tester.pumpAndSettle();
@@ -785,9 +910,7 @@ void main() {
       expect(find.text('助手名称'), findsOneWidget);
     });
 
-    testWidgets('⋮ menu 编辑 opens combined dialog with tab bar', (
-      tester,
-    ) async {
+    testWidgets('⋮ menu 编辑 opens combined dialog with tab bar', (tester) async {
       await tester.pumpWidget(
         createTestApp(
           assistants: [Assistant(name: '助手编辑', prompt: 'P1', emoji: '🤖')],
@@ -843,67 +966,76 @@ void main() {
 
       // Should see model parameters
       expect(find.text('温度 (Temperature)'), findsOneWidget);
-      expect(find.text('流式输出 (Stream Output)'), findsOneWidget);
+      expect(find.text('流式输出'), findsOneWidget);
       expect(find.text('Top P'), findsOneWidget);
-      expect(find.text('最大Token数 (Max Tokens)'), findsOneWidget);
-      expect(find.text('频率惩罚 (Frequency Penalty)'), findsOneWidget);
-      expect(find.text('存在惩罚 (Presence Penalty)'), findsOneWidget);
-      expect(find.text('随机种子 (Seed)'), findsOneWidget);
+      expect(find.text('最大 Token 数'), findsOneWidget);
+      expect(find.text('频率惩罚'), findsOneWidget);
+      expect(find.text('存在惩罚'), findsOneWidget);
+      expect(find.text('随机种子'), findsOneWidget);
       expect(find.text('联网搜索'), findsOneWidget);
       expect(find.text('自定义参数'), findsOneWidget);
     });
 
     testWidgets(
-        'edit dialog shows three centered tabs with label-sized indicator',
-        (tester) async {
-      await tester.pumpWidget(
-        createTestApp(
-          assistants: [Assistant(name: '助手编辑', prompt: 'P1', emoji: '🤖')],
-        ),
-      );
-      await tester.pumpAndSettle();
+      'edit dialog shows three centered tabs with label-sized indicator',
+      (tester) async {
+        await tester.pumpWidget(
+          createTestApp(
+            assistants: [Assistant(name: '助手编辑', prompt: 'P1', emoji: '🤖')],
+          ),
+        );
+        await tester.pumpAndSettle();
 
-      // 用卡片右上角 ⋮ 按钮打开菜单
-      await tester.tap(find.byIcon(Icons.more_vert).first);
-      await tester.pumpAndSettle();
+        // 用卡片右上角 ⋮ 按钮打开菜单
+        await tester.tap(find.byIcon(Icons.more_vert).first);
+        await tester.pumpAndSettle();
 
-      // Tap 编辑
-      await tester.tap(find.text('编辑'));
-      await tester.pumpAndSettle();
+        // Tap 编辑
+        await tester.tap(find.text('编辑'));
+        await tester.pumpAndSettle();
 
-      // All three tab labels are visible
-      expect(find.text('基本设置'), findsOneWidget);
-      expect(find.text('参数设置'), findsOneWidget);
-      expect(find.text('默认设置'), findsOneWidget);
+        // All three tab labels are visible
+        expect(find.text('基本设置'), findsOneWidget);
+        expect(find.text('参数设置'), findsOneWidget);
+        expect(find.text('默认设置'), findsOneWidget);
 
-      // The dialog's TabBar (the emoji picker's category TabBar only exists
-      // while its popup panel is open, so this is the only one in the tree)
-      // must be scrollable and centered so the tab group is centered — not
-      // left-aligned — with the highlight (label-sized indicator) aligned to
-      // the selected tab label.
-      final dialogTabBar = tester.widget<TabBar>(find.byType(TabBar).first);
-      expect(dialogTabBar.isScrollable, isTrue,
-          reason: 'scrollable TabBar is required for TabAlignment.center');
-      expect(dialogTabBar.tabAlignment, TabAlignment.center);
-      expect(dialogTabBar.indicatorSize, TabBarIndicatorSize.label,
-          reason: 'indicator hugs the label so the highlight stays aligned');
-      expect(dialogTabBar.tabs.length, 3);
+        // The dialog's TabBar (the emoji picker's category TabBar only exists
+        // while its popup panel is open, so this is the only one in the tree)
+        // must be scrollable and centered so the tab group is centered — not
+        // left-aligned — with the highlight (label-sized indicator) aligned to
+        // the selected tab label.
+        final dialogTabBar = tester.widget<TabBar>(find.byType(TabBar).first);
+        expect(
+          dialogTabBar.isScrollable,
+          isTrue,
+          reason: 'scrollable TabBar is required for TabAlignment.center',
+        );
+        expect(dialogTabBar.tabAlignment, TabAlignment.center);
+        expect(
+          dialogTabBar.indicatorSize,
+          TabBarIndicatorSize.label,
+          reason: 'indicator hugs the label so the highlight stays aligned',
+        );
+        expect(dialogTabBar.tabs.length, 3);
 
-      // Geometry: the tab group must actually be CENTERED in the dialog
-      // (the regression was the shrink-wrapped group pinned to the left).
-      final firstLabel = tester.getCenter(find.text('基本设置'));
-      final lastLabel = tester.getCenter(find.text('默认设置'));
-      final groupCenterX = (firstLabel.dx + lastLabel.dx) / 2;
-      final dialogCenterX = tester.getCenter(find.byType(AlertDialog)).dx;
-      expect(
-        (groupCenterX - dialogCenterX).abs(),
-        lessThan(5),
-        reason: 'Tab group should be centered in the dialog, not left-aligned',
-      );
-    });
+        // Geometry: the tab group must actually be CENTERED in the dialog
+        // (the regression was the shrink-wrapped group pinned to the left).
+        final firstLabel = tester.getCenter(find.text('基本设置'));
+        final lastLabel = tester.getCenter(find.text('默认设置'));
+        final groupCenterX = (firstLabel.dx + lastLabel.dx) / 2;
+        final dialogCenterX = tester.getCenter(find.byType(AlertDialog)).dx;
+        expect(
+          (groupCenterX - dialogCenterX).abs(),
+          lessThan(5),
+          reason:
+              'Tab group should be centered in the dialog, not left-aligned',
+        );
+      },
+    );
 
-    testWidgets('默认设置 tab shows default model selector and tool switches',
-        (tester) async {
+    testWidgets('默认设置 tab shows default model selector and tool switches', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         createTestApp(
           assistants: [Assistant(name: '助手编辑', prompt: 'P1', emoji: '🤖')],
@@ -920,6 +1052,7 @@ void main() {
       // Switch to 默认设置 tab
       await tester.tap(find.text('默认设置'));
       await tester.pumpAndSettle();
+      expect(find.byType(AssistantDefaultsTab), findsOneWidget);
 
       // Model section + empty state (no LLM config in test env) — the
       // not-set option is still shown and is the effective selection
@@ -978,7 +1111,7 @@ void main() {
       // 默认开启：开关 on，副标题显示当前上限（字符数，非 token）
       expect(find.text('工具结果截断'), findsOneWidget);
       expect(find.text('启用截断'), findsOneWidget);
-      expect(find.text('超长结果截断至 5000 字符'), findsOneWidget);
+      expect(find.text('超长结果将截断至 5000 个字符'), findsOneWidget);
       final tile = tester.widget<SwitchListTile>(
         find.widgetWithText(SwitchListTile, '启用截断'),
       );
@@ -1016,7 +1149,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // 关闭后：副标题变为"不截断"，长度输入框隐藏
-      expect(find.text('不截断，完整发送（仍受 50KB 存储上限约束）'), findsOneWidget);
+      expect(find.text('完整发送（仍受 50 KB 存储上限约束）'), findsOneWidget);
       expect(
         find.byWidgetPredicate(
           (w) => w is TextField && w.decoration?.labelText == '最大字符数',
@@ -1060,7 +1193,7 @@ void main() {
       await tester.enterText(lengthField, '8000');
       await tester.pumpAndSettle();
       // 副标题即时反映新上限
-      expect(find.text('超长结果截断至 8000 字符'), findsOneWidget);
+      expect(find.text('超长结果将截断至 8000 个字符'), findsOneWidget);
 
       await tester.tap(find.text('保存'));
       await tester.pumpAndSettle();
@@ -1099,12 +1232,12 @@ void main() {
       await tester.enterText(lengthField, '5000000');
       await tester.pumpAndSettle();
       expect(
-        find.text('有效范围：100~100000 字符'),
+        find.text('有效范围：100–100000 个字符'),
         findsOneWidget,
         reason: '越界输入必须就地提示有效范围',
       );
       // 副标题仍显示生效值（未写入 vars）
-      expect(find.text('超长结果截断至 5000 字符'), findsOneWidget);
+      expect(find.text('超长结果将截断至 5000 个字符'), findsOneWidget);
 
       await tester.tap(find.text('保存'));
       await tester.pumpAndSettle();
@@ -1151,8 +1284,11 @@ void main() {
         tester.element(find.byType(AssistantSelectionPage)),
       );
       final assistant = container.read(assistantProvider).single;
-      expect(assistant.defaultToolNames, isNotNull,
-          reason: '切换过工具后保存即视为已配置默认工具');
+      expect(
+        assistant.defaultToolNames,
+        isNotNull,
+        reason: '切换过工具后保存即视为已配置默认工具',
+      );
       expect(assistant.defaultToolNames, isNot(contains('todowrite')));
       expect(assistant.defaultToolNames, contains('web_search'));
     });
@@ -1164,8 +1300,10 @@ void main() {
           overrides: [
             assistantProvider.overrideWith((ref) {
               final notifier = AssistantsNotifier();
-              final assistant =
-                  notifier.createAssistant(name: '助手编辑', prompt: 'P1');
+              final assistant = notifier.createAssistant(
+                name: '助手编辑',
+                prompt: 'P1',
+              );
               // 显式配置"全部关闭"（空集合 = 已配置）。
               notifier.updateAssistantDefaults(
                 id: assistant.id,
@@ -1174,7 +1312,7 @@ void main() {
               return notifier;
             }),
           ],
-          child: const MaterialApp(home: AssistantSelectionPage()),
+          child: _localizedAssistantSelectionApp(),
         ),
       );
       await tester.pumpAndSettle();
@@ -1187,7 +1325,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // 配置过空集合 → 开关全部关闭，说明文字用"已配置"措辞
-      expect(find.textContaining('未启用的工具'), findsOneWidget);
+      expect(find.text('已关闭的工具不会在新话题中自动启用。'), findsOneWidget);
       for (final toolName in ['web_search', 'todowrite', 'brave_web_search']) {
         final tile = tester.widget<SwitchListTile>(
           find.widgetWithText(SwitchListTile, toolName),
@@ -1206,8 +1344,10 @@ void main() {
           overrides: [
             assistantProvider.overrideWith((ref) {
               final notifier = AssistantsNotifier();
-              final assistant =
-                  notifier.createAssistant(name: '助手编辑', prompt: 'P1');
+              final assistant = notifier.createAssistant(
+                name: '助手编辑',
+                prompt: 'P1',
+              );
               // 记录一个已不存在的模型（provider_entries 未配置任何 LLM）。
               notifier.updateAssistantDefaults(
                 id: assistant.id,
@@ -1216,7 +1356,7 @@ void main() {
               return notifier;
             }),
           ],
-          child: const MaterialApp(home: AssistantSelectionPage()),
+          child: _localizedAssistantSelectionApp(),
         ),
       );
       await tester.pumpAndSettle();
@@ -1285,7 +1425,7 @@ void main() {
               return notifier;
             }),
           ],
-          child: const MaterialApp(home: AssistantSelectionPage()),
+          child: _localizedAssistantSelectionApp(),
         ),
       );
       await tester.pumpAndSettle();
@@ -1317,9 +1457,7 @@ void main() {
     testWidgets('手机宽度下默认设置 tab 不溢出（标题行按钮自动换行）', (tester) async {
       // 360dp 手机宽度 + 系统字体缩放 2.0，最严苛的常见布局场景
       tester.platformDispatcher.textScaleFactorTestValue = 2.0;
-      addTearDown(
-        tester.platformDispatcher.clearTextScaleFactorTestValue,
-      );
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
       await tester.binding.setSurfaceSize(const Size(360, 800));
       addTearDown(() => tester.binding.setSurfaceSize(null));
 
@@ -1329,8 +1467,10 @@ void main() {
           overrides: [
             assistantProvider.overrideWith((ref) {
               final notifier = AssistantsNotifier();
-              final assistant =
-                  notifier.createAssistant(name: '助手编辑', prompt: 'P1');
+              final assistant = notifier.createAssistant(
+                name: '助手编辑',
+                prompt: 'P1',
+              );
               // 已配置状态 → 两个批量按钮出现在标题行右侧，最容易溢出
               notifier.updateAssistantDefaults(
                 id: assistant.id,
@@ -1339,7 +1479,7 @@ void main() {
               return notifier;
             }),
           ],
-          child: const MaterialApp(home: AssistantSelectionPage()),
+          child: _localizedAssistantSelectionApp(),
         ),
       );
       await tester.pumpAndSettle();
@@ -1393,7 +1533,7 @@ void main() {
               return notifier;
             }),
           ],
-          child: const MaterialApp(home: AssistantSelectionPage()),
+          child: _localizedAssistantSelectionApp(),
         ),
       );
       await tester.pumpAndSettle();
@@ -1473,7 +1613,7 @@ void main() {
               return notifier;
             }),
           ],
-          child: const MaterialApp(home: AssistantSelectionPage()),
+          child: _localizedAssistantSelectionApp(),
         ),
       );
       await tester.pumpAndSettle();
@@ -1495,8 +1635,11 @@ void main() {
       final gptY = tester.getCenter(find.text('gpt-4o | OpenAI')).dy;
       final geminiY =
           tester.getCenter(find.text('gemini-2.0-flash | OpenAI')).dy;
-      expect(claudeY, lessThan(gptY),
-          reason: '保存顺序（model_order）中的模型应排在配置添加顺序之前');
+      expect(
+        claudeY,
+        lessThan(gptY),
+        reason: '保存顺序（model_order）中的模型应排在配置添加顺序之前',
+      );
       expect(gptY, lessThan(geminiY), reason: '未出现在保存顺序中的新模型按原顺序追加在末尾');
     });
 
@@ -1513,7 +1656,7 @@ void main() {
               return notifier;
             }),
           ],
-          child: const MaterialApp(home: AssistantSelectionPage()),
+          child: _localizedAssistantSelectionApp(),
         ),
       );
       await tester.pumpAndSettle();
@@ -1535,9 +1678,12 @@ void main() {
       final assistant = container.read(assistantProvider).single;
       expect(assistant.name, '新名称');
       expect(assistant.defaultModelName, isNull);
-      expect(assistant.defaultToolNames, isNull,
-          reason: '未触碰默认设置 tab 的保存（如仅改名）不得把助手标记为'
-              '"已配置默认工具"——否则新话题会从自动启用全部工具变成全部关闭');
+      expect(
+        assistant.defaultToolNames,
+        isNull,
+        reason: '未触碰默认设置 tab 的保存（如仅改名）不得把助手标记为'
+            '"已配置默认工具"——否则新话题会从自动启用全部工具变成全部关闭',
+      );
     });
 
     testWidgets('⋮ menu 删除 shows confirmation dialog', (tester) async {
@@ -1561,7 +1707,7 @@ void main() {
 
       // Should show confirmation dialog
       expect(find.text('删除助手'), findsOneWidget);
-      expect(find.text('确定要删除助手「助手删除」吗？此操作无法撤销。'), findsOneWidget);
+      expect(find.text('确定要删除助手“助手删除”吗？此操作无法撤销。'), findsOneWidget);
       // Should have cancel and delete buttons
       expect(find.text('取消'), findsOneWidget);
       expect(find.text('删除'), findsOneWidget);
@@ -1595,7 +1741,7 @@ void main() {
       // Assistant should be removed
       expect(find.text('要删除的助手'), findsNothing);
       // Should show empty state
-      expect(find.text('暂无助手，请先创建'), findsOneWidget);
+      expect(find.text('暂无助手，请先创建。'), findsOneWidget);
     });
 
     testWidgets('cancelling delete keeps assistant in grid', (tester) async {
@@ -1672,7 +1818,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // The info box text should now be visible
-      expect(find.text('助手的参数开关打开时覆盖模型参数；关闭时使用模型参数。'), findsOneWidget);
+      expect(find.text('启用时助手参数会覆盖模型参数；关闭时使用模型参数。'), findsOneWidget);
 
       // The info icon should be visible
       expect(find.byIcon(Icons.info_outline), findsOneWidget);

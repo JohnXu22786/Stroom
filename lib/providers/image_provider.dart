@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../utils/folder_copy_lock.dart';
+import '../utils/folder_operation_rollback.dart';
 import '../utils/image_manifest.dart';
 
 // ============================================================================
@@ -160,35 +162,65 @@ class ImageRecordsNotifier extends StateNotifier<List<ImageRecord>> {
     if (existing.any((f) => f == newPath || f.startsWith('$newPath/'))) return;
 
     final records = await ImageManifest.loadRecords();
-
-    // 更新 oldName 本身的记录
-    for (final r in records) {
-      if (r.folder == oldName) {
-        await ImageManifest.moveRecord(r.id, newPath);
-      }
-    }
-
-    // 更新所有后代文件夹的记录
-    final descendants = await _getDescendantFolders(oldName);
-    for (final desc in descendants) {
-      final suffix = desc.substring(oldName.length);
-      final newDescPath = '$newPath$suffix';
-      for (final r in records) {
-        if (r.folder == desc) {
-          await ImageManifest.moveRecord(r.id, newDescPath);
+    final originalFolders = await ImageManifest.getAllFolders();
+    final recordsToRestore = List<ImageRecord>.unmodifiable(records.where(
+        (record) =>
+            record.folder == oldName ||
+            record.folder.startsWith('${oldName}/')));
+    final rollbackFolderAncestors = <String>{};
+    await runFolderOperationWithRollback<ImageRecord>(
+      originalRecords: recordsToRestore,
+      rollbackFolderSubtrees: {oldName, newPath},
+      rollbackFolderPaths: rollbackFolderAncestors,
+      createdFolderPaths: folderOperationDestinationPaths(
+        sourceFolder: oldName,
+        destinationFolder: newPath,
+        originalFolders: originalFolders,
+        originalRecords: recordsToRestore,
+        recordFolder: (record) => record.folder,
+      ).union(rollbackFolderAncestors),
+      originalFolders: originalFolders,
+      recordId: (record) => record.id,
+      recordFolder: (record) => record.folder,
+      loadRecords: ImageManifest.loadRecords,
+      getFolders: ImageManifest.getAllFolders,
+      moveRecordIfFolder: ImageManifest.moveRecordIfFolder,
+      addFolder: ImageManifest.addFolder,
+      removeFolder: ImageManifest.removeFolderMetadataFromCache,
+      operation: (moveOperationRecord) async {
+        // 更新 oldName 本身的记录
+        for (final r in records) {
+          if (r.folder == oldName) {
+            await moveOperationRecord(r.id, r.folder, newPath);
+          }
         }
-      }
-      // Empty subfolders (no records) must stay in the folder cache; otherwise the old-path cleanup would drop their paths.
-      await ImageManifest.addFolder(newDescPath);
-    }
 
-    // 将新路径加入文件夹缓存
-    await ImageManifest.addFolder(newPath);
+        // 更新所有后代文件夹的记录
+        final descendants = await _getDescendantFolders(oldName);
+        for (final desc in descendants) {
+          final suffix = desc.substring(oldName.length);
+          final newDescPath = '$newPath$suffix';
+          for (final r in records) {
+            if (r.folder == desc) {
+              await moveOperationRecord(r.id, r.folder, newDescPath);
+            }
+          }
+          // Empty subfolders (no records) must stay in the folder cache; otherwise the old-path cleanup would drop their paths.
+          await ImageManifest.addFolder(newDescPath);
+        }
 
-    // 移除旧路径的文件夹缓存
-    await ImageManifest.removeFolderFromCache(oldName);
+        // 将新路径加入文件夹缓存
+        await ImageManifest.addFolder(newPath);
 
-    await loadRecords();
+        // 移除旧路径的文件夹缓存
+        await ImageManifest.removeFolderMetadataFromCache(oldName);
+        for (final desc in descendants) {
+          await ImageManifest.removeFolderMetadataFromCache(desc);
+        }
+
+        await loadRecords();
+      },
+    );
   }
 
   /// 移动文件夹（保持层级结构，整体搬入目标文件夹）
@@ -216,56 +248,92 @@ class ImageRecordsNotifier extends StateNotifier<List<ImageRecord>> {
     if (existing.any((f) => f == newPath || f.startsWith('$newPath/'))) return;
 
     final records = await ImageManifest.loadRecords();
-
-    // 移动 sourceName 本身的记录到 newPath
-    for (final r in records) {
-      if (r.folder == sourceName) {
-        await ImageManifest.moveRecord(r.id, newPath);
-      }
-    }
-
-    // 移动所有后代文件夹的记录
-    final descendants = await _getDescendantFolders(sourceName);
-    for (final desc in descendants) {
-      final suffix = desc.substring(sourceName.length);
-      final newDescPath = '$newPath$suffix';
-      for (final r in records) {
-        if (r.folder == desc) {
-          await ImageManifest.moveRecord(r.id, newDescPath);
-        }
-      }
-      // Empty subfolders (no records) must stay in the folder cache; otherwise the old-path cleanup would drop their paths.
-      await ImageManifest.addFolder(newDescPath);
-    }
-
-    // 清理旧文件夹缓存（不删除记录）
-    await ImageManifest.removeFolderFromCache(sourceName);
-    for (final desc in descendants) {
-      await ImageManifest.removeFolderFromCache(desc);
-    }
-
-    // 添加新文件夹缓存
-    await ImageManifest.addFolder(newPath);
+    final originalFolders = await ImageManifest.getAllFolders();
+    final recordsToRestore = List<ImageRecord>.unmodifiable(records.where(
+        (record) =>
+            record.folder == sourceName ||
+            record.folder.startsWith('${sourceName}/')));
+    final rollbackFolderAncestors = <String>{};
     if (targetParentClean.isNotEmpty) {
-      await ImageManifest.addFolder(targetParentClean);
-      // 空文件夹移动/复制不经过 moveRecord/addRecord，
-      // 祖先目录不会被自动跟踪，需逐级补齐
-      var ancestor = ImageManifest.getParentFolderPath(targetParentClean);
+      var ancestor = targetParentClean;
       while (ancestor.isNotEmpty) {
-        await ImageManifest.addFolder(ancestor);
+        rollbackFolderAncestors.add(ancestor);
         ancestor = ImageManifest.getParentFolderPath(ancestor);
       }
     }
+    await runFolderOperationWithRollback<ImageRecord>(
+      originalRecords: recordsToRestore,
+      rollbackFolderSubtrees: {sourceName, newPath},
+      rollbackFolderPaths: rollbackFolderAncestors,
+      createdFolderPaths: folderOperationDestinationPaths(
+        sourceFolder: sourceName,
+        destinationFolder: newPath,
+        originalFolders: originalFolders,
+        originalRecords: recordsToRestore,
+        recordFolder: (record) => record.folder,
+      ).union(rollbackFolderAncestors),
+      originalFolders: originalFolders,
+      recordId: (record) => record.id,
+      recordFolder: (record) => record.folder,
+      loadRecords: ImageManifest.loadRecords,
+      getFolders: ImageManifest.getAllFolders,
+      moveRecordIfFolder: ImageManifest.moveRecordIfFolder,
+      addFolder: ImageManifest.addFolder,
+      removeFolder: ImageManifest.removeFolderMetadataFromCache,
+      operation: (moveOperationRecord) async {
+        // 移动 sourceName 本身的记录到 newPath
+        for (final r in records) {
+          if (r.folder == sourceName) {
+            await moveOperationRecord(r.id, r.folder, newPath);
+          }
+        }
 
-    await loadRecords();
+        // 移动所有后代文件夹的记录
+        final descendants = await _getDescendantFolders(sourceName);
+        for (final desc in descendants) {
+          final suffix = desc.substring(sourceName.length);
+          final newDescPath = '$newPath$suffix';
+          for (final r in records) {
+            if (r.folder == desc) {
+              await moveOperationRecord(r.id, r.folder, newDescPath);
+            }
+          }
+          // Empty subfolders (no records) must stay in the folder cache; otherwise the old-path cleanup would drop their paths.
+          await ImageManifest.addFolder(newDescPath);
+        }
+
+        // 清理旧文件夹缓存（不删除记录）
+        await ImageManifest.removeFolderMetadataFromCache(sourceName);
+        for (final desc in descendants) {
+          await ImageManifest.removeFolderMetadataFromCache(desc);
+        }
+
+        // 添加新文件夹缓存
+        await ImageManifest.addFolder(newPath);
+        if (targetParentClean.isNotEmpty) {
+          await ImageManifest.addFolder(targetParentClean);
+          // 空文件夹移动/复制不经过 moveRecord/addRecord，
+          // 祖先目录不会被自动跟踪，需逐级补齐
+          var ancestor = ImageManifest.getParentFolderPath(targetParentClean);
+          while (ancestor.isNotEmpty) {
+            await ImageManifest.addFolder(ancestor);
+            ancestor = ImageManifest.getParentFolderPath(ancestor);
+          }
+        }
+
+        await loadRecords();
+      },
+    );
   }
 
   /// 复制文件夹（保持层级结构，整体复制到目标文件夹）
   Future<void> copyFolder(String sourceName, String targetParent) async {
     final baseName = ImageManifest.getFolderBaseName(sourceName);
     // 规范化目标父路径（去首尾空白与尾部斜杠），'' 表示根目录
-    final targetParentClean =
-        targetParent.trim().replaceAll(RegExp(r'/+$'), '');
+    final targetParentClean = targetParent.trim().replaceAll(
+          RegExp(r'/+$'),
+          '',
+        );
     final newPath =
         targetParentClean.isEmpty ? baseName : '$targetParentClean/$baseName';
 
@@ -278,61 +346,117 @@ class ImageRecordsNotifier extends StateNotifier<List<ImageRecord>> {
       return;
     }
 
+    await FolderCopyLock.withLock(
+      'image',
+      newPath,
+      () => _copyFolderToDestination(sourceName, targetParentClean, newPath),
+    );
+  }
+
+  Future<void> _copyFolderToDestination(
+    String sourceName,
+    String targetParentClean,
+    String newPath,
+  ) async {
     // 目标位置（或其下）已存在同名文件夹：拒绝，避免重复复制/合并
     final existing = await ImageManifest.getAllFolders();
     if (existing.any((f) => f == newPath || f.startsWith('$newPath/'))) return;
 
-    final records = await ImageManifest.loadRecords();
+    // addRecord mutates the manifest cache returned by loadRecords, so iterate
+    // over a snapshot while adding the copied records.
+    final records = List<ImageRecord>.from(await ImageManifest.loadRecords());
 
-    // 复制 sourceName 本身的记录
-    for (final r in records) {
-      if (r.folder == sourceName) {
-        await ImageManifest.addRecord(ImageRecord(
-          name: r.name,
-          hash: r.hash,
-          format: r.format,
-          createdAt: DateTime.now(),
-          size: r.size,
-          folder: newPath,
-        ));
-      }
-    }
-
-    // 复制所有后代文件夹的记录
-    final descendants = await _getDescendantFolders(sourceName);
-    for (final desc in descendants) {
-      final suffix = desc.substring(sourceName.length);
-      final newDescPath = '$newPath$suffix';
-      for (final r in records) {
-        if (r.folder == desc) {
-          await ImageManifest.addRecord(ImageRecord(
-            name: r.name,
-            hash: r.hash,
-            format: r.format,
-            createdAt: DateTime.now(),
-            size: r.size,
-            folder: newDescPath,
-          ));
-        }
-      }
-      // 空子文件夹（无记录）也需要保留在缓存中
-      await ImageManifest.addFolder(newDescPath);
-    }
-
-    // 确保新路径在文件夹缓存中
-    await ImageManifest.addFolder(newPath);
+    final rollbackFolderAncestors = <String>{};
     if (targetParentClean.isNotEmpty) {
-      await ImageManifest.addFolder(targetParentClean);
-      // 空文件夹移动/复制不经过 moveRecord/addRecord，
-      // 祖先目录不会被自动跟踪，需逐级补齐
-      var ancestor = ImageManifest.getParentFolderPath(targetParentClean);
+      var ancestor = targetParentClean;
       while (ancestor.isNotEmpty) {
-        await ImageManifest.addFolder(ancestor);
+        rollbackFolderAncestors.add(ancestor);
         ancestor = ImageManifest.getParentFolderPath(ancestor);
       }
     }
+    final rollbackRecordIds = <String>{};
+    Future<void> addCopiedRecord(ImageRecord record) async {
+      rollbackRecordIds.add(record.id);
+      await ImageManifest.addRecord(record);
+    }
 
-    await loadRecords();
+    await runFolderOperationWithRollback<ImageRecord>(
+      originalRecords: const [],
+      originalFolders: existing,
+      rollbackFolderSubtrees: {newPath},
+      rollbackRecordIds: rollbackRecordIds,
+      rollbackFolderPaths: rollbackFolderAncestors,
+      createdFolderPaths: folderOperationDestinationPaths(
+        sourceFolder: sourceName,
+        destinationFolder: newPath,
+        originalFolders: existing,
+        originalRecords: records,
+        recordFolder: (record) => record.folder,
+      ).union(rollbackFolderAncestors),
+      recordId: (record) => record.id,
+      recordFolder: (record) => record.folder,
+      loadRecords: ImageManifest.loadRecords,
+      getFolders: ImageManifest.getAllFolders,
+      moveRecordIfFolder: ImageManifest.moveRecordIfFolder,
+      addFolder: ImageManifest.addFolder,
+      removeFolder: ImageManifest.removeFolderFromCache,
+      deleteRecords: ImageManifest.deleteRecords,
+      operation: (moveOperationRecord) async {
+        // 复制 sourceName 本身的记录
+        for (final r in records) {
+          if (r.folder == sourceName) {
+            await addCopiedRecord(
+              ImageRecord(
+                name: r.name,
+                hash: r.hash,
+                format: r.format,
+                createdAt: DateTime.now(),
+                size: r.size,
+                folder: newPath,
+              ),
+            );
+          }
+        }
+
+        // 复制所有后代文件夹的记录
+        final descendants = await _getDescendantFolders(sourceName);
+        for (final desc in descendants) {
+          final suffix = desc.substring(sourceName.length);
+          final newDescPath = '$newPath$suffix';
+          for (final r in records) {
+            if (r.folder == desc) {
+              await addCopiedRecord(
+                ImageRecord(
+                  name: r.name,
+                  hash: r.hash,
+                  format: r.format,
+                  createdAt: DateTime.now(),
+                  size: r.size,
+                  folder: newDescPath,
+                ),
+              );
+            }
+          }
+          // 空子文件夹（无记录）也需要保留在缓存中
+          await ImageManifest.addFolder(newDescPath);
+        }
+
+        // 确保新路径在文件夹缓存中
+        await ImageManifest.addFolder(newPath);
+        if (targetParentClean.isNotEmpty) {
+          await ImageManifest.addFolder(targetParentClean);
+          // 空文件夹移动/复制不经过 moveRecord/addRecord，
+          // 祖先目录不会被自动跟踪，需逐级补齐
+          var ancestor = ImageManifest.getParentFolderPath(targetParentClean);
+          while (ancestor.isNotEmpty) {
+            await ImageManifest.addFolder(ancestor);
+            ancestor = ImageManifest.getParentFolderPath(ancestor);
+          }
+        }
+
+        await loadRecords();
+      },
+    );
   }
 }
 

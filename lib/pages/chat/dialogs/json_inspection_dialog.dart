@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/utils/data_sanitizer.dart';
 
 /// Shows a dialog with JSON request/response data inspection.
@@ -24,8 +25,8 @@ void showJsonInspectionDialog({
                 padding: const EdgeInsets.fromLTRB(16, 12, 8, 0),
                 child: Row(
                   children: [
-                    const Text(
-                      'JSON 审查',
+                    Text(
+                      AppLocalizations.of(context)!.chatJsonInspection,
                       style:
                           TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                     ),
@@ -48,11 +49,11 @@ void showJsonInspectionDialog({
                   children: [
                     _JsonContent(
                       data: rawRequest,
-                      label: '无请求数据',
+                      label: AppLocalizations.of(context)!.chatNoRequestData,
                     ),
                     _JsonContent(
                       data: rawResponse,
-                      label: '无响应数据',
+                      label: AppLocalizations.of(context)!.chatNoResponseData,
                     ),
                   ],
                 ),

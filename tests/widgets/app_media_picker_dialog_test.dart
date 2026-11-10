@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/widgets/app_media_picker_dialog.dart';
 
 // ============================================================================
@@ -30,11 +31,10 @@ class _TestRecord {
 
 Widget _buildTestApp(Widget trigger) {
   return MaterialApp(
+    locale: const Locale('zh', 'CN'),
+    supportedLocales: AppLocalizations.supportedLocales,
     home: Scaffold(body: trigger),
-    localizationsDelegates: const [
-      DefaultMaterialLocalizations.delegate,
-      DefaultWidgetsLocalizations.delegate,
-    ],
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
   );
 }
 
@@ -139,6 +139,90 @@ void main() {
 
       // Should show empty state text
       expect(find.text('暂无文件'), findsOneWidget);
+    });
+
+    testWidgets('shows and retries record loading failures', (tester) async {
+      var loadRecordsCalls = 0;
+      const record = _TestRecord(id: '1', name: '恢复后的文件');
+      final config = MediaPickerConfig<_TestRecord>(
+        title: '测试选择器',
+        emptyIcon: Icons.folder_outlined,
+        emptyText: '暂无文件',
+        fileIcon: Icons.insert_drive_file,
+        loadRecords: () async {
+          loadRecordsCalls++;
+          if (loadRecordsCalls == 1) throw StateError('records unavailable');
+          return [record];
+        },
+        loadFolders: () async => <String>{},
+        displayName: (record) => record.name,
+        subtitleBuilder: (record) => const Text(''),
+      );
+
+      await tester.pumpWidget(_buildTestApp(Builder(builder: (context) {
+        return ElevatedButton(
+          onPressed: () => showMediaPickerDialog(context, config),
+          child: const Text('Open'),
+        );
+      })));
+
+      await tester.tap(find.text('Open'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.textContaining('records unavailable'), findsOneWidget);
+      expect(find.text('重试'), findsOneWidget);
+      expect(find.text('暂无文件'), findsNothing);
+
+      await tester.tap(find.text('重试'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(loadRecordsCalls, 2);
+      expect(find.text('恢复后的文件'), findsOneWidget);
+      expect(find.textContaining('records unavailable'), findsNothing);
+    });
+
+    testWidgets('shows and retries folder loading failures', (tester) async {
+      var loadFoldersCalls = 0;
+      const record = _TestRecord(id: '1', name: '文件');
+      final config = MediaPickerConfig<_TestRecord>(
+        title: '测试选择器',
+        emptyIcon: Icons.folder_outlined,
+        emptyText: '暂无文件',
+        fileIcon: Icons.insert_drive_file,
+        loadRecords: () async => [record],
+        loadFolders: () async {
+          loadFoldersCalls++;
+          if (loadFoldersCalls == 1) throw StateError('folders unavailable');
+          return <String>{};
+        },
+        displayName: (record) => record.name,
+        subtitleBuilder: (record) => const Text(''),
+      );
+
+      await tester.pumpWidget(_buildTestApp(Builder(builder: (context) {
+        return ElevatedButton(
+          onPressed: () => showMediaPickerDialog(context, config),
+          child: const Text('Open'),
+        );
+      })));
+
+      await tester.tap(find.text('Open'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.textContaining('folders unavailable'), findsOneWidget);
+      expect(find.text('重试'), findsOneWidget);
+      expect(find.text('暂无文件'), findsNothing);
+
+      await tester.tap(find.text('重试'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(loadFoldersCalls, 2);
+      expect(find.text('文件'), findsOneWidget);
+      expect(find.textContaining('folders unavailable'), findsNothing);
     });
 
     testWidgets('shows records when data is loaded', (tester) async {

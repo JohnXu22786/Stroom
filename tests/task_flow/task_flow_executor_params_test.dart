@@ -37,12 +37,15 @@ class _FakeChatStreamManager extends ChatStreamManager {
     required String text,
     required String convId,
     required List<ChatMessage> history,
+    List<ChatMessage>? requestHistoryOverride,
+    List<ChatMessage>? historyOnSuccess,
     List<ToolDefinition> tools = const [],
     bool reasoning = false,
     String reasoningEffort = 'medium',
     Map<String, String> reasoningParamValues = const {},
     String? streamingMsgId,
     Assistant? assistant,
+    Map<String, String>? customParamValues,
     ProviderEntriesState? entriesStateOverride,
   }) {
     captureHistory = history;

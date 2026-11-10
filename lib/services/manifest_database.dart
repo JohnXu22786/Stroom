@@ -40,6 +40,10 @@ class ManifestDatabase {
   @visibleForTesting
   static void Function(String path)? beforeFolderInsertForTesting;
 
+  /// Injects a folder deletion failure in manifest operation tests.
+  @visibleForTesting
+  static void Function(String path)? beforeFolderDeleteForTesting;
+
   /// Signals the start of a JSON record registration in tests.
   @visibleForTesting
   static void Function()? beforeJsonRecordRegistrationForTesting;
@@ -1538,6 +1542,7 @@ class ManifestDatabase {
         throw ArgumentError('recordTable is required in v2+ format');
       }
       final folderTable = ManifestTables.folderTableFor(recordTable);
+      beforeFolderDeleteForTesting?.call(path);
       if (_useJsonStore) {
         final data = await _loadWebData();
         final list = data[folderTable] as List<dynamic>? ?? [];

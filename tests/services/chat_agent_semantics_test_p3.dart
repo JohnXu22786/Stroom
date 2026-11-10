@@ -6,6 +6,7 @@ void chatAgentSemanticsGroup3() {
       final container = _makeContainer(
         conversations: [Conversation(id: 'conv-title', title: '')],
       );
+      await container.read(localeProvider.notifier).setLocaleCode('zh_CN');
       final manager = container.read(chatStreamManagerProvider);
 
       // 调用顺序：主请求 → 标题生成（单条用户消息无旧历史可压缩，

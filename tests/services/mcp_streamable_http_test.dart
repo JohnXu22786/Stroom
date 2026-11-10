@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/widgets.dart' show Locale;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/models/mcp.dart';
 import 'package:stroom/services/mcp_client.dart';
@@ -416,7 +417,11 @@ void main() {
       final tools = await client.listTools();
       expect(tools.map((t) => t.name), contains('search'));
 
-      final result = await client.callTool('search', {'q': 'x'});
+      final result = await client.callTool(
+        'search',
+        {'q': 'x'},
+        locale: const Locale('en', 'US'),
+      );
       expect(result, equals('hello'));
     });
 
@@ -505,7 +510,11 @@ void main() {
       });
 
       await client.connect();
-      final result = await client.callTool('search', {'q': 'x'});
+      final result = await client.callTool(
+        'search',
+        {'q': 'x'},
+        locale: const Locale('en', 'US'),
+      );
       expect(result, contains('Error:'),
           reason: 'JSON-RPC error 应通过 callTool 的 Error 前缀暴露');
       expect(result, contains('Internal tool error'));
@@ -529,9 +538,12 @@ void main() {
       });
 
       await client.connect();
-      final result = await client.callTool('search', {'q': 'x'});
-      expect(result, contains('Error:'));
-      expect(result, contains('tool reported failure'));
+      final result = await client.callTool(
+        'search',
+        {'q': 'x'},
+        locale: const Locale('zh', 'CN'),
+      );
+      expect(result, '错误：tool reported failure');
     });
 
     test('streamable POST 失败(405)时回退 legacy SSE GET 连接', () async {
@@ -586,7 +598,11 @@ void main() {
 
       // POST 失败 → 断开，但旧 GET 流仍保持打开
       fake.failLegacyPost = true;
-      final result = await client.callTool('search', {'q': 'x'});
+      final result = await client.callTool(
+        'search',
+        {'q': 'x'},
+        locale: const Locale('en', 'US'),
+      );
       expect(result, contains('Error:'));
       expect(client.isConnected, isFalse);
 
@@ -623,7 +639,11 @@ void main() {
 
       expect(await client.connect(), isTrue);
 
-      final result = await client.callTool('search', {'q': 'x'});
+      final result = await client.callTool(
+        'search',
+        {'q': 'x'},
+        locale: const Locale('en', 'US'),
+      );
       expect(result, contains('Error:'));
       expect(client.isConnected, isFalse,
           reason: 'legacy POST 传输失败应标记断开，下次调用才会重连');

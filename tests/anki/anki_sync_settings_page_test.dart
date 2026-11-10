@@ -10,10 +10,18 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/anki/providers/anki_provider.dart';
 import 'package:stroom/anki/sync/anki_sync_provider.dart';
 import 'package:stroom/anki/sync/anki_sync_protocol_client.dart';
 import 'package:stroom/pages/anki_sync_page.dart';
+
+Widget _localizedApp({required Widget home}) => MaterialApp(
+      locale: const Locale('zh', 'CN'),
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      home: home,
+    );
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -27,7 +35,7 @@ void main() {
             (_) => const _FakeSecureStorage(),
           ),
         ],
-        child: const MaterialApp(home: AnkiSyncSettingsPage()),
+        child: _localizedApp(home: const AnkiSyncSettingsPage()),
       ),
     );
     await tester.pumpAndSettle();
@@ -50,7 +58,7 @@ void main() {
             (_) => const _FakeSecureStorage(),
           ),
         ],
-        child: const MaterialApp(home: AnkiSyncSettingsPage()),
+        child: _localizedApp(home: const AnkiSyncSettingsPage()),
       ),
     );
     await tester.pumpAndSettle();
@@ -78,7 +86,7 @@ void main() {
             (_) => const _FakeSecureStorage(),
           ),
         ],
-        child: const MaterialApp(home: AnkiSyncSettingsPage()),
+        child: _localizedApp(home: const AnkiSyncSettingsPage()),
       ),
     );
     await tester.pumpAndSettle();
@@ -87,7 +95,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('登录AnkiWeb'), findsOneWidget);
-    expect(find.text('登录自建同步服务器'), findsNothing);
+    expect(find.text('登录自建服务器'), findsNothing);
   });
 
   testWidgets('shows the retained custom server after migrating settings', (
@@ -104,13 +112,13 @@ void main() {
             (_) => const _FakeSecureStorage(),
           ),
         ],
-        child: const MaterialApp(home: AnkiSyncSettingsPage()),
+        child: _localizedApp(home: const AnkiSyncSettingsPage()),
       ),
     );
     await tester.pumpAndSettle();
 
     expect(find.text('https://sync.example.invalid/sync/'), findsOneWidget);
-    expect(find.text('登录自建同步服务器'), findsOneWidget);
+    expect(find.text('登录自建服务器'), findsOneWidget);
   });
 
   testWidgets('saves an edited server URL before checking sync status', (
@@ -151,7 +159,7 @@ void main() {
             );
           }),
         ],
-        child: const MaterialApp(home: AnkiSyncSettingsPage()),
+        child: _localizedApp(home: const AnkiSyncSettingsPage()),
       ),
     );
     await tester.pumpAndSettle();
@@ -166,7 +174,7 @@ void main() {
     expect(preferences.getString('custom_sync_server_collection_url'), newUrl);
     expect(factoryUrls, [oldUrl]);
     expect(requests, isEmpty);
-    expect(find.text('登录自建同步服务器'), findsOneWidget);
+    expect(find.text('登录自建服务器'), findsOneWidget);
   });
 
   testWidgets('formats the server modification time as Unix seconds', (
@@ -200,7 +208,7 @@ void main() {
             ),
           ),
         ],
-        child: const MaterialApp(home: AnkiSyncSettingsPage()),
+        child: _localizedApp(home: const AnkiSyncSettingsPage()),
       ),
     );
     await tester.pumpAndSettle();
@@ -247,7 +255,7 @@ void main() {
             ),
           ),
         ],
-        child: const MaterialApp(home: AnkiSyncSettingsPage()),
+        child: _localizedApp(home: const AnkiSyncSettingsPage()),
       ),
     );
     await tester.pumpAndSettle();
@@ -307,7 +315,7 @@ void main() {
             throw StateError('Stop before touching a collection in this test');
           }),
         ],
-        child: const MaterialApp(home: AnkiSyncSettingsPage()),
+        child: _localizedApp(home: const AnkiSyncSettingsPage()),
       ),
     );
     await tester.pumpAndSettle();
@@ -348,7 +356,7 @@ void main() {
             (_) => _StoredSecureStorage({config.secureStorageKey: 'saved-key'}),
           ),
         ],
-        child: const MaterialApp(home: AnkiSyncSettingsPage()),
+        child: _localizedApp(home: const AnkiSyncSettingsPage()),
       ),
     );
     await tester.pumpAndSettle();
@@ -387,7 +395,7 @@ void main() {
           overrides: [
             ankiSyncSecureStorageProvider.overrideWith((_) => storage),
           ],
-          child: const MaterialApp(home: AnkiSyncSettingsPage()),
+          child: _localizedApp(home: const AnkiSyncSettingsPage()),
         ),
       );
       await tester.pump();
@@ -438,7 +446,7 @@ void main() {
             ),
           ),
         ],
-        child: const MaterialApp(home: AnkiSyncSettingsPage()),
+        child: _localizedApp(home: const AnkiSyncSettingsPage()),
       ),
     );
     await tester.pumpAndSettle();
@@ -474,7 +482,7 @@ void main() {
                 _StoredSecureStorage({oldConfig.secureStorageKey: 'saved-key'}),
           ),
         ],
-        child: const MaterialApp(home: AnkiSyncSettingsPage()),
+        child: _localizedApp(home: const AnkiSyncSettingsPage()),
       ),
     );
     await tester.pumpAndSettle();

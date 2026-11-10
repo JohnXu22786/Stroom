@@ -43,6 +43,484 @@ void chatStreamManagerGroup1() {
       manager.dispose();
     });
 
+    test('network interruption after partial output adds a user continuation',
+        () async {
+      final manager =
+          ChatStreamManager.withRetryPolicy(retryDelay: (_) async {});
+      final networkFailure = DioException(
+        requestOptions: RequestOptions(path: '/chat'),
+        type: DioExceptionType.connectionError,
+      );
+      final provider = _MockProvider([
+        [AIStreamEvent('partial answer')],
+      ])
+        ..errorAfterYield = networkFailure;
+      manager.adapter.forceService(_makeChatService(provider));
+      final displayedContinuations = <ChatMessage>[];
+      manager.setContinuationHandler(
+        'conv-network-continue',
+        (message) async {
+          displayedContinuations.add(message);
+          return true;
+        },
+      );
+
+      final result = await manager.startStreaming(
+        text: 'Hi',
+        convId: 'conv-network-continue',
+        history: [_userMsg('Hi', 'u-original')],
+      );
+
+      expect(provider.callCount, 2);
+      expect(result.history.map((message) => message.role),
+          ['user', 'user', 'assistant']);
+      expect(result.history[1].content, 'Continue if not finished.');
+      expect(displayedContinuations, hasLength(1));
+      expect(displayedContinuations.single.role, 'user');
+      expect(
+          displayedContinuations.single.content, 'Continue if not finished.');
+      expect(result.fullReply, 'partial answerFinal response');
+      final resentMessages = provider.capturedMessages.last;
+      expect(resentMessages.last['role'], 'user');
+      expect(resentMessages.last['content'], 'Continue if not finished.');
+      manager.dispose();
+    });
+
+    test('repeated partial interruptions continue without losing history',
+        () async {
+      final networkFailure = DioException(
+        requestOptions: RequestOptions(path: '/chat'),
+        type: DioExceptionType.connectionError,
+      );
+      final provider = _MockProvider([
+        [AIStreamEvent('first part')],
+        [AIStreamEvent(' second part')],
+        [AIStreamEvent(' final part')],
+      ])
+        ..errorsAfterCall.addAll({1: networkFailure, 2: networkFailure});
+      final waits = <Duration>[];
+      final manager = ChatStreamManager.withRetryPolicy(
+        retryDelay: (duration) async => waits.add(duration),
+        transportRetryPolicy: const TransportRetryPolicy(jitter: false),
+      );
+      manager.adapter.forceService(_makeChatService(provider));
+      final bubbles = <ChatMessage>[];
+      manager.setContinuationHandler('conv-repeated-network', (message) async {
+        bubbles.add(message);
+        return true;
+      });
+
+      final result = await manager.startStreaming(
+        text: 'Hi',
+        convId: 'conv-repeated-network',
+        history: [_userMsg('Hi', 'u-original')],
+      );
+
+      expect(provider.callCount, 3);
+      expect(waits, [const Duration(seconds: 2), const Duration(seconds: 4)]);
+      expect(bubbles, hasLength(2));
+      expect(bubbles.every((message) => message.role == 'user'), isTrue);
+      expect(result.history.where((message) => message.role == 'user'),
+          hasLength(3));
+      expect(result.fullReply, 'first part second part final part');
+      manager.dispose();
+    });
+
+    test('uses the active locale for each continuation bubble', () async {
+      SharedPreferences.setMockInitialValues({});
+      final container = ProviderContainer();
+      await container.read(localeProvider.notifier).setLocaleCode('zh_CN');
+      final networkFailure = DioException(
+        requestOptions: RequestOptions(path: '/chat'),
+        type: DioExceptionType.connectionError,
+      );
+      final provider = _MockProvider([
+        [AIStreamEvent('部分回答')],
+      ])
+        ..errorAfterYield = networkFailure;
+      final managerProvider = Provider<ChatStreamManager>(
+        (ref) => ChatStreamManager.withRetryPolicy(
+          ref: ref,
+          retryDelay: (_) async {},
+        ),
+      );
+      final manager = container.read(managerProvider);
+      manager.adapter.forceService(_makeChatService(provider));
+      final bubbles = <ChatMessage>[];
+      manager.setContinuationHandler(
+        'conv-localized-network',
+        (message) async {
+          bubbles.add(message);
+          return true;
+        },
+      );
+
+      await manager.startStreaming(
+        text: '你好',
+        convId: 'conv-localized-network',
+        history: [_userMsg('你好', 'u-original')],
+      );
+
+      expect(bubbles.single.content, '如果还没完成，请继续。');
+      expect(bubbles.single.role, 'user');
+      manager.dispose();
+      container.dispose();
+    });
+
+    test('retries a transport failure before output without adding a bubble',
+        () async {
+      final networkFailure = DioException(
+        requestOptions: RequestOptions(path: '/chat'),
+        type: DioExceptionType.connectionError,
+      );
+      final provider = _MockProvider([
+        [],
+        [AIStreamEvent('recovered')],
+      ])
+        ..errorsAfterCall[1] = networkFailure;
+      final waits = <Duration>[];
+      final manager = ChatStreamManager.withRetryPolicy(
+        retryDelay: (duration) async => waits.add(duration),
+        transportRetryPolicy: const TransportRetryPolicy(jitter: false),
+      );
+      manager.adapter.forceService(_makeChatService(provider));
+
+      final result = await manager.startStreaming(
+        text: 'Hi',
+        convId: 'conv-network-before-output',
+        history: [_userMsg('Hi', 'u-original')],
+      );
+
+      expect(provider.callCount, 2);
+      expect(waits, [const Duration(seconds: 2)]);
+      expect(
+        result.history.map((message) => message.role),
+        ['user', 'assistant'],
+      );
+      expect(
+        provider.capturedMessages[1].map((message) => message['content']),
+        orderedEquals(
+          provider.capturedMessages.first.map((message) => message['content']),
+        ),
+      );
+      manager.dispose();
+    });
+
+    test('does not replay already visible reasoning after interruption',
+        () async {
+      final networkFailure = DioException(
+        requestOptions: RequestOptions(path: '/chat'),
+        type: DioExceptionType.connectionError,
+      );
+      final provider = _MockProvider([
+        [AIStreamEvent('partial reasoning', isReasoning: true)],
+      ])
+        ..errorAfterYield = networkFailure;
+      final manager =
+          ChatStreamManager.withRetryPolicy(retryDelay: (_) async {});
+      manager.adapter.forceService(_makeChatService(provider));
+      var bubbleCount = 0;
+      manager.setContinuationHandler('conv-visible-reasoning', (_) async {
+        bubbleCount++;
+        return true;
+      });
+
+      final result = await manager.startStreaming(
+        text: 'Hi',
+        convId: 'conv-visible-reasoning',
+        history: [_userMsg('Hi', 'u-original')],
+      );
+
+      expect(provider.callCount, 1);
+      expect(bubbleCount, 0);
+      expect(result.reasoningSections, contains('partial reasoning'));
+      expect(result.assistantMessage?.isError, isTrue);
+      manager.dispose();
+    });
+
+    test('stops after five failed transport retries', () async {
+      final networkFailure = DioException(
+        requestOptions: RequestOptions(path: '/chat'),
+        type: DioExceptionType.connectionError,
+      );
+      final provider = _MockProvider(List.generate(
+        6,
+        (_) => [AIStreamEvent('partial')],
+      ));
+      for (var call = 1; call <= 6; call++) {
+        provider.errorsAfterCall[call] = networkFailure;
+      }
+      final waits = <Duration>[];
+      final bubbles = <ChatMessage>[];
+      final manager = ChatStreamManager.withRetryPolicy(
+        retryDelay: (duration) async => waits.add(duration),
+        transportRetryPolicy: const TransportRetryPolicy(jitter: false),
+      );
+      manager.adapter.forceService(_makeChatService(provider));
+      manager.setContinuationHandler('conv-network-budget', (message) async {
+        bubbles.add(message);
+        return true;
+      });
+
+      final result = await manager.startStreaming(
+        text: 'Hi',
+        convId: 'conv-network-budget',
+        history: [_userMsg('Hi', 'u-original')],
+      );
+
+      expect(provider.callCount, 6);
+      expect(waits, hasLength(5));
+      expect(waits.last, const Duration(seconds: 30));
+      expect(bubbles, hasLength(5));
+      expect(result.assistantMessage?.isError, isTrue);
+      manager.dispose();
+    });
+
+    test('cancellation during backoff prevents another request or bubble',
+        () async {
+      final networkFailure = DioException(
+        requestOptions: RequestOptions(path: '/chat'),
+        type: DioExceptionType.connectionError,
+      );
+      final provider = _MockProvider([
+        [AIStreamEvent('partial')],
+      ])
+        ..errorAfterYield = networkFailure;
+      final delayStarted = Completer<void>();
+      final manager = ChatStreamManager.withRetryPolicy(retryDelay: (_) async {
+        delayStarted.complete();
+        await Completer<void>().future;
+      });
+      manager.adapter.forceService(_makeChatService(provider));
+      var bubbleCount = 0;
+      manager.setContinuationHandler('conv-cancel-backoff', (_) async {
+        bubbleCount++;
+        return true;
+      });
+
+      final stream = manager.startStreaming(
+        text: 'Hi',
+        convId: 'conv-cancel-backoff',
+        history: [_userMsg('Hi', 'u-original')],
+      );
+      await delayStarted.future;
+      manager.cancel('conv-cancel-backoff');
+      await stream;
+
+      expect(provider.callCount, 1);
+      expect(bubbleCount, 0);
+      manager.dispose();
+    });
+
+    test('does not replay a request after a tool call has started', () async {
+      final networkFailure = DioException(
+        requestOptions: RequestOptions(path: '/chat'),
+        type: DioExceptionType.connectionError,
+      );
+      final provider = _MockProvider([
+        [
+          AIStreamEvent('', toolCalls: [
+            {
+              'id': 'call_1',
+              'type': 'function',
+              'function': {'name': 'write_file', 'arguments': '{}'},
+            },
+          ]),
+        ],
+      ])
+        ..errorAfterYield = networkFailure;
+      final manager =
+          ChatStreamManager.withRetryPolicy(retryDelay: (_) async {});
+      manager.adapter.forceService(_makeChatService(provider));
+
+      await manager.startStreaming(
+        text: 'Create a file',
+        convId: 'conv-no-side-effect-replay',
+        history: [_userMsg('Create a file', 'u-original')],
+      );
+
+      expect(provider.callCount, 1);
+      manager.dispose();
+    });
+
+    test('continuation handler survives stop followed by resend', () async {
+      final manager =
+          ChatStreamManager.withRetryPolicy(retryDelay: (_) async {});
+      final firstStreamGate = Completer<void>();
+      final firstCallStarted = Completer<void>();
+      final networkFailure = DioException(
+        requestOptions: RequestOptions(path: '/chat'),
+        type: DioExceptionType.connectionError,
+      );
+      final provider = _MockProvider(
+        [
+          [],
+          [AIStreamEvent('partial answer')],
+        ],
+        waitForYield: firstStreamGate,
+        firstCallStarted: firstCallStarted,
+      );
+      manager.adapter.forceService(_makeChatService(provider));
+      final displayedContinuations = <ChatMessage>[];
+
+      final stoppedStream = manager.startStreaming(
+        text: 'Stop this turn',
+        convId: 'conv-stop-resend',
+        history: [_userMsg('Stop this turn')],
+      );
+      await firstCallStarted.future;
+      manager.cancel('conv-stop-resend');
+      manager.setContinuationHandler(
+        'conv-stop-resend',
+        (message) async {
+          displayedContinuations.add(message);
+          return true;
+        },
+      );
+      firstStreamGate.complete();
+      await stoppedStream;
+      provider.errorAfterYield = networkFailure;
+
+      final result = await manager.startStreaming(
+        text: 'Try again',
+        convId: 'conv-stop-resend',
+        history: [_userMsg('Try again')],
+      );
+
+      expect(provider.callCount, 3);
+      expect(displayedContinuations, hasLength(1));
+      expect(displayedContinuations.single.role, 'user');
+      expect(
+        displayedContinuations.single.content,
+        'Continue if not finished.',
+      );
+      expect(
+          result.history.any((message) =>
+              message.role == 'user' &&
+              message.content == 'Continue if not finished.'),
+          isTrue);
+      manager.dispose();
+    });
+
+    test('replays an undisplayed continuation to the restored page', () async {
+      final manager =
+          ChatStreamManager.withRetryPolicy(retryDelay: (_) async {});
+      final firstCallStarted = Completer<void>();
+      final secondCallStarted = Completer<void>();
+      final secondCallGate = Completer<void>();
+      final provider = _MockProvider(
+        [
+          [AIStreamEvent('partial answer')],
+          [AIStreamEvent(' another part')],
+        ],
+        firstCallStarted: firstCallStarted,
+        secondCallStarted: secondCallStarted,
+        secondCallGate: secondCallGate,
+      )..errorsAfterCall.addAll({
+          1: DioException(
+            requestOptions: RequestOptions(path: '/chat'),
+            type: DioExceptionType.connectionError,
+          ),
+          2: DioException(
+            requestOptions: RequestOptions(path: '/chat'),
+            type: DioExceptionType.connectionError,
+          ),
+        });
+      manager.adapter.forceService(_makeChatService(provider));
+      var originalHandlerCalls = 0;
+      final restoredPageContinuations = <ChatMessage>[];
+      final originalHandlerFinished = Completer<void>();
+      manager.setContinuationHandler('conv-restored-page', (_) async {
+        originalHandlerCalls++;
+        originalHandlerFinished.complete();
+        return false;
+      });
+
+      final stream = manager.startStreaming(
+        text: 'Continue this turn',
+        convId: 'conv-restored-page',
+        history: [_userMsg('Continue this turn')],
+      );
+      await firstCallStarted.future;
+      await secondCallStarted.future;
+      await originalHandlerFinished.future;
+      manager.setContinuationHandler('conv-restored-page', (message) async {
+        restoredPageContinuations.add(message);
+        return true;
+      });
+      secondCallGate.complete();
+      final result = await stream;
+
+      expect(originalHandlerCalls, 1);
+      expect(restoredPageContinuations, hasLength(2));
+      expect(
+        restoredPageContinuations.every((message) => message.role == 'user'),
+        isTrue,
+      );
+      expect(restoredPageContinuations.map((message) => message.content),
+          everyElement('Continue if not finished.'));
+      expect(
+        result.history.any((message) =>
+            message.role == 'user' &&
+            message.content == 'Continue if not finished.'),
+        isTrue,
+      );
+      expect(
+        result.history.where((message) =>
+            message.role == 'user' &&
+            message.content == 'Continue if not finished.'),
+        hasLength(2),
+      );
+      manager.dispose();
+    });
+
+    test('redelivers pending continuation when page changes during callback',
+        () async {
+      final manager =
+          ChatStreamManager.withRetryPolicy(retryDelay: (_) async {});
+      final firstCallStarted = Completer<void>();
+      final oldHandlerStarted = Completer<void>();
+      final finishOldHandler = Completer<bool>();
+      final restoredPageContinuations = <ChatMessage>[];
+      final provider = _MockProvider(
+        [
+          [AIStreamEvent('partial answer')],
+          [AIStreamEvent('completed answer')],
+        ],
+        firstCallStarted: firstCallStarted,
+      )..errorsAfterCall[1] = DioException(
+          requestOptions: RequestOptions(path: '/chat'),
+          type: DioExceptionType.connectionError,
+        );
+      manager.adapter.forceService(_makeChatService(provider));
+      manager.setContinuationHandler('conv-page-race', (_) {
+        oldHandlerStarted.complete();
+        return finishOldHandler.future;
+      });
+
+      final stream = manager.startStreaming(
+        text: 'Continue this turn',
+        convId: 'conv-page-race',
+        history: [_userMsg('Continue this turn')],
+      );
+      await firstCallStarted.future;
+      await oldHandlerStarted.future;
+      manager.setContinuationHandler('conv-page-race', (message) async {
+        restoredPageContinuations.add(message);
+        return true;
+      });
+      finishOldHandler.complete(false);
+      await stream;
+
+      expect(restoredPageContinuations, hasLength(1));
+      expect(restoredPageContinuations.single.role, 'user');
+      expect(
+        restoredPageContinuations.single.content,
+        'Continue if not finished.',
+      );
+      manager.dispose();
+    });
+
     test('isStreamingFor returns true during streaming', () async {
       final manager = ChatStreamManager();
       final completer = Completer<void>();
@@ -101,6 +579,36 @@ void chatStreamManagerGroup1() {
       expect(manager.isStreamingFor('conv1'), false);
 
       manager.dispose();
+    });
+
+    test('cancel error block follows the selected locale', () async {
+      final container = ProviderContainer(overrides: [
+        localeProvider.overrideWith(_EnglishLocaleController.new),
+      ]);
+      addTearDown(container.dispose);
+      final manager = container.read(chatStreamManagerProvider);
+      addTearDown(manager.dispose);
+      final completer = Completer<void>();
+      final provider = _MockProvider(
+        [
+          [AIStreamEvent('Partial response')],
+        ],
+        waitForYield: completer,
+      );
+      manager.adapter.forceService(_makeChatService(provider));
+
+      final future = manager.startStreaming(
+        text: 'Hi',
+        convId: 'conv-cancel-localized',
+        history: [_userMsg('Hi')],
+      );
+      manager.cancel('conv-cancel-localized');
+      completer.complete();
+
+      final result = await future;
+      final errorBlock =
+          result.assistantMessage!.blocks!.whereType<ErrorBlock>().single;
+      expect(errorBlock.message, 'Output was interrupted by the user');
     });
 
     test('cancel without convId cancels all streams', () async {

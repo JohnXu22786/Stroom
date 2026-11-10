@@ -51,7 +51,7 @@ void main() {
 
     test('no channel calls are made when not supported', () async {
       final service = IosContinuedTaskService.instance;
-      await service.submit();
+      await service.submit(title: 'Background task');
       await service.updateProgress(50);
       await service.complete();
       expect(channelCalls, isEmpty);

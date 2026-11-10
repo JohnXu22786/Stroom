@@ -9,7 +9,6 @@ class OcrDiagnosticSnapshot {
 
   static const maxSerializedBytes = 2048;
   static const _maxTextLength = 160;
-  static const _maxCredentialValueLength = 512;
   static const _requestIdHeaders = {
     'x-request-id',
     'request-id',
@@ -76,6 +75,8 @@ class OcrDiagnosticSnapshot {
     caseSensitive: false,
   );
 
+  /// Extracted values may contain full secrets. Use them only as transient
+  /// sanitizer exclusions; never expose or persist the returned values.
   static List<String> credentialValuesFromUrl(dynamic rawUrl) {
     if (rawUrl is! String || rawUrl.isEmpty) return const [];
     final uri = Uri.tryParse(rawUrl);
@@ -93,16 +94,21 @@ class OcrDiagnosticSnapshot {
         }
       }
     }
-    try {
-      for (final entry in uri.queryParametersAll.entries) {
-        if (!_credentialQueryParameter.hasMatch(entry.key)) continue;
-        for (final value in entry.value) {
-          addValue(value);
-        }
+    for (final component in uri.query.split('&')) {
+      final separator = component.indexOf('=');
+      final rawKey =
+          separator < 0 ? component : component.substring(0, separator);
+      if (rawKey.isEmpty) continue;
+      try {
+        final key = Uri.decodeQueryComponent(rawKey);
+        if (!_credentialQueryParameter.hasMatch(key)) continue;
+
+        final rawValue =
+            separator < 0 ? '' : component.substring(separator + 1);
+        addValue(Uri.decodeQueryComponent(rawValue));
+      } on FormatException {
+        // Skip only this component; malformed bytes are not credential text.
       }
-    } on FormatException {
-      // Keep any values recovered from userinfo when a malformed query cannot
-      // be decoded safely.
     }
     return values.toList(growable: false);
   }
@@ -121,6 +127,14 @@ class OcrDiagnosticSnapshot {
 
   static List<String> _credentialValuesFromBody(dynamic rawBody) {
     final values = <String>{};
+    var body = rawBody;
+    if (body is String) {
+      try {
+        body = jsonDecode(body);
+      } on FormatException {
+        return const [];
+      }
+    }
 
     void collect(dynamic value, {bool credentialField = false}) {
       if (credentialField && value is String) {
@@ -131,7 +145,7 @@ class OcrDiagnosticSnapshot {
           if (entry.key is String) {
             collect(
               entry.value,
-              credentialField:
+              credentialField: credentialField ||
                   _credentialQueryParameter.hasMatch(entry.key as String),
             );
           }
@@ -143,7 +157,7 @@ class OcrDiagnosticSnapshot {
       }
     }
 
-    collect(rawBody);
+    collect(body);
     return values.toList(growable: false);
   }
 
@@ -151,23 +165,18 @@ class OcrDiagnosticSnapshot {
     final value = rawValue.trim();
     if (value.isEmpty) return;
 
-    String bounded(String credential) =>
-        credential.length <= _maxCredentialValueLength
-            ? credential
-            : credential.substring(0, _maxTextLength);
-
-    values.add(bounded(value));
+    values.add(value);
     final token = RegExp(
       r'^(?:Bearer|Basic)\s+(.+)$',
       caseSensitive: false,
     ).firstMatch(value)?.group(1)?.trim();
-    if (token != null && token.isNotEmpty) values.add(bounded(token));
+    if (token != null && token.isNotEmpty) values.add(token);
   }
 
   static List<String> credentialValuesFromHeaders(dynamic rawHeaders) {
     if (rawHeaders is! Map) return const [];
     final credentialHeader = RegExp(
-      r'(?:authorization|auth.?token|(?:^|[-_.])token|api.?key|access.?key|subscription.?key|access.?token|refresh.?token|(?:private|secret).?key|(?:^|[-_.])secret(?:$|[-_.])|client.?secret|credentials?|password|cookie)',
+      r'(?:authorization|auth.?token|(?:^|[-_.])auth(?:$|[-_.])|(?:^|[-_.])token|api.?key|api.?secret|api.?token|access.?key|subscription.?key|access.?token|refresh.?token|(?:private|secret).?key|(?:^|[-_.])secret(?:$|[-_.])|client.?secret|credentials?|password|cookie)',
       caseSensitive: false,
     );
     final values = <String>{};
@@ -265,7 +274,11 @@ class OcrDiagnosticSnapshot {
         : null;
     final safeFinishReason = includeFinishReason
         ? _safeReason(
-              source['finishReason'] ?? source['finish_reason'],
+              source['finishReason'],
+              excludedValues: safeExcludedValues,
+            ) ??
+            _safeReason(
+              source['finish_reason'],
               excludedValues: safeExcludedValues,
             ) ??
             _finishReasonFromData(data, excludedValues: safeExcludedValues)
@@ -487,6 +500,9 @@ class OcrDiagnosticSnapshot {
           ).hasMatch(candidate) ||
           RegExp(
             r'^部分图片 OCR 未完成：第 \d+ 张图片(?:识别失败|结果不完整)(?:；第 \d+ 张图片(?:识别失败|结果不完整))*$',
+          ).hasMatch(candidate) ||
+          RegExp(
+            r'^Some images were not fully recognized: Image \d+: (?:recognition failed|incomplete result)(?:; Image \d+: (?:recognition failed|incomplete result))*$',
           ).hasMatch(candidate)) {
         return true;
       }
@@ -494,7 +510,11 @@ class OcrDiagnosticSnapshot {
       final incompleteResult = RegExp(
         r'^OCR 返回了不完整结果（finish_reason=([A-Za-z0-9_-]{1,48})）$',
       ).firstMatch(candidate);
-      final finishReason = incompleteResult?.group(1);
+      final englishIncompleteResult = RegExp(
+        r'^OCR returned an incomplete result \(finish_reason=([A-Za-z0-9_-]{1,48})\)$',
+      ).firstMatch(candidate);
+      final finishReason =
+          incompleteResult?.group(1) ?? englishIncompleteResult?.group(1);
       if (finishReason == 'unknown' ||
           (finishReason != null &&
               _safeReason(finishReason, excludedValues: excludedValues) ==
@@ -694,15 +714,16 @@ class OcrDiagnosticSnapshot {
           ? value.clamp(0, 1 << 50).toInt()
           : null;
 
-  static bool _matchesCredentialPrefix(
+  static bool _matchesCredentialFragment(
     String value,
     Iterable<String> excludedValues,
   ) {
     final normalized = value.toLowerCase();
     return excludedValues.any((secret) {
       final normalizedSecret = secret.toLowerCase();
-      return normalizedSecret.length > normalized.length &&
-          normalizedSecret.startsWith(normalized);
+      return (normalizedSecret.length > normalized.length &&
+              normalizedSecret.startsWith(normalized)) ||
+          (normalized.length >= 8 && normalizedSecret.contains(normalized));
     });
   }
 
@@ -717,7 +738,7 @@ class OcrDiagnosticSnapshot {
     }
     if (RegExp(r'data:image/', caseSensitive: false).hasMatch(cleaned) ||
         _isShortEncodedImageBody(cleaned) ||
-        _matchesCredentialPrefix(cleaned, excludedValues) ||
+        _matchesCredentialFragment(cleaned, excludedValues) ||
         containsCredential(cleaned, excludedValues: excludedValues)) {
       return null;
     }

@@ -49,16 +49,23 @@ class JsHookScript {
     } catch(e) {
       return; // Invalid URL, skip
     }
-    // Dedup
-    if (seenUrls[url]) return;
-    // Check media extension
-    if (!MEDIA_EXT_RE.test(url)) return;
-    seenUrls[url] = true;
-
     var method = (opts && opts.method) || 'GET';
     var initiator = (opts && opts.initiator) || PAGE_URL;
     var mimeType = (opts && opts.mimeType) || '';
     var requestHeaders = (opts && opts.headers) || {};
+    var normalizedMimeType = mimeType.split(';')[0].trim().toLowerCase();
+    var hasMediaMime = normalizedMimeType.indexOf('audio/') === 0 ||
+      normalizedMimeType.indexOf('video/') === 0 ||
+      normalizedMimeType === 'application/vnd.apple.mpegurl' ||
+      normalizedMimeType === 'application/x-mpegurl' ||
+      normalizedMimeType === 'application/dash+xml';
+    // Extensionless URLs are valid when a media element supplies its MIME
+    // type; network requests without either signal remain filtered out.
+    if (!MEDIA_EXT_RE.test(url) && !hasMediaMime) return;
+    // Dedup only after the media check so a later MIME-bearing report can
+    // still admit an extensionless URL first seen through a generic request.
+    if (seenUrls[url]) return;
+    seenUrls[url] = true;
 
     var msg = JSON.stringify({
       url: url,
@@ -455,11 +462,13 @@ class JsHookScript {
           el.getAttribute('data-src'),
           el.getAttribute('data-url')
         ];
-        mediaUrls.forEach(function(mediaUrl) {
+        mediaUrls.forEach(function(mediaUrl, index) {
           if (!mediaUrl) return;
           sendMediaUrl(mediaUrl, {
             method: 'GET',
-            mimeType: el.tagName === 'VIDEO' ? 'video/*' : 'audio/*',
+            mimeType: index === 0
+              ? (el.tagName === 'VIDEO' ? 'video/*' : 'audio/*')
+              : '',
             initiator: PAGE_URL
           });
         });
@@ -473,11 +482,13 @@ class JsHookScript {
               source.getAttribute('data-src'),
               source.getAttribute('data-url')
             ];
-            sourceUrls.forEach(function(sourceUrl) {
+            sourceUrls.forEach(function(sourceUrl, index) {
               if (!sourceUrl) return;
               sendMediaUrl(sourceUrl, {
                 method: 'GET',
-                mimeType: source.type || (el.tagName === 'VIDEO' ? 'video/*' : 'audio/*'),
+                mimeType: source.type || (index === 0
+                  ? (el.tagName === 'VIDEO' ? 'video/*' : 'audio/*')
+                  : ''),
                 initiator: PAGE_URL
               });
             });

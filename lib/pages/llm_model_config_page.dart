@@ -1,10 +1,14 @@
 import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/widgets/stroom_menu_style.dart';
+
 import '../providers/provider_config.dart';
 import '../widgets/code_editor_field.dart';
 import '../widgets/drag_sort_area.dart';
 import 'llm_model_config_shared.dart';
+import 'model_config_shared.dart';
 
 part 'llm_model_config_page_custom_params.dart';
 part 'llm_model_config_page_reasoning.dart';
@@ -147,9 +151,10 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
         widget.provider?.reasoningParams ?? [],
         const [],
       ).map((p) => p.copy()).toList();
-      final initialEffort = initialReasoning
-          .cast<ReasoningParam?>()
-          .firstWhere((p) => p?.isEffortParam ?? false, orElse: () => null);
+      final initialEffort = initialReasoning.cast<ReasoningParam?>().firstWhere(
+            (p) => p?.isEffortParam ?? false,
+            orElse: () => null,
+          );
       if (initialEffort != null) {
         _normalizeBaselineEffort(initialEffort, const []);
       }
@@ -274,9 +279,10 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     // 保存的 options 按块顺序归一化（模型无力度参数时为空）——与
     // initState 的块勾选初始值一致。boolean 清空 options/order，json
     // 保留 options（与 sync 一致）。
-    final initialEffort = initialReasoning
-        .cast<ReasoningParam?>()
-        .firstWhere((p) => p?.isEffortParam ?? false, orElse: () => null);
+    final initialEffort = initialReasoning.cast<ReasoningParam?>().firstWhere(
+          (p) => p?.isEffortParam ?? false,
+          orElse: () => null,
+        );
     if (initialEffort != null) {
       _normalizeBaselineEffort(initialEffort, m.reasoningParams);
     }
@@ -294,14 +300,15 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     return false;
   }
 
-  /// 与 initState 的「没有就不显示」一致：供应商的名称式力度参数
-  /// （仅参数名、无选项值）且模型没有自己的力度参数时，把它从列表
-  /// 中移除。基线比较必须镜像工作副本的同一处理，否则打开未修改
-  /// 的页面也会弹「放弃修改」。
+  /// 与 initState 的「没有就不显示」一致：供应商的不可用名称式力度参数
+  /// 且模型没有自己的力度参数时，把它从列表中移除。布尔力度参数没有
+  /// options，但仍然可用，因此保留。基线比较必须镜像工作副本的同一
+  /// 处理，否则打开未修改的页面也会弹「放弃修改」。
   void _removeNameOnlyProviderEffort(List<ReasoningParam> params) {
-    final providerEffort =
-        findEffortParam(widget.provider?.reasoningParams ?? []);
-    if (providerEffort == null || providerEffort.options.isNotEmpty) return;
+    final providerEffort = findEffortParam(
+      widget.provider?.reasoningParams ?? [],
+    );
+    if (providerEffort == null || providerEffort.isUsable) return;
     final modelEffort = findEffortParam(widget.model?.reasoningParams ?? []);
     if (modelEffort != null) return;
     params.removeWhere((p) => p.isEffortParam);
@@ -339,19 +346,29 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
       effort.optionOrder = const [];
       return;
     }
-    final providerEffort =
-        findEffortParam(widget.provider?.reasoningParams ?? []);
+    final providerEffort = findEffortParam(
+      widget.provider?.reasoningParams ?? [],
+    );
     final savedEffort = findEffortParam(modelParams);
     final savedOptions = savedEffort?.options ?? const <String>[];
+    final hasSavedSelection = savedEffort != null &&
+        (savedOptions.isNotEmpty || savedEffort.optionOrder.isNotEmpty);
     effort.optionOrder = mergeOptionBlocks(
       providerOptions: providerEffort?.options ?? const [],
       savedOptions: savedOptions,
       savedOrder: savedEffort?.optionOrder ?? const [],
     );
-    effort.options = selectedInBlockOrder(
-      blocks: effort.optionOrder,
-      savedOptions: savedOptions,
-    );
+    effort.options = hasSavedSelection
+        ? selectedInBlockOrder(
+            blocks: effort.optionOrder,
+            savedOptions: savedOptions,
+          )
+        : effort.optionOrder
+            .where(
+              (value) =>
+                  (providerEffort?.options ?? const <String>[]).contains(value),
+            )
+            .toList();
   }
 
   /// 归一化附加参数基线（string/number）：options = 已保存勾选值按块
@@ -378,14 +395,18 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
         );
     final providerOptions = List<String>.of(providerParam?.options ?? const []);
     final savedOptions = List<String>.of(p.options);
+    final hasSavedSelection =
+        savedOptions.isNotEmpty || p.optionOrder.isNotEmpty;
     p.optionOrder = mergeOptionBlocks(
       providerOptions: providerOptions,
       savedOptions: savedOptions,
       savedOrder: p.optionOrder,
     );
-    p.options = savedOptions.isNotEmpty
+    p.options = hasSavedSelection
         ? selectedInBlockOrder(
-            blocks: p.optionOrder, savedOptions: savedOptions)
+            blocks: p.optionOrder,
+            savedOptions: savedOptions,
+          )
         : p.optionOrder.where((v) => providerOptions.contains(v)).toList();
   }
 
@@ -430,7 +451,9 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
         // 空 options + 非空 optionOrder 表示明确取消了全部勾选。
         p.options = savedOptions.isNotEmpty
             ? selectedInBlockOrder(
-                blocks: p.optionOrder, savedOptions: savedOptions)
+                blocks: p.optionOrder,
+                savedOptions: savedOptions,
+              )
             : _hasSavedCustomParamOptionSelection(p)
                 ? const []
                 : p.optionOrder
@@ -579,13 +602,12 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
       m?.reasoningParams ?? [],
     );
 
-    // 「没有就不显示」：供应商的力度参数未设置任何选项值（仅参数名）
-    // 且模型也没有自己的力度参数时，模型页不显示它——力度区只在有值
-    // （供应商或模型）时出现，用户可在模型页自建。
+    // 「没有就不显示」：供应商的力度参数不可用且模型也没有自己的
+    // 力度参数时，模型页不显示它；boolean 力度参数没有 options 但可用。
     final providerEffort = findEffortParam(provider?.reasoningParams ?? []);
     final modelEffortParam = findEffortParam(m?.reasoningParams ?? []);
     if (modelEffortParam == null &&
-        (providerEffort == null || providerEffort.options.isEmpty)) {
+        (providerEffort == null || !providerEffort.isUsable)) {
       _reasoningParams.removeWhere((p) => p.isEffortParam);
     }
 
@@ -593,8 +615,9 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     // - 块顺序：模型已保存的完整顺序（optionOrder）在前 + 供应商新增值
     //   追加；未保存过顺序时供应商顺序在前 + 模型独有值——勾选状态不改
     //   变显示顺序（修复「选中值自动前置」）；
-    // - 勾选 = 模型已保存的 options；模型未保存过勾选（新建模型或
-    //   编辑但模型无力度参数）时默认全不选，用户显式勾选想显示的值；
+    // - 勾选 = 模型已保存的 options；尚无已保存选择（options 和
+    //   optionOrder 均为空）时默认选中供应商值，之后用户的显式取消状态
+    //   会由非空 optionOrder 保留；
     // - 供应商来源判定用于删除按钮的显隐。
     _providerEffortValues = {...providerEffort?.options ?? []};
     final modelEffortValues = modelEffortParam?.options ?? [];
@@ -603,13 +626,15 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
       savedOptions: modelEffortValues,
       savedOrder: modelEffortParam?.optionOrder ?? const [],
     );
-    _effortSelectedValues =
-        modelEffortParam != null ? modelEffortValues.toSet() : <String>{};
+    final hasSavedEffortSelection = modelEffortParam != null &&
+        (modelEffortValues.isNotEmpty ||
+            modelEffortParam.optionOrder.isNotEmpty);
+    _effortSelectedValues = hasSavedEffortSelection
+        ? modelEffortValues.toSet()
+        : {...?providerEffort?.options};
 
     // 初始快照（reset 还原用）
-    _initialParamSnapshots = {
-      for (final p in _reasoningParams) p: p.copy(),
-    };
+    _initialParamSnapshots = {for (final p in _reasoningParams) p: p.copy()};
     _initialBlockValues = List.of(_effortBlockValues);
     _initialSelectedValues = {..._effortSelectedValues};
 
@@ -617,8 +642,9 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     // - 块顺序：模型已保存的完整顺序（optionOrder）在前 + 供应商新增值
     //   追加；未保存过顺序时供应商顺序在前 + 模型独有值（与力度参数
     //   同款，勾选状态不改变显示顺序）；
-    // - 勾选 = 模型已保存的 options；模型未保存过时默认全选供应商值
-    //   （附加参数保持「选项默认有效」语义，与力度参数默认不选不同）；
+    // - 勾选 = 模型已保存的 options；尚无已保存选择（options 和
+    //   optionOrder 均为空）时默认全选供应商值；显式全取消由 optionOrder
+    //   保留；
     // - 供应商来源判定用于删除按钮的显隐。
     final providerByName = {
       for (final p in provider?.reasoningParams ?? [])
@@ -640,8 +666,10 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
         savedOptions: modelOptions,
         savedOrder: p.optionOrder,
       );
+      final hasSavedSelection =
+          modelOptions.isNotEmpty || p.optionOrder.isNotEmpty;
       _additionalSelectedValues[p] =
-          modelOptions.isNotEmpty ? modelOptions.toSet() : {...providerOptions};
+          hasSavedSelection ? modelOptions.toSet() : {...providerOptions};
     }
   }
 
@@ -662,8 +690,10 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
   @override
   Widget build(BuildContext context) {
     final title = _isEditing
-        ? (widget.model!.name.isNotEmpty ? widget.model!.name : '编辑模型')
-        : '添加模型';
+        ? (widget.model!.name.isNotEmpty
+            ? widget.model!.name
+            : AppLocalizations.of(context)!.modelEditTitle)
+        : AppLocalizations.of(context)!.modelCreateTitle;
     final cs = Theme.of(context).colorScheme;
 
     return PopScope(
@@ -673,17 +703,17 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
         final discard = await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
-            title: const Text('放弃修改？'),
-            content: const Text('当前有未保存的修改，确定要放弃吗？'),
+            title: Text(AppLocalizations.of(context)!.modelDiscardTitle),
+            content: Text(AppLocalizations.of(context)!.modelDiscardBody),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('取消'),
+                child: Text(AppLocalizations.of(context)!.batchDlgCancel),
               ),
               TextButton(
                 onPressed: () => Navigator.pop(ctx, true),
                 style: TextButton.styleFrom(foregroundColor: Colors.red),
-                child: const Text('放弃'),
+                child: Text(AppLocalizations.of(context)!.taskFlowUiDiscard),
               ),
             ],
           ),
@@ -698,7 +728,7 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
           actions: [
             TextButton(
               onPressed: _isSaving ? null : _save,
-              child: const Text('保存'),
+              child: Text(AppLocalizations.of(context)!.mermaidSaveButton),
             ),
           ],
         ),

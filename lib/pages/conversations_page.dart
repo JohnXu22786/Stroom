@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+
+import '../l10n/app_localizations.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/conversation_provider.dart';
@@ -57,7 +60,9 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
       // Search both conversation titles AND message content
       result = result.where((c) {
         // Check title match
-        final displayTitle = c.title.isEmpty ? '新对话' : c.title;
+        final displayTitle = c.title.isEmpty
+            ? AppLocalizations.of(context)!.conversationNew
+            : c.title;
         if (displayTitle.toLowerCase().contains(query)) return true;
         // Check message content match
         if (countMessageMatches(c, query) > 0) return true;
@@ -90,18 +95,22 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('删除对话'),
-        content: Text('确定要删除选中的 ${_selectedIds.length} 个对话吗？此操作无法撤销。'),
+        title: Text(AppLocalizations.of(context)!.conversationDeleteTitle),
+        content: Text(
+          AppLocalizations.of(context)!
+              .conversationDeleteMany(_selectedIds.length),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('取消'),
+            child: Text(AppLocalizations.of(context)!.actionCancel),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
             style: TextButton.styleFrom(
-                foregroundColor: Theme.of(context).colorScheme.error),
-            child: const Text('删除'),
+              foregroundColor: Theme.of(context).colorScheme.error,
+            ),
+            child: Text(AppLocalizations.of(context)!.actionDelete),
           ),
         ],
       ),
@@ -151,18 +160,19 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('删除对话'),
-        content: const Text('确定要删除这个对话吗？此操作无法撤销。'),
+        title: Text(AppLocalizations.of(context)!.conversationDeleteTitle),
+        content: Text(AppLocalizations.of(context)!.conversationDeleteOne),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('取消'),
+            child: Text(AppLocalizations.of(context)!.actionCancel),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
             style: TextButton.styleFrom(
-                foregroundColor: Theme.of(context).colorScheme.error),
-            child: const Text('删除'),
+              foregroundColor: Theme.of(context).colorScheme.error,
+            ),
+            child: Text(AppLocalizations.of(context)!.actionDelete),
           ),
         ],
       ),
@@ -200,12 +210,12 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('重命名对话'),
+        title: Text(AppLocalizations.of(context)!.conversationRename),
         content: TextField(
           controller: controller,
           autofocus: true,
-          decoration: const InputDecoration(
-            hintText: '输入新名称',
+          decoration: InputDecoration(
+            hintText: AppLocalizations.of(context)!.conversationRenameHint,
             border: OutlineInputBorder(),
           ),
           onSubmitted: (value) {
@@ -224,7 +234,7 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
               controller.dispose();
               Navigator.of(ctx).pop();
             },
-            child: const Text('取消'),
+            child: Text(AppLocalizations.of(context)!.actionCancel),
           ),
           TextButton(
             onPressed: () {
@@ -237,7 +247,7 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
               controller.dispose();
               Navigator.of(ctx).pop();
             },
-            child: const Text('确定'),
+            child: Text(AppLocalizations.of(context)!.actionConfirm),
           ),
         ],
       ),
@@ -257,7 +267,9 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
     final query = _searchController.text.trim();
     return Center(
       child: Text(
-        query.isNotEmpty ? '没有找到匹配的对话' : '暂无历史记录',
+        query.isNotEmpty
+            ? AppLocalizations.of(context)!.conversationNoMatches
+            : AppLocalizations.of(context)!.conversationEmpty,
         style: TextStyle(color: cs.onSurfaceVariant),
       ),
     );
@@ -286,7 +298,8 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
                 controller: _searchController,
                 autofocus: true,
                 decoration: InputDecoration(
-                  hintText: '搜索所有对话中的消息...',
+                  hintText:
+                      AppLocalizations.of(context)!.conversationSearchHint,
                   border: InputBorder.none,
                   hintStyle: TextStyle(color: cs.onSurfaceVariant),
                 ),
@@ -295,19 +308,22 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
             )
           : AppBar(
               title: Text(
-                _selectionMode ? '已选 ${_selectedIds.length} 个' : '对话历史',
+                _selectionMode
+                    ? AppLocalizations.of(context)!
+                        .conversationSelected(_selectedIds.length)
+                    : AppLocalizations.of(context)!.conversationsTitle,
               ),
               actions: [
                 if (!_selectionMode)
                   IconButton(
                     icon: const Icon(Icons.search),
-                    tooltip: '搜索',
+                    tooltip: AppLocalizations.of(context)!.conversationSearch,
                     onPressed: () => setState(() => _showSearch = true),
                   ),
                 if (!_selectionMode)
                   IconButton(
                     icon: const Icon(Icons.add),
-                    tooltip: '新对话',
+                    tooltip: AppLocalizations.of(context)!.conversationNew,
                     onPressed: () {
                       ref
                           .read(conversationsProvider.notifier)
@@ -318,14 +334,15 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
                 if (_selectionMode)
                   IconButton(
                     icon: const Icon(Icons.delete),
-                    tooltip: '删除选中',
+                    tooltip: AppLocalizations.of(context)!
+                        .conversationDeleteSelected,
                     onPressed: _selectedIds.isNotEmpty ? _batchDelete : null,
                   ),
                 IconButton(
-                  icon: Icon(
-                    _selectionMode ? Icons.close : Icons.checklist,
-                  ),
-                  tooltip: _selectionMode ? '取消选择' : '选择',
+                  icon: Icon(_selectionMode ? Icons.close : Icons.checklist),
+                  tooltip: _selectionMode
+                      ? AppLocalizations.of(context)!.actionUnselect
+                      : AppLocalizations.of(context)!.actionSelect,
                   onPressed: _toggleSelectionMode,
                 ),
               ],
@@ -340,7 +357,12 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
                     final conv = filtered[index];
                     final isActive = conv.id == activeId;
                     return _buildConversationItem(
-                        conv, isActive, cs, index, activeId);
+                      conv,
+                      isActive,
+                      cs,
+                      index,
+                      activeId,
+                    );
                   },
                 )
               : ReorderableListView.builder(
@@ -372,7 +394,12 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
                     final conv = filtered[index];
                     final isActive = conv.id == activeId;
                     return _buildConversationItem(
-                        conv, isActive, cs, index, activeId);
+                      conv,
+                      isActive,
+                      cs,
+                      index,
+                      activeId,
+                    );
                   },
                 ),
       floatingActionButton: _selectionMode && _selectedIds.isNotEmpty
@@ -381,14 +408,22 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
               backgroundColor: cs.error,
               foregroundColor: cs.onError,
               icon: const Icon(Icons.delete),
-              label: Text('删除 ${_selectedIds.length} 个'),
+              label: Text(
+                AppLocalizations.of(context)!
+                    .conversationDeleteCount(_selectedIds.length),
+              ),
             )
           : null,
     );
   }
 
-  Widget _buildConversationItem(Conversation conv, bool isActive,
-      ColorScheme cs, int index, String? activeId) {
+  Widget _buildConversationItem(
+    Conversation conv,
+    bool isActive,
+    ColorScheme cs,
+    int index,
+    String? activeId,
+  ) {
     return ListTile(
       key: ValueKey('tile_${conv.id}'),
       selected: isActive,
@@ -404,10 +439,7 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
               ? Icon(Icons.mark_chat_read_outlined, color: cs.primary)
               : ReorderableDragStartListener(
                   index: index,
-                  child: Icon(
-                    Icons.drag_handle,
-                    color: cs.onSurfaceVariant,
-                  ),
+                  child: Icon(Icons.drag_handle, color: cs.onSurfaceVariant),
                 ),
       title: Row(
         children: [
@@ -421,7 +453,9 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
             TemporaryCountdownCapsule(expiresAt: conv.temporaryExpiresAt!),
           Expanded(
             child: Text(
-              conv.title.isEmpty ? '新对话' : conv.title,
+              conv.title.isEmpty
+                  ? AppLocalizations.of(context)!.conversationNew
+                  : conv.title,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
@@ -452,14 +486,19 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
                         ? cs.primary
                         : cs.onSurfaceVariant.withValues(alpha: 0.7),
                   ),
-                  tooltip: conv.isPinned ? '取消置顶' : '置顶',
+                  tooltip: conv.isPinned
+                      ? AppLocalizations.of(context)!.conversationUnpin
+                      : AppLocalizations.of(context)!.conversationPin,
                   onPressed: () {
                     ref.read(conversationsProvider.notifier).togglePin(conv.id);
                   },
                 ),
                 PopupMenuButton<String>(
-                  icon: Icon(Icons.more_vert,
-                      size: 18, color: cs.onSurfaceVariant),
+                  icon: Icon(
+                    Icons.more_vert,
+                    size: 18,
+                    color: cs.onSurfaceVariant,
+                  ),
                   onSelected: (value) {
                     switch (value) {
                       case 'rename':
@@ -486,30 +525,43 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
                     }
                   },
                   itemBuilder: (ctx) => [
-                    const PopupMenuItem(
+                    PopupMenuItem(
                       value: 'rename',
-                      child: Text('重命名'),
+                      child: Text(AppLocalizations.of(context)!.actionRename),
                     ),
                     PopupMenuItem(
                       value: 'auto_rename',
-                      child:
-                          Text('自动命名', style: TextStyle(color: cs.onSurface)),
+                      child: Text(
+                        AppLocalizations.of(context)!.conversationAutoRename,
+                        style: TextStyle(color: cs.onSurface),
+                      ),
                     ),
                     PopupMenuItem(
                       value: 'toggle_temporary',
                       child: Text(
-                        conv.isTemporary ? '关闭临时对话' : '临时对话',
+                        conv.isTemporary
+                            ? AppLocalizations.of(context)!
+                                .conversationCloseTemporary
+                            : AppLocalizations.of(context)!
+                                .conversationTemporary,
                         style: TextStyle(color: cs.onSurface),
                       ),
                     ),
                     PopupMenuItem(
                       value: 'pin',
-                      child: Text(conv.isPinned ? '取消置顶' : '置顶'),
+                      child: Text(
+                        conv.isPinned
+                            ? AppLocalizations.of(context)!.conversationUnpin
+                            : AppLocalizations.of(context)!.conversationPin,
+                      ),
                     ),
                     const PopupMenuDivider(),
                     PopupMenuItem(
                       value: 'delete',
-                      child: Text('删除', style: TextStyle(color: cs.error)),
+                      child: Text(
+                        AppLocalizations.of(context)!.actionDelete,
+                        style: TextStyle(color: cs.error),
+                      ),
                     ),
                   ],
                 ),

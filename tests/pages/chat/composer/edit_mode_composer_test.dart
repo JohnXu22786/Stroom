@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/pages/chat/composer/chat_composer_widget.dart';
@@ -25,7 +27,16 @@ Widget createChatTestApp({String? activeConversationId}) {
         return ProviderEntriesNotifier();
       }),
     ],
-    child: const MaterialApp(home: ChatPage()),
+    child: const MaterialApp(
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: ChatPage()),
   );
 }
 
@@ -42,6 +53,7 @@ Widget wrapComposerInApp({
   Set<String> streamingConversations = const {},
   bool showEditWarningOnEntry = false,
   int editWarningArmCount = 0,
+  Locale locale = const Locale('zh', 'CN'),
 }) {
   SharedPreferences.setMockInitialValues({});
   return ProviderScope(
@@ -58,6 +70,14 @@ Widget wrapComposerInApp({
       }),
     ],
     child: MaterialApp(
+      locale: locale,
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       home: Scaffold(
         body: ChatComposerWidget(
           onSend: onSend ?? (text, attachments) {},
@@ -357,6 +377,7 @@ void main() {
       String? conversationId,
       Set<String> streamingConversations = const {},
       void Function(String text, List<Attachment> attachments)? onSend,
+      Locale locale = const Locale('zh', 'CN'),
     }) async {
       await tester.binding.setSurfaceSize(const Size(1200, 2000));
       await tester.pumpWidget(
@@ -366,6 +387,7 @@ void main() {
           conversationId: conversationId,
           streamingConversations: streamingConversations,
           onSend: onSend,
+          locale: locale,
         ),
       );
       await tester.pump();
@@ -392,6 +414,48 @@ void main() {
 
     String mainInputText(WidgetTester tester) =>
         tester.widget<TextField>(mainInputField()).controller?.text ?? '';
+
+    for (final (locale, title, close, hint, send) in [
+      (
+        const Locale('en', 'US'),
+        'Edit message',
+        'Close',
+        'Enter a message...',
+        'Send',
+      ),
+      (
+        const Locale('zh', 'CN'),
+        '编辑消息',
+        '关闭',
+        '输入消息...',
+        '发送',
+      ),
+    ]) {
+      testWidgets('$locale localizes the editor and preserves edited text', (
+        tester,
+      ) async {
+        String? sentText;
+        await openFullscreenEditor(
+          tester,
+          locale: locale,
+          onSend: (text, _) => sentText = text,
+        );
+
+        expect(find.text(title), findsOneWidget);
+        expect(find.byTooltip(close), findsOneWidget);
+        expect(
+          tester.widget<TextField>(dialogTextField()).decoration?.hintText,
+          hint,
+        );
+        expect(find.text(send), findsOneWidget);
+
+        await tester.enterText(dialogTextField(), 'edited message content');
+        await tester.tap(find.text(send));
+        await tester.pump();
+
+        expect(sentText, 'edited message content');
+      });
+    }
 
     testWidgets('X button preserves edited text back to main input', (
       tester,

@@ -64,12 +64,15 @@ class _Manager extends ChatStreamManager {
     required String text,
     required String convId,
     required List<ChatMessage> history,
+    List<ChatMessage>? requestHistoryOverride,
+    List<ChatMessage>? historyOnSuccess,
     List<ToolDefinition> tools = const [],
     bool reasoning = false,
     String reasoningEffort = 'medium',
     Map<String, String> reasoningParamValues = const {},
     String? streamingMsgId,
     Assistant? assistant,
+    Map<String, String>? customParamValues,
     ProviderEntriesState? entriesStateOverride,
   }) async {
     starts++;
@@ -325,7 +328,9 @@ void main() {
         .copy('${directory.path}/recording.mp4');
     final notifier = _CatCatch();
     late String taskId;
-    when(() => notifier.addTask(any(), any(), taskId: any(named: 'taskId')))
+    when(() => notifier.addTask(any(), any(),
+            taskId: any(named: 'taskId'),
+            flowManagedSelection: any(named: 'flowManagedSelection')))
         .thenAnswer((invocation) {
       taskId = invocation.namedArguments[#taskId] as String;
       return taskId;

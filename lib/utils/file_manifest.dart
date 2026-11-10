@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
@@ -16,6 +17,46 @@ import 'folder_path_utils.dart';
 // ====================================================================
 // AudioRecord
 // ====================================================================
+
+String _safeAudioFormat(String format, {required int maxLength}) {
+  const windowsInvalidCharacters = '<>:"/\\|?*';
+  final codeUnits = format.codeUnits;
+  var trailingDotOrSpaceStart = codeUnits.length;
+  while (trailingDotOrSpaceStart > 0 &&
+      (codeUnits[trailingDotOrSpaceStart - 1] == 0x20 ||
+          codeUnits[trailingDotOrSpaceStart - 1] == 0x2e)) {
+    trailingDotOrSpaceStart--;
+  }
+
+  final safeFormat = StringBuffer();
+  for (var i = 0; i < codeUnits.length; i++) {
+    final codeUnit = codeUnits[i];
+    final character = String.fromCharCode(codeUnit);
+    final needsEscape = codeUnit < 0x20 ||
+        character == '%' ||
+        windowsInvalidCharacters.contains(character) ||
+        i >= trailingDotOrSpaceStart;
+    if (needsEscape) {
+      safeFormat
+        ..write('%')
+        ..write(codeUnit.toRadixString(16).padLeft(4, '0'));
+    } else {
+      safeFormat.write(character);
+    }
+  }
+  final encoded = safeFormat.isEmpty ? '%' : safeFormat.toString();
+  if (encoded.length <= maxLength) return encoded;
+
+  final compact = '%fmt${sha256.convert(utf8.encode(format))}';
+  if (compact.length > maxLength) {
+    throw ArgumentError.value(
+      format,
+      'format',
+      'Audio format cannot fit in a Windows file name.',
+    );
+  }
+  return compact;
+}
 
 /// 音频文件记录（manifest 中的一条记录）
 class AudioRecord
@@ -54,12 +95,19 @@ class AudioRecord
   })  : modifiedAt = modifiedAt ?? createdAt,
         id = id ?? 'rec_${const Uuid().v4()}';
 
+  /// Audio storage filename for a hash and format, safe on Windows.
+  static String storageFileNameFor({
+    required String hash,
+    required String format,
+  }) =>
+      '$hash.${_safeAudioFormat(format, maxLength: 254 - hash.length)}';
+
   /// 音频文件的存储文件名（基于哈希）
-  String get storageFileName => '$hash.$format';
+  String get storageFileName => storageFileNameFor(hash: hash, format: format);
 
   /// 音频文件的实际存储路径（相对于 tts_audio 目录）
   @override
-  String get storagePath => '$hash.$format';
+  String get storagePath => storageFileName;
 
   /// 文本文件的存储路径
   String get textStoragePath => '$hash.txt';
@@ -287,6 +335,7 @@ class FileManifest {
     fromMap: AudioRecord.fromMap,
     tableName: 'audio_records',
     toMap: (r) => r.toMap(),
+    legacyStorageNameOf: (r) => '${r.hash}.${r.format}',
     onExtraDelete: (r) async {
       // Also delete the .txt sidecar file (same prefix convention)
       if (kIsWeb || WebFileStore.isTestMode) {
@@ -551,6 +600,24 @@ class FileManifest {
         () => _ops.moveRecord(id, targetFolder),
       );
 
+  static Future<bool> moveRecordIfFolder(
+    String id,
+    String expectedFolder,
+    String targetFolder, {
+    void Function()? onMoved,
+  }) async {
+    var moved = false;
+    await _withRecordStorageFileSaveLock(id, () async {
+      moved = await _ops.moveRecordIfFolder(
+        id,
+        expectedFolder,
+        targetFolder,
+        onMoved: onMoved,
+      );
+    });
+    return moved;
+  }
+
   static Future<void> _withRecordStorageFileSaveLock(
     String id,
     Future<void> Function() operation,
@@ -588,6 +655,7 @@ class FileManifest {
     );
   }
 
+  static Future<bool> fileExists(String fileName) => _ops.fileExists(fileName);
   static Future<Uint8List?> readFile(String fileName) =>
       _ops.readFile(fileName);
   static Future<Uint8List?> readFileCancellable(
@@ -626,6 +694,8 @@ class FileManifest {
   static Future<Set<String>> getAllFolders() => _ops.getAllFolders();
   static Future<void> removeFolderFromCache(String folderPath) =>
       _ops.removeFolderFromCache(folderPath);
+  static Future<void> removeFolderMetadataFromCache(String folderPath) =>
+      _ops.removeFolderMetadataFromCache(folderPath);
   static void invalidateCache() => _ops.invalidateCache();
 
   // Path utilities — forward to shared utilities

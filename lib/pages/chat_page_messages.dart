@@ -41,7 +41,19 @@ extension _ChatPageMessagesExt on _ChatPageState {
     // Load conversation messages after restoring a background stream. This
     // lets the loader merge the manager's live history with the persisted
     // snapshot instead of briefly replacing it with stale data.
-    await _loadConversationMessages();
+    try {
+      await _loadConversationMessages();
+    } finally {
+      // If no conversation is active, the empty chat is ready. When an ID is
+      // active but its record is not available yet, keep loading visible until
+      // the conversations listener retries after provider hydration.
+      if (mounted) {
+        final activeId = ref.read(activeConversationIdProvider);
+        if (activeId == null || _loadedConversationId == activeId) {
+          setState(() => _isInitialChatLoadPending = false);
+        }
+      }
+    }
 
     // Then initialize MCP server placeholders (SSE / stdio) without any
     // network connection — MCP servers are lazy: they connect only when a
@@ -183,8 +195,13 @@ extension _ChatPageMessagesExt on _ChatPageState {
     _controller = InMemoryChatController();
     _history.clear();
     _chatSegments.clear();
+    _streamingSearchOccurrenceCache.clear();
+    _legacyFullReplySnapshots.clear();
+    _legacyFullReplySequences.clear();
+    _legacyFullReplyGenerations.clear();
     _reasoningContents.clear();
     _finalizedMessages.clear();
+    _convertedStreamingPlaceholderIds.clear();
     _streamingMsgId = null;
     _isStreamingActive = false;
     _messageKeys.clear();
@@ -259,8 +276,10 @@ extension _ChatPageMessagesExt on _ChatPageState {
     final loadCompleter = Completer<void>();
     _messageLoadCompleter = loadCompleter;
     final loadGeneration = ++_conversationLoadGeneration;
+    String? loadingConversationId;
     try {
       final activeId = ref.read(activeConversationIdProvider);
+      loadingConversationId = activeId;
       bool isCurrentLoad() =>
           mounted &&
           loadGeneration == _conversationLoadGeneration &&
@@ -271,7 +290,12 @@ extension _ChatPageMessagesExt on _ChatPageState {
       if (activeId == null) {
         await AppLogService.warning(
             'ChatPage', '[STREAM-LOAD] activeConversationId is null, skip');
-        if (isCurrentLoad()) _clearConversationView();
+        if (isCurrentLoad()) {
+          _clearConversationView();
+          if (_isInitialChatLoadPending) {
+            setState(() => _isInitialChatLoadPending = false);
+          }
+        }
         return;
       }
       final conv = convs.where((c) => c.id == activeId).firstOrNull;
@@ -309,7 +333,13 @@ extension _ChatPageMessagesExt on _ChatPageState {
       // the next save.
       _resolveEnabledToolsForActiveConversation();
       if (messages.isEmpty) {
+        if (conv == null && _isInitialChatLoadPending && convs.isEmpty) {
+          return;
+        }
         _clearConversationView();
+        if (_isInitialChatLoadPending && isCurrentLoad()) {
+          setState(() => _isInitialChatLoadPending = false);
+        }
         return;
       }
 
@@ -377,12 +407,14 @@ extension _ChatPageMessagesExt on _ChatPageState {
           toolCalls: msg.toolCalls ?? [],
           toolCallRoundStarts: msg.toolCallRoundStarts ?? [],
         );
-        if (msg.toolCallRoundStarts != null) {
-          rebuiltBlocks.addAll(msg.blocks?.whereType<ErrorBlock>() ?? const []);
-        }
-        final blocks = (msg.toolCallRoundStarts != null)
-            ? rebuiltBlocks
-            : (msg.blocks ?? rebuiltBlocks);
+        rebuiltBlocks.addAll(msg.blocks?.whereType<ErrorBlock>() ?? const []);
+        final hasCanonicalFields = msg.toolCallRoundStarts != null ||
+            ((msg.toolCalls == null || msg.toolCalls!.isEmpty) &&
+                !(msg.blocks?.any((block) => block is ToolCallBlock) ??
+                    false) &&
+                (msg.reasoningSections != null || msg.textSections != null));
+        final blocks =
+            hasCanonicalFields ? rebuiltBlocks : (msg.blocks ?? rebuiltBlocks);
         final segments = blocksToSegments(blocks);
         // Fallback: no textSections, use content as single trailing block
         if (segments.isEmpty && msg.content.isNotEmpty) {
@@ -470,6 +502,10 @@ extension _ChatPageMessagesExt on _ChatPageState {
         ..clear()
         ..addAll(loadedReasoningContents);
       _finalizedMessages.clear();
+      _convertedStreamingPlaceholderIds.clear();
+      _legacyFullReplySnapshots.clear();
+      _legacyFullReplySequences.clear();
+      _legacyFullReplyGenerations.clear();
       _streamingMsgId = null;
       _messageKeys.clear();
       _expandedErrors.clear();
@@ -482,15 +518,18 @@ extension _ChatPageMessagesExt on _ChatPageState {
       if (_isSearching) {
         final searchQuery = _searchQuery;
         _searchMatches.clear();
+        _searchMatchFirstIndexByMessageId.clear();
         _currentMatchIndex = 0;
         if (searchQuery.isNotEmpty) {
           _performSearch(searchQuery);
         }
       } else {
+        _liveMarkdownSearchPreviews.clear();
         _searchTextController.clear();
         _isSearching = false;
         _searchQuery = '';
         _searchMatches.clear();
+        _searchMatchFirstIndexByMessageId.clear();
         _currentMatchIndex = 0;
       }
       _editingMessageId = null;
@@ -535,8 +574,8 @@ extension _ChatPageMessagesExt on _ChatPageState {
         // yet if periodic persist hasn't run), so restore it now as a
         // live Message.text so it renders through the normal textMessageBuilder
         // (gray bubble + segments) instead of textStreamMessageBuilder (raw
-        // white-background Markdown). Streaming listeners will continue to
-        // update it via _updateStreamingMessage.
+        // white-background Markdown). Streaming listeners update segments
+        // without copying the full reply into the controller message.
         final inCtrl =
             _controller?.messages.any((m) => m.id == savedStreamingMsgId) ??
                 false;
@@ -557,10 +596,23 @@ extension _ChatPageMessagesExt on _ChatPageState {
         // its complete reasoning/tool/text segments after the controller swap.
         _rebuildLiveSegments(savedStreamingMsgId);
       }
-      if (mounted) setState(() {});
+      if (mounted) {
+        setState(() {
+          if (_isInitialChatLoadPending &&
+              ref.read(activeConversationIdProvider) == loadingConversationId) {
+            _isInitialChatLoadPending = false;
+          }
+        });
+      }
     } catch (e, s) {
       debugPrint('[ChatPage] _loadConversationMessages error: $e\n$s');
       await AppLogService.error('ChatPage', '加载对话消息失败', e, s);
+      if (mounted &&
+          loadingConversationId != null &&
+          ref.read(activeConversationIdProvider) == loadingConversationId &&
+          _isInitialChatLoadPending) {
+        setState(() => _isInitialChatLoadPending = false);
+      }
     } finally {
       _isLoadingMessages = false;
       if (identical(_messageLoadCompleter, loadCompleter)) {

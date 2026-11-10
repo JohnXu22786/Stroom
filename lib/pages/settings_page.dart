@@ -4,10 +4,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../l10n/app_localizations.dart';
 import '../models/built_in_assistants.dart';
 import '../providers/context_management_provider.dart';
 import '../providers/system_assistant_provider.dart';
 import '../providers/provider_config.dart';
+import '../providers/provider_config_display_names.dart';
 import '../providers/update_provider.dart';
 import '../services/chat_adapter.dart'
     show AvailableModel, availableLlmModels, resolveModelRef;
@@ -37,29 +39,62 @@ class SettingsPage extends ConsumerStatefulWidget {
 }
 
 class _SettingsPageState extends ConsumerState<SettingsPage> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
+    final strings = AppLocalizations.of(context)!;
     return Scaffold(
-      appBar: AppBar(title: const Text('设置'), centerTitle: true),
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(kToolbarHeight),
+        child: AnimatedBuilder(
+          animation: _scrollController,
+          builder: (context, child) {
+            final scrollProgress = _scrollController.hasClients
+                ? (_scrollController.offset / 160).clamp(0.0, 1.0).toDouble()
+                : 0.0;
+            final colorScheme = Theme.of(context).colorScheme;
+            return AppBar(
+              title: child,
+              centerTitle: true,
+              backgroundColor: Color.lerp(
+                colorScheme.surface,
+                colorScheme.surfaceContainerHigh,
+                scrollProgress,
+              ),
+              surfaceTintColor: Colors.transparent,
+              scrolledUnderElevation: 0,
+            );
+          },
+          child: Text(strings.settingsPageTitle),
+        ),
+      ),
       body: ListView(
+        controller: _scrollController,
         padding: const EdgeInsets.all(16),
         children: [
-          _buildSectionHeader('常规设置'),
+          _buildSectionHeader(strings.settingsSectionGeneral),
           _buildGeneralSettings(),
           const SizedBox(height: 24),
-          _buildSectionHeader('供应商设置'),
+          _buildSectionHeader(strings.settingsSectionProviders),
           _buildProviderSettings(),
           const SizedBox(height: 24),
-          _buildSectionHeader('系统助手'),
+          _buildSectionHeader(strings.settingsSectionSystemAssistant),
           _buildSystemAssistantSettings(),
           const SizedBox(height: 24),
-          _buildSectionHeader('上下文管理'),
+          _buildSectionHeader(strings.settingsSectionContextManagement),
           _buildContextManagementSettings(),
           const SizedBox(height: 24),
-          _buildSectionHeader('管理'),
+          _buildSectionHeader(strings.settingsSectionManagement),
           _buildManagementSettings(),
           const SizedBox(height: 24),
-          _buildSectionHeader('关于'),
+          _buildSectionHeader(strings.settingsSectionAbout),
           _buildAboutSection(),
           const SizedBox(height: 40),
         ],

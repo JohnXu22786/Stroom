@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/catcatch/models/catcatch_task.dart';
+import 'package:stroom/catcatch/models/media_resource.dart';
 
 void main() {
   test('immutable updates keep ownership while restored rows get new ownership',
@@ -25,5 +26,88 @@ void main() {
     expect(
         identical(restored.runtimeIdentity, updated.runtimeIdentity), isFalse);
     expect(restored.toMap(), updated.toMap());
+  });
+
+  test('browser recovery resumes after fetch and retains prior task state', () {
+    final originalMedia = MediaResource(
+      url: 'https://example.com/original.mp4',
+      name: 'original',
+      ext: 'mp4',
+    );
+    final recoveredMedia = MediaResource(
+      url: 'https://example.com/recovered.mp4',
+      name: 'recovered',
+      ext: 'mp4',
+    );
+    final unclassifiedMedia = MediaResource(
+      url: 'https://cdn.example.net/stream?token=abc',
+      name: 'stream',
+      ext: '',
+      isPlayable: false,
+    );
+    final classifiedRecoveryMedia = MediaResource(
+      url: unclassifiedMedia.url,
+      name: 'stream',
+      ext: '',
+      mimeType: 'video/*',
+      initiator: 'https://example.com/watch',
+      isPlayable: true,
+    );
+    final task = CatCatchTask(
+      id: 'recovery',
+      url: 'https://example.com/page',
+      expectedDurationSec: 30,
+      createdAt: DateTime(2025, 1, 1),
+      status: TaskStatus.paused,
+      error: 'WebView scan needs manual browser recovery',
+      steps: [
+        StepStatus.running(StepType.fetching),
+        StepStatus.pending(StepType.analyzing),
+        StepStatus.pending(StepType.parsingPlaylist),
+      ],
+      detectedMedia: [originalMedia, unclassifiedMedia],
+      metadata: {CatCatchTask.webViewRecoveryRequiredKey: 'true'},
+    );
+
+    final resumed = task.resumeAfterBrowserRecovery(
+      recoveredMedia: [recoveredMedia, originalMedia, classifiedRecoveryMedia],
+      pageTitle: 'Recovered page',
+      cookieHeadersByUrl: {
+        'https://example.com/media/master.m3u8': 'session=playlist',
+        'https://example.com/media/segment.ts': 'session=segment',
+        'https://cdn.example.net/video.mp4': 'cdn_session=example',
+      },
+    );
+
+    expect(resumed, isNotNull);
+    expect(resumed!.status, TaskStatus.running);
+    expect(resumed.steps[0].completed, isTrue);
+    expect(resumed.steps[1].completed, isTrue);
+    expect(resumed.steps[2].completed, isFalse);
+    expect(
+      resumed.detectedMedia,
+      [originalMedia, classifiedRecoveryMedia, recoveredMedia],
+    );
+    expect(resumed.metadata, isEmpty);
+    expect(resumed.error, isNull);
+    expect(resumed.title, 'Recovered page');
+    expect(
+      resumed
+          .browserCookieHeaderForUrl('https://example.com/media/master.m3u8'),
+      'session=playlist',
+    );
+    expect(
+      resumed.browserCookieHeaderForUrl('https://example.com/media/segment.ts'),
+      'session=segment',
+    );
+    expect(
+      resumed.browserCookieHeaderForUrl('https://example.com/video.mp4'),
+      isNull,
+    );
+    expect(
+      resumed.browserCookieHeaderForUrl('https://cdn.example.net/video.mp4'),
+      'cdn_session=example',
+    );
+    expect(resumed.toMap().containsKey('runtimeBrowserCookieHeader'), isFalse);
   });
 }

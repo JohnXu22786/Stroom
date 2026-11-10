@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../l10n/app_localizations.dart';
 import '../../models/tts_models.dart';
 import '../../providers/assistant_provider.dart';
 import '../../providers/provider_config.dart';
@@ -18,29 +19,32 @@ String friendlyParamValue(
   BlockParamDefinition? paramDef,
   dynamic value,
   WidgetRef ref, {
+  required AppLocalizations strings,
   required Map<String, dynamic> params,
 }) {
   if (paramDef == null) return value.toString();
   final raw = value?.toString() ?? '';
   switch (paramDef.type) {
     case BlockParamType.assistantSelector:
-      if (raw.isEmpty) return '未指定';
+      if (raw.isEmpty) return strings.providerValueNotSet;
       // Only user-defined assistants are valid on blocks — legacy
       // built-in prompt ids read as 已失效.
       final assistants = ref.read(assistantProvider);
       final a = assistants.where((a) => a.id == raw).firstOrNull;
-      return a != null ? '${a.emoji} ${a.name}' : '已失效';
+      return a != null
+          ? '${a.emoji} ${a.name}'
+          : strings.taskFlowUiAssistantUnavailable;
     case BlockParamType.voiceSelector:
       final voices = selectedTtsVoices(ref, params);
       final v = voices.where((v) => v.id == raw).firstOrNull;
-      return v != null ? v.name : '已失效';
+      return v != null ? v.name : strings.taskFlowUiVoiceUnavailable;
     case BlockParamType.modelSelector:
       final selected = resolveProviderModel(
         ref.read(providerEntriesProvider),
         paramDef.configType,
         value,
       );
-      if (selected == null) return '已失效，请重新选择';
+      if (selected == null) return strings.taskFlowUiModelUnavailable;
       final m = selected.model;
       final c = selected.config;
       final name = m.name.isNotEmpty ? m.name : m.modelId;
@@ -49,7 +53,7 @@ String friendlyParamValue(
       // An empty path = the root folder — show it explicitly so a
       // root-folder save config is visible on the block card and in the
       // run-mode 查看参数 panel instead of looking unset.
-      return raw.isEmpty ? '根目录' : raw;
+      return raw.isEmpty ? strings.rootFolder : raw;
     default:
       return raw;
   }

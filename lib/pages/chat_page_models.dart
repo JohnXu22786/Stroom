@@ -107,6 +107,7 @@ extension _ChatPageModelsExt on _ChatPageState {
             'reasoningEffortEnabled': ref.read(reasoningEffortEnabledProvider),
             'reasoningEffort': ref.read(reasoningEffortProvider),
             'reasoningParamValues': ref.read(reasoningParamValuesProvider),
+            'customParamValues': ref.read(customParamValuesProvider),
           };
           prefs.setString('per_model_chat_settings', jsonEncode(allSettings));
         }
@@ -219,6 +220,7 @@ extension _ChatPageModelsExt on _ChatPageState {
         'reasoningEffortEnabled': ref.read(reasoningEffortEnabledProvider),
         'reasoningEffort': ref.read(reasoningEffortProvider),
         'reasoningParamValues': ref.read(reasoningParamValuesProvider),
+        'customParamValues': ref.read(customParamValuesProvider),
       };
       prefs.setString('per_model_chat_settings', jsonEncode(allSettings));
     } catch (e) {
@@ -340,12 +342,61 @@ extension _ChatPageModelsExt on _ChatPageState {
         (k, v) => MapEntry(k, v.toString()),
       );
     } else {
-      // No saved settings for this model — use defaults
-      ref.read(reasoningEnabledProvider.notifier).state = false;
-      ref.read(reasoningEffortEnabledProvider.notifier).state = false;
-      ref.read(reasoningEffortProvider.notifier).state = 'medium';
-      ref.read(reasoningParamValuesProvider.notifier).state = {};
+      // No saved settings for this model — activate configured defaults so
+      // the composer reflects the parameters that the request sends by default.
+      final reasoningParams = _adapter.reasoningParams;
+      final reasoningValues = <String, String>{};
+      for (final param in reasoningParams) {
+        if (!param.enabled || param.isReasoningToggle || !param.isUsable) {
+          continue;
+        }
+        if (param.options.isNotEmpty) {
+          reasoningValues[param.paramName] = param.options.first;
+        } else if (param.type == 'boolean') {
+          reasoningValues[param.paramName] = 'true';
+        }
+      }
+      final effortParam = findEffortParam(reasoningParams);
+      final effortEnabled =
+          effortParam != null && effortParam.enabled && effortParam.isUsable;
+      final reasoningToggle = reasoningParams
+          .where((param) => param.isReasoningToggle && param.isFilledToggle)
+          .firstOrNull;
+      ref.read(reasoningEnabledProvider.notifier).state =
+          reasoningToggle?.enabled ?? reasoningValues.isNotEmpty;
+      ref.read(reasoningEffortEnabledProvider.notifier).state = effortEnabled;
+      ref.read(reasoningEffortProvider.notifier).state = effortParam != null &&
+              (reasoningValues[effortParam.paramName]?.isNotEmpty ?? false)
+          ? reasoningValues[effortParam.paramName]!
+          : 'medium';
+      ref.read(reasoningParamValuesProvider.notifier).state = reasoningValues;
     }
+    final savedCustomValues =
+        modelSettings is Map ? modelSettings['customParamValues'] : null;
+    ref.read(customParamValuesProvider.notifier).state =
+        savedCustomValues is Map
+            ? savedCustomValues.map(
+                (key, value) => MapEntry(key.toString(), value.toString()),
+              )
+            : _adapter.customParams.fold<Map<String, String>>(
+                <String, String>{},
+                (values, param) {
+                  final name = param.paramName;
+                  if (name.trim().isEmpty) return values;
+                  final value = param.type == 'json'
+                      ? param.defaultValue
+                      : param.options.isNotEmpty
+                          ? param.options.first
+                          : param.optionOrder.isEmpty &&
+                                  param.defaultValue.trim().isNotEmpty
+                              ? param.defaultValue
+                              : param.type == 'boolean'
+                                  ? 'true'
+                                  : '';
+                  if (value.isNotEmpty) values[name] = value;
+                  return values;
+                },
+              );
 
     // Heal sessions where the effort toggle is on but no effort value was
     // ever written to the map (the panel previously only saved explicitly
@@ -441,6 +492,7 @@ extension _ChatPageModelsExt on _ChatPageState {
       onModelSelected: _onModelSelected,
       onModelsReordered: _onModelsReordered,
       reasoningParams: _adapter.reasoningParams,
+      customParams: _adapter.customParams,
       editingMessageId: _editingMessageId,
       editingMessageText: _editingMessageText,
       editingMessageAttachments: _editingMessageAttachments,
