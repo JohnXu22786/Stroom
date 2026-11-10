@@ -884,6 +884,29 @@ class EvaluateTests(unittest.TestCase):
         )
         self.assertNotIn("Traceback", stderr.getvalue())
 
+    def test_cli_reports_excessive_json_nesting_in_fixture_manifest_without_traceback(
+        self,
+    ):
+        with TemporaryDirectory() as directory:
+            manifest_path = Path(directory) / "manifest.json"
+            manifest_path.write_text(
+                "[" * 10000 + "0" + "]" * 10000, encoding="utf-8"
+            )
+
+            stderr = StringIO()
+            with redirect_stderr(stderr):
+                exit_code = main(
+                    ["--manifest", str(manifest_path), "--verify-fixtures"]
+                )
+
+        self.assertEqual(exit_code, 2)
+        self.assertIn(
+            "evaluation error: cannot read fixture manifest: "
+            "JSON nesting exceeds parser limit",
+            stderr.getvalue(),
+        )
+        self.assertNotIn("Traceback", stderr.getvalue())
+
     def test_cli_reports_overflowing_elapsed_time_without_traceback(self):
         with TemporaryDirectory() as directory:
             manifest_path = Path(directory) / "manifest.json"
