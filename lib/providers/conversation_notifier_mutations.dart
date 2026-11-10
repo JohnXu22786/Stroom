@@ -57,6 +57,7 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
     if (conversation == null) return false;
     for (final message in conversation.messages.reversed) {
       if (message.role != 'assistant' || message.isStreaming) continue;
+      if (message.isError) return false;
       if (conversation.lastReadMessageId == message.id) return false;
       conversation.lastReadMessageId = message.id;
       return true;

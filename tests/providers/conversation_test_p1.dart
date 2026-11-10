@@ -379,5 +379,31 @@ void conversationGroup1() {
       // CLIENT REQUIREMENT: selecting a conversation should NOT change its time
       expect(notifier.state[0].updatedAt, originalUpdatedAt);
     });
+
+    test('selecting a conversation does not mark its error reply as read', () {
+      final previousReply = ChatMessage(
+        id: 'previous-reply',
+        role: 'assistant',
+        content: 'Earlier successful reply',
+      );
+      final errorReply = ChatMessage(
+        id: 'error-reply',
+        role: 'assistant',
+        content: 'Request failed',
+        isError: true,
+      );
+      final conv = Conversation(
+        id: 'error-conv',
+        title: 'Failed conversation',
+        messages: [previousReply, errorReply],
+      );
+      final container = _createContainer(initialState: [conv]);
+      final notifier = container.read(conversationsProvider.notifier);
+
+      notifier.selectConversation('error-conv');
+
+      expect(notifier.state.single.lastReadMessageId, isNull);
+      expect(notifier.state.single.messages.last.isError, isTrue);
+    });
   });
 }
