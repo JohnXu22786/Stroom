@@ -161,12 +161,12 @@ void main() {
       await tester.pump(const Duration(milliseconds: 500));
       await tester.tap(find.byKey(const Key('file_picker_tab_image')));
       await tester.pumpAndSettle();
-      await _pumpUntil(tester,
-          () => find.text('gate-file.png').evaluate().isNotEmpty);
+      await _pumpUntil(
+          tester, () => find.text('gate-file.png').evaluate().isNotEmpty);
       await tester.tap(find.byType(Checkbox), warnIfMissed: false);
       await tester.pump();
-      await _pumpUntil(tester,
-          () => find.byType(PreviewChip).evaluate().isNotEmpty);
+      await _pumpUntil(
+          tester, () => find.byType(PreviewChip).evaluate().isNotEmpty);
       final originalBytes =
           tester.widget<PreviewChip>(find.byType(PreviewChip)).bytes;
       await tester.tap(find.byType(PreviewChip));
@@ -174,8 +174,8 @@ void main() {
       await tester.tap(find.byIcon(Icons.crop));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
-      await _pumpUntil(tester,
-          () => find.byType(ExtendedImageEditor).evaluate().isNotEmpty);
+      await _pumpUntil(
+          tester, () => find.byType(ExtendedImageEditor).evaluate().isNotEmpty);
       await tester.tap(find.text('保存'));
       await tester.pump();
       await _pumpUntil(tester,
@@ -327,13 +327,16 @@ void main() {
     testWidgets('failed temp write deletes partial file but keeps edited bytes',
         (tester) async {
       String? partialPath;
-      final originalBytes = await openEditor(tester, tempFileWriter: (path, bytes) async {
+      final originalBytes =
+          await openEditor(tester, tempFileWriter: (path, bytes) async {
         partialPath = path;
         await File(path).writeAsBytes(bytes.take(4).toList());
         throw const FileSystemException('simulated partial write failure');
       });
-      await _pumpUntil(tester, () =>
-          tester.widget<PreviewChip>(find.byType(PreviewChip)).bytes !=
+      await _pumpUntil(
+          tester,
+          () =>
+              tester.widget<PreviewChip>(find.byType(PreviewChip)).bytes !=
               originalBytes);
 
       final exists = await tester.runAsync(() => File(partialPath!).exists());

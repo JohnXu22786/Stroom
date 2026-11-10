@@ -878,7 +878,8 @@ class _AppFilePickerDialogState extends State<_AppFilePickerDialog>
       final tempDir = await getTemporaryDirectory();
       if (!mounted ||
           editGeneration != _selectionGeneration ||
-          !_selectedItems.values.any((selected) => identical(selected, entry))) {
+          !_selectedItems.values
+              .any((selected) => identical(selected, entry))) {
         return;
       }
       final tempFileName =
