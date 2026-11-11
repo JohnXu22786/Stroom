@@ -903,5 +903,39 @@ void main() {
         },
       );
     }
+
+    testWidgets(
+        'negative stored bytes remain invalid instead of becoming a positive override',
+        (
+      tester,
+    ) async {
+      ModelConfig? saved;
+      final model = ModelConfig(
+        name: 'OCR模型',
+        modelId: 'qwen-vl-ocr',
+        typeConfig: {'requestSizeBudgetBytes': -1},
+      );
+
+      await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
+      final budgetField = find.byKey(
+        const Key('ocr_model_request_size_budget_mib'),
+      );
+      await _scrollTo(tester, budgetField);
+      expect(
+        tester.widget<TextField>(budgetField).controller!.text,
+        '-0.00000095367431640625',
+      );
+
+      final nameField = find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && widget.controller?.text == model.name,
+      );
+      await tester.enterText(nameField, 'Edited OCR model');
+      await tester.pump();
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      expect(saved, isNull);
+    });
   });
 }

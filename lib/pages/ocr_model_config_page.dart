@@ -11,18 +11,20 @@ import 'llm_model_config_shared.dart';
 import 'model_config_shared.dart';
 
 String _requestSizeBudgetMibText(int bytes) {
-  const bytesPerMib = 1024 * 1024;
-  final whole = bytes ~/ bytesPerMib;
-  final remainder = bytes % bytesPerMib;
-  if (remainder == 0) return whole.toString();
+  final absoluteBytes = BigInt.from(bytes).abs();
+  final bytesPerMib = BigInt.from(1024 * 1024);
+  final whole = absoluteBytes ~/ bytesPerMib;
+  final remainder = absoluteBytes % bytesPerMib;
+  final sign = bytes < 0 ? '-' : '';
+  if (remainder == BigInt.zero) return '$sign$whole';
 
   // 1 / 2^20 is exactly 95367431640625 / 10^20. Formatting the
   // remainder this way preserves every byte without exposing double noise.
-  final fraction = (BigInt.from(remainder) * BigInt.from(95367431640625))
+  final fraction = (remainder * BigInt.from(95367431640625))
       .toString()
       .padLeft(20, '0')
       .replaceFirst(RegExp(r'0+$'), '');
-  return '$whole.$fraction';
+  return '$sign$whole.$fraction';
 }
 
 /// OCR 模型配置编辑页面
