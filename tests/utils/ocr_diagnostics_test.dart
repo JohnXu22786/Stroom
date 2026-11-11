@@ -32,8 +32,7 @@ void main() {
       ),
       'OCR 错误详情已隐藏',
     );
-    final credentialBearing =
-        OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+    final credentialBearing = OcrDiagnosticSnapshot.sanitizeStoredTaskError(
       'OCR returned an incomplete result (finish_reason=length); secret=abc',
     );
     expect(credentialBearing, startsWith('OCR 错误详情已隐藏'));
