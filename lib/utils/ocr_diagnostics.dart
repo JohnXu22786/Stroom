@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 
+import '../l10n/app_localizations.dart';
 import 'ocr_page_failure_summary.dart';
 
 /// Creates small OCR diagnostic maps suitable for task persistence and display.
@@ -596,6 +597,10 @@ class OcrDiagnosticSnapshot {
     var candidate = value;
     while (candidate.isNotEmpty) {
       if (_knownSafeStoredTaskErrorSummaries.contains(candidate) ||
+          _isKnownLocalizedOcrTaskErrorSummary(
+            candidate,
+            excludedValues: excludedValues,
+          ) ||
           RegExp(
             r'^The image exceeds (?:OCR request size budget \([\d.]+ MiB\)|the task flow image input limit \([\d.]+ MiB\))\. Choose a smaller image and try again\.$',
           ).hasMatch(candidate) ||
@@ -634,21 +639,6 @@ class OcrDiagnosticSnapshot {
         return true;
       }
 
-      final incompleteResult = RegExp(
-        r'^OCR 返回了不完整结果（finish_reason=([A-Za-z0-9_-]{1,48})）$',
-      ).firstMatch(candidate);
-      final englishIncompleteResult = RegExp(
-        r'^OCR returned an incomplete result \(finish_reason=([A-Za-z0-9_-]{1,48})\)$',
-      ).firstMatch(candidate);
-      final finishReason =
-          incompleteResult?.group(1) ?? englishIncompleteResult?.group(1);
-      if (finishReason == 'unknown' ||
-          (finishReason != null &&
-              _safeReason(finishReason, excludedValues: excludedValues) ==
-                  finishReason)) {
-        return true;
-      }
-
       if (_isSafeHiddenTaskErrorSummary(
         candidate,
         excludedValues: excludedValues,
@@ -665,6 +655,40 @@ class OcrDiagnosticSnapshot {
       }
       if (wrapper == null) return false;
       candidate = candidate.substring(wrapper.length);
+    }
+    return false;
+  }
+
+  static bool _isKnownLocalizedOcrTaskErrorSummary(
+    String value, {
+    required Iterable<String> excludedValues,
+  }) {
+    const finishReasonMarker = '__OCR_FINISH_REASON__';
+    for (final locale in AppLocalizations.supportedLocales) {
+      final strings = lookupAppLocalizations(locale);
+      if (value == strings.ocrImagePreparationFailed ||
+          value == strings.taskFlowOcrModelUnavailable) {
+        return true;
+      }
+
+      final template = strings.bgTaskOcrResultIncomplete(finishReasonMarker);
+      final markerOffset = template.indexOf(finishReasonMarker);
+      if (markerOffset < 0) continue;
+      final prefix = template.substring(0, markerOffset);
+      final suffix =
+          template.substring(markerOffset + finishReasonMarker.length);
+      if (!value.startsWith(prefix) || !value.endsWith(suffix)) continue;
+      if (value.length < prefix.length + suffix.length) continue;
+
+      final finishReason = value.substring(
+        prefix.length,
+        value.length - suffix.length,
+      );
+      if (finishReason == 'unknown' ||
+          _safeReason(finishReason, excludedValues: excludedValues) ==
+              finishReason) {
+        return true;
+      }
     }
     return false;
   }

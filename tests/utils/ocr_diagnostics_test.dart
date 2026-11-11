@@ -12,6 +12,46 @@ import 'package:stroom/l10n/app_localizations_pt.dart';
 import 'package:stroom/utils/ocr_diagnostics.dart';
 
 void main() {
+  test('supported localized OCR summaries remain safe after persistence', () {
+    for (final locale in AppLocalizations.supportedLocales) {
+      final strings = lookupAppLocalizations(locale);
+      final summaries = [
+        strings.ocrImagePreparationFailed,
+        strings.taskFlowOcrModelUnavailable,
+        strings.bgTaskOcrResultIncomplete('length'),
+      ];
+
+      for (final summary in summaries) {
+        expect(OcrDiagnosticSnapshot.sanitizeStoredTaskError(summary), summary);
+      }
+    }
+
+    expect(
+      OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+        'OCR returned an incomplete result (finish_reason=provider-private-data)',
+      ),
+      'OCR 错误详情已隐藏',
+    );
+    expect(
+      OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+        'OCR returned an incomplete result (finish_reason=length); secret=abc',
+      ),
+      'OCR 错误详情已隐藏',
+    );
+    expect(
+      OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+        'OCR model unavailable: private provider response',
+      ),
+      'OCR 错误详情已隐藏',
+    );
+    expect(
+      OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+        '${AppLocalizationsDe().taskFlowOcrModelUnavailable} sk-proj-12345678',
+      ),
+      'OCR 错误详情已隐藏',
+    );
+  });
+
   test('localized per-page OCR failure summaries are safe to persist', () {
     for (final locale in AppLocalizations.supportedLocales) {
       final strings = lookupAppLocalizations(locale);
