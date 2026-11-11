@@ -441,6 +441,53 @@ void main() {
       },
     );
 
+    test(
+      'restoring OCR errors cannot introduce an excluded localized prefix',
+      () async {
+        var strings = lookupAppLocalizations(const Locale('en', 'US'));
+        final japaneseOcrErrorPrefix = lookupAppLocalizations(
+          const Locale('ja'),
+        ).bgTaskOcrError('');
+        final notifier = BackgroundTaskNotifier(
+          localizationsResolver: () => strings,
+        );
+        final id = notifier.addTask(
+          type: BackgroundTaskType.ocr,
+          title: 'OCR',
+        );
+        notifier.failTask(
+          id,
+          error: 'OCR failed: OCR error details were hidden（HTTP 429）',
+          ocrCredentialValuesForSanitization: [japaneseOcrErrorPrefix],
+        );
+
+        final safeEnglishError = notifier.taskById(id)!.error!;
+        expect(safeEnglishError, contains('HTTP 429'));
+        expect(safeEnglishError, isNot(contains(japaneseOcrErrorPrefix)));
+        expect(
+          notifier.taskById(id)!.hasOcrErrorLocalizationCredentialCollision,
+          isTrue,
+        );
+        await notifier.pendingPersistence;
+
+        strings = lookupAppLocalizations(const Locale('ja'));
+        final restored = BackgroundTaskNotifier(
+          localizationsResolver: () => strings,
+        );
+        try {
+          expect(await restored.restoreFromPersistence(), isTrue);
+          final restoredError = restored.taskById(id)!.error!;
+          expect(restoredError, safeEnglishError);
+          expect(restoredError, isNot(contains(japaneseOcrErrorPrefix)));
+        } finally {
+          restored.dispose();
+          await restored.pendingPersistence;
+          notifier.dispose();
+          await notifier.pendingPersistence;
+        }
+      },
+    );
+
     test('stored ASR and OCR error wrappers localize without changing details',
         () async {
       var strings = lookupAppLocalizations(const Locale('zh', 'CN'));

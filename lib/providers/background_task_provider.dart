@@ -1057,6 +1057,9 @@ bool _hasOcrErrorLocalizationCredentialCollision(
     final strings = lookupAppLocalizations(locale);
     return [
       '${strings.unifiedTaskOcrFailed}: ',
+      strings.bgTaskOcrError(''),
+      strings.bgTaskOcrSaveError(''),
+      strings.bgTaskOcrIncompleteError(''),
       strings.bgTaskOcrErrorDetailsHidden,
       strings.bgTaskErrorDetailsHidden,
     ].any((label) => _legacyOcrTextContainsCredential(label, values));
