@@ -1517,6 +1517,38 @@ class AppLocalizationsAr extends AppLocalizations {
   String get conversationCloseTemporary => 'إغلاق المحادثة المؤقتة';
 
   @override
+  String get conversationKeep => 'الاحتفاظ بالمحادثة';
+
+  @override
+  String get conversationTemporaryStatus => 'مؤقتة';
+
+  @override
+  String get conversationTemporaryWarning => 'على وشك الانتهاء';
+
+  @override
+  String get conversationTemporaryExplanation =>
+      'سيتم حذف هذه المحادثة بعد ساعة واحدة. تؤدي كل رسالة إلى إعادة تشغيل المؤقت. أوقف الوضع المؤقت للاحتفاظ بها.';
+
+  @override
+  String get conversationEnableTemporary => 'تفعيل الوضع المؤقت';
+
+  @override
+  String get chatLoadingConversation => 'جارٍ تحميل المحادثة…';
+
+  @override
+  String get chatEmptyConversation => 'أرسل رسالة لبدء المحادثة.';
+
+  @override
+  String get chatNoActiveConversation =>
+      'اختر محادثة أو أنشئ واحدة لبدء الدردشة.';
+
+  @override
+  String get chatConversationLoadError => 'تعذر تحميل هذه المحادثة.';
+
+  @override
+  String get chatRetryLoadConversation => 'إعادة المحاولة';
+
+  @override
   String get taskListTitle => 'قائمة المهام';
 
   @override
@@ -13460,6 +13492,38 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
 
   @override
   String get conversationCloseTemporary => 'إغلاق المحادثة المؤقتة';
+
+  @override
+  String get conversationKeep => 'الاحتفاظ بالمحادثة';
+
+  @override
+  String get conversationTemporaryStatus => 'مؤقتة';
+
+  @override
+  String get conversationTemporaryWarning => 'على وشك الانتهاء';
+
+  @override
+  String get conversationTemporaryExplanation =>
+      'سيتم حذف هذه المحادثة بعد ساعة واحدة. تؤدي كل رسالة إلى إعادة تشغيل المؤقت. أوقف الوضع المؤقت للاحتفاظ بها.';
+
+  @override
+  String get conversationEnableTemporary => 'تفعيل الوضع المؤقت';
+
+  @override
+  String get chatLoadingConversation => 'جارٍ تحميل المحادثة…';
+
+  @override
+  String get chatEmptyConversation => 'أرسل رسالة لبدء المحادثة.';
+
+  @override
+  String get chatNoActiveConversation =>
+      'اختر محادثة أو أنشئ واحدة لبدء الدردشة.';
+
+  @override
+  String get chatConversationLoadError => 'تعذر تحميل هذه المحادثة.';
+
+  @override
+  String get chatRetryLoadConversation => 'إعادة المحاولة';
 
   @override
   String get taskListTitle => 'قائمة المهام';

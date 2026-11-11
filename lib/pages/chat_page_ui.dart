@@ -726,11 +726,16 @@ extension _ChatPageUiExt on _ChatPageState {
               color: isTemporary ? cs.primary : null,
             ),
             tooltip: isTemporary
-                ? AppLocalizations.of(context)!.conversationCloseTemporary
+                ? AppLocalizations.of(context)!.conversationKeep
                 : AppLocalizations.of(context)!.conversationTemporary,
             onPressed: conversation == null
                 ? null
-                : () {
+                : () async {
+                    if (!isTemporary &&
+                        !await showTemporaryConversationEnableDialog(context)) {
+                      return;
+                    }
+                    if (!context.mounted) return;
                     ref
                         .read(conversationsProvider.notifier)
                         .toggleTemporary(conversation.id);

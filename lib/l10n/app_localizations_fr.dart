@@ -1508,6 +1508,40 @@ class AppLocalizationsFr extends AppLocalizations {
   String get conversationCloseTemporary => 'Fermer la conversation temporaire';
 
   @override
+  String get conversationKeep => 'Conserver la conversation';
+
+  @override
+  String get conversationTemporaryStatus => 'Temporaire';
+
+  @override
+  String get conversationTemporaryWarning => 'Expiration proche';
+
+  @override
+  String get conversationTemporaryExplanation =>
+      'Cette conversation sera supprimée après une heure. Chaque message redémarre le délai. Désactivez le mode temporaire pour la conserver.';
+
+  @override
+  String get conversationEnableTemporary => 'Activer le mode temporaire';
+
+  @override
+  String get chatLoadingConversation => 'Chargement de la conversation…';
+
+  @override
+  String get chatEmptyConversation =>
+      'Envoyez un message pour commencer la conversation.';
+
+  @override
+  String get chatNoActiveConversation =>
+      'Choisissez ou créez une conversation pour commencer à discuter.';
+
+  @override
+  String get chatConversationLoadError =>
+      'Impossible de charger cette conversation.';
+
+  @override
+  String get chatRetryLoadConversation => 'Réessayer';
+
+  @override
   String get taskListTitle => 'Liste des tâches';
 
   @override
@@ -13559,6 +13593,40 @@ class AppLocalizationsFrFr extends AppLocalizationsFr {
 
   @override
   String get conversationCloseTemporary => 'Fermer la conversation temporaire';
+
+  @override
+  String get conversationKeep => 'Conserver la conversation';
+
+  @override
+  String get conversationTemporaryStatus => 'Temporaire';
+
+  @override
+  String get conversationTemporaryWarning => 'Expiration proche';
+
+  @override
+  String get conversationTemporaryExplanation =>
+      'Cette conversation sera supprimée après une heure. Chaque message redémarre le délai. Désactivez le mode temporaire pour la conserver.';
+
+  @override
+  String get conversationEnableTemporary => 'Activer le mode temporaire';
+
+  @override
+  String get chatLoadingConversation => 'Chargement de la conversation…';
+
+  @override
+  String get chatEmptyConversation =>
+      'Envoyez un message pour commencer la conversation.';
+
+  @override
+  String get chatNoActiveConversation =>
+      'Choisissez ou créez une conversation pour commencer à discuter.';
+
+  @override
+  String get chatConversationLoadError =>
+      'Impossible de charger cette conversation.';
+
+  @override
+  String get chatRetryLoadConversation => 'Réessayer';
 
   @override
   String get taskListTitle => 'Liste des tâches';

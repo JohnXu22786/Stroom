@@ -1486,6 +1486,39 @@ class AppLocalizationsEn extends AppLocalizations {
   String get conversationCloseTemporary => 'Close temporary conversation';
 
   @override
+  String get conversationKeep => 'Keep conversation';
+
+  @override
+  String get conversationTemporaryStatus => 'Temporary';
+
+  @override
+  String get conversationTemporaryWarning => 'Expiring soon';
+
+  @override
+  String get conversationTemporaryExplanation =>
+      'This conversation will be deleted after one hour. Sending a message restarts the timer. Turn off temporary mode to keep it.';
+
+  @override
+  String get conversationEnableTemporary => 'Enable temporary mode';
+
+  @override
+  String get chatLoadingConversation => 'Loading conversation…';
+
+  @override
+  String get chatEmptyConversation =>
+      'Start the conversation by sending a message.';
+
+  @override
+  String get chatNoActiveConversation =>
+      'Choose or create a conversation to start chatting.';
+
+  @override
+  String get chatConversationLoadError => 'Could not load this conversation.';
+
+  @override
+  String get chatRetryLoadConversation => 'Retry';
+
+  @override
   String get taskListTitle => 'Task list';
 
   @override
@@ -13316,6 +13349,39 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get conversationCloseTemporary => 'Close temporary conversation';
+
+  @override
+  String get conversationKeep => 'Keep conversation';
+
+  @override
+  String get conversationTemporaryStatus => 'Temporary';
+
+  @override
+  String get conversationTemporaryWarning => 'Expiring soon';
+
+  @override
+  String get conversationTemporaryExplanation =>
+      'This conversation will be deleted after one hour. Sending a message restarts the timer. Turn off temporary mode to keep it.';
+
+  @override
+  String get conversationEnableTemporary => 'Enable temporary mode';
+
+  @override
+  String get chatLoadingConversation => 'Loading conversation…';
+
+  @override
+  String get chatEmptyConversation =>
+      'Start the conversation by sending a message.';
+
+  @override
+  String get chatNoActiveConversation =>
+      'Choose or create a conversation to start chatting.';
+
+  @override
+  String get chatConversationLoadError => 'Could not load this conversation.';
+
+  @override
+  String get chatRetryLoadConversation => 'Retry';
 
   @override
   String get taskListTitle => 'Task list';

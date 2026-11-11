@@ -5,6 +5,7 @@ import '../l10n/app_localizations.dart';
 import '../providers/conversation_provider.dart';
 import '../utils/conversation_utils.dart';
 import 'temporary_countdown_capsule.dart';
+import 'temporary_conversation_dialog.dart';
 
 class TopicItem extends StatelessWidget {
   final Conversation topic;
@@ -210,7 +211,7 @@ class TopicItem extends StatelessWidget {
                         size: 18,
                         color: cs.onSurfaceVariant,
                       ),
-                      onSelected: (value) {
+                      onSelected: (value) async {
                         switch (value) {
                           case 'rename':
                             onRename();
@@ -222,7 +223,14 @@ class TopicItem extends StatelessWidget {
                             onPinToggle();
                             break;
                           case 'toggle_temporary':
-                            onTemporaryToggle?.call();
+                            if (topic.isTemporary ||
+                                await showTemporaryConversationEnableDialog(
+                                  context,
+                                )) {
+                              if (context.mounted) {
+                                onTemporaryToggle?.call();
+                              }
+                            }
                             break;
                           case 'delete':
                             onDelete();
@@ -257,7 +265,7 @@ class TopicItem extends StatelessWidget {
                             child: Text(
                               topic.isTemporary
                                   ? AppLocalizations.of(context)!
-                                      .conversationCloseTemporary
+                                      .conversationKeep
                                   : AppLocalizations.of(context)!
                                       .conversationTemporary,
                             ),

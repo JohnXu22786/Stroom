@@ -23,6 +23,8 @@ import 'package:url_launcher/url_launcher.dart';
 import '../widgets/markdown_extensions.dart';
 import '../widgets/message_attachment_preview.dart';
 import '../widgets/temporary_countdown_capsule.dart';
+import '../widgets/temporary_conversation_dialog.dart';
+import '../widgets/chat_conversation_state.dart';
 import '../widgets/transform_stretch_overscroll.dart';
 import '../services/attachment_storage.dart';
 import '../utils/model_order.dart';
@@ -272,6 +274,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// Keeps the first chat entry visibly loading until history has been
   /// restored and its initial positioning pass is ready to reveal the list.
   bool _isInitialChatLoadPending = true;
+  bool _initialMessageLoadFailed = false;
 
   /// ID of the conversation whose messages are currently shown in
   /// [_history]. Used to distinguish entry/conversation switches (which
@@ -655,9 +658,25 @@ class _ChatPageState extends ConsumerState<ChatPage>
                               child: TickerMode(
                                 enabled: TickerMode.of(context) &&
                                     ChatTabVisibility.of(context),
-                                child: const Center(
-                                  child: CircularProgressIndicator(),
+                                child: const ChatConversationStateView(
+                                  state: ChatConversationState.loading,
                                 ),
+                              ),
+                            )
+                          else if (_initialMessageLoadFailed &&
+                              _history.isEmpty)
+                            Positioned.fill(
+                              child: ChatConversationStateView(
+                                state: ChatConversationState.loadFailed,
+                                onRetry: _retryConversationLoad,
+                              ),
+                            )
+                          else if (_history.isEmpty && !isStreaming)
+                            Positioned.fill(
+                              child: ChatConversationStateView(
+                                state: currentConversation == null
+                                    ? ChatConversationState.noConversation
+                                    : ChatConversationState.empty,
                               ),
                             ),
                         ],

@@ -182,6 +182,7 @@ extension _ChatPageMessagesExt on _ChatPageState {
   }
 
   void _clearConversationView() {
+    _initialMessageLoadFailed = false;
     // The edit mode and its data-loss warning refer to the previous
     // conversation's messages — stale state would be misleading after the
     // view is cleared. Clearing _editingMessageId makes the composer's
@@ -226,6 +227,15 @@ extension _ChatPageMessagesExt on _ChatPageState {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       oldCtrl?.dispose();
     });
+  }
+
+  Future<void> _retryConversationLoad() async {
+    if (!mounted) return;
+    setState(() {
+      _initialMessageLoadFailed = false;
+      _isInitialChatLoadPending = true;
+    });
+    await _loadConversationMessages();
   }
 
   void _scheduleReloadAfterBlockingOperation() {
@@ -313,6 +323,7 @@ extension _ChatPageMessagesExt on _ChatPageState {
       );
 
       if (!isCurrentLoad()) return;
+      _initialMessageLoadFailed = false;
 
       // Restore the active conversation's model selection: the conversation's
       // own record (user choice or seeded assistant default) takes priority,
@@ -609,9 +620,11 @@ extension _ChatPageMessagesExt on _ChatPageState {
       await AppLogService.error('ChatPage', '加载对话消息失败', e, s);
       if (mounted &&
           loadingConversationId != null &&
-          ref.read(activeConversationIdProvider) == loadingConversationId &&
-          _isInitialChatLoadPending) {
-        setState(() => _isInitialChatLoadPending = false);
+          ref.read(activeConversationIdProvider) == loadingConversationId) {
+        setState(() {
+          _isInitialChatLoadPending = false;
+          _initialMessageLoadFailed = true;
+        });
       }
     } finally {
       _isLoadingMessages = false;

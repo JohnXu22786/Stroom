@@ -9,7 +9,7 @@ String formatTemporaryCountdown(Duration remaining) {
   final totalSeconds = remaining <= Duration.zero
       ? 0
       : (remaining.inMicroseconds / const Duration(seconds: 1).inMicroseconds)
-          .ceil();
+            .ceil();
   final minutes = totalSeconds ~/ 60;
   final seconds = totalSeconds % 60;
   final minuteText = minutes.toString().padLeft(2, '0');
@@ -42,28 +42,53 @@ class TemporaryCountdownCapsule extends ConsumerWidget {
         ? Theme.of(context).colorScheme.error
         : Colors.amber;
 
+    final l10n = AppLocalizations.of(context)!;
     return Semantics(
-      label: '${AppLocalizations.of(context)!.conversationTemporary}, $text',
-      child: Container(
-      margin: const EdgeInsets.only(right: 6),
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1.5),
-      decoration: BoxDecoration(
-        color: accent.withValues(alpha: isDark ? 0.20 : 0.16),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: accent.withValues(alpha: 0.45)),
-      ),
-      child: Text(
+      label: [
+        l10n.conversationTemporary,
         text,
-        style: TextStyle(
-          fontSize: 11,
-          height: 1.2,
-          fontWeight: FontWeight.w600,
-          fontFeatures: const [FontFeature.tabularFigures()],
-          color: isNearExpiry
-              ? Theme.of(context).colorScheme.error
-              : (isDark ? Colors.amber.shade100 : Colors.amber.shade800),
+        if (isNearExpiry) l10n.conversationTemporaryWarning,
+      ].join(', '),
+      child: Container(
+        margin: const EdgeInsets.only(right: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1.5),
+        decoration: BoxDecoration(
+          color: accent.withValues(alpha: isDark ? 0.20 : 0.16),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: accent.withValues(alpha: 0.45)),
         ),
-      ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.timer_outlined, size: 12, color: accent),
+            const SizedBox(width: 3),
+            Text(
+              l10n.conversationTemporaryStatus,
+              maxLines: 1,
+              style: TextStyle(
+                fontSize: 10,
+                height: 1.2,
+                fontWeight: FontWeight.w600,
+                color: isNearExpiry
+                    ? Theme.of(context).colorScheme.error
+                    : (isDark ? Colors.amber.shade100 : Colors.amber.shade800),
+              ),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              text,
+              style: TextStyle(
+                fontSize: 11,
+                height: 1.2,
+                fontWeight: FontWeight.w600,
+                fontFeatures: const [FontFeature.tabularFigures()],
+                color: isNearExpiry
+                    ? Theme.of(context).colorScheme.error
+                    : (isDark ? Colors.amber.shade100 : Colors.amber.shade800),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
