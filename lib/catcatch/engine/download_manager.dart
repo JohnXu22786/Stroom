@@ -314,6 +314,38 @@ class DownloadManager {
       throw ArgumentError('segmentRanges must match segmentUrls length');
     }
 
+    // Hold the resolved path until staging, merging, and cleanup all finish.
+    // The parts directory uses this same path, isolating concurrent tasks with
+    // the same requested filename.
+    final resolvedOutputPath = _reserveOutputPath(outputPath);
+    return _downloadSegmentsAtOutputPath(
+      segmentUrls: segmentUrls,
+      segmentRanges: segmentRanges,
+      outputPath: resolvedOutputPath,
+      headers: headers,
+      headersForUrl: headersForUrl,
+      concurrency: concurrency,
+      onProgress: onProgress,
+      onBytes: onBytes,
+      cancelToken: cancelToken,
+      taskId: taskId,
+    ).whenComplete(() {
+      _activeDownloadPaths.remove(resolvedOutputPath);
+    });
+  }
+
+  static Future<String> _downloadSegmentsAtOutputPath({
+    required List<String> segmentUrls,
+    List<({int start, int length})?>? segmentRanges,
+    required String outputPath,
+    Map<String, String>? headers,
+    Map<String, String> Function(String url)? headersForUrl,
+    int concurrency = 3,
+    void Function(int completed, int total, int progress)? onProgress,
+    void Function(int totalBytes)? onBytes,
+    CancelToken? cancelToken,
+    String taskId = '',
+  }) async {
     final dir = Directory(p.dirname(outputPath));
     if (!await dir.exists()) {
       await dir.create(recursive: true);
@@ -337,7 +369,8 @@ class DownloadManager {
       if (saved != null) {
         completedCount = saved['completed'] as int? ?? 0;
         debugPrint(
-            '[DownloadManager] Restored progress: $completedCount/$total');
+          '[DownloadManager] Restored progress: $completedCount/$total',
+        );
       }
     }
 
@@ -375,32 +408,34 @@ class DownloadManager {
     // Seeded above from restored parts.
 
     for (int i = completedCount; i < total; i++) {
-      futures.add(downloadSingleSegment(
-        index: i,
-        url: segmentUrls[i],
-        rangeStart: segmentRanges?[i]?.start,
-        rangeLength: segmentRanges?[i]?.length,
-        tempDir: tempDirPath,
-        partFiles: partFiles,
-        headers: headersForUrl?.call(segmentUrls[i]) ?? headers,
-        semaphore: semaphore,
-        cancelToken: cancelToken,
-        errors: errors,
-        taskId: taskId,
-        onSegmentComplete: (idx) {
-          completedCount++;
-          final progress = (completedCount * 100 ~/ total).clamp(0, 100);
-          onProgress?.call(completedCount, total, progress);
-          // 保存进度
-          if (taskId.isNotEmpty) {
-            saveSegmentProgress(taskId, {'completed': completedCount});
-          }
-        },
-        onBytesDelta: (delta) {
-          totalBytes += delta;
-          onBytes?.call(totalBytes);
-        },
-      ));
+      futures.add(
+        downloadSingleSegment(
+          index: i,
+          url: segmentUrls[i],
+          rangeStart: segmentRanges?[i]?.start,
+          rangeLength: segmentRanges?[i]?.length,
+          tempDir: tempDirPath,
+          partFiles: partFiles,
+          headers: headersForUrl?.call(segmentUrls[i]) ?? headers,
+          semaphore: semaphore,
+          cancelToken: cancelToken,
+          errors: errors,
+          taskId: taskId,
+          onSegmentComplete: (idx) {
+            completedCount++;
+            final progress = (completedCount * 100 ~/ total).clamp(0, 100);
+            onProgress?.call(completedCount, total, progress);
+            // 保存进度
+            if (taskId.isNotEmpty) {
+              saveSegmentProgress(taskId, {'completed': completedCount});
+            }
+          },
+          onBytesDelta: (delta) {
+            totalBytes += delta;
+            onBytes?.call(totalBytes);
+          },
+        ),
+      );
     }
 
     await Future.wait(futures);
@@ -417,10 +452,14 @@ class DownloadManager {
     // Byte signal during the merge too — a multi-GB merge on slow storage
     // can exceed the flow's stall window if the signature stays frozen.
     var mergeBytes = 0;
-    await mergeFiles(validParts, outputPath, onBytes: (delta) {
-      mergeBytes += delta;
-      onBytes?.call(totalBytes + mergeBytes);
-    });
+    await mergeFiles(
+      validParts,
+      outputPath,
+      onBytes: (delta) {
+        mergeBytes += delta;
+        onBytes?.call(totalBytes + mergeBytes);
+      },
+    );
 
     // 清理临时目录
     try {
