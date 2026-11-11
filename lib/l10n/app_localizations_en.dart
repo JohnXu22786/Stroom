@@ -5041,7 +5041,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get providerCompressionAdpcm => 'ADPCM (~4x compression)';
 
   @override
-  String get providerCompressionFlac => 'FLAC (lossless, ~2x)';
+  String get providerCompressionFlac => 'FLAC (lossless, ~2x, recommended)';
 
   @override
   String get providerCompressionAdpcmDescription =>
@@ -5257,7 +5257,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get providerPreprocessNone => 'None';
 
   @override
-  String get providerPreprocessResample => 'WAV optimization (16 kHz mono)';
+  String get providerPreprocessResample => 'WAV optimization (16 kHz mono, recommended)';
 
   @override
   String get providerPreprocessResampleHelp =>
@@ -16853,7 +16853,7 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String get providerCompressionAdpcm => 'ADPCM (~4x compression)';
 
   @override
-  String get providerCompressionFlac => 'FLAC (lossless, ~2x)';
+  String get providerCompressionFlac => 'FLAC (lossless, ~2x, recommended)';
 
   @override
   String get providerCompressionAdpcmDescription =>
@@ -17069,7 +17069,7 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String get providerPreprocessNone => 'None';
 
   @override
-  String get providerPreprocessResample => 'WAV optimization (16 kHz mono)';
+  String get providerPreprocessResample => 'WAV optimization (16 kHz mono, recommended)';
 
   @override
   String get providerPreprocessResampleHelp =>

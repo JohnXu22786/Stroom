@@ -136,6 +136,26 @@ void main() {
   });
 
   group('New config creation', () {
+    testWidgets('new ASR config starts with recommended lossless compression', (
+      tester,
+    ) async {
+      await tester.pumpDetailPage(configIndex: -1, entryType: 'asr');
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('参数设置'));
+      await tester.pumpAndSettle();
+
+      final compressionDropdown = tester
+          .widgetList<DropdownButton<String>>(
+              find.byType(DropdownButton<String>))
+          .where((dropdown) => dropdown.value == 'flac');
+      expect(
+        compressionDropdown,
+        isNotEmpty,
+        reason: 'new ASR providers should default to lossless compression',
+      );
+    });
+
     testWidgets('opens settings panel auto for new config with 3 TextFields', (
       tester,
     ) async {
