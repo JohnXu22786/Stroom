@@ -52,6 +52,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get languageNameKorean => '韩语';
 
   @override
+  String get languageNamePortuguese => '葡萄牙语（巴西）';
+
+  @override
   String get languageSearchHint => '搜索语言';
 
   @override
@@ -11242,6 +11245,9 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get languageNameKorean => '韩语';
+
+  @override
+  String get languageNamePortuguese => '葡萄牙语（巴西）';
 
   @override
   String get languageSearchHint => '搜索语言';

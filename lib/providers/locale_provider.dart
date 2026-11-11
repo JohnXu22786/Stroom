@@ -39,6 +39,9 @@ Locale resolveSystemLocale(Locale systemLocale) {
   if (systemLocale.languageCode == 'ja') {
     return const Locale('ja', 'JP');
   }
+  if (systemLocale.languageCode == 'pt') {
+    return const Locale('pt', 'BR');
+  }
   return const Locale('en', 'US');
 }
 
