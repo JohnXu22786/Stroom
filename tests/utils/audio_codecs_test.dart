@@ -382,6 +382,47 @@ void main() {
       expect(totalSamples, pcm.length);
     });
 
+    test('STREAMINFO block-size bounds match all encoded frame lengths', () {
+      for (final (sampleCount, expectedFrameSizes) in [
+        (200, [200]),
+        (4096 + 200, [4096, 200]),
+        (8192, [4096, 4096]),
+      ]) {
+        final flac = encodeFlac(Int16List(sampleCount));
+        final minBlockSize = (flac[8] << 8) | flac[9];
+        final maxBlockSize = (flac[10] << 8) | flac[11];
+        final frameBlockSizes = <int>[];
+
+        for (var offset = 42; offset < flac.length - 6; offset++) {
+          if (flac[offset] != 0xFF || (flac[offset + 1] & 0xFC) != 0xF8) {
+            continue;
+          }
+          final blockSizeCode = (flac[offset + 2] >> 4) & 0x0F;
+          final frameNumberLeadByte = flac[offset + 4];
+          final frameNumberBytes = frameNumberLeadByte < 0x80
+              ? 1
+              : (frameNumberLeadByte & 0xE0) == 0xC0
+                  ? 2
+                  : (frameNumberLeadByte & 0xF0) == 0xE0
+                      ? 3
+                      : 4;
+          final blockSizeOffset = offset + 4 + frameNumberBytes;
+          final blockSize = switch (blockSizeCode) {
+            6 => flac[blockSizeOffset] + 1,
+            7 => ((flac[blockSizeOffset] << 8) | flac[blockSizeOffset + 1]) + 1,
+            10 => 1024,
+            12 => 4096,
+            _ => fail('Unexpected FLAC block-size code $blockSizeCode'),
+          };
+          frameBlockSizes.add(blockSize);
+        }
+
+        expect(frameBlockSizes, expectedFrameSizes);
+        expect(minBlockSize, frameBlockSizes.reduce((a, b) => a < b ? a : b));
+        expect(maxBlockSize, frameBlockSizes.reduce((a, b) => a > b ? a : b));
+      }
+    });
+
     test('produces smaller output than PCM for tonal content', () {
       final pcm = _sineWave(8192);
       final pcmSize = pcm.length * 2;
