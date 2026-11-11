@@ -250,17 +250,13 @@ class SnapshotService {
         selection: BackupSelection.structuredOnly,
         useStartupPreferenceAdapter: true,
       );
-      debugPrint('[SnapshotService diagnostic] backup returned');
 
       final file = File(tmpPath);
       await debugAfterBackupCreated?.call(file);
       final sha = await computeSha256ForFile(file.path);
-      debugPrint('[SnapshotService diagnostic] hash returned');
       await file.rename(zipPath);
-      debugPrint('[SnapshotService diagnostic] rename returned');
 
       final partVersions = await DataMigrationService.getStoredPartVersions();
-      debugPrint('[SnapshotService diagnostic] version lookup returned');
       final entry = SnapshotEntry(
         file: zipName,
         sha256: sha,
@@ -271,10 +267,8 @@ class SnapshotService {
         index.removeWhere((e) => e.file == zipName);
         index.add(entry);
       });
-      debugPrint('[SnapshotService diagnostic] index update returned');
 
       await cleanupOldSnapshots();
-      debugPrint('[SnapshotService diagnostic] cleanup returned');
       await AppLogService.info('SnapshotService', '结构化快照完成: $zipName');
       return File(zipPath);
     } catch (e) {
@@ -323,18 +317,14 @@ class SnapshotService {
     if (_indexUpdateBusy) {
       final waiter = Completer<void>();
       _indexUpdateWaiters.add(waiter);
-      debugPrint('[SnapshotService diagnostic] index lock waiting');
       await waiter.future;
     } else {
       _indexUpdateBusy = true;
     }
-    debugPrint('[SnapshotService diagnostic] index lock acquired');
     try {
       final index = await readIndex();
-      debugPrint('[SnapshotService diagnostic] index read returned');
       update(index);
       await _writeIndex(index);
-      debugPrint('[SnapshotService diagnostic] index write returned');
     } finally {
       if (_indexUpdateWaiters.isNotEmpty) {
         _indexUpdateWaiters.removeAt(0).complete();
@@ -387,7 +377,6 @@ class SnapshotService {
   static Future<void> cleanupOldSnapshots() async {
     try {
       final dir = await snapshotsDir;
-      debugPrint('[SnapshotService diagnostic] cleanup directory returned');
       if (!await dir.exists()) return;
 
       // 清理残留 tmp（写入中断留下的半成品）
@@ -476,7 +465,6 @@ class SnapshotService {
           }
         }
       }
-      debugPrint('[SnapshotService diagnostic] retention scan returned');
       // 同步索引
       final keptNames = {
         ...keep.map((path) => path.split(Platform.pathSeparator).last),
