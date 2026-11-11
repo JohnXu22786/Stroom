@@ -1318,6 +1318,56 @@ class EvaluateTests(unittest.TestCase):
 
         manifest = {
             "fixtures": [
+                {"id": "clientsecret-1", "gold_text": "x", "categories": ["english"]}
+            ]
+        }
+        with self.assertRaisesRegex(
+            EvaluationError, "\\[redacted\\]: text must be a string or null"
+        ):
+            evaluate_predictions(
+                manifest,
+                predictions([{"fixture_id": "clientsecret-1", "text": 1}]),
+            )
+
+        manifest["fixtures"][0]["id"] = "clientSecret1"
+        with self.assertRaisesRegex(
+            EvaluationError, "\\[redacted\\]: text must be a string or null"
+        ):
+            evaluate_predictions(
+                manifest,
+                predictions([{"fixture_id": "clientSecret1", "text": 1}]),
+            )
+
+        manifest["fixtures"][0]["id"] = "apiKey-1"
+        with self.assertRaisesRegex(
+            EvaluationError, "\\[redacted\\]: text must be a string or null"
+        ):
+            evaluate_predictions(
+                manifest,
+                predictions([{"fixture_id": "apiKey-1", "text": 1}]),
+            )
+
+        for credential_id in (
+            "clientSecrets",
+            "apiKeys",
+            "author-1-apiKey-1",
+            "provider-apiKey-prod",
+            "api-keys-prod",
+            "apiKeys-prod",
+        ):
+            with self.subTest(credential_id=credential_id):
+                manifest["fixtures"][0]["id"] = credential_id
+                with self.assertRaisesRegex(
+                    EvaluationError,
+                    "\\[redacted\\]: text must be a string or null",
+                ):
+                    evaluate_predictions(
+                        manifest,
+                        predictions([{"fixture_id": credential_id, "text": 1}]),
+                    )
+
+        manifest = {
+            "fixtures": [
                 {"id": "safe-id", "gold_text": "x", "categories": ["english"]},
                 {"id": "safe-id", "gold_text": "y", "categories": ["english"]},
             ]
@@ -1352,6 +1402,40 @@ class EvaluateTests(unittest.TestCase):
                     ]
                 ),
             )
+
+    def test_benign_fixture_ids_are_preserved_in_validation_diagnostics(self):
+        manifest = {
+            "fixtures": [
+                {"id": "secretary-1", "gold_text": "x", "categories": ["english"]}
+            ]
+        }
+        with self.assertRaisesRegex(
+            EvaluationError, "secretary-1: text must be a string or null"
+        ):
+            evaluate_predictions(
+                manifest,
+                predictions([{"fixture_id": "secretary-1", "text": 1}]),
+            )
+
+        manifest["fixtures"][0]["id"] = "monkey"
+        with self.assertRaisesRegex(
+            EvaluationError, "monkey: text must be a string or null"
+        ):
+            evaluate_predictions(
+                manifest,
+                predictions([{"fixture_id": "monkey", "text": 1}]),
+            )
+
+        manifest = {
+            "fixtures": [
+                {"id": "authentication", "gold_text": "x", "categories": ["english"]},
+                {"id": "authentication", "gold_text": "y", "categories": ["english"]},
+            ]
+        }
+        with self.assertRaisesRegex(
+            EvaluationError, "duplicate fixture id: authentication"
+        ):
+            evaluate_predictions(manifest, predictions([]))
 
     def test_safe_run_settings_are_retained(self):
         input_data = predictions([])

@@ -177,15 +177,65 @@ def _safe_validation_identifier(value: Any) -> str:
     """Keep benign identifiers useful in errors without echoing credential-like text."""
     if not isinstance(value, str):
         return f"<{type(value).__name__}>"
-    normalized = re.sub(r"[^a-z]", "", value.lower())
-    if normalized.startswith("author") and not normalized.startswith("authorization"):
-        name = normalized[len("author") :]
-        credential_like_name = bool(name) and _is_credential_like_setting_name(name)
-    else:
-        credential_like_name = _is_credential_like_setting_name(value)
-    if credential_like_name or _contains_credential_like_value(value):
+    if _is_credential_like_identifier(value) or _contains_credential_like_value(value):
         return "[redacted]"
     return value
+
+
+def _is_credential_like_identifier(value: str) -> bool:
+    """Recognize credential terms as whole identifier components, not substrings."""
+    word_boundaries = re.sub(
+        r"(?<=[A-Z])(?=[A-Z][a-z])|(?<=[a-z0-9])(?=[A-Z])", " ", value
+    )
+    parts = [part.lower() for part in re.findall(r"[A-Za-z0-9]+", word_boundaries)]
+    if parts and parts[0] == "author" and len(parts) > 1:
+        parts = parts[1:]
+    credential_terms = SECRET_SETTING_KEYS | {
+        "auth",
+        "cookie",
+        "privatekey",
+        "apikey",
+        "accesskey",
+        "authorization",
+        "credential",
+        "credentials",
+        "password",
+    }
+    normalized = "".join(part for part in parts if not part.isdigit())
+    compound_key = re.fullmatch(
+        r"(?:access|api|client|openai|private|secret|service|session|signing|stripe)keys?\d*",
+        normalized,
+    )
+    key_qualifiers = {
+        "access",
+        "api",
+        "client",
+        "openai",
+        "private",
+        "secret",
+        "service",
+        "session",
+        "signing",
+        "stripe",
+    }
+    qualified_key_component = any(
+        parts[index] in key_qualifiers and parts[index + 1] in {"key", "keys"}
+        for index in range(len(parts) - 1)
+    )
+    return (
+        compound_key is not None
+        or qualified_key_component
+        or normalized in credential_terms
+        or any(
+            part in credential_terms
+            or any(
+                marker not in {"auth", "key"}
+                and re.sub(r"s?\d*$", "", part).endswith(marker)
+                for marker in credential_terms
+            )
+            for part in parts
+        )
+    )
 
 
 def levenshtein_distance(left: str, right: str) -> int:
