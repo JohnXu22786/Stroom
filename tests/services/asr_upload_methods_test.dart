@@ -12,7 +12,9 @@ class _RouteAdapter implements HttpClientAdapter {
   final List<Map<String, dynamic>> _requests = [];
 
   void onPost(
-      String path, ResponseBody Function(RequestOptions, List<int>?) handler) {
+    String path,
+    ResponseBody Function(RequestOptions, List<int>?) handler,
+  ) {
     _routes[path] = handler;
   }
 
@@ -53,7 +55,7 @@ class _RouteAdapter implements HttpClientAdapter {
       '{"error":{"message":"Not found"}}',
       404,
       headers: {
-        Headers.contentTypeHeader: [Headers.jsonContentType]
+        Headers.contentTypeHeader: [Headers.jsonContentType],
       },
     );
   }
@@ -64,56 +66,56 @@ class _RouteAdapter implements HttpClientAdapter {
 
 void main() {
   group('AsrService base64 JSON upload', () {
-    test('sends Content-Type application/json with base64 file field',
-        () async {
-      final adapter = _RouteAdapter();
-      adapter.onPost('/audio/transcriptions', (options, bodyBytes) {
-        return ResponseBody.fromString(
-          '{"text":"Hello base64"}',
-          200,
-          headers: {
-            Headers.contentTypeHeader: [Headers.jsonContentType]
-          },
+    test(
+      'sends Content-Type application/json with base64 file field',
+      () async {
+        final adapter = _RouteAdapter();
+        adapter.onPost('/audio/transcriptions', (options, bodyBytes) {
+          return ResponseBody.fromString(
+            '{"text":"Hello base64"}',
+            200,
+            headers: {
+              Headers.contentTypeHeader: [Headers.jsonContentType],
+            },
+          );
+        });
+
+        final dio = Dio(BaseOptions(baseUrl: 'https://api.test.com'))
+          ..httpClientAdapter = adapter;
+
+        const config = AsrConfig(
+          apiKey: 'test-key',
+          host: 'https://api.test.com/audio/transcriptions',
+          uploadMethod: AudioUploadMethod.base64Json,
         );
-      });
+        final service = AsrService(config: config, dio: dio);
 
-      final dio = Dio(BaseOptions(
-        baseUrl: 'https://api.test.com',
-      ))
-        ..httpClientAdapter = adapter;
+        final audioBytes = Uint8List.fromList([1, 2, 3, 4, 5]);
+        final result = await service.transcribe(
+          audioBytes: audioBytes,
+          audioFormat: 'wav',
+        );
 
-      const config = AsrConfig(
-        apiKey: 'test-key',
-        host: 'https://api.test.com/audio/transcriptions',
-        uploadMethod: AudioUploadMethod.base64Json,
-      );
-      final service = AsrService(config: config, dio: dio);
+        expect(result.text, 'Hello base64');
 
-      final audioBytes = Uint8List.fromList([1, 2, 3, 4, 5]);
-      final result = await service.transcribe(
-        audioBytes: audioBytes,
-        audioFormat: 'wav',
-      );
+        // Verify the request
+        expect(adapter.requests.length, 1);
+        final req = adapter.requests.first;
+        expect(req['method'], 'POST');
+        expect(req['contentType'], contains('application/json'));
 
-      expect(result.text, 'Hello base64');
+        // Parse the JSON body
+        final body =
+            jsonDecode(req['bodyString'] as String) as Map<String, dynamic>;
+        expect(body['model'], 'whisper-1');
+        expect(body['file'], isA<String>());
+        expect(body['response_format'], 'json');
 
-      // Verify the request
-      expect(adapter.requests.length, 1);
-      final req = adapter.requests.first;
-      expect(req['method'], 'POST');
-      expect(req['contentType'], contains('application/json'));
-
-      // Parse the JSON body
-      final body =
-          jsonDecode(req['bodyString'] as String) as Map<String, dynamic>;
-      expect(body['model'], 'whisper-1');
-      expect(body['file'], isA<String>());
-      expect(body['response_format'], 'json');
-
-      // Verify the file field is base64 of our bytes
-      final expectedB64 = base64Encode(audioBytes);
-      expect(body['file'], expectedB64);
-    });
+        // Verify the file field is base64 of our bytes
+        final expectedB64 = base64Encode(audioBytes);
+        expect(body['file'], expectedB64);
+      },
+    );
 
     test('base64 JSON includes all configured fields', () async {
       final adapter = _RouteAdapter();
@@ -122,14 +124,12 @@ void main() {
           '{"text":"ok"}',
           200,
           headers: {
-            Headers.contentTypeHeader: [Headers.jsonContentType]
+            Headers.contentTypeHeader: [Headers.jsonContentType],
           },
         );
       });
 
-      final dio = Dio(BaseOptions(
-        baseUrl: 'https://api.test.com',
-      ))
+      final dio = Dio(BaseOptions(baseUrl: 'https://api.test.com'))
         ..httpClientAdapter = adapter;
 
       final config = AsrConfig(
@@ -151,8 +151,9 @@ void main() {
         audioFormat: 'wav',
       );
 
-      final body = jsonDecode(adapter.requests.first['bodyString'] as String)
-          as Map<String, dynamic>;
+      final body = jsonDecode(
+        adapter.requests.first['bodyString'] as String,
+      ) as Map<String, dynamic>;
       expect(body['language'], 'zh');
       expect(body['response_format'], 'verbose_json');
       expect(body['temperature'], 0.3);
@@ -169,12 +170,10 @@ void main() {
 
       // 10 bytes > 4 byte limit → should reject
       await expectLater(
-        () => service.transcribe(
-          audioBytes: Uint8List(10),
-          audioFormat: 'wav',
+        () => service.transcribe(audioBytes: Uint8List(10), audioFormat: 'wav'),
+        throwsA(
+          predicate((e) => e is Exception && e.toString().contains('文件大小超过限制')),
         ),
-        throwsA(predicate(
-            (e) => e is Exception && e.toString().contains('文件大小超过限制'))),
       );
     });
   });
@@ -187,14 +186,12 @@ void main() {
           '{"text":"URL result"}',
           200,
           headers: {
-            Headers.contentTypeHeader: [Headers.jsonContentType]
+            Headers.contentTypeHeader: [Headers.jsonContentType],
           },
         );
       });
 
-      final dio = Dio(BaseOptions(
-        baseUrl: 'https://api.test.com',
-      ))
+      final dio = Dio(BaseOptions(baseUrl: 'https://api.test.com'))
         ..httpClientAdapter = adapter;
 
       const config = AsrConfig(
@@ -223,6 +220,50 @@ void main() {
       expect(body['response_format'], 'json');
     });
 
+    test(
+      'transcribeFromUrl accepts case-insensitive HTTP(S) schemes',
+      () async {
+        final adapter = _RouteAdapter();
+        adapter.onPost('/audio/transcriptions', (options, bodyBytes) {
+          return ResponseBody.fromString(
+            '{"text":"URL result"}',
+            200,
+            headers: {
+              Headers.contentTypeHeader: [Headers.jsonContentType],
+            },
+          );
+        });
+
+        final dio = Dio(BaseOptions(baseUrl: 'https://api.test.com'))
+          ..httpClientAdapter = adapter;
+        const config = AsrConfig(
+          apiKey: 'test-key',
+          host: 'https://api.test.com/audio/transcriptions',
+          uploadMethod: AudioUploadMethod.url,
+        );
+        final service = AsrService(config: config, dio: dio);
+
+        for (final audioUrl in [
+          'HTTPS://example.com/audio.mp3',
+          'HtTp://example.com/audio.wav',
+        ]) {
+          await service.transcribeFromUrl(audioUrl);
+        }
+
+        expect(adapter.requests, hasLength(2));
+        final uploadedUrls = adapter.requests.map((request) {
+          final body = jsonDecode(
+            request['bodyString'] as String,
+          ) as Map<String, dynamic>;
+          return body['file'];
+        });
+        expect(uploadedUrls, [
+          'HTTPS://example.com/audio.mp3',
+          'HtTp://example.com/audio.wav',
+        ]);
+      },
+    );
+
     test('transcribeFromUrl includes language and extra fields', () async {
       final adapter = _RouteAdapter();
       adapter.onPost('/audio/transcriptions', (options, bodyBytes) {
@@ -230,14 +271,12 @@ void main() {
           '{"text":"with lang"}',
           200,
           headers: {
-            Headers.contentTypeHeader: [Headers.jsonContentType]
+            Headers.contentTypeHeader: [Headers.jsonContentType],
           },
         );
       });
 
-      final dio = Dio(BaseOptions(
-        baseUrl: 'https://api.test.com',
-      ))
+      final dio = Dio(BaseOptions(baseUrl: 'https://api.test.com'))
         ..httpClientAdapter = adapter;
 
       final config = AsrConfig(
@@ -245,17 +284,15 @@ void main() {
         host: 'https://api.test.com/audio/transcriptions',
         uploadMethod: AudioUploadMethod.url,
         language: 'en',
-        typeConfig: {
-          'enableResponseFormat': true,
-          'responseFormat': 'text',
-        },
+        typeConfig: {'enableResponseFormat': true, 'responseFormat': 'text'},
       );
       final service = AsrService(config: config, dio: dio);
 
       await service.transcribeFromUrl('https://files.example.com/audio.wav');
 
-      final body = jsonDecode(adapter.requests.first['bodyString'] as String)
-          as Map<String, dynamic>;
+      final body = jsonDecode(
+        adapter.requests.first['bodyString'] as String,
+      ) as Map<String, dynamic>;
       expect(body['language'], 'en');
       expect(body['response_format'], 'text');
     });
@@ -291,6 +328,13 @@ void main() {
         () => service.transcribeFromUrl('not-a-url'),
         throwsA(isA<Exception>()),
       );
+
+      for (final invalidUrl in ['ftp://example.com/audio.wav', 'https://']) {
+        await expectLater(
+          () => service.transcribeFromUrl(invalidUrl),
+          throwsA(isA<Exception>()),
+        );
+      }
     });
 
     test('transcribeFromUrl does not apply file size validation', () async {
@@ -302,14 +346,12 @@ void main() {
           '{"text":"no size check"}',
           200,
           headers: {
-            Headers.contentTypeHeader: [Headers.jsonContentType]
+            Headers.contentTypeHeader: [Headers.jsonContentType],
           },
         );
       });
 
-      final dio = Dio(BaseOptions(
-        baseUrl: 'https://api.test.com',
-      ))
+      final dio = Dio(BaseOptions(baseUrl: 'https://api.test.com'))
         ..httpClientAdapter = adapter;
 
       const config = AsrConfig(
@@ -320,8 +362,9 @@ void main() {
       );
       final service = AsrService(config: config, dio: dio);
 
-      final result =
-          await service.transcribeFromUrl('https://example.com/huge-audio.mp3');
+      final result = await service.transcribeFromUrl(
+        'https://example.com/huge-audio.mp3',
+      );
       expect(result.text, 'no size check');
     });
 
@@ -332,14 +375,12 @@ void main() {
           '{"error":{"message":"Download failed"}}',
           400,
           headers: {
-            Headers.contentTypeHeader: [Headers.jsonContentType]
+            Headers.contentTypeHeader: [Headers.jsonContentType],
           },
         );
       });
 
-      final dio = Dio(BaseOptions(
-        baseUrl: 'https://api.test.com',
-      ))
+      final dio = Dio(BaseOptions(baseUrl: 'https://api.test.com'))
         ..httpClientAdapter = adapter;
 
       const config = AsrConfig(
@@ -351,8 +392,9 @@ void main() {
 
       await expectLater(
         () => service.transcribeFromUrl('https://example.com/bad.mp3'),
-        throwsA(predicate(
-            (e) => e is Exception && e.toString().contains('HTTP 400'))),
+        throwsA(
+          predicate((e) => e is Exception && e.toString().contains('HTTP 400')),
+        ),
       );
     });
   });
@@ -365,14 +407,12 @@ void main() {
           '{"text":"diag"}',
           200,
           headers: {
-            Headers.contentTypeHeader: [Headers.jsonContentType]
+            Headers.contentTypeHeader: [Headers.jsonContentType],
           },
         );
       });
 
-      final dio = Dio(BaseOptions(
-        baseUrl: 'https://api.test.com',
-      ))
+      final dio = Dio(BaseOptions(baseUrl: 'https://api.test.com'))
         ..httpClientAdapter = adapter;
 
       const config = AsrConfig(
@@ -390,7 +430,9 @@ void main() {
       expect(service.lastRequestBody, isNotNull);
       expect(service.lastRequestBody!['model'], 'whisper-1');
       expect(
-          service.lastRequestUrl, 'https://api.test.com/audio/transcriptions');
+        service.lastRequestUrl,
+        'https://api.test.com/audio/transcriptions',
+      );
     });
 
     test('URL upload captures diagnostics', () async {
@@ -400,14 +442,12 @@ void main() {
           '{"text":"url diag"}',
           200,
           headers: {
-            Headers.contentTypeHeader: [Headers.jsonContentType]
+            Headers.contentTypeHeader: [Headers.jsonContentType],
           },
         );
       });
 
-      final dio = Dio(BaseOptions(
-        baseUrl: 'https://api.test.com',
-      ))
+      final dio = Dio(BaseOptions(baseUrl: 'https://api.test.com'))
         ..httpClientAdapter = adapter;
 
       const config = AsrConfig(
