@@ -7012,5 +7012,6 @@
   "emojiCategorySymbols": "符号",
   "emojiCategoryFlags": "旗帜",
   "languageNameSpanish": "西班牙语",
-  "languageNameJapanese": "日语"
+  "languageNameJapanese": "日语",
+  "fileManagerDeleteEmptyFolderWithSubfoldersConfirm": "确定要删除空文件夹 “{name}” 吗？其下的 {count} 个子文件夹也将被删除。"
 }

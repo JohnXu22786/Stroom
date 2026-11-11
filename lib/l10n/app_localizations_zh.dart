@@ -11184,6 +11184,14 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get languageNameJapanese => '日语';
+
+  @override
+  String fileManagerDeleteEmptyFolderWithSubfoldersConfirm(
+    num count,
+    Object name,
+  ) {
+    return '确定要删除空文件夹 “$name” 吗？其下的 $count 个子文件夹也将被删除。';
+  }
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).
@@ -22365,4 +22373,12 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get languageNameJapanese => '日语';
+
+  @override
+  String fileManagerDeleteEmptyFolderWithSubfoldersConfirm(
+    num count,
+    Object name,
+  ) {
+    return '确定要删除空文件夹 “$name” 吗？其下的 $count 个子文件夹也将被删除。';
+  }
 }
