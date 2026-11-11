@@ -880,18 +880,17 @@ void main() {
           final budgetField = find.byKey(
             const Key('ocr_model_request_size_budget_mib'),
           );
-          await _scrollTo(tester, budgetField);
-          expect(
-            tester.widget<TextField>(budgetField).controller!.text,
-            testCase.text,
-          );
-
           final nameField = find.byWidgetPredicate(
             (widget) =>
                 widget is TextField && widget.controller?.text == model.name,
           );
           await tester.enterText(nameField, 'Edited OCR model');
           await tester.pump();
+          await _scrollTo(tester, budgetField);
+          expect(
+            tester.widget<TextField>(budgetField).controller!.text,
+            testCase.text,
+          );
           await tester.tap(find.text('保存'));
           await tester.pumpAndSettle();
 
@@ -920,18 +919,17 @@ void main() {
       final budgetField = find.byKey(
         const Key('ocr_model_request_size_budget_mib'),
       );
-      await _scrollTo(tester, budgetField);
-      expect(
-        tester.widget<TextField>(budgetField).controller!.text,
-        '-0.00000095367431640625',
-      );
-
       final nameField = find.byWidgetPredicate(
         (widget) =>
             widget is TextField && widget.controller?.text == model.name,
       );
       await tester.enterText(nameField, 'Edited OCR model');
       await tester.pump();
+      await _scrollTo(tester, budgetField);
+      expect(
+        tester.widget<TextField>(budgetField).controller!.text,
+        '-0.00000095367431640625',
+      );
       await tester.tap(find.text('保存'));
       await tester.pumpAndSettle();
 
