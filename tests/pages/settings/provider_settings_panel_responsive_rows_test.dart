@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/pages/provider_settings_panel.dart';
 import 'package:stroom/providers/provider_config.dart';
+import 'package:stroom/services/asr_service.dart';
 
 void main() {
   testWidgets('ASR setting labels and dropdowns fit narrow and wide dialogs', (
@@ -13,7 +14,7 @@ void main() {
       tester.view.resetDevicePixelRatio();
     });
 
-    for (final width in [800.0, 1100.0]) {
+    for (final width in [360.0, 800.0, 1100.0]) {
       tester.view.physicalSize = Size(width, 2400);
       tester.view.devicePixelRatio = 1;
       await tester.pumpWidget(
@@ -55,6 +56,25 @@ void main() {
       expect(find.text('Preprocessing method'), findsOneWidget);
       expect(find.text('Compression method'), findsOneWidget);
       expect(find.byType(DropdownButton<String>), findsNWidgets(4));
+      final uploadLabel = tester.getRect(find.text('Upload method'));
+      final uploadControl = tester.getRect(
+        find.byType(DropdownButton<AudioUploadMethod>),
+      );
+      final maxSizeLabel = tester.getRect(find.text('Maximum upload size'));
+      final maxSizeControl = tester.getRect(find.byType(TextField).first);
+      if (width < 800) {
+        expect(uploadControl.top, greaterThanOrEqualTo(uploadLabel.bottom));
+        expect(maxSizeControl.top, greaterThanOrEqualTo(maxSizeLabel.bottom));
+      } else {
+        expect(
+          (uploadControl.center.dy - uploadLabel.center.dy).abs(),
+          lessThan(20),
+        );
+        expect(
+          (maxSizeControl.center.dy - maxSizeLabel.center.dy).abs(),
+          lessThan(20),
+        );
+      }
       expect(tester.takeException(), isNull, reason: 'Dialog width: $width');
 
       await tester.tap(find.text('Cancel'));

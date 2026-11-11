@@ -27,68 +27,61 @@ extension _ProviderSettingsPanelTabAsrExt on _ProviderSettingsPanelState {
             ),
       ),
       const SizedBox(height: 16),
-      Row(
-        children: [
-          Text(
-            AppLocalizations.of(context)!.providerChunkingMode,
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
-              fontSize: 14,
-              color: cs.onSurface,
+      _buildResponsiveSettingsRow(
+        context,
+        label: AppLocalizations.of(context)!.providerChunkingMode,
+        control: Container(
+          decoration: BoxDecoration(
+            border: Border.all(color: cs.outlineVariant),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              dropdownColor: StroomMenuStyle.surface(context),
+              borderRadius: StroomMenuStyle.borderRadius,
+              value: _chunking,
+              isDense: true,
+              isExpanded: MediaQuery.sizeOf(context).width < 800,
+              items: [
+                DropdownMenuItem(
+                  value: 'none',
+                  child: Text(
+                    AppLocalizations.of(context)!.providerChunkNone,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ),
+                DropdownMenuItem(
+                  value: 'silence',
+                  child: Text(
+                    AppLocalizations.of(context)!.providerChunkSmart,
+                    style: Theme.of(context)
+                        .textTheme
+                        .labelLarge
+                        ?.copyWith(fontWeight: FontWeight.w600),
+                  ),
+                ),
+                DropdownMenuItem(
+                  value: 'fixedDuration',
+                  child: Text(
+                    AppLocalizations.of(context)!.providerChunkFixedDuration,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ),
+                DropdownMenuItem(
+                  value: 'fixedSize',
+                  child: Text(
+                    AppLocalizations.of(context)!.providerChunkFixedSize,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ),
+              ],
+              onChanged: (v) {
+                if (v != null) setState(() => _chunking = v);
+              },
             ),
           ),
-          const Spacer(),
-          Container(
-            decoration: BoxDecoration(
-              border: Border.all(color: cs.outlineVariant),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                dropdownColor: StroomMenuStyle.surface(context),
-                borderRadius: StroomMenuStyle.borderRadius,
-                value: _chunking,
-                isDense: true,
-                items: [
-                  DropdownMenuItem(
-                    value: 'none',
-                    child: Text(
-                      AppLocalizations.of(context)!.providerChunkNone,
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ),
-                  DropdownMenuItem(
-                    value: 'silence',
-                    child: Text(
-                      AppLocalizations.of(context)!.providerChunkSmart,
-                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                    ),
-                  ),
-                  DropdownMenuItem(
-                    value: 'fixedDuration',
-                    child: Text(
-                      AppLocalizations.of(context)!.providerChunkFixedDuration,
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ),
-                  DropdownMenuItem(
-                    value: 'fixedSize',
-                    child: Text(
-                      AppLocalizations.of(context)!.providerChunkFixedSize,
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ),
-                ],
-                onChanged: (v) {
-                  if (v != null) setState(() => _chunking = v);
-                },
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
       const SizedBox(height: 8),
       Text(
@@ -137,6 +130,7 @@ extension _ProviderSettingsPanelTabAsrExt on _ProviderSettingsPanelState {
               borderRadius: StroomMenuStyle.borderRadius,
               value: _compression,
               isDense: true,
+              isExpanded: MediaQuery.sizeOf(context).width < 800,
               items: [
                 DropdownMenuItem(
                   value: 'none',

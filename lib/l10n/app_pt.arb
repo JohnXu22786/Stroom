@@ -2366,7 +2366,7 @@
   "providerCompressionMode": "Método de compressão",
   "providerCompressionNone": "Nenhuma (enviar como está)",
   "providerCompressionAdpcm": "ADPCM (compressão de ~4x)",
-  "providerCompressionFlac": "FLAC (sem perdas, ~2x)",
+  "providerCompressionFlac": "FLAC (sem perdas, ~2x, recomendado)",
   "providerCompressionAdpcmDescription": "IMA ADPCM, compressão com perdas de 4:1. Implementação em Dart puro; a qualidade do áudio é adequada para transcrição.",
   "providerCompressionFlacDescription": "Compressão FLAC sem perdas, implementada em Dart puro. Reduz o tamanho pela metade, aproximadamente.",
   "providerCompressionWavDescription": "Sem compressão; enviar como arquivo WAV.",

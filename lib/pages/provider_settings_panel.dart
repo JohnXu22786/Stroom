@@ -51,13 +51,13 @@ Widget _buildResponsiveSettingsRow(
 
   return LayoutBuilder(
     builder: (context, constraints) {
-      if (constraints.maxWidth < 800) {
+      if (MediaQuery.sizeOf(context).width < 800) {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             labelWidget,
             const SizedBox(height: 8),
-            control,
+            SizedBox(width: constraints.maxWidth, child: control),
           ],
         );
       }

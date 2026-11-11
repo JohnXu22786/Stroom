@@ -191,59 +191,51 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
             ),
       ),
       const SizedBox(height: 16),
-      Row(
-        children: [
-          Text(
-            AppLocalizations.of(context)!.providerUploadMethod,
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
-              fontSize: 14,
-              color: cs.onSurface,
+      _buildResponsiveSettingsRow(
+        context,
+        label: AppLocalizations.of(context)!.providerUploadMethod,
+        control: Container(
+          decoration: BoxDecoration(
+            border: Border.all(color: cs.outlineVariant),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<AudioUploadMethod>(
+              dropdownColor: StroomMenuStyle.surface(context),
+              borderRadius: StroomMenuStyle.borderRadius,
+              value: _uploadMethod,
+              isDense: true,
+              isExpanded: MediaQuery.sizeOf(context).width < 800,
+              items: [
+                DropdownMenuItem(
+                  value: AudioUploadMethod.multipart,
+                  child: Text(
+                    AppLocalizations.of(context)!.providerMultipart,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ),
+                DropdownMenuItem(
+                  value: AudioUploadMethod.base64Json,
+                  child: Text(
+                    'Base64 JSON',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ),
+                DropdownMenuItem(
+                  value: AudioUploadMethod.url,
+                  child: Text(
+                    AppLocalizations.of(context)!.providerUrlUpload,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ),
+              ],
+              onChanged: (v) {
+                if (v != null) setState(() => _uploadMethod = v);
+              },
             ),
           ),
-          const Spacer(),
-          Container(
-            decoration: BoxDecoration(
-              border: Border.all(color: cs.outlineVariant),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<AudioUploadMethod>(
-                dropdownColor: StroomMenuStyle.surface(context),
-                borderRadius: StroomMenuStyle.borderRadius,
-                value: _uploadMethod,
-                isDense: true,
-                items: [
-                  DropdownMenuItem(
-                    value: AudioUploadMethod.multipart,
-                    child: Text(
-                      AppLocalizations.of(context)!.providerMultipart,
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ),
-                  DropdownMenuItem(
-                    value: AudioUploadMethod.base64Json,
-                    child: Text(
-                      'Base64 JSON',
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ),
-                  DropdownMenuItem(
-                    value: AudioUploadMethod.url,
-                    child: Text(
-                      AppLocalizations.of(context)!.providerUrlUpload,
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ),
-                ],
-                onChanged: (v) {
-                  if (v != null) setState(() => _uploadMethod = v);
-                },
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
       const SizedBox(height: 8),
       Text(
@@ -263,51 +255,42 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Text(
-                  AppLocalizations.of(context)!.providerMaxUploadSize,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                    color: cs.onSurface,
+            _buildResponsiveSettingsRow(
+              context,
+              label: AppLocalizations.of(context)!.providerMaxUploadSize,
+              control: SizedBox(
+                width: 90,
+                child: TextField(
+                  controller: _maxFileSizeController,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
                   ),
-                ),
-                const Spacer(),
-                SizedBox(
-                  width: 90,
-                  child: TextField(
-                    controller: _maxFileSizeController,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 13),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 8,
                     ),
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 13),
-                    decoration: InputDecoration(
-                      isDense: true,
-                      contentPadding: EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 8,
-                      ),
-                      border: OutlineInputBorder(),
-                      suffixText: 'MB',
-                      errorText: _maxFileSizeError,
-                    ),
-                    onChanged: (v) {
-                      final parsed = double.tryParse(v.trim());
-                      setState(() {
-                        if (parsed != null && parsed.isFinite && parsed > 0) {
-                          _maxFileSizeMb = parsed;
-                          _maxFileSizeError = null;
-                        } else {
-                          _maxFileSizeError = AppLocalizations.of(context)!
-                              .providerMaxUploadSizePositive;
-                        }
-                      });
-                    },
+                    border: OutlineInputBorder(),
+                    suffixText: 'MB',
+                    errorText: _maxFileSizeError,
                   ),
+                  onChanged: (v) {
+                    final parsed = double.tryParse(v.trim());
+                    setState(() {
+                      if (parsed != null && parsed.isFinite && parsed > 0) {
+                        _maxFileSizeMb = parsed;
+                        _maxFileSizeError = null;
+                      } else {
+                        _maxFileSizeError = AppLocalizations.of(context)!
+                            .providerMaxUploadSizePositive;
+                      }
+                    });
+                  },
                 ),
-              ],
+              ),
             ),
             const SizedBox(height: 8),
             Text(
@@ -358,6 +341,7 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
               borderRadius: StroomMenuStyle.borderRadius,
               value: _fallbackMethod,
               isDense: true,
+              isExpanded: MediaQuery.sizeOf(context).width < 800,
               items: [
                 DropdownMenuItem(
                   value: 'none',
@@ -450,6 +434,7 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
               borderRadius: StroomMenuStyle.borderRadius,
               value: _preprocessing,
               isDense: true,
+              isExpanded: MediaQuery.sizeOf(context).width < 800,
               items: [
                 DropdownMenuItem(
                   value: 'none',
