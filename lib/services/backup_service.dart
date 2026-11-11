@@ -13,6 +13,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:unorm_dart/unorm_dart.dart' as unorm;
 
 import 'backup_location_manager.dart';
 import 'backup_service_shared.dart';
@@ -86,6 +87,18 @@ class _RestoreEntryCorruptException implements Exception {
   @override
   String toString() => message;
 }
+
+typedef _RestoreCollisionCandidate = ({
+  String destination,
+  String sourcePath,
+  String normalizedSourcePath,
+  String targetDirectory,
+  String targetRoot,
+  String relativePath,
+  String fileName,
+  bool isAttachment,
+  bool normalizationInsensitive,
+});
 
 // ====================================================================
 // BackupSelection — 选择性备份/恢复的数据类别
@@ -201,6 +214,12 @@ class BackupSelection {
 
 class BackupService {
   static int? _lastBackupFileTimestampSeconds;
+  @visibleForTesting
+  static bool? restorePathsCaseInsensitiveForTesting;
+  @visibleForTesting
+  static bool? restorePathsNormalizationInsensitiveForTesting;
+  @visibleForTesting
+  static bool? restorePathsCaseExpansionInsensitiveForTesting;
   static const _audioDraftsDirectory = 'audio_drafts';
   static final _audioRecordingDraftFileName = RegExp(
     r'^recording_\d+\.m4a$',
@@ -2222,6 +2241,14 @@ class BackupService {
       },
       taskFlowAttachmentKeysToPreserve: taskFlowAttachmentKeys,
     );
+    await _validateMediaRestoreTargetCollisions(
+      restoreSelection,
+      fileMap.keys,
+      entryFingerprint: (name) {
+        final data = fileMap[name];
+        return data == null ? null : sha256.convert(data).toString();
+      },
+    );
     onProgress?.call(0.15);
     await _yieldToEventLoop();
 
@@ -2384,6 +2411,11 @@ class BackupService {
         reader.entries.map((entry) => entry.name),
         entryFingerprint: reader.entryFingerprint,
         taskFlowAttachmentKeysToPreserve: taskFlowAttachmentKeys,
+      );
+      await _validateMediaRestoreTargetCollisions(
+        restoreSelection,
+        reader.entries.map((entry) => entry.name),
+        entryFingerprint: reader.entryFingerprint,
       );
       onProgress?.call(0.15);
       await _yieldToEventLoop();
@@ -3992,6 +4024,434 @@ class BackupService {
     return Platform.isWindows || Platform.isMacOS || Platform.isIOS
         ? normalized.toLowerCase()
         : normalized;
+  }
+
+  /// Reject selected media paths that resolve to the same destination on
+  /// case-insensitive filesystems before restore preparation deletes data.
+  static Future<void> _validateMediaRestoreTargetCollisions(
+    BackupSelection selection,
+    Iterable<String> archiveEntries,
+    {required String? Function(String name) entryFingerprint}
+  ) async {
+    if (!selection.includeMediaFiles) return;
+
+    const mediaDirectories = {
+      'pictures',
+      'tts_audio',
+      'audio_drafts',
+      'videos',
+      'texts',
+      'synthesis',
+      'catcatch',
+      'task_flow_temporary',
+      'anki',
+      'attachments',
+    };
+    final appDirectory = kIsWeb || WebFileStore.isTestMode
+        ? null
+        : await AppStorage.directory;
+    final nameRulesByDirectory = <String, (bool, bool)>{};
+    final destinations = <String, List<_RestoreCollisionCandidate>>{};
+    final expansionCandidates = <_RestoreCollisionCandidate>[];
+    final registeredCandidates = <_RestoreCollisionCandidate>[];
+    final destinationPrefixes = <String>{};
+
+    Future<void> addDestination({
+      required String directory,
+      required String relativePath,
+      required String sourcePath,
+      required String normalizedSourcePath,
+      bool isAttachment = false,
+    }) async {
+      final targetDirectory = appDirectory == null
+          ? p.posix.join(directory, p.posix.dirname(relativePath))
+          : directory == 'anki'
+              ? p.join(appDirectory, p.posix.dirname(relativePath))
+              : p.join(
+                  appDirectory,
+                  directory,
+                  p.posix.dirname(relativePath),
+                );
+      final targetRoot = appDirectory == null
+          ? directory
+          : directory == 'anki'
+              ? appDirectory
+              : p.join(appDirectory, directory);
+      final bool caseInsensitive;
+      final bool normalizationInsensitive;
+      final override = restorePathsCaseInsensitiveForTesting;
+      if (override != null) {
+        caseInsensitive = override;
+        normalizationInsensitive =
+            restorePathsNormalizationInsensitiveForTesting ?? false;
+      } else if (kIsWeb || WebFileStore.isTestMode) {
+        caseInsensitive = false;
+        normalizationInsensitive = false;
+      } else if (nameRulesByDirectory.containsKey(targetDirectory)) {
+        final rules = nameRulesByDirectory[targetDirectory]!;
+        caseInsensitive = rules.$1;
+        normalizationInsensitive = rules.$2;
+      } else {
+        final rules = await _restoreTargetDirectoryNameRules(targetDirectory);
+        caseInsensitive = rules.$1;
+        normalizationInsensitive = rules.$2;
+        nameRulesByDirectory[targetDirectory] = rules;
+      }
+      var comparableDestination = '$directory/$relativePath';
+      if (normalizationInsensitive) {
+        comparableDestination = unorm.nfc(comparableDestination);
+      }
+      if (caseInsensitive) {
+        comparableDestination = _caseInsensitiveRestorePath(
+          comparableDestination,
+        );
+      }
+
+      final candidate = (
+        destination: '$directory/$relativePath',
+        sourcePath: sourcePath,
+        normalizedSourcePath: normalizedSourcePath,
+        targetDirectory: targetDirectory,
+        targetRoot: targetRoot,
+        relativePath: relativePath,
+        fileName: p.posix.basename(relativePath),
+        isAttachment: isAttachment,
+        normalizationInsensitive: normalizationInsensitive,
+      );
+      if (caseInsensitive) {
+        final candidateHasExpansion = _hasExpandingCaseFold(
+          candidate.destination,
+        );
+        final possibleCandidates = candidateHasExpansion
+            ? registeredCandidates
+            : expansionCandidates;
+        for (final previous in possibleCandidates) {
+          if (!_expandedPathsMayOverlap(
+            previous,
+            candidate,
+          )) {
+            continue;
+          }
+          if (restorePathsCaseExpansionInsensitiveForTesting == true ||
+              (override == null &&
+                  await _restoreTargetPathsOverlap(previous, candidate))) {
+            throw const DataManagementPreflightException(
+              '备份中的媒体路径在当前设备上重名。为避免覆盖文件，已取消导入。',
+            );
+          }
+        }
+      }
+      final pathSegments = comparableDestination.split('/');
+      var prefixCollision = destinationPrefixes.contains(
+        comparableDestination,
+      );
+      for (var i = 1; !prefixCollision && i < pathSegments.length; i++) {
+        final ancestor = pathSegments.take(i).join('/');
+        prefixCollision = destinations.containsKey(ancestor);
+      }
+      if (prefixCollision) {
+        throw const DataManagementPreflightException(
+          '备份中的媒体文件路径与目录路径冲突。为避免覆盖文件，已取消导入。',
+        );
+      }
+      final matches = destinations.putIfAbsent(
+        comparableDestination,
+        () => <_RestoreCollisionCandidate>[],
+      );
+      if (matches.isNotEmpty) {
+        final sharedTaskAttachmentAlias = isAttachment &&
+            matches.length == 1 &&
+            _isSafeSharedTaskAttachmentAlias(
+              matches.single,
+              candidate,
+              entryFingerprint,
+            );
+        if (!sharedTaskAttachmentAlias) {
+          throw const DataManagementPreflightException(
+            '备份中的媒体路径在当前设备上重名。为避免覆盖文件，已取消导入。',
+          );
+        }
+      }
+      matches.add(candidate);
+      if (caseInsensitive &&
+          _hasExpandingCaseFold(candidate.destination)) {
+        expansionCandidates.add(candidate);
+      }
+      registeredCandidates.add(candidate);
+      for (var i = 1; i < pathSegments.length; i++) {
+        destinationPrefixes.add(pathSegments.take(i).join('/'));
+      }
+    }
+
+    for (final sourcePath in archiveEntries) {
+      var archivePath = sourcePath;
+      if (!_isSafeRelativeArchivePath(archivePath)) continue;
+      if (archivePath.startsWith('files/')) {
+        archivePath = archivePath.substring('files/'.length);
+      }
+
+      if (selection.chatRecordsAndAttachments &&
+          selection.includeMediaFiles &&
+          archivePath.startsWith('temp_edited/')) {
+        final relativePath = p.posix.basename(archivePath);
+        await addDestination(
+          directory: 'attachments',
+          relativePath: relativePath,
+          sourcePath: sourcePath,
+          normalizedSourcePath: archivePath,
+          isAttachment: true,
+        );
+        continue;
+      }
+      if (selection.chatRecordsAndAttachments &&
+          selection.includeMediaFiles &&
+          archivePath.startsWith('attachments/')) {
+        final relativePath = archivePath.substring('attachments/'.length);
+        if (_isSafeRelativeArchivePath(relativePath)) {
+          await addDestination(
+            directory: 'attachments',
+            relativePath: relativePath,
+            sourcePath: sourcePath,
+            normalizedSourcePath: archivePath,
+            isAttachment: true,
+          );
+        }
+        continue;
+      }
+      if (selection.tasks &&
+          selection.includeMediaFiles &&
+          archivePath.startsWith('task_flow_attachments/')) {
+        final relativePath = archivePath.substring(
+          'task_flow_attachments/'.length,
+        );
+        if (_isSafeRelativeArchivePath(relativePath)) {
+          await addDestination(
+            directory: 'attachments',
+            relativePath: relativePath,
+            sourcePath: sourcePath,
+            normalizedSourcePath: archivePath,
+            isAttachment: true,
+          );
+        }
+        continue;
+      }
+      if (archivePath.startsWith('tasks/')) {
+        archivePath = archivePath.substring('tasks/'.length);
+        if (archivePath == 'synthesis_tasks.json') {
+          archivePath = 'synthesis/tasks.json';
+        } else if (archivePath == 'catcatch_tasks.json') {
+          archivePath = 'catcatch/tasks.json';
+        }
+      }
+      for (final directory in mediaDirectories) {
+        if (!archivePath.startsWith('$directory/')) continue;
+        if (!_shouldRestoreDir(directory, selection)) break;
+        final relativePath = archivePath.substring(directory.length + 1);
+        if (!_isSafeRelativeArchivePath(relativePath)) break;
+        if (directory == 'audio_drafts' &&
+            !_isAudioRecordingDraft(relativePath)) {
+          break;
+        }
+        if (directory == 'synthesis' && relativePath != 'tasks.json') break;
+        if (directory == 'catcatch' &&
+            relativePath != 'tasks.json' &&
+            !_isCatCatchMediaPath(relativePath)) {
+          break;
+        }
+        if (directory == 'anki' &&
+            (!selection.includeMediaFiles ||
+                !relativePath.startsWith('collection.media/'))) {
+          break;
+        }
+        await addDestination(
+          directory: directory,
+          relativePath: relativePath,
+          sourcePath: sourcePath,
+          normalizedSourcePath: archivePath,
+        );
+        break;
+      }
+    }
+  }
+
+  static bool _isSafeSharedTaskAttachmentAlias(
+    _RestoreCollisionCandidate previous,
+    _RestoreCollisionCandidate current,
+    String? Function(String name) entryFingerprint,
+  ) {
+    if (!previous.isAttachment || !current.isAttachment) return false;
+    if (previous.destination != current.destination) return false;
+    final destination = current.destination;
+    final relativePath = destination.substring('attachments/'.length);
+    final taskAlias = 'task_flow_attachments/$relativePath';
+    final isAliasPair =
+        (previous.normalizedSourcePath == destination &&
+            current.normalizedSourcePath == taskAlias) ||
+        (current.normalizedSourcePath == destination &&
+            previous.normalizedSourcePath == taskAlias);
+    if (!isAliasPair) return false;
+    final previousFingerprint = entryFingerprint(previous.sourcePath);
+    return previousFingerprint != null &&
+        previousFingerprint == entryFingerprint(current.sourcePath);
+  }
+
+  static String _caseInsensitiveRestorePath(String path) => path.runes
+      .map((rune) {
+        if (rune == 0x0345) return 'ι';
+        final character = String.fromCharCode(rune);
+        final uppercase = character.toUpperCase();
+        return uppercase.runes.length == 1
+            ? uppercase.toLowerCase()
+            : character.toLowerCase();
+      })
+      .join();
+
+  static String _expandedCaseInsensitiveRestorePath(String path) => path.runes
+      .map((rune) {
+        if (rune == 0x0345) return 'ι';
+        return String.fromCharCode(rune).toUpperCase().toLowerCase();
+      })
+      .join();
+
+  static bool _hasExpandingCaseFold(String path) => path.runes.any((rune) {
+        if (rune == 0x0345) return false;
+        return String.fromCharCode(rune).toUpperCase().runes.length > 1;
+      });
+
+  static bool _expandedPathsMayOverlap(
+    _RestoreCollisionCandidate left,
+    _RestoreCollisionCandidate right,
+  ) {
+    if (left.targetRoot != right.targetRoot) return false;
+    final leftPath = left.normalizationInsensitive
+        ? unorm.nfc(left.destination)
+        : left.destination;
+    final rightPath = right.normalizationInsensitive
+        ? unorm.nfc(right.destination)
+        : right.destination;
+    final expandedLeft = _expandedCaseInsensitiveRestorePath(leftPath);
+    final expandedRight = _expandedCaseInsensitiveRestorePath(rightPath);
+    return expandedLeft == expandedRight ||
+        expandedLeft.startsWith('$expandedRight/') ||
+        expandedRight.startsWith('$expandedLeft/');
+  }
+
+  static Future<bool> _restoreTargetPathsOverlap(
+    _RestoreCollisionCandidate left,
+    _RestoreCollisionCandidate right,
+  ) async {
+    final leftParts = left.relativePath.split('/');
+    final rightParts = right.relativePath.split('/');
+    final sharedLength = leftParts.length < rightParts.length
+        ? leftParts.length
+        : rightParts.length;
+    for (var i = 0; i < sharedLength; i++) {
+      var leftPart = leftParts[i];
+      var rightPart = rightParts[i];
+      if (left.normalizationInsensitive || right.normalizationInsensitive) {
+        leftPart = unorm.nfc(leftPart);
+        rightPart = unorm.nfc(rightPart);
+      }
+      if (_caseInsensitiveRestorePath(leftPart) ==
+          _caseInsensitiveRestorePath(rightPart)) {
+        continue;
+      }
+      if (_expandedCaseInsensitiveRestorePath(leftPart) !=
+          _expandedCaseInsensitiveRestorePath(rightPart)) {
+        return false;
+      }
+      final parentDirectory = p.joinAll([
+        left.targetRoot,
+        ...leftParts.take(i),
+      ]);
+      if (!await _restoreTargetNamesAreEquivalent(
+        parentDirectory,
+        leftPart,
+        rightPart,
+      )) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  static Future<bool> _restoreTargetNamesAreEquivalent(
+    String targetDirectory,
+    String leftName,
+    String rightName,
+  ) async {
+    var directory = Directory(targetDirectory);
+    while (!await directory.exists()) {
+      final parent = directory.parent;
+      if (parent.path == directory.path) break;
+      directory = parent;
+    }
+
+    Directory? probeDirectory;
+    try {
+      probeDirectory = await directory.createTemp('.stroom-name-check-');
+      await File(p.join(probeDirectory.path, leftName)).create(exclusive: true);
+      return await File(p.join(probeDirectory.path, rightName)).exists();
+    } catch (error) {
+      throw DataManagementPreflightException(
+        '无法检查恢复目标文件名的大小写规则，已取消导入：$error',
+      );
+    } finally {
+      if (probeDirectory != null) {
+        try {
+          await probeDirectory.delete(recursive: true);
+        } catch (_) {}
+      }
+    }
+  }
+
+  static Future<(bool, bool)> _restoreTargetDirectoryNameRules(
+    String targetDirectory,
+  ) async {
+    var directory = Directory(targetDirectory);
+    while (!await directory.exists()) {
+      final parent = directory.parent;
+      if (parent.path == directory.path) break;
+      directory = parent;
+    }
+
+    File? caseProbeFile;
+    File? normalizationProbeFile;
+    try {
+      final probePrefix =
+          '.stroom_restore_name_${pid}_${DateTime.now().microsecondsSinceEpoch}_';
+      final caseProbeName = '${probePrefix}a';
+      caseProbeFile = File(p.join(directory.path, caseProbeName));
+      await caseProbeFile.create(exclusive: true);
+      final alternateCaseExists = await File(
+        p.join(directory.path, '${probePrefix}A'),
+      ).exists();
+
+      final normalizationProbeName = '${probePrefix}café';
+      normalizationProbeFile = File(
+        p.join(directory.path, normalizationProbeName),
+      );
+      await normalizationProbeFile.create(exclusive: true);
+      final alternateNormalizationExists = await File(
+        p.join(directory.path, unorm.nfd(normalizationProbeName)),
+      ).exists();
+      return (alternateCaseExists, alternateNormalizationExists);
+    } catch (error) {
+      throw DataManagementPreflightException(
+        '无法检查恢复目标文件系统的大小写规则，已取消导入：$error',
+      );
+    } finally {
+      if (caseProbeFile != null) {
+        try {
+          await caseProbeFile.delete();
+        } catch (_) {}
+      }
+      if (normalizationProbeFile != null) {
+        try {
+          await normalizationProbeFile.delete();
+        } catch (_) {}
+      }
+    }
   }
 
   /// Prevent restoring attachment files from overwriting files referenced by
