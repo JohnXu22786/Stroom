@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:path/path.dart' as p;
 import 'package:dio/dio.dart';
 import '../config/default_rules.dart';
@@ -268,9 +268,13 @@ class DownloadManager {
         debugPrint('[DownloadManager] Download complete: $outputPath');
         return outputPath;
       } catch (e) {
-        debugPrint('[DownloadManager] File write failed (expected on web): $e');
-        // Return temp path or output path as best-effort
-        return tempPath;
+        if (kIsWeb) {
+          debugPrint(
+              '[DownloadManager] File write failed (expected on web): $e');
+          // Return temp path or output path as best-effort
+          return tempPath;
+        }
+        rethrow;
       }
     } finally {
       dio.close();
