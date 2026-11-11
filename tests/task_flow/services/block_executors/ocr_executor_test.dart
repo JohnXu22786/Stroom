@@ -1060,6 +1060,99 @@ void main() {
     );
   });
 
+  test('Spanish and Japanese TaskFlow OCR preflight errors survive restore',
+      () async {
+    for (final localizations in [AppLocalizationsEs(), AppLocalizationsJa()]) {
+      final missingError = localizations.taskFlowOcrInputMissing;
+      await expectPreflightFailure(
+        expectedError: missingError,
+        execute: () => executeOcrBlock(
+          block: ocrBlock(),
+          def: BlockTypeDefinition.ocr,
+          input: '${directory.path}/missing_${localizations.localeName}.png',
+          execId: execId,
+          execNotifier: executions,
+          flowSubTask: subTask,
+          bgNotifier: background,
+          providerEntries: providerForOcr(),
+          localizations: localizations,
+        ),
+      );
+
+      final missingTask = background.state.last;
+      await background.pendingPersistence;
+      final restoredMissing = BackgroundTaskNotifier(
+        localizationsResolver: () => localizations,
+      );
+      addTearDown(restoredMissing.dispose);
+      expect(await restoredMissing.restoreFromPersistence(), isTrue);
+      expect(restoredMissing.taskById(missingTask.id)?.error, missingError);
+
+      final source = await File(
+        '${directory.path}/unreadable_${localizations.localeName}.png',
+      ).writeAsBytes(_validPng());
+      final unreadableError = localizations.taskFlowOcrInputReadFailed;
+      await expectPreflightFailure(
+        expectedError: unreadableError,
+        execute: () => executeOcrBlock(
+          block: ocrBlock(),
+          def: BlockTypeDefinition.ocr,
+          input: source.path,
+          execId: execId,
+          execNotifier: executions,
+          flowSubTask: subTask,
+          bgNotifier: background,
+          providerEntries: providerForOcr(),
+          localizations: localizations,
+          readInputBytes: (_, _) => throw StateError('read failed'),
+        ),
+      );
+
+      final unreadableTask = background.state.last;
+      await background.pendingPersistence;
+      final restoredUnreadable = BackgroundTaskNotifier(
+        localizationsResolver: () => localizations,
+      );
+      addTearDown(restoredUnreadable.dispose);
+      expect(await restoredUnreadable.restoreFromPersistence(), isTrue);
+      expect(
+        restoredUnreadable.taskById(unreadableTask.id)?.error,
+        unreadableError,
+      );
+
+      const inputKey = 'attachments/oversized_es_ja.png';
+      await WebFileStore.write(inputKey, Uint8List(800 * 1024));
+      final limitLabel = localizations.taskFlowOcrRequestSizeLimit('1.00');
+      final oversizedError = localizations.taskFlowOcrInputTooLarge(limitLabel);
+      await expectPreflightFailure(
+        expectedError: oversizedError,
+        execute: () => executeOcrBlock(
+          block: ocrBlock(),
+          def: BlockTypeDefinition.ocr,
+          input: inputKey,
+          execId: execId,
+          execNotifier: executions,
+          flowSubTask: subTask,
+          bgNotifier: background,
+          providerEntries: providerForOcr(requestSizeBudgetBytes: 1024 * 1024),
+          localizations: localizations,
+        ),
+      );
+
+      final oversizedTask = background.state.last;
+      await background.pendingPersistence;
+      final restoredOversized = BackgroundTaskNotifier(
+        localizationsResolver: () => localizations,
+      );
+      addTearDown(restoredOversized.dispose);
+      expect(await restoredOversized.restoreFromPersistence(), isTrue);
+      expect(
+        restoredOversized.taskById(oversizedTask.id)?.error,
+        oversizedError,
+      );
+    }
+  });
+
   test('unreadable OCR input failure is localized in English', () async {
     final source = await File('${directory.path}/unreadable.png')
         .writeAsBytes(_validPng());
