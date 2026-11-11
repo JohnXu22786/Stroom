@@ -175,7 +175,7 @@ void main() {
     await tester.pumpAndSettle();
 
     final themeCard = find.ancestor(
-      of: find.text('Light mode'),
+      of: find.byIcon(Icons.light_mode),
       matching: find.byType(Card),
     );
     final languageCard = find.ancestor(
