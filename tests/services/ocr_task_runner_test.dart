@@ -2270,7 +2270,7 @@ void main() {
     );
     expect(
       englishNotifier.state.single.error,
-      contains('OCR 处理失败'),
+      contains(englishStrings.bgTaskOcrErrorDetailsHidden),
     );
     englishNotifier.dispose();
     await englishNotifier.pendingPersistence;

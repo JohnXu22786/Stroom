@@ -354,6 +354,7 @@ class OcrTaskRunner {
                   : OcrDiagnosticSnapshot.safeTaskError(
                       error,
                       excludedValues: [config.apiKey],
+                      localizations: notifier.localizations,
                     )
               : OcrDiagnosticSnapshot.sanitizeStoredTaskError(
                     taskSpecificFailure,
@@ -518,6 +519,7 @@ class OcrTaskRunner {
                 : OcrDiagnosticSnapshot.safeTaskError(
                     error,
                     excludedValues: [config.apiKey],
+                    localizations: notifier.localizations,
                   ),
           );
         } finally {
