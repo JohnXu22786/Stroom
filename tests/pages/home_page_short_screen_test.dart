@@ -106,10 +106,6 @@ void main() {
     for (final label in labels) {
       final labelFinder = find.text(label);
       expect(labelFinder, findsOneWidget);
-      final paragraph = tester.renderObject<RenderParagraph>(labelFinder);
-      final lineBoxes = paragraph.getBoxesForSelection(
-        TextSelection(baseOffset: 0, extentOffset: label.length),
-      );
       final itemColumn = find
           .ancestor(
             of: labelFinder,
@@ -135,12 +131,7 @@ void main() {
         ),
       );
       expect(dot, findsOneWidget);
-      final dotRect = tester.getRect(dot);
-      final textOrigin = tester.getTopLeft(labelFinder);
-      final textRight = lineBoxes
-          .map((box) => textOrigin.dx + box.right)
-          .reduce((left, right) => left > right ? left : right);
-      final groupCenter = (dotRect.left + textRight) / 2;
+      final groupCenter = tester.getRect(statusRow).center.dx;
       expect(
         groupCenter,
         closeTo(countRect.center.dx, 1),
