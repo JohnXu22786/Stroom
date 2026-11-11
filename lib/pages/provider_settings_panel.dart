@@ -34,6 +34,22 @@ String? validateJsonValue(String type, String value) {
   return null;
 }
 
+Widget _buildAsrSelectedDropdownText(
+  BuildContext context,
+  String label, {
+  TextStyle? style,
+}) {
+  return Align(
+    alignment: AlignmentDirectional.centerStart,
+    child: Text(
+      label,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: style ?? Theme.of(context).textTheme.bodyMedium,
+    ),
+  );
+}
+
 Widget _buildResponsiveSettingsRow(
   BuildContext context, {
   required String label,
@@ -51,22 +67,23 @@ Widget _buildResponsiveSettingsRow(
 
   return LayoutBuilder(
     builder: (context, constraints) {
-      if (constraints.maxWidth < 800) {
+      if (MediaQuery.sizeOf(context).width < 800) {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             labelWidget,
             const SizedBox(height: 8),
-            control,
+            SizedBox(width: constraints.maxWidth, child: control),
           ],
         );
       }
 
       return Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           labelWidget,
-          const Spacer(),
-          control,
+          const SizedBox(width: 16),
+          Flexible(child: control),
         ],
       );
     },
@@ -292,7 +309,9 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
                 ),
               ),
               TabBar(
-                labelPadding: const EdgeInsets.symmetric(horizontal: 24),
+                labelPadding: EdgeInsets.symmetric(
+                  horizontal: MediaQuery.sizeOf(context).width < 800 ? 8 : 24,
+                ),
                 tabs: [
                   Tab(text: AppLocalizations.of(context)!.providerBasicInfoTab),
                   Tab(

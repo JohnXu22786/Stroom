@@ -5123,7 +5123,8 @@ class AppLocalizationsFr extends AppLocalizations {
   String get providerCompressionAdpcm => 'ADPCM (compression d’environ 4×)';
 
   @override
-  String get providerCompressionFlac => 'FLAC (sans perte, environ 2×)';
+  String get providerCompressionFlac =>
+      'FLAC (sans perte, environ 2×, recommandé)';
 
   @override
   String get providerCompressionAdpcmDescription =>
@@ -17269,7 +17270,8 @@ class AppLocalizationsFrFr extends AppLocalizationsFr {
   String get providerCompressionAdpcm => 'ADPCM (compression d’environ 4×)';
 
   @override
-  String get providerCompressionFlac => 'FLAC (sans perte, environ 2×)';
+  String get providerCompressionFlac =>
+      'FLAC (sans perte, environ 2×, recommandé)';
 
   @override
   String get providerCompressionAdpcmDescription =>
