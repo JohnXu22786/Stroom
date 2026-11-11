@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/l10n/app_localizations_ar.dart';
 import 'package:stroom/l10n/app_localizations_de.dart';
 import 'package:stroom/l10n/app_localizations_es.dart';
@@ -11,6 +12,43 @@ import 'package:stroom/l10n/app_localizations_pt.dart';
 import 'package:stroom/utils/ocr_diagnostics.dart';
 
 void main() {
+  test('localized per-page OCR failure summaries are safe to persist', () {
+    for (final locale in AppLocalizations.supportedLocales) {
+      final strings = lookupAppLocalizations(locale);
+      final details = [
+        strings.bgTaskOcrPageFailed('2'),
+        strings.bgTaskOcrPageIncomplete('4'),
+      ].join(strings.bgTaskOcrPageFailureSeparator);
+      final summary = strings.bgTaskOcrPagesIncomplete(details);
+
+      expect(OcrDiagnosticSnapshot.sanitizeStoredTaskError(summary), summary);
+      final longDetails = List.generate(20, (index) {
+        return index.isEven
+            ? strings.bgTaskOcrPageFailed('${index + 1}')
+            : strings.bgTaskOcrPageIncomplete('${index + 1}');
+      }).join(strings.bgTaskOcrPageFailureSeparator);
+      final longSummary = strings.bgTaskOcrPagesIncomplete(longDetails);
+      expect(longSummary.length, greaterThan(160));
+      expect(
+        OcrDiagnosticSnapshot.sanitizeStoredTaskError(longSummary),
+        longSummary,
+      );
+      expect(
+        OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+          '$longSummary sk-proj-12345678',
+        ),
+        'OCR 错误详情已隐藏',
+      );
+    }
+
+    expect(
+      OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+        'Some images were not fully recognized: Image 2: vendor says secret=abc',
+      ),
+      'OCR 错误详情已隐藏',
+    );
+  });
+
   test('Arabic OCR summaries stay safe and actionable after persistence', () {
     final locales = [AppLocalizationsAr(), AppLocalizationsArSa()];
 
