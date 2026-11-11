@@ -53,6 +53,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get languageNameKorean => 'Korean';
 
   @override
+  String get languageNamePortuguese => 'Portuguese (Brazil)';
+
+  @override
   String get languageSearchHint => 'Search languages';
 
   @override

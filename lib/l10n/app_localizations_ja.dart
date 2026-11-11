@@ -53,6 +53,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get languageNameKorean => '韓国語';
 
   @override
+  String get languageNamePortuguese => 'ポルトガル語（ブラジル）';
+
+  @override
   String get languageSearchHint => '検索言語';
 
   @override
@@ -11559,6 +11562,9 @@ class AppLocalizationsJaJp extends AppLocalizationsJa {
 
   @override
   String get languageNameKorean => '韓国語';
+
+  @override
+  String get languageNamePortuguese => 'ポルトガル語（ブラジル）';
 
   @override
   String get languageSearchHint => '検索言語';

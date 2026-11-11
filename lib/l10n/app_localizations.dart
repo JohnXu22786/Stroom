@@ -9,6 +9,7 @@ import 'app_localizations_en.dart';
 import 'app_localizations_es.dart';
 import 'app_localizations_ja.dart';
 import 'app_localizations_ko.dart';
+import 'app_localizations_pt.dart';
 import 'app_localizations_zh.dart';
 
 // ignore_for_file: type=lint
@@ -102,10 +103,12 @@ abstract class AppLocalizations {
     Locale('es', 'ES'),
     Locale('ja', 'JP'),
     Locale('ko', 'KR'),
+    Locale('pt', 'BR'),
     Locale('en'),
     Locale('es'),
     Locale('ja'),
     Locale('ko'),
+    Locale('pt'),
     Locale('zh'),
   ];
 
@@ -192,6 +195,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Korean'**
   String get languageNameKorean;
+
+  /// No description provided for @languageNamePortuguese.
+  ///
+  /// In en, this message translates to:
+  /// **'Portuguese (Brazil)'**
+  String get languageNamePortuguese;
 
   /// No description provided for @languageSearchHint.
   ///
@@ -19427,8 +19436,14 @@ class _AppLocalizationsDelegate
   }
 
   @override
-  bool isSupported(Locale locale) =>
-      <String>['en', 'es', 'ja', 'ko', 'zh'].contains(locale.languageCode);
+  bool isSupported(Locale locale) => <String>[
+    'en',
+    'es',
+    'ja',
+    'ko',
+    'pt',
+    'zh',
+  ].contains(locale.languageCode);
 
   @override
   bool shouldReload(_AppLocalizationsDelegate old) => false;
@@ -19469,6 +19484,14 @@ AppLocalizations lookupAppLocalizations(Locale locale) {
         }
         break;
       }
+    case 'pt':
+      {
+        switch (locale.countryCode) {
+          case 'BR':
+            return AppLocalizationsPtBr();
+        }
+        break;
+      }
     case 'zh':
       {
         switch (locale.countryCode) {
@@ -19489,6 +19512,8 @@ AppLocalizations lookupAppLocalizations(Locale locale) {
       return AppLocalizationsJa();
     case 'ko':
       return AppLocalizationsKo();
+    case 'pt':
+      return AppLocalizationsPt();
     case 'zh':
       return AppLocalizationsZh();
   }
