@@ -486,8 +486,8 @@ class OcrDiagnosticSnapshot {
       caseSensitive: false,
     ).firstMatch(value)?.group(1);
     final details = <String>[
-      // A parsed, bounded HTTP status is protocol metadata even when its digits
-      // happen to match an excluded credential value.
+      // Keep parsed bounded status metadata only when it does not match an
+      // explicitly excluded credential value.
       if (statusCode != null &&
           !containsCredential(
             'HTTP $statusCode',
