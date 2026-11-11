@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import '../../../l10n/app_localizations.dart';
 import '../../../providers/background_task_provider.dart';
 import '../../../providers/task_provider_shared.dart';
 import '../../../utils/text_manifest.dart';
@@ -26,6 +27,7 @@ void failSubTask(
   Map<String, dynamic>? rawRequest,
   Map<String, dynamic>? rawResponse,
   Iterable<String> ocrCredentialValuesForSanitization = const [],
+  AppLocalizations? localizations,
 }) {
   bgNotifier.failTask(
     taskId,
@@ -33,6 +35,7 @@ void failSubTask(
     rawRequest: rawRequest,
     rawResponse: rawResponse,
     ocrCredentialValuesForSanitization: ocrCredentialValuesForSanitization,
+    localizations: localizations,
   );
   execNotifier.updateSubTaskStatus(execId, flowSubTaskId, TaskStatus.failed);
 }

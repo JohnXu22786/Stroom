@@ -92,6 +92,7 @@ Future<String> executeOcrBlock({
         execId,
         flowSubTask.id,
         strings.taskFlowOcrInputMissing,
+        localizations: strings,
       );
       throw BlockExecutionException(
         strings.taskFlowOcrInputMissing,
@@ -108,6 +109,7 @@ Future<String> executeOcrBlock({
       execId,
       flowSubTask.id,
       strings.taskFlowOcrInputReadFailed,
+      localizations: strings,
     );
     throw BlockExecutionException(
       strings.taskFlowOcrInputReadFailed,
@@ -128,6 +130,7 @@ Future<String> executeOcrBlock({
       execId,
       flowSubTask.id,
       strings.taskFlowOcrModelUnavailable,
+      localizations: strings,
     );
     throw BlockExecutionException(
       strings.taskFlowOcrModelUnavailable,
@@ -164,7 +167,12 @@ Future<String> executeOcrBlock({
           excludedValues: [config.key],
         ) ??
         OcrDiagnosticSnapshot.safeTaskError(e, excludedValues: [config.key]);
-    bgNotifier.updateStep(taskId, 0, failed: true, error: safeError);
+    bgNotifier.updateStep(
+      taskId,
+      0,
+      failed: true,
+      error: safeError,
+    );
     failSubTask(
       bgNotifier,
       taskId,
@@ -173,6 +181,7 @@ Future<String> executeOcrBlock({
       flowSubTask.id,
       '${strings.unifiedTaskOcrFailed}: $safeError',
       ocrCredentialValuesForSanitization: [config.key],
+      localizations: strings,
     );
     throw BlockExecutionException(
       safeError,
@@ -202,6 +211,7 @@ Future<String> executeOcrBlock({
       execId,
       flowSubTask.id,
       error,
+      localizations: strings,
     );
     return BlockExecutionException(
       error,
@@ -222,6 +232,7 @@ Future<String> executeOcrBlock({
           execId,
           flowSubTask.id,
           strings.taskFlowOcrInputMissing,
+          localizations: strings,
         );
         throw BlockExecutionException(
           strings.taskFlowOcrInputMissing,
@@ -252,6 +263,7 @@ Future<String> executeOcrBlock({
       execId,
       flowSubTask.id,
       strings.taskFlowOcrInputReadFailed,
+      localizations: strings,
     );
     throw BlockExecutionException(
       strings.taskFlowOcrInputReadFailed,
@@ -288,6 +300,7 @@ Future<String> executeOcrBlock({
       execId,
       flowSubTask.id,
       localizedError,
+      localizations: strings,
     );
     throw BlockExecutionException(
       localizedError,
@@ -346,7 +359,12 @@ Future<String> executeOcrBlock({
         final error = strings.bgTaskOcrResultIncomplete(
           ocrResult.finishReason ?? 'null',
         );
-        bgNotifier.updateStep(taskId, 0, failed: true, error: error);
+        bgNotifier.updateStep(
+          taskId,
+          0,
+          failed: true,
+          error: error,
+        );
         failSubTask(
           bgNotifier,
           taskId,
@@ -354,6 +372,7 @@ Future<String> executeOcrBlock({
           execId,
           flowSubTask.id,
           error,
+          localizations: strings,
         );
         throw BlockExecutionException(
           error,
@@ -406,7 +425,12 @@ Future<String> executeOcrBlock({
           e,
           excludedValues: [config.key],
         );
-    bgNotifier.updateStep(taskId, 0, failed: true, error: safeError);
+    bgNotifier.updateStep(
+      taskId,
+      0,
+      failed: true,
+      error: safeError,
+    );
     failSubTask(
       bgNotifier,
       taskId,
@@ -415,6 +439,7 @@ Future<String> executeOcrBlock({
       flowSubTask.id,
       '${strings.unifiedTaskOcrFailed}: $safeError',
       ocrCredentialValuesForSanitization: [config.key],
+      localizations: strings,
     );
     throw BlockExecutionException(
       safeError,
