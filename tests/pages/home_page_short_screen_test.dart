@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/l10n/app_localizations.dart';
@@ -70,5 +71,91 @@ void main() {
         .position;
     expect(position.pixels, greaterThan(0),
         reason: 'drag on the grid must scroll the page, not dead-zone');
+  });
+
+  testWidgets('home status dots stay centered and labels wrap when narrow', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 720);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    Future<void> pumpHome(Locale locale) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            locale: locale,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const HomePage(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    await pumpHome(const Locale('en'));
+    final english = await AppLocalizations.delegate.load(const Locale('en'));
+    final labels = [
+      english.statusInProgress,
+      english.statusCompleted,
+      english.statusFailed,
+    ];
+    for (final label in labels) {
+      final labelFinder = find.text(label);
+      expect(labelFinder, findsOneWidget);
+      final paragraph = tester.renderObject<RenderParagraph>(labelFinder);
+      final lineBoxes = paragraph.getBoxesForSelection(
+        TextSelection(baseOffset: 0, extentOffset: label.length),
+      );
+      final itemColumn = find.ancestor(
+        of: labelFinder,
+        matching: find.byType(Column),
+      ).first;
+      final countRect = tester.getRect(
+        find.descendant(of: itemColumn, matching: find.text('0')),
+      );
+      final statusRow = find.ancestor(
+        of: labelFinder,
+        matching: find.byType(Row),
+      ).first;
+      final dot = find.descendant(
+        of: statusRow,
+        matching: find.byWidgetPredicate(
+          (widget) => widget is Container &&
+              widget.decoration is BoxDecoration &&
+              (widget.decoration! as BoxDecoration).shape == BoxShape.circle,
+        ),
+      );
+      expect(dot, findsOneWidget);
+      final dotRect = tester.getRect(dot);
+      final textOrigin = tester.getTopLeft(labelFinder);
+      final textRight = lineBoxes
+          .map((box) => textOrigin.dx + box.right)
+          .reduce((left, right) => left > right ? left : right);
+      final groupCenter = (dotRect.left + textRight) / 2;
+      expect(
+        groupCenter,
+        closeTo(countRect.center.dx, 1),
+        reason: 'the dot and $label should be centered together',
+      );
+    }
+
+    await pumpHome(const Locale('de'));
+    final german = await AppLocalizations.delegate.load(const Locale('de'));
+    final wrappedLabel = find.text(german.statusInProgress);
+    expect(
+      tester
+          .renderObject<RenderParagraph>(wrappedLabel)
+          .getBoxesForSelection(
+            TextSelection(
+              baseOffset: 0,
+              extentOffset: german.statusInProgress.length,
+            ),
+          )
+          .length,
+      greaterThan(1),
+      reason: 'the German in-progress label should wrap at this width',
+    );
   });
 }
