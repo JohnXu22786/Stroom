@@ -592,7 +592,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
   static Future<String?> _canonicalizePath(String path) async {
     final normalizedPath = p.normalize(p.absolute(path));
     try {
-      return await File(normalizedPath).resolveSymbolicLinks();
+      return await Directory(normalizedPath).resolveSymbolicLinks();
     } on FileSystemException {
       final parent = p.dirname(normalizedPath);
       if (parent == normalizedPath) return null;
