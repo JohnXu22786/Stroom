@@ -5157,6 +5157,30 @@ class EvaluateTests(unittest.TestCase):
         image_bytes = (ROOT / "fixtures" / "mixed-zh-en-01.png").read_bytes()[:24]
         self._assert_fixture_png_rejected(image_bytes)
 
+    def test_fixture_verification_rejects_png_dimension_above_limit(self):
+        oversized_png = (
+            b"\x89PNG\r\n\x1a\n"
+            + png_chunk(b"IHDR", struct.pack(">IIBBBBB", 8193, 1, 8, 2, 0, 0, 0))
+            + png_chunk(b"IDAT", zlib.compress(b""))
+            + png_chunk(b"IEND", b"")
+        )
+
+        self._assert_fixture_png_rejected(
+            oversized_png, "PNG exceeds the benchmark fixture resource limits"
+        )
+
+    def test_fixture_verification_rejects_png_pixel_count_above_limit(self):
+        oversized_png = (
+            b"\x89PNG\r\n\x1a\n"
+            + png_chunk(b"IHDR", struct.pack(">IIBBBBB", 3000, 2000, 8, 2, 0, 0, 0))
+            + png_chunk(b"IDAT", zlib.compress(b""))
+            + png_chunk(b"IEND", b"")
+        )
+
+        self._assert_fixture_png_rejected(
+            oversized_png, "PNG exceeds the benchmark fixture resource limits"
+        )
+
     def test_fixture_verification_rejects_transparency_chunk_after_image_data(self):
         malformed_png = (
             b"\x89PNG\r\n\x1a\n"
@@ -5325,8 +5349,8 @@ class EvaluateTests(unittest.TestCase):
 
         self._assert_fixture_png_rejected(malformed_png)
 
-    def _assert_fixture_png_rejected(self, image_bytes):
-        with TemporaryDirectory() as directory:
+    def _assert_fixture_png_rejected(self, image_bytes, message="PNG"):
+        with TemporaryDirectory(dir=ROOT) as directory:
             fixture_root = Path(directory)
             shutil.copytree(ROOT / "fixtures", fixture_root / "fixtures")
             manifest = json.loads((ROOT / "manifest.json").read_text())
@@ -5337,7 +5361,7 @@ class EvaluateTests(unittest.TestCase):
             manifest_path = fixture_root / "manifest.json"
             manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
 
-            with self.assertRaisesRegex(EvaluationError, "PNG"):
+            with self.assertRaisesRegex(EvaluationError, message):
                 verify_fixtures(manifest_path)
 
     def _assert_fixture_png_accepted(self, image_bytes):
