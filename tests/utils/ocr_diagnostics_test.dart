@@ -2,8 +2,10 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/l10n/app_localizations_es.dart';
+import 'package:stroom/l10n/app_localizations_fr.dart';
 import 'package:stroom/l10n/app_localizations_ja.dart';
 import 'package:stroom/l10n/app_localizations_ko.dart';
+import 'package:stroom/l10n/app_localizations_pt.dart';
 import 'package:stroom/utils/ocr_diagnostics.dart';
 
 void main() {
@@ -88,6 +90,75 @@ void main() {
     expect(
       OcrDiagnosticSnapshot.sanitizeStoredTaskError(
         'Exception: OCR 请求被模型拒绝: private provider response',
+      ),
+      'OCR 错误详情已隐藏',
+    );
+  });
+
+  test('Portuguese and French OCR summaries remain safe to persist', () {
+    final locales = [
+      AppLocalizationsPt(),
+      AppLocalizationsPtBr(),
+      AppLocalizationsFr(),
+      AppLocalizationsFrFr(),
+    ];
+
+    for (final localizations in locales) {
+      final requestLimit = localizations.taskFlowOcrRequestSizeLimit('1.25');
+      final inputLimit = localizations.taskFlowImageInputSizeLimit('20.00');
+      final summaries = [
+        localizations.taskFlowOcrInputMissing,
+        localizations.taskFlowOcrInputReadFailed,
+        localizations.taskFlowOcrModelUnavailable,
+        localizations.taskFlowOcrInputTooLarge(requestLimit),
+        localizations.taskFlowOcrInputTooLarge(inputLimit),
+        localizations.ocrImageEmpty,
+        localizations.ocrImageUnsupportedFormat,
+        localizations.ocrImageUnsupportedSpecialFormat,
+        localizations.ocrImageDecodeFailed,
+        localizations.ocrImageDimensionsTooLarge,
+        localizations.ocrImageOrientationPngTooLarge,
+        localizations.ocrImageOrientationFailed,
+        localizations.ocrImagePreparationFailed,
+      ];
+
+      for (final summary in summaries) {
+        expect(
+          OcrDiagnosticSnapshot.sanitizeStoredTaskError(summary),
+          summary,
+        );
+      }
+    }
+
+    final portugueseMissing = AppLocalizationsPt().taskFlowOcrInputMissing;
+    final portugueseLarge = AppLocalizationsPt().taskFlowOcrInputTooLarge(
+      AppLocalizationsPt().taskFlowOcrRequestSizeLimit('1.25'),
+    );
+    final frenchMissing = AppLocalizationsFr().taskFlowOcrInputMissing;
+    expect(
+      OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+        portugueseMissing,
+        excludedValues: ['imagem'],
+      ),
+      'OCR 错误详情已隐藏',
+    );
+    expect(
+      OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+        portugueseLarge,
+        excludedValues: ['1.25'],
+      ),
+      'OCR 错误详情已隐藏',
+    );
+    expect(
+      OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+        frenchMissing,
+        excludedValues: ['image'],
+      ),
+      'OCR 错误详情已隐藏',
+    );
+    expect(
+      OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+        'Exception: OCR 请求被模型拒绝: sk-proj-12345678 private provider response',
       ),
       'OCR 错误详情已隐藏',
     );

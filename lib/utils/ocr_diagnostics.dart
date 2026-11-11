@@ -64,6 +64,28 @@ class OcrDiagnosticSnapshot {
     'La imagen está dañada o no se puede decodificar. Selecciónelo nuevamente o conviértalo a PNG, JPEG o WebP e inténtelo nuevamente.',
     'La resolución de la imagen es demasiado grande. OCR admite hasta 50 millones de píxeles por imagen. Cambie su tamaño e inténtelo de nuevo.',
     'El PNG necesario para corregir la orientación de esta imagen excedería el límite de tamaño de la solicitud de OCR. Cambie el tamaño de la imagen e inténtelo de nuevo.',
+    'Não foi possível encontrar o arquivo de imagem. Selecione a imagem novamente.',
+    'Não foi possível ler o arquivo de imagem. Verifique o acesso ao arquivo e tente novamente.',
+    'Nenhum modelo de OCR utilizável está configurado. Escolha um provedor e um modelo de OCR nas configurações do fluxo.',
+    'A imagem está vazia. Selecione-a novamente.',
+    'Este formato de imagem não é compatível. Converta a imagem para PNG, JPEG ou WebP e tente novamente.',
+    'Imagens HEIC, SVG e TIFF ainda não são compatíveis. Converta a imagem para PNG, JPEG ou WebP e tente novamente.',
+    'A imagem está danificada ou não pode ser decodificada. Selecione-a novamente ou converta-a para PNG, JPEG ou WebP e tente de novo.',
+    'A resolução da imagem é muito alta. O OCR aceita até 50 milhões de pixels por imagem. Redimensione-a e tente novamente.',
+    'O PNG necessário para corrigir a orientação desta imagem excederia o limite de tamanho da solicitação de OCR. Redimensione a imagem e tente novamente.',
+    'Não foi possível corrigir a orientação da imagem. Converta-a para PNG, JPEG ou WebP e tente novamente.',
+    'Não foi possível processar a imagem. Selecione-a novamente e tente mais uma vez.',
+    'Le fichier image est introuvable. Sélectionne à nouveau l’image.',
+    'Impossible de lire le fichier image. Vérifie les droits d’accès, puis réessaie.',
+    'Aucun modèle OCR utilisable n’est configuré. Choisis un fournisseur et un modèle OCR dans les paramètres du flux.',
+    'L’image est vide. Sélectionnez-la à nouveau.',
+    'Ce format d’image n’est pas pris en charge. Convertissez-la au format PNG, JPEG ou WebP, puis réessayez.',
+    'Les images HEIC, SVG et TIFF ne sont pas encore prises en charge. Convertissez l’image au format PNG, JPEG ou WebP, puis réessayez.',
+    'L’image est endommagée ou ne peut pas être décodée. Sélectionnez-la à nouveau, ou convertissez-la au format PNG, JPEG ou WebP, puis réessayez.',
+    'La résolution de l’image est trop élevée. L’OCR prend en charge jusqu’à 50 millions de pixels par image. Réduisez sa taille, puis réessayez.',
+    'Le PNG nécessaire pour corriger l’orientation de cette image dépasserait la limite de taille des requêtes OCR. Réduisez la taille de l’image, puis réessayez.',
+    'L’orientation de l’image n’a pas pu être corrigée. Convertissez-la au format PNG, JPEG ou WebP, puis réessayez.',
+    'L’image n’a pas pu être traitée. Sélectionnez-la à nouveau, puis réessayez.',
     'No se pudo encontrar el archivo de imagen. Seleccione la imagen nuevamente.',
     'No se pudo leer el archivo de imagen. Verifique el acceso al archivo e inténtelo nuevamente.',
     'No se pudo corregir la orientación de la imagen. Conviértelo a PNG, JPEG o WebP e inténtalo de nuevo.',
@@ -557,6 +579,12 @@ class OcrDiagnosticSnapshot {
           ).hasMatch(candidate) ||
           RegExp(
             r'^La imagen supera (?:Presupuesto de tamaño de solicitud de OCR \([\d.]+ MiB\)|el límite de entrada de imagen de flujo de tareas \([\d.]+ MiB\))\. Elija una imagen más pequeña e inténtelo de nuevo\.$',
+          ).hasMatch(candidate) ||
+          RegExp(
+            r'^A imagem excede o limite de (?:Limite de tamanho da solicitação de OCR \([\d.]+ MiB\)|limite de tamanho da imagem de entrada do fluxo de tarefas \([\d.]+ MiB\))\. Escolha uma imagem menor e tente novamente\.$',
+          ).hasMatch(candidate) ||
+          RegExp(
+            r'^L’image dépasse la limite de (?:Budget de taille de la requête OCR \([\d.]+ MiB\)|la limite de taille des images d’entrée du flux de tâches \([\d.]+ MiB\))\. Choisis une image plus petite, puis réessaie\.$',
           ).hasMatch(candidate) ||
           RegExp(
             r'^画像は(?:OCR リクエスト サイズの予算 \([\d.]+ MiB\)|タスク フロー イメージの入力制限 \([\d.]+ MiB\))を超えています。より小さい画像を選択して、もう一度試してください。$',
