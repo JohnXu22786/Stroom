@@ -1899,17 +1899,20 @@ void main() {
       },
     );
 
-    testWidgets('cancelling batch export keeps the selection mode', (
+    testWidgets('cancelling file export skips folder export and keeps selection', (
       tester,
     ) async {
+      var folderExportCalls = 0;
       await tester.pumpWidget(
         _buildTestApp(
           buildBatchFM(
             records: [_TestFileRecord(id: 'f1', name: 'one')],
             folders: {'a'},
-            // 两次导出都被用户取消（返回 null）
             onExportFiles: (ids, t) async => null,
-            onExportFolders: (names, t) async => null,
+            onExportFolders: (names, t) async {
+              folderExportCalls++;
+              return 'D:\\out';
+            },
           ),
         ),
       );
@@ -1922,6 +1925,7 @@ void main() {
       await tester.tap(find.byKey(const Key('fm_selection_export_btn')));
       await tester.pumpAndSettle();
 
+      expect(folderExportCalls, 0);
       // 取消后选择模式保留
       expect(find.byKey(const Key('fm_close_selection_btn')), findsOneWidget);
     });
