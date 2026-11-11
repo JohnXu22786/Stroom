@@ -163,20 +163,36 @@ extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
 
   List<Widget> _buildCustomParamsSection(ColorScheme cs) {
     return [
-      Row(
-        children: [
-          Text(
-            AppLocalizations.of(context)!.chatCustomParameters,
-            style: TextStyle(fontWeight: FontWeight.w600),
-          ),
-          const Spacer(),
-          TextButton.icon(
-            icon: const Icon(Icons.add, size: 18),
-            label: Text(AppLocalizations.of(context)!.providerAddCustomParam),
-            onPressed: _addCustomParam,
-          ),
-        ],
-      ),
+      if (MediaQuery.sizeOf(context).width < 800)
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              AppLocalizations.of(context)!.chatCustomParameters,
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+            TextButton.icon(
+              icon: const Icon(Icons.add, size: 18),
+              label: Text(AppLocalizations.of(context)!.providerAddCustomParam),
+              onPressed: _addCustomParam,
+            ),
+          ],
+        )
+      else
+        Row(
+          children: [
+            Text(
+              AppLocalizations.of(context)!.chatCustomParameters,
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+            const Spacer(),
+            TextButton.icon(
+              icon: const Icon(Icons.add, size: 18),
+              label: Text(AppLocalizations.of(context)!.providerAddCustomParam),
+              onPressed: _addCustomParam,
+            ),
+          ],
+        ),
       const SizedBox(height: 8),
       if (_customParams.isEmpty)
         Padding(

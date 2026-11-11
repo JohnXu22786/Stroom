@@ -56,6 +56,29 @@ void main() {
       expect(find.text('Preprocessing method'), findsOneWidget);
       expect(find.text('Compression method'), findsOneWidget);
       expect(find.byType(DropdownButton<String>), findsNWidgets(4));
+      final dialogRect = tester.getRect(find.byType(Dialog));
+      final customParamsHeader = tester.getRect(find.text('Custom parameters'));
+      final addCustomParamButton = tester.getRect(
+        find.ancestor(
+          of: find.text('Add parameter'),
+          matching: find.byType(TextButton),
+        ),
+      );
+      for (final controlRect in [customParamsHeader, addCustomParamButton]) {
+        expect(controlRect.left, greaterThanOrEqualTo(dialogRect.left));
+        expect(controlRect.right, lessThanOrEqualTo(dialogRect.right));
+      }
+      if (width < 800) {
+        expect(
+          addCustomParamButton.top,
+          greaterThanOrEqualTo(customParamsHeader.bottom),
+        );
+      } else {
+        expect(
+          (addCustomParamButton.center.dy - customParamsHeader.center.dy).abs(),
+          lessThan(20),
+        );
+      }
       for (final tabLabel in ['Basic info', 'Parameter settings']) {
         final tabRect = tester.getRect(find.text(tabLabel));
         expect(tabRect.left, greaterThanOrEqualTo(0));
