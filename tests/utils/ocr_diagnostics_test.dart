@@ -3,9 +3,53 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/l10n/app_localizations_es.dart';
 import 'package:stroom/l10n/app_localizations_ja.dart';
+import 'package:stroom/l10n/app_localizations_ko.dart';
 import 'package:stroom/utils/ocr_diagnostics.dart';
 
 void main() {
+  test('Korean OCR summaries stay safe to persist without exposing credentials',
+      () {
+    final locales = [AppLocalizationsKo(), AppLocalizationsKoKr()];
+
+    for (final localizations in locales) {
+      final missing = localizations.taskFlowOcrInputMissing;
+      final unreadable = localizations.taskFlowOcrInputReadFailed;
+      final unavailableModel = localizations.taskFlowOcrModelUnavailable;
+      final requestLimit = localizations.taskFlowOcrRequestSizeLimit('1.25');
+      final inputLimit = localizations.taskFlowImageInputSizeLimit('20.00');
+      final oversized = localizations.taskFlowOcrInputTooLarge(requestLimit);
+      final oversizedInput = localizations.taskFlowOcrInputTooLarge(inputLimit);
+
+      final summaries = [
+        missing,
+        unreadable,
+        unavailableModel,
+        oversized,
+        oversizedInput,
+        localizations.ocrImageEmpty,
+        localizations.ocrImageUnsupportedFormat,
+        localizations.ocrImageUnsupportedSpecialFormat,
+        localizations.ocrImageDecodeFailed,
+        localizations.ocrImageDimensionsTooLarge,
+        localizations.ocrImageOrientationPngTooLarge,
+        localizations.ocrImageOrientationFailed,
+        localizations.ocrImagePreparationFailed,
+      ];
+
+      for (final summary in summaries) {
+        expect(OcrDiagnosticSnapshot.sanitizeStoredTaskError(summary), summary);
+      }
+
+      expect(
+        OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+          missing,
+          excludedValues: [missing],
+        ),
+        'OCR 错误详情已隐藏',
+      );
+    }
+  });
+
   test('Spanish and Japanese TaskFlow OCR preflight summaries remain safe', () {
     final locales = [AppLocalizationsEs(), AppLocalizationsJa()];
 
