@@ -51,29 +51,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   Widget build(BuildContext context) {
     final strings = AppLocalizations.of(context)!;
     return Scaffold(
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(kToolbarHeight),
-        child: AnimatedBuilder(
-          animation: _scrollController,
-          builder: (context, child) {
-            final scrollProgress = _scrollController.hasClients
-                ? (_scrollController.offset / 160).clamp(0.0, 1.0).toDouble()
-                : 0.0;
-            final colorScheme = Theme.of(context).colorScheme;
-            return AppBar(
-              title: child,
-              centerTitle: true,
-              backgroundColor: Color.lerp(
-                colorScheme.surface,
-                colorScheme.surfaceContainerHigh,
-                scrollProgress,
-              ),
-              surfaceTintColor: Colors.transparent,
-              scrolledUnderElevation: 0,
-            );
-          },
-          child: Text(strings.settingsPageTitle),
-        ),
+      appBar: AppBar(
+        title: Text(strings.settingsPageTitle),
+        centerTitle: true,
       ),
       body: ListView(
         controller: _scrollController,

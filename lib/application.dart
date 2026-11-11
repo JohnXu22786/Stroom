@@ -513,6 +513,9 @@ class _ApplicationState extends ConsumerState<Application>
                 theme: ThemeData(
                   useMaterial3: true,
                   colorScheme: colorScheme,
+                  appBarTheme: const AppBarTheme(
+                    surfaceTintColor: Colors.transparent,
+                  ),
                   cardTheme: const CardThemeData(elevation: 0),
                   popupMenuTheme: StroomMenuStyle.popupMenu(colorScheme),
                   dropdownMenuTheme: DropdownMenuThemeData(
@@ -528,6 +531,9 @@ class _ApplicationState extends ConsumerState<Application>
                 darkTheme: ThemeData(
                   useMaterial3: true,
                   colorScheme: darkColorScheme,
+                  appBarTheme: const AppBarTheme(
+                    surfaceTintColor: Colors.transparent,
+                  ),
                   cardTheme: const CardThemeData(elevation: 0),
                   popupMenuTheme: StroomMenuStyle.popupMenu(darkColorScheme),
                   dropdownMenuTheme: DropdownMenuThemeData(
