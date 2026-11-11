@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/l10n/app_localizations.dart';
@@ -70,5 +71,120 @@ void main() {
         .position;
     expect(position.pixels, greaterThan(0),
         reason: 'drag on the grid must scroll the page, not dead-zone');
+  });
+
+  testWidgets('home status dots stay centered and labels wrap when narrow', (
+    tester,
+  ) async {
+    // Keep the existing Recent tasks header within its minimum width while
+    // still allowing the German status label to wrap.
+    tester.view.physicalSize = const Size(350, 720);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    Future<void> pumpHome(Locale locale) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            locale: locale,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const HomePage(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    await pumpHome(const Locale('en'));
+    final english = await AppLocalizations.delegate.load(const Locale('en'));
+    final labels = [
+      english.statusInProgress,
+      english.statusCompleted,
+      english.statusFailed,
+    ];
+    for (final label in labels) {
+      final labelFinder = find.text(label);
+      expect(labelFinder, findsOneWidget);
+      final itemColumn = find
+          .ancestor(
+            of: labelFinder,
+            matching: find.byType(Column),
+          )
+          .first;
+      final countRect = tester.getRect(
+        find.descendant(of: itemColumn, matching: find.text('0')),
+      );
+      final statusRow = find
+          .ancestor(
+            of: labelFinder,
+            matching: find.byType(Row),
+          )
+          .first;
+      final dot = find.descendant(
+        of: statusRow,
+        matching: find.byWidgetPredicate(
+          (widget) =>
+              widget is Container &&
+              widget.decoration is BoxDecoration &&
+              (widget.decoration! as BoxDecoration).shape == BoxShape.circle,
+        ),
+      );
+      expect(dot, findsOneWidget);
+      final groupCenter = tester.getRect(statusRow).center.dx;
+      expect(
+        groupCenter,
+        closeTo(countRect.center.dx, 1),
+        reason: 'the dot and $label should be centered together',
+      );
+    }
+
+    final german = await AppLocalizations.delegate.load(const Locale('de'));
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('de'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Center(
+          child: SizedBox(
+            width: 80,
+            child: HomeStatusLabel(
+              label: german.statusInProgress,
+              dotColor: Colors.orange,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final wrappedLabel = find.text(german.statusInProgress);
+    expect(wrappedLabel, findsOneWidget);
+    final germanRow =
+        find.ancestor(of: wrappedLabel, matching: find.byType(Row)).first;
+    expect(
+      find.descendant(
+        of: germanRow,
+        matching: find.byWidgetPredicate(
+          (widget) =>
+              widget is Container &&
+              widget.decoration is BoxDecoration &&
+              (widget.decoration! as BoxDecoration).shape == BoxShape.circle,
+        ),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .renderObject<RenderParagraph>(wrappedLabel)
+          .getBoxesForSelection(
+            TextSelection(
+              baseOffset: 0,
+              extentOffset: german.statusInProgress.length,
+            ),
+          )
+          .length,
+      greaterThan(1),
+      reason: 'the German in-progress label should wrap at this width',
+    );
   });
 }
