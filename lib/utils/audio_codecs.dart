@@ -484,7 +484,14 @@ void _writeFlacFrame(
     headerBits.write(b, 8);
   }
 
-  // Block size (if variable): not needed for fixed
+  // Partial blocks use an explicit size: codes 6 and 7 encode blockLen - 1
+  // in 8 and 16 bits respectively, even with the fixed-blocking strategy.
+  if (bsCode == 6) {
+    headerBits.write(blockLen - 1, 8);
+  } else if (bsCode == 7) {
+    headerBits.write(blockLen - 1, 16);
+  }
+
   // Sample rate (if variable): not needed
 
   // CRC-8 of header
@@ -680,7 +687,9 @@ int _blockSizeCode(int blockLen) {
   if (blockLen == 8192) return 13;
   if (blockLen == 16384) return 14;
   if (blockLen == 32768) return 15;
-  return 0; // get from header
+  if (blockLen >= 1 && blockLen <= 256) return 6;
+  if (blockLen > 256 && blockLen <= 65536) return 7;
+  return 0; // reserved/unsupported block size
 }
 
 int _sampleRateCode(int sr) {
