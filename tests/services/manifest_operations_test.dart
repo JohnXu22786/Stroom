@@ -1676,38 +1676,38 @@ void main() {
   test(
     'non-audio storage names cannot escape their managed directory',
     () async {
-    final originalPathProvider = PathProviderPlatform.instance;
-    final directory = await Directory.systemTemp.createTemp(
-      'image-path-traversal-test-',
-    );
-    PathProviderPlatform.instance = _DocumentsDirectory(directory.path);
-    WebFileStore.disableTestMode();
-    addTearDown(() async {
-      PathProviderPlatform.instance = originalPathProvider;
-      WebFileStore.enableTestMode();
-      await directory.delete(recursive: true);
-    });
+      final originalPathProvider = PathProviderPlatform.instance;
+      final directory = await Directory.systemTemp.createTemp(
+        'image-path-traversal-test-',
+      );
+      PathProviderPlatform.instance = _DocumentsDirectory(directory.path);
+      WebFileStore.disableTestMode();
+      addTearDown(() async {
+        PathProviderPlatform.instance = originalPathProvider;
+        WebFileStore.enableTestMode();
+        await directory.delete(recursive: true);
+      });
 
-    final outsideFile = File('${directory.path}/outside.jpg');
-    await outsideFile.writeAsBytes([7, 8, 9]);
-    final record = ImageRecord.fromMap({
-      'name': 'unsafe',
-      'hash': '../outside',
-      'format': 'jpg',
-      'createdAt': DateTime(2024).toIso8601String(),
-      'size': 3,
-    });
+      final outsideFile = File('${directory.path}/outside.jpg');
+      await outsideFile.writeAsBytes([7, 8, 9]);
+      final record = ImageRecord.fromMap({
+        'name': 'unsafe',
+        'hash': '../outside',
+        'format': 'jpg',
+        'createdAt': DateTime(2024).toIso8601String(),
+        'size': 3,
+      });
 
-    expect(record.storagePath, '../outside.jpg');
-    expect(await ImageManifest.readFile(record.storagePath), isNull);
-    expect(await ImageManifest.readFilePath(record.storagePath), isNull);
-    expect(await ImageManifest.deleteFile(record.storagePath), isFalse);
-    await expectLater(
-      ImageManifest.writeFile(record.storagePath, Uint8List.fromList([1])),
-      throwsArgumentError,
-    );
-    await expectLater(ImageManifest.addRecord(record), throwsArgumentError);
-    expect(await outsideFile.readAsBytes(), [7, 8, 9]);
+      expect(record.storagePath, '../outside.jpg');
+      expect(await ImageManifest.readFile(record.storagePath), isNull);
+      expect(await ImageManifest.readFilePath(record.storagePath), isNull);
+      expect(await ImageManifest.deleteFile(record.storagePath), isFalse);
+      await expectLater(
+        ImageManifest.writeFile(record.storagePath, Uint8List.fromList([1])),
+        throwsArgumentError,
+      );
+      await expectLater(ImageManifest.addRecord(record), throwsArgumentError);
+      expect(await outsideFile.readAsBytes(), [7, 8, 9]);
     },
   );
 
