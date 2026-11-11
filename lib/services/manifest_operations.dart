@@ -262,7 +262,6 @@ class ManifestOperations<T extends FileRecord> {
       '$storageDirName/${_validatedFileName(fileName)}';
 
   String _validatedFileName(String fileName) {
-    if (!_isAudioTable) return fileName;
     if (fileName.isEmpty ||
         fileName == '.' ||
         fileName == '..' ||
