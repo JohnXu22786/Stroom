@@ -19437,13 +19437,13 @@ class _AppLocalizationsDelegate
 
   @override
   bool isSupported(Locale locale) => <String>[
-    'en',
-    'es',
-    'ja',
-    'ko',
-    'pt',
-    'zh',
-  ].contains(locale.languageCode);
+        'en',
+        'es',
+        'ja',
+        'ko',
+        'pt',
+        'zh',
+      ].contains(locale.languageCode);
 
   @override
   bool shouldReload(_AppLocalizationsDelegate old) => false;
