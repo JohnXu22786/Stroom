@@ -206,7 +206,18 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
               borderRadius: StroomMenuStyle.borderRadius,
               value: _uploadMethod,
               isDense: true,
-              isExpanded: MediaQuery.sizeOf(context).width < 800,
+              isExpanded: MediaQuery.sizeOf(context).width < 1100,
+              selectedItemBuilder: (context) => [
+                _buildAsrSelectedDropdownText(
+                  context,
+                  AppLocalizations.of(context)!.providerMultipart,
+                ),
+                _buildAsrSelectedDropdownText(context, 'Base64 JSON'),
+                _buildAsrSelectedDropdownText(
+                  context,
+                  AppLocalizations.of(context)!.providerUrlUpload,
+                ),
+              ],
               items: [
                 DropdownMenuItem(
                   value: AudioUploadMethod.multipart,
@@ -341,7 +352,27 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
               borderRadius: StroomMenuStyle.borderRadius,
               value: _fallbackMethod,
               isDense: true,
-              isExpanded: MediaQuery.sizeOf(context).width < 800,
+              isExpanded: MediaQuery.sizeOf(context).width < 1100,
+              selectedItemBuilder: (context) => [
+                _buildAsrSelectedDropdownText(
+                  context,
+                  AppLocalizations.of(context)!.providerFallbackNone,
+                ),
+                _buildAsrSelectedDropdownText(
+                  context,
+                  AppLocalizations.of(context)!.providerFallbackSpecific,
+                ),
+                _buildAsrSelectedDropdownText(
+                  context,
+                  AppLocalizations.of(context)!.providerFallbackGeneric,
+                ),
+                _buildAsrSelectedDropdownText(
+                  context,
+                  AppLocalizations.of(context)!.providerFallbackAll,
+                  style: Theme.of(context).textTheme.labelLarge
+                      ?.copyWith(fontWeight: FontWeight.w600),
+                ),
+              ],
               items: [
                 DropdownMenuItem(
                   value: 'none',
@@ -434,7 +465,17 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
               borderRadius: StroomMenuStyle.borderRadius,
               value: _preprocessing,
               isDense: true,
-              isExpanded: MediaQuery.sizeOf(context).width < 800,
+              isExpanded: MediaQuery.sizeOf(context).width < 1100,
+              selectedItemBuilder: (context) => [
+                _buildAsrSelectedDropdownText(
+                  context,
+                  AppLocalizations.of(context)!.providerPreprocessNone,
+                ),
+                _buildAsrSelectedDropdownText(
+                  context,
+                  AppLocalizations.of(context)!.providerPreprocessResample,
+                ),
+              ],
               items: [
                 DropdownMenuItem(
                   value: 'none',

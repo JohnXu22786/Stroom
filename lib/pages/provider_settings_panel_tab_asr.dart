@@ -42,7 +42,27 @@ extension _ProviderSettingsPanelTabAsrExt on _ProviderSettingsPanelState {
               borderRadius: StroomMenuStyle.borderRadius,
               value: _chunking,
               isDense: true,
-              isExpanded: MediaQuery.sizeOf(context).width < 800,
+              isExpanded: MediaQuery.sizeOf(context).width < 1100,
+              selectedItemBuilder: (context) => [
+                _buildAsrSelectedDropdownText(
+                  context,
+                  AppLocalizations.of(context)!.providerChunkNone,
+                ),
+                _buildAsrSelectedDropdownText(
+                  context,
+                  AppLocalizations.of(context)!.providerChunkSmart,
+                  style: Theme.of(context).textTheme.labelLarge
+                      ?.copyWith(fontWeight: FontWeight.w600),
+                ),
+                _buildAsrSelectedDropdownText(
+                  context,
+                  AppLocalizations.of(context)!.providerChunkFixedDuration,
+                ),
+                _buildAsrSelectedDropdownText(
+                  context,
+                  AppLocalizations.of(context)!.providerChunkFixedSize,
+                ),
+              ],
               items: [
                 DropdownMenuItem(
                   value: 'none',
@@ -130,7 +150,21 @@ extension _ProviderSettingsPanelTabAsrExt on _ProviderSettingsPanelState {
               borderRadius: StroomMenuStyle.borderRadius,
               value: _compression,
               isDense: true,
-              isExpanded: MediaQuery.sizeOf(context).width < 800,
+              isExpanded: MediaQuery.sizeOf(context).width < 1100,
+              selectedItemBuilder: (context) => [
+                _buildAsrSelectedDropdownText(
+                  context,
+                  AppLocalizations.of(context)!.providerCompressionNone,
+                ),
+                _buildAsrSelectedDropdownText(
+                  context,
+                  AppLocalizations.of(context)!.providerCompressionAdpcm,
+                ),
+                _buildAsrSelectedDropdownText(
+                  context,
+                  AppLocalizations.of(context)!.providerCompressionFlac,
+                ),
+              ],
               items: [
                 DropdownMenuItem(
                   value: 'none',

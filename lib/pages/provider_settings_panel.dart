@@ -34,6 +34,22 @@ String? validateJsonValue(String type, String value) {
   return null;
 }
 
+Widget _buildAsrSelectedDropdownText(
+  BuildContext context,
+  String label, {
+  TextStyle? style,
+}) {
+  return Align(
+    alignment: AlignmentDirectional.centerStart,
+    child: Text(
+      label,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: style ?? Theme.of(context).textTheme.bodyMedium,
+    ),
+  );
+}
+
 Widget _buildResponsiveSettingsRow(
   BuildContext context, {
   required String label,

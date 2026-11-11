@@ -37,6 +37,12 @@ void main() {
                       providerName: 'ASR provider',
                       host: 'https://api.example.com',
                       key: 'test-key',
+                      typeConfig: {
+                        'fallbackMethod': 'none',
+                        'preprocessing': 'resampleMono',
+                        'chunking': 'silence',
+                        'compression': 'flac',
+                      },
                     ),
                     providerType: 'asr',
                   ),
