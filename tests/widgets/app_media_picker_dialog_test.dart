@@ -586,6 +586,114 @@ void main() {
       expect(pickerResult!.first.key, '文件1');
     });
 
+    testWidgets('multi-select: confirm waits for pending file reads', (
+      tester,
+    ) async {
+      final pendingRead = Completer<Uint8List?>();
+      List<MapEntry<String, Uint8List>>? pickerResult;
+      const record = _TestRecord(id: '1', name: '待读取文件');
+
+      await tester.pumpWidget(_buildTestApp(Builder(builder: (context) {
+        return ElevatedButton(
+          onPressed: () async {
+            pickerResult = await showMediaPickerDialog(
+              context,
+              MediaPickerConfig<_TestRecord>(
+                title: '测试选择器',
+                emptyIcon: Icons.folder_outlined,
+                emptyText: '暂无文件',
+                fileIcon: Icons.insert_drive_file,
+                multiSelect: true,
+                loadRecords: () async => [record],
+                loadFolders: () async => <String>{},
+                readFile: (_) => pendingRead.future,
+                displayName: (item) => item.name,
+                subtitleBuilder: (_) => const Text(''),
+              ),
+            );
+          },
+          child: const Text('Open'),
+        );
+      })));
+
+      await tester.tap(find.text('Open'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.tap(find.text('待读取文件'));
+      await tester.pump();
+
+      final confirmButton = find.byKey(const Key('media_picker_confirm_btn'));
+      expect(tester.widget<FilledButton>(confirmButton).onPressed, isNull);
+      await tester.tap(confirmButton);
+      await tester.pump();
+      expect(find.text('待读取文件'), findsOneWidget);
+      expect(pickerResult, isNull);
+
+      final fileBytes = Uint8List.fromList([1, 2, 3]);
+      pendingRead.complete(fileBytes);
+      await tester.pump();
+      await tester.pump();
+
+      expect(tester.widget<FilledButton>(confirmButton).onPressed, isNotNull);
+      await tester.tap(confirmButton);
+      await tester.pumpAndSettle();
+      expect(pickerResult, hasLength(1));
+      expect(pickerResult!.single.key, '待读取文件');
+      expect(pickerResult!.single.value, fileBytes);
+    });
+
+    testWidgets('canceling a pending read re-enables confirmation', (
+      tester,
+    ) async {
+      final pendingRead = Completer<Uint8List?>();
+      List<MapEntry<String, Uint8List>>? pickerResult;
+      const record = _TestRecord(id: '1', name: '待读取文件');
+
+      await tester.pumpWidget(_buildTestApp(Builder(builder: (context) {
+        return ElevatedButton(
+          onPressed: () async {
+            pickerResult = await showMediaPickerDialog(
+              context,
+              MediaPickerConfig<_TestRecord>(
+                title: '测试选择器',
+                emptyIcon: Icons.folder_outlined,
+                emptyText: '暂无文件',
+                fileIcon: Icons.insert_drive_file,
+                multiSelect: true,
+                loadRecords: () async => [record],
+                loadFolders: () async => <String>{},
+                readFile: (_) => pendingRead.future,
+                displayName: (item) => item.name,
+                subtitleBuilder: (_) => const Text(''),
+              ),
+            );
+          },
+          child: const Text('Open'),
+        );
+      })));
+
+      await tester.tap(find.text('Open'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.tap(find.text('待读取文件'));
+      await tester.pump();
+
+      final confirmButton = find.byKey(const Key('media_picker_confirm_btn'));
+      expect(tester.widget<FilledButton>(confirmButton).onPressed, isNull);
+      await tester.tap(find.text('待读取文件'));
+      await tester.pump();
+      expect(tester.widget<FilledButton>(confirmButton).onPressed, isNotNull);
+
+      pendingRead.complete(Uint8List.fromList([1, 2, 3]));
+      await tester.pump();
+      await tester.pump();
+      expect(find.byKey(const Key('media_picker_preview_bar')), findsNothing);
+
+      await tester.tap(confirmButton);
+      await tester.pumpAndSettle();
+      expect(pickerResult, isEmpty);
+    });
+
     testWidgets('multi-select: clear button removes all selections', (
       tester,
     ) async {
