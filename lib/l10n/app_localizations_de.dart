@@ -1433,8 +1433,7 @@ class AppLocalizationsDe extends AppLocalizations {
       locale: localeName,
       other:
           'Die $count ausgewählten Gespräche löschen? Dies kann nicht rückgängig gemacht werden.',
-      one:
-          'Das ausgewählte Gespräch löschen? Dies kann nicht rückgängig gemacht werden.',
+      one: 'Das ausgewählte Gespräch löschen? Dies kann nicht rückgängig gemacht werden.',
     );
     return '$_temp0';
   }
@@ -11977,6 +11976,9 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get languageNameGerman => 'Deutsch';
+
+  @override
+  String get languageNameArabic => 'Arabisch';
 
   @override
   String fileManagerDeleteEmptyFolderWithSubfoldersConfirm(
@@ -13426,8 +13428,7 @@ class AppLocalizationsDeDe extends AppLocalizationsDe {
       locale: localeName,
       other:
           'Die $count ausgewählten Gespräche löschen? Dies kann nicht rückgängig gemacht werden.',
-      one:
-          'Das ausgewählte Gespräch löschen? Dies kann nicht rückgängig gemacht werden.',
+      one: 'Das ausgewählte Gespräch löschen? Dies kann nicht rückgängig gemacht werden.',
     );
     return '$_temp0';
   }
@@ -23970,6 +23971,9 @@ class AppLocalizationsDeDe extends AppLocalizationsDe {
 
   @override
   String get languageNameGerman => 'Deutsch';
+
+  @override
+  String get languageNameArabic => 'Arabisch';
 
   @override
   String fileManagerDeleteEmptyFolderWithSubfoldersConfirm(

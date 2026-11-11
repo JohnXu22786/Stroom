@@ -7017,6 +7017,7 @@
   "languageNameJapanese": "Japanese",
   "languageNameFrench": "French",
   "languageNameGerman": "German",
+  "languageNameArabic": "Arabic",
   "fileManagerDeleteEmptyFolderWithSubfoldersConfirm": "Delete empty folder “{name}”? {count, plural, one{Its 1 nested folder will also be deleted.} other{Its {count} nested folders will also be deleted.}}",
   "providerMaxUploadSizePositive": "Maximum upload size must be a positive number."
 }
