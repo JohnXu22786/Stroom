@@ -589,6 +589,58 @@ void main() {
     expect(restoredTask.hasOcrErrorLocalizationCredentialCollision, isTrue);
   });
 
+  test('OCR status metadata never echoes an API key matching the status',
+      () async {
+    final source =
+        await File('${directory.path}/status_credential.png').writeAsBytes(
+      _validPng(),
+    );
+    const apiKey = '429';
+
+    await expectLater(
+      executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: source.path,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(key: apiKey),
+        localizations: AppLocalizationsEn(),
+        requestOcr: (_, _) async =>
+            throw StateError('HTTP 429 finish_reason=test-key'),
+      ),
+      throwsA(isA<BlockExecutionException>()),
+    );
+
+    final task = background.state.single;
+    expect(task.status, TaskStatus.failed);
+    expect(task.error, isNot(contains(apiKey)));
+    expect(task.error, isNot(contains('HTTP 429')));
+    await background.pendingPersistence;
+
+    final persistedTasks = jsonDecode(
+      await File('${directory.path}/background/tasks.json').readAsString(),
+    ) as List<dynamic>;
+    final persistedTask = persistedTasks
+        .map((row) => Map<String, dynamic>.from(row as Map))
+        .singleWhere((row) => row['id'] == task.id);
+    expect(persistedTask['error'], isNot(contains(apiKey)));
+    expect(persistedTask['error'], isNot(contains('HTTP 429')));
+
+    final restored = BackgroundTaskNotifier(
+      localizationsResolver: () => AppLocalizationsZhCn(),
+    );
+    addTearDown(restored.dispose);
+    expect(await restored.restoreFromPersistence(), isTrue);
+    expect(restored.taskById(task.id)?.error, isNot(contains(apiKey)));
+    expect(
+      restored.taskById(task.id)?.error,
+      isNot(contains('HTTP 429')),
+    );
+  });
+
   test('OCR rejects oversized WebFileStore input before request dispatch',
       () async {
     const key = 'attachments/oversized_taskflow_image.png';

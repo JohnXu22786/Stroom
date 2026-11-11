@@ -421,10 +421,7 @@ class OcrDiagnosticSnapshot {
     for (final fallback in fallbacks) {
       final candidate =
           detailsText.isEmpty ? fallback : '$fallback（$detailsText）';
-      if (!containsCredential(fallback, excludedValues: exclusions)) {
-        // [details] is built only from a parsed HTTP status and a separately
-        // validated finish reason. Do not treat digits in the bounded status
-        // as a credential merely because the same digits are excluded.
+      if (!containsCredential(candidate, excludedValues: exclusions)) {
         return candidate;
       }
     }
