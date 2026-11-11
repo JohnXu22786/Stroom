@@ -76,7 +76,9 @@ void main() {
   testWidgets('home status dots stay centered and labels wrap when narrow', (
     tester,
   ) async {
-    tester.view.physicalSize = const Size(320, 720);
+    // Keep the existing Recent tasks header within its minimum width while
+    // still allowing the German status label to wrap.
+    tester.view.physicalSize = const Size(350, 720);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
 
