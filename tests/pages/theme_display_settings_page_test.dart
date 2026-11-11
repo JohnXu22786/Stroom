@@ -38,6 +38,11 @@ void main() {
         resolveSystemLocale(const Locale('pt', 'BR')),
         const Locale('pt', 'BR'),
       );
+      expect(resolveSystemLocale(const Locale('de')), const Locale('de', 'DE'));
+      expect(
+        resolveSystemLocale(const Locale('de', 'AT')),
+        const Locale('de', 'DE'),
+      );
       expect(
         resolveSystemLocale(const Locale('zh', 'TW')),
         const Locale('en', 'US'),
@@ -71,10 +76,20 @@ void main() {
     expect(localeNativeName(const Locale('zh', 'CN')), '简体中文');
     expect(localeNativeName(const Locale('es', 'ES')), 'Español');
     expect(localeNativeName(const Locale('ja', 'JP')), '日本語');
+    expect(
+      localeDisplayName(AppLocalizationsEnUs(), const Locale('de', 'DE')),
+      'German',
+    );
+    expect(
+      localeDisplayName(AppLocalizationsZhCn(), const Locale('zh', 'CN')),
+      '简体中文',
+    );
+    expect(localeNativeName(const Locale('de', 'DE')), 'Deutsch');
     expect(localeIdTag(const Locale('en', 'US')), 'en-us');
     expect(localeIdTag(const Locale('zh', 'CN')), 'zh-cn');
     expect(localeIdTag(const Locale('es', 'ES')), 'es-es');
     expect(localeIdTag(const Locale('ja', 'JP')), 'ja-jp');
+    expect(localeIdTag(const Locale('de', 'DE')), 'de-de');
   });
 
   group('locale preference persistence', () {
@@ -270,6 +285,7 @@ void main() {
       scrollable: pageScrollable,
     );
     await tester.pumpAndSettle();
+    expect(find.byKey(const Key('language-search-field')), findsOneWidget);
     expect(find.text('搜索语言'), findsOneWidget);
     final chineseFollowSystemOption = find.descendant(
       of: languageCard,
