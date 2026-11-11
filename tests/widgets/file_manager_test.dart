@@ -1899,7 +1899,8 @@ void main() {
       },
     );
 
-    testWidgets('cancelling file export skips folder export and keeps selection', (
+    testWidgets(
+        'cancelling file export skips folder export and keeps selection', (
       tester,
     ) async {
       var folderExportCalls = 0;
