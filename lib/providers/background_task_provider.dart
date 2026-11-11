@@ -523,8 +523,33 @@ String? _localizeStoredBackgroundError(
 ) {
   if (error == null) return null;
   if (error == '已取消' || error == 'Canceled') return strings.bgTaskCancelled;
-  if (error == 'OCR 错误详情已隐藏' || error == 'OCR error details were hidden') {
-    return strings.bgTaskOcrErrorDetailsHidden;
+  final hiddenDetailsPrefixes = {
+    for (final locale in AppLocalizations.supportedLocales)
+      lookupAppLocalizations(locale).bgTaskOcrErrorDetailsHidden,
+  };
+  for (final hiddenDetailsPrefix in hiddenDetailsPrefixes) {
+    if (error == hiddenDetailsPrefix) {
+      return strings.bgTaskOcrErrorDetailsHidden;
+    }
+    if (error.startsWith('$hiddenDetailsPrefix（') &&
+        error.endsWith('）') &&
+        OcrDiagnosticSnapshot.sanitizeStoredTaskError(error) == error) {
+      return '${strings.bgTaskOcrErrorDetailsHidden}${error.substring(hiddenDetailsPrefix.length)}';
+    }
+  }
+  final genericHiddenDetailsPrefixes = {
+    for (final locale in AppLocalizations.supportedLocales)
+      lookupAppLocalizations(locale).bgTaskErrorDetailsHidden,
+  };
+  for (final hiddenDetailsPrefix in genericHiddenDetailsPrefixes) {
+    if (error == hiddenDetailsPrefix) {
+      return strings.bgTaskErrorDetailsHidden;
+    }
+    if (error.startsWith('$hiddenDetailsPrefix（') &&
+        error.endsWith('）') &&
+        OcrDiagnosticSnapshot.sanitizeStoredTaskError(error) == error) {
+      return '${strings.bgTaskErrorDetailsHidden}${error.substring(hiddenDetailsPrefix.length)}';
+    }
   }
   if (error == '错误详情已隐藏' || error == 'Error details were hidden') {
     return strings.bgTaskErrorDetailsHidden;
@@ -559,6 +584,15 @@ String? _localizeStoredBackgroundError(
       'Saving speech transcription failed: ',
     ])
       (prefix, strings.bgTaskAsrSaveError),
+    for (final prefix in [
+      for (final locale in AppLocalizations.supportedLocales)
+        '${lookupAppLocalizations(locale).unifiedTaskOcrFailed}: ',
+    ])
+      (
+        prefix,
+        (detail) =>
+            '${strings.unifiedTaskOcrFailed}: ${_localizeStoredBackgroundError(detail, strings) ?? detail}',
+      ),
     for (final prefix in ['OCR识别失败: ', 'OCR识别失败：', 'OCR failed: '])
       (prefix, strings.bgTaskOcrError),
     for (final prefix in [
@@ -678,16 +712,23 @@ BackgroundTask _localizeRestoredBackgroundTask(
   BackgroundTask task,
   AppLocalizations strings,
 ) {
-  final error = _localizeStoredBackgroundError(task.error, strings);
+  final canRelocalizeErrors = !task.hasOcrErrorLocalizationCredentialCollision;
+  final error = canRelocalizeErrors
+      ? _localizeStoredBackgroundError(task.error, strings)
+      : task.error;
   var changed = error != task.error;
   final steps = task.steps.map((step) {
     final label = _localizeStoredBackgroundStep(step.label, strings);
-    final stepError = _localizeStoredBackgroundError(step.error, strings);
+    final stepError = canRelocalizeErrors
+        ? _localizeStoredBackgroundError(step.error, strings)
+        : step.error;
     if (label != step.label || stepError != step.error) changed = true;
     return step.copyWith(label: label, error: stepError);
   }).toList(growable: false);
   final outcomes = task.ocrPageOutcomes.map((outcome) {
-    final outcomeError = _localizeStoredBackgroundError(outcome.error, strings);
+    final outcomeError = canRelocalizeErrors
+        ? _localizeStoredBackgroundError(outcome.error, strings)
+        : outcome.error;
     if (outcomeError != outcome.error) changed = true;
     return OcrPageOutcome(
       imageIndex: outcome.imageIndex,
@@ -855,32 +896,64 @@ String? _sanitizeOcrTaskError(
     ...additionalCredentialValues,
   }.toList();
   if (error != null) {
-    for (final locale in [const Locale('en', 'US'), const Locale('zh', 'CN')]) {
+    for (final locale in AppLocalizations.supportedLocales) {
       final strings = lookupAppLocalizations(locale);
+      final taskFlowFailurePrefix = '${strings.unifiedTaskOcrFailed}: ';
       for (final prefix in [
         strings.bgTaskOcrError(''),
         strings.bgTaskOcrSaveError(''),
         strings.bgTaskOcrIncompleteError(''),
+        taskFlowFailurePrefix,
       ]) {
         if (!error.startsWith(prefix)) continue;
         if (_legacyOcrTextContainsCredential(prefix, credentialValues)) {
           return _localizedOcrHiddenTaskError(strings, credentialValues);
         }
         final details = error.substring(prefix.length);
-        final sanitizedDetails = OcrDiagnosticSnapshot.sanitizeStoredTaskError(
-          details,
-          excludedValues: credentialValues,
-        );
-        const hiddenDetailsPrefix = 'OCR 错误详情已隐藏';
         final localizedHiddenDetails =
             _localizedOcrHiddenTaskError(strings, credentialValues);
-        final safeDetails =
-            sanitizedDetails?.startsWith(hiddenDetailsPrefix) == true
-                ? sanitizedDetails!.replaceFirst(
-                    hiddenDetailsPrefix,
-                    localizedHiddenDetails,
-                  )
-                : sanitizedDetails;
+        final sanitizedDetails =
+            prefix == taskFlowFailurePrefix && details == localizedHiddenDetails
+                ? details
+                : OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+                    details,
+                    excludedValues: credentialValues,
+                  );
+        var safeDetails = sanitizedDetails;
+        final candidateDetails = safeDetails;
+        if (candidateDetails != null) {
+          String safeLocalizedLabel(String preferred) =>
+              _legacyOcrTextContainsCredential(preferred, credentialValues)
+                  ? _localizedOcrHiddenTaskError(strings, credentialValues)
+                  : preferred;
+
+          final hiddenDetailsLabels = <String, String>{
+            for (final locale in AppLocalizations.supportedLocales)
+              lookupAppLocalizations(locale).bgTaskOcrErrorDetailsHidden:
+                  safeLocalizedLabel(strings.bgTaskOcrErrorDetailsHidden),
+            for (final locale in AppLocalizations.supportedLocales)
+              lookupAppLocalizations(locale).bgTaskErrorDetailsHidden:
+                  safeLocalizedLabel(strings.bgTaskErrorDetailsHidden),
+          };
+          for (final entry in hiddenDetailsLabels.entries) {
+            final hiddenDetailsPrefix = entry.key;
+            if (candidateDetails == hiddenDetailsPrefix) {
+              safeDetails = entry.value;
+              break;
+            }
+            if (candidateDetails.startsWith('$hiddenDetailsPrefix（') &&
+                candidateDetails.endsWith('）') &&
+                OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+                      candidateDetails,
+                      excludedValues: credentialValues,
+                    ) ==
+                    candidateDetails) {
+              safeDetails =
+                  '${entry.value}${candidateDetails.substring(hiddenDetailsPrefix.length)}';
+              break;
+            }
+          }
+        }
         return '$prefix${safeDetails ?? ''}';
       }
     }
@@ -974,6 +1047,24 @@ bool _isSafeOcrModelId(String value, Iterable<String> credentialValues) =>
 
 Iterable<String> _legacyOcrCredentialValues(Map<String, dynamic>? rawRequest) =>
     OcrDiagnosticSnapshot.credentialValuesFromRequest(rawRequest);
+
+bool _hasOcrErrorLocalizationCredentialCollision(
+  Iterable<String> credentialValues,
+) {
+  final values = credentialValues.where((value) => value.isNotEmpty).toList();
+  if (values.isEmpty) return false;
+  return AppLocalizations.supportedLocales.any((locale) {
+    final strings = lookupAppLocalizations(locale);
+    return [
+      '${strings.unifiedTaskOcrFailed}: ',
+      strings.bgTaskOcrError(''),
+      strings.bgTaskOcrSaveError(''),
+      strings.bgTaskOcrIncompleteError(''),
+      strings.bgTaskOcrErrorDetailsHidden,
+      strings.bgTaskErrorDetailsHidden,
+    ].any((label) => _legacyOcrTextContainsCredential(label, values));
+  });
+}
 
 bool _legacyOcrIsOrdinaryTerminalReadCarefullyPrompt(
   String text,
@@ -4220,6 +4311,7 @@ class BackgroundTask {
   final Map<String, dynamic>?
       rawResponse; // Raw response data for error diagnostics
   final List<String> _ocrDiagnosticCredentialValues;
+  final bool hasOcrErrorLocalizationCredentialCollision;
   final Map<String, dynamic>?
       retryData; // Retry data to pre-populate form when retrying
   final List<OcrPageOutcome> ocrPageOutcomes;
@@ -4246,6 +4338,7 @@ class BackgroundTask {
     List<OcrPageOutcome> ocrPageOutcomes = const [],
     Iterable<String> ocrDiagnosticCredentialValues = const [],
     Iterable<String> ocrCredentialValuesForSanitization = const [],
+    bool hasOcrErrorLocalizationCredentialCollision = false,
   }) : this._(
           id: id,
           type: type,
@@ -4269,6 +4362,8 @@ class BackgroundTask {
           ocrDiagnosticCredentialValues: ocrDiagnosticCredentialValues,
           ocrCredentialValuesForSanitization:
               ocrCredentialValuesForSanitization,
+          hasOcrErrorLocalizationCredentialCollision:
+              hasOcrErrorLocalizationCredentialCollision,
         );
 
   BackgroundTask._({
@@ -4294,6 +4389,7 @@ class BackgroundTask {
     List<OcrPageOutcome> ocrPageOutcomes = const [],
     Iterable<String> ocrDiagnosticCredentialValues = const [],
     Iterable<String> ocrCredentialValuesForSanitization = const [],
+    bool hasOcrErrorLocalizationCredentialCollision = false,
   })  : error = type == BackgroundTaskType.ocr
             ? _sanitizeOcrTaskError(
                 error,
@@ -4328,6 +4424,18 @@ class BackgroundTask {
                 ...ocrDiagnosticCredentialValues,
               })
             : const [],
+        hasOcrErrorLocalizationCredentialCollision =
+            type == BackgroundTaskType.ocr &&
+                (hasOcrErrorLocalizationCredentialCollision ||
+                    _hasOcrErrorLocalizationCredentialCollision(
+                      [
+                        ..._legacyOcrCredentialValues(rawRequest),
+                        ..._combinedOcrCredentialValues(
+                          ocrDiagnosticCredentialValues,
+                          ocrCredentialValuesForSanitization,
+                        ),
+                      ],
+                    )),
         rawRequest = type == BackgroundTaskType.ocr
             ? _sanitizeOcrTaskRequest(
                 rawRequest,
@@ -4431,6 +4539,8 @@ class BackgroundTask {
       ocrPageOutcomes: ocrPageOutcomes ?? this.ocrPageOutcomes,
       ocrDiagnosticCredentialValues: _ocrDiagnosticCredentialValues,
       ocrCredentialValuesForSanitization: ocrCredentialValuesForSanitization,
+      hasOcrErrorLocalizationCredentialCollision:
+          hasOcrErrorLocalizationCredentialCollision,
       retryData: clearRetryData ? null : (retryData ?? this.retryData),
       retryDataAlreadySanitized: retryData == null &&
           rawRequest == null &&
@@ -4452,6 +4562,8 @@ class BackgroundTask {
         'partialSaveRequested': partialSaveRequested,
         'resultSavedAsPartial': resultSavedAsPartial,
         'error': error,
+        if (hasOcrErrorLocalizationCredentialCollision)
+          'hasOcrErrorLocalizationCredentialCollision': true,
         'createdAt': createdAt.toIso8601String(),
         'completedAt': completedAt?.toIso8601String(),
         'statusChangedAt': statusChangedAt?.toIso8601String(),
@@ -4509,6 +4621,8 @@ class BackgroundTask {
       retryDataAlreadySanitized: true,
       ocrPageOutcomes: _ocrPageOutcomesFromTaskMap(map['ocrPageOutcomes']),
       ocrCredentialValuesForSanitization: retryCredentialValues,
+      hasOcrErrorLocalizationCredentialCollision:
+          map['hasOcrErrorLocalizationCredentialCollision'] as bool? ?? false,
     );
   }
 }

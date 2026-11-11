@@ -1,6 +1,7 @@
 // ignore_for_file: invalid_use_of_visible_for_testing_member, invalid_use_of_protected_member
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -10,6 +11,8 @@ import 'package:image/image.dart' as img;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/l10n/app_localizations_en.dart';
+import 'package:stroom/l10n/app_localizations_es.dart';
+import 'package:stroom/l10n/app_localizations_ja.dart';
 import 'package:stroom/l10n/app_localizations_zh.dart';
 import 'package:stroom/models/tts_models.dart';
 import 'package:stroom/providers/background_task_provider.dart';
@@ -146,7 +149,8 @@ void main() {
     executions.addSubTask(execId, subTask);
   });
 
-  tearDown(() {
+  tearDown(() async {
+    await background.pendingPersistence;
     if (executions.mounted) executions.dispose();
     background.dispose();
     WebFileStore.disableTestMode();
@@ -268,6 +272,137 @@ void main() {
     expect(restoredTask.error, expectedError);
   }
 
+  Future<void> expectLocalizedFailureSummaries({
+    required AppLocalizations localizations,
+  }) async {
+    final restoredLocalizations = localizations is AppLocalizationsEn
+        ? AppLocalizationsZhCn()
+        : AppLocalizationsEn();
+
+    String localizeHiddenDetails(String detail, AppLocalizations target) {
+      final hiddenDetailsPrefixes = {
+        for (final locale in AppLocalizations.supportedLocales)
+          lookupAppLocalizations(locale).bgTaskOcrErrorDetailsHidden,
+      };
+      for (final hiddenDetailsPrefix in hiddenDetailsPrefixes) {
+        if (detail == hiddenDetailsPrefix) {
+          return target.bgTaskOcrErrorDetailsHidden;
+        }
+        if (detail.startsWith('$hiddenDetailsPrefix（') &&
+            detail.endsWith('）')) {
+          return '${target.bgTaskOcrErrorDetailsHidden}${detail.substring(hiddenDetailsPrefix.length)}';
+        }
+      }
+      return detail;
+    }
+
+    String localizedSummary(String detail, AppLocalizations target) =>
+        '${target.unifiedTaskOcrFailed}: ${localizeHiddenDetails(detail, target)}';
+
+    final source =
+        await File('${directory.path}/localized_failure.png').writeAsBytes(
+      _validPng(),
+    );
+    BlockExecutionException? estimatorFailure;
+    try {
+      await executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: source.path,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(
+          modelTypeConfig: {'userInstruction': 42},
+        ),
+        localizations: localizations,
+      );
+    } on BlockExecutionException catch (error) {
+      estimatorFailure = error;
+    }
+    expect(estimatorFailure, isNotNull);
+    final estimatorDetail = estimatorFailure!.message;
+    expect(estimatorDetail, isNotEmpty);
+    final estimatorTaskId =
+        executions.execution(execId)!.subTasks.single.subTaskId;
+    final estimatorTask = background.taskById(estimatorTaskId)!;
+    final estimatorSummary = localizedSummary(estimatorDetail, localizations);
+    expect(
+      estimatorTask.error,
+      estimatorSummary,
+    );
+    expect(estimatorTask.status, TaskStatus.failed);
+    expect(
+      executions.execution(execId)?.subTasks.single.status,
+      TaskStatus.failed,
+    );
+    await background.pendingPersistence;
+    final restoredEstimator = BackgroundTaskNotifier(
+      localizationsResolver: () => restoredLocalizations,
+    );
+    addTearDown(restoredEstimator.dispose);
+    expect(await restoredEstimator.restoreFromPersistence(), isTrue);
+    expect(
+      restoredEstimator.taskById(estimatorTask.id)?.error,
+      localizedSummary(estimatorDetail, restoredLocalizations),
+    );
+
+    BlockExecutionException? requestFailure;
+    try {
+      await executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: source.path,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(),
+        localizations: localizations,
+        requestOcr: (_, _) async =>
+            throw StateError('HTTP 429 finish_reason=test-key'),
+      );
+    } on BlockExecutionException catch (error) {
+      requestFailure = error;
+    }
+    expect(requestFailure, isNotNull);
+    final requestDetail = requestFailure!.message;
+    expect(requestDetail, isNotEmpty);
+    expect(requestDetail, contains('HTTP 429'));
+    expect(requestDetail, isNot(contains('test-key')));
+    final requestTaskId =
+        executions.execution(execId)!.subTasks.single.subTaskId;
+    final requestTask = background.taskById(requestTaskId)!;
+    final requestSummary = localizedSummary(requestDetail, localizations);
+    expect(
+      requestTask.error,
+      requestSummary,
+    );
+    expect(requestTask.status, TaskStatus.failed);
+    expect(
+      executions.execution(execId)?.subTasks.single.status,
+      TaskStatus.failed,
+    );
+    await background.pendingPersistence;
+    final persistedTasks = jsonDecode(
+      await File('${directory.path}/background/tasks.json').readAsString(),
+    ) as List<dynamic>;
+    final persistedRequest = persistedTasks
+        .map((row) => Map<String, dynamic>.from(row as Map))
+        .firstWhere((row) => row['id'] == requestTask.id);
+    expect(persistedRequest['error'], requestSummary);
+    final restoredRequest = BackgroundTaskNotifier(
+      localizationsResolver: () => restoredLocalizations,
+    );
+    addTearDown(restoredRequest.dispose);
+    expect(await restoredRequest.restoreFromPersistence(), isTrue);
+    expect(
+      restoredRequest.taskById(requestTask.id)?.error,
+      localizedSummary(requestDetail, restoredLocalizations),
+    );
+  }
+
   test('OCR uses payload bytes instead of the filename suffix', () async {
     final bytes = _validPng();
     final source =
@@ -377,6 +512,132 @@ void main() {
     await expectIncompleteOcrLocalization(
       localizations: AppLocalizationsZhCn(),
       expectedError: 'OCR 返回了不完整结果（finish_reason=length）',
+    );
+  });
+
+  test('OCR failure summaries are localized in English', () async {
+    await expectLocalizedFailureSummaries(localizations: AppLocalizationsEn());
+  });
+
+  test('OCR failure summaries are localized in Chinese', () async {
+    await expectLocalizedFailureSummaries(
+        localizations: AppLocalizationsZhCn());
+  });
+
+  test('OCR failure summaries are localized in Spanish', () async {
+    await expectLocalizedFailureSummaries(localizations: AppLocalizationsEs());
+  });
+
+  test('OCR failure summaries are localized in Japanese', () async {
+    await expectLocalizedFailureSummaries(localizations: AppLocalizationsJa());
+  });
+
+  test('OCR failure prefix credentials are not restored into task errors',
+      () async {
+    final source =
+        await File('${directory.path}/prefix_credential.png').writeAsBytes(
+      _validPng(),
+    );
+    final sourceLocalizations = AppLocalizationsEn();
+    final restoreLocalizations = AppLocalizationsZhCn();
+    final apiKey = sourceLocalizations.unifiedTaskOcrFailed;
+
+    await expectLater(
+      executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: source.path,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(
+          key: apiKey,
+          modelTypeConfig: {'userInstruction': 42},
+        ),
+        localizations: sourceLocalizations,
+      ),
+      throwsA(isA<BlockExecutionException>()),
+    );
+
+    final task = background.state.single;
+    expect(task.status, TaskStatus.failed);
+    expect(task.hasOcrErrorLocalizationCredentialCollision, isTrue);
+    expect(task.error, isNot(contains(apiKey)));
+    await background.pendingPersistence;
+
+    final persistedTasks = jsonDecode(
+      await File('${directory.path}/background/tasks.json').readAsString(),
+    ) as List<dynamic>;
+    final persistedTask = persistedTasks
+        .map((row) => Map<String, dynamic>.from(row as Map))
+        .singleWhere((row) => row['id'] == task.id);
+    expect(jsonEncode(persistedTask), isNot(contains(apiKey)));
+    expect(persistedTask['error'], isNot(contains(apiKey)));
+    expect(
+      persistedTask['hasOcrErrorLocalizationCredentialCollision'],
+      isTrue,
+    );
+
+    final restored = BackgroundTaskNotifier(
+      localizationsResolver: () => restoreLocalizations,
+    );
+    addTearDown(restored.dispose);
+    expect(await restored.restoreFromPersistence(), isTrue);
+    final restoredTask = restored.taskById(task.id)!;
+    expect(restoredTask.error, isNot(contains(apiKey)));
+    expect(restoredTask.hasOcrErrorLocalizationCredentialCollision, isTrue);
+  });
+
+  test('OCR status metadata never echoes an API key matching the status',
+      () async {
+    final source =
+        await File('${directory.path}/status_credential.png').writeAsBytes(
+      _validPng(),
+    );
+    const apiKey = '429';
+
+    await expectLater(
+      executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: source.path,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(key: apiKey),
+        localizations: AppLocalizationsEn(),
+        requestOcr: (_, _) async =>
+            throw StateError('HTTP 429 finish_reason=test-key'),
+      ),
+      throwsA(isA<BlockExecutionException>()),
+    );
+
+    final task = background.state.single;
+    expect(task.status, TaskStatus.failed);
+    expect(task.error, isNot(contains(apiKey)));
+    expect(task.error, isNot(contains('HTTP 429')));
+    await background.pendingPersistence;
+
+    final persistedTasks = jsonDecode(
+      await File('${directory.path}/background/tasks.json').readAsString(),
+    ) as List<dynamic>;
+    final persistedTask = persistedTasks
+        .map((row) => Map<String, dynamic>.from(row as Map))
+        .singleWhere((row) => row['id'] == task.id);
+    expect(persistedTask['error'], isNot(contains(apiKey)));
+    expect(persistedTask['error'], isNot(contains('HTTP 429')));
+
+    final restored = BackgroundTaskNotifier(
+      localizationsResolver: () => AppLocalizationsZhCn(),
+    );
+    addTearDown(restored.dispose);
+    expect(await restored.restoreFromPersistence(), isTrue);
+    expect(restored.taskById(task.id)?.error, isNot(contains(apiKey)));
+    expect(
+      restored.taskById(task.id)?.error,
+      isNot(contains('HTTP 429')),
     );
   });
 

@@ -1135,14 +1135,68 @@ void main() {
     expect(sanitized, isNot(contains('finish_reason=')));
   });
 
-  test('legacy task error details exclude an unsafe HTTP status token', () {
+  test('legacy task errors omit status when it matches an excluded value', () {
     final sanitized = OcrDiagnosticSnapshot.sanitizeStoredTaskError(
-      'OCR 请求失败 HTTP 503',
-      excludedValues: ['503'],
+      'OCR 请求失败 HTTP 503 token=private-secret',
+      excludedValues: ['503', 'private-secret'],
     )!;
 
     expect(sanitized, 'OCR 错误详情已隐藏');
-    expect(sanitized, isNot(contains('503')));
+    expect(sanitized, isNot(contains('private-secret')));
+  });
+
+  test('safe hidden summaries retain only unexcluded bounded status', () {
+    final sanitized = OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+      'OCR 错误详情已隐藏（HTTP 429，finish_reason=test-key）',
+      excludedValues: ['test-key'],
+    );
+
+    expect(sanitized, 'OCR 错误详情已隐藏（HTTP 429）');
+
+    final collidingStatus = OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+      'OCR 错误详情已隐藏（HTTP 429，finish_reason=test-key）',
+      excludedValues: ['429', 'test-key'],
+    );
+    expect(collidingStatus, 'OCR 错误详情已隐藏');
+
+    final lowercaseStatus = OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+      'OCR error details were hidden（http 429）',
+      excludedValues: ['429'],
+    );
+
+    expect(lowercaseStatus, 'OCR error details were hidden');
+
+    expect(
+      OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+        'Los detalles del error de OCR estaban ocultos（HTTP 429）',
+        excludedValues: ['429'],
+      ),
+      'Los detalles del error de OCR estaban ocultos',
+    );
+    expect(
+      OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+        'OCR エラーの詳細は非表示になりました（HTTP 429）',
+        excludedValues: ['429'],
+      ),
+      'OCR エラーの詳細は非表示になりました',
+    );
+    expect(
+      OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+        '错误详情已隐藏（HTTP 429，finish_reason=secret）',
+        excludedValues: ['OCR', '429', 'secret'],
+      ),
+      '错误详情已隐藏',
+    );
+  });
+
+  test('safe hidden summaries still exclude credentials in the hidden label',
+      () {
+    final sanitized = OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+      'OCR error details were hidden',
+      excludedValues: ['OCR'],
+    );
+
+    expect(sanitized, isNot(contains('OCR')));
   });
 
   test('safe Dio error types still honor recovered credential exclusions', () {

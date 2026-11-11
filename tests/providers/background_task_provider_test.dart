@@ -344,6 +344,150 @@ void main() {
       notifier.dispose();
     });
 
+    test(
+      'generic OCR hidden details with safe status relocalize after restore',
+      () async {
+        var strings = lookupAppLocalizations(const Locale('en', 'US'));
+        final notifier = BackgroundTaskNotifier(
+          localizationsResolver: () => strings,
+        );
+        final id = notifier.addTask(
+          type: BackgroundTaskType.ocr,
+          title: 'OCR',
+        );
+        notifier.failTask(
+          id,
+          error: '${strings.unifiedTaskOcrFailed}: 错误详情已隐藏（HTTP 429）',
+        );
+
+        expect(
+          notifier.taskById(id)!.error,
+          '${strings.unifiedTaskOcrFailed}: ${strings.bgTaskErrorDetailsHidden}（HTTP 429）',
+        );
+        await notifier.pendingPersistence;
+
+        strings = lookupAppLocalizations(const Locale('ja', 'JP'));
+        final restored = BackgroundTaskNotifier(
+          localizationsResolver: () => strings,
+        );
+        try {
+          expect(await restored.restoreFromPersistence(), isTrue);
+          expect(
+            restored.taskById(id)!.error,
+            '${strings.unifiedTaskOcrFailed}: ${strings.bgTaskErrorDetailsHidden}（HTTP 429）',
+          );
+        } finally {
+          restored.dispose();
+          await restored.pendingPersistence;
+          notifier.dispose();
+          await notifier.pendingPersistence;
+        }
+      },
+    );
+
+    test(
+      'restoring OCR error summaries cannot introduce another locale credential',
+      () async {
+        var strings = lookupAppLocalizations(const Locale('en', 'US'));
+        final spanishOcrHiddenLabel = lookupAppLocalizations(
+          const Locale('es'),
+        ).bgTaskOcrErrorDetailsHidden;
+        final notifier = BackgroundTaskNotifier(
+          localizationsResolver: () => strings,
+        );
+        final id = notifier.addTask(
+          type: BackgroundTaskType.ocr,
+          title: 'OCR',
+        );
+        notifier.failTask(
+          id,
+          error:
+              '${strings.unifiedTaskOcrFailed}: OCR error details were hidden（HTTP 429）',
+          ocrCredentialValuesForSanitization: [spanishOcrHiddenLabel],
+        );
+
+        final safeEnglishError = notifier.taskById(id)!.error!;
+        expect(safeEnglishError, contains('HTTP 429'));
+        expect(safeEnglishError, isNot(contains(spanishOcrHiddenLabel)));
+        expect(
+          notifier.taskById(id)!.hasOcrErrorLocalizationCredentialCollision,
+          isTrue,
+        );
+        await notifier.pendingPersistence;
+        final persistedRows = jsonDecode(
+          await _tasksFileIn(testDir.path).readAsString(),
+        ) as List<dynamic>;
+        final persistedTask = persistedRows
+            .map((row) => Map<String, dynamic>.from(row as Map))
+            .singleWhere((row) => row['id'] == id);
+        expect(persistedTask['hasOcrErrorLocalizationCredentialCollision'],
+            isTrue);
+
+        strings = lookupAppLocalizations(const Locale('es'));
+        final restored = BackgroundTaskNotifier(
+          localizationsResolver: () => strings,
+        );
+        try {
+          expect(await restored.restoreFromPersistence(), isTrue);
+          final restoredError = restored.taskById(id)!.error!;
+          expect(restoredError, safeEnglishError);
+          expect(restoredError, isNot(contains(spanishOcrHiddenLabel)));
+        } finally {
+          restored.dispose();
+          await restored.pendingPersistence;
+          notifier.dispose();
+          await notifier.pendingPersistence;
+        }
+      },
+    );
+
+    test(
+      'restoring OCR errors cannot introduce an excluded localized prefix',
+      () async {
+        var strings = lookupAppLocalizations(const Locale('en', 'US'));
+        final japaneseOcrErrorPrefix = lookupAppLocalizations(
+          const Locale('ja'),
+        ).bgTaskOcrError('');
+        final notifier = BackgroundTaskNotifier(
+          localizationsResolver: () => strings,
+        );
+        final id = notifier.addTask(
+          type: BackgroundTaskType.ocr,
+          title: 'OCR',
+        );
+        notifier.failTask(
+          id,
+          error: 'OCR failed: OCR error details were hidden（HTTP 429）',
+          ocrCredentialValuesForSanitization: [japaneseOcrErrorPrefix],
+        );
+
+        final safeEnglishError = notifier.taskById(id)!.error!;
+        expect(safeEnglishError, contains('HTTP 429'));
+        expect(safeEnglishError, isNot(contains(japaneseOcrErrorPrefix)));
+        expect(
+          notifier.taskById(id)!.hasOcrErrorLocalizationCredentialCollision,
+          isTrue,
+        );
+        await notifier.pendingPersistence;
+
+        strings = lookupAppLocalizations(const Locale('ja'));
+        final restored = BackgroundTaskNotifier(
+          localizationsResolver: () => strings,
+        );
+        try {
+          expect(await restored.restoreFromPersistence(), isTrue);
+          final restoredError = restored.taskById(id)!.error!;
+          expect(restoredError, safeEnglishError);
+          expect(restoredError, isNot(contains(japaneseOcrErrorPrefix)));
+        } finally {
+          restored.dispose();
+          await restored.pendingPersistence;
+          notifier.dispose();
+          await notifier.pendingPersistence;
+        }
+      },
+    );
+
     test('stored ASR and OCR error wrappers localize without changing details',
         () async {
       var strings = lookupAppLocalizations(const Locale('zh', 'CN'));

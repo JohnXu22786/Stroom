@@ -425,10 +425,6 @@ class OcrDiagnosticSnapshot {
         return candidate;
       }
     }
-    if (detailsText.isNotEmpty &&
-        !containsCredential(detailsText, excludedValues: exclusions)) {
-      return detailsText;
-    }
     return '';
   }
 
@@ -440,6 +436,11 @@ class OcrDiagnosticSnapshot {
   }) {
     if (value == null || value.isEmpty) return value;
     final credentialValues = excludedValues.toList(growable: false);
+    final safeHiddenSummary = _sanitizeSafeHiddenTaskErrorSummary(
+      value,
+      excludedValues: credentialValues,
+    );
+    if (safeHiddenSummary != null) return safeHiddenSummary;
     if (value.length <= _maxTextLength) {
       var safeDioCandidate = value;
       while (true) {
@@ -485,8 +486,13 @@ class OcrDiagnosticSnapshot {
       caseSensitive: false,
     ).firstMatch(value)?.group(1);
     final details = <String>[
+      // Keep parsed bounded status metadata only when it does not match an
+      // explicitly excluded credential value.
       if (statusCode != null &&
-          !containsCredential(statusCode, excludedValues: credentialValues))
+          !containsCredential(
+            'HTTP $statusCode',
+            excludedValues: credentialValues,
+          ))
         'HTTP $statusCode',
       if (_safeReason(
         RegExp(
@@ -571,7 +577,18 @@ class OcrDiagnosticSnapshot {
     String value, {
     Iterable<String> excludedValues = const [],
   }) {
-    const prefixes = ['OCR 错误详情已隐藏', '错误详情已隐藏', '请求失败', '请重试'];
+    const prefixes = [
+      'OCR 错误详情已隐藏',
+      'OCR error details were hidden',
+      'Los detalles del error de OCR estaban ocultos',
+      'OCR エラーの詳細は非表示になりました',
+      '错误详情已隐藏',
+      'Error details were hidden',
+      'Los detalles del error estaban ocultos',
+      'エラーの詳細は非表示になりました',
+      '请求失败',
+      '请重试',
+    ];
     for (final prefix in prefixes) {
       if (value == prefix) return true;
       if (!value.startsWith('$prefix（') || !value.endsWith('）')) continue;
@@ -595,6 +612,56 @@ class OcrDiagnosticSnapshot {
       });
     }
     return false;
+  }
+
+  static String? _sanitizeSafeHiddenTaskErrorSummary(
+    String value, {
+    required Iterable<String> excludedValues,
+  }) {
+    if (value.length > _maxTextLength) return null;
+    const prefixes = [
+      'OCR 错误详情已隐藏',
+      'OCR error details were hidden',
+      'Los detalles del error de OCR estaban ocultos',
+      'OCR エラーの詳細は非表示になりました',
+      '错误详情已隐藏',
+      'Error details were hidden',
+      'Los detalles del error estaban ocultos',
+      'エラーの詳細は非表示になりました',
+    ];
+    for (final prefix in prefixes) {
+      if (containsCredential(prefix, excludedValues: excludedValues)) {
+        continue;
+      }
+      if (value == prefix) return value;
+      if (!value.startsWith('$prefix（') || !value.endsWith('）')) continue;
+
+      final details = value.substring(prefix.length + 1, value.length - 1);
+      final parts = details.split('，');
+      if (parts.isEmpty || parts.length > 2) return null;
+      final safeParts = <String>[];
+      for (final part in parts) {
+        if (RegExp(
+          r'^HTTP\s+[1-5]\d{2}$',
+          caseSensitive: false,
+        ).hasMatch(part)) {
+          if (!containsCredential(part, excludedValues: excludedValues)) {
+            safeParts.add(part);
+          }
+          continue;
+        }
+        final finishReason = RegExp(
+          r'^finish_reason=([A-Za-z0-9_-]{1,48})$',
+        ).firstMatch(part)?.group(1);
+        if (finishReason != null &&
+            _safeReason(finishReason, excludedValues: excludedValues) ==
+                finishReason) {
+          safeParts.add(part);
+        }
+      }
+      return safeParts.isEmpty ? prefix : '$prefix（${safeParts.join('，')}）';
+    }
+    return null;
   }
 
   /// Whether text contains a credential-shaped value or a supplied secret.
