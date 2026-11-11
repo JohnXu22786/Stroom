@@ -622,7 +622,8 @@ void main() {
       );
       notifier.failTask(
         id,
-        error: 'Unexpected provider failure: Bearer opaque-provider-… (HTTP 429)',
+        error:
+            'Unexpected provider failure: Bearer opaque-provider-… (HTTP 429)',
         rawRequest: {
           'headers': {'Authorization': 'Bearer $credential'},
         },
