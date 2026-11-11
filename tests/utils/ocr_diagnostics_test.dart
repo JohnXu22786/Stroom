@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations_ar.dart';
 import 'package:stroom/l10n/app_localizations_de.dart';
 import 'package:stroom/l10n/app_localizations_es.dart';
 import 'package:stroom/l10n/app_localizations_fr.dart';
@@ -10,6 +11,57 @@ import 'package:stroom/l10n/app_localizations_pt.dart';
 import 'package:stroom/utils/ocr_diagnostics.dart';
 
 void main() {
+  test('Arabic OCR summaries stay safe and actionable after persistence', () {
+    final locales = [AppLocalizationsAr(), AppLocalizationsArSa()];
+
+    for (final localizations in locales) {
+      final requestLimit = localizations.taskFlowOcrRequestSizeLimit('1.25');
+      final inputLimit = localizations.taskFlowImageInputSizeLimit('20.00');
+      final summaries = [
+        localizations.taskFlowOcrInputMissing,
+        localizations.taskFlowOcrInputReadFailed,
+        localizations.taskFlowOcrModelUnavailable,
+        localizations.taskFlowOcrInputTooLarge(requestLimit),
+        localizations.taskFlowOcrInputTooLarge(inputLimit),
+        localizations.ocrImageEmpty,
+        localizations.ocrImageUnsupportedFormat,
+        localizations.ocrImageUnsupportedSpecialFormat,
+        localizations.ocrImageDecodeFailed,
+        localizations.ocrImageDimensionsTooLarge,
+        localizations.ocrImageOrientationPngTooLarge,
+        localizations.ocrImageOrientationFailed,
+        localizations.ocrImagePreparationFailed,
+      ];
+
+      for (final summary in summaries) {
+        expect(
+          OcrDiagnosticSnapshot.sanitizeStoredTaskError(summary),
+          summary,
+        );
+      }
+
+      expect(
+        OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+          localizations.taskFlowOcrInputMissing,
+          excludedValues: ['الصورة'],
+        ),
+        'OCR 错误详情已隐藏',
+      );
+      expect(
+        OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+          'فشل OCR: private provider response',
+        ),
+        'OCR 错误详情已隐藏',
+      );
+      expect(
+        OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+          '${localizations.taskFlowOcrInputMissing} sk-proj-12345678',
+        ),
+        'OCR 错误详情已隐藏',
+      );
+    }
+  });
+
   test('German OCR summaries stay safe and actionable after persistence', () {
     final locales = [AppLocalizationsDe(), AppLocalizationsDeDe()];
 
