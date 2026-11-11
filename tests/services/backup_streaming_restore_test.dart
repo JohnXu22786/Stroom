@@ -62,16 +62,17 @@ void main() {
     List<Map<String, dynamic>> videoRecords = const [],
     List<Map<String, dynamic>> textRecords = const [],
     Map<String, Uint8List> files = const {},
+    List<String>? dataParts,
     int version = 2,
   }) {
     final archive = Archive();
-    final manifest = utf8.encode(
-      jsonEncode({
-        'version': version,
-        'createdAt': DateTime.now().toIso8601String(),
-        'appVersion': 'test',
-      }),
-    );
+    final manifestData = <String, dynamic>{
+      'version': version,
+      'createdAt': DateTime.now().toIso8601String(),
+      'appVersion': 'test',
+    };
+    if (dataParts != null) manifestData['dataParts'] = dataParts;
+    final manifest = utf8.encode(jsonEncode(manifestData));
     archive.addFile(ArchiveFile('manifest.json', manifest.length, manifest));
     final dbData = {
       'image_records': imageRecords,
@@ -202,7 +203,9 @@ void main() {
     expect(records[0]['id'], equals('v_deflate'));
   });
 
-  test('case-only media destination collisions fail before selected files are cleared', () async {
+  test(
+      'case-only media destination collisions fail before selected files are cleared',
+      () async {
     const selection = BackupSelection(
       chatRecordsAndAttachments: false,
       settings: false,
@@ -220,6 +223,17 @@ void main() {
       pictures: true,
       audio: false,
       videos: false,
+      texts: false,
+      tasks: false,
+      ankiData: false,
+      browserCookies: false,
+    );
+    const picturesVideosAndAttachmentsSelection = BackupSelection(
+      chatRecordsAndAttachments: true,
+      settings: false,
+      pictures: true,
+      audio: false,
+      videos: true,
       texts: false,
       tasks: false,
       ankiData: false,
@@ -300,9 +314,8 @@ void main() {
       addJson('task_flows/flows.json', []);
       addJson('task_flows/executions.json', []);
       final attachmentBytes = Uint8List.fromList([32, 33]);
-      final taskAttachmentBytes = sameContent
-          ? attachmentBytes
-          : Uint8List.fromList([34, 35]);
+      final taskAttachmentBytes =
+          sameContent ? attachmentBytes : Uint8List.fromList([34, 35]);
       archive.addFile(
         ArchiveFile(
           'attachments/shared.txt',
@@ -484,8 +497,8 @@ void main() {
       );
 
       var browserRestorePreparationEntered = false;
-      BrowserProfileService.onPrepareForRestoreForTesting = () =>
-          browserRestorePreparationEntered = true;
+      BrowserProfileService.onPrepareForRestoreForTesting =
+          () => browserRestorePreparationEntered = true;
       final browserCollisionZip = await writeArchive(
         buildV2Archive(
           files: {
@@ -506,7 +519,8 @@ void main() {
       expect(
         browserRestorePreparationEntered,
         isFalse,
-        reason: 'collision preflight must preserve an existing browser restore staging directory',
+        reason:
+            'collision preflight must preserve an existing browser restore staging directory',
       );
       BrowserProfileService.onPrepareForRestoreForTesting = null;
       await BackupService.restoreBackup(
@@ -516,7 +530,8 @@ void main() {
       expect(
         await readBackupFile('pictures', 'existing.jpg'),
         equals(original),
-        reason: 'database-only Anki restore must ignore unselected media collisions',
+        reason:
+            'database-only Anki restore must ignore unselected media collisions',
       );
 
       final prefixCollisionZip = await writeArchive(
@@ -541,6 +556,119 @@ void main() {
         reason:
             'file/directory prefix collisions must fail before clearing media',
       );
+
+      final symlinkAppDirectory = '$workDir/restore_root_aliases';
+      final sharedMediaDirectory = '$symlinkAppDirectory/shared';
+      final videoMediaDirectory = '$symlinkAppDirectory/video';
+      await Directory(sharedMediaDirectory).create(recursive: true);
+      await Directory(videoMediaDirectory).create(recursive: true);
+      await Link('$symlinkAppDirectory/pictures').create(sharedMediaDirectory);
+      await Link('$symlinkAppDirectory/attachments').create(
+        sharedMediaDirectory,
+      );
+      await Link('$symlinkAppDirectory/videos').create(videoMediaDirectory);
+      await Link('$sharedMediaDirectory/alias').create(videoMediaDirectory);
+      BackupService.restoreAppDirectoryForTesting = symlinkAppDirectory;
+      final categoryRootSymlinkCollisionZip = await writeArchive(
+        buildV2Archive(
+          imageRecords: [
+            {
+              'id': 'shared-picture',
+              'name': 'shared-picture',
+              'hash': 'shared',
+              'format': 'bin',
+              'createdAt': '2026-01-01T00:00:00.000',
+              'size': 1,
+              'folder': '',
+            },
+          ],
+          videoRecords: [
+            {
+              'id': 'root-video',
+              'name': 'root-video',
+              'hash': 'root-video',
+              'format': 'bin',
+              'createdAt': '2026-01-01T00:00:00.000',
+              'size': 1,
+              'folder': '',
+            },
+          ],
+          dataParts: [DataParts.chat, DataParts.pictures, DataParts.videos],
+          files: {
+            'chat_data.json': Uint8List.fromList(
+              utf8.encode('{"conversations":"[]"}'),
+            ),
+            'pictures/shared.bin': Uint8List.fromList([45]),
+            'attachments/shared.bin': Uint8List.fromList([46]),
+            'videos/root-video.bin': Uint8List.fromList([50]),
+          },
+        ),
+        'category_root_symlink_collision.zip',
+      );
+      await expectLater(
+        BackupService.restoreBackup(
+          categoryRootSymlinkCollisionZip,
+          selection: picturesVideosAndAttachmentsSelection,
+        ),
+        throwsA(isA<DataManagementPreflightException>()),
+      );
+      expect(
+        await readBackupFile('pictures', 'existing.jpg'),
+        equals(original),
+        reason:
+            'category roots that resolve to the same directory must collide before clearing',
+      );
+
+      final nestedSymlinkCollisionZip = await writeArchive(
+        buildV2Archive(
+          imageRecords: [
+            {
+              'id': 'shared-picture',
+              'name': 'shared-picture',
+              'hash': 'shared',
+              'format': 'bin',
+              'createdAt': '2026-01-01T00:00:00.000',
+              'size': 1,
+              'folder': '',
+            },
+          ],
+          videoRecords: [
+            {
+              'id': 'nested-video',
+              'name': 'nested-video',
+              'hash': 'nested',
+              'format': 'bin',
+              'createdAt': '2026-01-01T00:00:00.000',
+              'size': 1,
+              'folder': '',
+            },
+          ],
+          dataParts: [DataParts.chat, DataParts.pictures, DataParts.videos],
+          files: {
+            'chat_data.json': Uint8List.fromList(
+              utf8.encode('{"conversations":"[]"}'),
+            ),
+            'pictures/shared.bin': Uint8List.fromList([47]),
+            'pictures/alias/nested.bin': Uint8List.fromList([48]),
+            'videos/nested.bin': Uint8List.fromList([49]),
+          },
+        ),
+        'nested_symlink_collision.zip',
+      );
+      await expectLater(
+        BackupService.restoreBackup(
+          nestedSymlinkCollisionZip,
+          selection: picturesVideosAndAttachmentsSelection,
+        ),
+        throwsA(isA<DataManagementPreflightException>()),
+      );
+      expect(
+        await readBackupFile('pictures', 'existing.jpg'),
+        equals(original),
+        reason:
+            'nested symlink destinations must collide before selected files are cleared',
+      );
+      BackupService.restoreAppDirectoryForTesting = null;
 
       final expansionPrefixZip = await writeArchive(
         buildV2Archive(
@@ -687,7 +815,8 @@ void main() {
       expect(
         await readBackupFile('attachments', 'existing.jpg'),
         equals(originalAttachment),
-        reason: 'different-content shared attachment aliases must fail before clearing files',
+        reason:
+            'different-content shared attachment aliases must fail before clearing files',
       );
 
       SharedPreferences.setMockInitialValues({
@@ -719,7 +848,8 @@ void main() {
       expect(
         await readBackupFile('attachments', 'foo.'),
         equals(protectedAttachmentBytes),
-        reason: 'Windows-equivalent unselected chat attachment references must be preserved',
+        reason:
+            'Windows-equivalent unselected chat attachment references must be preserved',
       );
       SharedPreferences.setMockInitialValues({});
 
@@ -788,7 +918,8 @@ void main() {
       expect(
         await readBackupFile('pictures', 'existing.jpg'),
         equals(original),
-        reason: 'normalization collision must also fail before selected files are cleared',
+        reason:
+            'normalization collision must also fail before selected files are cleared',
       );
       await expectLater(
         BackupService.restoreBackup(
@@ -872,6 +1003,7 @@ void main() {
       BackupService.restorePathsCaseExpansionInsensitiveForTesting = null;
       BackupService.restorePathsWindowsNameNormalizationInsensitiveForTesting =
           null;
+      BackupService.restoreAppDirectoryForTesting = null;
       WebFileStore.disableTestMode();
     }
   });
@@ -1732,20 +1864,19 @@ int _zipCrc32(List<int> bytes) {
   for (final byte in bytes) {
     checksum ^= byte;
     for (var bit = 0; bit < 8; bit++) {
-      checksum = (checksum & 1) != 0
-          ? (checksum >> 1) ^ 0xedb88320
-          : checksum >> 1;
+      checksum =
+          (checksum & 1) != 0 ? (checksum >> 1) ^ 0xedb88320 : checksum >> 1;
     }
   }
   return (checksum ^ 0xffffffff) & 0xffffffff;
 }
 
 Uint8List _le32(int v) => Uint8List.fromList([
-  v & 0xff,
-  (v >> 8) & 0xff,
-  (v >> 16) & 0xff,
-  (v >> 24) & 0xff,
-]);
+      v & 0xff,
+      (v >> 8) & 0xff,
+      (v >> 16) & 0xff,
+      (v >> 24) & 0xff,
+    ]);
 
 Uint8List _le64(int v) {
   final b = Uint8List(8);
