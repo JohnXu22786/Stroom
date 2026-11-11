@@ -917,6 +917,7 @@ void main() {
           const Locale('es'),
           const Locale('ja'),
           const Locale('ko'),
+          const Locale('pt', 'BR'),
         ]) {
           final taskId = 'ocr-removal-stale-failure-${locale.languageCode}';
           SharedPreferences.setMockInitialValues({
