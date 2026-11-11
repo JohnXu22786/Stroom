@@ -47,6 +47,20 @@ class OcrDiagnosticSnapshot {
     'The image resolution is too large. OCR supports up to 50 million pixels per image. Resize it and try again.',
     'The PNG needed to correct this image orientation would exceed the OCR request size limit. Resize the image and try again.',
     'The image orientation could not be corrected. Convert it to PNG, JPEG, or WebP and try again.',
+    'La imagen está vacía. Selecciónelo nuevamente.',
+    'Este formato de imagen no es compatible. Conviértelo a PNG, JPEG o WebP e inténtalo de nuevo.',
+    'Las imágenes HEIC, SVG y TIFF aún no son compatibles. Convierta la imagen a PNG, JPEG o WebP e inténtelo de nuevo.',
+    'La imagen está dañada o no se puede decodificar. Selecciónelo nuevamente o conviértalo a PNG, JPEG o WebP e inténtelo nuevamente.',
+    'La resolución de la imagen es demasiado grande. OCR admite hasta 50 millones de píxeles por imagen. Cambie su tamaño e inténtelo de nuevo.',
+    'El PNG necesario para corregir la orientación de esta imagen excedería el límite de tamaño de la solicitud de OCR. Cambie el tamaño de la imagen e inténtelo de nuevo.',
+    'No se pudo corregir la orientación de la imagen. Conviértelo a PNG, JPEG o WebP e inténtalo de nuevo.',
+    '画像は空です。もう一度選択してください。',
+    'この画像形式はサポートされていません。 PNG、JPEG、または WebP に変換して、再試行してください。',
+    'HEIC、SVG、TIFF 画像はまだサポートされていません。画像を PNG、JPEG、または WebP に変換して、再試行してください。',
+    '画像が破損しているか、デコードできません。再度選択するか、PNG、JPEG、または WebP に変換して再試行してください。',
+    '画像の解像度が大きすぎます。 OCR は、画像あたり最大 5,000 万ピクセルをサポートします。サイズを変更して再試行してください。',
+    'この画像の方向を修正するために必要な PNG は、OCR リクエストのサイズ制限を超えます。画像のサイズを変更して再試行してください。',
+    '画像の向きを補正できませんでした。 PNG、JPEG、または WebP に変換して、再試行してください。',
     'OCR request failed',
     'OCR失败',
     '上传超时',
@@ -74,6 +88,9 @@ class OcrDiagnosticSnapshot {
     'OCR 未识别到文字内容',
     'OCR 未识别到文字内容（content 列表为空）',
     'OCR 返回了异常内容（仅包含 JSON 括号），请检查 API 返回格式或更换模型',
+  };
+  static const _longSafeStoredTaskErrorSummaries = {
+    'El PNG necesario para corregir la orientación de esta imagen excedería el límite de tamaño de la solicitud de OCR. Cambie el tamaño de la imagen e inténtelo de nuevo.',
   };
   static const _storedTaskErrorWrappers = [
     'OCR识别失败: ',
@@ -471,7 +488,8 @@ class OcrDiagnosticSnapshot {
       value,
       excludedValues: credentialValues,
     );
-    if (value.length <= _maxTextLength &&
+    if ((value.length <= _maxTextLength ||
+            _longSafeStoredTaskErrorSummaries.contains(value)) &&
         !containsProviderBody &&
         !containsCredentialValue &&
         _isKnownSafeStoredTaskErrorSummary(

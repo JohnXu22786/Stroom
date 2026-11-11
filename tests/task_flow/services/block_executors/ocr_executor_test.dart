@@ -214,6 +214,43 @@ void main() {
     );
   }
 
+  Future<void> expectPersistedPayloadFailure({
+    required AppLocalizations localizations,
+  }) async {
+    final source = await File(
+      '${directory.path}/corrupt_${localizations.localeName}.png',
+    ).writeAsBytes([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]);
+    final expectedError = localizations.ocrImageDecodeFailed;
+
+    await expectPreflightFailure(
+      expectedError: expectedError,
+      execute: () => executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: source.path,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(),
+        localizations: localizations,
+      ),
+    );
+
+    await background.pendingPersistence;
+    final restored = BackgroundTaskNotifier(
+      localizationsResolver: () => localizations,
+    );
+    addTearDown(restored.dispose);
+    expect(await restored.restoreFromPersistence(), isTrue);
+    expect(
+      restored.taskById(background.state.single.id)?.error,
+      expectedError,
+      reason:
+          'the stored TaskFlow summary should retain the locale-specific cause',
+    );
+  }
+
   Future<void> expectIncompleteOcrLocalization({
     required AppLocalizations localizations,
     required String expectedError,
@@ -806,6 +843,16 @@ void main() {
         localizations: localizations,
       ),
     );
+  });
+
+  test('OCR preserves Spanish payload failure summaries in task storage',
+      () async {
+    await expectPersistedPayloadFailure(localizations: AppLocalizationsEs());
+  });
+
+  test('OCR preserves Japanese payload failure summaries in task storage',
+      () async {
+    await expectPersistedPayloadFailure(localizations: AppLocalizationsJa());
   });
 
   test('OCR rejects files above the flow image limit before reading', () async {
