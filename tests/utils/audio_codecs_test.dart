@@ -331,7 +331,8 @@ void main() {
       expect(flac.isNotEmpty, true);
     });
 
-    test('partitions partial FLAC frame residuals by the declared block size', () {
+    test('partitions partial FLAC frame residuals by the declared block size',
+        () {
       for (final blockLength in [200, 257, 1025, 4095, 4096]) {
         final pcm = Int16List(blockLength)..fillRange(0, blockLength, 1000);
         final flac = encodeFlac(pcm, sampleRate: 16000);
@@ -345,7 +346,8 @@ void main() {
         final expectedPartitionSamples = blockLength ~/ partitions;
 
         expect(layout.partitionOrder, expectedOrder,
-            reason: '$blockLength samples must use a divisible partition order');
+            reason:
+                '$blockLength samples must use a divisible partition order');
         expect(layout.residualCounts, hasLength(partitions));
         expect(
           layout.residualCounts.first,
