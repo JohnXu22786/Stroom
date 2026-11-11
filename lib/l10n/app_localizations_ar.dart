@@ -11944,6 +11944,10 @@ class AppLocalizationsAr extends AppLocalizations {
     );
     return 'هل تريد حذف المجلد الفارغ «$name»؟ سيُحذف أيضًا $_temp0';
   }
+
+  @override
+  String get providerMaxUploadSizePositive =>
+      'يجب أن يكون الحد الأقصى لحجم الرفع رقمًا موجبًا.';
 }
 
 /// The translations for Arabic, as used in Saudi Arabia (`ar_SA`).
@@ -23885,4 +23889,8 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
     );
     return 'هل تريد حذف المجلد الفارغ «$name»؟ سيُحذف أيضًا $_temp0';
   }
+
+  @override
+  String get providerMaxUploadSizePositive =>
+      'يجب أن يكون الحد الأقصى لحجم الرفع رقمًا موجبًا.';
 }

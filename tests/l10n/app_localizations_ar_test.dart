@@ -65,6 +65,10 @@ void main() {
     expect(strings.localeName, 'ar_SA');
     expect(strings.languageSettingsTitle, isNotEmpty);
     expect(strings.languageNameEnglish, 'الإنجليزية');
+    expect(
+      strings.providerMaxUploadSizePositive,
+      'يجب أن يكون الحد الأقصى لحجم الرفع رقمًا موجبًا.',
+    );
     expect([0, 1, 2, 3, 11, 100].map(strings.taskFlowTemplateCount).toList(), [
       'لا قوالب',
       '1 قالب',

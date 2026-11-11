@@ -7018,5 +7018,6 @@
   "languageNameFrench": "الفرنسية",
   "languageNameGerman": "الألمانية",
   "languageNameArabic": "العربية",
-  "fileManagerDeleteEmptyFolderWithSubfoldersConfirm": "هل تريد حذف المجلد الفارغ «{name}»؟ سيُحذف أيضًا {count, plural, zero{0 مجلدات فرعية.} one{مجلد فرعي واحد.} two{مجلدان فرعيان.} few{{count} مجلدات فرعية.} many{{count} مجلدًا فرعيًا.} other{{count} مجلد فرعي.}}"
+  "fileManagerDeleteEmptyFolderWithSubfoldersConfirm": "هل تريد حذف المجلد الفارغ «{name}»؟ سيُحذف أيضًا {count, plural, zero{0 مجلدات فرعية.} one{مجلد فرعي واحد.} two{مجلدان فرعيان.} few{{count} مجلدات فرعية.} many{{count} مجلدًا فرعيًا.} other{{count} مجلد فرعي.}}",
+  "providerMaxUploadSizePositive": "يجب أن يكون الحد الأقصى لحجم الرفع رقمًا موجبًا."
 }
