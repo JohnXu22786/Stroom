@@ -675,31 +675,33 @@ Map<String, dynamic> _modelJson(
   String name, {
   int did = 1,
   int? templateDid,
-}) => {
-  'id': id,
-  'name': name,
-  'type': 0,
-  'mod': 1,
-  'usn': -1,
-  'sortf': 0,
-  'did': did,
-  'flds': [
-    {'name': 'Front', 'ord': 0},
-    {'name': 'Back', 'ord': 1},
-  ],
-  'tmpls': [
+}) =>
     {
-      'name': 'Card 1',
-      'ord': 0,
-      'qfmt': '{{Front}}',
-      'afmt': '{{Back}}',
-      'did': ?templateDid,
-    },
-  ],
-  'css': '',
-  'req': [],
-  'tags': [],
-  'latexPre': '',
-  'latexPost': '',
-  'latex': 'dvipng',
-};
+      'id': id,
+      'name': name,
+      'type': 0,
+      'mod': 1,
+      'usn': -1,
+      'sortf': 0,
+      'did': did,
+      'flds': [
+        {'name': 'Front', 'ord': 0},
+        {'name': 'Back', 'ord': 1},
+      ],
+      'tmpls': [
+        {
+          'name': 'Card 1',
+          'ord': 0,
+          'qfmt': '{{Front}}',
+          'afmt': '{{Back}}',
+          // ignore: use_null_aware_elements
+          if (templateDid != null) 'did': templateDid,
+        },
+      ],
+      'css': '',
+      'req': [],
+      'tags': [],
+      'latexPre': '',
+      'latexPost': '',
+      'latex': 'dvipng',
+    };

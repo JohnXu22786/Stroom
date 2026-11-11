@@ -216,12 +216,15 @@ class AnkiApkgImporter {
         }
 
         // Write back merged decks
-        await txn.update('col', {
-          'decks': jsonEncode(tgtDecks),
-          'models': jsonEncode(tgtModels),
-          'mod': now,
-          'dty': 1,
-        }, where: 'id = 1');
+        await txn.update(
+            'col',
+            {
+              'decks': jsonEncode(tgtDecks),
+              'models': jsonEncode(tgtModels),
+              'mod': now,
+              'dty': 1,
+            },
+            where: 'id = 1');
 
         // We also need to update the decks in the col row's conf activeDecks list
         // but for simplicity, we'll just merge and leave the active deck as-is
