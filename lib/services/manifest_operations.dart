@@ -275,7 +275,7 @@ class ManifestOperations<T extends FileRecord> {
       throw ArgumentError.value(
         fileName,
         'fileName',
-        'Audio storage file names must be a single path component.',
+        'Manifest storage file names must be a single path component.',
       );
     }
     return fileName;
