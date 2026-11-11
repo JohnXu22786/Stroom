@@ -653,16 +653,29 @@ void _writeRiceResiduals(_BitWriter bits, List<int> residuals, int order) {
     }
     if (k > _flacMaxRiceParam) k = _flacMaxRiceParam;
 
-    // Rice parameter (4 bits)
-    bits.write(k, 4);
-
-    // Escape code: if k == 15, use verbatim
+    // Rice parameter 15 is the Rice4 escape marker; parameter 14 remains a
+    // normal Rice code. Values that reach 14 use verbatim residuals here.
     if (k >= _flacMaxRiceParam) {
-      // Encode verbatim
+      var rawWidth = 0;
       for (int i = start; i < end; i++) {
-        bits.write(residuals[i] & 0xFFFF, 16);
+        final residual = residuals[i];
+        var width = 1;
+        while (
+            residual < -(1 << (width - 1)) || residual >= (1 << (width - 1))) {
+          width++;
+        }
+        if (width > rawWidth) rawWidth = width;
+      }
+
+      bits.write(15, 4); // Rice4 escape marker.
+      bits.write(rawWidth, 5); // Verbatim signed residual width.
+      for (int i = start; i < end; i++) {
+        bits.write(residuals[i] & ((1 << rawWidth) - 1), rawWidth);
       }
     } else {
+      // Rice parameter (4 bits)
+      bits.write(k, 4);
+
       // Rice encode each residual
       for (int i = start; i < end; i++) {
         final r = residuals[i];
