@@ -59,9 +59,11 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
           context: context,
           builder: (dialogContext) => AlertDialog(
             title: Text(isZh ? '助手有更新' : 'Assistant update available'),
-            content: Text(isZh
-                ? '${assistant.name} 有新版本 ${update.definition.version}。现在查看并更新吗？'
-                : '${assistant.name} has version ${update.definition.version}. Review and update now?'),
+            content: Text(
+              isZh
+                  ? '${assistant.name} 有新版本 ${update.definition.version}。现在查看并更新吗？'
+                  : '${assistant.name} has version ${update.definition.version}. Review and update now?',
+            ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(dialogContext).pop(false),
@@ -82,9 +84,8 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              AppLocalizations.of(context)!.topicAssistantUpdateCheckFailed(
-                error.toString(),
-              ),
+              AppLocalizations.of(context)!
+                  .topicAssistantUpdateCheckFailed(error.toString()),
             ),
           ),
         );
@@ -160,7 +161,9 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
       defaultProviderName: (remoteModel ?? existingModel)?.providerName,
       defaultToolNames: requestedTools ?? assistant.defaultToolNames,
     );
-    ref.read(assistantProvider.notifier).updateRemoteAssistant(
+    ref
+        .read(assistantProvider.notifier)
+        .updateRemoteAssistant(
           localId: assistant.id,
           replacement: replacement,
           remoteVersion: definition.version,
@@ -225,7 +228,8 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
             style: TextButton.styleFrom(
-                foregroundColor: Theme.of(context).colorScheme.error),
+              foregroundColor: Theme.of(context).colorScheme.error,
+            ),
             child: Text(l10n.actionDelete),
           ),
         ],
@@ -278,9 +282,11 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(l10n.conversationDeleteTitle),
-        content: Text(l10n.conversationDeleteNamed(
-          topic.title.isEmpty ? l10n.conversationNew : topic.title,
-        )),
+        content: Text(
+          l10n.conversationDeleteNamed(
+            topic.title.isEmpty ? l10n.conversationNew : topic.title,
+          ),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
@@ -291,7 +297,8 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
               Navigator.pop(ctx, true);
             },
             style: TextButton.styleFrom(
-                foregroundColor: Theme.of(context).colorScheme.error),
+              foregroundColor: Theme.of(context).colorScheme.error,
+            ),
             child: Text(l10n.actionDelete),
           ),
         ],
@@ -418,18 +425,24 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.chat_bubble_outline,
-              size: 48, color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
+          Icon(
+            Icons.chat_bubble_outline,
+            size: 48,
+            color: cs.onSurfaceVariant.withValues(alpha: 0.4),
+          ),
           const SizedBox(height: 16),
           Text(
             l10n.topicSelectionEmptyTitle,
             style: TextStyle(color: cs.onSurfaceVariant),
           ),
           const SizedBox(height: 8),
-          Text(l10n.topicSelectionEmptyMessage,
-              style: TextStyle(
-                  fontSize: 13,
-                  color: cs.onSurfaceVariant.withValues(alpha: 0.7))),
+          Text(
+            l10n.topicSelectionEmptyMessage,
+            style: TextStyle(
+              fontSize: 13,
+              color: cs.onSurfaceVariant.withValues(alpha: 0.7),
+            ),
+          ),
         ],
       ),
     );
@@ -451,9 +464,11 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
     return Scaffold(
       backgroundColor: cs.surface,
       appBar: AppBar(
-        title: Text(_selectionMode
-            ? l10n.conversationSelected(_selectedIds.length)
-            : l10n.conversationSelectTitle),
+        title: Text(
+          _selectionMode
+              ? l10n.conversationSelected(_selectedIds.length)
+              : l10n.conversationSelectTitle,
+        ),
         centerTitle: false,
         elevation: 0,
         backgroundColor: cs.surface,
@@ -471,9 +486,7 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
               onPressed: _selectedIds.isNotEmpty ? _batchDelete : null,
             ),
           IconButton(
-            icon: Icon(
-              _selectionMode ? Icons.close : Icons.checklist,
-            ),
+            icon: Icon(_selectionMode ? Icons.close : Icons.checklist),
             tooltip: _selectionMode ? l10n.actionUnselect : l10n.actionSelect,
             onPressed: _toggleSelectionMode,
           ),
@@ -484,12 +497,16 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.error_outline,
-                      size: 48,
-                      color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
+                  Icon(
+                    Icons.error_outline,
+                    size: 48,
+                    color: cs.onSurfaceVariant.withValues(alpha: 0.4),
+                  ),
                   const SizedBox(height: 16),
-                  Text(l10n.topicSelectionNoAssistant,
-                      style: TextStyle(color: cs.onSurfaceVariant)),
+                  Text(
+                    l10n.topicSelectionNoAssistant,
+                    style: TextStyle(color: cs.onSurfaceVariant),
+                  ),
                   const SizedBox(height: 16),
                   FilledButton(
                     onPressed: () {
@@ -511,10 +528,7 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                   decoration: BoxDecoration(
                     color: cs.primaryContainer.withValues(alpha: 0.3),
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: cs.primaryContainer,
-                      width: 0.5,
-                    ),
+                    border: Border.all(color: cs.primaryContainer, width: 0.5),
                   ),
                   child: Row(
                     children: [
@@ -553,7 +567,10 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                         tooltip: l10n.topicSelectionEditAssistant,
                         onPressed: () {
                           showAssistantFullEditDialog(
-                              context, ref, selectedAssistant);
+                            context,
+                            ref,
+                            selectedAssistant,
+                          );
                         },
                       ),
                     ],
@@ -562,8 +579,10 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
 
                 // Fixed hint: long-press drag to reorder
                 Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 4,
+                  ),
                   child: Text(
                     l10n.topicSelectionReorderHint,
                     style: TextStyle(
@@ -577,106 +596,112 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                 Expanded(
                   child: isLoading
                       ? TickerMode(
-                          enabled: TickerMode.of(context) &&
+                          enabled:
+                              TickerMode.of(context) &&
                               ChatTabVisibility.of(context),
                           child: const Center(
                             child: CircularProgressIndicator(),
                           ),
                         )
                       : sorted.isEmpty
-                          ? _buildEmptyState(cs)
-                          : ReorderableListView.builder(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 8),
-                              itemCount: sorted.length,
-                              buildDefaultDragHandles: false,
-                              onReorderItem: (oldIndex, newIndex) {
-                                final convs = ref.read(conversationsProvider);
-                                final item = sorted[oldIndex];
-                                final realOld =
-                                    convs.indexWhere((c) => c.id == item.id);
-                                // onReorderItem 的 newIndex 已是移除后的索引
-                                // （框架会先移除 oldIndex 再计算插入位置），
-                                // 不需要再手动减一。
-                                final target = sorted[newIndex];
-                                final realNew =
-                                    convs.indexWhere((c) => c.id == target.id);
-                                if (realOld >= 0 && realNew >= 0) {
-                                  ref
-                                      .read(conversationsProvider.notifier)
-                                      .reorderConversation(realOld, realNew);
+                      ? _buildEmptyState(cs)
+                      : ReorderableListView.builder(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          itemCount: sorted.length,
+                          buildDefaultDragHandles: false,
+                          onReorderItem: (oldIndex, newIndex) {
+                            final convs = ref.read(conversationsProvider);
+                            final item = sorted[oldIndex];
+                            final realOld = convs.indexWhere(
+                              (c) => c.id == item.id,
+                            );
+                            // onReorderItem 的 newIndex 已是移除后的索引
+                            // （框架会先移除 oldIndex 再计算插入位置），
+                            // 不需要再手动减一。
+                            final target = sorted[newIndex];
+                            final realNew = convs.indexWhere(
+                              (c) => c.id == target.id,
+                            );
+                            if (realOld >= 0 && realNew >= 0) {
+                              ref
+                                  .read(conversationsProvider.notifier)
+                                  .reorderConversation(realOld, realNew);
+                            }
+                          },
+                          proxyDecorator: (child, index, animation) => Material(
+                            elevation: 2,
+                            color: cs.surfaceContainerLow,
+                            borderRadius: BorderRadius.circular(16),
+                            child: child,
+                          ),
+                          itemBuilder: (context, index) {
+                            final topic = sorted[index];
+                            final isRunning = streamingConversations.contains(
+                              topic.id,
+                            );
+                            final latestMessage = topic.messages.isEmpty
+                                ? null
+                                : topic.messages.last;
+                            final isFailed =
+                                !isRunning &&
+                                latestMessage?.role == 'assistant' &&
+                                latestMessage?.isError == true;
+                            final itemWidget = TopicItem(
+                              key: ValueKey('topic_${topic.id}'),
+                              topic: topic,
+                              selectionMode: _selectionMode,
+                              isSelected: _selectedIds.contains(topic.id),
+                              isActive: topic.id == activeConversationId,
+                              isRunning: isRunning,
+                              isFailed: isFailed,
+                              isUnread:
+                                  !isRunning &&
+                                  !isFailed &&
+                                  topic.id != activeConversationId &&
+                                  latestMessage?.role == 'assistant' &&
+                                  latestMessage?.isStreaming == false &&
+                                  latestMessage?.isError == false &&
+                                  latestMessage?.id != topic.lastReadMessageId,
+                              onTap: () {
+                                if (_selectionMode) {
+                                  _toggleSelection(topic.id);
+                                } else {
+                                  _onTopicSelected(topic);
                                 }
                               },
-                              proxyDecorator: (child, index, animation) =>
-                                  Material(
-                                elevation: 2,
-                                color: cs.surfaceContainerLow,
-                                borderRadius: BorderRadius.circular(16),
-                                child: child,
-                              ),
-                              itemBuilder: (context, index) {
-                                final topic = sorted[index];
-                                final isRunning =
-                                    streamingConversations.contains(topic.id);
-                                final latestMessage = topic.messages.isEmpty
-                                    ? null
-                                    : topic.messages.last;
-                                final isFailed = !isRunning &&
-                                    latestMessage?.role == 'assistant' &&
-                                    latestMessage?.isError == true;
-                                final itemWidget = TopicItem(
-                                  key: ValueKey('topic_${topic.id}'),
-                                  topic: topic,
-                                  selectionMode: _selectionMode,
-                                  isSelected: _selectedIds.contains(topic.id),
-                                  isActive: topic.id == activeConversationId,
-                                  isRunning: isRunning,
-                                  isFailed: isFailed,
-                                  isUnread: !isRunning &&
-                                      !isFailed &&
-                                      topic.id != activeConversationId &&
-                                      latestMessage?.role == 'assistant' &&
-                                      latestMessage?.isStreaming == false &&
-                                      latestMessage?.isError == false &&
-                                      latestMessage?.id !=
-                                          topic.lastReadMessageId,
-                                  onTap: () {
-                                    if (_selectionMode) {
-                                      _toggleSelection(topic.id);
-                                    } else {
-                                      _onTopicSelected(topic);
-                                    }
-                                  },
-                                  onDelete: () => _deleteTopic(topic),
-                                  onPinToggle: () {
-                                    ref
-                                        .read(conversationsProvider.notifier)
-                                        .togglePin(topic.id);
-                                  },
-                                  onRename: () =>
-                                      _renameTopic(topic.id, topic.title),
-                                  onAutoRename: () {
-                                    ref
-                                        .read(conversationsProvider.notifier)
-                                        .autoRenameConversation(topic.id);
-                                  },
-                                  onSelectionToggle: () =>
-                                      _toggleSelection(topic.id),
-                                  onTemporaryToggle: () => ref
-                                      .read(conversationsProvider.notifier)
-                                      .toggleTemporary(topic.id),
-                                );
-                                // When NOT in selection mode, wrap in long-press drag listener
-                                if (!_selectionMode) {
-                                  return ReorderableDelayedDragStartListener(
-                                    index: index,
-                                    key: ValueKey('drag_${topic.id}'),
-                                    child: itemWidget,
-                                  );
-                                }
-                                return itemWidget;
+                              onDelete: () => _deleteTopic(topic),
+                              onPinToggle: () {
+                                ref
+                                    .read(conversationsProvider.notifier)
+                                    .togglePin(topic.id);
                               },
-                            ),
+                              onRename: () =>
+                                  _renameTopic(topic.id, topic.title),
+                              onAutoRename: () {
+                                ref
+                                    .read(conversationsProvider.notifier)
+                                    .autoRenameConversation(topic.id);
+                              },
+                              onSelectionToggle: () =>
+                                  _toggleSelection(topic.id),
+                              onTemporaryToggle: () => ref
+                                  .read(conversationsProvider.notifier)
+                                  .toggleTemporary(topic.id),
+                            );
+                            // When NOT in selection mode, wrap in long-press drag listener
+                            if (!_selectionMode) {
+                              return ReorderableDelayedDragStartListener(
+                                index: index,
+                                key: ValueKey('drag_${topic.id}'),
+                                child: itemWidget,
+                              );
+                            }
+                            return itemWidget;
+                          },
+                        ),
                 ),
 
                 // Bottom: create new conversation button
