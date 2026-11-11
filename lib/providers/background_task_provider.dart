@@ -5290,9 +5290,8 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     bool? skipped,
     String? error,
     String? label,
-    AppLocalizations? localizations,
   }) {
-    final errorLocalizations = localizations ?? this.localizations;
+    final errorLocalizations = this.localizations;
     state = state.map((t) {
       if (t.id != taskId) return t;
       final steps = [...t.steps];
