@@ -640,9 +640,9 @@ class OcrDiagnosticSnapshot {
           r'^HTTP\s+[1-5]\d{2}$',
           caseSensitive: false,
         ).hasMatch(part)) {
-          // Bounded HTTP status metadata is safe even when its digits happen
-          // to match a transient credential value.
-          safeParts.add(part);
+          if (!containsCredential(part, excludedValues: excludedValues)) {
+            safeParts.add(part);
+          }
           continue;
         }
         final finishReason = RegExp(
