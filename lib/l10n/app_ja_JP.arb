@@ -13,6 +13,7 @@
   "themeModeSystem": "システム設定に従う",
   "languageNameEnglish": "英語",
   "languageNameChinese": "中国語（簡体字）",
+  "languageNameKorean": "韓国語",
   "languageSearchHint": "検索言語",
   "languageNoMatches": "一致する言語がありません",
   "builtInPromptGeneralName": "一般アシスタント",

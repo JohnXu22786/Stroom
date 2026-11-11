@@ -51,6 +51,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get languageNameChinese => 'Chino (simplificado)';
 
   @override
+  String get languageNameKorean => 'Coreano';
+
+  @override
   String get languageSearchHint => 'Idiomas de búsqueda';
 
   @override
@@ -12056,6 +12059,9 @@ class AppLocalizationsEsEs extends AppLocalizationsEs {
 
   @override
   String get languageNameChinese => 'Chino (simplificado)';
+
+  @override
+  String get languageNameKorean => 'Coreano';
 
   @override
   String get languageSearchHint => 'Idiomas de búsqueda';
