@@ -11816,6 +11816,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get languageNameGerman => 'German';
 
   @override
+  String get languageNameArabic => 'Arabic';
+
+  @override
   String fileManagerDeleteEmptyFolderWithSubfoldersConfirm(
     num count,
     Object name,
@@ -23643,6 +23646,9 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get languageNameGerman => 'German';
+
+  @override
+  String get languageNameArabic => 'Arabic';
 
   @override
   String fileManagerDeleteEmptyFolderWithSubfoldersConfirm(

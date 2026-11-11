@@ -48,7 +48,17 @@ Locale resolveSystemLocale(Locale systemLocale) {
   if (systemLocale.languageCode == 'de') {
     return const Locale('de', 'DE');
   }
+  if (systemLocale.languageCode == 'ar') {
+    return const Locale('ar', 'SA');
+  }
   return const Locale('en', 'US');
+}
+
+TextDirection textDirectionForLocale(Locale? locale) {
+  final effectiveLocale = locale ?? PlatformDispatcher.instance.locale;
+  return effectiveLocale.languageCode == 'ar'
+      ? TextDirection.rtl
+      : TextDirection.ltr;
 }
 
 /// Resolves localization resources with the same override/follow-system

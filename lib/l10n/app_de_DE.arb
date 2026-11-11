@@ -7014,6 +7014,7 @@
   "languageNameSpanish": "Spanisch",
   "languageNameJapanese": "Japanisch",
   "languageNameGerman": "Deutsch",
+  "languageNameArabic": "Arabisch",
   "languageNameKorean": "Koreanisch",
   "fileManagerDeleteEmptyFolderWithSubfoldersConfirm": "Leeren Ordner „{name}“ löschen? {count, plural, one{Der darin enthaltene Unterordner wird ebenfalls gelöscht.} other{Die darin enthaltenen {count} Unterordner werden ebenfalls gelöscht.}}",
   "languageNamePortuguese": "Portugiesisch",

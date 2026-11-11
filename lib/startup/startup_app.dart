@@ -237,7 +237,7 @@ class _StartupAppState extends ConsumerState<StartupApp>
     // The startup screen owns rendering while checks run. The main app is
     // inserted only once those checks finish, then revealed by the fade.
     return Stack(
-      textDirection: TextDirection.ltr,
+      textDirection: textDirectionForLocale(locale),
       children: [
         if (_applicationReady)
           StartupErrorBoundary(
@@ -346,7 +346,7 @@ class _StartupErrorBoundaryState extends State<StartupErrorBoundary> {
     // 启动后任务（更新检查/备份检查）有进程级去重保护（见
     // application.dart 的 _postStartupTasksStarted），不会重复执行。
     return Stack(
-      textDirection: TextDirection.ltr,
+      textDirection: textDirectionForLocale(widget.locale),
       children: [
         _ErrorCatcher(
           onError: (Object error, StackTrace stack) {

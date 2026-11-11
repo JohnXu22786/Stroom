@@ -504,7 +504,7 @@ class _ApplicationState extends ConsumerState<Application>
                     : darkColorScheme;
 
         return Directionality(
-          textDirection: TextDirection.ltr,
+          textDirection: textDirectionForLocale(locale),
           child: Stack(
             children: [
               MaterialApp(

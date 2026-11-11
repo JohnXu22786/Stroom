@@ -7018,5 +7018,6 @@
   "languageNameFrench": "Francês",
   "fileManagerDeleteEmptyFolderWithSubfoldersConfirm": "Excluir a pasta vazia “{name}”? {count, plural, one{A subpasta será excluída também.} other{As {count} subpastas também serão excluídas.}}",
   "languageNameGerman": "Alemão",
+  "languageNameArabic": "Árabe",
   "providerMaxUploadSizePositive": "O tamanho máximo de envio deve ser um número positivo."
 }

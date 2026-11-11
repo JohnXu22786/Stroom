@@ -7017,6 +7017,7 @@
   "languageNameJapanese": "日语",
   "languageNameFrench": "法语",
   "languageNameGerman": "德语",
+  "languageNameArabic": "阿拉伯语",
   "fileManagerDeleteEmptyFolderWithSubfoldersConfirm": "确定要删除空文件夹 “{name}” 吗？其下的 {count} 个子文件夹也将被删除。",
   "providerMaxUploadSizePositive": "最大上传大小必须是正数。"
 }
