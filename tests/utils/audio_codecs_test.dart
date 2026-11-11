@@ -222,6 +222,46 @@ void main() {
       final adpcm = encodeAdpcm(pcm, AdpcmConfig());
       expect(adpcm.isNotEmpty, true);
     });
+
+    test('encodes trailing samples and declares their WAV sample count', () {
+      final pcm = Int16List.fromList(
+        List<int>.generate(259, (index) => 1000 + index),
+      );
+      final firstBlock = encodeAdpcm(
+        Int16List.fromList(pcm.sublist(0, 256)),
+        AdpcmConfig(),
+      );
+      final adpcm = encodeAdpcm(pcm, AdpcmConfig());
+
+      expect(adpcm.length, 2 * 132);
+      expect(adpcm.sublist(0, 132), orderedEquals(firstBlock));
+      expect(adpcm[132] | (adpcm[133] << 8), pcm[256]);
+
+      final wav = adpcmToWav(
+        adpcm,
+        sampleRate: 16000,
+        sampleCount: pcm.length,
+      );
+      final bytes = ByteData.sublistView(wav);
+      expect(String.fromCharCodes(wav.sublist(40, 44)), 'fact');
+      expect(bytes.getUint32(44, Endian.little), 4);
+      expect(bytes.getUint32(48, Endian.little), pcm.length);
+      expect(String.fromCharCodes(wav.sublist(52, 56)), 'data');
+      expect(bytes.getUint32(56, Endian.little), 2 * 132);
+      expect(bytes.getUint32(4, Endian.little), wav.length - 8);
+    });
+
+    test('yielding encoder includes a trailing partial block', () async {
+      final pcm = _sineWave(256 * 2 + 17);
+      final yielded = await encodeAdpcmWithEventLoopYield(
+        pcm,
+        AdpcmConfig(),
+        yieldEveryBlocks: 1,
+      );
+
+      expect(yielded.length, 3 * 132);
+      expect(yielded, orderedEquals(encodeAdpcm(pcm, AdpcmConfig())));
+    });
   });
 
   group('FLAC encoder', () {
@@ -528,14 +568,17 @@ void main() {
       expect(fmt.getUint16(34, Endian.little), 4);
       // samples per block extension
       expect(fmt.getUint16(38, Endian.little), 256);
-      // data chunk at offset 40 (after the 20-byte fmt data)
-      expect(String.fromCharCodes(wav.sublist(40, 44)), 'data');
-      final dataSize = fmt.getUint32(44, Endian.little);
+      // `fact` reports source samples before the compressed data chunk.
+      expect(String.fromCharCodes(wav.sublist(40, 44)), 'fact');
+      expect(fmt.getUint32(44, Endian.little), 4);
+      expect(fmt.getUint32(48, Endian.little), pcm.length);
+      expect(String.fromCharCodes(wav.sublist(52, 56)), 'data');
+      final dataSize = fmt.getUint32(56, Endian.little);
       expect(dataSize, adpcm.length);
       // WAV IMA ADPCM decoders read the LOW nibble first; the raw encoder
       // packs high-first, so the wrapper must have swapped the payload
       // nibbles — but ONLY the payload, never the 4-byte per-block headers.
-      final dataStart = 48; // 12 + 8 + 20 + 8
+      final dataStart = 60; // RIFF + fmt + fact + data headers
       for (int i = 0; i < adpcm.length; i++) {
         final expected = i % 132 >= 4
             ? ((adpcm[i] & 0x0F) << 4) | (adpcm[i] >> 4)
@@ -551,7 +594,7 @@ void main() {
 
       final wav = adpcmToWav(adpcm, sampleRate: 8000);
       final fmt = ByteData.view(wav.buffer);
-      final dataSize = fmt.getUint32(44, Endian.little);
+      final dataSize = fmt.getUint32(56, Endian.little);
 
       // Partial block padded to a multiple of 132.
       expect(dataSize % 132, 0);

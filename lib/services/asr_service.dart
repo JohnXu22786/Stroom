@@ -66,7 +66,11 @@ class _AsrCompressionRequest {
   }
   if (request.compression == 'adpcm') {
     return (
-      adpcmToWav(encodeAdpcm(pcm, AdpcmConfig()), sampleRate: info.sampleRate),
+      adpcmToWav(
+        encodeAdpcm(pcm, AdpcmConfig()),
+        sampleRate: info.sampleRate,
+        sampleCount: pcm.length,
+      ),
       'wav',
     );
   }
@@ -1846,7 +1850,14 @@ class AsrService {
         onYield: onYield,
         checkCancelled: checkCancelled,
       );
-      return (adpcmToWav(adpcm, sampleRate: info.sampleRate), 'wav');
+      return (
+        adpcmToWav(
+          adpcm,
+          sampleRate: info.sampleRate,
+          sampleCount: pcm.length,
+        ),
+        'wav',
+      );
     }
     return (
       await encodeFlacWithEventLoopYield(
