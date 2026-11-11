@@ -572,6 +572,7 @@ void main() {
     final persistedTask = persistedTasks
         .map((row) => Map<String, dynamic>.from(row as Map))
         .singleWhere((row) => row['id'] == task.id);
+    expect(jsonEncode(persistedTask), isNot(contains(apiKey)));
     expect(persistedTask['error'], isNot(contains(apiKey)));
     expect(
       persistedTask['hasOcrErrorLocalizationCredentialCollision'],
