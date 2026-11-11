@@ -100,6 +100,16 @@ void main() {
         expect(uploadControl.top, greaterThanOrEqualTo(uploadLabel.bottom));
         expect(maxSizeControl.top, greaterThanOrEqualTo(maxSizeLabel.bottom));
       } else {
+        for (var i = 0; i < 4; i++) {
+          final dropdownRect = tester.getRect(
+            find.byType(DropdownButton<String>).at(i),
+          );
+          expect(
+            dropdownRect.right,
+            lessThanOrEqualTo(dialogRect.right - 16),
+            reason: 'ASR dropdown $i should fit within the dialog content',
+          );
+        }
         expect(
           (uploadControl.center.dy - uploadLabel.center.dy).abs(),
           lessThan(20),

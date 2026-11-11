@@ -63,10 +63,11 @@ Widget _buildResponsiveSettingsRow(
       }
 
       return Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           labelWidget,
-          const Spacer(),
-          control,
+          const SizedBox(width: 16),
+          Flexible(child: control),
         ],
       );
     },
