@@ -108,21 +108,26 @@ void main() {
       final lineBoxes = paragraph.getBoxesForSelection(
         TextSelection(baseOffset: 0, extentOffset: label.length),
       );
-      final itemColumn = find.ancestor(
-        of: labelFinder,
-        matching: find.byType(Column),
-      ).first;
+      final itemColumn = find
+          .ancestor(
+            of: labelFinder,
+            matching: find.byType(Column),
+          )
+          .first;
       final countRect = tester.getRect(
         find.descendant(of: itemColumn, matching: find.text('0')),
       );
-      final statusRow = find.ancestor(
-        of: labelFinder,
-        matching: find.byType(Row),
-      ).first;
+      final statusRow = find
+          .ancestor(
+            of: labelFinder,
+            matching: find.byType(Row),
+          )
+          .first;
       final dot = find.descendant(
         of: statusRow,
         matching: find.byWidgetPredicate(
-          (widget) => widget is Container &&
+          (widget) =>
+              widget is Container &&
               widget.decoration is BoxDecoration &&
               (widget.decoration! as BoxDecoration).shape == BoxShape.circle,
         ),
