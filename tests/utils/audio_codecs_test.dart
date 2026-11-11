@@ -409,9 +409,7 @@ void main() {
           final blockSizeOffset = offset + 4 + frameNumberBytes;
           final blockSize = switch (blockSizeCode) {
             6 => flac[blockSizeOffset] + 1,
-            7 => ((flac[blockSizeOffset] << 8) |
-                    flac[blockSizeOffset + 1]) +
-                1,
+            7 => ((flac[blockSizeOffset] << 8) | flac[blockSizeOffset + 1]) + 1,
             10 => 1024,
             12 => 4096,
             _ => fail('Unexpected FLAC block-size code $blockSizeCode'),
