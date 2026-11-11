@@ -139,9 +139,40 @@ void main() {
       );
     }
 
-    await pumpHome(const Locale('de'));
     final german = await AppLocalizations.delegate.load(const Locale('de'));
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('de'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Center(
+          child: SizedBox(
+            width: 80,
+            child: HomeStatusLabel(
+              label: german.statusInProgress,
+              dotColor: Colors.orange,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
     final wrappedLabel = find.text(german.statusInProgress);
+    expect(wrappedLabel, findsOneWidget);
+    final germanRow =
+        find.ancestor(of: wrappedLabel, matching: find.byType(Row)).first;
+    expect(
+      find.descendant(
+        of: germanRow,
+        matching: find.byWidgetPredicate(
+          (widget) =>
+              widget is Container &&
+              widget.decoration is BoxDecoration &&
+              (widget.decoration! as BoxDecoration).shape == BoxShape.circle,
+        ),
+      ),
+      findsOneWidget,
+    );
     expect(
       tester
           .renderObject<RenderParagraph>(wrappedLabel)
