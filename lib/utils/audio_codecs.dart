@@ -423,21 +423,21 @@ void _writeStreamInfo(BytesOutput out, int totalSamples, int sampleRate) {
   out.writeByte(maxFrame & 0xFF);
 
   // Sample rate (20 bits) | channels-1 (3 bits) | bps-1 (5 bits) | total samples (36 bits)
-  // Pack: sample_rate(20) << 44 | channels(3) << 41 | bps(5) << 36 | total(36)
   final sr = sampleRate;
   final ch = 0; // mono -> 1 channel -> value 0
   final bps = 15; // 16-bit -> value 15
   final ts = totalSamples;
 
+  // Write the 64-bit packed field byte-by-byte for compatibility with
+  // platforms where bitwise integers are 32-bit.
   out.writeByte((sr >> 12) & 0xFF);
   out.writeByte((sr >> 4) & 0xFF);
-  out.writeByte(((sr & 0xF) << 4) | ((ch >> 1) & 0xF));
-  out.writeByte(((ch & 0x1) << 7) | ((bps & 0x1F) << 2) | ((ts >> 34) & 0x3));
-  out.writeByte((ts >> 26) & 0xFF);
-  out.writeByte((ts >> 18) & 0xFF);
-  out.writeByte((ts >> 10) & 0xFF);
-  out.writeByte((ts >> 2) & 0xFF);
-  out.writeByte((ts & 0x3) << 6);
+  out.writeByte(((sr & 0xF) << 4) | ((ch & 0x7) << 1) | ((bps >> 4) & 0x1));
+  out.writeByte(((bps & 0xF) << 4) | ((ts ~/ 0x100000000) & 0xF));
+  out.writeByte((ts >> 24) & 0xFF);
+  out.writeByte((ts >> 16) & 0xFF);
+  out.writeByte((ts >> 8) & 0xFF);
+  out.writeByte(ts & 0xFF);
 
   // MD5 (16 bytes, all zeros - placeholder)
   for (int i = 0; i < 16; i++) {

@@ -33,6 +33,11 @@ void main() {
         resolveSystemLocale(const Locale('ja', 'US')),
         const Locale('ja', 'JP'),
       );
+      expect(resolveSystemLocale(const Locale('pt')), const Locale('pt', 'BR'));
+      expect(
+        resolveSystemLocale(const Locale('pt', 'BR')),
+        const Locale('pt', 'BR'),
+      );
       expect(
         resolveSystemLocale(const Locale('zh', 'TW')),
         const Locale('en', 'US'),
@@ -135,6 +140,8 @@ void main() {
   testWidgets('theme mode and language options update', (tester) async {
     tester.platformDispatcher.localeTestValue = const Locale('en', 'US');
     addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+    // ignore: invalid_use_of_visible_for_testing_member
+    SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(
       ProviderScope(
         overrides: [themeProvider.overrideWith((ref) => ThemeNotifier())],
@@ -167,9 +174,25 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    final themeCard = find.ancestor(
+      of: find.byIcon(Icons.light_mode),
+      matching: find.byType(Card),
+    );
+    final languageCard = find.ancestor(
+      of: find.byKey(const Key('language-search-field')),
+      matching: find.byType(Card),
+    );
+
     expect(find.text('Light mode'), findsOneWidget);
     expect(find.text('Dark mode'), findsOneWidget);
-    expect(find.text('Follow system'), findsNWidgets(2));
+    expect(
+      find.descendant(of: themeCard, matching: find.text('Follow system')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: languageCard, matching: find.text('Follow system')),
+      findsOneWidget,
+    );
     expect(find.text('Theme'), findsOneWidget);
     expect(find.text('Theme & Display'), findsOneWidget);
     expect(find.text('Language'), findsOneWidget);
@@ -213,7 +236,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('浅色模式'), findsOneWidget);
     expect(find.text('深色模式'), findsOneWidget);
-    expect(find.text('跟随系统'), findsNWidgets(2));
+    expect(
+      find.descendant(of: themeCard, matching: find.text('跟随系统')),
+      findsOneWidget,
+    );
     expect(find.text('主题'), findsOneWidget);
     expect(find.text('主题与显示'), findsOneWidget);
     await tester.scrollUntilVisible(
@@ -224,7 +250,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('语言'), findsOneWidget);
     expect(find.text('搜索语言'), findsOneWidget);
-    expect(find.text('跟随系统'), findsNWidgets(2));
+    expect(
+      find.descendant(of: languageCard, matching: find.text('跟随系统')),
+      findsOneWidget,
+    );
     expect(find.text('英语（English）'), findsOneWidget);
     expect(find.text('简体中文（简体中文）'), findsOneWidget);
     expect(find.text('en-us'), findsOneWidget);
@@ -237,7 +266,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('简体中文（简体中文）'), findsOneWidget);
     expect(find.text('英语（English）'), findsNothing);
-    expect(find.text('跟随系统'), findsNWidgets(2));
+    expect(
+      find.descendant(of: languageCard, matching: find.text('跟随系统')),
+      findsOneWidget,
+    );
 
     await tester.enterText(
       find.byKey(const Key('language-search-field')),
@@ -245,6 +277,27 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('没有匹配的语言'), findsOneWidget);
+
+    await tester.enterText(
+      find.byKey(const Key('language-search-field')),
+      'pt-br',
+    );
+    await tester.pumpAndSettle();
+    final portugueseLanguage = find.text(
+      '葡萄牙语（巴西）（Português (Brasil)）',
+    );
+    await tester.ensureVisible(portugueseLanguage);
+    await tester.pumpAndSettle();
+    await tester.tap(portugueseLanguage);
+    await tester.pumpAndSettle();
+    expect(
+      (await SharedPreferences.getInstance()).getString(localePreferenceKey),
+      'pt_BR',
+    );
+    expect(
+      tester.widget<MaterialApp>(find.byType(MaterialApp)).locale,
+      const Locale('pt', 'BR'),
+    );
   });
 
   testWidgets('settings entry opens the titled theme and display page', (
