@@ -34,6 +34,45 @@ String? validateJsonValue(String type, String value) {
   return null;
 }
 
+Widget _buildResponsiveSettingsRow(
+  BuildContext context, {
+  required String label,
+  required Widget control,
+}) {
+  final colorScheme = Theme.of(context).colorScheme;
+  final labelWidget = Text(
+    label,
+    style: TextStyle(
+      fontWeight: FontWeight.w600,
+      fontSize: 14,
+      color: colorScheme.onSurface,
+    ),
+  );
+
+  return LayoutBuilder(
+    builder: (context, constraints) {
+      if (constraints.maxWidth < 800) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            labelWidget,
+            const SizedBox(height: 8),
+            control,
+          ],
+        );
+      }
+
+      return Row(
+        children: [
+          labelWidget,
+          const Spacer(),
+          control,
+        ],
+      );
+    },
+  );
+}
+
 /// Shows a full-screen dialog to edit provider basic info and parameters.
 /// Pattern follows [showAssistantFullEditDialog] from assistant_selection_page.dart.
 Future<ProviderConfigItem?> showProviderSettingsPanel({
