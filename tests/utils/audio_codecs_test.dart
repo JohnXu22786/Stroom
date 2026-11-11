@@ -220,13 +220,13 @@ void main() {
       expect(flac[42], 0xFF);
       expect(flac[43] & 0xFC, 0xF8);
 
-      final encodedSampleRate =
-          (streamInfo[10] << 12) | (streamInfo[11] << 4) | (streamInfo[12] >> 4);
+      final encodedSampleRate = (streamInfo[10] << 12) |
+          (streamInfo[11] << 4) |
+          (streamInfo[12] >> 4);
       final channels = ((streamInfo[12] & 0x0E) >> 1) + 1;
       final bitsPerSample =
           (((streamInfo[12] & 0x01) << 4) | (streamInfo[13] >> 4)) + 1;
-      final totalSamples =
-          ((streamInfo[13] & 0x0F) * 0x100000000) +
+      final totalSamples = ((streamInfo[13] & 0x0F) * 0x100000000) +
           (streamInfo[14] * 0x1000000) +
           (streamInfo[15] * 0x10000) +
           (streamInfo[16] * 0x100) +
