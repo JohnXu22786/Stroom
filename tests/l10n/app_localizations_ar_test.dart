@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/l10n/app_localizations.dart';
+import 'package:stroom/l10n/app_localizations_ar.dart';
 import 'package:stroom/l10n/locale_name_catalog.dart';
 import 'package:stroom/providers/locale_provider.dart';
 
@@ -60,6 +61,7 @@ void main() {
     expect(localeNativeName(arabic), 'العربية');
 
     final strings = lookupAppLocalizations(arabic);
+    expect(strings, isA<AppLocalizationsArSa>());
     expect(strings.localeName, 'ar_SA');
     expect(strings.languageSettingsTitle, isNotEmpty);
     expect(strings.languageNameEnglish, 'الإنجليزية');
