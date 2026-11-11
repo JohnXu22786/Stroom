@@ -10,6 +10,7 @@ void main() {
 
       for (final strings in [base, brazil]) {
         expect(strings.languageNameKorean, 'Coreano');
+        expect(strings.languageNameFrench, 'Francês');
         expect(
           strings.updateApkInstallerUnavailable,
           'Não foi possível encontrar um aplicativo para instalar este APK. Abra-o manualmente.',

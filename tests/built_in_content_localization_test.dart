@@ -32,6 +32,8 @@ void main() {
         'lib/l10n/app_en_US.arb',
         'lib/l10n/app_zh.arb',
         'lib/l10n/app_zh_CN.arb',
+        'lib/l10n/app_fr.arb',
+        'lib/l10n/app_fr_FR.arb',
       ];
       final resources = files
           .map((path) => jsonDecode(File(path).readAsStringSync()) as Map)
@@ -57,8 +59,15 @@ void main() {
             .allMatches(resources[3][key] as String)
             .map((match) => match.group(1))
             .toSet();
+        final french = placeholder
+            .allMatches(resources[5][key] as String)
+            .map((match) => match.group(1))
+            .toSet();
         expect(chinese, english, reason: 'Placeholder mismatch for $key');
+        expect(french, english, reason: 'French placeholder mismatch for $key');
       }
+      expect(resources[4]['languageNameFrench'], 'Français');
+      expect(resources[5]['languageNameFrench'], 'Français');
     });
 
     test('English count labels use singular forms for a count of one', () {
