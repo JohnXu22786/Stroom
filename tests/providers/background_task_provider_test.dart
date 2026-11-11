@@ -19824,8 +19824,8 @@ void main() {
           });
           final persisted = jsonEncode(task.toMap());
 
-          expect(task.error, 'OCR error details were hidden');
-          expect(task.steps.single.error, 'OCR error details were hidden');
+          expect(task.error, 'OCR 错误详情已隐藏');
+          expect(task.steps.single.error, 'OCR 错误详情已隐藏');
           expect(persisted, isNot(contains(apiKey)));
         }
       },

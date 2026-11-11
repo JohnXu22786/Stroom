@@ -867,6 +867,7 @@ String? _sanitizeOcrTaskError(
   String? error,
   Map<String, dynamic>? rawRequest, {
   Iterable<String> additionalCredentialValues = const [],
+  AppLocalizations? localizations,
 }) {
   final credentialValues = <String>{
     ..._legacyOcrCredentialValues(rawRequest),
@@ -937,9 +938,9 @@ String? _sanitizeOcrTaskError(
   }
   if (error != null &&
       _legacyOcrTextContainsMaskedCredential(error, credentialValues)) {
-    final englishStrings = lookupAppLocalizations(const Locale('en'));
+    final strings = localizations ?? lookupAppLocalizations(const Locale('zh'));
     final hiddenDetails = _localizedOcrHiddenTaskError(
-      englishStrings,
+      strings,
       credentialValues,
     );
     final statusCode = RegExp(
@@ -960,10 +961,17 @@ String? _sanitizeOcrTaskError(
         ? '…'
         : summary;
   }
-  return OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+  final sanitized = OcrDiagnosticSnapshot.sanitizeStoredTaskError(
     error,
     excludedValues: credentialValues,
   );
+  if (sanitized == null || localizations == null) return sanitized;
+  final localized = _localizeStoredBackgroundError(sanitized, localizations);
+  return localized != null &&
+          !_legacyOcrTextContainsCredential(localized, credentialValues) &&
+          !_legacyOcrTextContainsMaskedCredential(localized, credentialValues)
+      ? localized
+      : sanitized;
 }
 
 String _localizedOcrHiddenTaskError(
@@ -4364,6 +4372,7 @@ class BackgroundTask {
     List<OcrPageOutcome> ocrPageOutcomes = const [],
     Iterable<String> ocrDiagnosticCredentialValues = const [],
     Iterable<String> ocrCredentialValuesForSanitization = const [],
+    AppLocalizations? localizations,
     bool hasOcrErrorLocalizationCredentialCollision = false,
   }) : this._(
           id: id,
@@ -4388,6 +4397,7 @@ class BackgroundTask {
           ocrDiagnosticCredentialValues: ocrDiagnosticCredentialValues,
           ocrCredentialValuesForSanitization:
               ocrCredentialValuesForSanitization,
+          localizations: localizations,
           hasOcrErrorLocalizationCredentialCollision:
               hasOcrErrorLocalizationCredentialCollision,
         );
@@ -4415,6 +4425,7 @@ class BackgroundTask {
     List<OcrPageOutcome> ocrPageOutcomes = const [],
     Iterable<String> ocrDiagnosticCredentialValues = const [],
     Iterable<String> ocrCredentialValuesForSanitization = const [],
+    AppLocalizations? localizations,
     bool hasOcrErrorLocalizationCredentialCollision = false,
   })  : error = type == BackgroundTaskType.ocr
             ? _sanitizeOcrTaskError(
@@ -4424,6 +4435,7 @@ class BackgroundTask {
                   ocrDiagnosticCredentialValues,
                   ocrCredentialValuesForSanitization,
                 ),
+                localizations: localizations,
               )
             : error,
         steps = type == BackgroundTaskType.ocr
@@ -4439,6 +4451,7 @@ class BackgroundTask {
                         ocrDiagnosticCredentialValues,
                         ocrCredentialValuesForSanitization,
                       ),
+                      localizations: localizations,
                     ),
                   ),
                 )
@@ -4506,6 +4519,7 @@ class BackgroundTask {
                         ocrDiagnosticCredentialValues,
                         ocrCredentialValuesForSanitization,
                       ),
+                      localizations: localizations,
                     ),
                   ),
                 ),
@@ -4529,6 +4543,7 @@ class BackgroundTask {
     Map<String, dynamic>? rawResponse,
     Map<String, dynamic>? retryData,
     Iterable<String> ocrCredentialValuesForSanitization = const [],
+    AppLocalizations? localizations,
     List<OcrPageOutcome>? ocrPageOutcomes,
     bool clearError = false,
     bool clearCompletedAt = false,
@@ -4565,6 +4580,7 @@ class BackgroundTask {
       ocrPageOutcomes: ocrPageOutcomes ?? this.ocrPageOutcomes,
       ocrDiagnosticCredentialValues: _ocrDiagnosticCredentialValues,
       ocrCredentialValuesForSanitization: ocrCredentialValuesForSanitization,
+      localizations: localizations,
       hasOcrErrorLocalizationCredentialCollision:
           hasOcrErrorLocalizationCredentialCollision,
       retryData: clearRetryData ? null : (retryData ?? this.retryData),
@@ -5134,6 +5150,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     Map<String, dynamic>? rawRequest,
     Map<String, dynamic>? rawResponse,
     Iterable<String> ocrCredentialValuesForSanitization = const [],
+    AppLocalizations? localizations,
   }) {
     final task = taskById(taskId);
     if (task != null &&
@@ -5153,6 +5170,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       rawRequest: rawRequest,
       rawResponse: rawResponse,
       ocrCredentialValuesForSanitization: ocrCredentialValuesForSanitization,
+      localizations: localizations,
     );
   }
 
@@ -5272,6 +5290,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     bool? skipped,
     String? error,
     String? label,
+    AppLocalizations? localizations,
   }) {
     state = state.map((t) {
       if (t.id != taskId) return t;
@@ -5294,7 +5313,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         error: error,
         label: label,
       );
-      return t.copyWith(steps: steps);
+      return t.copyWith(steps: steps, localizations: localizations);
     }).toList();
     _persistTasks();
     _syncIosContinuedTask();
@@ -5729,8 +5748,10 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     Map<String, dynamic>? rawRequest,
     Map<String, dynamic>? rawResponse,
     Iterable<String> ocrCredentialValuesForSanitization = const [],
+    AppLocalizations? localizations,
   }) {
     BackgroundTask? updatedTask;
+    final errorLocalizations = localizations ?? this.localizations;
     state = state.map((t) {
       if (t.id != taskId) return t;
       final shouldClearError = error == null && status == TaskStatus.completed;
@@ -5743,13 +5764,17 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         rawRequest: rawRequest,
         rawResponse: rawResponse,
         ocrCredentialValuesForSanitization: ocrCredentialValuesForSanitization,
+        localizations: errorLocalizations,
         completedAt:
             status == TaskStatus.completed || status == TaskStatus.failed
                 ? DateTime.now()
                 : null,
       );
       final localized = updated.type == BackgroundTaskType.ocr
-          ? _localizeRestoredBackgroundTask(updated, localizations)
+          ? _localizeRestoredBackgroundTask(
+              updated,
+              errorLocalizations,
+            )
           : updated;
       updatedTask = localized;
       return localized;
