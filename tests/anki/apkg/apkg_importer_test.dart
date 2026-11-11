@@ -428,11 +428,12 @@ void main() {
           version: 1,
           onCreate: (db, _) async {
             await db.execute(
-              'CREATE TABLE col (id INTEGER PRIMARY KEY, decks TEXT, mod INTEGER, dty INTEGER)',
+              'CREATE TABLE col (id INTEGER PRIMARY KEY, decks TEXT, models TEXT, mod INTEGER, dty INTEGER)',
             );
             await db.insert('col', {
               'id': 1,
               'decks': decks,
+              'models': '{}',
               'mod': 10,
               'dty': 0,
             });
@@ -509,9 +510,15 @@ void main() {
           version: 1,
           onCreate: (db, _) async {
             await db.execute(
-              'CREATE TABLE col (id INTEGER PRIMARY KEY, decks TEXT, mod INTEGER, dty INTEGER)',
+              'CREATE TABLE col (id INTEGER PRIMARY KEY, decks TEXT, models TEXT, mod INTEGER, dty INTEGER)',
             );
-            await db.insert('col', {'id': 1, 'decks': '{}'});
+            await db.insert('col', {
+              'id': 1,
+              'decks': '{}',
+              'models': jsonEncode(
+                includeNote ? {'1': _modelJson(1, 'Basic')} : {},
+              ),
+            });
             if (includeNote) {
               await db.execute(
                 'CREATE TABLE notes (id INTEGER, guid TEXT, mid INTEGER, tags TEXT, flds TEXT, sfld TEXT, csum INTEGER, flags INTEGER, data TEXT)',
