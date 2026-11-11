@@ -453,14 +453,14 @@ class AppLocalizationsEs extends AppLocalizations {
       'Transcribe todo el texto visible en el orden de lectura natural de la página, conservando los saltos de línea y los párrafos. Devuelve sólo texto sin formato; no agregue explicaciones o inferencias.';
 
   @override
-  String get ocrTemplateMarkdownLabel => 'Reducción';
+  String get ocrTemplateMarkdownLabel => 'Markdown';
 
   @override
   String get ocrTemplateMarkdownContent =>
       'Transcribe todo el texto visible en el orden de lectura natural de la página y utiliza Markdown para conservar títulos, listas y tablas. Representar fórmulas matemáticas en LaTeX. Devuelve sólo la transcripción; no agregue explicaciones o inferencias.';
 
   @override
-  String get ocrTemplateTableLabel => 'Mesas';
+  String get ocrTemplateTableLabel => 'Tablas';
 
   @override
   String get ocrTemplateTableContent =>
@@ -12480,14 +12480,14 @@ class AppLocalizationsEsEs extends AppLocalizationsEs {
       'Transcribe todo el texto visible en el orden de lectura natural de la página, conservando los saltos de línea y los párrafos. Devuelve sólo texto sin formato; no agregue explicaciones o inferencias.';
 
   @override
-  String get ocrTemplateMarkdownLabel => 'Reducción';
+  String get ocrTemplateMarkdownLabel => 'Markdown';
 
   @override
   String get ocrTemplateMarkdownContent =>
       'Transcribe todo el texto visible en el orden de lectura natural de la página y utiliza Markdown para conservar títulos, listas y tablas. Representar fórmulas matemáticas en LaTeX. Devuelve sólo la transcripción; no agregue explicaciones o inferencias.';
 
   @override
-  String get ocrTemplateTableLabel => 'Mesas';
+  String get ocrTemplateTableLabel => 'Tablas';
 
   @override
   String get ocrTemplateTableContent =>

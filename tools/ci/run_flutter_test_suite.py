@@ -131,6 +131,7 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
         "widgets/selection_bottom_bar_test.dart",
     ),
     "media-processing": (
+        "models/ocr_output_template_localization_test.dart",
         "services/asr*_test.dart",
         "services/background_task_snapshot_log_redaction_test.dart",
         "services/ocr*_test.dart",
