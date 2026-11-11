@@ -2305,7 +2305,12 @@ class AsrService {
     if (trimmed.isEmpty) {
       _throwLocalValidation('音频链接为空');
     }
-    if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+    final uri = Uri.tryParse(trimmed);
+    final scheme = uri?.scheme.toLowerCase();
+    if (uri == null ||
+        !uri.hasAuthority ||
+        uri.host.isEmpty ||
+        (scheme != 'http' && scheme != 'https')) {
       _throwLocalValidation('无效的音频链接，必须以 http:// 或 https:// 开头');
     }
     _failClosedOnUncertainPriorChunks(priorChunks);
