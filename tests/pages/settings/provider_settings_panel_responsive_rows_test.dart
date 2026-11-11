@@ -79,7 +79,13 @@ void main() {
           lessThan(20),
         );
       }
-      for (final tabLabel in ['Basic info', 'Parameter settings']) {
+      final localizations = AppLocalizations.of(
+        tester.element(find.byType(Dialog)),
+      )!;
+      for (final tabLabel in [
+        localizations.providerBasicInfoTab,
+        localizations.providerParameterSettingsTab,
+      ]) {
         final tabRect = tester.getRect(find.text(tabLabel));
         expect(tabRect.left, greaterThanOrEqualTo(0));
         expect(tabRect.right, lessThanOrEqualTo(width));
