@@ -11,9 +11,12 @@ from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import Mock
 
 from evaluate import (
     EvaluationError,
+    MAX_PNG_ENCODED_BYTES,
+    _read_fixture_png,
     compare_reports,
     evaluate_predictions,
     main,
@@ -5111,6 +5114,18 @@ class EvaluateTests(unittest.TestCase):
                 "low_contrast",
             }.issubset(summary["categories"])
         )
+
+    def test_oversized_fixture_png_is_rejected_before_opening(self):
+        image_path = Mock()
+        image_path.stat.return_value.st_size = MAX_PNG_ENCODED_BYTES + 1
+
+        with self.assertRaisesRegex(
+            EvaluationError,
+            "oversized: PNG exceeds the maximum encoded fixture size",
+        ):
+            _read_fixture_png(image_path, "oversized")
+
+        image_path.open.assert_not_called()
 
     def test_fixture_verification_reports_self_referential_symlink_as_evaluation_error(self):
         with TemporaryDirectory() as directory:
