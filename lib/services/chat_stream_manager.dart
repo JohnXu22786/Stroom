@@ -368,6 +368,8 @@ class ChatStreamManager {
       }
     }
 
+    final operationClock = Stopwatch()..start();
+
     // Each conversation gets its own ChatService via the adapter, so
     // multiple conversations can stream concurrently. No need to
     // abandon other conversations' streams.
@@ -543,6 +545,12 @@ class ChatStreamManager {
       }
     } catch (e, s) {
       debugPrint('[ChatStreamManager] 上下文管理失败: $e\n$s');
+      await AppLogService.error(
+        'ChatStreamManager',
+        '请求前上下文管理失败, convId=$convId',
+        e.runtimeType,
+        s,
+      );
     }
 
     // Start the provider stream BEFORE yielding to the event loop so
@@ -583,8 +591,12 @@ class ChatStreamManager {
 
     try {
       try {
-        await AppLogService.info('ChatStreamManager',
-            '[STREAM-MGR] startStreaming: begin, convId=$convId, historyLen=${history.length}');
+        await AppLogService.info(
+          'ChatStreamManager',
+          '[STREAM-MGR] startStreaming: begin, convId=$convId, '
+              'historyLen=${history.length}, requestHistoryLen=${requestHistory.length}, '
+              'toolCount=${tools.length}, reasoning=$reasoning',
+        );
       } catch (_) {
         // 日志失败不能误判为流错误（否则主请求已发出但响应
         // 永不被消费，回复丢失）
@@ -622,6 +634,12 @@ class ChatStreamManager {
 
           transportRetries++;
           final wait = _transportRetryPolicy.delayForRetry(transportRetries);
+          await AppLogService.info(
+            'ChatStreamManager',
+            '[STREAM-MGR] transport retry scheduled, convId=$convId, '
+                'attempt=$transportRetries/${_transportRetryPolicy.maxRetries}, '
+                'delayMs=${wait.inMilliseconds}, partialReply=$hasPartialOutput',
+          );
           await waitForRetryOrCancellation(
             wait,
             delay: _retryDelay,
@@ -706,6 +724,7 @@ class ChatStreamManager {
       streamError: streamError,
       snappedChatService: snappedChatService,
       finalTextChunks: finalTextChunks,
+      operationClock: operationClock,
     );
   }
 
