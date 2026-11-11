@@ -50,6 +50,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get languageNameChinese => 'Chinese (Simplified)';
 
   @override
+  String get languageNameKorean => 'Korean';
+
+  @override
   String get languageSearchHint => 'Search languages';
 
   @override
@@ -5257,7 +5260,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get providerPreprocessNone => 'None';
 
   @override
-  String get providerPreprocessResample => 'WAV optimization (16 kHz mono, recommended)';
+  String get providerPreprocessResample =>
+      'WAV optimization (16 kHz mono, recommended)';
 
   @override
   String get providerPreprocessResampleHelp =>
@@ -11862,6 +11866,9 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String get languageNameChinese => 'Chinese (Simplified)';
 
   @override
+  String get languageNameKorean => 'Korean';
+
+  @override
   String get languageSearchHint => 'Search languages';
 
   @override
@@ -17069,7 +17076,8 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
   String get providerPreprocessNone => 'None';
 
   @override
-  String get providerPreprocessResample => 'WAV optimization (16 kHz mono, recommended)';
+  String get providerPreprocessResample =>
+      'WAV optimization (16 kHz mono, recommended)';
 
   @override
   String get providerPreprocessResampleHelp =>

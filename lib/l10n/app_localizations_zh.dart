@@ -49,6 +49,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get languageNameChinese => '简体中文';
 
   @override
+  String get languageNameKorean => '韩语';
+
+  @override
   String get languageSearchHint => '搜索语言';
 
   @override
@@ -11236,6 +11239,9 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get languageNameChinese => '简体中文';
+
+  @override
+  String get languageNameKorean => '韩语';
 
   @override
   String get languageSearchHint => '搜索语言';

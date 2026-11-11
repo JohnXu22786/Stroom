@@ -13,6 +13,7 @@
   "themeModeSystem": "Follow system",
   "languageNameEnglish": "English",
   "languageNameChinese": "Chinese (Simplified)",
+  "languageNameKorean": "Korean",
   "languageSearchHint": "Search languages",
   "languageNoMatches": "No matching languages",
   "builtInPromptGeneralName": "General Assistant",
