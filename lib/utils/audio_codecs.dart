@@ -660,8 +660,8 @@ void _writeRiceResiduals(_BitWriter bits, List<int> residuals, int order) {
       for (int i = start; i < end; i++) {
         final residual = residuals[i];
         var width = 1;
-        while (residual < -(1 << (width - 1)) ||
-            residual >= (1 << (width - 1))) {
+        while (
+            residual < -(1 << (width - 1)) || residual >= (1 << (width - 1))) {
           width++;
         }
         if (width > rawWidth) rawWidth = width;

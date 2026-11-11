@@ -94,9 +94,8 @@ class _FlacBitReader {
     expect(rawWidth, 16, reason: 'alternating S16 residuals need 16 bits');
     for (var i = 0; i < count; i++) {
       final raw = bits.read(rawWidth);
-      final residual = raw >= (1 << (rawWidth - 1))
-          ? raw - (1 << rawWidth)
-          : raw;
+      final residual =
+          raw >= (1 << (rawWidth - 1)) ? raw - (1 << rawWidth) : raw;
       expect(residual, i.isEven ? 32767 : -32768);
     }
   }
