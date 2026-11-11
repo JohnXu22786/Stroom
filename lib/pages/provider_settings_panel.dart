@@ -109,8 +109,8 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
 
   void _showMaxFileSizeError() {
     setState(() {
-      _maxFileSizeError = AppLocalizations.of(context)!
-          .providerMaxUploadSizePositive;
+      _maxFileSizeError =
+          AppLocalizations.of(context)!.providerMaxUploadSizePositive;
     });
   }
 
