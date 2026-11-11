@@ -12049,6 +12049,10 @@ class AppLocalizationsFr extends AppLocalizations {
     );
     return 'Supprimer le dossier vide « $name » ? Ses $_temp0';
   }
+
+  @override
+  String get providerMaxUploadSizePositive =>
+      'La taille maximale d’envoi doit être un nombre positif.';
 }
 
 /// The translations for French, as used in France (`fr_FR`).
@@ -24095,4 +24099,8 @@ class AppLocalizationsFrFr extends AppLocalizationsFr {
     );
     return 'Supprimer le dossier vide « $name » ? Ses $_temp0';
   }
+
+  @override
+  String get providerMaxUploadSizePositive =>
+      'La taille maximale d’envoi doit être un nombre positif.';
 }

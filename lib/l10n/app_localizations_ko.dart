@@ -11510,6 +11510,9 @@ class AppLocalizationsKo extends AppLocalizations {
     );
     return '빈 폴더 ‘$name’을(를) 삭제하시겠습니까? 중첩 폴더 $_temp0.';
   }
+
+  @override
+  String get providerMaxUploadSizePositive => '최대 업로드 크기는 양수여야 합니다.';
 }
 
 /// The translations for Korean, as used in Republic of Korea (`ko_KR`).
@@ -23017,4 +23020,7 @@ class AppLocalizationsKoKr extends AppLocalizationsKo {
     );
     return '빈 폴더 ‘$name’을(를) 삭제하시겠습니까? 중첩 폴더 $_temp0.';
   }
+
+  @override
+  String get providerMaxUploadSizePositive => '최대 업로드 크기는 양수여야 합니다.';
 }

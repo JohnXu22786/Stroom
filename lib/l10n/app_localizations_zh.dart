@@ -11204,6 +11204,9 @@ class AppLocalizationsZh extends AppLocalizations {
   ) {
     return '确定要删除空文件夹 “$name” 吗？其下的 $count 个子文件夹也将被删除。';
   }
+
+  @override
+  String get providerMaxUploadSizePositive => '最大上传大小必须是正数。';
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).
@@ -22405,4 +22408,7 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   ) {
     return '确定要删除空文件夹 “$name” 吗？其下的 $count 个子文件夹也将被删除。';
   }
+
+  @override
+  String get providerMaxUploadSizePositive => '最大上传大小必须是正数。';
 }

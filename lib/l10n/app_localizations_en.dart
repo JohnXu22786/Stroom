@@ -11828,6 +11828,10 @@ class AppLocalizationsEn extends AppLocalizations {
     );
     return 'Delete empty folder “$name”? $_temp0';
   }
+
+  @override
+  String get providerMaxUploadSizePositive =>
+      'Maximum upload size must be a positive number.';
 }
 
 /// The translations for English, as used in the United States (`en_US`).
@@ -23653,4 +23657,8 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
     );
     return 'Delete empty folder “$name”? $_temp0';
   }
+
+  @override
+  String get providerMaxUploadSizePositive =>
+      'Maximum upload size must be a positive number.';
 }

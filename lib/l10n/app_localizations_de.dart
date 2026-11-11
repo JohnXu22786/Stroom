@@ -11992,6 +11992,10 @@ class AppLocalizationsDe extends AppLocalizations {
     );
     return 'Leeren Ordner „$name“ löschen? $_temp0';
   }
+
+  @override
+  String get providerMaxUploadSizePositive =>
+      'Die maximale Uploadgröße muss eine positive Zahl sein.';
 }
 
 /// The translations for German, as used in Germany (`de_DE`).
@@ -23981,4 +23985,8 @@ class AppLocalizationsDeDe extends AppLocalizationsDe {
     );
     return 'Leeren Ordner „$name“ löschen? $_temp0';
   }
+
+  @override
+  String get providerMaxUploadSizePositive =>
+      'Die maximale Uploadgröße muss eine positive Zahl sein.';
 }

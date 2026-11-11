@@ -92,6 +92,7 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
   // ASR upload settings
   AudioUploadMethod _uploadMethod = AudioUploadMethod.multipart;
   double _maxFileSizeMb = 25.0;
+  String? _maxFileSizeError;
   late final TextEditingController _maxFileSizeController;
   late final TextEditingController _ocrRequestSizeBudgetController;
 
@@ -105,6 +106,13 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
   bool get _isLlmType => widget.providerType == 'llm';
   bool get _isAsrType => widget.providerType == 'asr';
   bool get _isOcrType => widget.providerType == 'ocr';
+
+  void _showMaxFileSizeError() {
+    setState(() {
+      _maxFileSizeError = AppLocalizations.of(context)!
+          .providerMaxUploadSizePositive;
+    });
+  }
 
   @override
   void initState() {
@@ -179,7 +187,7 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
       _maxFileSizeMb =
           (c.typeConfig['maxFileSizeMb'] as num?)?.toDouble() ?? 25.0;
       _maxFileSizeController = TextEditingController(
-        text: _maxFileSizeMb.toStringAsFixed(1),
+        text: _maxFileSizeMb.toString(),
       );
       _preprocessing = c.typeConfig['preprocessing'] as String? ?? 'none';
       _chunking = c.typeConfig['chunking'] as String? ?? 'none';
