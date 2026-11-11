@@ -488,7 +488,12 @@ class OcrDiagnosticSnapshot {
     final details = <String>[
       // A parsed, bounded HTTP status is protocol metadata even when its digits
       // happen to match an excluded credential value.
-      if (statusCode != null) 'HTTP $statusCode',
+      if (statusCode != null &&
+          !containsCredential(
+            'HTTP $statusCode',
+            excludedValues: credentialValues,
+          ))
+        'HTTP $statusCode',
       if (_safeReason(
         RegExp(
           r'finish[_ ]reason\s*=\s*([a-zA-Z0-9_-]{1,48})',
