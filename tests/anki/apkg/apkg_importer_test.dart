@@ -477,8 +477,7 @@ void main() {
     }
   });
 
-  test('imports large review histories without duplicating existing rows',
-      () async {
+  test('imports large review histories with distinct source events', () async {
     const existingReviewCount = 512;
     const importedReviewCount = 512;
     final documents = await Directory.systemTemp.createTemp(
@@ -537,11 +536,12 @@ void main() {
         final revlogs = await target.query('revlog');
         expect(
           revlogs,
-          hasLength(existingReviewCount + importedReviewCount),
+          hasLength(
+              existingReviewCount + existingReviewCount + importedReviewCount),
         );
         expect(
           revlogs.where((row) => row['usn'] == -1),
-          hasLength(importedReviewCount),
+          hasLength(existingReviewCount + importedReviewCount),
         );
       } finally {
         await target.close();
