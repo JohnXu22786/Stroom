@@ -137,6 +137,13 @@ OPAQUE_CREDENTIAL_PATTERNS = (
         r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b"
     ),
 )
+OPAQUE_CREDENTIAL_IDENTIFIER_PATTERNS = tuple(
+    re.compile(
+        pattern.pattern.removeprefix(r"\b").removesuffix(r"\b"),
+        pattern.flags,
+    )
+    for pattern in OPAQUE_CREDENTIAL_PATTERNS
+)
 PREDICTION_FIELDS = {
     "fixture_id",
     "text",
@@ -202,6 +209,9 @@ def _is_credential_like_identifier(value: str) -> bool:
         "password",
     }
     normalized = "".join(part for part in parts if not part.isdigit())
+    contains_opaque_credential = any(
+        pattern.search(value) for pattern in OPAQUE_CREDENTIAL_IDENTIFIER_PATTERNS
+    )
     compound_key = re.fullmatch(
         r"(?:access|api|client|openai|private|secret|service|session|signing|stripe)keys?\d*",
         normalized,
@@ -226,8 +236,13 @@ def _is_credential_like_identifier(value: str) -> bool:
         compound_key is not None
         or qualified_key_component
         or normalized in credential_terms
+        or contains_opaque_credential
         or any(
-            part in credential_terms
+            re.sub(r"\d+$", "", part) in credential_terms
+            or (
+                re.sub(r"\d+$", "", part).endswith("s")
+                and re.sub(r"\d+$", "", part)[:-1] in credential_terms
+            )
             or any(
                 marker not in {"auth", "key"}
                 and re.sub(r"s?\d*$", "", part).endswith(marker)

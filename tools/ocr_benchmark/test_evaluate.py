@@ -1366,6 +1366,28 @@ class EvaluateTests(unittest.TestCase):
                         predictions([{"fixture_id": credential_id, "text": 1}]),
                     )
 
+        for credential_id in ("key1", "keys", "auth1"):
+            with self.subTest(credential_id=credential_id):
+                manifest["fixtures"][0]["id"] = credential_id
+                with self.assertRaisesRegex(
+                    EvaluationError,
+                    "\\[redacted\\]: text must be a string or null",
+                ):
+                    evaluate_predictions(
+                        manifest,
+                        predictions([{"fixture_id": credential_id, "text": 1}]),
+                    )
+
+        opaque_credential_id = f"fixture_{secret_value}_tail"
+        manifest["fixtures"][0]["id"] = "safe-id"
+        with self.assertRaisesRegex(
+            EvaluationError, "unknown fixture_id: '\\[redacted\\]'"
+        ):
+            evaluate_predictions(
+                manifest,
+                predictions([{"fixture_id": opaque_credential_id, "text": "x"}]),
+            )
+
         manifest = {
             "fixtures": [
                 {"id": "safe-id", "gold_text": "x", "categories": ["english"]},
