@@ -142,6 +142,9 @@ void main() {
       await tester.pumpDetailPage(configIndex: -1, entryType: 'asr');
       await tester.pumpAndSettle();
 
+      await tester.tap(find.text('参数设置'));
+      await tester.pumpAndSettle();
+
       final compressionDropdown = tester
           .widgetList<DropdownButton<String>>(
               find.byType(DropdownButton<String>))
