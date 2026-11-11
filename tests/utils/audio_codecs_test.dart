@@ -423,6 +423,40 @@ void main() {
       }
     });
 
+    test('uses sequential frame numbers for fixed-block frames', () async {
+      final pcm = Int16List(4096 * 3);
+      final outputs = [
+        encodeFlac(pcm),
+        await encodeFlacWithEventLoopYield(pcm, yieldEveryFrames: 2),
+      ];
+
+      for (final flac in outputs) {
+        final frameNumbers = <int>[];
+        for (var offset = 42; offset < flac.length - 6; offset++) {
+          if (flac[offset] != 0xFF || (flac[offset + 1] & 0xFC) != 0xF8) {
+            continue;
+          }
+
+          final first = flac[offset + 4];
+          final byteCount = first < 0x80
+              ? 1
+              : (first & 0xE0) == 0xC0
+                  ? 2
+                  : (first & 0xF0) == 0xE0
+                      ? 3
+                      : 4;
+          final prefixMask = byteCount == 1 ? 0x7F : 0x1F >> (byteCount - 2);
+          var frameNumber = first & prefixMask;
+          for (var i = 1; i < byteCount; i++) {
+            frameNumber = (frameNumber << 6) | (flac[offset + 4 + i] & 0x3F);
+          }
+          frameNumbers.add(frameNumber);
+        }
+
+        expect(frameNumbers, [0, 1, 2]);
+      }
+    });
+
     test('produces smaller output than PCM for tonal content', () {
       final pcm = _sineWave(8192);
       final pcmSize = pcm.length * 2;
