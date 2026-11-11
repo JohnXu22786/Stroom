@@ -285,7 +285,7 @@ class ManifestOperations<T extends FileRecord> {
       p.join(directory, _validatedFileName(fileName));
 
   void _validateRecordStorageName(T record) {
-    if (_isAudioTable) _validatedFileName(storageNameOf(record));
+    _validatedFileName(storageNameOf(record));
   }
 
   Future<void> _deleteStoredFile(String name) async {
