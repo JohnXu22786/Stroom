@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/l10n/app_localizations.dart';
+import 'package:stroom/l10n/app_localizations_ko.dart';
 import 'package:stroom/l10n/locale_name_catalog.dart';
 import 'package:stroom/providers/locale_provider.dart';
 
@@ -43,6 +44,7 @@ void main() {
       'Korean',
     );
     final strings = lookupAppLocalizations(korean);
+    expect(strings, isA<AppLocalizationsKo>());
     expect(strings.localeName, 'ko_KR');
     expect(strings.languageNameKorean, '한국어');
     expect(strings.galleryPermissionTitle, '사진 라이브러리 접근 권한 필요');
