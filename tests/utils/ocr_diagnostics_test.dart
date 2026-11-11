@@ -1,9 +1,40 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations_es.dart';
+import 'package:stroom/l10n/app_localizations_ja.dart';
 import 'package:stroom/utils/ocr_diagnostics.dart';
 
 void main() {
+  test('Spanish and Japanese OCR payload errors remain safe to persist', () {
+    final summaries = [
+      AppLocalizationsEs().ocrImageEmpty,
+      AppLocalizationsEs().ocrImageUnsupportedFormat,
+      AppLocalizationsEs().ocrImageUnsupportedSpecialFormat,
+      AppLocalizationsEs().ocrImageDecodeFailed,
+      AppLocalizationsEs().ocrImageDimensionsTooLarge,
+      AppLocalizationsEs().ocrImageOrientationPngTooLarge,
+      AppLocalizationsEs().ocrImageOrientationFailed,
+      AppLocalizationsJa().ocrImageEmpty,
+      AppLocalizationsJa().ocrImageUnsupportedFormat,
+      AppLocalizationsJa().ocrImageUnsupportedSpecialFormat,
+      AppLocalizationsJa().ocrImageDecodeFailed,
+      AppLocalizationsJa().ocrImageDimensionsTooLarge,
+      AppLocalizationsJa().ocrImageOrientationPngTooLarge,
+      AppLocalizationsJa().ocrImageOrientationFailed,
+    ];
+
+    for (final summary in summaries) {
+      expect(OcrDiagnosticSnapshot.sanitizeStoredTaskError(summary), summary);
+    }
+    expect(
+      OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+        'Exception: OCR 请求被模型拒绝: secret provider response',
+      ),
+      'OCR 错误详情已隐藏',
+    );
+  });
+
   test('nested request body credentials exclude echoed request IDs', () {
     const credential = 'opaque-secret-77';
     const nestedCredential = 'nested-token-secret-77';
