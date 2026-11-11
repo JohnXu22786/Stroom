@@ -6,6 +6,49 @@ import 'package:stroom/l10n/app_localizations_ja.dart';
 import 'package:stroom/utils/ocr_diagnostics.dart';
 
 void main() {
+  test('Spanish and Japanese TaskFlow OCR preflight summaries remain safe', () {
+    final locales = [AppLocalizationsEs(), AppLocalizationsJa()];
+
+    for (final localizations in locales) {
+      final missing = localizations.taskFlowOcrInputMissing;
+      final unreadable = localizations.taskFlowOcrInputReadFailed;
+      final requestLimit = localizations.taskFlowOcrRequestSizeLimit('1.25');
+      final inputLimit = localizations.taskFlowImageInputSizeLimit('20.00');
+      final oversized = localizations.taskFlowOcrInputTooLarge(requestLimit);
+      final oversizedInput = localizations.taskFlowOcrInputTooLarge(inputLimit);
+
+      for (final summary in [missing, unreadable, oversized, oversizedInput]) {
+        expect(
+          OcrDiagnosticSnapshot.sanitizeStoredTaskError(summary),
+          summary,
+        );
+      }
+    }
+
+    final spanishMissing = AppLocalizationsEs().taskFlowOcrInputMissing;
+    final japaneseMissing = AppLocalizationsJa().taskFlowOcrInputMissing;
+    expect(
+      OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+        spanishMissing,
+        excludedValues: ['imagen'],
+      ),
+      'OCR 错误详情已隐藏',
+    );
+    expect(
+      OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+        japaneseMissing,
+        excludedValues: ['画像'],
+      ),
+      'OCR 错误详情已隐藏',
+    );
+    expect(
+      OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+        'Exception: OCR 请求被模型拒绝: private provider response',
+      ),
+      'OCR 错误详情已隐藏',
+    );
+  });
+
   test('Spanish and Japanese OCR payload errors remain safe to persist', () {
     final summaries = [
       AppLocalizationsEs().ocrImageEmpty,
