@@ -165,6 +165,10 @@ void main() {
         reason: 'new ASR providers should default to the recommended fallback',
       );
 
+      await tester.tap(find.text('基本信息'));
+      await tester.pumpAndSettle();
+      expect(find.byType(TextField), findsNWidgets(3));
+
       await tester.enterText(find.byType(TextField).at(0), 'NewASRProvider');
       await tester.enterText(
         find.byType(TextField).at(1),
@@ -182,7 +186,7 @@ void main() {
           .entries
           .single
           .configs
-          .single;
+          .firstWhere((config) => config.providerName == 'NewASRProvider');
       expect(savedConfig.typeConfig['compression'], 'flac');
       expect(savedConfig.typeConfig['fallbackMethod'], 'all');
     });
