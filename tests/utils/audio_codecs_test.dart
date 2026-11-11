@@ -208,6 +208,36 @@ void main() {
       expect(flac[3], 0x43); // 'C'
     });
 
+    test('writes a 34-byte STREAMINFO before the first frame', () {
+      const sampleRate = 16000;
+      final pcm = Int16List(200);
+
+      final flac = encodeFlac(pcm, sampleRate: sampleRate);
+      final metadataLength = (flac[5] << 16) | (flac[6] << 8) | flac[7];
+      final streamInfo = flac.sublist(8, 8 + metadataLength);
+
+      expect(metadataLength, 34);
+      expect(flac[42], 0xFF);
+      expect(flac[43] & 0xFC, 0xF8);
+
+      final encodedSampleRate = (streamInfo[10] << 12) |
+          (streamInfo[11] << 4) |
+          (streamInfo[12] >> 4);
+      final channels = ((streamInfo[12] & 0x0E) >> 1) + 1;
+      final bitsPerSample =
+          (((streamInfo[12] & 0x01) << 4) | (streamInfo[13] >> 4)) + 1;
+      final totalSamples = ((streamInfo[13] & 0x0F) * 0x100000000) +
+          (streamInfo[14] * 0x1000000) +
+          (streamInfo[15] * 0x10000) +
+          (streamInfo[16] * 0x100) +
+          streamInfo[17];
+
+      expect(encodedSampleRate, sampleRate);
+      expect(channels, 1);
+      expect(bitsPerSample, 16);
+      expect(totalSamples, pcm.length);
+    });
+
     test('produces smaller output than PCM for tonal content', () {
       final pcm = _sineWave(8192);
       final pcmSize = pcm.length * 2;
