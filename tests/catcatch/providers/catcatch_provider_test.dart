@@ -2711,9 +2711,9 @@ void main() {
         final secondTaskPartial = File(
           '${downloadDir.path}/second.mp4.$taskSuffix.catcatch_tmp',
         )..writeAsStringSync('second task partial');
-        final firstPartial = File('${directory.path}/first.partial')
+        final firstPartial = File('${downloadDir.path}/first.partial')
           ..writeAsStringSync('first recorded partial');
-        final secondPartial = File('${directory.path}/second.partial')
+        final secondPartial = File('${downloadDir.path}/second.partial')
           ..writeAsStringSync('second recorded partial');
         final sharedArtifact = File('${downloadDir.path}/second.mp4')
           ..writeAsStringSync('remaining owner');
@@ -2762,7 +2762,7 @@ void main() {
       final tempDownload = File(
         '${downloadDir.path}/video.mp4.catcatch_tmp',
       )..writeAsStringSync('partial download');
-      final unsharedDownload = File('${directory.path}/unshared-download.tmp')
+      final unsharedDownload = File('${downloadDir.path}/unshared-download.tmp')
         ..writeAsStringSync('removed task artifact');
       final progressFile = File(
         '${directory.path}/catcatch/.progress/removed_dl_progress.json',
@@ -2823,7 +2823,7 @@ void main() {
       final tempDownload = File(
         '${downloadDir.path}/video.mp4.catcatch_tmp',
       )..writeAsStringSync('partial download');
-      final unsharedDownload = File('${directory.path}/unshared-download.tmp')
+      final unsharedDownload = File('${downloadDir.path}/unshared-download.tmp')
         ..writeAsStringSync('removed task artifact');
       final progressFile = File(
         '${directory.path}/catcatch/.progress/removed_dl_progress.json',

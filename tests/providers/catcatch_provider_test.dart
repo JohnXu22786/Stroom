@@ -52,6 +52,9 @@ class _RetryProgressFile implements File {
   Future<bool> exists() => file.exists();
 
   @override
+  Future<String> resolveSymbolicLinks() => file.resolveSymbolicLinks();
+
+  @override
   Future<FileSystemEntity> delete({bool recursive = false}) async {
     deleteAttempts++;
     if (deleteAttempts == 1) {
@@ -533,6 +536,125 @@ void main() {
         returnsNormally,
       );
     });
+
+    test('does not let a traversal task ID escape the progress directory',
+        () async {
+      final outsideProgress = File(p.join(appDir, 'outside_dl_progress.json'))
+        ..writeAsStringSync('keep');
+      final task = createTask(
+        id: '../../outside',
+        status: TaskStatus.failed,
+      );
+
+      await CatCatchNotifier.cleanupTaskFiles(task, appDirPath: appDir);
+
+      expect(outsideProgress.existsSync(), isTrue);
+    });
+
+    test('cleans progress files for task IDs containing a period', () async {
+      const taskId = 'legacy.task';
+      final progressDir = Directory(p.join(appDir, 'catcatch', '.progress'))
+        ..createSync(recursive: true);
+      final progressFile =
+          File(p.join(progressDir.path, '${taskId}_dl_progress.json'))
+            ..writeAsStringSync('progress');
+      final task = createTask(
+        id: taskId,
+        status: TaskStatus.failed,
+      );
+
+      await CatCatchNotifier.cleanupTaskFiles(task, appDirPath: appDir);
+
+      expect(progressFile.existsSync(), isFalse);
+    });
+
+    test('does not delete downloadedFilePath outside CatCatch directories',
+        () async {
+      final outsideFile = File(p.join(appDir, 'user-data.mp4'))
+        ..writeAsStringSync('keep');
+      final task = createTask(
+        id: 'test-outside-download',
+        status: TaskStatus.failed,
+        downloadedFilePath: outsideFile.path,
+      );
+
+      await CatCatchNotifier.cleanupTaskFiles(task, appDirPath: appDir);
+
+      expect(outsideFile.existsSync(), isTrue);
+    });
+
+    test(
+        'does not follow a managed downloads directory symlink outside CatCatch',
+        () async {
+      final catcatchDir = Directory(p.join(appDir, 'catcatch'))
+        ..createSync(recursive: true);
+      final outsideDir = Directory(p.join(appDir, 'outside'))
+        ..createSync(recursive: true);
+      final outsideFile = File(p.join(outsideDir.path, 'partial.mp4'))
+        ..writeAsStringSync('keep');
+      final downloadsDir = p.join(catcatchDir.path, 'downloads');
+      Link(downloadsDir).createSync(outsideDir.path);
+      final task = createTask(
+        id: 'test-symlink-download',
+        status: TaskStatus.failed,
+        downloadedFilePath: p.join(downloadsDir, 'partial.mp4'),
+      );
+
+      await CatCatchNotifier.cleanupTaskFiles(task, appDirPath: appDir);
+
+      expect(outsideFile.existsSync(), isTrue);
+    },
+        skip: Platform.isWindows
+            ? 'Symlink creation may require elevation.'
+            : false);
+
+    test('does not follow downloads symlink to another CatCatch directory',
+        () async {
+      final catcatchDir = Directory(p.join(appDir, 'catcatch'))
+        ..createSync(recursive: true);
+      final privateDir = Directory(p.join(catcatchDir.path, 'private'))
+        ..createSync(recursive: true);
+      final privateFile = File(p.join(privateDir.path, 'partial.mp4'))
+        ..writeAsStringSync('keep');
+      final downloadsDir = p.join(catcatchDir.path, 'downloads');
+      Link(downloadsDir).createSync(privateDir.path);
+      final task = createTask(
+        id: 'test-symlink-private-directory',
+        status: TaskStatus.failed,
+        downloadedFilePath: p.join(downloadsDir, 'partial.mp4'),
+      );
+
+      await CatCatchNotifier.cleanupTaskFiles(task, appDirPath: appDir);
+
+      expect(privateFile.existsSync(), isTrue);
+    },
+        skip: Platform.isWindows
+            ? 'Symlink creation may require elevation.'
+            : false);
+
+    test('does not follow the CatCatch root symlink outside app storage',
+        () async {
+      final outsideDir = Directory(p.join(appDir, 'outside'))
+        ..createSync(recursive: true);
+      final downloadsDir = Directory(p.join(outsideDir.path, 'downloads'))
+        ..createSync(recursive: true);
+      final outsideFile = File(p.join(downloadsDir.path, 'partial.mp4'))
+        ..writeAsStringSync('keep');
+      Link(p.join(appDir, 'catcatch')).createSync(outsideDir.path);
+      final task = createTask(
+        id: 'test-symlink-catcatch-root',
+        status: TaskStatus.failed,
+        downloadedFilePath:
+            p.join(appDir, 'catcatch', 'downloads', 'partial.mp4'),
+      );
+
+      await CatCatchNotifier.cleanupTaskFiles(task, appDirPath: appDir);
+
+      expect(outsideFile.existsSync(), isTrue);
+    },
+        skip: Platform.isWindows
+            ? 'Symlink creation may require elevation.'
+            : false);
 
     test('handles page-title based download filenames', () async {
       final media = MediaResource(
