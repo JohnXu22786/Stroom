@@ -129,20 +129,29 @@ const List<int> _imaIndexTable = [-1, -1, -1, -1, 2, 4, 6, 8];
 /// Encode PCM S16LE samples to IMA ADPCM.
 ///
 /// Returns ADPCM bytes (4-bit nibbles, packed high nibble first per IMA spec).
-/// Only whole blocks of [AdpcmConfig.blockSize] samples are encoded — a
-/// trailing partial block (fewer than 256 samples) is dropped.
+/// A trailing partial block is padded by repeating its last sample.
 Uint8List encodeAdpcm(Int16List pcmSamples, AdpcmConfig config) {
-  final numBlocks = pcmSamples.length ~/ config.blockSize;
+  final numBlocks =
+      (pcmSamples.length + config.blockSize - 1) ~/ config.blockSize;
   final nibblesPerBlock = config.blockSize;
 
   final out = BytesOutput();
   int sampleIdx = 0;
 
   for (int block = 0; block < numBlocks; block++) {
-    final blockSamples = pcmSamples.sublist(
-      sampleIdx,
-      sampleIdx + config.blockSize,
+    final actualBlockSize = (pcmSamples.length - sampleIdx).clamp(
+      0,
+      config.blockSize,
     );
+    final blockSamples = Int16List(config.blockSize);
+    blockSamples.setRange(0, actualBlockSize, pcmSamples, sampleIdx);
+    if (actualBlockSize < config.blockSize) {
+      blockSamples.fillRange(
+        actualBlockSize,
+        config.blockSize,
+        blockSamples[actualBlockSize - 1],
+      );
+    }
 
     for (int ch = 0; ch < config.channels; ch++) {
       // Block header: 2-byte predictor + 1-byte step index + 1 reserved
@@ -234,14 +243,18 @@ Future<Uint8List> encodeAdpcmWithEventLoopYield(
   }
   checkCancelled?.call();
   final output = BytesBuilder(copy: false);
-  final blockCount = pcmSamples.length ~/ config.blockSize;
+  final blockCount =
+      (pcmSamples.length + config.blockSize - 1) ~/ config.blockSize;
   for (var firstBlock = 0;
       firstBlock < blockCount;
       firstBlock += yieldEveryBlocks) {
     checkCancelled?.call();
     final lastBlock = (firstBlock + yieldEveryBlocks).clamp(0, blockCount);
     final firstSample = firstBlock * config.blockSize;
-    final lastSample = lastBlock * config.blockSize;
+    final lastSample = (lastBlock * config.blockSize).clamp(
+      0,
+      pcmSamples.length,
+    );
     output.add(
       encodeAdpcm(pcmSamples.sublist(firstSample, lastSample), config),
     );
@@ -266,6 +279,7 @@ Uint8List adpcmToWav(
   required int sampleRate,
   // Matches AdpcmConfig().blockSize (the default used by encodeAdpcm).
   int samplesPerBlock = 256,
+  int? sampleCount,
 }) {
   // Mono IMA ADPCM block layout (per encodeAdpcm):
   // 4-byte header + nibbles for (samplesPerBlock - 1) samples.
@@ -274,6 +288,15 @@ Uint8List adpcmToWav(
 
   // Pad trailing partial block with a silent block (zero header + nibbles).
   final paddedLength = (adpcmBytes.length / blockAlign).ceil() * blockAlign;
+  final encodedSampleCapacity = paddedLength ~/ blockAlign * samplesPerBlock;
+  final declaredSampleCount = sampleCount ?? encodedSampleCapacity;
+  if (declaredSampleCount < 0 || declaredSampleCount > encodedSampleCapacity) {
+    throw ArgumentError.value(
+      declaredSampleCount,
+      'sampleCount',
+      'must be between 0 and the encoded sample capacity ($encodedSampleCapacity)',
+    );
+  }
   final data = Uint8List(paddedLength);
   // WAVE_FORMAT_IMA_ADPCM decoders (ffmpeg, dr_wav) read the LOW nibble of
   // each payload byte first, while [encodeAdpcm] packs the first sample's
@@ -289,7 +312,7 @@ Uint8List adpcmToWav(
 
   final out = BytesOutput();
   out.writeString('RIFF');
-  out.writeUint32LE(4 + (8 + 18 + 2) + (8 + data.length)); // file size - 8
+  out.writeUint32LE(4 + (8 + 20) + (8 + 4) + (8 + data.length));
   out.writeString('WAVE');
   out.writeString('fmt ');
   // 20 bytes of fmt data: 16 base + cbSize (2) + samplesPerBlock (2).
@@ -305,6 +328,11 @@ Uint8List adpcmToWav(
   out.writeUint16LE(4); // bits per sample (4-bit nibbles)
   out.writeUint16LE(2); // cbSize
   out.writeUint16LE(samplesPerBlock); // samples per block (extension)
+  // Compressed formats use `fact` to report the number of source samples,
+  // which may be shorter than the padded final ADPCM block.
+  out.writeString('fact');
+  out.writeUint32LE(4);
+  out.writeUint32LE(declaredSampleCount);
   out.writeString('data');
   out.writeUint32LE(data.length);
   out.addBytes(data);
