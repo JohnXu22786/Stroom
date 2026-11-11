@@ -25,13 +25,6 @@ import 'task_provider.dart';
 
 const _unrestoredTaskRecordMarker = {'_unrestoredTaskRecord': true};
 
-bool _isBackgroundTaskCancellationError(String? error) =>
-    error == '已取消' ||
-    error == 'Canceled' ||
-    error == 'Cancelado' ||
-    error == 'キャンセル' ||
-    error == '취소됨';
-
 Map<String, dynamic> _unrestoredTaskRecord({
   required bool retryAudioOwnershipKnown,
   Set<String> retryAudioIds = const {},
@@ -5118,11 +5111,10 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         task.type == BackgroundTaskType.ocr &&
         task.retryData != null &&
         (_pendingTaskRemovalReconciliations.containsKey(taskId) ||
-            (task.status == TaskStatus.waiting &&
-                _isBackgroundTaskCancellationError(task.error)))) {
+            task.status == TaskStatus.waiting)) {
       // Cancellation callbacks and stale runners can report failure while
-      // removal is in progress or after rollback. Keep the retry task's
-      // cancellation outcome instead of notifying for a stale failure.
+      // removal is in progress or after rollback. Keep a restored retryable
+      // OCR task waiting instead of notifying for a stale failure.
       return;
     }
     _updateTask(
