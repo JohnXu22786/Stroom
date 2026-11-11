@@ -67,7 +67,7 @@ Future<void> downloadSingleSegment({
   required Semaphore semaphore,
   CancelToken? cancelToken,
   required Map<int, String> errors,
-  required void Function(int index) onSegmentComplete,
+  required Future<void> Function(int index) onSegmentComplete,
 
   /// Byte-granularity progress: called with the chunk size after each
   /// chunk is written. The caller aggregates this into a total so
@@ -148,7 +148,7 @@ Future<void> downloadSingleSegment({
             return;
           }
 
-          onSegmentComplete(index);
+          await onSegmentComplete(index);
           return;
         } finally {
           dio.close();
