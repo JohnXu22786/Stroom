@@ -98,13 +98,30 @@ class AppStorage {
       return _resolved!;
     }
 
-    await AppLogService.info('AppStorage', '获取应用文档目录');
+    final resolutionClock = Stopwatch()..start();
+    await AppLogService.info('AppStorage', '目录解析开始');
 
     try {
       final dir = await getApplicationDocumentsDirectory();
       _resolved = dir.path;
+      await AppLogService.info(
+        'AppStorage',
+        '目录解析完成: source=platform_provider, elapsedMs=${resolutionClock.elapsedMilliseconds}',
+      );
     } on MissingPluginException {
       _resolved = await _fallbackPath();
+      await AppLogService.info(
+        'AppStorage',
+        '目录解析完成: source=fallback, elapsedMs=${resolutionClock.elapsedMilliseconds}',
+      );
+    } catch (error, stackTrace) {
+      await AppLogService.error(
+        'AppStorage',
+        '目录解析失败',
+        error.runtimeType,
+        stackTrace,
+      );
+      rethrow;
     }
 
     return _resolved!;

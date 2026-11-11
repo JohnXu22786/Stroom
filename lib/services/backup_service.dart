@@ -246,29 +246,50 @@ class BackupService {
     BackupSelection selection = BackupSelection.all,
     bool useStartupPreferenceAdapter = false,
   }) async {
+    final operationClock = Stopwatch()..start();
     await AppLogService.info(
       'BackupService',
-      'createBackup: outputPath=$outputPath',
+      'createBackup: start, selectedCategories=${selection.selectedLabels.length}, '
+          'includeMediaFiles=${selection.includeMediaFiles}',
     );
-    if (kIsWeb) {
-      throw UnsupportedError(
-        'createBackup is not available on web. Use exportBackup instead.',
+    try {
+      if (kIsWeb) {
+        throw UnsupportedError(
+          'createBackup is not available on web. Use exportBackup instead.',
+        );
+      }
+      if (isCancelled != null && isCancelled()) {
+        throw const BackupCancelledException();
+      }
+      // 使用流式写入：逐个文件处理并直接写入磁盘，
+      // 峰值内存从 O(总备份大小) 降低到 O(最大单文件大小)。
+      await _createBackupStreaming(
+        outputPath: outputPath,
+        onProgress: onProgress,
+        isCancelled: isCancelled,
+        selection: selection,
+        useStartupPreferenceAdapter: useStartupPreferenceAdapter,
       );
+      await AppLogService.info(
+        'BackupService',
+        'createBackup: success, elapsedMs=${operationClock.elapsedMilliseconds}',
+      );
+      return outputPath;
+    } on BackupCancelledException {
+      await AppLogService.info(
+        'BackupService',
+        'createBackup: cancelled, elapsedMs=${operationClock.elapsedMilliseconds}',
+      );
+      rethrow;
+    } catch (error, stackTrace) {
+      await AppLogService.error(
+        'BackupService',
+        'createBackup: failed, elapsedMs=${operationClock.elapsedMilliseconds}',
+        error.runtimeType,
+        stackTrace,
+      );
+      rethrow;
     }
-    if (isCancelled != null && isCancelled()) {
-      throw const BackupCancelledException();
-    }
-    // 使用流式写入：逐个文件处理并直接写入磁盘，
-    // 峰值内存从 O(总备份大小) 降低到 O(最大单文件大小)。
-    await _createBackupStreaming(
-      outputPath: outputPath,
-      onProgress: onProgress,
-      isCancelled: isCancelled,
-      selection: selection,
-      useStartupPreferenceAdapter: useStartupPreferenceAdapter,
-    );
-    await AppLogService.info('BackupService', 'createBackup: success');
-    return outputPath;
   }
 
   static Future<void> restoreBackup(
@@ -280,26 +301,41 @@ class BackupService {
     bool trustEmptyLegacyTaskPayloads = false,
     bool useStartupPreferenceAdapter = false,
   }) async {
+    final operationClock = Stopwatch()..start();
     await AppLogService.info(
       'BackupService',
-      'restoreBackup: zipPath=$zipPath',
+      'restoreBackup: start, selectedCategories=${selection.selectedLabels.length}',
     );
-    if (kIsWeb) {
-      throw UnsupportedError(
-        'restoreBackup is not available on web. Use importBackup instead.',
+    try {
+      if (kIsWeb) {
+        throw UnsupportedError(
+          'restoreBackup is not available on web. Use importBackup instead.',
+        );
+      }
+      // 流式恢复：只解析中央目录 + 按条目分块解压落盘，
+      // 峰值内存 O(块大小)，不再把整个备份包 readAsBytes 进内存。
+      await _restoreFromZipFile(
+        zipPath,
+        onProgress: onProgress,
+        selection: selection,
+        skipPostRestoreMigration: skipPostRestoreMigration,
+        skipMissingCategories: skipMissingCategories,
+        trustEmptyLegacyTaskPayloads: trustEmptyLegacyTaskPayloads,
+        useStartupPreferenceAdapter: useStartupPreferenceAdapter,
       );
+      await AppLogService.info(
+        'BackupService',
+        'restoreBackup: success, elapsedMs=${operationClock.elapsedMilliseconds}',
+      );
+    } catch (error, stackTrace) {
+      await AppLogService.error(
+        'BackupService',
+        'restoreBackup: failed, elapsedMs=${operationClock.elapsedMilliseconds}',
+        error.runtimeType,
+        stackTrace,
+      );
+      rethrow;
     }
-    // 流式恢复：只解析中央目录 + 按条目分块解压落盘，
-    // 峰值内存 O(块大小)，不再把整个备份包 readAsBytes 进内存。
-    await _restoreFromZipFile(
-      zipPath,
-      onProgress: onProgress,
-      selection: selection,
-      skipPostRestoreMigration: skipPostRestoreMigration,
-      skipMissingCategories: skipMissingCategories,
-      trustEmptyLegacyTaskPayloads: trustEmptyLegacyTaskPayloads,
-      useStartupPreferenceAdapter: useStartupPreferenceAdapter,
-    );
   }
 
   // ================================================================
@@ -5486,7 +5522,11 @@ class BackupService {
     BackupSelection selection = BackupSelection.all,
   }) async {
     final l10n = AppLocalizations.of(context)!;
-    await AppLogService.info('BackupService', 'exportBackup: start');
+    final operationClock = Stopwatch()..start();
+    await AppLogService.info(
+      'BackupService',
+      'exportBackup: start, selectedCategories=${selection.selectedLabels.length}',
+    );
     try {
       final defaultName = await _nextBackupFileName();
 
@@ -5539,7 +5579,10 @@ class BackupService {
         );
         if (saveLocation == null) {
           // 用户取消保存
-          await AppLogService.info('BackupService', 'exportBackup: 用户取消');
+          await AppLogService.info(
+            'BackupService',
+            'exportBackup: cancelled, elapsedMs=${operationClock.elapsedMilliseconds}',
+          );
           return false;
         }
         final outputPath = saveLocation.path;
@@ -5569,7 +5612,13 @@ class BackupService {
         savedLocation = destinationPath;
       }
 
-      if (savedLocation == null) return false;
+      if (savedLocation == null) {
+        await AppLogService.info(
+          'BackupService',
+          'exportBackup: cancelled, elapsedMs=${operationClock.elapsedMilliseconds}',
+        );
+        return false;
+      }
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -5577,10 +5626,18 @@ class BackupService {
           ),
         );
       }
-      await AppLogService.info('BackupService', 'exportBackup: success');
+      await AppLogService.info(
+        'BackupService',
+        'exportBackup: success, elapsedMs=${operationClock.elapsedMilliseconds}',
+      );
       return true;
-    } catch (e) {
-      await AppLogService.error('BackupService', 'exportBackup: 失败', e);
+    } catch (e, s) {
+      await AppLogService.error(
+        'BackupService',
+        'exportBackup: failed, elapsedMs=${operationClock.elapsedMilliseconds}',
+        e.runtimeType,
+        s,
+      );
       if (context.mounted) {
         final errorText = e.toString();
         final noBackupFolderError =
@@ -5614,14 +5671,24 @@ class BackupService {
     void Function(List<String> skippedCategories)? onSkippedCategories,
   }) async {
     final l10n = AppLocalizations.of(context)!;
-    await AppLogService.info('BackupService', 'importBackup: start');
+    final operationClock = Stopwatch()..start();
+    await AppLogService.info(
+      'BackupService',
+      'importBackup: start, selectedCategories=${selection.selectedLabels.length}',
+    );
     try {
       final file = await FilePicker.pickFile(
         type: FileType.custom,
         allowedExtensions: ['zip'],
         initialDirectory: SystemPickDirectories.documents(),
       );
-      if (file == null) return false;
+      if (file == null) {
+        await AppLogService.info(
+          'BackupService',
+          'importBackup: cancelled, elapsedMs=${operationClock.elapsedMilliseconds}',
+        );
+        return false;
+      }
 
       final List<String> skippedCategories;
 
@@ -5668,10 +5735,19 @@ class BackupService {
       onSkippedCategories?.call(skippedCategories);
 
       // 恢复成功 — 让调用方处理重启提示
-      await AppLogService.info('BackupService', 'importBackup: success');
+      await AppLogService.info(
+        'BackupService',
+        'importBackup: success, skippedCategories=${skippedCategories.length}, '
+            'elapsedMs=${operationClock.elapsedMilliseconds}',
+      );
       return true;
-    } catch (e) {
-      await AppLogService.error('BackupService', 'importBackup: 失败', e);
+    } catch (e, s) {
+      await AppLogService.error(
+        'BackupService',
+        'importBackup: failed, elapsedMs=${operationClock.elapsedMilliseconds}',
+        e.runtimeType,
+        s,
+      );
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
