@@ -20,6 +20,7 @@ import '../services/ocr_retry_storage.dart';
 import '../pages/ocr/ocr_retry_snapshot.dart';
 import '../utils/atomic_file.dart';
 import '../utils/ocr_diagnostics.dart';
+import '../utils/ocr_page_failure_summary.dart';
 import 'locale_provider.dart';
 import 'task_provider.dart';
 
@@ -677,32 +678,7 @@ String? _localizeStoredOcrPageFailureSummary(
   String error,
   AppLocalizations strings,
 ) {
-  for (final prefix in [
-    '部分图片 OCR 未完成：',
-    'Some images were not fully recognized: ',
-  ]) {
-    if (!error.startsWith(prefix)) continue;
-    final details = error.substring(prefix.length);
-    final pageFailures = RegExp(
-      r'第 (\d+) 张图片(结果不完整|识别失败)|'
-      r'Image (\d+): (incomplete result|recognition failed)',
-    );
-    final matches = pageFailures.allMatches(details).toList();
-    final unmatched = details
-        .replaceAll(pageFailures, '')
-        .replaceAll(RegExp(r'[；，;, ]+'), '');
-    if (matches.isEmpty || unmatched.isNotEmpty) return error;
-    final localizedDetails = matches.map((match) {
-      final index = match.group(1) ?? match.group(3)!;
-      final incomplete =
-          match.group(2) == '结果不完整' || match.group(4) == 'incomplete result';
-      return incomplete
-          ? strings.bgTaskOcrPageIncomplete(index)
-          : strings.bgTaskOcrPageFailed(index);
-    }).join(strings.bgTaskOcrPageFailureSeparator);
-    return strings.bgTaskOcrPagesIncomplete(localizedDetails);
-  }
-  return null;
+  return OcrPageFailureSummary.localize(error, strings);
 }
 
 BackgroundTask _localizeRestoredBackgroundTask(

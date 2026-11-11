@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 
+import 'ocr_page_failure_summary.dart';
+
 /// Creates small OCR diagnostic maps suitable for task persistence and display.
 class OcrDiagnosticSnapshot {
   OcrDiagnosticSnapshot._();
@@ -548,7 +550,8 @@ class OcrDiagnosticSnapshot {
       excludedValues: credentialValues,
     );
     if ((value.length <= _maxTextLength ||
-            _longSafeStoredTaskErrorSummaries.contains(value)) &&
+            _longSafeStoredTaskErrorSummaries.contains(value) ||
+            OcrPageFailureSummary.isKnownLocalizedSummary(value)) &&
         !containsProviderBody &&
         !containsCredentialValue &&
         _isKnownSafeStoredTaskErrorSummary(
@@ -627,12 +630,7 @@ class OcrDiagnosticSnapshot {
           RegExp(
             r'^OCR 请求的 JSON 大小为 \d+ 字节，超过 \d+ 字节上限$',
           ).hasMatch(candidate) ||
-          RegExp(
-            r'^部分图片 OCR 未完成：第 \d+ 张图片(?:识别失败|结果不完整)(?:；第 \d+ 张图片(?:识别失败|结果不完整))*$',
-          ).hasMatch(candidate) ||
-          RegExp(
-            r'^Some images were not fully recognized: Image \d+: (?:recognition failed|incomplete result)(?:; Image \d+: (?:recognition failed|incomplete result))*$',
-          ).hasMatch(candidate)) {
+          OcrPageFailureSummary.isKnownLocalizedSummary(candidate)) {
         return true;
       }
 

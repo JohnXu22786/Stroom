@@ -289,6 +289,60 @@ void main() {
       notifier.dispose();
     });
 
+    test('localized partial OCR page summaries survive persistence and restore',
+        () async {
+      var strings = lookupAppLocalizations(const Locale('en', 'US'));
+      final notifier = BackgroundTaskNotifier(
+        localizationsResolver: () => strings,
+      );
+      final id = notifier.addTask(
+        type: BackgroundTaskType.ocr,
+        title: 'OCR',
+      );
+      notifier.setOcrPageOutcomes(id, const [
+        OcrPageOutcome(imageIndex: 3, status: OcrPageOutcomeStatus.incomplete),
+        OcrPageOutcome(imageIndex: 1, status: OcrPageOutcomeStatus.failed),
+      ]);
+
+      final sourceStrings = lookupAppLocalizations(const Locale('ja'));
+      final sourceDetails = [
+        sourceStrings.bgTaskOcrPageFailed('2'),
+        sourceStrings.bgTaskOcrPageIncomplete('4'),
+      ].join(sourceStrings.bgTaskOcrPageFailureSeparator);
+      notifier.failTask(
+        id,
+        error: sourceStrings.bgTaskOcrPagesIncomplete(sourceDetails),
+      );
+      await notifier.pendingPersistence;
+      notifier.dispose();
+      await notifier.pendingPersistence;
+
+      strings = lookupAppLocalizations(const Locale('de'));
+      final restored = BackgroundTaskNotifier(
+        localizationsResolver: () => strings,
+      );
+      try {
+        expect(await restored.restoreFromPersistence(), isTrue);
+        final task = restored.taskById(id)!;
+        final expectedDetails = [
+          strings.bgTaskOcrPageFailed('2'),
+          strings.bgTaskOcrPageIncomplete('4'),
+        ].join(strings.bgTaskOcrPageFailureSeparator);
+        expect(task.error, strings.bgTaskOcrPagesIncomplete(expectedDetails));
+        expect(
+          task.ocrPageOutcomes.map((outcome) => outcome.imageIndex),
+          [1, 3],
+        );
+        expect(
+          task.ocrPageOutcomes.map((outcome) => outcome.status),
+          [OcrPageOutcomeStatus.failed, OcrPageOutcomeStatus.incomplete],
+        );
+      } finally {
+        restored.dispose();
+        await restored.pendingPersistence;
+      }
+    });
+
     test('localized hidden details never echo a matching OCR API key',
         () async {
       const apiKey = 'OCR error details were hidden';
