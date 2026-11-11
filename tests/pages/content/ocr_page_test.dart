@@ -5966,6 +5966,10 @@ void main() {
       expect(preflightBudget, currentBudget);
       await _pumpUntil(tester, () => taskNotifier.tasksForTest.isNotEmpty);
       expect(taskNotifier.tasksForTest, hasLength(1));
+      await _pumpUntil(
+        tester,
+        () => taskNotifier.tasksForTest.single.status == TaskStatus.completed,
+      );
       await tester.pumpWidget(const SizedBox.shrink());
     });
 
