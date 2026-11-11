@@ -46,7 +46,10 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.textContaining('one hour'), findsOneWidget);
       expect(find.textContaining('restarts the timer'), findsOneWidget);
-      expect(find.textContaining('keep this conversation'), findsOneWidget);
+      expect(
+        find.textContaining('Turn off temporary mode to keep it'),
+        findsOneWidget,
+      );
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
       expect(enabled, isFalse);

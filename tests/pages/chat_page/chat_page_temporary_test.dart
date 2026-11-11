@@ -47,8 +47,7 @@ Widget _appFor({
 }
 
 void main() {
-  testWidgets(
-      'top bar toggles temporary mode on the current conversation '
+  testWidgets('top bar toggles temporary mode on the current conversation '
       'and shows the countdown capsule', (tester) async {
     await tester.pumpWidget(_appFor(activeId: 'c-main', convTitle: '主对话'));
     await tester.pumpAndSettle();
@@ -76,8 +75,8 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
 
     // 开启态：气泡 + 打勾图标、标题前出现倒计时胶囊。
-    expect(find.byIcon(Icons.timer), findsOneWidget);
-    expect(find.byIcon(Icons.timer_outlined), findsNothing);
+    expect(find.widgetWithIcon(IconButton, Icons.timer), findsOneWidget);
+    expect(find.widgetWithIcon(IconButton, Icons.timer_outlined), findsNothing);
     expect(find.byType(TemporaryCountdownCapsule), findsOneWidget);
     expect(find.text('临时'), findsOneWidget);
     expect(find.text('60:00'), findsOneWidget);
