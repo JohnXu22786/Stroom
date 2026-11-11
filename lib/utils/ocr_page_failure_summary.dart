@@ -16,13 +16,11 @@ class OcrPageFailureSummary {
     final pages = _parse(value);
     if (pages == null) return null;
 
-    final details = pages
-        .map((page) {
-          return page.incomplete
-              ? strings.bgTaskOcrPageIncomplete(page.index)
-              : strings.bgTaskOcrPageFailed(page.index);
-        })
-        .join(strings.bgTaskOcrPageFailureSeparator);
+    final details = pages.map((page) {
+      return page.incomplete
+          ? strings.bgTaskOcrPageIncomplete(page.index)
+          : strings.bgTaskOcrPageFailed(page.index);
+    }).join(strings.bgTaskOcrPageFailureSeparator);
     return strings.bgTaskOcrPagesIncomplete(details);
   }
 
