@@ -981,6 +981,9 @@ void main() {
 
             // A late runner callback after rollback must not convert the
             // localized cancellation outcome into a failure.
+            final rolledBack = notifier.taskById(taskId)!;
+            expect(rolledBack.error, cancellationError);
+            expect(rolledBack.retryData, retryData);
             notifier.failTask(taskId, error: 'OCR failed after cancellation');
             await notifier.pendingPersistence;
             await Future<void>.delayed(Duration.zero);
