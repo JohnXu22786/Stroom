@@ -512,9 +512,8 @@ void _writeFlacFrame(
   // Reserved: 0
   headerBits.write(0, 1);
 
-  // Frame/Sample number: UTF-8 coded
-  final frameNum = frameIdx * _flacBlockSize;
-  final utf8 = _encodeUtf8(frameNum);
+  // Fixed-blocking strategy numbers frames sequentially, not by sample offset.
+  final utf8 = _encodeUtf8(frameIdx);
   for (final b in utf8) {
     headerBits.write(b, 8);
   }
