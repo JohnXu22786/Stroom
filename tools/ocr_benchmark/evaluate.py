@@ -40,6 +40,9 @@ PNG_PRE_IDAT_CHUNKS = {
     b"sRGB",
     b"tRNS",
 }
+MAX_PNG_DIMENSION = 8192
+MAX_PNG_PIXELS = 4_000_000
+MAX_PNG_DECODED_BYTES = 64 * 1024 * 1024
 OUTPUT_FORMATS = {"plain_text", "markdown", "table", "latex"}
 # Keep accepted settings nesting well below Python's recursion limit so validation
 # reports malformed input instead of exhausting the interpreter stack.
@@ -2290,6 +2293,14 @@ def _validate_png(image_bytes: bytes, fixture_id: str) -> None:
                 or interlace not in (0, 1)
             ):
                 raise invalid()
+            if (
+                width > MAX_PNG_DIMENSION
+                or height > MAX_PNG_DIMENSION
+                or width * height > MAX_PNG_PIXELS
+            ):
+                raise EvaluationError(
+                    f"{fixture_id}: PNG exceeds the benchmark fixture resource limits"
+                )
             channels = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}[color_type]
             bits_per_pixel = channels * bit_depth
             if interlace == 0:
@@ -2310,6 +2321,14 @@ def _validate_png(image_bytes: bytes, fixture_id: str) -> None:
                         (0, 1, 1, 2),
                     )
                 ]
+            decoded_bytes = sum(
+                ((pass_width * bits_per_pixel + 7) // 8 + 1) * pass_height
+                for pass_width, pass_height in passes
+            )
+            if decoded_bytes > MAX_PNG_DECODED_BYTES:
+                raise EvaluationError(
+                    f"{fixture_id}: PNG exceeds the benchmark fixture resource limits"
+                )
             set_pass(0)
         elif chunk_type == b"IHDR":
             raise invalid()
