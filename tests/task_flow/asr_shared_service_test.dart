@@ -338,7 +338,10 @@ void main() {
       final dio = Dio()..httpClientAdapter = adapter;
       final file = await audioFile('typed.wav');
       final state = providers(
-        providerTypeConfig: {'uploadMethod': 'base64Json'},
+        providerTypeConfig: {
+          'uploadMethod': 'base64Json',
+          'compression': 'none',
+        },
         modelTypeConfig: {
           'enableLanguage': true,
           'language': 'zh',
@@ -430,7 +433,8 @@ void main() {
             providerTypeConfig: {
               'maxFileSizeMb': 0.012,
               'chunking': 'fixedSize',
-              'fallbackMethod': 'generic',
+              'compression': 'none',
+              'fallbackMethod': 'none',
             },
           ),
           asrServiceFactory: (config) => AsrService(config: config, dio: dio),
@@ -472,7 +476,8 @@ void main() {
       providerTypeConfig: {
         'maxFileSizeMb': 0.012,
         'chunking': 'fixedSize',
-        'fallbackMethod': 'generic',
+        'compression': 'none',
+        'fallbackMethod': 'none',
       },
     );
     final providerNotifier = ProviderEntriesNotifier()..state = entries;
