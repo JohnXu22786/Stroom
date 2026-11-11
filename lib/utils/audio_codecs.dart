@@ -436,10 +436,17 @@ void _writeStreamInfo(BytesOutput out, int totalSamples, int sampleRate) {
   out.writeByte(0x00);
   out.writeByte(0x22); // 34 bytes
 
-  // Minimum block size (16 bits)
-  out.writeUint16BE(_flacBlockSize);
-  // Maximum block size (16 bits)
-  out.writeUint16BE(_flacBlockSize);
+  // A partial final frame determines the minimum. With no frame (empty PCM),
+  // retain the encoder's nominal size in both fields.
+  final finalBlockSize = totalSamples % _flacBlockSize;
+  final minBlockSize = totalSamples == 0
+      ? _flacBlockSize
+      : (finalBlockSize == 0 ? _flacBlockSize : finalBlockSize);
+  final maxBlockSize = totalSamples == 0 || totalSamples >= _flacBlockSize
+      ? _flacBlockSize
+      : totalSamples;
+  out.writeUint16BE(minBlockSize);
+  out.writeUint16BE(maxBlockSize);
   // Minimum frame size (24 bits) - approximate
   out.writeByte(0x00);
   out.writeByte(0x01);
