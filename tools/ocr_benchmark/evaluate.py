@@ -186,7 +186,10 @@ def _safe_validation_identifier(value: Any) -> str:
         return f"<{type(value).__name__}>"
     if _is_credential_like_identifier(value) or _contains_credential_like_value(value):
         return "[redacted]"
-    return value
+    return "".join(
+        character if not unicodedata.category(character).startswith("C") else "�"
+        for character in value
+    )
 
 
 def _is_credential_like_identifier(value: str) -> bool:
@@ -1775,7 +1778,13 @@ def _formula_span_matches(
     }
 
     def is_cjk_text_character(character: str) -> bool:
-        return "\u3400" <= character <= "\u9fff"
+        codepoint = ord(character)
+        return (
+            0x3400 <= codepoint <= 0x9FFF
+            or 0x3040 <= codepoint <= 0x309F
+            or 0x30A0 <= codepoint <= 0x30FF
+            or 0x31F0 <= codepoint <= 0x31FF
+        )
 
     def is_hangul_text_character(character: str) -> bool:
         return "\uac00" <= character <= "\ud7af"
@@ -2653,7 +2662,7 @@ def verify_fixtures(
         _reject_output_input_collision(
             output_path, [("fixture image", image_path)]
         )
-        image_bytes = _read_fixture_png(image_path, display_fixture_id, image)
+        image_bytes = _read_fixture_png(image_path, display_fixture_id)
         _validate_png(image_bytes, display_fixture_id)
         actual_digest = hashlib.sha256(image_bytes).hexdigest()
         if actual_digest != digest:
@@ -2680,9 +2689,7 @@ def verify_fixtures(
     }
 
 
-def _read_fixture_png(
-    image_path: Path, fixture_id: str, image: str = "PNG"
-) -> bytes:
+def _read_fixture_png(image_path: Path, fixture_id: str) -> bytes:
     try:
         if image_path.stat().st_size > MAX_PNG_ENCODED_BYTES:
             raise EvaluationError(
@@ -2691,7 +2698,7 @@ def _read_fixture_png(
         with image_path.open("rb") as image_file:
             image_bytes = image_file.read(MAX_PNG_ENCODED_BYTES + 1)
     except OSError as error:
-        raise EvaluationError(f"{fixture_id}: cannot read {image}: {error}") from error
+        raise EvaluationError(f"{fixture_id}: cannot read fixture image") from error
     if len(image_bytes) > MAX_PNG_ENCODED_BYTES:
         raise EvaluationError(
             f"{fixture_id}: PNG exceeds the maximum encoded fixture size"
@@ -2728,10 +2735,16 @@ def _reject_output_input_collision(
                 and input_path.exists()
                 and output_path.samefile(input_path)
             ):
+                if option == "fixture image":
+                    raise EvaluationError(
+                        "--output path conflicts with input file fixture image"
+                    )
                 raise EvaluationError(
                     f"--output path conflicts with input file {option}: {input_path}"
                 )
     except (OSError, RuntimeError) as error:
+        if any(option == "fixture image" for option, _ in input_paths):
+            raise EvaluationError("cannot resolve output or fixture image path") from error
         raise EvaluationError(f"cannot resolve output or input path: {error}") from error
 
 
@@ -2741,9 +2754,7 @@ def _resolve_fixture_image_path(
     try:
         return (manifest_path.resolve().parent / image).resolve()
     except (OSError, RuntimeError, ValueError) as error:
-        raise EvaluationError(
-            f"{fixture_id}: cannot resolve image path {image}: {error}"
-        ) from error
+        raise EvaluationError(f"{fixture_id}: cannot resolve fixture image path") from error
 
 
 def main(argv: list[str] | None = None) -> int:

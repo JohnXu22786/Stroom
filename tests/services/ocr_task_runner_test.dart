@@ -1454,6 +1454,38 @@ void main() {
     expect((await TextManifest.loadRecords()).single.name, 'owned（部分结果）');
   });
 
+  test('Spanish partial OCR titles include a separating space', () async {
+    for (final (index, spanishLocale) in [
+      const Locale('es'),
+      const Locale('es', 'ES'),
+    ].indexed) {
+      locale = spanishLocale;
+      final text = 'partial text $index';
+      final taskId = notifier.addTask(
+        type: BackgroundTaskType.ocr,
+        title: 'Invoice',
+      );
+      notifier.setResult(taskId, text, isComplete: false);
+      notifier.failTask(taskId, error: 'incomplete OCR result');
+
+      final saver = OcrResultSaver(
+        taskId: taskId,
+        notifier: notifier,
+        title: 'Invoice',
+        folder: 'captured folder',
+        onSaved: () {},
+      );
+      await saver.retryTaskResult(allowPartial: true);
+
+      final record = (await TextManifest.loadRecords()).singleWhere(
+        (record) =>
+            record.hash ==
+            computeTextHash(Uint8List.fromList(utf8.encode(text))),
+      );
+      expect(record.name, 'Invoice (resultado parcial)');
+    }
+  });
+
   test(
       'partial save waits for durable approval and restore retains it after cancellation',
       () async {
