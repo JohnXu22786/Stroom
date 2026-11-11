@@ -5946,9 +5946,13 @@ void main() {
       providerNotifier.state = ProviderEntriesState(entries: [entry]);
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('开始识别'));
+      expect(find.byKey(const ValueKey('ocr_grid_item_0')), findsOneWidget);
+      final startButton = find.widgetWithText(FilledButton, '开始识别');
+      expect(tester.widget<FilledButton>(startButton).onPressed, isNotNull);
+      await tester.ensureVisible(startButton);
+      await tester.tap(startButton);
       await tester.pump();
-      await preflightStarted.future;
+      await _pumpUntil(tester, () => preflightStarted.isCompleted);
       expect(encodedRequestBytes, greaterThan(snapshotBudget));
       expect(encodedRequestBytes, lessThan(currentBudget));
       expect(preflightBudget, currentBudget);
@@ -6011,9 +6015,13 @@ void main() {
       providerNotifier.state = ProviderEntriesState(entries: [entry]);
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('开始识别'));
+      expect(find.byKey(const ValueKey('ocr_grid_item_0')), findsOneWidget);
+      final startButton = find.widgetWithText(FilledButton, '开始识别');
+      expect(tester.widget<FilledButton>(startButton).onPressed, isNotNull);
+      await tester.ensureVisible(startButton);
+      await tester.tap(startButton);
       await tester.pump();
-      await preflightStarted.future;
+      await _pumpUntil(tester, () => preflightStarted.isCompleted);
       expect(encodedRequestBytes, greaterThan(currentBudget));
       expect(preflightBudget, currentBudget);
       await tester.pumpAndSettle();
