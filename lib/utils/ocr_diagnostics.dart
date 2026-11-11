@@ -136,6 +136,17 @@ class OcrDiagnosticSnapshot {
     'OCR 未识别到文字内容',
     'OCR 未识别到文字内容（content 列表为空）',
     'OCR 返回了异常内容（仅包含 JSON 括号），请检查 API 返回格式或更换模型',
+    'تعذّر العثور على ملف الصورة. اختر الصورة مرة أخرى.',
+    'تعذّرت قراءة ملف الصورة. تحقّق من صلاحية الوصول ثم أعد المحاولة.',
+    'لم يتم إعداد نموذج OCR صالح. اختر موفّر OCR ونموذجًا من إعدادات المسار.',
+    'الصورة فارغة. اخترها مرة أخرى.',
+    'تنسيق الصورة هذا غير مدعوم. حوّلها إلى PNG أو JPEG أو WebP ثم أعد المحاولة.',
+    'لم يتم دعم صور HEIC وSVG وTIFF بعد. حوّل الصورة إلى PNG أو JPEG أو WebP ثم أعد المحاولة.',
+    'الصورة تالفة أو يتعذّر فك ترميزها. اخترها مرة أخرى، أو حوّلها إلى PNG أو JPEG أو WebP ثم أعد المحاولة.',
+    'دقة الصورة كبيرة جدًا. يدعم OCR ما يصل إلى 50 مليون بكسل للصورة. غيّر حجمها ثم أعد المحاولة.',
+    'سيتجاوز حجم ملف PNG اللازم لتصحيح اتجاه الصورة حد طلب OCR. غيّر حجم الصورة ثم أعد المحاولة.',
+    'تعذّر تصحيح اتجاه الصورة. حوّلها إلى PNG أو JPEG أو WebP ثم أعد المحاولة.',
+    'تعذّرت معالجة الصورة. اخترها مرة أخرى ثم أعد المحاولة.',
   };
   static const _longSafeStoredTaskErrorSummaries = {
     'El PNG necesario para corregir la orientación de esta imagen excedería el límite de tamaño de la solicitud de OCR. Cambie el tamaño de la imagen e inténtelo de nuevo.',
@@ -605,6 +616,9 @@ class OcrDiagnosticSnapshot {
           ).hasMatch(candidate) ||
           RegExp(
             r'^이미지가 (?:OCR 요청 크기 한도|작업 흐름 이미지 입력 한도)\([\d.]+ MiB\)을\(를\) 초과합니다\. 더 작은 이미지를 선택하고 다시 시도하세요\.$',
+          ).hasMatch(candidate) ||
+          RegExp(
+            r'^تتجاوز الصورة الحد (?:حد حجم طلب OCR|حد حجم صور مسار المهام) \([\d.]+ ميبي بايت\)\. اختر صورة أصغر ثم أعد المحاولة\.$',
           ).hasMatch(candidate) ||
           RegExp(
             r'^HTTP\s+[1-5]\d{2}$',
