@@ -11,11 +11,22 @@ Future<ProviderConfigItem?> _openAndSave(
   bool switchToUrl = false,
 }) async {
   ProviderConfigItem? saved;
+  tester.view.physicalSize = const Size(1600, 2400);
+  tester.view.devicePixelRatio = 1.0;
+  addTearDown(() {
+    tester.view.resetPhysicalSize();
+    tester.view.resetDevicePixelRatio();
+  });
   await tester.pumpWidget(
     MaterialApp(
       locale: const Locale('en'),
       supportedLocales: AppLocalizations.supportedLocales,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
+      theme: ThemeData(
+        dialogTheme: const DialogThemeData(
+          constraints: BoxConstraints(maxWidth: 1200),
+        ),
+      ),
       home: Scaffold(
         body: Builder(
           builder: (context) => Center(
