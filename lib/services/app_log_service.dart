@@ -69,13 +69,13 @@ class AppLogPolicy {
     LogLevel? minimumLevel,
     int? maxStorageBytes,
     bool unlimitedStorage = false,
-  }) => AppLogPolicy(
-    retentionDays: retentionDays ?? this.retentionDays,
-    minimumLevel: minimumLevel ?? this.minimumLevel,
-    maxStorageBytes: unlimitedStorage
-        ? null
-        : maxStorageBytes ?? this.maxStorageBytes,
-  );
+  }) =>
+      AppLogPolicy(
+        retentionDays: retentionDays ?? this.retentionDays,
+        minimumLevel: minimumLevel ?? this.minimumLevel,
+        maxStorageBytes:
+            unlimitedStorage ? null : maxStorageBytes ?? this.maxStorageBytes,
+      );
 }
 
 /// Aggregate log storage information for the settings UI.
@@ -700,8 +700,8 @@ class AppLogService {
 
   static DateTime? _dateFromLogFileName(String name) {
     if (!_appLogName.hasMatch(name)) return null;
-    final dateMatch = RegExp(r'^app_(\d{4}-\d{2}-\d{2})(?:-(\d{2}))?\.log$')
-        .firstMatch(name);
+    final dateMatch =
+        RegExp(r'^app_(\d{4}-\d{2}-\d{2})(?:-(\d{2}))?\.log$').firstMatch(name);
     if (dateMatch == null) return null;
     try {
       final date = DateTime.parse(dateMatch.group(1)!);

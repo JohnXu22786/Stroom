@@ -94,17 +94,22 @@ class BackupLocationManager {
         try {
           final result = await _safChannel.invokeMethod<List<dynamic>>(
               'listLogMetadata', {'uri': uri}).timeout(_safChannelTimeout);
-          return (result ?? []).whereType<Map>().map((entry) {
-            final name = entry['name'] as String?;
-            final size = entry['sizeBytes'] as int?;
-            final modified = entry['modifiedAtMillis'] as int?;
-            if (name == null || size == null) return null;
-            return LogFileMetadata(
-              name: name,
-              sizeBytes: size,
-              modifiedAt: DateTime.fromMillisecondsSinceEpoch(modified ?? 0),
-            );
-          }).whereType<LogFileMetadata>().toList();
+          return (result ?? [])
+              .whereType<Map>()
+              .map((entry) {
+                final name = entry['name'] as String?;
+                final size = entry['sizeBytes'] as int?;
+                final modified = entry['modifiedAtMillis'] as int?;
+                if (name == null || size == null) return null;
+                return LogFileMetadata(
+                  name: name,
+                  sizeBytes: size,
+                  modifiedAt:
+                      DateTime.fromMillisecondsSinceEpoch(modified ?? 0),
+                );
+              })
+              .whereType<LogFileMetadata>()
+              .toList();
         } catch (e) {
           debugPrint('[BackupLocationManager] SAF 日志元数据读取失败: $e');
           rethrow;
@@ -921,9 +926,10 @@ class BackupLocationManager {
             return await _deleteLogFromFile(relativePath);
           }
           return await _safChannel.invokeMethod<bool>('deleteLog', {
-            'uri': uri,
-            'fileName': relativePath,
-          }).timeout(_safChannelTimeout) ?? false;
+                'uri': uri,
+                'fileName': relativePath,
+              }).timeout(_safChannelTimeout) ??
+              false;
         }
       } catch (e) {
         debugPrint('[BackupLocationManager] SAF 删除日志失败: $e');
