@@ -44,6 +44,7 @@ The app does not define a complete custom global `textTheme`; read the nearest t
 
 - Follow the responsive app shell in [`lib/pages/home_page_navigation.dart`](../lib/pages/home_page_navigation.dart) and the page's existing navigation structure. The app uses different navigation affordances across available widths/orientations; don't assume a phone-width bottom bar is the only layout.
 - Keep page title, back navigation, and page-level actions in the established app bar/header region. Put actions that apply to a section or item at that scope rather than duplicating global actions in the body.
+- Keep a page app bar's background color and visual color state unchanged while scrollable content moves beneath it. Use the established theme color consistently before and after scrolling; configure scroll-under styling so it does not introduce a color or tint change.
 - Respect system safe areas, keyboard insets, scrollable content bounds, and platform-specific back behavior. Check portrait and landscape or narrow and wide layouts when the page supports them.
 - Use consistent section spacing and alignment within one screen. Don't nest redundant cards, borders, and shadows around content already grouped by a parent surface.
 - When adding a page, follow route and shell conventions in the existing page family; search for the route, title, navigation entry and all links to that page.
