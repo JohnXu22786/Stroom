@@ -153,7 +153,8 @@ void main() {
             .colorScheme
             .onSurfaceVariant,
         0.4,
-      )!.withValues(alpha: 0.12),
+      )!
+          .withValues(alpha: 0.12),
     );
   });
 

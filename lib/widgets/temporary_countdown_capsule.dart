@@ -9,7 +9,7 @@ String formatTemporaryCountdown(Duration remaining) {
   final totalSeconds = remaining <= Duration.zero
       ? 0
       : (remaining.inMicroseconds / const Duration(seconds: 1).inMicroseconds)
-            .ceil();
+          .ceil();
   final minutes = totalSeconds ~/ 60;
   final seconds = totalSeconds % 60;
   final minuteText = minutes.toString().padLeft(2, '0');
@@ -38,9 +38,8 @@ class TemporaryCountdownCapsule extends ConsumerWidget {
     final remaining = expiresAt.difference(DateTime.now());
     final text = formatTemporaryCountdown(remaining);
     final isNearExpiry = remaining <= const Duration(minutes: 5);
-    final accent = isNearExpiry
-        ? Theme.of(context).colorScheme.error
-        : Colors.amber;
+    final accent =
+        isNearExpiry ? Theme.of(context).colorScheme.error : Colors.amber;
 
     final l10n = AppLocalizations.of(context)!;
     return Semantics(

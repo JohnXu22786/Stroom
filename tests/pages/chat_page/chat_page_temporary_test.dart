@@ -47,7 +47,8 @@ Widget _appFor({
 }
 
 void main() {
-  testWidgets('top bar toggles temporary mode on the current conversation '
+  testWidgets(
+      'top bar toggles temporary mode on the current conversation '
       'and shows the countdown capsule', (tester) async {
     await tester.pumpWidget(_appFor(activeId: 'c-main', convTitle: '主对话'));
     await tester.pumpAndSettle();

@@ -1433,7 +1433,8 @@ class AppLocalizationsDe extends AppLocalizations {
       locale: localeName,
       other:
           'Die $count ausgewählten Gespräche löschen? Dies kann nicht rückgängig gemacht werden.',
-      one: 'Das ausgewählte Gespräch löschen? Dies kann nicht rückgängig gemacht werden.',
+      one:
+          'Das ausgewählte Gespräch löschen? Dies kann nicht rückgängig gemacht werden.',
     );
     return '$_temp0';
   }
@@ -13462,7 +13463,8 @@ class AppLocalizationsDeDe extends AppLocalizationsDe {
       locale: localeName,
       other:
           'Die $count ausgewählten Gespräche löschen? Dies kann nicht rückgängig gemacht werden.',
-      one: 'Das ausgewählte Gespräch löschen? Dies kann nicht rückgängig gemacht werden.',
+      one:
+          'Das ausgewählte Gespräch löschen? Dies kann nicht rückgängig gemacht werden.',
     );
     return '$_temp0';
   }
