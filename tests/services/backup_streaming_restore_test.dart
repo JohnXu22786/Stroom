@@ -700,9 +700,11 @@ void main() {
       );
       expect(await readBackupFile('pictures', 'ß'), equals([16]));
       expect(await readBackupFile('pictures', 'SS/child.jpg'), equals([17]));
+      await writeBackupFile('pictures', 'existing.jpg', original);
 
       BackupService.restorePathsWindowsNameNormalizationInsensitiveForTesting =
           true;
+      BackupService.restorePathsWindowsSeparatorsForTesting = true;
       final windowsNameCollisionZip = await writeArchive(
         buildV2Archive(
           files: {
@@ -909,6 +911,8 @@ void main() {
       );
       expect(await readBackupFile('attachments', 'Foo'), equals([43]));
       expect(await readBackupFile('attachments', 'foo'), equals([44]));
+      await writeBackupFile('pictures', 'existing.jpg', original);
+      await writeBackupFile('attachments', 'existing.jpg', originalAttachment);
 
       BackupService.restorePathsNormalizationInsensitiveForTesting = true;
       await expectLater(
@@ -1004,6 +1008,7 @@ void main() {
       BackupService.restorePathsWindowsNameNormalizationInsensitiveForTesting =
           null;
       BackupService.restoreAppDirectoryForTesting = null;
+      BackupService.restorePathsWindowsSeparatorsForTesting = false;
       WebFileStore.disableTestMode();
     }
   });

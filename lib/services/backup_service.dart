@@ -224,6 +224,8 @@ class BackupService {
   static bool? restorePathsWindowsNameNormalizationInsensitiveForTesting;
   @visibleForTesting
   static String? restoreAppDirectoryForTesting;
+  @visibleForTesting
+  static bool restorePathsWindowsSeparatorsForTesting = false;
   static const _audioDraftsDirectory = 'audio_drafts';
   static final _audioRecordingDraftFileName = RegExp(
     r'^recording_\d+\.m4a$',
@@ -4097,7 +4099,10 @@ class BackupService {
       final targetPath = appDirectory == null
           ? '$directory/$relativePath'
           : p.join(canonicalTargetDirectory, p.posix.basename(relativePath));
-      var comparableDestination = targetPath;
+      final targetPathForTesting = restorePathsWindowsSeparatorsForTesting
+          ? targetPath.replaceAll('/', r'\')
+          : targetPath;
+      var comparableDestination = targetPathForTesting.replaceAll(r'\', '/');
       if (normalizationInsensitive) {
         comparableDestination = unorm.nfc(comparableDestination);
       }
@@ -4112,7 +4117,7 @@ class BackupService {
         sourcePath: sourcePath,
         normalizedSourcePath: normalizedSourcePath,
         targetDirectory: targetDirectory,
-        targetPath: targetPath,
+        targetPath: targetPathForTesting,
         relativePath: relativePath,
         fileName: p.posix.basename(relativePath),
         isAttachment: isAttachment,
@@ -4359,6 +4364,7 @@ class BackupService {
   }
 
   static String _windowsNormalizedRestorePath(String path) => path
+      .replaceAll(r'\', '/')
       .split('/')
       .map((component) => component.replaceFirst(RegExp(r'[ .]+$'), ''))
       .join('/');
@@ -4375,12 +4381,14 @@ class BackupService {
     _RestoreCollisionCandidate left,
     _RestoreCollisionCandidate right,
   ) {
+    final leftPortablePath = left.targetPath.replaceAll(r'\', '/');
+    final rightPortablePath = right.targetPath.replaceAll(r'\', '/');
     final leftPath = left.normalizationInsensitive
-        ? unorm.nfc(left.targetPath)
-        : left.targetPath;
+        ? unorm.nfc(leftPortablePath)
+        : leftPortablePath;
     final rightPath = right.normalizationInsensitive
-        ? unorm.nfc(right.targetPath)
-        : right.targetPath;
+        ? unorm.nfc(rightPortablePath)
+        : rightPortablePath;
     final expandedLeft = _expandedCaseInsensitiveRestorePath(leftPath);
     final expandedRight = _expandedCaseInsensitiveRestorePath(rightPath);
     return expandedLeft == expandedRight ||
