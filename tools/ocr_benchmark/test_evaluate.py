@@ -4843,6 +4843,56 @@ class EvaluateTests(unittest.TestCase):
         self.assertEqual(report["metrics"]["character_error_rate"]["value"], 0)
         self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 0)
 
+    def test_formula_fidelity_accepts_japanese_prose_after_formula(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "japanese-prose-formula",
+                    "gold_text": "x=1です",
+                    "formula_text": "x=1",
+                    "categories": ["mixed_language", "formula"],
+                }
+            ]
+        }
+
+        for text in ("x=1です", "これは x=1です"):
+            with self.subTest(text=text):
+                report = evaluate_predictions(
+                    manifest,
+                    predictions(
+                        [{"fixture_id": "japanese-prose-formula", "text": text}]
+                    ),
+                )
+
+                self.assertEqual(
+                    report["metrics"]["formula_fidelity"]["value"], 1
+                )
+
+    def test_formula_fidelity_still_rejects_adjacent_math_after_formula(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "formula-with-adjacent-math",
+                    "gold_text": "x=1",
+                    "formula_text": "x=1",
+                    "categories": ["english", "formula"],
+                }
+            ]
+        }
+
+        for text in ("x=1y", "x=1 + y", "x=1 plus y"):
+            with self.subTest(text=text):
+                report = evaluate_predictions(
+                    manifest,
+                    predictions(
+                        [{"fixture_id": "formula-with-adjacent-math", "text": text}]
+                    ),
+                )
+
+                self.assertEqual(
+                    report["metrics"]["formula_fidelity"]["value"], 0
+                )
+
     def test_formula_fidelity_rejects_written_operator_after_formula(self):
         manifest = {
             "fixtures": [
@@ -5506,6 +5556,49 @@ class EvaluateTests(unittest.TestCase):
 
             with self.assertRaisesRegex(EvaluationError, "image path escapes fixture root"):
                 verify_fixtures(manifest_path)
+
+    def test_fixture_read_error_redacts_untrusted_path_and_os_exception(self):
+        path_marker = "apiKey-marker\x1b[31m"
+        with TemporaryDirectory() as directory:
+            fixture_root = Path(directory)
+            shutil.copytree(ROOT / "fixtures", fixture_root / "fixtures")
+            manifest = json.loads((ROOT / "manifest.json").read_text())
+            manifest["fixtures"][0]["id"] = "fixture-demo"
+            manifest["fixtures"][0]["image"] = (
+                f"fixtures/demo-{path_marker}\npath.png"
+            )
+            manifest_path = fixture_root / "manifest.json"
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            with self.assertRaises(EvaluationError) as raised:
+                verify_fixtures(manifest_path)
+
+        diagnostic = str(raised.exception)
+        self.assertIn("fixture-demo", diagnostic)
+        self.assertIn("cannot read fixture image", diagnostic)
+        self.assertNotIn(path_marker, diagnostic)
+        self.assertNotIn("path.png", diagnostic)
+        self.assertNotIn(directory, diagnostic)
+        self.assertNotIn("No such file or directory", diagnostic)
+
+    def test_fixture_read_error_keeps_benign_identifier_and_category(self):
+        with TemporaryDirectory() as directory:
+            fixture_root = Path(directory)
+            shutil.copytree(ROOT / "fixtures", fixture_root / "fixtures")
+            manifest = json.loads((ROOT / "manifest.json").read_text())
+            manifest["fixtures"][0]["id"] = "fixture-demo"
+            manifest["fixtures"][0]["image"] = "fixtures/missing-demo.png"
+            manifest_path = fixture_root / "manifest.json"
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            with self.assertRaises(EvaluationError) as raised:
+                verify_fixtures(manifest_path)
+
+        diagnostic = str(raised.exception)
+        self.assertIn("fixture-demo", diagnostic)
+        self.assertIn("cannot read fixture image", diagnostic)
+        self.assertNotIn("missing-demo.png", diagnostic)
+        self.assertNotIn(directory, diagnostic)
 
     def test_fixture_verification_rejects_truncated_png_with_matching_digest(self):
         image_bytes = (ROOT / "fixtures" / "mixed-zh-en-01.png").read_bytes()[:24]
