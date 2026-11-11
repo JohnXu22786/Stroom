@@ -856,4 +856,43 @@ void main() {
       expect(find.text('最大输出 Token 数必须为正整数。'), findsOneWidget);
     });
   });
+
+  group('OcrModelConfigPage request size budget display', () {
+    for (final testCase in [
+      (bytes: 1153434, text: '1.1000003814697265625'),
+      (bytes: 1572864, text: '1.5'),
+    ]) {
+      testWidgets(
+        'reopening and editing ${testCase.text} MiB preserves the byte budget',
+        (tester) async {
+          ModelConfig? saved;
+          final model = ModelConfig(
+            name: 'OCR模型',
+            modelId: 'qwen-vl-ocr',
+            typeConfig: {'requestSizeBudgetBytes': testCase.bytes},
+          );
+
+          await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
+          final budgetField = find.byKey(
+            const Key('ocr_model_request_size_budget_mib'),
+          );
+          await _scrollTo(tester, budgetField);
+          expect(
+            tester.widget<TextField>(budgetField).controller!.text,
+            testCase.text,
+          );
+
+          await _enterField(tester, 0, 'Edited OCR model');
+          await tester.tap(find.text('保存'));
+          await tester.pumpAndSettle();
+
+          expect(saved, isNotNull);
+          expect(
+            saved!.typeConfig['requestSizeBudgetBytes'],
+            testCase.bytes,
+          );
+        },
+      );
+    }
+  });
 }
