@@ -7019,5 +7019,65 @@
   "fileManagerDeleteEmptyFolderWithSubfoldersConfirm": "Excluir a pasta vazia “{name}”? {count, plural, one{A subpasta será excluída também.} other{As {count} subpastas também serão excluídas.}}",
   "languageNameGerman": "Alemão",
   "languageNameArabic": "Árabe",
-  "providerMaxUploadSizePositive": "O tamanho máximo de envio deve ser um número positivo."
+  "providerMaxUploadSizePositive": "O tamanho máximo de envio deve ser um número positivo.",
+  "appLogAnyLevel": "Qualquer nível",
+  "appLogClearFilters": "Limpar filtros",
+  "appLogDays": "{count, plural, one{# dia} other{# dias}}",
+  "@appLogDays": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "appLogFilter": "Filtrar entradas do registro",
+  "appLogFilteredLineCount": "{visible} de {total} linhas",
+  "@appLogFilteredLineCount": {
+    "placeholders": {
+      "visible": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "appLogFromTime": "De",
+  "appLogLevel": "Nível",
+  "appLogLevelDebug": "Depuração · mais detalhes",
+  "appLogLevelError": "Erro",
+  "appLogLevelInfo": "Informações",
+  "appLogLevelWarning": "Aviso",
+  "appLogMinimumLevel": "Nível mínimo de detalhes",
+  "appLogNoMatches": "Nenhuma entrada corresponde a estes filtros",
+  "appLogRetentionDays": "Manter registros por",
+  "appLogSave": "Salvar",
+  "appLogSearch": "Palavra-chave",
+  "appLogSettings": "Configurações do registro",
+  "appLogSettingsError": "Não foi possível salvar as configurações do registro: {error}",
+  "@appLogSettingsError": {
+    "placeholders": {
+      "error": {
+        "type": "Object"
+      }
+    }
+  },
+  "appLogSettingsHelp": "Registros antigos e os que excederem o limite de armazenamento serão removidos automaticamente. O arquivo da hora atual será mantido.",
+  "appLogSettingsSaved": "Configurações do registro salvas",
+  "appLogSettingsTitle": "Configurações do registro do aplicativo",
+  "appLogSource": "Origem",
+  "appLogStorageLimit": "Limite máximo de armazenamento de registros",
+  "appLogStorageUsage": "{count} arquivos · {size} usados",
+  "@appLogStorageUsage": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "appLogUnlimited": "Ilimitado",
+  "appLogUntilTime": "Até"
 }
