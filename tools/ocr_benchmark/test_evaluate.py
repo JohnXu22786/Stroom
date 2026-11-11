@@ -380,6 +380,146 @@ class EvaluateTests(unittest.TestCase):
                 "fixtures_verified",
             )
 
+    def test_cli_rejects_fixture_image_as_prediction_output(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture_path = root / "fixtures" / "fixture.png"
+            fixture_path.parent.mkdir()
+            original_fixture = b"fixture image bytes"
+            fixture_path.write_bytes(original_fixture)
+            manifest_path = root / "manifest.json"
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "fixtures": [
+                            {
+                                "id": "fixture",
+                                "gold_text": "fixture text",
+                                "categories": ["english"],
+                                "image": "fixtures/fixture.png",
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            predictions_path = root / "predictions.json"
+            predictions_path.write_text(json.dumps(predictions([])), encoding="utf-8")
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "evaluate.py"),
+                    "--manifest",
+                    str(manifest_path),
+                    "--predictions",
+                    str(predictions_path),
+                    "--output",
+                    str(fixture_path),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn(
+                "output path conflicts with input file fixture image", result.stderr
+            )
+            self.assertEqual(fixture_path.read_bytes(), original_fixture)
+
+    def test_cli_rejects_prediction_output_symlink_to_fixture_image(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture_path = root / "fixtures" / "fixture.png"
+            fixture_path.parent.mkdir()
+            original_fixture = b"fixture image bytes"
+            fixture_path.write_bytes(original_fixture)
+            output_alias = root / "output.png"
+            output_alias.symlink_to(fixture_path)
+            manifest_path = root / "manifest.json"
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "fixtures": [
+                            {
+                                "id": "fixture",
+                                "gold_text": "fixture text",
+                                "categories": ["english"],
+                                "image": "fixtures/fixture.png",
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            predictions_path = root / "predictions.json"
+            predictions_path.write_text(json.dumps(predictions([])), encoding="utf-8")
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "evaluate.py"),
+                    "--manifest",
+                    str(manifest_path),
+                    "--predictions",
+                    str(predictions_path),
+                    "--output",
+                    str(output_alias),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn(
+                "output path conflicts with input file fixture image", result.stderr
+            )
+            self.assertEqual(fixture_path.read_bytes(), original_fixture)
+
+    def test_cli_reports_invalid_fixture_image_path_without_traceback(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest_path = root / "manifest.json"
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "fixtures": [
+                            {
+                                "id": "fixture",
+                                "gold_text": "fixture text",
+                                "categories": ["english"],
+                                "image": "invalid\u0000path.png",
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            predictions_path = root / "predictions.json"
+            predictions_path.write_text(json.dumps(predictions([])), encoding="utf-8")
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "evaluate.py"),
+                    "--manifest",
+                    str(manifest_path),
+                    "--predictions",
+                    str(predictions_path),
+                    "--output",
+                    str(root / "report.json"),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 2)
+            self.assertTrue(result.stderr.startswith("evaluation error:"))
+            self.assertNotIn("Traceback", result.stderr)
+
     def test_cli_rejects_output_that_is_the_baseline_file(self):
         with TemporaryDirectory() as directory:
             root = Path(directory)

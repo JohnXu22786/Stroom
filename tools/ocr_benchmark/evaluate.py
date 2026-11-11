@@ -2511,12 +2511,7 @@ def verify_fixtures(
         digest = fixture.get("sha256")
         if not isinstance(image, str) or not isinstance(digest, str):
             raise EvaluationError(f"{fixture_id}: image and sha256 are required")
-        try:
-            image_path = (root / image).resolve()
-        except (OSError, RuntimeError) as error:
-            raise EvaluationError(
-                f"{fixture_id}: cannot resolve image path {image}: {error}"
-            ) from error
+        image_path = _resolve_fixture_image_path(manifest_path, image, fixture_id)
         if not image_path.is_relative_to(root):
             raise EvaluationError(f"{fixture_id}: image path escapes fixture root")
         _reject_output_input_collision(
@@ -2582,6 +2577,17 @@ def _reject_output_input_collision(
         raise EvaluationError(f"cannot resolve output or input path: {error}") from error
 
 
+def _resolve_fixture_image_path(
+    manifest_path: Path, image: str, fixture_id: str
+) -> Path:
+    try:
+        return (manifest_path.resolve().parent / image).resolve()
+    except (OSError, RuntimeError, ValueError) as error:
+        raise EvaluationError(
+            f"{fixture_id}: cannot resolve image path {image}: {error}"
+        ) from error
+
+
 def main(argv: list[str] | None = None) -> int:
     default_manifest = Path(__file__).with_name("manifest.json")
     parser = argparse.ArgumentParser(description=__doc__)
@@ -2613,8 +2619,19 @@ def main(argv: list[str] | None = None) -> int:
             input_paths = [("--manifest", args.manifest), ("--predictions", args.predictions)]
             if args.baseline is not None:
                 input_paths.append(("--baseline", args.baseline))
-            _reject_output_input_collision(args.output, input_paths)
             manifest = _read_json(args.manifest)
+            for fixture in _validated_fixtures(manifest):
+                image = fixture.get("image")
+                if isinstance(image, str):
+                    input_paths.append(
+                        (
+                            "fixture image",
+                            _resolve_fixture_image_path(
+                                args.manifest, image, fixture["id"]
+                            ),
+                        )
+                    )
+            _reject_output_input_collision(args.output, input_paths)
             candidate = evaluate_predictions(
                 manifest, _read_json(args.predictions)
             )
