@@ -279,12 +279,8 @@ void main() {
       final container = ProviderScope.containerOf(
         tester.element(find.byType(ProviderConfigDetailPage)),
       );
-      final savedConfig = container
-          .read(providerEntriesProvider)
-          .entries
-          .single
-          .configs
-          .single;
+      final savedConfig =
+          container.read(providerEntriesProvider).entries.single.configs.single;
       expect(savedConfig.typeConfig['chunking'], 'none');
       expect(savedConfig.typeConfig['compression'], 'adpcm');
       expect(savedConfig.typeConfig['fallbackMethod'], 'specific');
