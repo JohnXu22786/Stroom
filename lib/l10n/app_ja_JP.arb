@@ -3204,6 +3204,7 @@
   "languageNameSpanish": "スペイン語",
   "languageNameJapanese": "日本語",
   "languageNameFrench": "フランス語",
+  "languageNameGerman": "ドイツ語",
   "@topicAssistantUpdateCheckFailed": {
     "placeholders": {
       "error": {}

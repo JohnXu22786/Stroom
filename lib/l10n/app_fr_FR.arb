@@ -7016,5 +7016,6 @@
   "languageNameSpanish": "Espagnol",
   "languageNameJapanese": "Japonais",
   "languageNameFrench": "Français",
-  "fileManagerDeleteEmptyFolderWithSubfoldersConfirm": "Supprimer le dossier vide « {name} » ? Ses {count, plural, one{1 dossier imbriqué sera également supprimé.} other{{count} dossiers imbriqués seront également supprimés.}}"
+  "fileManagerDeleteEmptyFolderWithSubfoldersConfirm": "Supprimer le dossier vide « {name} » ? Ses {count, plural, one{1 dossier imbriqué sera également supprimé.} other{{count} dossiers imbriqués seront également supprimés.}}",
+  "languageNameGerman": "Allemand"
 }

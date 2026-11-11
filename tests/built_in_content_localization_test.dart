@@ -20,21 +20,18 @@ import 'package:stroom/task_flow/models/task_flow_templates.dart';
 void main() {
   group('built-in content localization', () {
     test('Chinese TTS instruction hint is translated', () {
-      expect(
-        AppLocalizationsZhCn().ttsInstructionHint,
-        '例如：请用愉快、兴奋的语气说话',
-      );
+      expect(AppLocalizationsZhCn().ttsInstructionHint, '例如：请用愉快、兴奋的语气说话');
     });
 
     test('ARB resources have matching keys and valid JSON', () {
-      final files = [
-        'lib/l10n/app_en.arb',
-        'lib/l10n/app_en_US.arb',
-        'lib/l10n/app_zh.arb',
-        'lib/l10n/app_zh_CN.arb',
-        'lib/l10n/app_fr.arb',
-        'lib/l10n/app_fr_FR.arb',
-      ];
+      final files = Directory('lib/l10n')
+          .listSync()
+          .whereType<File>()
+          .map((file) => file.path)
+          .where((path) =>
+              path.startsWith('lib/l10n/app_') && path.endsWith('.arb'))
+          .toList()
+        ..sort();
       final resources = files
           .map((path) => jsonDecode(File(path).readAsStringSync()) as Map)
           .toList();
@@ -52,22 +49,22 @@ void main() {
       final placeholder = RegExp(r'\{([A-Za-z][A-Za-z0-9_]*)(?:\s*,|\})');
       for (final key in templateKeys.where((key) => !key.startsWith('@'))) {
         final english = placeholder
-            .allMatches(resources[1][key] as String)
+            .allMatches(resources.first[key] as String)
             .map((match) => match.group(1))
             .toSet();
-        final chinese = placeholder
-            .allMatches(resources[3][key] as String)
-            .map((match) => match.group(1))
-            .toSet();
-        final french = placeholder
-            .allMatches(resources[5][key] as String)
-            .map((match) => match.group(1))
-            .toSet();
-        expect(chinese, english, reason: 'Placeholder mismatch for $key');
-        expect(french, english, reason: 'French placeholder mismatch for $key');
+        for (final resource in resources.skip(1)) {
+          final localized = placeholder
+              .allMatches(resource[key] as String)
+              .map((match) => match.group(1))
+              .toSet();
+          expect(localized, english, reason: 'Placeholder mismatch for $key');
+        }
       }
-      expect(resources[4]['languageNameFrench'], 'Français');
-      expect(resources[5]['languageNameFrench'], 'Français');
+      final german = resources[files.indexOf('lib/l10n/app_de.arb')];
+      final french = resources[files.indexOf('lib/l10n/app_fr.arb')];
+      expect(german['languageNameFrench'], 'Französisch');
+      expect(german['languageNameGerman'], 'Deutsch');
+      expect(french['languageNameGerman'], 'Allemand');
     });
 
     test('English count labels use singular forms for a count of one', () {
@@ -212,7 +209,7 @@ void main() {
       },
     );
 
-    testWidgets('built-in prompt market renders English and Chinese', (
+    testWidgets('built-in prompt market renders English, Chinese, and German', (
       tester,
     ) async {
       Future<void> pumpMarket(Locale locale) async {
@@ -250,6 +247,17 @@ void main() {
       expect(find.text('助手市场'), findsOneWidget);
       expect(find.text('通用助手'), findsOneWidget);
       expect(find.text('选择后将添加为普通助手，之后可自由编辑'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await pumpMarket(const Locale('de', 'DE'));
+      expect(find.text('Assistenten-Marktplatz'), findsOneWidget);
+      expect(find.text('Allgemeiner Assistent'), findsOneWidget);
+      expect(
+        find.text(
+          'Importierte Prompts werden zu regulären Assistenten, die du frei bearbeiten kannst.',
+        ),
+        findsOneWidget,
+      );
     });
   });
 }
