@@ -13,12 +13,10 @@ void main() {
     final portuguese = jsonDecode(
       File('lib/l10n/app_pt_BR.arb').readAsStringSync(),
     ) as Map<String, dynamic>;
-    final englishKeys = english.keys
-        .where((key) => !key.startsWith('@'))
-        .toSet();
-    final portugueseKeys = portuguese.keys
-        .where((key) => !key.startsWith('@'))
-        .toSet();
+    final englishKeys =
+        english.keys.where((key) => !key.startsWith('@')).toSet();
+    final portugueseKeys =
+        portuguese.keys.where((key) => !key.startsWith('@')).toSet();
 
     expect(portugueseKeys, englishKeys);
     for (final key in englishKeys) {
@@ -65,8 +63,7 @@ void main() {
   });
 }
 
-Set<String> _placeholders(String message) =>
-    RegExp(r'\{\s*([A-Za-z_]\w*)\s*\}')
-        .allMatches(message)
-        .map((match) => match.group(1)!)
-        .toSet();
+Set<String> _placeholders(String message) => RegExp(r'\{\s*([A-Za-z_]\w*)\s*\}')
+    .allMatches(message)
+    .map((match) => match.group(1)!)
+    .toSet();
