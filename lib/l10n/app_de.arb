@@ -7017,5 +7017,6 @@
   "languageNameKorean": "Koreanisch",
   "fileManagerDeleteEmptyFolderWithSubfoldersConfirm": "Leeren Ordner „{name}“ löschen? {count, plural, one{Der darin enthaltene Unterordner wird ebenfalls gelöscht.} other{Die darin enthaltenen {count} Unterordner werden ebenfalls gelöscht.}}",
   "languageNamePortuguese": "Portugiesisch",
-  "languageNameFrench": "Französisch"
+  "languageNameFrench": "Französisch",
+  "providerMaxUploadSizePositive": "Die maximale Uploadgröße muss eine positive Zahl sein."
 }

@@ -7017,5 +7017,6 @@
       }
     }
   },
-  "fileManagerDeleteEmptyFolderWithSubfoldersConfirm": "¿Eliminar la carpeta vacía “{name}”? {count, plural, one{También se eliminará su 1 subcarpeta.} other{También se eliminarán sus {count} subcarpetas.}}"
+  "fileManagerDeleteEmptyFolderWithSubfoldersConfirm": "¿Eliminar la carpeta vacía “{name}”? {count, plural, one{También se eliminará su 1 subcarpeta.} other{También se eliminarán sus {count} subcarpetas.}}",
+  "providerMaxUploadSizePositive": "El tamaño máximo de carga debe ser un número positivo."
 }

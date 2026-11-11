@@ -122,59 +122,50 @@ extension _ProviderSettingsPanelTabAsrExt on _ProviderSettingsPanelState {
             ),
       ),
       const SizedBox(height: 16),
-      Row(
-        children: [
-          Text(
-            AppLocalizations.of(context)!.providerCompressionMode,
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
-              fontSize: 14,
-              color: cs.onSurface,
+      _buildResponsiveSettingsRow(
+        context,
+        label: AppLocalizations.of(context)!.providerCompressionMode,
+        control: Container(
+          decoration: BoxDecoration(
+            border: Border.all(color: cs.outlineVariant),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              dropdownColor: StroomMenuStyle.surface(context),
+              borderRadius: StroomMenuStyle.borderRadius,
+              value: _compression,
+              isDense: true,
+              items: [
+                DropdownMenuItem(
+                  value: 'none',
+                  child: Text(
+                    AppLocalizations.of(context)!.providerCompressionNone,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ),
+                DropdownMenuItem(
+                  value: 'adpcm',
+                  child: Text(
+                    AppLocalizations.of(context)!.providerCompressionAdpcm,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ),
+                DropdownMenuItem(
+                  value: 'flac',
+                  child: Text(
+                    AppLocalizations.of(context)!.providerCompressionFlac,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ),
+              ],
+              onChanged: (v) {
+                if (v != null) setState(() => _compression = v);
+              },
             ),
           ),
-          const Spacer(),
-          Container(
-            decoration: BoxDecoration(
-              border: Border.all(color: cs.outlineVariant),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                dropdownColor: StroomMenuStyle.surface(context),
-                borderRadius: StroomMenuStyle.borderRadius,
-                value: _compression,
-                isDense: true,
-                items: [
-                  DropdownMenuItem(
-                    value: 'none',
-                    child: Text(
-                      AppLocalizations.of(context)!.providerCompressionNone,
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ),
-                  DropdownMenuItem(
-                    value: 'adpcm',
-                    child: Text(
-                      AppLocalizations.of(context)!.providerCompressionAdpcm,
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ),
-                  DropdownMenuItem(
-                    value: 'flac',
-                    child: Text(
-                      AppLocalizations.of(context)!.providerCompressionFlac,
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ),
-                ],
-                onChanged: (v) {
-                  if (v != null) setState(() => _compression = v);
-                },
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
       const SizedBox(height: 8),
       Text(

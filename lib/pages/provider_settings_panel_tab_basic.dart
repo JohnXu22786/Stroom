@@ -283,7 +283,7 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
                     ),
                     textAlign: TextAlign.center,
                     style: const TextStyle(fontSize: 13),
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       isDense: true,
                       contentPadding: EdgeInsets.symmetric(
                         horizontal: 8,
@@ -291,12 +291,19 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
                       ),
                       border: OutlineInputBorder(),
                       suffixText: 'MB',
+                      errorText: _maxFileSizeError,
                     ),
                     onChanged: (v) {
-                      final parsed = double.tryParse(v);
-                      if (parsed != null && parsed > 0) {
-                        setState(() => _maxFileSizeMb = parsed);
-                      }
+                      final parsed = double.tryParse(v.trim());
+                      setState(() {
+                        if (parsed != null && parsed.isFinite && parsed > 0) {
+                          _maxFileSizeMb = parsed;
+                          _maxFileSizeError = null;
+                        } else {
+                          _maxFileSizeError = AppLocalizations.of(context)!
+                              .providerMaxUploadSizePositive;
+                        }
+                      });
                     },
                   ),
                 ),
@@ -336,68 +343,59 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
             ),
       ),
       const SizedBox(height: 16),
-      Row(
-        children: [
-          Text(
-            AppLocalizations.of(context)!.providerFallbackMethod,
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
-              fontSize: 14,
-              color: cs.onSurface,
+      _buildResponsiveSettingsRow(
+        context,
+        label: AppLocalizations.of(context)!.providerFallbackMethod,
+        control: Container(
+          decoration: BoxDecoration(
+            border: Border.all(color: cs.outlineVariant),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              dropdownColor: StroomMenuStyle.surface(context),
+              borderRadius: StroomMenuStyle.borderRadius,
+              value: _fallbackMethod,
+              isDense: true,
+              items: [
+                DropdownMenuItem(
+                  value: 'none',
+                  child: Text(
+                    AppLocalizations.of(context)!.providerFallbackNone,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ),
+                DropdownMenuItem(
+                  value: 'specific',
+                  child: Text(
+                    AppLocalizations.of(context)!.providerFallbackSpecific,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ),
+                DropdownMenuItem(
+                  value: 'generic',
+                  child: Text(
+                    AppLocalizations.of(context)!.providerFallbackGeneric,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ),
+                DropdownMenuItem(
+                  value: 'all',
+                  child: Text(
+                    AppLocalizations.of(context)!.providerFallbackAll,
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                  ),
+                ),
+              ],
+              onChanged: (v) {
+                if (v != null) setState(() => _fallbackMethod = v);
+              },
             ),
           ),
-          const Spacer(),
-          Container(
-            decoration: BoxDecoration(
-              border: Border.all(color: cs.outlineVariant),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                dropdownColor: StroomMenuStyle.surface(context),
-                borderRadius: StroomMenuStyle.borderRadius,
-                value: _fallbackMethod,
-                isDense: true,
-                items: [
-                  DropdownMenuItem(
-                    value: 'none',
-                    child: Text(
-                      AppLocalizations.of(context)!.providerFallbackNone,
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ),
-                  DropdownMenuItem(
-                    value: 'specific',
-                    child: Text(
-                      AppLocalizations.of(context)!.providerFallbackSpecific,
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ),
-                  DropdownMenuItem(
-                    value: 'generic',
-                    child: Text(
-                      AppLocalizations.of(context)!.providerFallbackGeneric,
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ),
-                  DropdownMenuItem(
-                    value: 'all',
-                    child: Text(
-                      AppLocalizations.of(context)!.providerFallbackAll,
-                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                    ),
-                  ),
-                ],
-                onChanged: (v) {
-                  if (v != null) setState(() => _fallbackMethod = v);
-                },
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
       const SizedBox(height: 8),
       Text(
@@ -437,52 +435,43 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
             ),
       ),
       const SizedBox(height: 16),
-      Row(
-        children: [
-          Text(
-            AppLocalizations.of(context)!.providerPreprocessingMethod,
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
-              fontSize: 14,
-              color: cs.onSurface,
+      _buildResponsiveSettingsRow(
+        context,
+        label: AppLocalizations.of(context)!.providerPreprocessingMethod,
+        control: Container(
+          decoration: BoxDecoration(
+            border: Border.all(color: cs.outlineVariant),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              dropdownColor: StroomMenuStyle.surface(context),
+              borderRadius: StroomMenuStyle.borderRadius,
+              value: _preprocessing,
+              isDense: true,
+              items: [
+                DropdownMenuItem(
+                  value: 'none',
+                  child: Text(
+                    AppLocalizations.of(context)!.providerPreprocessNone,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ),
+                DropdownMenuItem(
+                  value: 'resampleMono',
+                  child: Text(
+                    AppLocalizations.of(context)!.providerPreprocessResample,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ),
+              ],
+              onChanged: (v) {
+                if (v != null) setState(() => _preprocessing = v);
+              },
             ),
           ),
-          const Spacer(),
-          Container(
-            decoration: BoxDecoration(
-              border: Border.all(color: cs.outlineVariant),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                dropdownColor: StroomMenuStyle.surface(context),
-                borderRadius: StroomMenuStyle.borderRadius,
-                value: _preprocessing,
-                isDense: true,
-                items: [
-                  DropdownMenuItem(
-                    value: 'none',
-                    child: Text(
-                      AppLocalizations.of(context)!.providerPreprocessNone,
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ),
-                  DropdownMenuItem(
-                    value: 'resampleMono',
-                    child: Text(
-                      AppLocalizations.of(context)!.providerPreprocessResample,
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ),
-                ],
-                onChanged: (v) {
-                  if (v != null) setState(() => _preprocessing = v);
-                },
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
       const SizedBox(height: 8),
       Text(

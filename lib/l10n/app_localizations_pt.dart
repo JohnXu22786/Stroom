@@ -11987,6 +11987,10 @@ class AppLocalizationsPt extends AppLocalizations {
     );
     return 'Excluir a pasta vazia “$name”? $_temp0';
   }
+
+  @override
+  String get providerMaxUploadSizePositive =>
+      'O tamanho máximo de envio deve ser um número positivo.';
 }
 
 /// The translations for Portuguese, as used in Brazil (`pt_BR`).
@@ -23971,4 +23975,8 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
     );
     return 'Excluir a pasta vazia “$name”? $_temp0';
   }
+
+  @override
+  String get providerMaxUploadSizePositive =>
+      'O tamanho máximo de envio deve ser um número positivo.';
 }

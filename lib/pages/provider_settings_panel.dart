@@ -34,6 +34,45 @@ String? validateJsonValue(String type, String value) {
   return null;
 }
 
+Widget _buildResponsiveSettingsRow(
+  BuildContext context, {
+  required String label,
+  required Widget control,
+}) {
+  final colorScheme = Theme.of(context).colorScheme;
+  final labelWidget = Text(
+    label,
+    style: TextStyle(
+      fontWeight: FontWeight.w600,
+      fontSize: 14,
+      color: colorScheme.onSurface,
+    ),
+  );
+
+  return LayoutBuilder(
+    builder: (context, constraints) {
+      if (constraints.maxWidth < 800) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            labelWidget,
+            const SizedBox(height: 8),
+            control,
+          ],
+        );
+      }
+
+      return Row(
+        children: [
+          labelWidget,
+          const Spacer(),
+          control,
+        ],
+      );
+    },
+  );
+}
+
 /// Shows a full-screen dialog to edit provider basic info and parameters.
 /// Pattern follows [showAssistantFullEditDialog] from assistant_selection_page.dart.
 Future<ProviderConfigItem?> showProviderSettingsPanel({
@@ -92,6 +131,7 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
   // ASR upload settings
   AudioUploadMethod _uploadMethod = AudioUploadMethod.multipart;
   double _maxFileSizeMb = 25.0;
+  String? _maxFileSizeError;
   late final TextEditingController _maxFileSizeController;
   late final TextEditingController _ocrRequestSizeBudgetController;
 
@@ -105,6 +145,13 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
   bool get _isLlmType => widget.providerType == 'llm';
   bool get _isAsrType => widget.providerType == 'asr';
   bool get _isOcrType => widget.providerType == 'ocr';
+
+  void _showMaxFileSizeError() {
+    setState(() {
+      _maxFileSizeError =
+          AppLocalizations.of(context)!.providerMaxUploadSizePositive;
+    });
+  }
 
   @override
   void initState() {
@@ -179,7 +226,7 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
       _maxFileSizeMb =
           (c.typeConfig['maxFileSizeMb'] as num?)?.toDouble() ?? 25.0;
       _maxFileSizeController = TextEditingController(
-        text: _maxFileSizeMb.toStringAsFixed(1),
+        text: _maxFileSizeMb.toString(),
       );
       _preprocessing = c.typeConfig['preprocessing'] as String? ?? 'none';
       _chunking = c.typeConfig['chunking'] as String? ?? 'none';

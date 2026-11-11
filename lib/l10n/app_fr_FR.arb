@@ -7017,5 +7017,6 @@
   "languageNameJapanese": "Japonais",
   "languageNameFrench": "Français",
   "fileManagerDeleteEmptyFolderWithSubfoldersConfirm": "Supprimer le dossier vide « {name} » ? Ses {count, plural, one{1 dossier imbriqué sera également supprimé.} other{{count} dossiers imbriqués seront également supprimés.}}",
-  "languageNameGerman": "Allemand"
+  "languageNameGerman": "Allemand",
+  "providerMaxUploadSizePositive": "La taille maximale d’envoi doit être un nombre positif."
 }
