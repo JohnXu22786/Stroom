@@ -18,6 +18,7 @@ ProviderEntry _createTestEntry({
   String host = 'https://api.test.com',
   String key = 'test-key-123',
   List<ModelConfig> models = const [],
+  Map<String, dynamic> typeConfig = const {},
   String type = 'llm',
   String name = 'LLM供应商',
 }) {
@@ -31,6 +32,7 @@ ProviderEntry _createTestEntry({
         host: host,
         key: key,
         models: models,
+        typeConfig: typeConfig,
       ),
     ],
   );
@@ -67,6 +69,7 @@ extension on WidgetTester {
     String entryType = 'llm',
     String entryName = 'LLM供应商',
     List<ModelConfig> models = const [],
+    Map<String, dynamic> typeConfig = const {},
   }) {
     return pumpWidget(
       ProviderScope(
@@ -75,12 +78,13 @@ extension on WidgetTester {
             (ref) => ProviderEntriesNotifierFake(
               type: entryType,
               name: entryName,
-              entries: models.isNotEmpty
+              entries: models.isNotEmpty || typeConfig.isNotEmpty
                   ? [
                       _createTestEntry(
                         type: entryType,
                         name: entryName,
                         models: models,
+                        typeConfig: typeConfig,
                       ),
                     ]
                   : null,
@@ -108,6 +112,22 @@ List<String> modelTileTitles(WidgetTester tester) {
       .map((t) => (t.title as Text?)?.data ?? '')
       .where((s) => s.isNotEmpty)
       .toList();
+}
+
+List<String?> _selectedAsrOptionValues(WidgetTester tester) {
+  return tester
+      .widgetList<DropdownButton<String>>(find.byType(DropdownButton<String>))
+      .map((dropdown) => dropdown.value)
+      .toList();
+}
+
+Future<void> _openExistingAsrSettings(WidgetTester tester) async {
+  final pageContext = tester.element(find.byType(ProviderConfigDetailPage));
+  final l10n = AppLocalizations.of(pageContext)!;
+  await tester.tap(find.byTooltip(l10n.providerEditSettings));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text(l10n.providerParameterSettingsTab));
+  await tester.pumpAndSettle();
 }
 
 void main() {
@@ -164,6 +184,12 @@ void main() {
         isNotEmpty,
         reason: 'new ASR providers should default to the recommended fallback',
       );
+      expect(
+        _selectedAsrOptionValues(tester),
+        contains('silence'),
+        reason:
+            'new ASR providers should default to recommended smart chunking',
+      );
 
       await tester.tap(find.text('基本信息'));
       await tester.pumpAndSettle();
@@ -189,6 +215,75 @@ void main() {
           .firstWhere((config) => config.providerName == 'NewASRProvider');
       expect(savedConfig.typeConfig['compression'], 'flac');
       expect(savedConfig.typeConfig['fallbackMethod'], 'all');
+      expect(savedConfig.typeConfig['chunking'], 'silence');
+    });
+
+    testWidgets(
+      'legacy ASR config defaults persist after saving and reopening settings',
+      (tester) async {
+        await tester.pumpDetailPage(entryType: 'asr');
+        await tester.pumpAndSettle();
+
+        await _openExistingAsrSettings(tester);
+        expect(
+          _selectedAsrOptionValues(tester),
+          containsAll(['silence', 'flac', 'all']),
+        );
+
+        await tester.tap(find.text('保存'));
+        await tester.pumpAndSettle();
+
+        final container = ProviderScope.containerOf(
+          tester.element(find.byType(ProviderConfigDetailPage)),
+        );
+        final savedConfig = container
+            .read(providerEntriesProvider)
+            .entries
+            .single
+            .configs
+            .single;
+        expect(savedConfig.typeConfig['chunking'], 'silence');
+        expect(savedConfig.typeConfig['compression'], 'flac');
+        expect(savedConfig.typeConfig['fallbackMethod'], 'all');
+
+        await _openExistingAsrSettings(tester);
+        expect(
+          _selectedAsrOptionValues(tester),
+          containsAll(['silence', 'flac', 'all']),
+        );
+      },
+    );
+
+    testWidgets('explicit ASR choices, including none, stay selected', (
+      tester,
+    ) async {
+      await tester.pumpDetailPage(
+        entryType: 'asr',
+        typeConfig: {
+          'chunking': 'none',
+          'compression': 'adpcm',
+          'fallbackMethod': 'specific',
+        },
+      );
+      await tester.pumpAndSettle();
+
+      await _openExistingAsrSettings(tester);
+      expect(
+        _selectedAsrOptionValues(tester),
+        containsAll(['none', 'adpcm', 'specific']),
+      );
+
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(ProviderConfigDetailPage)),
+      );
+      final savedConfig =
+          container.read(providerEntriesProvider).entries.single.configs.single;
+      expect(savedConfig.typeConfig['chunking'], 'none');
+      expect(savedConfig.typeConfig['compression'], 'adpcm');
+      expect(savedConfig.typeConfig['fallbackMethod'], 'specific');
     });
 
     testWidgets('opens settings panel auto for new config with 3 TextFields', (

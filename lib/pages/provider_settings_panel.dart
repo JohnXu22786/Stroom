@@ -155,9 +155,9 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
   // ASR preprocessing & chunking
   String _preprocessing = 'none'; // 'none' | 'resampleMono'
   String _chunking =
-      'none'; // 'none' | 'silence' | 'fixedDuration' | 'fixedSize'
-  String _compression = 'none'; // 'none' | 'adpcm' | 'flac'
-  String _fallbackMethod = 'none'; // 'none' | 'specific' | 'generic' | 'all'
+      'silence'; // 'none' | 'silence' | 'fixedDuration' | 'fixedSize'
+  String _compression = 'flac'; // 'none' | 'adpcm' | 'flac'
+  String _fallbackMethod = 'all'; // 'none' | 'specific' | 'generic' | 'all'
 
   bool get _isLlmType => widget.providerType == 'llm';
   bool get _isAsrType => widget.providerType == 'asr';
@@ -246,15 +246,15 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
         text: _maxFileSizeMb.toString(),
       );
       _preprocessing = c.typeConfig['preprocessing'] as String? ?? 'none';
-      _chunking = c.typeConfig['chunking'] as String? ?? 'none';
+      _chunking = c.typeConfig['chunking'] as String? ?? 'silence';
       // Only codecs with valid standalone output are supported
       // ('opus'/'mp3' encoders are experimental and produce undecodable
       // output — legacy saved values are normalized to 'none').
-      final savedCompression = c.typeConfig['compression'] as String? ?? 'none';
+      final savedCompression = c.typeConfig['compression'] as String? ?? 'flac';
       _compression = (savedCompression == 'adpcm' || savedCompression == 'flac')
           ? savedCompression
           : 'none';
-      _fallbackMethod = c.typeConfig['fallbackMethod'] as String? ?? 'none';
+      _fallbackMethod = c.typeConfig['fallbackMethod'] as String? ?? 'all';
     } else {
       _maxFileSizeController = TextEditingController(text: '25.0');
     }

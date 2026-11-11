@@ -3860,9 +3860,9 @@ AsrConfig createAsrConfigFromProviderModel({
         ? (maxFileSizeMb * 1024 * 1024).toInt()
         : AsrConfig.defaultMaxAudioFileSizeBytes,
     preprocessing: providerTypeConfig['preprocessing'] as String? ?? 'none',
-    compression: providerTypeConfig['compression'] as String? ?? 'none',
-    chunking: providerTypeConfig['chunking'] as String? ?? 'none',
-    fallbackMethod: providerTypeConfig['fallbackMethod'] as String? ?? 'none',
+    compression: providerTypeConfig['compression'] as String? ?? 'flac',
+    chunking: providerTypeConfig['chunking'] as String? ?? 'silence',
+    fallbackMethod: providerTypeConfig['fallbackMethod'] as String? ?? 'all',
   );
 }
 
