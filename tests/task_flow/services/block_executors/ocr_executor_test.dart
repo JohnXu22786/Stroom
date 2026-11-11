@@ -192,7 +192,7 @@ void main() {
         },
       );
 
-  Future<void> expectPreflightFailure({
+  Future<String> expectPreflightFailure({
     required String expectedError,
     required Future<String> Function() execute,
   }) async {
@@ -205,13 +205,18 @@ void main() {
       )),
     );
 
-    final failedTask = background.state.last;
-    expect(failedTask.status, TaskStatus.failed);
+    final failedTaskId =
+        executions.execution(execId)?.subTasks.single.subTaskId;
+    expect(failedTaskId, isNotEmpty);
+    final failedTask = background.taskById(failedTaskId!);
+    expect(failedTask, isNotNull);
+    expect(failedTask!.status, TaskStatus.failed);
     expect(failedTask.error, expectedError);
     expect(
       executions.execution(execId)?.subTasks.single.status,
       TaskStatus.failed,
     );
+    return failedTaskId;
   }
 
   Future<void> expectPersistedPayloadFailure({
@@ -1064,7 +1069,7 @@ void main() {
       () async {
     for (final localizations in [AppLocalizationsEs(), AppLocalizationsJa()]) {
       final missingError = localizations.taskFlowOcrInputMissing;
-      await expectPreflightFailure(
+      final missingTaskId = await expectPreflightFailure(
         expectedError: missingError,
         execute: () => executeOcrBlock(
           block: ocrBlock(),
@@ -1079,20 +1084,19 @@ void main() {
         ),
       );
 
-      final missingTask = background.state.last;
       await background.pendingPersistence;
       final restoredMissing = BackgroundTaskNotifier(
         localizationsResolver: () => localizations,
       );
       addTearDown(restoredMissing.dispose);
       expect(await restoredMissing.restoreFromPersistence(), isTrue);
-      expect(restoredMissing.taskById(missingTask.id)?.error, missingError);
+      expect(restoredMissing.taskById(missingTaskId)?.error, missingError);
 
       final source = await File(
         '${directory.path}/unreadable_${localizations.localeName}.png',
       ).writeAsBytes(_validPng());
       final unreadableError = localizations.taskFlowOcrInputReadFailed;
-      await expectPreflightFailure(
+      final unreadableTaskId = await expectPreflightFailure(
         expectedError: unreadableError,
         execute: () => executeOcrBlock(
           block: ocrBlock(),
@@ -1108,7 +1112,6 @@ void main() {
         ),
       );
 
-      final unreadableTask = background.state.last;
       await background.pendingPersistence;
       final restoredUnreadable = BackgroundTaskNotifier(
         localizationsResolver: () => localizations,
@@ -1116,7 +1119,7 @@ void main() {
       addTearDown(restoredUnreadable.dispose);
       expect(await restoredUnreadable.restoreFromPersistence(), isTrue);
       expect(
-        restoredUnreadable.taskById(unreadableTask.id)?.error,
+        restoredUnreadable.taskById(unreadableTaskId)?.error,
         unreadableError,
       );
 
@@ -1124,7 +1127,7 @@ void main() {
       await WebFileStore.write(inputKey, Uint8List(800 * 1024));
       final limitLabel = localizations.taskFlowOcrRequestSizeLimit('1.00');
       final oversizedError = localizations.taskFlowOcrInputTooLarge(limitLabel);
-      await expectPreflightFailure(
+      final oversizedTaskId = await expectPreflightFailure(
         expectedError: oversizedError,
         execute: () => executeOcrBlock(
           block: ocrBlock(),
@@ -1139,7 +1142,6 @@ void main() {
         ),
       );
 
-      final oversizedTask = background.state.last;
       await background.pendingPersistence;
       final restoredOversized = BackgroundTaskNotifier(
         localizationsResolver: () => localizations,
@@ -1147,7 +1149,7 @@ void main() {
       addTearDown(restoredOversized.dispose);
       expect(await restoredOversized.restoreFromPersistence(), isTrue);
       expect(
-        restoredOversized.taskById(oversizedTask.id)?.error,
+        restoredOversized.taskById(oversizedTaskId)?.error,
         oversizedError,
       );
     }
