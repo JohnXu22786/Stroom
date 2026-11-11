@@ -174,9 +174,25 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    final themeCard = find.ancestor(
+      of: find.text('Light mode'),
+      matching: find.byType(Card),
+    );
+    final languageCard = find.ancestor(
+      of: find.byKey(const Key('language-search-field')),
+      matching: find.byType(Card),
+    );
+
     expect(find.text('Light mode'), findsOneWidget);
     expect(find.text('Dark mode'), findsOneWidget);
-    expect(find.text('Follow system'), findsNWidgets(2));
+    expect(
+      find.descendant(of: themeCard, matching: find.text('Follow system')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: languageCard, matching: find.text('Follow system')),
+      findsOneWidget,
+    );
     expect(find.text('Theme'), findsOneWidget);
     expect(find.text('Theme & Display'), findsOneWidget);
     expect(find.text('Language'), findsOneWidget);
@@ -220,7 +236,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('浅色模式'), findsOneWidget);
     expect(find.text('深色模式'), findsOneWidget);
-    expect(find.text('跟随系统'), findsOneWidget);
+    expect(
+      find.descendant(of: themeCard, matching: find.text('跟随系统')),
+      findsOneWidget,
+    );
     expect(find.text('主题'), findsOneWidget);
     expect(find.text('主题与显示'), findsOneWidget);
     await tester.scrollUntilVisible(
@@ -231,7 +250,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('语言'), findsOneWidget);
     expect(find.text('搜索语言'), findsOneWidget);
-    expect(find.text('跟随系统'), findsOneWidget);
+    expect(
+      find.descendant(of: languageCard, matching: find.text('跟随系统')),
+      findsOneWidget,
+    );
     expect(find.text('英语（English）'), findsOneWidget);
     expect(find.text('简体中文（简体中文）'), findsOneWidget);
     expect(find.text('en-us'), findsOneWidget);
@@ -244,7 +266,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('简体中文（简体中文）'), findsOneWidget);
     expect(find.text('英语（English）'), findsNothing);
-    expect(find.text('跟随系统'), findsOneWidget);
+    expect(
+      find.descendant(of: languageCard, matching: find.text('跟随系统')),
+      findsOneWidget,
+    );
 
     await tester.enterText(
       find.byKey(const Key('language-search-field')),
