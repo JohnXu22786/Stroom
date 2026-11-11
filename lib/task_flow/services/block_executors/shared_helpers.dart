@@ -25,12 +25,15 @@ void failSubTask(
   String error, {
   Map<String, dynamic>? rawRequest,
   Map<String, dynamic>? rawResponse,
+  Iterable<String> ocrCredentialValuesForSanitization = const [],
 }) {
   bgNotifier.failTask(
     taskId,
     error: error,
     rawRequest: rawRequest,
     rawResponse: rawResponse,
+    ocrCredentialValuesForSanitization:
+        ocrCredentialValuesForSanitization,
   );
   execNotifier.updateSubTaskStatus(execId, flowSubTaskId, TaskStatus.failed);
 }

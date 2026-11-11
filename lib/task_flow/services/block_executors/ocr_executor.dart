@@ -172,6 +172,7 @@ Future<String> executeOcrBlock({
       execId,
       flowSubTask.id,
       '${strings.unifiedTaskOcrFailed}: $safeError',
+      ocrCredentialValuesForSanitization: [config.key],
     );
     throw BlockExecutionException(
       safeError,
@@ -413,6 +414,7 @@ Future<String> executeOcrBlock({
       execId,
       flowSubTask.id,
       '${strings.unifiedTaskOcrFailed}: $safeError',
+      ocrCredentialValuesForSanitization: [config.key],
     );
     throw BlockExecutionException(
       safeError,
