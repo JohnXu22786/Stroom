@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../utils/web_file_store.dart';
 import 'backup_location_manager.dart';
@@ -38,13 +40,57 @@ import 'backup_location_manager.dart';
 
 /// 日志级别枚举。
 enum LogLevel {
-  debug('DEBUG'),
-  info('INFO'),
-  warning('WARN'),
-  error('ERROR');
+  debug('DEBUG', 0),
+  info('INFO', 1),
+  warning('WARN', 2),
+  error('ERROR', 3);
 
   final String label;
-  const LogLevel(this.label);
+
+  /// Higher values are more severe; filtering keeps levels at or above minimum.
+  final int severity;
+  const LogLevel(this.label, this.severity);
+}
+
+/// Persistent logging policy. A null [maxStorageBytes] means unlimited storage.
+class AppLogPolicy {
+  const AppLogPolicy({
+    this.retentionDays = AppLogService.defaultRetentionDays,
+    this.minimumLevel = LogLevel.debug,
+    this.maxStorageBytes,
+  });
+
+  final int retentionDays;
+  final LogLevel minimumLevel;
+  final int? maxStorageBytes;
+
+  AppLogPolicy copyWith({
+    int? retentionDays,
+    LogLevel? minimumLevel,
+    int? maxStorageBytes,
+    bool unlimitedStorage = false,
+  }) =>
+      AppLogPolicy(
+        retentionDays: retentionDays ?? this.retentionDays,
+        minimumLevel: minimumLevel ?? this.minimumLevel,
+        maxStorageBytes:
+            unlimitedStorage ? null : maxStorageBytes ?? this.maxStorageBytes,
+      );
+}
+
+/// Aggregate log storage information for the settings UI.
+class AppLogStorageUsage {
+  const AppLogStorageUsage({required this.fileCount, required this.bytes});
+
+  final int fileCount;
+  final int bytes;
+}
+
+class _LogFileInfo {
+  const _LogFileInfo(this.name, this.sizeBytes);
+
+  final String name;
+  final int sizeBytes;
 }
 
 /// 内存中的日志条目。
@@ -107,8 +153,88 @@ class AppLogService {
     return false;
   }
 
-  /// 日志文件保留天数。
-  static const int retentionDays = 15;
+  static const int defaultRetentionDays = 15;
+  static const String _policyKey = 'app_log_policy';
+
+  static AppLogPolicy _policy = const AppLogPolicy();
+  static Future<void>? _policyLoad;
+
+  /// Current configured retention period, retained for existing UI callers.
+  static int get retentionDays => _policy.retentionDays;
+
+  /// Load persistent policy values, falling back safely to the original defaults.
+  static Future<AppLogPolicy> getPolicy() async {
+    await _ensurePolicyLoaded();
+    return _policy;
+  }
+
+  /// Persist policy changes and immediately enforce the resulting cleanup policy.
+  static Future<void> updatePolicy(AppLogPolicy policy) async {
+    if (policy.retentionDays < 1) {
+      throw ArgumentError.value(
+        policy.retentionDays,
+        'retentionDays',
+        'must be positive',
+      );
+    }
+    if (policy.maxStorageBytes != null && policy.maxStorageBytes! < 1) {
+      throw ArgumentError.value(
+        policy.maxStorageBytes,
+        'maxStorageBytes',
+        'must be positive or null',
+      );
+    }
+    await _ensurePolicyLoaded();
+    final prefs = await SharedPreferences.getInstance();
+    final saved = await prefs.setString(
+      _policyKey,
+      jsonEncode({
+        'retentionDays': policy.retentionDays,
+        'minimumSeverity': policy.minimumLevel.severity,
+        'maxStorageBytes': policy.maxStorageBytes,
+      }),
+    );
+    if (!saved) {
+      throw StateError('Unable to persist the application log policy.');
+    }
+    _policy = policy;
+    await cleanupOldLogs();
+  }
+
+  static Future<void> _ensurePolicyLoaded() => _policyLoad ??= _loadPolicy();
+
+  static Future<void> _loadPolicy() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final encoded = prefs.getString(_policyKey);
+      if (encoded == null) {
+        _policy = const AppLogPolicy();
+        return;
+      }
+      final decoded = jsonDecode(encoded);
+      if (decoded is! Map<String, dynamic>) {
+        _policy = const AppLogPolicy();
+        return;
+      }
+      final retention = decoded['retentionDays'] as int?;
+      final severity = decoded['minimumSeverity'] as int?;
+      final level = LogLevel.values.firstWhere(
+        (candidate) => candidate.severity == severity,
+        orElse: () => LogLevel.debug,
+      );
+      final maxBytes = decoded['maxStorageBytes'] as int?;
+      _policy = AppLogPolicy(
+        retentionDays: retention != null && retention > 0
+            ? retention
+            : defaultRetentionDays,
+        minimumLevel: level,
+        maxStorageBytes: maxBytes != null && maxBytes > 0 ? maxBytes : null,
+      );
+    } catch (e) {
+      debugPrint('[AppLogService] 加载日志策略失败，使用默认值: $e');
+      _policy = const AppLogPolicy();
+    }
+  }
 
   /// 缓存日志目录。
   static Directory? _cachedLogDir;
@@ -172,19 +298,26 @@ class AppLogService {
   ///
   /// 日志先存入内存缓冲区，随后由定时器每 10 秒刷入文件。
   static Future<void> _writeLog(
-      LogLevel level, String source, String message) async {
+    LogLevel level,
+    String source,
+    String message,
+  ) async {
     // 先输出到控制台（所有场景）
     debugPrint('[AppLog] [${level.label}] [$source] $message');
 
     // 手动禁用或 Web 平台时跳过缓冲区写入
     if (_shouldSkipFileIo) return;
+    await _ensurePolicyLoaded();
+    if (level.severity < _policy.minimumLevel.severity) return;
 
-    _buffer.add(_LogEntry(
-      timestamp: DateTime.now(),
-      level: level,
-      source: source,
-      message: message,
-    ));
+    _buffer.add(
+      _LogEntry(
+        timestamp: DateTime.now(),
+        level: level,
+        source: source,
+        message: message,
+      ),
+    );
 
     // 启动定时刷入（仅一次，非测试环境）
     if (_flushTimer == null) _startFlushTimer();
@@ -223,6 +356,7 @@ class AppLogService {
         // 标准模式：直接使用 dart:io
         await _flushViaDartIO(entries);
       }
+      if (_policy.maxStorageBytes != null) await cleanupOldLogs();
       // 写入成功：entries 已从 _buffer 清除，无需额外操作
     } catch (e) {
       // 写入失败：将条目放回缓冲区前端，避免丢失
@@ -319,6 +453,8 @@ class AppLogService {
     _flushTimer = null;
     _buffer.clear();
     _cachedLogDir = null;
+    _policy = const AppLogPolicy();
+    _policyLoad = null;
     _manualFileLogging = null;
     _cachedIsTestEnv = false;
     _isTestEnvChecked = false;
@@ -509,62 +645,111 @@ class AppLogService {
     if (kIsWeb) return;
 
     try {
+      await _ensurePolicyLoaded();
       final bool useSaf = await _isSafMode();
-
-      if (useSaf) {
-        // SAF 模式：通过 BackupLocationManager 列出和删除
-        final files = await BackupLocationManager.listLogFiles();
-        final cutoff = DateTime.now().subtract(Duration(days: retentionDays));
-        final dateOnlyMatch = RegExp(r'app_(\d{4}-\d{2}-\d{2})');
-
-        for (final fileName in files) {
-          final m = dateOnlyMatch.firstMatch(fileName);
-          if (m == null) continue;
-          try {
-            final fileDate = DateTime.parse(m.group(1)!);
-            if (fileDate.isBefore(cutoff)) {
-              await BackupLocationManager.deleteLogFile(fileName);
-              debugPrint('[AppLogService] 清理旧日志(SAF): $fileName');
-            }
-          } catch (_) {
-            // 日期解析失败，跳过
+      final files = await _getLogFileInfo(useSaf: useSaf);
+      final cutoff = DateTime.now().subtract(
+        Duration(days: _policy.retentionDays),
+      );
+      for (final file in files) {
+        final fileDate = _dateFromLogFileName(file.name);
+        if (fileDate != null && fileDate.isBefore(cutoff)) {
+          if (await _deleteLogFile(file.name, useSaf: useSaf)) {
+            debugPrint('[AppLogService] 清理过期日志: ${file.name}');
           }
         }
-        return;
       }
 
-      // 非 SAF 模式：直接文件系统操作
-      final logDir = await getLogDir();
-      if (!await logDir.exists()) return;
-
-      final entries = await logDir.list().toList();
-      final cutoff = DateTime.now().subtract(Duration(days: retentionDays));
-
-      // 同时匹配新格式 (app_YYYY-MM-DD-HH.log) 和旧格式 (app_YYYY-MM-DD.log)
-      // 的日期前缀。旧文件在升级后没有 -HH 后缀，必须用宽松的正则匹配。
-      final dateOnlyMatch = RegExp(r'app_(\d{4}-\d{2}-\d{2})');
-
-      for (final entry in entries) {
-        if (entry is! File) continue;
-        if (!entry.path.endsWith('.log')) continue;
-
-        final fileName = p.basename(entry.path);
-        final m = dateOnlyMatch.firstMatch(fileName);
-        if (m == null) continue;
-
-        try {
-          final fileDate = DateTime.parse(m.group(1)!);
-          if (fileDate.isBefore(cutoff)) {
-            await entry.delete();
-            debugPrint('[AppLogService] 清理旧日志: $fileName');
-          }
-        } catch (_) {
-          // 日期解析失败，跳过
+      final maxBytes = _policy.maxStorageBytes;
+      if (maxBytes == null) return;
+      final remaining = (await _getLogFileInfo(useSaf: useSaf))
+        ..sort((a, b) => a.name.compareTo(b.name));
+      var totalBytes = remaining.fold<int>(
+        0,
+        (sum, file) => sum + file.sizeBytes,
+      );
+      final now = DateTime.now();
+      final currentName =
+          'app_${now.year}-${_pad(now.month)}-${_pad(now.day)}-${_pad(now.hour)}.log';
+      for (final file in remaining) {
+        if (totalBytes <= maxBytes) break;
+        if (file.name == currentName) continue;
+        if (await _deleteLogFile(file.name, useSaf: useSaf)) {
+          totalBytes -= file.sizeBytes;
+          debugPrint('[AppLogService] 按存储上限清理日志: ${file.name}');
         }
       }
     } catch (e) {
       debugPrint('[AppLogService] 清理旧日志失败: $e');
     }
+  }
+
+  /// Read current log usage for the settings UI.
+  static Future<AppLogStorageUsage> getStorageUsage() async {
+    if (kIsWeb) return const AppLogStorageUsage(fileCount: 0, bytes: 0);
+    final files = await _getLogFileInfo(useSaf: await _isSafMode());
+    return AppLogStorageUsage(
+      fileCount: files.length,
+      bytes: files.fold<int>(0, (sum, file) => sum + file.sizeBytes),
+    );
+  }
+
+  static final RegExp _appLogName = RegExp(
+    r'^app_\d{4}-\d{2}-\d{2}(?:-\d{2})?\.log$',
+  );
+
+  static DateTime? _dateFromLogFileName(String name) {
+    if (!_appLogName.hasMatch(name)) return null;
+    final dateMatch =
+        RegExp(r'^app_(\d{4}-\d{2}-\d{2})(?:-(\d{2}))?\.log$').firstMatch(name);
+    if (dateMatch == null) return null;
+    try {
+      final date = DateTime.parse(dateMatch.group(1)!);
+      final hour = int.tryParse(dateMatch.group(2) ?? '0') ?? 0;
+      if (hour > 23) return null;
+      return DateTime(date.year, date.month, date.day, hour);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<List<_LogFileInfo>> _getLogFileInfo({
+    required bool useSaf,
+  }) async {
+    if (useSaf) {
+      final files = await BackupLocationManager.getLogFileMetadata();
+      return files
+          .where((file) => _appLogName.hasMatch(file.name))
+          .map((file) => _LogFileInfo(file.name, file.sizeBytes))
+          .toList();
+    }
+    final dir = await getLogDir();
+    if (!await dir.exists()) return [];
+    final result = <_LogFileInfo>[];
+    await for (final entry in dir.list()) {
+      if (entry is! File) continue;
+      final name = p.basename(entry.path);
+      if (!_appLogName.hasMatch(name)) continue;
+      try {
+        final stat = await entry.stat();
+        result.add(_LogFileInfo(name, stat.size));
+      } catch (_) {}
+    }
+    return result;
+  }
+
+  static Future<bool> _deleteLogFile(
+    String name, {
+    required bool useSaf,
+  }) async {
+    if (!_appLogName.hasMatch(name)) return false;
+    if (useSaf) {
+      return await BackupLocationManager.deleteLogFile(name);
+    }
+    final dir = await getLogDir();
+    final file = File(p.join(dir.path, name));
+    if (await file.exists()) await file.delete();
+    return !await file.exists();
   }
 }
 

@@ -85,6 +85,57 @@ class BackupLocationManager {
   /// 上限兜底，防止原生侧永久无响应挂起启动流程。
   static const Duration _safWriteFromPathTimeout = Duration(minutes: 5);
 
+  /// Metadata for log files used by retention and storage-cap enforcement.
+  static Future<List<LogFileMetadata>> getLogFileMetadata() async {
+    if (kIsWeb) return [];
+    if (Platform.isAndroid) {
+      final uri = await _getSavedSafUri();
+      if (uri != null) {
+        try {
+          final result = await _safChannel.invokeMethod<List<dynamic>>(
+              'listLogMetadata', {'uri': uri}).timeout(_safChannelTimeout);
+          return (result ?? [])
+              .whereType<Map>()
+              .map((entry) {
+                final name = entry['name'] as String?;
+                final size = entry['sizeBytes'] as int?;
+                final modified = entry['modifiedAtMillis'] as int?;
+                if (name == null || size == null) return null;
+                return LogFileMetadata(
+                  name: name,
+                  sizeBytes: size,
+                  modifiedAt:
+                      DateTime.fromMillisecondsSinceEpoch(modified ?? 0),
+                );
+              })
+              .whereType<LogFileMetadata>()
+              .toList();
+        } catch (e) {
+          debugPrint('[BackupLocationManager] SAF 日志元数据读取失败: $e');
+          rethrow;
+        }
+      }
+    }
+
+    final logsPath = await getLogsRootPath();
+    if (logsPath == null) return [];
+    final dir = Directory(logsPath);
+    if (!await dir.exists()) return [];
+    final result = <LogFileMetadata>[];
+    await for (final entry in dir.list()) {
+      if (entry is! File || !entry.path.endsWith('.log')) continue;
+      try {
+        final stat = await entry.stat();
+        result.add(LogFileMetadata(
+          name: p.basename(entry.path),
+          sizeBytes: stat.size,
+          modifiedAt: stat.modified,
+        ));
+      } catch (_) {}
+    }
+    return result;
+  }
+
   /// 备份目录路径（所有平台统一，相对于用户选择的 Documents 目录）。
   /// 使用 Stroom/AutoBackups 两级目录结构，便于用户识别和管理。
   static const String _backupDirName = 'Stroom/AutoBackups';
@@ -863,8 +914,8 @@ class BackupLocationManager {
   /// 删除日志文件。
   ///
   /// [relativePath] 是相对于日志根目录的路径。
-  static Future<void> deleteLogFile(String relativePath) async {
-    if (kIsWeb) return;
+  static Future<bool> deleteLogFile(String relativePath) async {
+    if (kIsWeb) return false;
 
     // Android SAF
     if (!kIsWeb) {
@@ -872,24 +923,22 @@ class BackupLocationManager {
         if (Platform.isAndroid) {
           final uri = await _getSavedSafUri();
           if (uri == null) {
-            await _deleteLogFromFile(relativePath);
-            return;
+            return await _deleteLogFromFile(relativePath);
           }
-          await _safChannel.invokeMethod<void>('deleteLog', {
-            'uri': uri,
-            'fileName': relativePath,
-          }).timeout(_safChannelTimeout);
-          return;
+          return await _safChannel.invokeMethod<bool>('deleteLog', {
+                'uri': uri,
+                'fileName': relativePath,
+              }).timeout(_safChannelTimeout) ??
+              false;
         }
       } catch (e) {
         debugPrint('[BackupLocationManager] SAF 删除日志失败: $e');
-        await _deleteLogFromFile(relativePath);
-        return;
+        return false;
       }
     }
 
     // 非 Android 平台
-    await _deleteLogFromFile(relativePath);
+    return await _deleteLogFromFile(relativePath);
   }
 
   /// dart:io 日志写入（非 SAF 模式）。
@@ -944,16 +993,18 @@ class BackupLocationManager {
   }
 
   /// dart:io 日志文件删除（非 SAF 模式）。
-  static Future<void> _deleteLogFromFile(String relativePath) async {
+  static Future<bool> _deleteLogFromFile(String relativePath) async {
     try {
       final logsPath = await getLogsRootPath();
-      if (logsPath == null) return;
+      if (logsPath == null) return false;
       final file = File(p.join(logsPath, relativePath));
       if (await file.exists()) {
         await file.delete();
       }
+      return !await file.exists();
     } catch (e) {
       debugPrint('[BackupLocationManager] 删除日志文件失败: $relativePath: $e');
+      return false;
     }
   }
 
@@ -1084,4 +1135,16 @@ class BackupLocationManager {
     }
     return false;
   }
+}
+
+class LogFileMetadata {
+  const LogFileMetadata({
+    required this.name,
+    required this.sizeBytes,
+    required this.modifiedAt,
+  });
+
+  final String name;
+  final int sizeBytes;
+  final DateTime modifiedAt;
 }

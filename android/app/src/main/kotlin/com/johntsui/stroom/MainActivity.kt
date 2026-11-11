@@ -203,6 +203,14 @@ class MainActivity : FlutterActivity() {
                         result.error("INVALID_ARGS", "URI 为空", null)
                     }
                 }
+                "listLogMetadata" -> {
+                    val uriStr = call.argument<String>("uri")
+                    if (uriStr != null) {
+                        listLogMetadataInSaf(uriStr, result)
+                    } else {
+                        result.error("INVALID_ARGS", "URI 为空", null)
+                    }
+                }
                 "deleteLog" -> {
                     val uriStr = call.argument<String>("uri")
                     val fileName = call.argument<String>("fileName")
@@ -699,6 +707,36 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    /// Enumerate log files and their sizes/timestamps for retention and cap cleanup.
+    private fun listLogMetadataInSaf(
+        uriStr: String,
+        result: MethodChannel.Result
+    ) {
+        try {
+            val uri = Uri.parse(uriStr)
+            val treeDocument = DocumentFile.fromTreeUri(this, uri)
+            val logsDir = treeDocument?.let { getOrCreateLogsDir(it) }
+            if (logsDir == null) {
+                result.error("LOGS_DIR_UNAVAILABLE", "无法访问日志目录", null)
+                return
+            }
+            val metadata = logsDir.listFiles()
+                .filter { it.isFile && (it.name?.endsWith(".log") == true) }
+                .mapNotNull { file ->
+                    val name = file.name ?: return@mapNotNull null
+                    mapOf(
+                        "name" to name,
+                        "sizeBytes" to file.length(),
+                        "modifiedAtMillis" to file.lastModified(),
+                    )
+                }
+            result.success(metadata)
+        } catch (e: Exception) {
+            Log.e(TAG, "SAF: 读取日志元数据失败", e)
+            result.error("LIST_LOG_METADATA_FAILED", "读取日志元数据失败", null)
+        }
+    }
+
     /// 通过 SAF 删除日志文件。
     private fun deleteLogInSaf(
         uriStr: String,
@@ -709,24 +747,22 @@ class MainActivity : FlutterActivity() {
             val uri = Uri.parse(uriStr)
             val treeDocument = DocumentFile.fromTreeUri(this, uri)
             if (treeDocument == null) {
-                result.success(null)
+                result.success(false)
                 return
             }
             val logsDir = getOrCreateLogsDir(treeDocument)
                 ?: run {
-                    result.success(null)
+                    result.success(false)
                     return
                 }
 
             val file = logsDir.findFile(fileName)
-            if (file != null) {
-                val deleted = file.delete()
-                Log.i(TAG, "SAF: 删除日志文件 $fileName: $deleted")
-            }
-            result.success(null)
+            val deleted = file?.delete() ?: true
+            Log.i(TAG, "SAF: 删除日志文件 $fileName: $deleted")
+            result.success(deleted)
         } catch (e: Exception) {
             Log.e(TAG, "SAF: 删除日志文件失败", e)
-            result.success(null)
+            result.success(false)
         }
     }
 
