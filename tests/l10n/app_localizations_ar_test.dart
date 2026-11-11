@@ -79,6 +79,14 @@ void main() {
     ]);
     expect(strings.providerGroupItemCount(0), 'لا توجد عناصر');
     expect(strings.textStorageImportSuccess(1), 'تم استيراد 1 ملف نصي');
+    expect(strings.textStorageImportSuccess(3), 'تم استيراد 3 ملفات نصية');
+    expect(strings.textStorageImportSuccess(11), 'تم استيراد 11 ملفًا نصيًا');
+    expect(strings.textStorageExportedFiles(1), 'تم تصدير 1 ملف');
+    expect(strings.textStorageExportedFiles(3), 'تم تصدير 3 ملفات');
+    expect(strings.textStorageExportedFiles(11), 'تم تصدير 11 ملفًا');
+    expect(strings.galleryImportImagesCount(1), 'تم استيراد 1 صورة');
+    expect(strings.galleryImportVideosCount(1), 'تم استيراد 1 فيديو');
+    expect(strings.galleryExportedFilesCount(1), 'تم تصدير 1 ملف');
   });
 
   testWidgets('Flutter localization delegate gives Arabic RTL direction', (

@@ -3279,7 +3279,7 @@
   "@providerDeleteTooltip": {
     "placeholders": {}
   },
-  "providerGroupItemCount": "{count, plural, zero{لا توجد عناصر} one{# عنصر} two{عنصران} few{# عناصر} many{# عنصرًا} other{# عنصر}}",
+  "providerGroupItemCount": "{count, plural, zero{لا توجد عناصر} one{{count} عنصر} two{عنصران} few{{count} عناصر} many{{count} عنصرًا} other{{count} عنصر}}",
   "@providerGroupItemCount": {
     "placeholders": {
       "count": {
@@ -3921,7 +3921,7 @@
   "audioFiles": "ملفات صوتية",
   "noAudioSelected": "لم يتم اختيار ملفات صوتية",
   "supportedAudioFormats": "يدعم تنسيقات صوت شائعة مثل WAV وMP3 وM4A وOGG",
-  "asrSelectedAudioCount": "{count, plural, zero{لم يتم اختيار ملفات صوتية} one{تم تحديد ملف صوتي واحد} two{تم تحديد ملفين صوتيين} few{تم تحديد # ملفات صوتية} many{تم تحديد # ملفًا صوتيًا} other{تم تحديد # ملف صوتي}}",
+  "asrSelectedAudioCount": "{count, plural, zero{لم يتم اختيار ملفات صوتية} one{تم تحديد ملف صوتي واحد} two{تم تحديد ملفين صوتيين} few{تم تحديد {count} ملفات صوتية} many{تم تحديد {count} ملفًا صوتيًا} other{تم تحديد {count} ملف صوتي}}",
   "@asrSelectedAudioCount": {
     "placeholders": {
       "count": {
@@ -3989,7 +3989,7 @@
   "cancel": "إلغاء",
   "add": "إضافة",
   "ttsPageTitle": "الصوت",
-  "ttsAudioImportedCount": "تم استيراد {count, plural, zero{0 ملفات صوتية} one{ملف صوتي واحد} two{ملفين صوتيين} few{# ملفات صوتية} many{# ملفًا صوتيًا} other{# ملف صوتي}}",
+  "ttsAudioImportedCount": "تم استيراد {count, plural, zero{0 ملفات صوتية} one{ملف صوتي واحد} two{ملفين صوتيين} few{{count} ملفات صوتية} many{{count} ملفًا صوتيًا} other{{count} ملف صوتي}}",
   "@ttsAudioImportedCount": {
     "placeholders": {
       "count": {
@@ -4044,7 +4044,7 @@
   },
   "ttsChooseExportFolder": "اختيار مجلد التصدير",
   "ttsExportAudio": "تصدير الصوت",
-  "ttsExportedCount": "تم تصدير {count, plural, zero{0 ملفات} one{ملف واحد} two{ملفين} few{# ملفات} many{# ملفًا} other{# ملف}}",
+  "ttsExportedCount": "تم تصدير {count, plural, zero{0 ملفات} one{ملف واحد} two{ملفين} few{{count} ملفات} many{{count} ملفًا} other{{count} ملف}}",
   "@ttsExportedCount": {
     "placeholders": {
       "count": {
@@ -4714,7 +4714,7 @@
     },
     "description": "User-facing text for the text preview or storage interface: textStorageSkipUnsupportedFormat."
   },
-  "textStorageImportSuccess": "تم استيراد {count, plural, zero{# ملفات نصية} one{# ملف نصي} two{ملفين نصيين} few{# ملفات نصية} many{# ملفًا نصيًا} other{# ملف نصي}}",
+  "textStorageImportSuccess": "تم استيراد {count, plural, zero{{count} ملفات نصية} one{{count} ملف نصي} two{ملفين نصيين} few{{count} ملفات نصية} many{{count} ملفًا نصيًا} other{{count} ملف نصي}}",
   "@textStorageImportSuccess": {
     "placeholders": {
       "count": {
@@ -4759,7 +4759,7 @@
   "textStorageWebFolderExportInfo": "لا يمكن للمتصفح اختيار مجلد للتصدير. سيتم تنزيل ملف ZIP يحافظ على بنية المجلد.",
   "textStorageCancel": "إلغاء",
   "textStorageDownloadZip": "تنزيل ملف ZIP",
-  "textStorageExportedFiles": "تم تصدير {count, plural, zero{# ملفات} one{# ملف} two{ملفين} few{# ملفات} many{# ملفًا} other{# ملف}}",
+  "textStorageExportedFiles": "تم تصدير {count, plural, zero{{count} ملفات} one{{count} ملف} two{ملفين} few{{count} ملفات} many{{count} ملفًا} other{{count} ملف}}",
   "@textStorageExportedFiles": {
     "placeholders": {
       "count": {
@@ -5043,8 +5043,8 @@
   "galleryCameraFailed": "تعذّر التقاط صورة: {error}",
   "galleryPhotoSaved": "تم حفظ الصورة",
   "galleryUnsupportedImportFormat": "تم تخطي تنسيق غير مدعوم: {format}",
-  "galleryImportImagesCount": "تم استيراد {count, plural, zero{# صور} one{# صورة} two{صورتان} few{# صور} many{# صورة} other{# صورة}}",
-  "galleryImportVideosCount": "تم استيراد {count, plural, zero{# فيديوهات} one{# فيديو} two{فيديوين} few{# فيديوهات} many{# فيديو} other{# فيديو}}",
+  "galleryImportImagesCount": "تم استيراد {count, plural, zero{{count} صور} one{{count} صورة} two{صورتان} few{{count} صور} many{{count} صورة} other{{count} صورة}}",
+  "galleryImportVideosCount": "تم استيراد {count, plural, zero{{count} فيديوهات} one{{count} فيديو} two{فيديوين} few{{count} فيديوهات} many{{count} فيديو} other{{count} فيديو}}",
   "galleryImportFailed": "فشل الاستيراد: {error}",
   "galleryFileReadFailed": "تعذّرت قراءة بيانات الملف",
   "galleryExportImageTitle": "تصدير صورة",
@@ -5052,7 +5052,7 @@
   "galleryExportedTo": "تم التصدير إلى: {path}",
   "galleryExportFailed": "فشل التصدير: {error}",
   "galleryChooseExportDirectory": "اختيار مجلد التصدير",
-  "galleryExportedFilesCount": "تم تصدير {count, plural, zero{# ملفات} one{# ملف} two{ملفين} few{# ملفات} many{# ملفًا} other{# ملف}}",
+  "galleryExportedFilesCount": "تم تصدير {count, plural, zero{{count} ملفات} one{{count} ملف} two{ملفين} few{{count} ملفات} many{{count} ملفًا} other{{count} ملف}}",
   "galleryFolderExportTitle": "تصدير المجلد",
   "galleryWebFolderExportInfo": "لا يمكن للمتصفح اختيار مجلد للتصدير. سيتم تنزيل ملف ZIP يحافظ على بنية المجلد.",
   "galleryDownloadZip": "تنزيل ملف ZIP",
