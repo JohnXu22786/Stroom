@@ -292,7 +292,9 @@ class _ProviderSettingsPanelState extends State<_ProviderSettingsPanel>
                 ),
               ),
               TabBar(
-                labelPadding: const EdgeInsets.symmetric(horizontal: 24),
+                labelPadding: EdgeInsets.symmetric(
+                  horizontal: MediaQuery.sizeOf(context).width < 800 ? 8 : 24,
+                ),
                 tabs: [
                   Tab(text: AppLocalizations.of(context)!.providerBasicInfoTab),
                   Tab(

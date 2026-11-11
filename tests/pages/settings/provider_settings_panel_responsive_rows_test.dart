@@ -56,6 +56,11 @@ void main() {
       expect(find.text('Preprocessing method'), findsOneWidget);
       expect(find.text('Compression method'), findsOneWidget);
       expect(find.byType(DropdownButton<String>), findsNWidgets(4));
+      for (final tabLabel in ['Basic info', 'Parameter settings']) {
+        final tabRect = tester.getRect(find.text(tabLabel));
+        expect(tabRect.left, greaterThanOrEqualTo(0));
+        expect(tabRect.right, lessThanOrEqualTo(width));
+      }
       final uploadLabel = tester.getRect(find.text('Upload method'));
       final uploadControl = tester.getRect(
         find.byType(DropdownButton<AudioUploadMethod>),
