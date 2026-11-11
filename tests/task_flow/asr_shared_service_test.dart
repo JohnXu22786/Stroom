@@ -434,7 +434,7 @@ void main() {
               'maxFileSizeMb': 0.012,
               'chunking': 'fixedSize',
               'compression': 'none',
-              'fallbackMethod': 'none',
+              'fallbackMethod': 'generic',
             },
           ),
           asrServiceFactory: (config) => AsrService(config: config, dio: dio),
@@ -477,7 +477,7 @@ void main() {
         'maxFileSizeMb': 0.012,
         'chunking': 'fixedSize',
         'compression': 'none',
-        'fallbackMethod': 'none',
+        'fallbackMethod': 'generic',
       },
     );
     final providerNotifier = ProviderEntriesNotifier()..state = entries;
