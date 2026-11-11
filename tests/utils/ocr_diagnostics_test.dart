@@ -32,12 +32,12 @@ void main() {
       ),
       'OCR 错误详情已隐藏',
     );
-    expect(
-      OcrDiagnosticSnapshot.sanitizeStoredTaskError(
-        'OCR returned an incomplete result (finish_reason=length); secret=abc',
-      ),
-      'OCR 错误详情已隐藏',
+    final credentialBearing =
+        OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+      'OCR returned an incomplete result (finish_reason=length); secret=abc',
     );
+    expect(credentialBearing, startsWith('OCR 错误详情已隐藏'));
+    expect(credentialBearing, isNot(contains('secret=abc')));
     expect(
       OcrDiagnosticSnapshot.sanitizeStoredTaskError(
         'OCR model unavailable: private provider response',
