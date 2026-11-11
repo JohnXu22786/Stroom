@@ -221,8 +221,6 @@ class _OcrPageState extends ConsumerState<OcrPage> {
 
   final List<SelectedImage> _selectedImages = [];
   late List<OcrPageOutcome> _retryPageOutcomes;
-  int? _retryRequestSizeBudgetBytes;
-  bool _retryRequestSizeBudgetHasStableModelReference = false;
   OcrBatchMode _batchMode = OcrBatchMode.joint;
   int _perImageConcurrency = 1;
   bool _isProcessing = false;
@@ -417,12 +415,6 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     final retryTaskId = widget.retryTaskId;
     final retryTaskGeneration = widget.retryTaskGeneration;
     final snapshot = OcrRetrySnapshot.fromMap(data);
-    _retryRequestSizeBudgetBytes = snapshot.requestSizeBudgetBytes;
-    _retryRequestSizeBudgetHasStableModelReference =
-        (snapshot.version == null ||
-                snapshot.version! <= OcrRetrySnapshot.currentVersion) &&
-            snapshot.configId != null &&
-            snapshot.modelId != null;
     _retryImageCountUnknown = snapshot.imageEntryCount == 0;
     _saveFolder = snapshot.saveFolder;
 
@@ -783,14 +775,6 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   }
 
   void _selectModelOption(_ModelOption option, int index) {
-    final retryModelChanged = _retryRequestSizeBudgetBytes != null &&
-        (!_retryRequestSizeBudgetHasStableModelReference ||
-            option.configId != _selectedConfigId ||
-            option.modelRecordId != _selectedModelRecordId);
-    if (retryModelChanged) {
-      _retryRequestSizeBudgetBytes = null;
-      _retryRequestSizeBudgetHasStableModelReference = false;
-    }
     _selectedModelIndex = index;
     _selectedConfigId = option.configId;
     _selectedModelRecordId = option.modelRecordId;
@@ -2833,8 +2817,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     _selectedModelIndex = requestModelIndex;
     _selectedConfigId = selectedOption.configId;
     _selectedModelRecordId = selectedOption.modelRecordId;
-    final requestSizeBudgetBytes =
-        _retryRequestSizeBudgetBytes ?? selectedOption.requestSizeBudgetBytes;
+    final requestSizeBudgetBytes = selectedOption.requestSizeBudgetBytes;
     var effectiveConfig = OcrConfig(
       host: selectedOption.host,
       apiKey: selectedOption.apiKey,

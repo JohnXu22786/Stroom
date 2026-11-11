@@ -229,6 +229,7 @@ class _CapturingOcrAdapter implements HttpClientAdapter {
 ProviderEntry _createOcrEntry({
   bool withModels = true,
   int? providerBudgetBytes,
+  int? modelBudgetBytes,
 }) {
   return ProviderEntry(
     id: 'test_ocr',
@@ -245,7 +246,14 @@ ProviderEntry _createOcrEntry({
         },
         models: withModels
             ? [
-                ModelConfig(name: 'GPT-4o', modelId: 'gpt-4o'),
+                ModelConfig(
+                  name: 'GPT-4o',
+                  modelId: 'gpt-4o',
+                  typeConfig: {
+                    if (modelBudgetBytes != null)
+                      'requestSizeBudgetBytes': modelBudgetBytes,
+                  },
+                ),
                 ModelConfig(name: 'GPT-4o Mini', modelId: 'gpt-4o-mini'),
                 ModelConfig(
                   name: 'GPT-4 Vision',
@@ -5877,6 +5885,169 @@ void main() {
 
       expect(find.textContaining('当前 JSON 请求约为'), findsNothing);
       expect(taskNotifier.tasksForTest, hasLength(1));
+    });
+
+    testWidgets('retry uses the selected model budget after it is raised', (
+      tester,
+    ) async {
+      const snapshotBudget = 1;
+      const currentBudget = defaultOcrRequestSizeBudgetBytes;
+      final entry = _createOcrEntry(modelBudgetBytes: snapshotBudget);
+      final config = entry.configs.single;
+      final model = config.models.first;
+      final providerNotifier = ProviderEntriesNotifier()
+        ..state = ProviderEntriesState(entries: [entry]);
+      final taskNotifier = _InspectableBackgroundTaskNotifier();
+      final preflightStarted = Completer<void>();
+      int? preflightBudget;
+      int? encodedRequestBytes;
+      final imageBytes = _createValidOcrTestImage().bytes;
+      final retryData = {
+        ..._createVersionedRetryData(configId: config.id, modelId: model.id),
+        'images': [
+          {
+            'bytes': base64Encode(imageBytes),
+            'format': 'png',
+            'name': 'retry-image.png',
+          },
+        ],
+        'requestSizeBudgetBytes': snapshotBudget,
+      };
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          testProviderEntriesNotifier: providerNotifier,
+          retryData: retryData,
+          backgroundTasksNotifier: taskNotifier,
+          testRequestSizePreflight: (currentConfig, images) {
+            preflightBudget = currentConfig.requestSizeBudgetBytes;
+            final service = OcrService(config: currentConfig);
+            try {
+              encodedRequestBytes = service.encodedRequestSizeBytes(
+                imageBytesList:
+                    images.map((image) => (image.bytes, image.format)).toList(),
+              );
+            } finally {
+              service.close();
+            }
+            if (!preflightStarted.isCompleted) preflightStarted.complete();
+            return Future.value(
+              encodedRequestBytes! <= currentConfig.requestSizeBudgetBytes
+                  ? currentConfig.requestSizeBudgetBytes
+                  : null,
+            );
+          },
+          testImagePayloadPreparer: (bytes) async =>
+              prepareOcrImagePayloadSync(bytes),
+          testRetrySnapshotCacher: ({required taskId, required snapshot}) =>
+              Future.value(retryData),
+          testOcrServiceFactory: (config) => OcrService(
+            config: config,
+            ownsDio: true,
+            dio: Dio()..httpClientAdapter = _CapturingOcrAdapter(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      model.typeConfig['requestSizeBudgetBytes'] = currentBudget;
+      providerNotifier.state = ProviderEntriesState(entries: [entry]);
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('ocr_grid_item_0')), findsOneWidget);
+      final startButton = find.widgetWithText(FilledButton, '开始识别');
+      expect(tester.widget<FilledButton>(startButton).onPressed, isNotNull);
+      await tester.ensureVisible(startButton);
+      await tester.tap(startButton);
+      await tester.pump();
+      await _pumpUntil(tester, () => preflightStarted.isCompleted);
+      expect(encodedRequestBytes, greaterThan(snapshotBudget));
+      expect(encodedRequestBytes, lessThan(currentBudget));
+      expect(preflightBudget, currentBudget);
+      await _pumpUntil(tester, () => taskNotifier.tasksForTest.isNotEmpty);
+      expect(taskNotifier.tasksForTest, hasLength(1));
+      await _pumpUntil(
+        tester,
+        () => taskNotifier.tasksForTest.single.status == TaskStatus.completed,
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('retry uses the selected model budget after it is lowered', (
+      tester,
+    ) async {
+      const snapshotBudget = defaultOcrRequestSizeBudgetBytes;
+      const currentBudget = 1;
+      final entry = _createOcrEntry(modelBudgetBytes: snapshotBudget);
+      final config = entry.configs.single;
+      final model = config.models.first;
+      final providerNotifier = ProviderEntriesNotifier()
+        ..state = ProviderEntriesState(entries: [entry]);
+      final taskNotifier = _InspectableBackgroundTaskNotifier();
+      final preflightStarted = Completer<void>();
+      int? preflightBudget;
+      int? encodedRequestBytes;
+      final imageBytes = _createValidOcrTestImage().bytes;
+      final retryData = {
+        ..._createVersionedRetryData(configId: config.id, modelId: model.id),
+        'images': [
+          {
+            'bytes': base64Encode(imageBytes),
+            'format': 'png',
+            'name': 'retry-image.png',
+          },
+        ],
+        'requestSizeBudgetBytes': snapshotBudget,
+      };
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          testProviderEntriesNotifier: providerNotifier,
+          retryData: retryData,
+          backgroundTasksNotifier: taskNotifier,
+          testRequestSizePreflight: (currentConfig, images) {
+            preflightBudget = currentConfig.requestSizeBudgetBytes;
+            final service = OcrService(config: currentConfig);
+            try {
+              encodedRequestBytes = service.encodedRequestSizeBytes(
+                imageBytesList:
+                    images.map((image) => (image.bytes, image.format)).toList(),
+              );
+            } finally {
+              service.close();
+            }
+            if (!preflightStarted.isCompleted) preflightStarted.complete();
+            return Future.value(
+              encodedRequestBytes! <= currentConfig.requestSizeBudgetBytes
+                  ? currentConfig.requestSizeBudgetBytes
+                  : null,
+            );
+          },
+          testImagePayloadPreparer: (bytes) async =>
+              prepareOcrImagePayloadSync(bytes),
+          testRetrySnapshotCacher: ({required taskId, required snapshot}) =>
+              Future.value(retryData),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      model.typeConfig['requestSizeBudgetBytes'] = currentBudget;
+      providerNotifier.state = ProviderEntriesState(entries: [entry]);
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('ocr_grid_item_0')), findsOneWidget);
+      final startButton = find.widgetWithText(FilledButton, '开始识别');
+      expect(tester.widget<FilledButton>(startButton).onPressed, isNotNull);
+      await tester.ensureVisible(startButton);
+      await tester.tap(startButton);
+      await tester.pump();
+      await _pumpUntil(tester, () => preflightStarted.isCompleted);
+      expect(encodedRequestBytes, greaterThan(currentBudget));
+      expect(preflightBudget, currentBudget);
+      await tester.pumpAndSettle();
+      expect(taskNotifier.tasksForTest, isEmpty);
+      expect(find.textContaining('当前 JSON 请求约为'), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
     });
 
     testWidgets(
