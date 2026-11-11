@@ -27,6 +27,17 @@ class OcrDiagnosticSnapshot {
   static const _knownSafeStoredTaskErrorSummaries = {
     'OCR 图片格式无法识别',
     'OCR 任务因格式问题未完成',
+    'Die Bilddatei wurde nicht gefunden. Wähle das Bild erneut aus.',
+    'Die Bilddatei konnte nicht gelesen werden. Prüfe den Dateizugriff und versuche es erneut.',
+    'Es ist kein verwendbares OCR-Modell eingerichtet. Wähle in den Ablauf-Einstellungen einen OCR-Anbieter und ein Modell aus.',
+    'Das Bild ist leer. Wähle es erneut aus.',
+    'Dieses Bildformat wird nicht unterstützt. Konvertiere das Bild in PNG, JPEG oder WebP und versuche es erneut.',
+    'HEIC-, SVG- und TIFF-Bilder werden noch nicht unterstützt. Konvertiere das Bild in PNG, JPEG oder WebP und versuche es erneut.',
+    'Das Bild ist beschädigt oder kann nicht decodiert werden. Wähle es erneut aus oder konvertiere es in PNG, JPEG oder WebP und versuche es erneut.',
+    'Die Bildauflösung ist zu hoch. OCR unterstützt bis zu 50 Millionen Pixel pro Bild. Verkleinere das Bild und versuche es erneut.',
+    'Die PNG-Datei zur Korrektur der Bildausrichtung würde das OCR-Anfragegrößenlimit überschreiten. Verkleinere das Bild und versuche es erneut.',
+    'Die Bildausrichtung konnte nicht korrigiert werden. Konvertiere das Bild in PNG, JPEG oder WebP und versuche es erneut.',
+    'Das Bild konnte nicht verarbeitet werden. Wähle es erneut aus und versuche es noch einmal.',
     '이미지 파일을 찾을 수 없습니다. 이미지를 다시 선택하세요.',
     '이미지 파일을 읽을 수 없습니다. 파일 접근 권한을 확인하고 다시 시도하세요.',
     '사용 가능한 OCR 모델이 설정되지 않았습니다. 흐름 설정에서 OCR 제공업체와 모델을 선택하세요.',
@@ -573,6 +584,9 @@ class OcrDiagnosticSnapshot {
       if (_knownSafeStoredTaskErrorSummaries.contains(candidate) ||
           RegExp(
             r'^The image exceeds (?:OCR request size budget \([\d.]+ MiB\)|the task flow image input limit \([\d.]+ MiB\))\. Choose a smaller image and try again\.$',
+          ).hasMatch(candidate) ||
+          RegExp(
+            r'^Das Bild überschreitet (?:OCR-Anfragegrößenlimit \([\d.]+ MiB\)|das Größenlimit für Bildeingaben im Aufgabenablauf \([\d.]+ MiB\))\. Wähle ein kleineres Bild aus und versuche es erneut\.$',
           ).hasMatch(candidate) ||
           RegExp(
             r'^图片超过(?:OCR 请求大小预算（[\d.]+ MiB）|任务流图片输入上限（[\d.]+ MiB）)，请缩小图片后重试。$',
