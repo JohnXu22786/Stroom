@@ -312,7 +312,11 @@ class AppLocalizationsAr extends AppLocalizations {
       count,
       locale: localeName,
       other: '$count قالب',
+      many: '$count قالبًا',
+      few: '$count قوالب',
+      two: 'قالبان',
       one: '$count قالب',
+      zero: 'لا قوالب',
     );
     return '$_temp0';
   }
@@ -363,7 +367,11 @@ class AppLocalizationsAr extends AppLocalizations {
       count,
       locale: localeName,
       other: '$count كتلة',
+      many: '$count كتلةً',
+      few: '$count كتل',
+      two: 'كتلتان',
       one: '$count كتلة',
+      zero: 'لا كتل',
     );
     return '$_temp0';
   }
@@ -579,8 +587,12 @@ class AppLocalizationsAr extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count طلبات متزامنة',
+      other: '$count طلب متزامن',
+      many: '$count طلبًا متزامنًا',
+      few: '$count طلبات متزامنة',
+      two: 'طلبان متزامنان',
       one: '$count طلب متزامن',
+      zero: 'لا طلبات متزامنة',
     );
     return '$_temp0';
   }
@@ -590,8 +602,12 @@ class AppLocalizationsAr extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count طلبات متزامنة',
+      other: '$count طلب متزامن',
+      many: '$count طلبًا متزامنًا',
+      few: '$count طلبات متزامنة',
+      two: 'طلبان متزامنان',
       one: '$count طلب متزامن',
+      zero: 'لا طلبات متزامنة',
     );
     return '$_temp0';
   }
@@ -618,8 +634,12 @@ class AppLocalizationsAr extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count صور',
+      other: '$count صورة',
+      many: '$count صورة',
+      few: '$count صور',
+      two: 'صورتين',
       one: '$count صورة',
+      zero: '0 صورة',
     );
     return 'اختر كل $_temp0 مرة أخرى قبل إعادة المحاولة.';
   }
@@ -648,8 +668,12 @@ class AppLocalizationsAr extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count صور',
-      one: '$count صورة',
+      other: '$count صورة',
+      many: '$count صورة',
+      few: '$count صور',
+      two: 'صورتين',
+      one: 'صورة واحدة',
+      zero: '0 صور',
     );
     return 'تم اختيار $_temp0';
   }
@@ -712,8 +736,12 @@ class AppLocalizationsAr extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count صور',
-      one: '$count صورة',
+      other: '$count صورة',
+      many: '$count صورة',
+      few: '$count صور',
+      two: 'صورتين',
+      one: 'صورة واحدة',
+      zero: '0 صور',
     );
     return 'تم تحميل $_temp0';
   }
@@ -995,8 +1023,12 @@ class AppLocalizationsAr extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count تجاوزات خاصة بنماذج',
+      other: '$count تجاوز خاص بنموذج',
+      many: '$count تجاوزًا خاصًا بنموذج',
+      few: '$count تجاوزات خاصة بنماذج',
+      two: 'تجاوزان خاصان بنموذج',
       one: '$count تجاوز خاص بنموذج',
+      zero: 'لا تجاوزات خاصة بالنماذج',
     );
     return '$_temp0';
   }
@@ -1328,8 +1360,12 @@ class AppLocalizationsAr extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count مسارات مهام · إدارة',
+      other: '$count مسار مهام · إدارة',
+      many: '$count مسار مهمة · إدارة',
+      few: '$count مسارات مهام · إدارة',
+      two: 'مسارا مهام · إدارة',
       one: '$count مسار مهام · إدارة',
+      zero: 'لا مسارات مهام · إدارة',
     );
     return '$_temp0';
   }
@@ -1405,10 +1441,13 @@ class AppLocalizationsAr extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other:
-          'هل تريد حذف المحادثات المحددة وعددها $count؟ لا يمكن التراجع عن هذا الإجراء.',
+      other: 'هل تريد حذف $count محادثة محددة؟ لا يمكن التراجع عن هذا الإجراء.',
+      many: 'هل تريد حذف $count محادثة محددة؟ لا يمكن التراجع عن هذا الإجراء.',
+      few: 'هل تريد حذف $count محادثات محددة؟ لا يمكن التراجع عن هذا الإجراء.',
+      two: 'هل تريد حذف المحادثتين المحددتين؟ لا يمكن التراجع عن هذا الإجراء.',
       one:
-          'هل تريد حذف المحادثة المحددة وعددها $count؟ لا يمكن التراجع عن هذا الإجراء.',
+          'هل تريد حذف المحادثة المحددة ($count)؟ لا يمكن التراجع عن هذا الإجراء.',
+      zero: 'هل تريد حذف 0 محادثات محددة؟ لا يمكن التراجع عن هذا الإجراء.',
     );
     return '$_temp0';
   }
@@ -1670,8 +1709,12 @@ class AppLocalizationsAr extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       total,
       locale: localeName,
-      other: 'تم تحديد $selected/$total موارد',
+      other: 'تم تحديد $selected/$total مورد',
+      many: 'تم تحديد $selected/$total موردًا',
+      few: 'تم تحديد $selected/$total موارد',
+      two: 'تم تحديد $selected/$total موردان',
       one: 'تم تحديد $selected/$total مورد',
+      zero: 'تم تحديد $selected/$total موارد',
     );
     return '$_temp0';
   }
@@ -1684,8 +1727,12 @@ class AppLocalizationsAr extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'إخفاء المقاطع ($count)',
-      one: 'إخفاء المقطع $count',
+      other: 'إخفاء $count مقطع',
+      many: 'إخفاء $count مقطعًا',
+      few: 'إخفاء $count مقاطع',
+      two: 'إخفاء مقطعين',
+      one: 'إخفاء مقطع واحد',
+      zero: 'إخفاء 0 مقاطع',
     );
     return '$_temp0';
   }
@@ -1695,8 +1742,12 @@ class AppLocalizationsAr extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'إظهار المقاطع ($count)',
-      one: 'إظهار المقطع $count',
+      other: 'إظهار $count مقطع',
+      many: 'إظهار $count مقطعًا',
+      few: 'إظهار $count مقاطع',
+      two: 'إظهار مقطعين',
+      one: 'إظهار مقطع واحد',
+      zero: 'إظهار 0 مقاطع',
     );
     return '$_temp0';
   }
@@ -1743,8 +1794,12 @@ class AppLocalizationsAr extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'تنزيل الموارد المحددة ($count)',
-      one: 'تنزيل المورد المحدد ($count)',
+      other: 'تنزيل $count مورد محدد',
+      many: 'تنزيل $count موردًا محددًا',
+      few: 'تنزيل $count موارد محددة',
+      two: 'تنزيل الموردين المحددين',
+      one: 'تنزيل مورد واحد محدد',
+      zero: 'تنزيل 0 موارد محددة',
     );
     return '$_temp0';
   }
@@ -3299,8 +3354,12 @@ class AppLocalizationsAr extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count صور',
-      one: '$count صورة',
+      other: '$count صورة',
+      many: '$count صورة',
+      few: '$count صور',
+      two: 'صورتان',
+      one: 'صورة واحدة',
+      zero: '0 صور',
     );
     return 'تم تحديد $_temp0';
   }
@@ -6358,7 +6417,10 @@ class AppLocalizationsAr extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '# عناصر',
+      other: '# عنصر',
+      many: '# عنصرًا',
+      few: '# عناصر',
+      two: 'عنصران',
       one: '# عنصر',
       zero: 'لا توجد عناصر',
     );
@@ -7118,8 +7180,11 @@ class AppLocalizationsAr extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'تم اختيار $count من الملفات الصوتية',
-      one: 'تم اختيار ملف صوتي واحد',
+      other: 'تم تحديد # ملف صوتي',
+      many: 'تم تحديد # ملفًا صوتيًا',
+      few: 'تم تحديد # ملفات صوتية',
+      two: 'تم تحديد ملفين صوتيين',
+      one: 'تم تحديد ملف صوتي واحد',
       zero: 'لم يتم اختيار ملفات صوتية',
     );
     return '$_temp0';
@@ -7130,8 +7195,12 @@ class AppLocalizationsAr extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count ملفات صوتية',
-      one: '$count ملف صوتي',
+      other: '$count ملف صوتي',
+      many: '$count ملفًا صوتيًا',
+      few: '$count ملفات صوتية',
+      two: 'ملفين صوتيين',
+      one: 'ملف صوتي واحد',
+      zero: '0 ملفات صوتية',
     );
     return 'تم اختيار $_temp0';
   }
@@ -7201,7 +7270,11 @@ class AppLocalizationsAr extends AppLocalizations {
       seconds,
       locale: localeName,
       other: '$seconds ثانية',
+      many: '$seconds ثانية',
+      few: '$seconds ثوانٍ',
+      two: 'ثانيتان',
       one: '$seconds ثانية',
+      zero: '$seconds ثانية',
     );
     return '$_temp0';
   }
@@ -7252,8 +7325,12 @@ class AppLocalizationsAr extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count ملفات صوتية',
-      one: '$count ملف صوتي',
+      other: '# ملف صوتي',
+      many: '# ملفًا صوتيًا',
+      few: '# ملفات صوتية',
+      two: 'ملفين صوتيين',
+      one: 'ملف صوتي واحد',
+      zero: '0 ملفات صوتية',
     );
     return 'تم استيراد $_temp0';
   }
@@ -7310,8 +7387,12 @@ class AppLocalizationsAr extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count ملفات',
-      one: '$count ملف',
+      other: '# ملف',
+      many: '# ملفًا',
+      few: '# ملفات',
+      two: 'ملفين',
+      one: 'ملف واحد',
+      zero: '0 ملفات',
     );
     return 'تم تصدير $_temp0';
   }
@@ -7471,10 +7552,12 @@ class AppLocalizationsAr extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other:
-          'تم اكتشاف $count من الأعمدة. اختر العمود الذي يبدأ منه الاسم/المعرّف:',
-      one:
-          'تم اكتشاف عمود واحد ($count). اختر العمود الذي يبدأ منه الاسم/المعرّف:',
+      other: 'تم اكتشاف $count عمود. اختر العمود الذي يبدأ منه الاسم/المعرّف:',
+      many: 'تم اكتشاف $count عمودًا. اختر العمود الذي يبدأ منه الاسم/المعرّف:',
+      few: 'تم اكتشاف $count أعمدة. اختر العمود الذي يبدأ منه الاسم/المعرّف:',
+      two: 'تم اكتشاف عمودين. اختر العمود الذي يبدأ منه الاسم/المعرّف:',
+      one: 'تم اكتشاف عمود واحد. اختر العمود الذي يبدأ منه الاسم/المعرّف:',
+      zero: 'تم اكتشاف 0 أعمدة. اختر العمود الذي يبدأ منه الاسم/المعرّف:',
     );
     return '$_temp0';
   }
@@ -7520,8 +7603,12 @@ class AppLocalizationsAr extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count معرّفات مكررة: $ids',
+      other: '$count معرّف مكرر: $ids',
+      many: '$count معرّفًا مكررًا: $ids',
+      few: '$count معرّفات مكررة: $ids',
+      two: 'معرّفين مكررين: $ids',
       one: '$count معرّف مكرر: $ids',
+      zero: '0 معرّفات مكررة.',
     );
     return 'تم العثور على $_temp0';
   }
@@ -7578,8 +7665,12 @@ class AppLocalizationsAr extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count معرّفات مكررة',
+      other: '$count معرّف مكرر',
+      many: '$count معرّفًا مكررًا',
+      few: '$count معرّفات مكررة',
+      two: 'معرّفان مكرران',
       one: '$count معرّف مكرر',
+      zero: '0 معرّفات مكررة',
     );
     return 'تبقى $_temp0';
   }
@@ -7903,8 +7994,12 @@ class AppLocalizationsAr extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count فيديوهات',
-      one: '$count فيديو',
+      other: '$count فيديو',
+      many: '$count فيديو',
+      few: '$count فيديوهات',
+      two: 'فيديوين',
+      one: 'فيديو واحد',
+      zero: '0 فيديوهات',
     );
     return 'تم اختيار $_temp0';
   }
@@ -8735,8 +8830,12 @@ class AppLocalizationsAr extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '# ملفات نصية',
+      other: '# ملف نصي',
+      many: '# ملفًا نصيًا',
+      few: '# ملفات نصية',
+      two: 'ملفين نصيين',
       one: '# ملف نصي',
+      zero: '# ملفات نصية',
     );
     return 'تم استيراد $_temp0';
   }
@@ -8789,8 +8888,12 @@ class AppLocalizationsAr extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '# ملفات',
+      other: '# ملف',
+      many: '# ملفًا',
+      few: '# ملفات',
+      two: 'ملفين',
       one: '# ملف',
+      zero: '# ملفات',
     );
     return 'تم تصدير $_temp0';
   }
@@ -9155,8 +9258,12 @@ class AppLocalizationsAr extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count قواعد مطابقة',
+      other: '$count قاعدة مطابقة',
+      many: '$count قاعدة مطابقة',
+      few: '$count قواعد مطابقة',
+      two: 'قاعدتان مطابقتان',
       one: '$count قاعدة مطابقة',
+      zero: 'لا قواعد مطابقة',
     );
     return '$_temp0';
   }
@@ -9329,8 +9436,12 @@ class AppLocalizationsAr extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count ملفات تعريف ارتباط',
+      other: '$count ملف تعريف ارتباط',
+      many: '$count ملف تعريف ارتباط',
+      few: '$count ملفات تعريف ارتباط',
+      two: 'ملفا تعريف ارتباط',
       one: '$count ملف تعريف ارتباط',
+      zero: 'لا ملفات تعريف ارتباط',
     );
     return '$_temp0';
   }
@@ -9380,8 +9491,12 @@ class AppLocalizationsAr extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '# صور',
+      other: '# صورة',
+      many: '# صورة',
+      few: '# صور',
+      two: 'صورتان',
       one: '# صورة',
+      zero: '# صور',
     );
     return 'تم استيراد $_temp0';
   }
@@ -9391,8 +9506,12 @@ class AppLocalizationsAr extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '# فيديوهات',
+      other: '# فيديو',
+      many: '# فيديو',
+      few: '# فيديوهات',
+      two: 'فيديوين',
       one: '# فيديو',
+      zero: '# فيديوهات',
     );
     return 'تم استيراد $_temp0';
   }
@@ -9429,8 +9548,12 @@ class AppLocalizationsAr extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '# ملفات',
+      other: '# ملف',
+      many: '# ملفًا',
+      few: '# ملفات',
+      two: 'ملفين',
       one: '# ملف',
+      zero: '# ملفات',
     );
     return 'تم تصدير $_temp0';
   }
@@ -9607,8 +9730,12 @@ class AppLocalizationsAr extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count مهام',
-      one: '$count مهمة',
+      other: '$count مهمة',
+      many: '$count مهمة',
+      few: '$count مهام',
+      two: 'مهمتين',
+      one: 'مهمة واحدة',
+      zero: '0 مهام',
     );
     return 'تمت إضافة $_temp0';
   }
@@ -9652,8 +9779,12 @@ class AppLocalizationsAr extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count مهام',
-      one: '$count مهمة',
+      other: '$count مهمة',
+      many: '$count مهمة',
+      few: '$count مهام',
+      two: 'مهمتين',
+      one: 'مهمة واحدة',
+      zero: '0 مهام',
     );
     return 'تمت إضافة $_temp0';
   }
@@ -9736,8 +9867,12 @@ class AppLocalizationsAr extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count نتائج مطابقة',
+      other: '$count نتيجة مطابقة',
+      many: '$count نتيجة مطابقة',
+      few: '$count نتائج مطابقة',
+      two: 'نتيجتان متطابقتان',
       one: '$count نتيجة مطابقة',
+      zero: 'لا توجد نتائج مطابقة',
     );
     return '$_temp0';
   }
@@ -10431,8 +10566,12 @@ class AppLocalizationsAr extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'جارٍ التحديث تلقائيًا (المحاولات $count)...',
+      other: 'جارٍ التحديث تلقائيًا ($count محاولة)...',
+      many: 'جارٍ التحديث تلقائيًا ($count محاولة)...',
+      few: 'جارٍ التحديث تلقائيًا ($count محاولات)...',
+      two: 'جارٍ التحديث تلقائيًا (محاولتان)...',
       one: 'جارٍ التحديث تلقائيًا (المحاولة $count)...',
+      zero: 'جارٍ التحديث تلقائيًا (0 محاولات)...',
     );
     return '$_temp0';
   }
@@ -10507,8 +10646,12 @@ class AppLocalizationsAr extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count أسطر',
+      other: '$count سطر',
+      many: '$count سطرًا',
+      few: '$count أسطر',
+      two: 'سطران',
       one: '$count سطر',
+      zero: '0 أسطر',
     );
     return '$_temp0';
   }
@@ -11792,8 +11935,12 @@ class AppLocalizationsAr extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count من المجلدات الفرعية.',
+      other: '$count مجلد فرعي.',
+      many: '$count مجلدًا فرعيًا.',
+      few: '$count مجلدات فرعية.',
+      two: 'مجلدان فرعيان.',
       one: 'مجلد فرعي واحد.',
+      zero: '0 مجلدات فرعية.',
     );
     return 'هل تريد حذف المجلد الفارغ «$name»؟ سيُحذف أيضًا $_temp0';
   }
@@ -12106,7 +12253,11 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
       count,
       locale: localeName,
       other: '$count قالب',
+      many: '$count قالبًا',
+      few: '$count قوالب',
+      two: 'قالبان',
       one: '$count قالب',
+      zero: 'لا قوالب',
     );
     return '$_temp0';
   }
@@ -12157,7 +12308,11 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
       count,
       locale: localeName,
       other: '$count كتلة',
+      many: '$count كتلةً',
+      few: '$count كتل',
+      two: 'كتلتان',
       one: '$count كتلة',
+      zero: 'لا كتل',
     );
     return '$_temp0';
   }
@@ -12373,8 +12528,12 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count طلبات متزامنة',
+      other: '$count طلب متزامن',
+      many: '$count طلبًا متزامنًا',
+      few: '$count طلبات متزامنة',
+      two: 'طلبان متزامنان',
       one: '$count طلب متزامن',
+      zero: 'لا طلبات متزامنة',
     );
     return '$_temp0';
   }
@@ -12384,8 +12543,12 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count طلبات متزامنة',
+      other: '$count طلب متزامن',
+      many: '$count طلبًا متزامنًا',
+      few: '$count طلبات متزامنة',
+      two: 'طلبان متزامنان',
       one: '$count طلب متزامن',
+      zero: 'لا طلبات متزامنة',
     );
     return '$_temp0';
   }
@@ -12412,8 +12575,12 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count صور',
+      other: '$count صورة',
+      many: '$count صورة',
+      few: '$count صور',
+      two: 'صورتين',
       one: '$count صورة',
+      zero: '0 صورة',
     );
     return 'اختر كل $_temp0 مرة أخرى قبل إعادة المحاولة.';
   }
@@ -12442,8 +12609,12 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count صور',
-      one: '$count صورة',
+      other: '$count صورة',
+      many: '$count صورة',
+      few: '$count صور',
+      two: 'صورتين',
+      one: 'صورة واحدة',
+      zero: '0 صور',
     );
     return 'تم اختيار $_temp0';
   }
@@ -12506,8 +12677,12 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count صور',
-      one: '$count صورة',
+      other: '$count صورة',
+      many: '$count صورة',
+      few: '$count صور',
+      two: 'صورتين',
+      one: 'صورة واحدة',
+      zero: '0 صور',
     );
     return 'تم تحميل $_temp0';
   }
@@ -12789,8 +12964,12 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count تجاوزات خاصة بنماذج',
+      other: '$count تجاوز خاص بنموذج',
+      many: '$count تجاوزًا خاصًا بنموذج',
+      few: '$count تجاوزات خاصة بنماذج',
+      two: 'تجاوزان خاصان بنموذج',
       one: '$count تجاوز خاص بنموذج',
+      zero: 'لا تجاوزات خاصة بالنماذج',
     );
     return '$_temp0';
   }
@@ -13122,8 +13301,12 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count مسارات مهام · إدارة',
+      other: '$count مسار مهام · إدارة',
+      many: '$count مسار مهمة · إدارة',
+      few: '$count مسارات مهام · إدارة',
+      two: 'مسارا مهام · إدارة',
       one: '$count مسار مهام · إدارة',
+      zero: 'لا مسارات مهام · إدارة',
     );
     return '$_temp0';
   }
@@ -13199,10 +13382,13 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other:
-          'هل تريد حذف المحادثات المحددة وعددها $count؟ لا يمكن التراجع عن هذا الإجراء.',
+      other: 'هل تريد حذف $count محادثة محددة؟ لا يمكن التراجع عن هذا الإجراء.',
+      many: 'هل تريد حذف $count محادثة محددة؟ لا يمكن التراجع عن هذا الإجراء.',
+      few: 'هل تريد حذف $count محادثات محددة؟ لا يمكن التراجع عن هذا الإجراء.',
+      two: 'هل تريد حذف المحادثتين المحددتين؟ لا يمكن التراجع عن هذا الإجراء.',
       one:
-          'هل تريد حذف المحادثة المحددة وعددها $count؟ لا يمكن التراجع عن هذا الإجراء.',
+          'هل تريد حذف المحادثة المحددة ($count)؟ لا يمكن التراجع عن هذا الإجراء.',
+      zero: 'هل تريد حذف 0 محادثات محددة؟ لا يمكن التراجع عن هذا الإجراء.',
     );
     return '$_temp0';
   }
@@ -13464,8 +13650,12 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
     String _temp0 = intl.Intl.pluralLogic(
       total,
       locale: localeName,
-      other: 'تم تحديد $selected/$total موارد',
+      other: 'تم تحديد $selected/$total مورد',
+      many: 'تم تحديد $selected/$total موردًا',
+      few: 'تم تحديد $selected/$total موارد',
+      two: 'تم تحديد $selected/$total موردان',
       one: 'تم تحديد $selected/$total مورد',
+      zero: 'تم تحديد $selected/$total موارد',
     );
     return '$_temp0';
   }
@@ -13478,8 +13668,12 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'إخفاء المقاطع ($count)',
-      one: 'إخفاء المقطع $count',
+      other: 'إخفاء $count مقطع',
+      many: 'إخفاء $count مقطعًا',
+      few: 'إخفاء $count مقاطع',
+      two: 'إخفاء مقطعين',
+      one: 'إخفاء مقطع واحد',
+      zero: 'إخفاء 0 مقاطع',
     );
     return '$_temp0';
   }
@@ -13489,8 +13683,12 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'إظهار المقاطع ($count)',
-      one: 'إظهار المقطع $count',
+      other: 'إظهار $count مقطع',
+      many: 'إظهار $count مقطعًا',
+      few: 'إظهار $count مقاطع',
+      two: 'إظهار مقطعين',
+      one: 'إظهار مقطع واحد',
+      zero: 'إظهار 0 مقاطع',
     );
     return '$_temp0';
   }
@@ -13537,8 +13735,12 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'تنزيل الموارد المحددة ($count)',
-      one: 'تنزيل المورد المحدد ($count)',
+      other: 'تنزيل $count مورد محدد',
+      many: 'تنزيل $count موردًا محددًا',
+      few: 'تنزيل $count موارد محددة',
+      two: 'تنزيل الموردين المحددين',
+      one: 'تنزيل مورد واحد محدد',
+      zero: 'تنزيل 0 موارد محددة',
     );
     return '$_temp0';
   }
@@ -15093,8 +15295,12 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count صور',
-      one: '$count صورة',
+      other: '$count صورة',
+      many: '$count صورة',
+      few: '$count صور',
+      two: 'صورتان',
+      one: 'صورة واحدة',
+      zero: '0 صور',
     );
     return 'تم تحديد $_temp0';
   }
@@ -18152,7 +18358,10 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '# عناصر',
+      other: '# عنصر',
+      many: '# عنصرًا',
+      few: '# عناصر',
+      two: 'عنصران',
       one: '# عنصر',
       zero: 'لا توجد عناصر',
     );
@@ -18912,8 +19121,11 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'تم اختيار $count من الملفات الصوتية',
-      one: 'تم اختيار ملف صوتي واحد',
+      other: 'تم تحديد # ملف صوتي',
+      many: 'تم تحديد # ملفًا صوتيًا',
+      few: 'تم تحديد # ملفات صوتية',
+      two: 'تم تحديد ملفين صوتيين',
+      one: 'تم تحديد ملف صوتي واحد',
       zero: 'لم يتم اختيار ملفات صوتية',
     );
     return '$_temp0';
@@ -18924,8 +19136,12 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count ملفات صوتية',
-      one: '$count ملف صوتي',
+      other: '$count ملف صوتي',
+      many: '$count ملفًا صوتيًا',
+      few: '$count ملفات صوتية',
+      two: 'ملفين صوتيين',
+      one: 'ملف صوتي واحد',
+      zero: '0 ملفات صوتية',
     );
     return 'تم اختيار $_temp0';
   }
@@ -18995,7 +19211,11 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
       seconds,
       locale: localeName,
       other: '$seconds ثانية',
+      many: '$seconds ثانية',
+      few: '$seconds ثوانٍ',
+      two: 'ثانيتان',
       one: '$seconds ثانية',
+      zero: '$seconds ثانية',
     );
     return '$_temp0';
   }
@@ -19046,8 +19266,12 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count ملفات صوتية',
-      one: '$count ملف صوتي',
+      other: '# ملف صوتي',
+      many: '# ملفًا صوتيًا',
+      few: '# ملفات صوتية',
+      two: 'ملفين صوتيين',
+      one: 'ملف صوتي واحد',
+      zero: '0 ملفات صوتية',
     );
     return 'تم استيراد $_temp0';
   }
@@ -19104,8 +19328,12 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count ملفات',
-      one: '$count ملف',
+      other: '# ملف',
+      many: '# ملفًا',
+      few: '# ملفات',
+      two: 'ملفين',
+      one: 'ملف واحد',
+      zero: '0 ملفات',
     );
     return 'تم تصدير $_temp0';
   }
@@ -19265,10 +19493,12 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other:
-          'تم اكتشاف $count من الأعمدة. اختر العمود الذي يبدأ منه الاسم/المعرّف:',
-      one:
-          'تم اكتشاف عمود واحد ($count). اختر العمود الذي يبدأ منه الاسم/المعرّف:',
+      other: 'تم اكتشاف $count عمود. اختر العمود الذي يبدأ منه الاسم/المعرّف:',
+      many: 'تم اكتشاف $count عمودًا. اختر العمود الذي يبدأ منه الاسم/المعرّف:',
+      few: 'تم اكتشاف $count أعمدة. اختر العمود الذي يبدأ منه الاسم/المعرّف:',
+      two: 'تم اكتشاف عمودين. اختر العمود الذي يبدأ منه الاسم/المعرّف:',
+      one: 'تم اكتشاف عمود واحد. اختر العمود الذي يبدأ منه الاسم/المعرّف:',
+      zero: 'تم اكتشاف 0 أعمدة. اختر العمود الذي يبدأ منه الاسم/المعرّف:',
     );
     return '$_temp0';
   }
@@ -19314,8 +19544,12 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count معرّفات مكررة: $ids',
+      other: '$count معرّف مكرر: $ids',
+      many: '$count معرّفًا مكررًا: $ids',
+      few: '$count معرّفات مكررة: $ids',
+      two: 'معرّفين مكررين: $ids',
       one: '$count معرّف مكرر: $ids',
+      zero: '0 معرّفات مكررة.',
     );
     return 'تم العثور على $_temp0';
   }
@@ -19372,8 +19606,12 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count معرّفات مكررة',
+      other: '$count معرّف مكرر',
+      many: '$count معرّفًا مكررًا',
+      few: '$count معرّفات مكررة',
+      two: 'معرّفان مكرران',
       one: '$count معرّف مكرر',
+      zero: '0 معرّفات مكررة',
     );
     return 'تبقى $_temp0';
   }
@@ -19697,8 +19935,12 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count فيديوهات',
-      one: '$count فيديو',
+      other: '$count فيديو',
+      many: '$count فيديو',
+      few: '$count فيديوهات',
+      two: 'فيديوين',
+      one: 'فيديو واحد',
+      zero: '0 فيديوهات',
     );
     return 'تم اختيار $_temp0';
   }
@@ -20529,8 +20771,12 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '# ملفات نصية',
+      other: '# ملف نصي',
+      many: '# ملفًا نصيًا',
+      few: '# ملفات نصية',
+      two: 'ملفين نصيين',
       one: '# ملف نصي',
+      zero: '# ملفات نصية',
     );
     return 'تم استيراد $_temp0';
   }
@@ -20583,8 +20829,12 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '# ملفات',
+      other: '# ملف',
+      many: '# ملفًا',
+      few: '# ملفات',
+      two: 'ملفين',
       one: '# ملف',
+      zero: '# ملفات',
     );
     return 'تم تصدير $_temp0';
   }
@@ -20949,8 +21199,12 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count قواعد مطابقة',
+      other: '$count قاعدة مطابقة',
+      many: '$count قاعدة مطابقة',
+      few: '$count قواعد مطابقة',
+      two: 'قاعدتان مطابقتان',
       one: '$count قاعدة مطابقة',
+      zero: 'لا قواعد مطابقة',
     );
     return '$_temp0';
   }
@@ -21123,8 +21377,12 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count ملفات تعريف ارتباط',
+      other: '$count ملف تعريف ارتباط',
+      many: '$count ملف تعريف ارتباط',
+      few: '$count ملفات تعريف ارتباط',
+      two: 'ملفا تعريف ارتباط',
       one: '$count ملف تعريف ارتباط',
+      zero: 'لا ملفات تعريف ارتباط',
     );
     return '$_temp0';
   }
@@ -21174,8 +21432,12 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '# صور',
+      other: '# صورة',
+      many: '# صورة',
+      few: '# صور',
+      two: 'صورتان',
       one: '# صورة',
+      zero: '# صور',
     );
     return 'تم استيراد $_temp0';
   }
@@ -21185,8 +21447,12 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '# فيديوهات',
+      other: '# فيديو',
+      many: '# فيديو',
+      few: '# فيديوهات',
+      two: 'فيديوين',
       one: '# فيديو',
+      zero: '# فيديوهات',
     );
     return 'تم استيراد $_temp0';
   }
@@ -21223,8 +21489,12 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '# ملفات',
+      other: '# ملف',
+      many: '# ملفًا',
+      few: '# ملفات',
+      two: 'ملفين',
       one: '# ملف',
+      zero: '# ملفات',
     );
     return 'تم تصدير $_temp0';
   }
@@ -21401,8 +21671,12 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count مهام',
-      one: '$count مهمة',
+      other: '$count مهمة',
+      many: '$count مهمة',
+      few: '$count مهام',
+      two: 'مهمتين',
+      one: 'مهمة واحدة',
+      zero: '0 مهام',
     );
     return 'تمت إضافة $_temp0';
   }
@@ -21446,8 +21720,12 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count مهام',
-      one: '$count مهمة',
+      other: '$count مهمة',
+      many: '$count مهمة',
+      few: '$count مهام',
+      two: 'مهمتين',
+      one: 'مهمة واحدة',
+      zero: '0 مهام',
     );
     return 'تمت إضافة $_temp0';
   }
@@ -21530,8 +21808,12 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count نتائج مطابقة',
+      other: '$count نتيجة مطابقة',
+      many: '$count نتيجة مطابقة',
+      few: '$count نتائج مطابقة',
+      two: 'نتيجتان متطابقتان',
       one: '$count نتيجة مطابقة',
+      zero: 'لا توجد نتائج مطابقة',
     );
     return '$_temp0';
   }
@@ -22225,8 +22507,12 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'جارٍ التحديث تلقائيًا (المحاولات $count)...',
+      other: 'جارٍ التحديث تلقائيًا ($count محاولة)...',
+      many: 'جارٍ التحديث تلقائيًا ($count محاولة)...',
+      few: 'جارٍ التحديث تلقائيًا ($count محاولات)...',
+      two: 'جارٍ التحديث تلقائيًا (محاولتان)...',
       one: 'جارٍ التحديث تلقائيًا (المحاولة $count)...',
+      zero: 'جارٍ التحديث تلقائيًا (0 محاولات)...',
     );
     return '$_temp0';
   }
@@ -22301,8 +22587,12 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count أسطر',
+      other: '$count سطر',
+      many: '$count سطرًا',
+      few: '$count أسطر',
+      two: 'سطران',
       one: '$count سطر',
+      zero: '0 أسطر',
     );
     return '$_temp0';
   }
@@ -23586,8 +23876,12 @@ class AppLocalizationsArSa extends AppLocalizationsAr {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count من المجلدات الفرعية.',
+      other: '$count مجلد فرعي.',
+      many: '$count مجلدًا فرعيًا.',
+      few: '$count مجلدات فرعية.',
+      two: 'مجلدان فرعيان.',
       one: 'مجلد فرعي واحد.',
+      zero: '0 مجلدات فرعية.',
     );
     return 'هل تريد حذف المجلد الفارغ «$name»؟ سيُحذف أيضًا $_temp0';
   }

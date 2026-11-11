@@ -86,7 +86,7 @@
   "taskFlowStartFromTemplate": "البدء من قالب",
   "taskFlowChooseTemplate": "اختيار قالب مثال",
   "taskFlowTemplateIntroduction": "اختر مسارًا قريبًا مما تحتاج إليه؛ يمكنك تعديله لاحقًا.",
-  "taskFlowTemplateCount": "{count, plural, one{{count} قالب} other{{count} قالب}}",
+  "taskFlowTemplateCount": "{count, plural, zero{لا قوالب} one{{count} قالب} two{قالبان} few{{count} قوالب} many{{count} قالبًا} other{{count} قالب}}",
   "taskFlowTemplateDraftHint": "تُفتح القوالب كمسودات تحتاج إلى إعداد. اختر نموذجًا ومساعدًا قبل الحفظ.",
   "taskFlowTemplateRecordingName": "نسخ تسجيل وتلخيصه",
   "taskFlowTemplateRecordingDescription": "اختيار تسجيل → التعرّف على الكلام → تلخيصه بمساعد",
@@ -98,7 +98,7 @@
   "taskFlowTemplateReadImageDescription": "اختيار صورة → التعرّف على النص → تشغيله صوتيًا",
   "taskFlowTemplateReadImageRequirements": "اضبط نموذجي OCR وتحويل النص إلى كلام، ثم اختر صوتًا.",
   "taskFlowActions": "إجراءات المسار",
-  "taskFlowBlockCount": "{count, plural, one{{count} كتلة} other{{count} كتلة}}",
+  "taskFlowBlockCount": "{count, plural, zero{لا كتل} one{{count} كتلة} two{كتلتان} few{{count} كتل} many{{count} كتلةً} other{{count} كتلة}}",
   "taskFlowBlockOcr": "OCR",
   "taskFlowBlockAsr": "التعرّف على الكلام",
   "taskFlowBlockAudioSeparation": "فصل الصوت",
@@ -160,20 +160,20 @@
   "ocrMergeRecognition": "دمج النتائج",
   "ocrRecognizeEachImage": "التعرّف على كل صورة على حدة",
   "ocrMaxConcurrency": "طلبان متزامنان كحد أقصى",
-  "ocrConcurrencyOption": "{count, plural, one{{count} طلب متزامن} other{{count} طلبات متزامنة}}",
-  "ocrConcurrencyStatus": "{count, plural, one{{count} طلب متزامن} other{{count} طلبات متزامنة}}",
+  "ocrConcurrencyOption": "{count, plural, zero{لا طلبات متزامنة} one{{count} طلب متزامن} two{طلبان متزامنان} few{{count} طلبات متزامنة} many{{count} طلبًا متزامنًا} other{{count} طلب متزامن}}",
+  "ocrConcurrencyStatus": "{count, plural, zero{لا طلبات متزامنة} one{{count} طلب متزامن} two{طلبان متزامنان} few{{count} طلبات متزامنة} many{{count} طلبًا متزامنًا} other{{count} طلب متزامن}}",
   "ocrRetryCompletedHint": "تُحفظ الصفحات المكتملة؛ وعند إعادة المحاولة تُرسل الصفحات غير المكتملة فقط.",
   "ocrTakePhoto": "التقاط صورة",
   "ocrChooseFromAlbum": "الاختيار من الألبوم",
   "ocrNoImagesSelected": "لم يتم اختيار صور",
   "ocrSelectImagesHint": "التقط صورة أو اختر عدة صور من ألبومك للتعرّف عليها.",
-  "ocrRechooseRequiredImages": "اختر كل {count, plural, one{{count} صورة} other{{count} صور}} مرة أخرى قبل إعادة المحاولة.",
+  "ocrRechooseRequiredImages": "اختر كل {count, plural, zero{0 صورة} one{{count} صورة} two{صورتين} few{{count} صور} many{{count} صورة} other{{count} صورة}} مرة أخرى قبل إعادة المحاولة.",
   "ocrImageLabel": "الصورة {index}",
   "ocrImageFileName": "صورة_{index}.{format}",
   "ocrPreviewInvalidIndex": "فهرس الصورة غير صالح",
   "ocrViewErrorDetails": "عرض تفاصيل الخطأ",
   "ocrConfirmModel": "تأكيد هذا النموذج",
-  "ocrSelectedImagesCount": "تم اختيار {count, plural, one{{count} صورة} other{{count} صور}}",
+  "ocrSelectedImagesCount": "تم اختيار {count, plural, zero{0 صور} one{صورة واحدة} two{صورتين} few{{count} صور} many{{count} صورة} other{{count} صورة}}",
   "ocrPreparingImages": "جارٍ تجهيز الصور…",
   "ocrSavingRetryImages": "جارٍ حفظ صور إعادة المحاولة…",
   "ocrRecognizing": "جارٍ التعرّف…",
@@ -190,7 +190,7 @@
   "ocrSystemAlbumDescription": "استعرض الصور على هذا الجهاز واختر منها",
   "ocrTakePhotoFailed": "تعذّر التقاط الصورة: {error}",
   "ocrChooseImageFailed": "تعذّر اختيار الصورة: {error}",
-  "ocrImagesLoaded": "تم تحميل {count, plural, one{{count} صورة} other{{count} صور}}",
+  "ocrImagesLoaded": "تم تحميل {count, plural, zero{0 صور} one{صورة واحدة} two{صورتين} few{{count} صور} many{{count} صورة} other{{count} صورة}}",
   "ocrProcessImageFailed": "تعذّرت معالجة الصورة: {error}",
   "ocrUnknownSourceImageCount": "تعذّر تحديد العدد الأصلي للصور",
   "ocrConfirmClear": "تأكيد المسح",
@@ -274,7 +274,7 @@
   "contextCompactionTriggerSettings": "إعدادات بدء اختصار السياق",
   "contextCompactionDisabled": "معطّل (لن يتم اختصار السياق)",
   "contextGlobalTriggerPercent": "حد البدء العام {percent}%",
-  "contextModelOverrideCount": "{count, plural, one{{count} تجاوز خاص بنموذج} other{{count} تجاوزات خاصة بنماذج}}",
+  "contextModelOverrideCount": "{count, plural, zero{لا تجاوزات خاصة بالنماذج} one{{count} تجاوز خاص بنموذج} two{تجاوزان خاصان بنموذج} few{{count} تجاوزات خاصة بنماذج} many{{count} تجاوزًا خاصًا بنموذج} other{{count} تجاوز خاص بنموذج}}",
   "contextCompressionTriggerTitle": "إعدادات بدء اختصار السياق",
   "contextAutoCompaction": "اختصار السياق تلقائيًا",
   "contextAutoCompactionDisabled": "عند تعطيله، لن يتم اختصار السياق لأي نموذج.",
@@ -366,7 +366,7 @@
   "homeAnkiSubtitle": "نظام للمساعدة على التذكر",
   "homeTaskFlowTitle": "مسارات المهام",
   "homeTaskFlowEmpty": "أنشئ مسارًا آليًا لتشغيل عدة وحدات بالتتابع",
-  "homeTaskFlowManage": "{count, plural, one{{count} مسار مهام · إدارة} other{{count} مسارات مهام · إدارة}}",
+  "homeTaskFlowManage": "{count, plural, zero{لا مسارات مهام · إدارة} one{{count} مسار مهام · إدارة} two{مسارا مهام · إدارة} few{{count} مسارات مهام · إدارة} many{{count} مسار مهمة · إدارة} other{{count} مسار مهام · إدارة}}",
   "homeRecentTasks": "المهام الأخيرة",
   "homeViewAll": "عرض الكل",
   "statusInProgress": "قيد التنفيذ",
@@ -395,7 +395,7 @@
   },
   "conversationDeleteNamed": "هل تريد حذف المحادثة «{title}»؟ لا يمكن التراجع عن هذا الإجراء.",
   "conversationDeleteTitle": "حذف المحادثة",
-  "conversationDeleteMany": "{count, plural, one{هل تريد حذف المحادثة المحددة وعددها {count}؟ لا يمكن التراجع عن هذا الإجراء.} other{هل تريد حذف المحادثات المحددة وعددها {count}؟ لا يمكن التراجع عن هذا الإجراء.}}",
+  "conversationDeleteMany": "{count, plural, zero{هل تريد حذف 0 محادثات محددة؟ لا يمكن التراجع عن هذا الإجراء.} one{هل تريد حذف المحادثة المحددة ({count})؟ لا يمكن التراجع عن هذا الإجراء.} two{هل تريد حذف المحادثتين المحددتين؟ لا يمكن التراجع عن هذا الإجراء.} few{هل تريد حذف {count} محادثات محددة؟ لا يمكن التراجع عن هذا الإجراء.} many{هل تريد حذف {count} محادثة محددة؟ لا يمكن التراجع عن هذا الإجراء.} other{هل تريد حذف {count} محادثة محددة؟ لا يمكن التراجع عن هذا الإجراء.}}",
   "actionCancel": "إلغاء",
   "actionDelete": "حذف",
   "conversationRename": "إعادة تسمية المحادثة",
@@ -513,10 +513,10 @@
   "chatThinking": "جارٍ التفكير",
   "chatThinkingComplete": "اكتمل التفكير",
   "conversationDeleteOne": "هل تريد حذف هذه المحادثة؟ لا يمكن التراجع عن هذا الإجراء.",
-  "mediaSelectionCount": "{total, plural, one{تم تحديد {selected}/{total} مورد} other{تم تحديد {selected}/{total} موارد}}",
+  "mediaSelectionCount": "{total, plural, zero{تم تحديد {selected}/{total} موارد} one{تم تحديد {selected}/{total} مورد} two{تم تحديد {selected}/{total} موردان} few{تم تحديد {selected}/{total} موارد} many{تم تحديد {selected}/{total} موردًا} other{تم تحديد {selected}/{total} مورد}}",
   "mediaSelectionTitle": "اختيار وسائط لتنزيلها",
-  "mediaCollapseSegments": "{count, plural, one{إخفاء المقطع {count}} other{إخفاء المقاطع ({count})}}",
-  "mediaExpandSegments": "{count, plural, one{إظهار المقطع {count}} other{إظهار المقاطع ({count})}}",
+  "mediaCollapseSegments": "{count, plural, zero{إخفاء 0 مقاطع} one{إخفاء مقطع واحد} two{إخفاء مقطعين} few{إخفاء {count} مقاطع} many{إخفاء {count} مقطعًا} other{إخفاء {count} مقطع}}",
+  "mediaExpandSegments": "{count, plural, zero{إظهار 0 مقاطع} one{إظهار مقطع واحد} two{إظهار مقطعين} few{إظهار {count} مقاطع} many{إظهار {count} مقطعًا} other{إظهار {count} مقطع}}",
   "mediaNoResources": "لم يتم العثور على موارد",
   "mediaSegment": "مقطع",
   "mediaPlaylist": "قائمة التشغيل",
@@ -540,7 +540,7 @@
   "mediaResolution": "الدقة: {width}x{height}",
   "mediaPreview": "معاينة",
   "mediaSegmentPreviewHint": "معاينة مقاطع من قائمة التشغيل",
-  "mediaDownloadSelected": "{count, plural, one{تنزيل المورد المحدد ({count})} other{تنزيل الموارد المحددة ({count})}}",
+  "mediaDownloadSelected": "{count, plural, zero{تنزيل 0 موارد محددة} one{تنزيل مورد واحد محدد} two{تنزيل الموردين المحددين} few{تنزيل {count} موارد محددة} many{تنزيل {count} موردًا محددًا} other{تنزيل {count} مورد محدد}}",
   "mediaConfirmDownload": "تأكيد التنزيل",
   "@mediaSelectionCount": {
     "description": "Selected and total detected resource counts",
@@ -1218,7 +1218,7 @@
   "appMediaSelectedFiles": "تم تحديد {count} من الملفات",
   "chatAlbumPickerTitle": "ألبوم التطبيق",
   "chatAlbumPickerEmpty": "لا توجد صور متاحة",
-  "appAlbumPickerSelectedImages": "تم تحديد {count, plural, one{{count} صورة} other{{count} صور}}",
+  "appAlbumPickerSelectedImages": "تم تحديد {count, plural, zero{0 صور} one{صورة واحدة} two{صورتان} few{{count} صور} many{{count} صورة} other{{count} صورة}}",
   "chatFilePickerTitle": "اختيار ملفات",
   "chatFilePickerTabText": "نص",
   "chatFilePickerTabImages": "صور",
@@ -3279,7 +3279,7 @@
   "@providerDeleteTooltip": {
     "placeholders": {}
   },
-  "providerGroupItemCount": "{count, plural, =0{لا توجد عناصر} one{# عنصر} other{# عناصر}}",
+  "providerGroupItemCount": "{count, plural, zero{لا توجد عناصر} one{# عنصر} two{عنصران} few{# عناصر} many{# عنصرًا} other{# عنصر}}",
   "@providerGroupItemCount": {
     "placeholders": {
       "count": {
@@ -3921,7 +3921,7 @@
   "audioFiles": "ملفات صوتية",
   "noAudioSelected": "لم يتم اختيار ملفات صوتية",
   "supportedAudioFormats": "يدعم تنسيقات صوت شائعة مثل WAV وMP3 وM4A وOGG",
-  "asrSelectedAudioCount": "{count, plural, =0{لم يتم اختيار ملفات صوتية} one{تم اختيار ملف صوتي واحد} other{تم اختيار {count} من الملفات الصوتية}}",
+  "asrSelectedAudioCount": "{count, plural, zero{لم يتم اختيار ملفات صوتية} one{تم تحديد ملف صوتي واحد} two{تم تحديد ملفين صوتيين} few{تم تحديد # ملفات صوتية} many{تم تحديد # ملفًا صوتيًا} other{تم تحديد # ملف صوتي}}",
   "@asrSelectedAudioCount": {
     "placeholders": {
       "count": {
@@ -3929,7 +3929,7 @@
       }
     }
   },
-  "asrSelectedAudioCountShort": "تم اختيار {count, plural, one{{count} ملف صوتي} other{{count} ملفات صوتية}}",
+  "asrSelectedAudioCountShort": "تم اختيار {count, plural, zero{0 ملفات صوتية} one{ملف صوتي واحد} two{ملفين صوتيين} few{{count} ملفات صوتية} many{{count} ملفًا صوتيًا} other{{count} ملف صوتي}}",
   "@asrSelectedAudioCountShort": {
     "placeholders": {
       "count": {
@@ -3963,7 +3963,7 @@
   },
   "chooseInAppRecording": "اختيار تسجيلات من التطبيق",
   "noRecordings": "لا توجد تسجيلات",
-  "durationSeconds": "{seconds, plural, one{{seconds} ثانية} other{{seconds} ثانية}}",
+  "durationSeconds": "{seconds, plural, zero{{seconds} ثانية} one{{seconds} ثانية} two{ثانيتان} few{{seconds} ثوانٍ} many{{seconds} ثانية} other{{seconds} ثانية}}",
   "@durationSeconds": {
     "placeholders": {
       "seconds": {
@@ -3989,7 +3989,7 @@
   "cancel": "إلغاء",
   "add": "إضافة",
   "ttsPageTitle": "الصوت",
-  "ttsAudioImportedCount": "تم استيراد {count, plural, one{{count} ملف صوتي} other{{count} ملفات صوتية}}",
+  "ttsAudioImportedCount": "تم استيراد {count, plural, zero{0 ملفات صوتية} one{ملف صوتي واحد} two{ملفين صوتيين} few{# ملفات صوتية} many{# ملفًا صوتيًا} other{# ملف صوتي}}",
   "@ttsAudioImportedCount": {
     "placeholders": {
       "count": {
@@ -4044,7 +4044,7 @@
   },
   "ttsChooseExportFolder": "اختيار مجلد التصدير",
   "ttsExportAudio": "تصدير الصوت",
-  "ttsExportedCount": "تم تصدير {count, plural, one{{count} ملف} other{{count} ملفات}}",
+  "ttsExportedCount": "تم تصدير {count, plural, zero{0 ملفات} one{ملف واحد} two{ملفين} few{# ملفات} many{# ملفًا} other{# ملف}}",
   "@ttsExportedCount": {
     "placeholders": {
       "count": {
@@ -4126,7 +4126,7 @@
   "voiceBatchFieldOrder": "ترتيب الحقول:",
   "voiceBatchNameThenId": "الأول = الاسم، والثاني = المعرّف",
   "voiceBatchIdThenName": "الأول = المعرّف، والثاني = الاسم",
-  "voiceBatchColumnChoice": "{count, plural, one{تم اكتشاف عمود واحد ({count}). اختر العمود الذي يبدأ منه الاسم/المعرّف:} other{تم اكتشاف {count} من الأعمدة. اختر العمود الذي يبدأ منه الاسم/المعرّف:}}",
+  "voiceBatchColumnChoice": "{count, plural, zero{تم اكتشاف 0 أعمدة. اختر العمود الذي يبدأ منه الاسم/المعرّف:} one{تم اكتشاف عمود واحد. اختر العمود الذي يبدأ منه الاسم/المعرّف:} two{تم اكتشاف عمودين. اختر العمود الذي يبدأ منه الاسم/المعرّف:} few{تم اكتشاف {count} أعمدة. اختر العمود الذي يبدأ منه الاسم/المعرّف:} many{تم اكتشاف {count} عمودًا. اختر العمود الذي يبدأ منه الاسم/المعرّف:} other{تم اكتشاف {count} عمود. اختر العمود الذي يبدأ منه الاسم/المعرّف:}}",
   "@voiceBatchColumnChoice": {
     "placeholders": {
       "count": {
@@ -4161,7 +4161,7 @@
       }
     }
   },
-  "voiceDuplicateIds": "تم العثور على {count, plural, one{{count} معرّف مكرر: {ids}} other{{count} معرّفات مكررة: {ids}}}",
+  "voiceDuplicateIds": "تم العثور على {count, plural, zero{0 معرّفات مكررة.} one{{count} معرّف مكرر: {ids}} two{معرّفين مكررين: {ids}} few{{count} معرّفات مكررة: {ids}} many{{count} معرّفًا مكررًا: {ids}} other{{count} معرّف مكرر: {ids}}}",
   "@voiceDuplicateIds": {
     "placeholders": {
       "count": {
@@ -4187,7 +4187,7 @@
   "voiceDuplicateResolution": "معرّفات الأصوات التالية مكررة. اختر كيفية التعامل مع كل منها:",
   "update": "تحديث",
   "skip": "تخطي",
-  "voiceDuplicatesRemaining": "تبقى {count, plural, one{{count} معرّف مكرر} other{{count} معرّفات مكررة}}",
+  "voiceDuplicatesRemaining": "تبقى {count, plural, zero{0 معرّفات مكررة} one{{count} معرّف مكرر} two{معرّفان مكرران} few{{count} معرّفات مكررة} many{{count} معرّفًا مكررًا} other{{count} معرّف مكرر}}",
   "@voiceDuplicatesRemaining": {
     "placeholders": {
       "count": {
@@ -4382,7 +4382,7 @@
   "audioSeparationSupportedFormatsHint": "التنسيقات المدعومة: mp4، mov، m4v، 3gp",
   "audioSeparationSuccess": "تم استخراج الصوت وحفظه في مكتبة الصوت",
   "audioSeparationView": "عرض",
-  "audioSeparationSelectedVideoCount": "تم اختيار {count, plural, one{{count} فيديو} other{{count} فيديوهات}}",
+  "audioSeparationSelectedVideoCount": "تم اختيار {count, plural, zero{0 فيديوهات} one{فيديو واحد} two{فيديوين} few{{count} فيديوهات} many{{count} فيديو} other{{count} فيديو}}",
   "@audioSeparationSelectedVideoCount": {
     "placeholders": {
       "count": {
@@ -4714,7 +4714,7 @@
     },
     "description": "User-facing text for the text preview or storage interface: textStorageSkipUnsupportedFormat."
   },
-  "textStorageImportSuccess": "تم استيراد {count, plural, =1{# ملف نصي} other{# ملفات نصية}}",
+  "textStorageImportSuccess": "تم استيراد {count, plural, zero{# ملفات نصية} one{# ملف نصي} two{ملفين نصيين} few{# ملفات نصية} many{# ملفًا نصيًا} other{# ملف نصي}}",
   "@textStorageImportSuccess": {
     "placeholders": {
       "count": {
@@ -4759,7 +4759,7 @@
   "textStorageWebFolderExportInfo": "لا يمكن للمتصفح اختيار مجلد للتصدير. سيتم تنزيل ملف ZIP يحافظ على بنية المجلد.",
   "textStorageCancel": "إلغاء",
   "textStorageDownloadZip": "تنزيل ملف ZIP",
-  "textStorageExportedFiles": "تم تصدير {count, plural, =1{# ملف} other{# ملفات}}",
+  "textStorageExportedFiles": "تم تصدير {count, plural, zero{# ملفات} one{# ملف} two{ملفين} few{# ملفات} many{# ملفًا} other{# ملف}}",
   "@textStorageExportedFiles": {
     "placeholders": {
       "count": {
@@ -4984,7 +4984,7 @@
   "browserAdd": "إضافة",
   "browserNoScripts": "لا توجد نصوص برمجية بعد. اضغط على «إضافة» لإنشاء واحد.",
   "browserUnnamedScript": "نص برمجي بلا عنوان",
-  "browserScriptMatchCount": "{count, plural, one{{count} قاعدة مطابقة} other{{count} قواعد مطابقة}}",
+  "browserScriptMatchCount": "{count, plural, zero{لا قواعد مطابقة} one{{count} قاعدة مطابقة} two{قاعدتان مطابقتان} few{{count} قواعد مطابقة} many{{count} قاعدة مطابقة} other{{count} قاعدة مطابقة}}",
   "browserScriptOriginManual": "تمت الإضافة يدويًا",
   "browserScriptVersion": "@version {version}",
   "browserScriptEnabled": "مفعّل",
@@ -5031,7 +5031,7 @@
   "browserCookiesEmptyTitle": "لا توجد بيانات دائمة",
   "browserCookiesEmptyDescription": "استخدم المتصفح المدمج وفعّل الاحتفاظ بملفات تعريف الارتباط لعرض البيانات المحفوظة هنا.",
   "browserCookiesStoredCount": "ملفات تعريف الارتباط المخزنة ({count})",
-  "browserCookiesDomainCount": "{count, plural, one{{count} ملف تعريف ارتباط} other{{count} ملفات تعريف ارتباط}}",
+  "browserCookiesDomainCount": "{count, plural, zero{لا ملفات تعريف ارتباط} one{{count} ملف تعريف ارتباط} two{ملفا تعريف ارتباط} few{{count} ملفات تعريف ارتباط} many{{count} ملف تعريف ارتباط} other{{count} ملف تعريف ارتباط}}",
   "browserCookiesClearDomainTooltip": "مسح جميع ملفات تعريف الارتباط لهذا النطاق",
   "browserCookiesDeleteOneTooltip": "حذف ملف تعريف الارتباط هذا",
   "browserCookiesDeletedOne": "تم حذف ملف تعريف الارتباط",
@@ -5043,8 +5043,8 @@
   "galleryCameraFailed": "تعذّر التقاط صورة: {error}",
   "galleryPhotoSaved": "تم حفظ الصورة",
   "galleryUnsupportedImportFormat": "تم تخطي تنسيق غير مدعوم: {format}",
-  "galleryImportImagesCount": "تم استيراد {count, plural, =1{# صورة} other{# صور}}",
-  "galleryImportVideosCount": "تم استيراد {count, plural, =1{# فيديو} other{# فيديوهات}}",
+  "galleryImportImagesCount": "تم استيراد {count, plural, zero{# صور} one{# صورة} two{صورتان} few{# صور} many{# صورة} other{# صورة}}",
+  "galleryImportVideosCount": "تم استيراد {count, plural, zero{# فيديوهات} one{# فيديو} two{فيديوين} few{# فيديوهات} many{# فيديو} other{# فيديو}}",
   "galleryImportFailed": "فشل الاستيراد: {error}",
   "galleryFileReadFailed": "تعذّرت قراءة بيانات الملف",
   "galleryExportImageTitle": "تصدير صورة",
@@ -5052,7 +5052,7 @@
   "galleryExportedTo": "تم التصدير إلى: {path}",
   "galleryExportFailed": "فشل التصدير: {error}",
   "galleryChooseExportDirectory": "اختيار مجلد التصدير",
-  "galleryExportedFilesCount": "تم تصدير {count, plural, =1{# ملف} other{# ملفات}}",
+  "galleryExportedFilesCount": "تم تصدير {count, plural, zero{# ملفات} one{# ملف} two{ملفين} few{# ملفات} many{# ملفًا} other{# ملف}}",
   "galleryFolderExportTitle": "تصدير المجلد",
   "galleryWebFolderExportInfo": "لا يمكن للمتصفح اختيار مجلد للتصدير. سيتم تنزيل ملف ZIP يحافظ على بنية المجلد.",
   "galleryDownloadZip": "تنزيل ملف ZIP",
@@ -5227,7 +5227,7 @@
   "catCatchCapturedFromBrowser": "تم الالتقاط من المتصفح: {url}",
   "catCatchEnterValidUrl": "أدخل عنوان URL صالحًا واحدًا على الأقل",
   "catCatchTaskAdded": "تمت إضافة المهمة",
-  "catCatchTasksAdded": "تمت إضافة {count, plural, one{{count} مهمة} other{{count} مهام}}",
+  "catCatchTasksAdded": "تمت إضافة {count, plural, zero{0 مهام} one{مهمة واحدة} two{مهمتين} few{{count} مهام} many{{count} مهمة} other{{count} مهمة}}",
   "catCatchViewTaskList": "عرض قائمة المهام",
   "catCatchUrlHint": "أدخل عنوان URL لصفحة فيديو أو صوت",
   "catCatchDeleteTask": "حذف هذه المهمة",
@@ -5239,7 +5239,7 @@
   "catCatchDurationFilterHint": "اختياري: تصفية موارد الفيديو حسب المدة. اتركه فارغًا لعرض جميع الموارد للاختيار",
   "catCatchVideoSaveTo": "حفظ الفيديو في",
   "catCatchAudioSaveTo": "حفظ الصوت في",
-  "catCatchTaskCount": "تمت إضافة {count, plural, one{{count} مهمة} other{{count} مهام}}",
+  "catCatchTaskCount": "تمت إضافة {count, plural, zero{0 مهام} one{مهمة واحدة} two{مهمتين} few{{count} مهام} many{{count} مهمة} other{{count} مهمة}}",
   "catCatchStartAnalysis": "تحليل",
   "catCatchVideoFolderTitle": "مجلد حفظ الفيديو",
   "catCatchAudioFolderTitle": "مجلد حفظ الصوت",
@@ -5282,7 +5282,7 @@
   "messageSearchInitialState": "اكتب كلمة مفتاحية للبحث في الرسائل بكل المحادثات",
   "messageSearchEmptyState": "لم يتم العثور على رسائل مطابقة",
   "messageSearchNewConversation": "محادثة جديدة",
-  "messageSearchMatchCount": "{count, plural, one{{count} نتيجة مطابقة} other{{count} نتائج مطابقة}}",
+  "messageSearchMatchCount": "{count, plural, zero{لا توجد نتائج مطابقة} one{{count} نتيجة مطابقة} two{نتيجتان متطابقتان} few{{count} نتائج مطابقة} many{{count} نتيجة مطابقة} other{{count} نتيجة مطابقة}}",
   "filesTabText": "نص",
   "filesTabAudio": "صوت",
   "filesTabImages": "صور",
@@ -6027,7 +6027,7 @@
   },
   "appLogWebUnsupported": "السجلات المحلية غير مدعومة على الويب",
   "appLogNoFiles": "لا توجد ملفات سجلات بعد",
-  "appLogAutoRefresh": "{count, plural, =1{جارٍ التحديث تلقائيًا (المحاولة {count})...} other{جارٍ التحديث تلقائيًا (المحاولات {count})...}}",
+  "appLogAutoRefresh": "{count, plural, zero{جارٍ التحديث تلقائيًا (0 محاولات)...} one{جارٍ التحديث تلقائيًا (المحاولة {count})...} two{جارٍ التحديث تلقائيًا (محاولتان)...} few{جارٍ التحديث تلقائيًا ({count} محاولات)...} many{جارٍ التحديث تلقائيًا ({count} محاولة)...} other{جارٍ التحديث تلقائيًا ({count} محاولة)...}}",
   "@appLogAutoRefresh": {
     "description": "Status shown while the log list retries loading.",
     "placeholders": {
@@ -6131,7 +6131,7 @@
       }
     }
   },
-  "appLogLineCount": "{count, plural, =1{{count} سطر} other{{count} أسطر}}",
+  "appLogLineCount": "{count, plural, zero{0 أسطر} one{{count} سطر} two{سطران} few{{count} أسطر} many{{count} سطرًا} other{{count} سطر}}",
   "@appLogLineCount": {
     "description": "Number of lines in the log file.",
     "placeholders": {
@@ -7018,5 +7018,5 @@
   "languageNameFrench": "الفرنسية",
   "languageNameGerman": "الألمانية",
   "languageNameArabic": "العربية",
-  "fileManagerDeleteEmptyFolderWithSubfoldersConfirm": "هل تريد حذف المجلد الفارغ «{name}»؟ سيُحذف أيضًا {count, plural, one{مجلد فرعي واحد.} other{{count} من المجلدات الفرعية.}}"
+  "fileManagerDeleteEmptyFolderWithSubfoldersConfirm": "هل تريد حذف المجلد الفارغ «{name}»؟ سيُحذف أيضًا {count, plural, zero{0 مجلدات فرعية.} one{مجلد فرعي واحد.} two{مجلدان فرعيان.} few{{count} مجلدات فرعية.} many{{count} مجلدًا فرعيًا.} other{{count} مجلد فرعي.}}"
 }

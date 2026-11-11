@@ -65,6 +65,16 @@ void main() {
     expect(strings.localeName, 'ar_SA');
     expect(strings.languageSettingsTitle, isNotEmpty);
     expect(strings.languageNameEnglish, 'الإنجليزية');
+    expect([0, 1, 2, 3, 11, 100].map(strings.taskFlowTemplateCount).toList(), [
+      'لا قوالب',
+      '1 قالب',
+      'قالبان',
+      '3 قوالب',
+      '11 قالبًا',
+      '100 قالب',
+    ]);
+    expect(strings.providerGroupItemCount(0), 'لا توجد عناصر');
+    expect(strings.textStorageImportSuccess(1), 'تم استيراد 1 ملف نصي');
   });
 
   testWidgets('Flutter localization delegate gives Arabic RTL direction', (
