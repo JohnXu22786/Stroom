@@ -13,6 +13,7 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
     required Object? streamError,
     required ChatService? snappedChatService,
     required List<String> finalTextChunks,
+    required Stopwatch operationClock,
   }) async {
     // Deliver any sub-throttle reasoning tail before the stream state is
     // cleared. Normal section-end events flush this same delta earlier.
@@ -237,6 +238,23 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
       await AppLogService.error(
           'ChatStreamManager', '[STREAM-MGR] save failed', e);
     }
+
+    final streamStatus = wasCancelled
+        ? 'cancelled'
+        : hadStreamError
+            ? 'failed'
+            : 'completed';
+    final replyChars = finalTextChunks.fold<int>(
+      0,
+      (sum, chunk) => sum + chunk.length,
+    );
+    await AppLogService.info(
+      'ChatStreamManager',
+      '[STREAM-MGR] startStreaming: $streamStatus, convId=$convId, '
+          'replyChars=$replyChars, toolCalls=${state.accumulatedToolCalls.length}, '
+          'historyLen=${state.history.length}, '
+          'elapsedMs=${operationClock.elapsedMilliseconds}',
+    );
 
     // Build the result and complete the resultCompleter AFTER save.
     // 注意：标题生成等 LLM 回环任务绝不能阻塞这里 —— 否则页面
