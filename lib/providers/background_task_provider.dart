@@ -630,11 +630,11 @@ String? _localizeStoredBackgroundError(
           _localizeStoredBackgroundError(detail, strings) ?? detail);
     }
   }
-  for (final prefix in [
-    'OCR结果不完整: ',
-    'OCR结果不完整：',
-    'OCR result is incomplete: ',
-  ]) {
+  final incompletePrefixes = {
+    for (final locale in AppLocalizations.supportedLocales)
+      lookupAppLocalizations(locale).bgTaskOcrIncompleteError(''),
+  };
+  for (final prefix in incompletePrefixes) {
     if (!error.startsWith(prefix)) continue;
     final details = _localizeStoredOcrIncompleteDetail(
       error.substring(prefix.length),

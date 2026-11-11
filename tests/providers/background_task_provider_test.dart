@@ -311,7 +311,9 @@ void main() {
       ].join(sourceStrings.bgTaskOcrPageFailureSeparator);
       notifier.failTask(
         id,
-        error: sourceStrings.bgTaskOcrPagesIncomplete(sourceDetails),
+        error: sourceStrings.bgTaskOcrIncompleteError(
+          sourceStrings.bgTaskOcrPagesIncomplete(sourceDetails),
+        ),
       );
       await notifier.pendingPersistence;
       notifier.dispose();
@@ -328,7 +330,12 @@ void main() {
           strings.bgTaskOcrPageFailed('2'),
           strings.bgTaskOcrPageIncomplete('4'),
         ].join(strings.bgTaskOcrPageFailureSeparator);
-        expect(task.error, strings.bgTaskOcrPagesIncomplete(expectedDetails));
+        expect(
+          task.error,
+          strings.bgTaskOcrIncompleteError(
+            strings.bgTaskOcrPagesIncomplete(expectedDetails),
+          ),
+        );
         expect(
           task.ocrPageOutcomes.map((outcome) => outcome.imageIndex),
           [1, 3],
