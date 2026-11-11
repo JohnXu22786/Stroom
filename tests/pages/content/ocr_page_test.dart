@@ -5901,8 +5901,16 @@ void main() {
       final preflightStarted = Completer<void>();
       int? preflightBudget;
       int? encodedRequestBytes;
+      final imageBytes = _createValidOcrTestImage().bytes;
       final retryData = {
         ..._createVersionedRetryData(configId: config.id, modelId: model.id),
+        'images': [
+          {
+            'bytes': base64Encode(imageBytes),
+            'format': 'png',
+            'name': 'retry-image.png',
+          },
+        ],
         'requestSizeBudgetBytes': snapshotBudget,
       };
 
@@ -5975,8 +5983,16 @@ void main() {
       final preflightStarted = Completer<void>();
       int? preflightBudget;
       int? encodedRequestBytes;
+      final imageBytes = _createValidOcrTestImage().bytes;
       final retryData = {
         ..._createVersionedRetryData(configId: config.id, modelId: model.id),
+        'images': [
+          {
+            'bytes': base64Encode(imageBytes),
+            'format': 'png',
+            'name': 'retry-image.png',
+          },
+        ],
         'requestSizeBudgetBytes': snapshotBudget,
       };
 
