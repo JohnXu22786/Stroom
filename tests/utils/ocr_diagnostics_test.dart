@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/l10n/app_localizations.dart';
 import 'package:stroom/l10n/app_localizations_ar.dart';
@@ -1591,6 +1592,42 @@ void main() {
 
     expect(sanitized, 'OCR 错误详情已隐藏');
     expect(sanitized, isNot(contains(credential)));
+  });
+
+  test('live OCR safe errors use the selected locale and safe fallback', () {
+    final strings = AppLocalizationsDe();
+    final dioError = OcrDiagnosticSnapshot.safeTaskError(
+      DioException(
+        requestOptions: RequestOptions(path: '/ocr'),
+        type: DioExceptionType.connectionTimeout,
+      ),
+      localizations: strings,
+    );
+    final formatError = OcrDiagnosticSnapshot.safeTaskError(
+      const FormatException('provider response must stay private'),
+      localizations: strings,
+    );
+    final genericError = OcrDiagnosticSnapshot.safeTaskError(
+      StateError('provider response must stay private'),
+      localizations: strings,
+    );
+
+    expect(dioError, strings.bgTaskOcrErrorDetailsHidden);
+    expect(formatError, strings.ocrProcessingOcrFailed);
+    expect(genericError, strings.bgTaskOcrErrorDetailsHidden);
+    for (final summary in [dioError, formatError, genericError]) {
+      expect(summary, isNot(contains('请求')));
+      expect(summary, isNot(contains('provider response')));
+    }
+
+    expect(
+      OcrDiagnosticSnapshot.safeTaskError(
+        StateError('private'),
+        localizations: strings,
+        excludedValues: [strings.bgTaskOcrErrorDetailsHidden],
+      ),
+      isEmpty,
+    );
   });
 
   test('fallback task error excludes credentials contained in its label', () {

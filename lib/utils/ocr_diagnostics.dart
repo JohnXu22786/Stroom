@@ -471,20 +471,34 @@ class OcrDiagnosticSnapshot {
   static String safeTaskError(
     Object error, {
     Iterable<String> excludedValues = const [],
+    AppLocalizations? localizations,
   }) {
     late final String message;
     if (error is DioException) {
-      message = 'OCR 请求失败（${error.type.name}）';
+      message = localizations == null
+          ? 'OCR 请求失败（${error.type.name}）'
+          : localizations.bgTaskOcrErrorDetailsHidden;
     } else if (error is FormatException) {
-      message = 'OCR 返回格式无效';
+      message = localizations == null
+          ? 'OCR 返回格式无效'
+          : localizations.ocrProcessingOcrFailed;
     } else if (error is FileSystemException) {
-      message = 'OCR 结果保存失败';
+      message = localizations == null
+          ? 'OCR 结果保存失败'
+          : localizations.bgTaskOcrErrorDetailsHidden;
     } else {
       final type = error.runtimeType.toString();
-      message =
-          'OCR 处理失败（${type.substring(0, type.length.clamp(0, 64).toInt())}）';
+      message = localizations == null
+          ? 'OCR 处理失败（${type.substring(0, type.length.clamp(0, 64).toInt())}）'
+          : localizations.bgTaskOcrErrorDetailsHidden;
     }
     if (containsCredential(message, excludedValues: excludedValues)) {
+      if (localizations != null) {
+        final fallback = localizations.bgTaskOcrErrorDetailsHidden;
+        return containsCredential(fallback, excludedValues: excludedValues)
+            ? ''
+            : fallback;
+      }
       return _hiddenTaskError(excludedValues: excludedValues);
     }
     return message;
@@ -667,7 +681,9 @@ class OcrDiagnosticSnapshot {
     for (final locale in AppLocalizations.supportedLocales) {
       final strings = lookupAppLocalizations(locale);
       if (value == strings.ocrImagePreparationFailed ||
-          value == strings.taskFlowOcrModelUnavailable) {
+          value == strings.taskFlowOcrModelUnavailable ||
+          value == strings.ocrProcessingOcrFailed ||
+          value == strings.bgTaskOcrErrorDetailsHidden) {
         return true;
       }
 
