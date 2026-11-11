@@ -4922,7 +4922,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get providerCompressionAdpcm => 'ADPCM (約 4 倍圧縮)';
 
   @override
-  String get providerCompressionFlac => 'FLAC (ロスレス、~2x)';
+  String get providerCompressionFlac => 'FLAC (ロスレス、約2倍、推奨)';
 
   @override
   String get providerCompressionAdpcmDescription =>
@@ -5131,7 +5131,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get providerPreprocessNone => 'なし';
 
   @override
-  String get providerPreprocessResample => 'WAVの最適化（16kHzモノラル）';
+  String get providerPreprocessResample => 'WAVの最適化（16kHzモノラル、推奨）';
 
   @override
   String get providerPreprocessResampleHelp =>
@@ -16427,7 +16427,7 @@ class AppLocalizationsJaJp extends AppLocalizationsJa {
   String get providerCompressionAdpcm => 'ADPCM (約 4 倍圧縮)';
 
   @override
-  String get providerCompressionFlac => 'FLAC (ロスレス、~2x)';
+  String get providerCompressionFlac => 'FLAC (ロスレス、約2倍、推奨)';
 
   @override
   String get providerCompressionAdpcmDescription =>
@@ -16636,7 +16636,7 @@ class AppLocalizationsJaJp extends AppLocalizationsJa {
   String get providerPreprocessNone => 'なし';
 
   @override
-  String get providerPreprocessResample => 'WAVの最適化（16kHzモノラル）';
+  String get providerPreprocessResample => 'WAVの最適化（16kHzモノラル、推奨）';
 
   @override
   String get providerPreprocessResampleHelp =>
