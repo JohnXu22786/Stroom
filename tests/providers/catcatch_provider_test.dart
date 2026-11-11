@@ -534,6 +534,56 @@ void main() {
       );
     });
 
+    test('does not let a traversal task ID escape the progress directory',
+        () async {
+      final outsideProgress = File(p.join(appDir, 'outside_dl_progress.json'))
+        ..writeAsStringSync('keep');
+      final task = createTask(
+        id: '../../outside',
+        status: TaskStatus.failed,
+      );
+
+      await CatCatchNotifier.cleanupTaskFiles(task, appDirPath: appDir);
+
+      expect(outsideProgress.existsSync(), isTrue);
+    });
+
+    test('does not delete downloadedFilePath outside CatCatch directories',
+        () async {
+      final outsideFile = File(p.join(appDir, 'user-data.mp4'))
+        ..writeAsStringSync('keep');
+      final task = createTask(
+        id: 'test-outside-download',
+        status: TaskStatus.failed,
+        downloadedFilePath: outsideFile.path,
+      );
+
+      await CatCatchNotifier.cleanupTaskFiles(task, appDirPath: appDir);
+
+      expect(outsideFile.existsSync(), isTrue);
+    });
+
+    test('does not follow a managed downloads directory symlink outside CatCatch',
+        () async {
+      final catcatchDir = Directory(p.join(appDir, 'catcatch'))
+        ..createSync(recursive: true);
+      final outsideDir = Directory(p.join(appDir, 'outside'))
+        ..createSync(recursive: true);
+      final outsideFile = File(p.join(outsideDir.path, 'partial.mp4'))
+        ..writeAsStringSync('keep');
+      final downloadsDir = p.join(catcatchDir.path, 'downloads');
+      Link(downloadsDir).createSync(outsideDir.path);
+      final task = createTask(
+        id: 'test-symlink-download',
+        status: TaskStatus.failed,
+        downloadedFilePath: p.join(downloadsDir, 'partial.mp4'),
+      );
+
+      await CatCatchNotifier.cleanupTaskFiles(task, appDirPath: appDir);
+
+      expect(outsideFile.existsSync(), isTrue);
+    }, skip: Platform.isWindows ? 'Symlink creation may require elevation.' : false);
+
     test('handles page-title based download filenames', () async {
       final media = MediaResource(
         url: 'https://example.com/video.mp4',

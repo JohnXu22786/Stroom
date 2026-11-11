@@ -509,26 +509,52 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
       return false;
     }
 
-    // 1. 删除分段下载进度跟踪
-    final progressPath =
-        p.join(appDir, 'catcatch', '.progress', '${task.id}_dl_progress.json');
-    await _deleteFileBestEffort(File(progressPath),
-        shouldDelete: () =>
-            !currentRemainingTasks().any((current) => current.id == task.id));
+    // 1. 删除分段下载进度跟踪。 Persisted IDs must be safe path components
+    // before being interpolated into a filesystem path.
+    if (_isSafeTaskId(task.id)) {
+      final catcatchDir = p.join(appDir, 'catcatch');
+      final progressDir = p.join(appDir, 'catcatch', '.progress');
+      final progressPath =
+          p.join(progressDir, '${task.id}_dl_progress.json');
+      if (await _isCanonicalPathWithin(
+          progressPath, progressDir, catcatchDir)) {
+        await _deleteFileBestEffort(File(progressPath),
+            shouldDelete: () => !currentRemainingTasks()
+                .any((current) => current.id == task.id));
+      }
+    }
 
     // 2. 对于未完成的任务，删除它已记录的 downloadedFilePath
     // （放在前面处理，与 selectedMedia 无关）
     if (task.downloadedFilePath != null &&
         task.status != TaskStatus.completed) {
       final downloadedFilePath = task.downloadedFilePath!;
-      await _deleteFileBestEffort(File(downloadedFilePath),
-          shouldDelete: () => !isInUse(downloadedFilePath));
+      final catcatchDir = p.join(appDir, 'catcatch');
+      final downloadsDir = p.join(catcatchDir, 'downloads');
+      final convertedDir = p.join(catcatchDir, 'converted');
+      if (await _isCanonicalPathWithin(
+              downloadedFilePath, downloadsDir, catcatchDir) ||
+          await _isCanonicalPathWithin(
+              downloadedFilePath, convertedDir, catcatchDir)) {
+        await _deleteFileBestEffort(File(downloadedFilePath),
+            shouldDelete: () => !isInUse(downloadedFilePath));
+      }
     }
 
     // 3. 如果没有已选媒体资源，说明还没开始下载，无需进一步清理
     if (task.selectedMedia == null) return;
 
+    final catcatchDir = p.join(appDir, 'catcatch');
+    final downloadsDir = p.join(catcatchDir, 'downloads');
+    final convertedDir = p.join(catcatchDir, 'converted');
     for (final artifact in _mediaDerivedArtifacts(task, appDir)) {
+      final managedDir = p.isWithin(convertedDir, artifact.path)
+          ? convertedDir
+          : downloadsDir;
+      if (!await _isCanonicalPathWithin(
+          artifact.path, managedDir, catcatchDir)) {
+        continue;
+      }
       bool shouldDelete() => !isInUse(artifact.path);
       if (artifact is Directory) {
         await _deleteDirBestEffort(artifact, shouldDelete: shouldDelete);
@@ -540,6 +566,36 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
 
   static String _normalizedFilePath(String path) =>
       p.normalize(p.absolute(path));
+
+  static bool _isSafeTaskId(String id) =>
+      RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(id);
+
+  /// Checks a path after resolving existing symlinks in its path components.
+  /// Missing leaf paths are resolved against their nearest existing parent.
+  static Future<bool> _isCanonicalPathWithin(
+      String path, String root, String managedRoot) async {
+    final canonicalPath = await _canonicalizePath(path);
+    final canonicalRoot = await _canonicalizePath(root);
+    final canonicalManagedRoot = await _canonicalizePath(managedRoot);
+    return canonicalPath != null &&
+        canonicalRoot != null &&
+        canonicalManagedRoot != null &&
+        p.isWithin(canonicalManagedRoot, canonicalRoot) &&
+        p.isWithin(canonicalRoot, canonicalPath);
+  }
+
+  static Future<String?> _canonicalizePath(String path) async {
+    final normalizedPath = p.normalize(p.absolute(path));
+    try {
+      return await File(normalizedPath).resolveSymbolicLinks();
+    } on FileSystemException {
+      final parent = p.dirname(normalizedPath);
+      if (parent == normalizedPath) return null;
+      final canonicalParent = await _canonicalizePath(parent);
+      if (canonicalParent == null) return null;
+      return p.join(canonicalParent, p.basename(normalizedPath));
+    }
+  }
 
   static List<FileSystemEntity> _mediaDerivedArtifacts(
       CatCatchTask task, String appDir) {
