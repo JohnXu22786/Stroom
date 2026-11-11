@@ -7,6 +7,7 @@ import 'package:intl/intl.dart' as intl;
 
 import 'app_localizations_en.dart';
 import 'app_localizations_es.dart';
+import 'app_localizations_fr.dart';
 import 'app_localizations_ja.dart';
 import 'app_localizations_ko.dart';
 import 'app_localizations_pt.dart';
@@ -67,7 +68,7 @@ import 'app_localizations_zh.dart';
 /// property.
 abstract class AppLocalizations {
   AppLocalizations(String locale)
-      : localeName = intl.Intl.canonicalizedLocale(locale.toString());
+    : localeName = intl.Intl.canonicalizedLocale(locale.toString());
 
   final String localeName;
 
@@ -90,11 +91,11 @@ abstract class AppLocalizations {
   /// of delegates is preferred or required.
   static const List<LocalizationsDelegate<dynamic>> localizationsDelegates =
       <LocalizationsDelegate<dynamic>>[
-    delegate,
-    GlobalMaterialLocalizations.delegate,
-    GlobalCupertinoLocalizations.delegate,
-    GlobalWidgetsLocalizations.delegate,
-  ];
+        delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+      ];
 
   /// A list of this localizations delegate's supported locales.
   static const List<Locale> supportedLocales = <Locale>[
@@ -104,8 +105,10 @@ abstract class AppLocalizations {
     Locale('ja', 'JP'),
     Locale('ko', 'KR'),
     Locale('pt', 'BR'),
+    Locale('fr', 'FR'),
     Locale('en'),
     Locale('es'),
+    Locale('fr'),
     Locale('ja'),
     Locale('ko'),
     Locale('pt'),
@@ -19416,6 +19419,12 @@ abstract class AppLocalizations {
   /// **'Japanese'**
   String get languageNameJapanese;
 
+  /// No description provided for @languageNameFrench.
+  ///
+  /// In en, this message translates to:
+  /// **'French'**
+  String get languageNameFrench;
+
   /// No description provided for @fileManagerDeleteEmptyFolderWithSubfoldersConfirm.
   ///
   /// In en, this message translates to:
@@ -19437,13 +19446,14 @@ class _AppLocalizationsDelegate
 
   @override
   bool isSupported(Locale locale) => <String>[
-        'en',
-        'es',
-        'ja',
-        'ko',
-        'pt',
-        'zh',
-      ].contains(locale.languageCode);
+    'en',
+    'es',
+    'fr',
+    'ja',
+    'ko',
+    'pt',
+    'zh',
+  ].contains(locale.languageCode);
 
   @override
   bool shouldReload(_AppLocalizationsDelegate old) => false;
@@ -19465,6 +19475,14 @@ AppLocalizations lookupAppLocalizations(Locale locale) {
         switch (locale.countryCode) {
           case 'ES':
             return AppLocalizationsEsEs();
+        }
+        break;
+      }
+    case 'fr':
+      {
+        switch (locale.countryCode) {
+          case 'FR':
+            return AppLocalizationsFrFr();
         }
         break;
       }
@@ -19508,6 +19526,8 @@ AppLocalizations lookupAppLocalizations(Locale locale) {
       return AppLocalizationsEn();
     case 'es':
       return AppLocalizationsEs();
+    case 'fr':
+      return AppLocalizationsFr();
     case 'ja':
       return AppLocalizationsJa();
     case 'ko':

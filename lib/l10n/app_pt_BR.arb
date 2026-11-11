@@ -7015,5 +7015,6 @@
   "emojiCategoryFlags": "Bandeiras",
   "languageNameSpanish": "Espanhol",
   "languageNameJapanese": "Japonês",
+  "languageNameFrench": "Francês",
   "fileManagerDeleteEmptyFolderWithSubfoldersConfirm": "Excluir a pasta vazia “{name}”? {count, plural, one{A subpasta será excluída também.} other{As {count} subpastas também serão excluídas.}}"
 }

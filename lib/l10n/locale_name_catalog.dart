@@ -47,6 +47,11 @@ const localeNameCatalog = <String, LocaleNameInfo>{
     nativeName: 'Português (Brasil)',
     id: 'pt-br',
   ),
+  'fr_FR': LocaleNameInfo(
+    displayName: _frenchName,
+    nativeName: 'Français',
+    id: 'fr-fr',
+  ),
 };
 
 String _englishName(AppLocalizations strings) => strings.languageNameEnglish;
@@ -56,6 +61,7 @@ String _japaneseName(AppLocalizations strings) => strings.languageNameJapanese;
 String _koreanName(AppLocalizations strings) => strings.languageNameKorean;
 String _portugueseName(AppLocalizations strings) =>
     strings.languageNamePortuguese;
+String _frenchName(AppLocalizations strings) => strings.languageNameFrench;
 
 String localeDisplayName(AppLocalizations strings, Locale locale) =>
     localeNameCatalog[localeCodeForCatalog(locale)]?.displayName(strings) ??
