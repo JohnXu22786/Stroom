@@ -265,7 +265,8 @@ void main() {
         final code = (flac[frameOffset + 2] >> 4) & 0x0F;
 
         expect(code, expectedCode,
-            reason: '$blockLength samples must use a valid FLAC block-size code');
+            reason:
+                '$blockLength samples must use a valid FLAC block-size code');
 
         final decodedBlockLength = switch (code) {
           6 => flac[frameOffset + 5] + 1,
