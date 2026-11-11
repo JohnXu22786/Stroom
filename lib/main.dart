@@ -301,7 +301,7 @@ Future<void> main() async {
       } catch (e, s) {
         // If initialization fails, show an error screen
         debugPrint(
-          '[GlobalError] App initialization failed: ${e.runtimeType}\n${_sanitizeDiagnosticText(s.toString())}');
+            '[GlobalError] App initialization failed: ${e.runtimeType}\n${_sanitizeDiagnosticText(s.toString())}');
         await _recordUncaughtError('AppStartup', e, s);
         final strings = appLocalizationsForLocale(null);
         runApp(
