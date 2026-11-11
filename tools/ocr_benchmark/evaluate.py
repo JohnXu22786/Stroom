@@ -1777,6 +1777,9 @@ def _formula_span_matches(
     def is_cjk_text_character(character: str) -> bool:
         return "\u3400" <= character <= "\u9fff"
 
+    def is_hangul_text_character(character: str) -> bool:
+        return "\uac00" <= character <= "\ud7af"
+
     def is_formula_term(token: str) -> bool:
         latex_command = re.match(r"\\([A-Za-z]+)", token)
         function_name = latex_command.group(1) if latex_command else token
@@ -1787,6 +1790,7 @@ def _formula_span_matches(
                 len(token) == 1
                 and token.isalpha()
                 and not is_cjk_text_character(token)
+                and not is_hangul_text_character(token)
             )
             or function_name in math_functions
             or function_name in greek_symbols
