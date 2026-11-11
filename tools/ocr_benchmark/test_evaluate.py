@@ -4802,6 +4802,47 @@ class EvaluateTests(unittest.TestCase):
                     report["metrics"]["formula_fidelity"]["value"], 0
                 )
 
+    def test_formula_fidelity_allows_hangul_prose_before_formula(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "hangul-prose-formula",
+                    "gold_text": "식 x=1",
+                    "formula_text": "x=1",
+                    "categories": ["mixed_language", "formula"],
+                }
+            ]
+        }
+        report = evaluate_predictions(
+            manifest,
+            predictions(
+                [{"fixture_id": "hangul-prose-formula", "text": "식 x=1"}]
+            ),
+        )
+
+        self.assertEqual(report["metrics"]["character_error_rate"]["value"], 0)
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 1)
+
+    def test_formula_fidelity_rejects_hangul_attached_to_formula(self):
+        text = "식x=1"
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "hangul-attached-formula",
+                    "gold_text": text,
+                    "formula_text": "x=1",
+                    "categories": ["mixed_language", "formula"],
+                }
+            ]
+        }
+        report = evaluate_predictions(
+            manifest,
+            predictions([{"fixture_id": "hangul-attached-formula", "text": text}]),
+        )
+
+        self.assertEqual(report["metrics"]["character_error_rate"]["value"], 0)
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 0)
+
     def test_formula_fidelity_rejects_written_operator_after_formula(self):
         manifest = {
             "fixtures": [
