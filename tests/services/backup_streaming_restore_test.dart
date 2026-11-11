@@ -11,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/services/app_log_service.dart';
 import 'package:stroom/services/backup_service.dart';
 import 'package:stroom/services/backup_service_shared.dart';
+import 'package:stroom/services/browser_profile_service.dart';
 import 'package:stroom/services/data_migration_service.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/services/storage_service.dart';
@@ -201,329 +202,679 @@ void main() {
     expect(records[0]['id'], equals('v_deflate'));
   });
 
-  test(
-    'case-only media destination collisions fail before selected files are cleared',
-    () async {
-      const selection = BackupSelection(
-        chatRecordsAndAttachments: false,
-        settings: false,
-        pictures: true,
-        audio: false,
-        videos: false,
-        texts: false,
-        tasks: false,
-        ankiData: true,
-        browserCookies: false,
+  test('case-only media destination collisions fail before selected files are cleared', () async {
+    const selection = BackupSelection(
+      chatRecordsAndAttachments: false,
+      settings: false,
+      pictures: true,
+      audio: false,
+      videos: false,
+      texts: false,
+      tasks: false,
+      ankiData: true,
+      browserCookies: false,
+    );
+    const picturesOnlySelection = BackupSelection(
+      chatRecordsAndAttachments: false,
+      settings: false,
+      pictures: true,
+      audio: false,
+      videos: false,
+      texts: false,
+      tasks: false,
+      ankiData: false,
+      browserCookies: false,
+    );
+    const attachmentsOnlySelection = BackupSelection(
+      chatRecordsAndAttachments: true,
+      settings: false,
+      pictures: false,
+      audio: false,
+      videos: false,
+      texts: false,
+      tasks: false,
+      ankiData: false,
+      browserCookies: false,
+    );
+    const browserAndPicturesSelection = BackupSelection(
+      chatRecordsAndAttachments: false,
+      settings: false,
+      pictures: true,
+      audio: false,
+      videos: false,
+      texts: false,
+      tasks: false,
+      ankiData: false,
+      browserCookies: true,
+    );
+    const attachmentsAndTasksSelection = BackupSelection(
+      chatRecordsAndAttachments: true,
+      settings: false,
+      pictures: false,
+      audio: false,
+      videos: false,
+      texts: false,
+      tasks: true,
+      ankiData: false,
+      browserCookies: false,
+    );
+    const tasksOnlySelection = BackupSelection(
+      chatRecordsAndAttachments: false,
+      settings: false,
+      pictures: false,
+      audio: false,
+      videos: false,
+      texts: false,
+      tasks: true,
+      ankiData: false,
+      browserCookies: false,
+    );
+    Archive buildSharedTaskAttachmentArchive({required bool sameContent}) {
+      final archive = Archive();
+      void addJson(String name, Object value) {
+        final bytes = Uint8List.fromList(utf8.encode(jsonEncode(value)));
+        archive.addFile(ArchiveFile(name, bytes.length, bytes));
+      }
+
+      addJson('manifest.json', {
+        'version': 2,
+        'createdAt': DateTime.now().toIso8601String(),
+        'appVersion': 'test',
+        'dataParts': [DataParts.chat, DataParts.tasks],
+      });
+      addJson('stroom_manifest.json', {
+        'image_records': <Map<String, dynamic>>[],
+        'audio_records': <Map<String, dynamic>>[],
+        'video_records': <Map<String, dynamic>>[],
+        'text_records': <Map<String, dynamic>>[],
+        'folders': <String>[],
+        ManifestTables.textFolders: <String>[],
+        ManifestTables.audioFolders: <String>[],
+        ManifestTables.imageFolders: <String>[],
+        ManifestTables.videoFolders: <String>[],
+      });
+      addJson('chat_data.json', {'conversations': '[]'});
+      addJson('synthesis/tasks.json', []);
+      addJson('catcatch/tasks.json', []);
+      addJson('background/tasks.json', []);
+      addJson('task_flows/flows.json', []);
+      addJson('task_flows/executions.json', []);
+      final attachmentBytes = Uint8List.fromList([32, 33]);
+      final taskAttachmentBytes = sameContent
+          ? attachmentBytes
+          : Uint8List.fromList([34, 35]);
+      archive.addFile(
+        ArchiveFile(
+          'attachments/shared.txt',
+          attachmentBytes.length,
+          attachmentBytes,
+        ),
       );
-      const picturesOnlySelection = BackupSelection(
-        chatRecordsAndAttachments: false,
-        settings: false,
-        pictures: true,
-        audio: false,
-        videos: false,
-        texts: false,
-        tasks: false,
-        ankiData: false,
-        browserCookies: false,
+      archive.addFile(
+        ArchiveFile(
+          'task_flow_attachments/shared.txt',
+          taskAttachmentBytes.length,
+          taskAttachmentBytes,
+        ),
       );
-      const ankiDbOnlySelection = BackupSelection(
-        chatRecordsAndAttachments: false,
-        settings: false,
-        pictures: false,
-        audio: false,
-        videos: false,
-        texts: false,
-        tasks: false,
-        ankiData: true,
-        browserCookies: false,
-        includeMediaFiles: false,
+      return archive;
+    }
+
+    Archive buildTaskAttachmentArchive(String relativePath) {
+      final archive = Archive();
+      void addJson(String name, Object value) {
+        final bytes = Uint8List.fromList(utf8.encode(jsonEncode(value)));
+        archive.addFile(ArchiveFile(name, bytes.length, bytes));
+      }
+
+      addJson('manifest.json', {
+        'version': 2,
+        'createdAt': DateTime.now().toIso8601String(),
+        'appVersion': 'test',
+        'dataParts': [DataParts.tasks],
+      });
+      addJson('stroom_manifest.json', {
+        'image_records': <Map<String, dynamic>>[],
+        'audio_records': <Map<String, dynamic>>[],
+        'video_records': <Map<String, dynamic>>[],
+        'text_records': <Map<String, dynamic>>[],
+        'folders': <String>[],
+        ManifestTables.textFolders: <String>[],
+        ManifestTables.audioFolders: <String>[],
+        ManifestTables.imageFolders: <String>[],
+        ManifestTables.videoFolders: <String>[],
+      });
+      addJson('synthesis/tasks.json', []);
+      addJson('catcatch/tasks.json', []);
+      addJson('background/tasks.json', []);
+      addJson('task_flows/flows.json', []);
+      addJson('task_flows/executions.json', []);
+      final bytes = Uint8List.fromList([40, 41]);
+      archive.addFile(
+        ArchiveFile('task_flow_attachments/$relativePath', bytes.length, bytes),
       );
-      final original = Uint8List.fromList(utf8.encode('keep existing image'));
-      final originalAttachment = Uint8List.fromList(
-        utf8.encode('keep existing attachment'),
+      return archive;
+    }
+
+    const ankiDbOnlySelection = BackupSelection(
+      chatRecordsAndAttachments: false,
+      settings: false,
+      pictures: false,
+      audio: false,
+      videos: false,
+      texts: false,
+      tasks: false,
+      ankiData: true,
+      browserCookies: false,
+      includeMediaFiles: false,
+    );
+    final original = Uint8List.fromList(utf8.encode('keep existing image'));
+    final originalAttachment = Uint8List.fromList(
+      utf8.encode('keep existing attachment'),
+    );
+    WebFileStore.enableTestMode();
+    await writeBackupFile('pictures', 'existing.jpg', original);
+    await writeBackupFile('attachments', 'existing.jpg', originalAttachment);
+    BackupService.restorePathsCaseInsensitiveForTesting = true;
+    try {
+      final archive = buildV2Archive(
+        imageRecords: [
+          {
+            'id': 'ab',
+            'name': 'ab',
+            'hash': 'ab',
+            'format': 'jpg',
+            'createdAt': '2026-01-01T00:00:00.000',
+            'size': 1,
+            'folder': '',
+          },
+          {
+            'id': 'AB',
+            'name': 'AB',
+            'hash': 'AB',
+            'format': 'jpg',
+            'createdAt': '2026-01-01T00:00:00.000',
+            'size': 1,
+            'folder': '',
+          },
+          {
+            'id': 'cafe-nfc',
+            'name': 'café',
+            'hash': 'café',
+            'format': 'jpg',
+            'createdAt': '2026-01-01T00:00:00.000',
+            'size': 1,
+            'folder': '',
+          },
+          {
+            'id': 'cafe-nfd',
+            'name': 'cafe\u0301',
+            'hash': 'cafe\u0301',
+            'format': 'jpg',
+            'createdAt': '2026-01-01T00:00:00.000',
+            'size': 1,
+            'folder': '',
+          },
+          {
+            'id': 'greek-sigma',
+            'name': 'Σ',
+            'hash': 'Σ',
+            'format': 'jpg',
+            'createdAt': '2026-01-01T00:00:00.000',
+            'size': 1,
+            'folder': '',
+          },
+          {
+            'id': 'greek-final-sigma',
+            'name': 'ς',
+            'hash': 'ς',
+            'format': 'jpg',
+            'createdAt': '2026-01-01T00:00:00.000',
+            'size': 1,
+            'folder': '',
+          },
+          {
+            'id': 'sharp-s',
+            'name': 'ß',
+            'hash': 'ß',
+            'format': 'jpg',
+            'createdAt': '2026-01-01T00:00:00.000',
+            'size': 1,
+            'folder': '',
+          },
+          {
+            'id': 'double-s',
+            'name': 'SS',
+            'hash': 'SS',
+            'format': 'jpg',
+            'createdAt': '2026-01-01T00:00:00.000',
+            'size': 1,
+            'folder': '',
+          },
+        ],
+        files: {
+          'pictures/ab.jpg': Uint8List.fromList([1]),
+          'pictures/AB.jpg': Uint8List.fromList([2]),
+          'pictures/café.jpg': Uint8List.fromList([6]),
+          'pictures/cafe\u0301.jpg': Uint8List.fromList([7]),
+          'pictures/Σ.jpg': Uint8List.fromList([8]),
+          'pictures/ς.jpg': Uint8List.fromList([9]),
+          'pictures/ß.jpg': Uint8List.fromList([10]),
+          'pictures/SS.jpg': Uint8List.fromList([11]),
+          'attachments/café.jpg': Uint8List.fromList([12]),
+          'attachments/cafe\u0301.jpg': Uint8List.fromList([13]),
+          'chat_data.json': Uint8List.fromList(
+            utf8.encode('{"conversations":"[]"}'),
+          ),
+          'anki/collection.anki2': Uint8List.fromList([3]),
+          'anki/collection.media/a.jpg': Uint8List.fromList([4]),
+          'anki/collection.media/A.jpg': Uint8List.fromList([5]),
+        },
       );
-      WebFileStore.enableTestMode();
-      await writeBackupFile('pictures', 'existing.jpg', original);
-      await writeBackupFile(
-        'attachments',
-        'existing.jpg',
-        originalAttachment,
+      final zipPath = await writeArchive(archive, 'case_collision.zip');
+
+      await expectLater(
+        BackupService.restoreBackup(zipPath, selection: selection),
+        throwsA(isA<DataManagementPreflightException>()),
       );
-      BackupService.restorePathsCaseInsensitiveForTesting = true;
-      try {
-        final archive = buildV2Archive(
-          imageRecords: [
-            {
-              'id': 'ab',
-              'name': 'ab',
-              'hash': 'ab',
-              'format': 'jpg',
-              'createdAt': '2026-01-01T00:00:00.000',
-              'size': 1,
-              'folder': '',
-            },
-            {
-              'id': 'AB',
-              'name': 'AB',
-              'hash': 'AB',
-              'format': 'jpg',
-              'createdAt': '2026-01-01T00:00:00.000',
-              'size': 1,
-              'folder': '',
-            },
-            {
-              'id': 'cafe-nfc',
-              'name': 'café',
-              'hash': 'café',
-              'format': 'jpg',
-              'createdAt': '2026-01-01T00:00:00.000',
-              'size': 1,
-              'folder': '',
-            },
-            {
-              'id': 'cafe-nfd',
-              'name': 'cafe\u0301',
-              'hash': 'cafe\u0301',
-              'format': 'jpg',
-              'createdAt': '2026-01-01T00:00:00.000',
-              'size': 1,
-              'folder': '',
-            },
-            {
-              'id': 'greek-sigma',
-              'name': 'Σ',
-              'hash': 'Σ',
-              'format': 'jpg',
-              'createdAt': '2026-01-01T00:00:00.000',
-              'size': 1,
-              'folder': '',
-            },
-            {
-              'id': 'greek-final-sigma',
-              'name': 'ς',
-              'hash': 'ς',
-              'format': 'jpg',
-              'createdAt': '2026-01-01T00:00:00.000',
-              'size': 1,
-              'folder': '',
-            },
-            {
-              'id': 'sharp-s',
-              'name': 'ß',
-              'hash': 'ß',
-              'format': 'jpg',
-              'createdAt': '2026-01-01T00:00:00.000',
-              'size': 1,
-              'folder': '',
-            },
-            {
-              'id': 'double-s',
-              'name': 'SS',
-              'hash': 'SS',
-              'format': 'jpg',
-              'createdAt': '2026-01-01T00:00:00.000',
-              'size': 1,
-              'folder': '',
-            },
-          ],
+      expect(
+        await readBackupFile('pictures', 'existing.jpg'),
+        equals(original),
+        reason: 'collision preflight must run before selected media is cleared',
+      );
+
+      var browserRestorePreparationEntered = false;
+      BrowserProfileService.onPrepareForRestoreForTesting = () =>
+          browserRestorePreparationEntered = true;
+      final browserCollisionZip = await writeArchive(
+        buildV2Archive(
           files: {
-            'pictures/ab.jpg': Uint8List.fromList([1]),
-            'pictures/AB.jpg': Uint8List.fromList([2]),
-            'pictures/café.jpg': Uint8List.fromList([6]),
-            'pictures/cafe\u0301.jpg': Uint8List.fromList([7]),
-            'pictures/Σ.jpg': Uint8List.fromList([8]),
-            'pictures/ς.jpg': Uint8List.fromList([9]),
-            'pictures/ß.jpg': Uint8List.fromList([10]),
-            'pictures/SS.jpg': Uint8List.fromList([11]),
-            'attachments/café.jpg': Uint8List.fromList([12]),
-            'attachments/cafe\u0301.jpg': Uint8List.fromList([13]),
+            'pictures/ab.jpg': Uint8List.fromList([30]),
+            'pictures/AB.jpg': Uint8List.fromList([31]),
+            'browser_cookies.json': Uint8List.fromList(utf8.encode('[]')),
+          },
+        ),
+        'browser_collision.zip',
+      );
+      await expectLater(
+        BackupService.restoreBackup(
+          browserCollisionZip,
+          selection: browserAndPicturesSelection,
+        ),
+        throwsA(isA<DataManagementPreflightException>()),
+      );
+      expect(
+        browserRestorePreparationEntered,
+        isFalse,
+        reason: 'collision preflight must preserve an existing browser restore staging directory',
+      );
+      BrowserProfileService.onPrepareForRestoreForTesting = null;
+      await BackupService.restoreBackup(
+        zipPath,
+        selection: ankiDbOnlySelection,
+      );
+      expect(
+        await readBackupFile('pictures', 'existing.jpg'),
+        equals(original),
+        reason: 'database-only Anki restore must ignore unselected media collisions',
+      );
+
+      final prefixCollisionZip = await writeArchive(
+        buildV2Archive(
+          files: {
+            'pictures/Foo': Uint8List.fromList([14]),
+            'pictures/foo/bar.jpg': Uint8List.fromList([15]),
+          },
+        ),
+        'prefix_collision.zip',
+      );
+      await expectLater(
+        BackupService.restoreBackup(
+          prefixCollisionZip,
+          selection: picturesOnlySelection,
+        ),
+        throwsA(isA<DataManagementPreflightException>()),
+      );
+      expect(
+        await readBackupFile('pictures', 'existing.jpg'),
+        equals(original),
+        reason:
+            'file/directory prefix collisions must fail before clearing media',
+      );
+
+      final expansionPrefixZip = await writeArchive(
+        buildV2Archive(
+          files: {
+            'pictures/ß': Uint8List.fromList([16]),
+            'pictures/SS/child.jpg': Uint8List.fromList([17]),
+          },
+        ),
+        'case_expansion_prefix_collision.zip',
+      );
+      BackupService.restorePathsCaseExpansionInsensitiveForTesting = true;
+      await expectLater(
+        BackupService.restoreBackup(
+          expansionPrefixZip,
+          selection: picturesOnlySelection,
+        ),
+        throwsA(isA<DataManagementPreflightException>()),
+      );
+      expect(
+        await readBackupFile('pictures', 'existing.jpg'),
+        equals(original),
+        reason: 'expansion prefix collisions must fail before clearing media',
+      );
+
+      BackupService.restorePathsCaseExpansionInsensitiveForTesting = false;
+      await BackupService.restoreBackup(
+        expansionPrefixZip,
+        selection: picturesOnlySelection,
+      );
+      expect(await readBackupFile('pictures', 'ß'), equals([16]));
+      expect(await readBackupFile('pictures', 'SS/child.jpg'), equals([17]));
+
+      BackupService.restorePathsWindowsNameNormalizationInsensitiveForTesting =
+          true;
+      final windowsNameCollisionZip = await writeArchive(
+        buildV2Archive(
+          files: {
+            'pictures/Foo': Uint8List.fromList([18]),
+            'pictures/foo.': Uint8List.fromList([19]),
+          },
+        ),
+        'windows_name_collision.zip',
+      );
+      await expectLater(
+        BackupService.restoreBackup(
+          windowsNameCollisionZip,
+          selection: picturesOnlySelection,
+        ),
+        throwsA(isA<DataManagementPreflightException>()),
+      );
+      expect(
+        await readBackupFile('pictures', 'existing.jpg'),
+        equals(original),
+      );
+
+      final windowsSpaceCollisionZip = await writeArchive(
+        buildV2Archive(
+          files: {
+            'pictures/Name': Uint8List.fromList([24]),
+            'pictures/name ': Uint8List.fromList([25]),
+          },
+        ),
+        'windows_space_collision.zip',
+      );
+      await expectLater(
+        BackupService.restoreBackup(
+          windowsSpaceCollisionZip,
+          selection: picturesOnlySelection,
+        ),
+        throwsA(isA<DataManagementPreflightException>()),
+      );
+      expect(
+        await readBackupFile('pictures', 'existing.jpg'),
+        equals(original),
+      );
+
+      final windowsPrefixCollisionZip = await writeArchive(
+        buildV2Archive(
+          files: {
+            'pictures/Folder.': Uint8List.fromList([20]),
+            'pictures/folder /child.jpg': Uint8List.fromList([21]),
+          },
+        ),
+        'windows_prefix_collision.zip',
+      );
+      await expectLater(
+        BackupService.restoreBackup(
+          windowsPrefixCollisionZip,
+          selection: picturesOnlySelection,
+        ),
+        throwsA(isA<DataManagementPreflightException>()),
+      );
+      expect(
+        await readBackupFile('pictures', 'existing.jpg'),
+        equals(original),
+      );
+
+      final windowsAttachmentCollisionZip = await writeArchive(
+        buildV2Archive(
+          files: {
+            'attachments/Folder.': Uint8List.fromList([22]),
+            'attachments/folder /child.jpg': Uint8List.fromList([23]),
+          },
+        ),
+        'windows_attachment_prefix_collision.zip',
+      );
+      await expectLater(
+        BackupService.restoreBackup(
+          windowsAttachmentCollisionZip,
+          selection: attachmentsOnlySelection,
+        ),
+        throwsA(isA<DataManagementPreflightException>()),
+      );
+      expect(
+        await readBackupFile('attachments', 'existing.jpg'),
+        equals(originalAttachment),
+      );
+
+      final matchingTaskAttachmentAliasZip = await writeArchive(
+        buildSharedTaskAttachmentArchive(sameContent: true),
+        'matching_task_attachment_alias.zip',
+      );
+      await BackupService.restoreBackup(
+        matchingTaskAttachmentAliasZip,
+        selection: attachmentsAndTasksSelection,
+      );
+      expect(
+        await readBackupFile('attachments', 'shared.txt'),
+        equals([32, 33]),
+      );
+
+      await writeBackupFile('attachments', 'existing.jpg', originalAttachment);
+      final mismatchedTaskAttachmentAliasZip = await writeArchive(
+        buildSharedTaskAttachmentArchive(sameContent: false),
+        'mismatched_task_attachment_alias.zip',
+      );
+      await expectLater(
+        BackupService.restoreBackup(
+          mismatchedTaskAttachmentAliasZip,
+          selection: attachmentsAndTasksSelection,
+        ),
+        throwsA(isA<DataManagementPreflightException>()),
+      );
+      expect(
+        await readBackupFile('attachments', 'existing.jpg'),
+        equals(originalAttachment),
+        reason: 'different-content shared attachment aliases must fail before clearing files',
+      );
+
+      SharedPreferences.setMockInitialValues({
+        'conversations': jsonEncode([
+          {
+            'messages': [
+              {
+                'attachments': [
+                  {'storagePath': 'attachments/foo.'},
+                ],
+              },
+            ],
+          },
+        ]),
+      });
+      final protectedAttachmentBytes = Uint8List.fromList([42]);
+      await writeBackupFile('attachments', 'foo.', protectedAttachmentBytes);
+      final protectedAttachmentCollisionZip = await writeArchive(
+        buildTaskAttachmentArchive('Foo'),
+        'protected_attachment_collision.zip',
+      );
+      await expectLater(
+        BackupService.restoreBackup(
+          protectedAttachmentCollisionZip,
+          selection: tasksOnlySelection,
+        ),
+        throwsA(isA<DataManagementPreflightException>()),
+      );
+      expect(
+        await readBackupFile('attachments', 'foo.'),
+        equals(protectedAttachmentBytes),
+        reason: 'Windows-equivalent unselected chat attachment references must be preserved',
+      );
+      SharedPreferences.setMockInitialValues({});
+
+      final windowsAttachmentFileCollisionZip = await writeArchive(
+        buildV2Archive(
+          files: {
+            'attachments/Name': Uint8List.fromList([26]),
+            'attachments/name.': Uint8List.fromList([27]),
+          },
+        ),
+        'windows_attachment_file_collision.zip',
+      );
+      await expectLater(
+        BackupService.restoreBackup(
+          windowsAttachmentFileCollisionZip,
+          selection: attachmentsOnlySelection,
+        ),
+        throwsA(isA<DataManagementPreflightException>()),
+      );
+      expect(
+        await readBackupFile('attachments', 'existing.jpg'),
+        equals(originalAttachment),
+      );
+
+      BackupService.restorePathsCaseInsensitiveForTesting = false;
+      final caseSensitiveWindowsZip = await writeArchive(
+        buildV2Archive(
+          files: {
+            'pictures/Foo.': Uint8List.fromList([28]),
+            'pictures/foo.': Uint8List.fromList([29]),
+          },
+        ),
+        'case_sensitive_windows_names.zip',
+      );
+      await BackupService.restoreBackup(
+        caseSensitiveWindowsZip,
+        selection: picturesOnlySelection,
+      );
+      expect(await readBackupFile('pictures', 'Foo.'), equals([28]));
+      expect(await readBackupFile('pictures', 'foo.'), equals([29]));
+
+      final caseSensitiveAttachmentZip = await writeArchive(
+        buildV2Archive(
+          files: {
             'chat_data.json': Uint8List.fromList(
               utf8.encode('{"conversations":"[]"}'),
             ),
-            'anki/collection.anki2': Uint8List.fromList([3]),
-            'anki/collection.media/a.jpg': Uint8List.fromList([4]),
-            'anki/collection.media/A.jpg': Uint8List.fromList([5]),
+            'attachments/Foo': Uint8List.fromList([43]),
+            'attachments/foo': Uint8List.fromList([44]),
           },
-        );
-        final zipPath = await writeArchive(archive, 'case_collision.zip');
+        ),
+        'case_sensitive_windows_attachments.zip',
+      );
+      await BackupService.restoreBackup(
+        caseSensitiveAttachmentZip,
+        selection: attachmentsOnlySelection,
+      );
+      expect(await readBackupFile('attachments', 'Foo'), equals([43]));
+      expect(await readBackupFile('attachments', 'foo'), equals([44]));
 
-        await expectLater(
-          BackupService.restoreBackup(zipPath, selection: selection),
-          throwsA(isA<DataManagementPreflightException>()),
-        );
-        expect(
-          await readBackupFile('pictures', 'existing.jpg'),
-          equals(original),
-          reason: 'collision preflight must run before selected media is cleared',
-        );
-        await BackupService.restoreBackup(
+      BackupService.restorePathsNormalizationInsensitiveForTesting = true;
+      await expectLater(
+        BackupService.restoreBackup(zipPath, selection: picturesOnlySelection),
+        throwsA(isA<DataManagementPreflightException>()),
+      );
+      expect(
+        await readBackupFile('pictures', 'existing.jpg'),
+        equals(original),
+        reason: 'normalization collision must also fail before selected files are cleared',
+      );
+      await expectLater(
+        BackupService.restoreBackup(
           zipPath,
-          selection: ankiDbOnlySelection,
-        );
-        expect(
-          await readBackupFile('pictures', 'existing.jpg'),
-          equals(original),
-          reason: 'database-only Anki restore must ignore unselected media collisions',
-        );
-
-        final prefixCollisionZip = await writeArchive(
-          buildV2Archive(
-            files: {
-              'pictures/Foo': Uint8List.fromList([14]),
-              'pictures/foo/bar.jpg': Uint8List.fromList([15]),
-            },
+          selection: const BackupSelection(
+            chatRecordsAndAttachments: true,
+            settings: false,
+            pictures: false,
+            audio: false,
+            videos: false,
+            texts: false,
+            tasks: false,
+            ankiData: false,
+            browserCookies: false,
           ),
-          'prefix_collision.zip',
-        );
-        await expectLater(
-          BackupService.restoreBackup(
-            prefixCollisionZip,
-            selection: picturesOnlySelection,
-          ),
-          throwsA(isA<DataManagementPreflightException>()),
-        );
-        expect(
-          await readBackupFile('pictures', 'existing.jpg'),
-          equals(original),
-          reason: 'file/directory prefix collisions must fail before clearing media',
-        );
+        ),
+        throwsA(isA<DataManagementPreflightException>()),
+      );
+      expect(
+        await readBackupFile('attachments', 'existing.jpg'),
+        equals(originalAttachment),
+        reason:
+            'attachment collisions must fail before selected files are cleared',
+      );
 
-        final expansionPrefixZip = await writeArchive(
-          buildV2Archive(
-            files: {
-              'pictures/ß': Uint8List.fromList([16]),
-              'pictures/SS/child.jpg': Uint8List.fromList([17]),
-            },
-          ),
-          'case_expansion_prefix_collision.zip',
-        );
-        BackupService.restorePathsCaseExpansionInsensitiveForTesting = true;
-        await expectLater(
-          BackupService.restoreBackup(
-            expansionPrefixZip,
-            selection: picturesOnlySelection,
-          ),
-          throwsA(isA<DataManagementPreflightException>()),
-        );
-        expect(
-          await readBackupFile('pictures', 'existing.jpg'),
-          equals(original),
-          reason: 'expansion prefix collisions must fail before clearing media',
-        );
+      BackupService.restorePathsNormalizationInsensitiveForTesting = false;
+      await BackupService.restoreBackup(
+        zipPath,
+        selection: picturesOnlySelection,
+      );
+      expect(await readBackupFile('pictures', 'ab.jpg'), equals([1]));
+      expect(await readBackupFile('pictures', 'AB.jpg'), equals([2]));
+      expect(await readBackupFile('pictures', 'café.jpg'), equals([6]));
+      expect(await readBackupFile('pictures', 'cafe\u0301.jpg'), equals([7]));
+      expect(await readBackupFile('pictures', 'Σ.jpg'), equals([8]));
+      expect(await readBackupFile('pictures', 'ς.jpg'), equals([9]));
+      expect(await readBackupFile('pictures', 'ß.jpg'), equals([10]));
+      expect(await readBackupFile('pictures', 'SS.jpg'), equals([11]));
 
-        BackupService.restorePathsCaseExpansionInsensitiveForTesting = false;
-        await BackupService.restoreBackup(
-          expansionPrefixZip,
-          selection: picturesOnlySelection,
-        );
-        expect(await readBackupFile('pictures', 'ß'), equals([16]));
-        expect(
-          await readBackupFile('pictures', 'SS/child.jpg'),
-          equals([17]),
-        );
-
-        BackupService.restorePathsCaseInsensitiveForTesting = false;
-        BackupService.restorePathsNormalizationInsensitiveForTesting = true;
-        await expectLater(
-          BackupService.restoreBackup(
-            zipPath,
-            selection: picturesOnlySelection,
-          ),
-          throwsA(isA<DataManagementPreflightException>()),
-        );
-        expect(
-          await readBackupFile('pictures', 'existing.jpg'),
-          equals(original),
-          reason: 'normalization collision must also fail before selected files are cleared',
-        );
-        await expectLater(
-          BackupService.restoreBackup(
-            zipPath,
-            selection: const BackupSelection(
-              chatRecordsAndAttachments: true,
-              settings: false,
-              pictures: false,
-              audio: false,
-              videos: false,
-              texts: false,
-              tasks: false,
-              ankiData: false,
-              browserCookies: false,
-            ),
-          ),
-          throwsA(isA<DataManagementPreflightException>()),
-        );
-        expect(
-          await readBackupFile('attachments', 'existing.jpg'),
-          equals(originalAttachment),
-          reason: 'attachment collisions must fail before selected files are cleared',
-        );
-
-        BackupService.restorePathsNormalizationInsensitiveForTesting = false;
-        await BackupService.restoreBackup(
-          zipPath,
-          selection: picturesOnlySelection,
-        );
-        expect(await readBackupFile('pictures', 'ab.jpg'), equals([1]));
-        expect(await readBackupFile('pictures', 'AB.jpg'), equals([2]));
-        expect(
-          await readBackupFile('pictures', 'café.jpg'),
-          equals([6]),
-        );
-        expect(
-          await readBackupFile('pictures', 'cafe\u0301.jpg'),
-          equals([7]),
-        );
-        expect(await readBackupFile('pictures', 'Σ.jpg'), equals([8]));
-        expect(await readBackupFile('pictures', 'ς.jpg'), equals([9]));
-        expect(await readBackupFile('pictures', 'ß.jpg'), equals([10]));
-        expect(await readBackupFile('pictures', 'SS.jpg'), equals([11]));
-
-        BackupService.restorePathsCaseInsensitiveForTesting = true;
-        final expansionArchive = buildV2Archive(
-          imageRecords: [
-            {
-              'id': 'sharp-s',
-              'name': 'ß',
-              'hash': 'ß',
-              'format': 'jpg',
-              'createdAt': '2026-01-01T00:00:00.000',
-              'size': 1,
-              'folder': '',
-            },
-            {
-              'id': 'double-s',
-              'name': 'SS',
-              'hash': 'SS',
-              'format': 'jpg',
-              'createdAt': '2026-01-01T00:00:00.000',
-              'size': 1,
-              'folder': '',
-            },
-          ],
-          files: {
-            'pictures/ß.jpg': Uint8List.fromList([10]),
-            'pictures/SS.jpg': Uint8List.fromList([11]),
+      BackupService.restorePathsCaseInsensitiveForTesting = true;
+      final expansionArchive = buildV2Archive(
+        imageRecords: [
+          {
+            'id': 'sharp-s',
+            'name': 'ß',
+            'hash': 'ß',
+            'format': 'jpg',
+            'createdAt': '2026-01-01T00:00:00.000',
+            'size': 1,
+            'folder': '',
           },
-        );
-        final expansionZip = await writeArchive(
-          expansionArchive,
-          'case_expansion.zip',
-        );
-        await BackupService.restoreBackup(
-          expansionZip,
-          selection: picturesOnlySelection,
-        );
-        expect(await readBackupFile('pictures', 'ß.jpg'), equals([10]));
-        expect(await readBackupFile('pictures', 'SS.jpg'), equals([11]));
-      } finally {
-        BackupService.restorePathsCaseInsensitiveForTesting = null;
-        BackupService.restorePathsNormalizationInsensitiveForTesting = null;
-        BackupService.restorePathsCaseExpansionInsensitiveForTesting = null;
-        WebFileStore.disableTestMode();
-      }
-    },
-  );
+          {
+            'id': 'double-s',
+            'name': 'SS',
+            'hash': 'SS',
+            'format': 'jpg',
+            'createdAt': '2026-01-01T00:00:00.000',
+            'size': 1,
+            'folder': '',
+          },
+        ],
+        files: {
+          'pictures/ß.jpg': Uint8List.fromList([10]),
+          'pictures/SS.jpg': Uint8List.fromList([11]),
+        },
+      );
+      final expansionZip = await writeArchive(
+        expansionArchive,
+        'case_expansion.zip',
+      );
+      await BackupService.restoreBackup(
+        expansionZip,
+        selection: picturesOnlySelection,
+      );
+      expect(await readBackupFile('pictures', 'ß.jpg'), equals([10]));
+      expect(await readBackupFile('pictures', 'SS.jpg'), equals([11]));
+    } finally {
+      BrowserProfileService.onPrepareForRestoreForTesting = null;
+      BackupService.restorePathsCaseInsensitiveForTesting = null;
+      BackupService.restorePathsNormalizationInsensitiveForTesting = null;
+      BackupService.restorePathsCaseExpansionInsensitiveForTesting = null;
+      BackupService.restorePathsWindowsNameNormalizationInsensitiveForTesting =
+          null;
+      WebFileStore.disableTestMode();
+    }
+  });
 
   test(
     'restoreBackup validates malformed task JSON before mutating restored data',
@@ -1381,19 +1732,20 @@ int _zipCrc32(List<int> bytes) {
   for (final byte in bytes) {
     checksum ^= byte;
     for (var bit = 0; bit < 8; bit++) {
-      checksum =
-          (checksum & 1) != 0 ? (checksum >> 1) ^ 0xedb88320 : checksum >> 1;
+      checksum = (checksum & 1) != 0
+          ? (checksum >> 1) ^ 0xedb88320
+          : checksum >> 1;
     }
   }
   return (checksum ^ 0xffffffff) & 0xffffffff;
 }
 
 Uint8List _le32(int v) => Uint8List.fromList([
-      v & 0xff,
-      (v >> 8) & 0xff,
-      (v >> 16) & 0xff,
-      (v >> 24) & 0xff,
-    ]);
+  v & 0xff,
+  (v >> 8) & 0xff,
+  (v >> 16) & 0xff,
+  (v >> 24) & 0xff,
+]);
 
 Uint8List _le64(int v) {
   final b = Uint8List(8);
