@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -30,6 +31,7 @@ void main() {
 
   tearDown(() async {
     SnapshotService.debugNow = null;
+    SnapshotService.debugAfterBackupCreated = null;
     try {
       if (await snapDir.exists()) {
         await snapDir.delete(recursive: true);
@@ -225,6 +227,42 @@ void main() {
       // 清理时删除 tmp 残留
       await SnapshotService.cleanupOldSnapshots();
       expect(await tmpFile.exists(), isFalse, reason: 'cleanup 应清理 tmp 残留');
+    });
+
+    test('cleanup waits for an active snapshot write before deleting tmp files',
+        () async {
+      SharedPreferences.setMockInitialValues({
+        'conversations': '[{"id":"concurrent_snapshot"}]',
+      });
+      final writeStarted = Completer<void>();
+      final finishWrite = Completer<void>();
+      SnapshotService.debugAfterBackupCreated = (_) async {
+        writeStarted.complete();
+        await finishWrite.future;
+      };
+
+      final snapshotFuture = SnapshotService.createSnapshot(force: true);
+      await writeStarted.future;
+      final tmpFile = (await snapDir.list().toList())
+          .whereType<File>()
+          .singleWhere((file) => file.path.endsWith('.zip.tmp'));
+      expect(await tmpFile.exists(), isTrue);
+
+      var cleanupFinished = false;
+      final cleanupFuture = SnapshotService.cleanupOldSnapshots().then((_) {
+        cleanupFinished = true;
+      });
+      await Future<void>.delayed(Duration.zero);
+      expect(cleanupFinished, isFalse,
+          reason: 'cleanup must wait while snapshot creation owns a temp file');
+      expect(await tmpFile.exists(), isTrue);
+
+      finishWrite.complete();
+      final snapshot = await snapshotFuture;
+      await cleanupFuture;
+      expect(snapshot, isNotNull);
+      expect(await snapshot!.exists(), isTrue);
+      expect(await tmpFile.exists(), isFalse);
     });
   });
 }

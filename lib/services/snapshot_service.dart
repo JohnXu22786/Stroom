@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -88,6 +89,28 @@ class SnapshotService {
   /// 测试钩子：覆盖当前时间。
   @visibleForTesting
   static DateTime Function()? debugNow;
+
+  /// Test hook to hold a completed archive before it is hashed and published.
+  @visibleForTesting
+  static Future<void> Function(File)? debugAfterBackupCreated;
+
+  // Snapshot creation and retention cleanup share the directory's temporary
+  // files. Queue both operations so cleanup cannot remove a file mid-write and
+  // concurrent forced snapshots cannot collide on their timestamped path.
+  static Future<void> _operationTail = Future<void>.value();
+
+  static Future<T> _withSnapshotOperation<T>(
+      Future<T> Function() operation) async {
+    final previous = _operationTail;
+    final finished = Completer<void>();
+    _operationTail = finished.future;
+    await previous;
+    try {
+      return await operation();
+    } finally {
+      finished.complete();
+    }
+  }
 
   static DateTime _now() => debugNow?.call() ?? DateTime.now();
 
@@ -215,7 +238,10 @@ class SnapshotService {
   /// [force] 为 true 时无视 1 小时规则（迁移前快照）。
   /// 返回快照文件；1 小时规则命中时返回 null（不算失败）；
   /// 创建失败返回 null 并记日志。
-  static Future<File?> createSnapshot({bool force = false}) async {
+  static Future<File?> createSnapshot({bool force = false}) =>
+      _withSnapshotOperation(() => _createSnapshot(force: force));
+
+  static Future<File?> _createSnapshot({required bool force}) async {
     if (kIsWeb) return null;
     try {
       if (!force && await hasSnapshotWithinHour()) {
@@ -237,6 +263,7 @@ class SnapshotService {
       );
 
       final file = File(tmpPath);
+      await debugAfterBackupCreated?.call(file);
       final sha = await computeSha256ForFile(file.path);
       await file.rename(zipPath);
 
@@ -252,7 +279,7 @@ class SnapshotService {
       index.add(entry);
       await _writeIndex(index);
 
-      await cleanupOldSnapshots();
+      await _cleanupOldSnapshots();
       await AppLogService.info('SnapshotService', '结构化快照完成: $zipName');
       return File(zipPath);
     } catch (e) {
@@ -302,7 +329,10 @@ class SnapshotService {
   /// 清理超出保留策略的旧快照（策略与旧 AutoBackups 一致）。
   ///
   /// 同时清理崩溃残留的 `*.zip.tmp` 写入中文件。
-  static Future<void> cleanupOldSnapshots() async {
+  static Future<void> cleanupOldSnapshots() =>
+      _withSnapshotOperation(_cleanupOldSnapshots);
+
+  static Future<void> _cleanupOldSnapshots() async {
     try {
       final dir = await snapshotsDir;
       if (!await dir.exists()) return;
