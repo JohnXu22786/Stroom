@@ -245,11 +245,9 @@ Future<Uint8List> encodeAdpcmWithEventLoopYield(
   final output = BytesBuilder(copy: false);
   final blockCount =
       (pcmSamples.length + config.blockSize - 1) ~/ config.blockSize;
-  for (
-    var firstBlock = 0;
-    firstBlock < blockCount;
-    firstBlock += yieldEveryBlocks
-  ) {
+  for (var firstBlock = 0;
+      firstBlock < blockCount;
+      firstBlock += yieldEveryBlocks) {
     checkCancelled?.call();
     final lastBlock = (firstBlock + yieldEveryBlocks).clamp(0, blockCount);
     final firstSample = firstBlock * config.blockSize;
