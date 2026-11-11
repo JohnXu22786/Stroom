@@ -57,7 +57,7 @@ void main() {
       expect(find.byType(DropdownButton<String>), findsNWidgets(4));
       expect(tester.takeException(), isNull, reason: 'Dialog width: $width');
 
-      await tester.pageBack();
+      await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
     }
   });
