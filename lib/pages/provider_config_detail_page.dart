@@ -164,7 +164,9 @@ class _ProviderConfigDetailPageState
             models: _pendingModels.map((m) => m.copy()).toList(),
             // Recommend lossless size reduction for newly created ASR
             // providers. Existing configs without this key still load as-is.
-            typeConfig: entry.type == 'asr' ? {'compression': 'flac'} : {},
+            typeConfig: entry.type == 'asr'
+                ? {'compression': 'flac', 'fallbackMethod': 'all'}
+                : {},
           );
 
     final result = await showProviderSettingsPanel(

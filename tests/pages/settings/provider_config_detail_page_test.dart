@@ -154,6 +154,37 @@ void main() {
         isNotEmpty,
         reason: 'new ASR providers should default to lossless compression',
       );
+
+      final fallbackDropdown = tester
+          .widgetList<DropdownButton<String>>(
+              find.byType(DropdownButton<String>))
+          .where((dropdown) => dropdown.value == 'all');
+      expect(
+        fallbackDropdown,
+        isNotEmpty,
+        reason: 'new ASR providers should default to the recommended fallback',
+      );
+
+      await tester.enterText(find.byType(TextField).at(0), 'NewASRProvider');
+      await tester.enterText(
+        find.byType(TextField).at(1),
+        'https://api.asr.test',
+      );
+      await tester.enterText(find.byType(TextField).at(2), 'test-key');
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(ProviderConfigDetailPage)),
+      );
+      final savedConfig = container
+          .read(providerEntriesProvider)
+          .entries
+          .single
+          .configs
+          .single;
+      expect(savedConfig.typeConfig['compression'], 'flac');
+      expect(savedConfig.typeConfig['fallbackMethod'], 'all');
     });
 
     testWidgets('opens settings panel auto for new config with 3 TextFields', (
