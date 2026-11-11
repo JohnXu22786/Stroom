@@ -911,6 +911,101 @@ void main() {
     );
 
     test(
+      'failed OCR removal suppresses stale failure callbacks in every locale',
+      () async {
+        for (final (locale, cancellationError) in [
+          (const Locale('es'), 'Cancelado'),
+          (const Locale('ja'), 'キャンセル'),
+          (const Locale('ko'), '취소됨'),
+        ]) {
+          final taskId = 'ocr-removal-stale-failure-${locale.languageCode}';
+          SharedPreferences.setMockInitialValues({
+            'notifications_enabled': true,
+          });
+          final notificationService = NotificationService();
+          var staleFailureNotifications = 0;
+          notificationService.onInAppNotification = (payload) {
+            if (payload.taskId == taskId &&
+                payload.type == NotificationType.taskFailed) {
+              staleFailureNotifications++;
+            }
+          };
+
+          final retryData = OcrRetrySnapshot.capture(images: []).toMap();
+          final seed = BackgroundTaskNotifier();
+          seed.addTask(
+            type: BackgroundTaskType.ocr,
+            title: 'OCR retry task',
+            retryData: retryData,
+            startImmediately: false,
+            taskId: taskId,
+          );
+          await seed.pendingPersistence;
+          seed.dispose();
+          await seed.pendingPersistence;
+
+          final notifier = BackgroundTaskNotifier(
+            localizationsResolver: () => appLocalizationsForLocale(locale),
+          );
+          final cancellationHandled = Completer<void>();
+          var cancellationHandledWhileAbsent = false;
+          try {
+            expect(await notifier.restoreFromPersistence(), isTrue);
+            expect(notifier.taskById(taskId)?.status, TaskStatus.waiting);
+            expect(notifier.startTaskIfWaiting(taskId), isTrue);
+            notifier.setSteps(taskId, [
+              BgTaskStep(
+                label: 'OCR in progress',
+                status: BgStepStatus.running,
+              ),
+              BgTaskStep(label: 'Save result', status: BgStepStatus.pending),
+            ]);
+            await notifier.pendingPersistence;
+            notifier.registerCancellation(taskId, () {
+              notifier.failTask(taskId, error: 'Canceled by removal');
+              expect(notifier.taskById(taskId)?.status, TaskStatus.running);
+              scheduleMicrotask(() {
+                cancellationHandledWhileAbsent =
+                    notifier.taskById(taskId) == null;
+                cancellationHandled.complete();
+              });
+            });
+            BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = () async {
+              throw StateError('simulated OCR task removal write failure');
+            };
+
+            notifier.removeTask(taskId);
+            await cancellationHandled.future;
+            await notifier.pendingPersistence;
+            await Future<void>.delayed(Duration.zero);
+
+            // A late runner callback after rollback must not convert the
+            // localized cancellation outcome into a failure.
+            notifier.failTask(taskId, error: 'OCR failed after cancellation');
+            await notifier.pendingPersistence;
+            await Future<void>.delayed(Duration.zero);
+
+            final restored = notifier.taskById(taskId)!;
+            expect(cancellationHandledWhileAbsent, isTrue);
+            expect(restored.id, taskId);
+            expect(restored.status, TaskStatus.waiting);
+            expect(restored.error, cancellationError);
+            expect(restored.steps.first.status, BgStepStatus.failed);
+            expect(restored.steps.last.status, BgStepStatus.skipped);
+            expect(restored.retryData, retryData);
+            expect(staleFailureNotifications, 0);
+          } finally {
+            BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = null;
+            notificationService.onInAppNotification = null;
+            SharedPreferences.setMockInitialValues({});
+            notifier.dispose();
+            await notifier.pendingPersistence;
+          }
+        }
+      },
+    );
+
+    test(
       'repeated removeTask keeps pending OCR rollback ownership',
       () async {
         const taskId = 'ocr-repeated-removal-write-failure';

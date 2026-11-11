@@ -26,7 +26,11 @@ import 'task_provider.dart';
 const _unrestoredTaskRecordMarker = {'_unrestoredTaskRecord': true};
 
 bool _isBackgroundTaskCancellationError(String? error) =>
-    error == '已取消' || error == 'Canceled';
+    error == '已取消' ||
+    error == 'Canceled' ||
+    error == 'Cancelado' ||
+    error == 'キャンセル' ||
+    error == '취소됨';
 
 Map<String, dynamic> _unrestoredTaskRecord({
   required bool retryAudioOwnershipKnown,
