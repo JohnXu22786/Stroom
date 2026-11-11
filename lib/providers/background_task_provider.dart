@@ -937,7 +937,28 @@ String? _sanitizeOcrTaskError(
   }
   if (error != null &&
       _legacyOcrTextContainsMaskedCredential(error, credentialValues)) {
-    return 'OCR 错误详情已隐藏';
+    final englishStrings = lookupAppLocalizations(const Locale('en'));
+    final hiddenDetails = _localizedOcrHiddenTaskError(
+      englishStrings,
+      credentialValues,
+    );
+    final statusCode = RegExp(
+      r'\bHTTP\s+([1-5][0-9]{2})\b',
+      caseSensitive: false,
+    ).firstMatch(error)?.group(1);
+    final safeStatus = statusCode == null ? null : 'HTTP $statusCode';
+    final summary = safeStatus != null &&
+            !_legacyOcrTextContainsCredential(safeStatus, credentialValues) &&
+            !_legacyOcrTextContainsMaskedCredential(
+              safeStatus,
+              credentialValues,
+            )
+        ? '$hiddenDetails（$safeStatus）'
+        : hiddenDetails;
+    return _legacyOcrTextContainsCredential(summary, credentialValues) ||
+            _legacyOcrTextContainsMaskedCredential(summary, credentialValues)
+        ? '…'
+        : summary;
   }
   return OcrDiagnosticSnapshot.sanitizeStoredTaskError(
     error,
@@ -2801,6 +2822,33 @@ bool _legacyOcrHasSafeRedactedInstruction(
     caseSensitive: false,
     dotAll: true,
   ).hasMatch(text);
+  final safeNonEnglishActionLead = [
+    RegExp(
+      r'^\s*(?:(?:この|その|添付の|画像の|写真の)?'
+      r'(?:領収書|レシート|請求書|画像|写真|文書|書類|ページ)'
+      r'(?:の(?:合計|総額|日付|店名|内容|文字))?(?:を|から)?)?'
+      r'(?:読み取って|読んで|認識して|抽出して|翻訳して|確認して|要約して|分析して|説明して|分類して|文字起こしして)'
+      r'(?:ください|下さい)?[。.!！?？]?\s*\[redacted\]\s*$',
+    ),
+    RegExp(
+      r'^\s*(?:(?:이|그|첨부된)?(?:영수증|청구서|문서|이미지|사진|페이지)'
+      r'(?:의\s*(?:총액|날짜|내용|문자|글자))?(?:을|를)?\s*)?'
+      r'(?:읽어(?:\s*주세요)?|추출해\s*주세요|인식해\s*주세요|번역해\s*주세요|확인해\s*주세요|요약해\s*주세요|분석해\s*주세요|설명해\s*주세요|분류해\s*주세요|처리해\s*주세요)'
+      r'[。.!！?？]?\s*\[redacted\]\s*$',
+    ),
+    RegExp(
+      r'^\s*(?:(?:من فضلك|يرجى)\s+)?'
+      r'(?:اقرأ|استخرج|تعرّف|تعرف|ترجم|لخّص|حلل|افحص|صف|عالج)\s+'
+      r'(?:على\s+)?'
+      r'(?:إجمالي(?:\s+(?:هذا|هذه))?\s+(?:الإيصال|الفاتورة)|'
+      r'تاريخ(?:\s+(?:هذا|هذه))?\s+(?:الإيصال|الفاتورة)|'
+      r'(?:نص|محتوى|كتابة)(?:\s+(?:هذا|هذه))?\s+'
+      r'(?:الإيصال|الفاتورة|الصورة|المستند|الوثيقة)|'
+      r'(?:هذا|هذه)\s+(?:الإيصال|الفاتورة|الصورة|المستند|الوثيقة)|'
+      r'(?:الإيصال|الفاتورة|الصورة|المستند|الوثيقة))'
+      r'[。.!！?؟]?\s*\[redacted\]\s*$',
+    ),
+  ].any((pattern) => pattern.hasMatch(text));
   final bareRedactedAction = RegExp(
     r'^\s*(?:please\s+)?(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|extract|interpret|count|find|search|locate|transcribe|translate|classify|calculate|explain|process|show|tell|check|look|scan|ocr|decode)\s+\[redacted\]\s*[.!?]?\s*$',
     caseSensitive: false,
@@ -2812,7 +2860,8 @@ bool _legacyOcrHasSafeRedactedInstruction(
       safeScanContext ||
       safeImageContext ||
       safeReceiptContextAction ||
-      safeKeepLead;
+      safeKeepLead ||
+      safeNonEnglishActionLead;
 }
 
 bool _legacyOcrHasShortDocumentationApiKeyEcho(
@@ -5699,8 +5748,11 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
                 ? DateTime.now()
                 : null,
       );
-      updatedTask = updated;
-      return updated;
+      final localized = updated.type == BackgroundTaskType.ocr
+          ? _localizeRestoredBackgroundTask(updated, localizations)
+          : updated;
+      updatedTask = localized;
+      return localized;
     }).toList();
     _persistTasks();
 
