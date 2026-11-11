@@ -32,8 +32,7 @@ void failSubTask(
     error: error,
     rawRequest: rawRequest,
     rawResponse: rawResponse,
-    ocrCredentialValuesForSanitization:
-        ocrCredentialValuesForSanitization,
+    ocrCredentialValuesForSanitization: ocrCredentialValuesForSanitization,
   );
   execNotifier.updateSubTaskStatus(execId, flowSubTaskId, TaskStatus.failed);
 }
