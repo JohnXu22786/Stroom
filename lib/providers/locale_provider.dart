@@ -42,6 +42,9 @@ Locale resolveSystemLocale(Locale systemLocale) {
   if (systemLocale.languageCode == 'pt') {
     return const Locale('pt', 'BR');
   }
+  if (systemLocale.languageCode == 'fr') {
+    return const Locale('fr', 'FR');
+  }
   return const Locale('en', 'US');
 }
 

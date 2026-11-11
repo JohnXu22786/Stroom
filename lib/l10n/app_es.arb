@@ -3203,6 +3203,7 @@
   "emojiCategoryFlags": "Banderas",
   "languageNameSpanish": "Español",
   "languageNameJapanese": "japonés",
+  "languageNameFrench": "Francés",
   "@topicAssistantUpdateCheckFailed": {
     "placeholders": {
       "error": {}
