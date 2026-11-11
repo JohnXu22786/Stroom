@@ -43,6 +43,7 @@ PNG_PRE_IDAT_CHUNKS = {
 MAX_PNG_DIMENSION = 8192
 MAX_PNG_PIXELS = 4_000_000
 MAX_PNG_DECODED_BYTES = 64 * 1024 * 1024
+MAX_PNG_ENCODED_BYTES = 8 * 1024 * 1024
 OUTPUT_FORMATS = {"plain_text", "markdown", "table", "latex"}
 # Keep accepted settings nesting well below Python's recursion limit so validation
 # reports malformed input instead of exhausting the interpreter stack.
@@ -2536,10 +2537,7 @@ def verify_fixtures(
         _reject_output_input_collision(
             output_path, [("fixture image", image_path)]
         )
-        try:
-            image_bytes = image_path.read_bytes()
-        except OSError as error:
-            raise EvaluationError(f"{fixture_id}: cannot read {image}: {error}") from error
+        image_bytes = _read_fixture_png(image_path, fixture_id, image)
         _validate_png(image_bytes, fixture_id)
         actual_digest = hashlib.sha256(image_bytes).hexdigest()
         if actual_digest != digest:
@@ -2558,6 +2556,25 @@ def verify_fixtures(
         "categories": sorted(categories),
         "images_verified": len(fixtures),
     }
+
+
+def _read_fixture_png(
+    image_path: Path, fixture_id: str, image: str = "PNG"
+) -> bytes:
+    try:
+        if image_path.stat().st_size > MAX_PNG_ENCODED_BYTES:
+            raise EvaluationError(
+                f"{fixture_id}: PNG exceeds the maximum encoded fixture size"
+            )
+        with image_path.open("rb") as image_file:
+            image_bytes = image_file.read(MAX_PNG_ENCODED_BYTES + 1)
+    except OSError as error:
+        raise EvaluationError(f"{fixture_id}: cannot read {image}: {error}") from error
+    if len(image_bytes) > MAX_PNG_ENCODED_BYTES:
+        raise EvaluationError(
+            f"{fixture_id}: PNG exceeds the maximum encoded fixture size"
+        )
+    return image_bytes
 
 
 def _read_json(path: Path) -> dict[str, Any]:
