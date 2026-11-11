@@ -7012,5 +7012,6 @@
         "type": "int"
       }
     }
-  }
+  },
+  "fileManagerDeleteEmptyFolderWithSubfoldersConfirm": "¿Eliminar la carpeta vacía “{name}”? También se eliminarán sus {count} subcarpetas."
 }

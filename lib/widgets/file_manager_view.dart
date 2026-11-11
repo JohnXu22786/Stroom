@@ -2816,8 +2816,14 @@ class _FileManagerViewState<T extends FileRecord>
     final message = fileCount > 0
         ? AppLocalizations.of(context)!
             .fileManagerDeleteFolderConfirm(fileCount, folderName)
-        : AppLocalizations.of(context)!
-            .fileManagerDeleteEmptyFolderConfirm(folderName);
+        : descendants.isNotEmpty
+            ? AppLocalizations.of(context)!
+                .fileManagerDeleteEmptyFolderWithSubfoldersConfirm(
+                  descendants.length,
+                  folderName,
+                )
+            : AppLocalizations.of(context)!
+                .fileManagerDeleteEmptyFolderConfirm(folderName);
 
     final confirmed = await showDialog<bool>(
       context: context,

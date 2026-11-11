@@ -11801,6 +11801,14 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get languageNameJapanese => 'Japanese';
+
+  @override
+  String fileManagerDeleteEmptyFolderWithSubfoldersConfirm(
+    Object count,
+    Object name,
+  ) {
+    return 'Delete empty folder “$name”? Its $count nested folders will also be deleted.';
+  }
 }
 
 /// The translations for English, as used in the United States (`en_US`).
@@ -23599,4 +23607,12 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String get languageNameJapanese => 'Japanese';
+
+  @override
+  String fileManagerDeleteEmptyFolderWithSubfoldersConfirm(
+    Object count,
+    Object name,
+  ) {
+    return 'Delete empty folder “$name”? Its $count nested folders will also be deleted.';
+  }
 }

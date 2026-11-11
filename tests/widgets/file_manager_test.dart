@@ -1521,6 +1521,35 @@ void main() {
         );
 
     testWidgets(
+      'empty folder deletion warns that nested folders will also be deleted',
+      (tester) async {
+        final deletedFolders = <String>[];
+        await tester.pumpWidget(
+          _buildTestApp(
+            buildBatchFM(
+              records: const [],
+              folders: {'a', 'a/b', 'a/b/c'},
+              onDeleteFolder: (name) async => deletedFolders.add(name),
+            ),
+          ),
+        );
+
+        await tester.tap(find.byKey(const Key('fm_folder_popup_a')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('fm_folder_menu_delete')));
+        await tester.pumpAndSettle();
+
+        expect(find.textContaining('2 个子文件夹'), findsOneWidget);
+        expect(deletedFolders, isEmpty);
+
+        await tester.tap(find.byKey(const Key('fm_delete_folder_confirm_btn')));
+        await tester.pumpAndSettle();
+
+        expect(deletedFolders, ['a']);
+      },
+    );
+
+    testWidgets(
       'single-file move allows same name with a different format',
       (tester) async {
         final moved = <String>[];

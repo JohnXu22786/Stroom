@@ -19397,6 +19397,15 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Japanese'**
   String get languageNameJapanese;
+
+  /// No description provided for @fileManagerDeleteEmptyFolderWithSubfoldersConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete empty folder “{name}”? Its {count} nested folders will also be deleted.'**
+  String fileManagerDeleteEmptyFolderWithSubfoldersConfirm(
+    Object count,
+    Object name,
+  );
 }
 
 class _AppLocalizationsDelegate

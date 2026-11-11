@@ -11996,6 +11996,14 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get languageNameJapanese => 'japonés';
+
+  @override
+  String fileManagerDeleteEmptyFolderWithSubfoldersConfirm(
+    Object count,
+    Object name,
+  ) {
+    return '¿Eliminar la carpeta vacía “$name”? También se eliminarán sus $count subcarpetas.';
+  }
 }
 
 /// The translations for Spanish Castilian, as used in Spain (`es_ES`).
@@ -23989,4 +23997,12 @@ class AppLocalizationsEsEs extends AppLocalizationsEs {
 
   @override
   String get languageNameJapanese => 'japonés';
+
+  @override
+  String fileManagerDeleteEmptyFolderWithSubfoldersConfirm(
+    Object count,
+    Object name,
+  ) {
+    return '¿Eliminar la carpeta vacía “$name”? También se eliminarán sus $count subcarpetas.';
+  }
 }

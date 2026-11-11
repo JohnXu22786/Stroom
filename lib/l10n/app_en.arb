@@ -7012,5 +7012,6 @@
   "emojiCategorySymbols": "Symbols",
   "emojiCategoryFlags": "Flags",
   "languageNameSpanish": "Spanish",
-  "languageNameJapanese": "Japanese"
+  "languageNameJapanese": "Japanese",
+  "fileManagerDeleteEmptyFolderWithSubfoldersConfirm": "Delete empty folder “{name}”? Its {count} nested folders will also be deleted."
 }
