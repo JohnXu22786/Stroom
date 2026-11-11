@@ -5365,7 +5365,7 @@ class EvaluateTests(unittest.TestCase):
                 verify_fixtures(manifest_path)
 
     def _assert_fixture_png_accepted(self, image_bytes):
-        with TemporaryDirectory() as directory:
+        with TemporaryDirectory(dir=ROOT) as directory:
             fixture_root = Path(directory)
             shutil.copytree(ROOT / "fixtures", fixture_root / "fixtures")
             manifest = json.loads((ROOT / "manifest.json").read_text())
