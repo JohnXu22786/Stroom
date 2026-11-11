@@ -302,12 +302,12 @@ class AppLogService {
     String source,
     String message,
   ) async {
-    await _ensurePolicyLoaded();
     // 先输出到控制台（所有场景）
     debugPrint('[AppLog] [${level.label}] [$source] $message');
 
     // 手动禁用或 Web 平台时跳过缓冲区写入
     if (_shouldSkipFileIo) return;
+    await _ensurePolicyLoaded();
     if (level.severity < _policy.minimumLevel.severity) return;
 
     _buffer.add(
