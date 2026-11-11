@@ -633,6 +633,10 @@ String? _localizeStoredBackgroundError(
   final incompletePrefixes = {
     for (final locale in AppLocalizations.supportedLocales)
       lookupAppLocalizations(locale).bgTaskOcrIncompleteError(''),
+    // Older persisted task errors used an ASCII colon. The generated Chinese
+    // localization now uses a full-width colon, so retain this legacy prefix
+    // while continuing to recognize the current localized templates above.
+    'OCR结果不完整: ',
   };
   for (final prefix in incompletePrefixes) {
     if (!error.startsWith(prefix)) continue;
