@@ -369,7 +369,9 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
                 _buildAsrSelectedDropdownText(
                   context,
                   AppLocalizations.of(context)!.providerFallbackAll,
-                  style: Theme.of(context).textTheme.labelLarge
+                  style: Theme.of(context)
+                      .textTheme
+                      .labelLarge
                       ?.copyWith(fontWeight: FontWeight.w600),
                 ),
               ],

@@ -51,7 +51,9 @@ extension _ProviderSettingsPanelTabAsrExt on _ProviderSettingsPanelState {
                 _buildAsrSelectedDropdownText(
                   context,
                   AppLocalizations.of(context)!.providerChunkSmart,
-                  style: Theme.of(context).textTheme.labelLarge
+                  style: Theme.of(context)
+                      .textTheme
+                      .labelLarge
                       ?.copyWith(fontWeight: FontWeight.w600),
                 ),
                 _buildAsrSelectedDropdownText(
