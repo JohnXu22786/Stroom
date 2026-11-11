@@ -3049,7 +3049,7 @@ class _WavPreprocessPlan {
         : 1;
     outputSampleCount = _resample
         ? (info.totalSamples * outputSampleRate / info.sampleRate).round() *
-              outputChannels
+            outputChannels
         : _workingSampleCount;
     _dataSize = outputSampleCount * 2;
     _fileSize = 44 + _dataSize;
