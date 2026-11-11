@@ -318,6 +318,19 @@ void main() {
     expect(config.fallbackMethod, 'all');
   });
 
+  test('defaults missing provider ASR options to recommended choices', () {
+    final config = createAsrConfigFromProviderModel(
+      host: 'https://api.test.com/transcribe',
+      apiKey: 'secret',
+      model: ModelConfig(name: 'Whisper', modelId: 'whisper-1'),
+      providerTypeConfig: const {},
+    );
+
+    expect(config.chunking, 'silence');
+    expect(config.compression, 'flac');
+    expect(config.fallbackMethod, 'all');
+  });
+
   test(
     'task-flow sends typed base64 parameters through the shared service',
     () async {
