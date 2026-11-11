@@ -7019,5 +7019,65 @@
     }
   },
   "fileManagerDeleteEmptyFolderWithSubfoldersConfirm": "空のフォルダー「{name}」を削除しますか? 配下の {count} 個のサブフォルダーも削除されます。",
-  "providerMaxUploadSizePositive": "最大アップロードサイズは正の数である必要があります。"
+  "providerMaxUploadSizePositive": "最大アップロードサイズは正の数である必要があります。",
+  "appLogSettings": "Log settings",
+  "appLogSettingsTitle": "Application log settings",
+  "appLogStorageUsage": "{count} files · {size} used",
+  "@appLogStorageUsage": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "appLogRetentionDays": "Keep logs for",
+  "appLogDays": "{count, plural, one{# day} other{# days}}",
+  "@appLogDays": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "appLogMinimumLevel": "Minimum detail level",
+  "appLogStorageLimit": "Maximum log storage",
+  "appLogUnlimited": "Unlimited",
+  "appLogSettingsHelp": "Older logs and logs over the storage limit are removed automatically. The current hourly file is kept.",
+  "appLogSettingsSaved": "Log settings saved",
+  "appLogSettingsError": "Could not save log settings: {error}",
+  "@appLogSettingsError": {
+    "placeholders": {
+      "error": {
+        "type": "Object"
+      }
+    }
+  },
+  "appLogSave": "Save",
+  "appLogLevelDebug": "Debug · most detail",
+  "appLogLevelInfo": "Info",
+  "appLogLevelWarning": "Warning",
+  "appLogLevelError": "Error",
+  "appLogFilter": "Filter log entries",
+  "appLogSearch": "Keyword",
+  "appLogSource": "Source",
+  "appLogLevel": "Level",
+  "appLogAnyLevel": "Any level",
+  "appLogFromTime": "From",
+  "appLogUntilTime": "Until",
+  "appLogClearFilters": "Clear filters",
+  "appLogNoMatches": "No entries match these filters",
+  "appLogFilteredLineCount": "{visible} of {total} lines",
+  "@appLogFilteredLineCount": {
+    "placeholders": {
+      "visible": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  }
 }

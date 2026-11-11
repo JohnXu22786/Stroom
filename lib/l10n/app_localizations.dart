@@ -70,7 +70,7 @@ import 'app_localizations_zh.dart';
 /// property.
 abstract class AppLocalizations {
   AppLocalizations(String locale)
-    : localeName = intl.Intl.canonicalizedLocale(locale.toString());
+      : localeName = intl.Intl.canonicalizedLocale(locale.toString());
 
   final String localeName;
 
@@ -93,11 +93,11 @@ abstract class AppLocalizations {
   /// of delegates is preferred or required.
   static const List<LocalizationsDelegate<dynamic>> localizationsDelegates =
       <LocalizationsDelegate<dynamic>>[
-        delegate,
-        GlobalMaterialLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-      ];
+    delegate,
+    GlobalMaterialLocalizations.delegate,
+    GlobalCupertinoLocalizations.delegate,
+    GlobalWidgetsLocalizations.delegate,
+  ];
 
   /// A list of this localizations delegate's supported locales.
   static const List<Locale> supportedLocales = <Locale>[
@@ -17492,6 +17492,162 @@ abstract class AppLocalizations {
   /// **'Copied all log content'**
   String get appLogCopyDone;
 
+  /// No description provided for @appLogSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Log settings'**
+  String get appLogSettings;
+
+  /// No description provided for @appLogSettingsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Application log settings'**
+  String get appLogSettingsTitle;
+
+  /// No description provided for @appLogStorageUsage.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} files · {size} used'**
+  String appLogStorageUsage(int count, String size);
+
+  /// No description provided for @appLogRetentionDays.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep logs for'**
+  String get appLogRetentionDays;
+
+  /// No description provided for @appLogDays.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{# day} other{# days}}'**
+  String appLogDays(int count);
+
+  /// No description provided for @appLogMinimumLevel.
+  ///
+  /// In en, this message translates to:
+  /// **'Minimum detail level'**
+  String get appLogMinimumLevel;
+
+  /// No description provided for @appLogStorageLimit.
+  ///
+  /// In en, this message translates to:
+  /// **'Maximum log storage'**
+  String get appLogStorageLimit;
+
+  /// No description provided for @appLogUnlimited.
+  ///
+  /// In en, this message translates to:
+  /// **'Unlimited'**
+  String get appLogUnlimited;
+
+  /// No description provided for @appLogSettingsHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Older logs and logs over the storage limit are removed automatically. The current hourly file is kept.'**
+  String get appLogSettingsHelp;
+
+  /// No description provided for @appLogSettingsSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Log settings saved'**
+  String get appLogSettingsSaved;
+
+  /// No description provided for @appLogSettingsError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save log settings: {error}'**
+  String appLogSettingsError(Object error);
+
+  /// No description provided for @appLogSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get appLogSave;
+
+  /// No description provided for @appLogLevelDebug.
+  ///
+  /// In en, this message translates to:
+  /// **'Debug · most detail'**
+  String get appLogLevelDebug;
+
+  /// No description provided for @appLogLevelInfo.
+  ///
+  /// In en, this message translates to:
+  /// **'Info'**
+  String get appLogLevelInfo;
+
+  /// No description provided for @appLogLevelWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'Warning'**
+  String get appLogLevelWarning;
+
+  /// No description provided for @appLogLevelError.
+  ///
+  /// In en, this message translates to:
+  /// **'Error'**
+  String get appLogLevelError;
+
+  /// No description provided for @appLogFilter.
+  ///
+  /// In en, this message translates to:
+  /// **'Filter log entries'**
+  String get appLogFilter;
+
+  /// No description provided for @appLogSearch.
+  ///
+  /// In en, this message translates to:
+  /// **'Keyword'**
+  String get appLogSearch;
+
+  /// No description provided for @appLogSource.
+  ///
+  /// In en, this message translates to:
+  /// **'Source'**
+  String get appLogSource;
+
+  /// No description provided for @appLogLevel.
+  ///
+  /// In en, this message translates to:
+  /// **'Level'**
+  String get appLogLevel;
+
+  /// No description provided for @appLogAnyLevel.
+  ///
+  /// In en, this message translates to:
+  /// **'Any level'**
+  String get appLogAnyLevel;
+
+  /// No description provided for @appLogFromTime.
+  ///
+  /// In en, this message translates to:
+  /// **'From'**
+  String get appLogFromTime;
+
+  /// No description provided for @appLogUntilTime.
+  ///
+  /// In en, this message translates to:
+  /// **'Until'**
+  String get appLogUntilTime;
+
+  /// No description provided for @appLogClearFilters.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear filters'**
+  String get appLogClearFilters;
+
+  /// No description provided for @appLogNoMatches.
+  ///
+  /// In en, this message translates to:
+  /// **'No entries match these filters'**
+  String get appLogNoMatches;
+
+  /// No description provided for @appLogFilteredLineCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{visible} of {total} lines'**
+  String appLogFilteredLineCount(int visible, int total);
+
   /// Title shown in iOS continued-task system UI.
   ///
   /// In en, this message translates to:
@@ -19470,16 +19626,16 @@ class _AppLocalizationsDelegate
 
   @override
   bool isSupported(Locale locale) => <String>[
-    'ar',
-    'de',
-    'en',
-    'es',
-    'fr',
-    'ja',
-    'ko',
-    'pt',
-    'zh',
-  ].contains(locale.languageCode);
+        'ar',
+        'de',
+        'en',
+        'es',
+        'fr',
+        'ja',
+        'ko',
+        'pt',
+        'zh',
+      ].contains(locale.languageCode);
 
   @override
   bool shouldReload(_AppLocalizationsDelegate old) => false;

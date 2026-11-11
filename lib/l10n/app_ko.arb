@@ -7019,5 +7019,65 @@
   "languageNameSpanish": "스페인어",
   "languageNameJapanese": "일본어",
   "fileManagerDeleteEmptyFolderWithSubfoldersConfirm": "빈 폴더 ‘{name}’을(를) 삭제하시겠습니까? 중첩 폴더 {count, plural, one{1개도 함께 삭제됩니다} other{{count}개도 함께 삭제됩니다}}.",
-  "providerMaxUploadSizePositive": "최대 업로드 크기는 양수여야 합니다."
+  "providerMaxUploadSizePositive": "최대 업로드 크기는 양수여야 합니다.",
+  "appLogSettings": "Log settings",
+  "appLogSettingsTitle": "Application log settings",
+  "appLogStorageUsage": "{count} files · {size} used",
+  "@appLogStorageUsage": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "appLogRetentionDays": "Keep logs for",
+  "appLogDays": "{count, plural, one{# day} other{# days}}",
+  "@appLogDays": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "appLogMinimumLevel": "Minimum detail level",
+  "appLogStorageLimit": "Maximum log storage",
+  "appLogUnlimited": "Unlimited",
+  "appLogSettingsHelp": "Older logs and logs over the storage limit are removed automatically. The current hourly file is kept.",
+  "appLogSettingsSaved": "Log settings saved",
+  "appLogSettingsError": "Could not save log settings: {error}",
+  "@appLogSettingsError": {
+    "placeholders": {
+      "error": {
+        "type": "Object"
+      }
+    }
+  },
+  "appLogSave": "Save",
+  "appLogLevelDebug": "Debug · most detail",
+  "appLogLevelInfo": "Info",
+  "appLogLevelWarning": "Warning",
+  "appLogLevelError": "Error",
+  "appLogFilter": "Filter log entries",
+  "appLogSearch": "Keyword",
+  "appLogSource": "Source",
+  "appLogLevel": "Level",
+  "appLogAnyLevel": "Any level",
+  "appLogFromTime": "From",
+  "appLogUntilTime": "Until",
+  "appLogClearFilters": "Clear filters",
+  "appLogNoMatches": "No entries match these filters",
+  "appLogFilteredLineCount": "{visible} of {total} lines",
+  "@appLogFilteredLineCount": {
+    "placeholders": {
+      "visible": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  }
 }

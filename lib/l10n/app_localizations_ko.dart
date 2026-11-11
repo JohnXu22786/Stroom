@@ -10281,6 +10281,99 @@ class AppLocalizationsKo extends AppLocalizations {
   String get appLogCopyDone => '모든 로그 내용을 복사했습니다';
 
   @override
+  String get appLogSettings => 'Log settings';
+
+  @override
+  String get appLogSettingsTitle => 'Application log settings';
+
+  @override
+  String appLogStorageUsage(int count, String size) {
+    return '$count files · $size used';
+  }
+
+  @override
+  String get appLogRetentionDays => 'Keep logs for';
+
+  @override
+  String appLogDays(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '# days',
+      one: '# day',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get appLogMinimumLevel => 'Minimum detail level';
+
+  @override
+  String get appLogStorageLimit => 'Maximum log storage';
+
+  @override
+  String get appLogUnlimited => 'Unlimited';
+
+  @override
+  String get appLogSettingsHelp =>
+      'Older logs and logs over the storage limit are removed automatically. The current hourly file is kept.';
+
+  @override
+  String get appLogSettingsSaved => 'Log settings saved';
+
+  @override
+  String appLogSettingsError(Object error) {
+    return 'Could not save log settings: $error';
+  }
+
+  @override
+  String get appLogSave => 'Save';
+
+  @override
+  String get appLogLevelDebug => 'Debug · most detail';
+
+  @override
+  String get appLogLevelInfo => 'Info';
+
+  @override
+  String get appLogLevelWarning => 'Warning';
+
+  @override
+  String get appLogLevelError => 'Error';
+
+  @override
+  String get appLogFilter => 'Filter log entries';
+
+  @override
+  String get appLogSearch => 'Keyword';
+
+  @override
+  String get appLogSource => 'Source';
+
+  @override
+  String get appLogLevel => 'Level';
+
+  @override
+  String get appLogAnyLevel => 'Any level';
+
+  @override
+  String get appLogFromTime => 'From';
+
+  @override
+  String get appLogUntilTime => 'Until';
+
+  @override
+  String get appLogClearFilters => 'Clear filters';
+
+  @override
+  String get appLogNoMatches => 'No entries match these filters';
+
+  @override
+  String appLogFilteredLineCount(int visible, int total) {
+    return '$visible of $total lines';
+  }
+
+  @override
   String get iosContinuedTaskTitle => '백그라운드 작업';
 
   @override
