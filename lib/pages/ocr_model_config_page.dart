@@ -10,6 +10,23 @@ import '../widgets/code_editor_field.dart';
 import 'llm_model_config_shared.dart';
 import 'model_config_shared.dart';
 
+String _requestSizeBudgetMibText(int bytes) {
+  final absoluteBytes = BigInt.from(bytes).abs();
+  final bytesPerMib = BigInt.from(1024 * 1024);
+  final whole = absoluteBytes ~/ bytesPerMib;
+  final remainder = absoluteBytes % bytesPerMib;
+  final sign = bytes < 0 ? '-' : '';
+  if (remainder == BigInt.zero) return '$sign$whole';
+
+  // 1 / 2^20 is exactly 95367431640625 / 10^20. Formatting the
+  // remainder this way preserves every byte without exposing double noise.
+  final fraction = (remainder * BigInt.from(95367431640625))
+      .toString()
+      .padLeft(20, '0')
+      .replaceFirst(RegExp(r'0+$'), '');
+  return '$sign$whole.$fraction';
+}
+
 /// OCR 模型配置编辑页面
 /// 包含基本设置、OCR 参数（temperature/topP/maxTokens）
 /// 和自定义参数；所有参数均为可选，未开启/未填写则不发送。
@@ -105,10 +122,7 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
     }
     final originalRequestBudget = m.typeConfig['requestSizeBudgetBytes'];
     final originalRequestBudgetText = originalRequestBudget is num
-        ? (originalRequestBudget / (1024 * 1024)).toString().replaceFirst(
-              RegExp(r'\.0$'),
-              '',
-            )
+        ? _requestSizeBudgetMibText(originalRequestBudget.toInt())
         : '';
     if (originalRequestBudgetText != _requestSizeBudgetController.text) {
       return true;
@@ -146,10 +160,7 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
     final requestSizeBudgetBytes = m?.typeConfig['requestSizeBudgetBytes'];
     _requestSizeBudgetController = TextEditingController(
       text: requestSizeBudgetBytes is num
-          ? (requestSizeBudgetBytes / (1024 * 1024)).toString().replaceFirst(
-                RegExp(r'\.0$'),
-                '',
-              )
+          ? _requestSizeBudgetMibText(requestSizeBudgetBytes.toInt())
           : '',
     )..addListener(_handleControllerChanged);
 
