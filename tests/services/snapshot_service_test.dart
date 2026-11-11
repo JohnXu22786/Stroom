@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -30,6 +31,8 @@ void main() {
 
   tearDown(() async {
     SnapshotService.debugNow = null;
+    SnapshotService.debugAfterBackupCreated = null;
+    SnapshotService.debugBeforeIndexCleanup = null;
     try {
       if (await snapDir.exists()) {
         await snapDir.delete(recursive: true);
@@ -217,6 +220,8 @@ void main() {
       final tmpFile =
           File(p.join(snapDir.path, 'backup_2026-01-01T00-00-00.zip.tmp'));
       await tmpFile.writeAsString('half-written');
+      await tmpFile
+          .setLastModified(DateTime.now().subtract(const Duration(days: 2)));
 
       // 残留 tmp 不算快照 → 1 小时规则不命中
       expect(await SnapshotService.hasSnapshotWithinHour(), isFalse,
@@ -225,6 +230,114 @@ void main() {
       // 清理时删除 tmp 残留
       await SnapshotService.cleanupOldSnapshots();
       expect(await tmpFile.exists(), isFalse, reason: 'cleanup 应清理 tmp 残留');
+    });
+
+    test('cleanup preserves an active snapshot temporary file', () async {
+      SharedPreferences.setMockInitialValues({
+        'conversations': '[{"id":"concurrent_snapshot"}]',
+      });
+      final writeStarted = Completer<void>();
+      final finishWrite = Completer<void>();
+      SnapshotService.debugAfterBackupCreated = (file) async {
+        await file
+            .setLastModified(DateTime.now().subtract(const Duration(days: 2)));
+        writeStarted.complete();
+        await finishWrite.future;
+      };
+
+      final snapshotFuture = SnapshotService.createSnapshot(force: true);
+      await writeStarted.future;
+      final tmpFile = (await snapDir.list().toList())
+          .whereType<File>()
+          .singleWhere((file) => file.path.endsWith('.zip.tmp'));
+      expect(await tmpFile.exists(), isTrue);
+
+      await SnapshotService.cleanupOldSnapshots();
+      expect(await tmpFile.exists(), isTrue);
+
+      finishWrite.complete();
+      final snapshot = await snapshotFuture;
+      expect(snapshot, isNotNull);
+      expect(await snapshot!.exists(), isTrue);
+      expect(await tmpFile.exists(), isFalse);
+    });
+
+    test('overlapping forced snapshots reserve distinct paths', () async {
+      SharedPreferences.setMockInitialValues({
+        'conversations': '[{"id":"concurrent_snapshot"}]',
+      });
+      final sameTimestamp = DateTime(2026, 1, 1);
+      SnapshotService.debugNow = () => sameTimestamp;
+      final bothWritesStarted = Completer<void>();
+      final finishWrites = Completer<void>();
+      var writeCount = 0;
+      SnapshotService.debugAfterBackupCreated = (file) async {
+        writeCount++;
+        if (writeCount == 2) bothWritesStarted.complete();
+        await finishWrites.future;
+      };
+
+      final firstFuture = SnapshotService.createSnapshot(force: true);
+      final secondFuture = SnapshotService.createSnapshot(force: true);
+      await bothWritesStarted.future;
+      finishWrites.complete();
+      final snapshots = await Future.wait([firstFuture, secondFuture]);
+
+      expect(snapshots, everyElement(isNotNull));
+      expect(snapshots.map((file) => file!.path).toSet(), hasLength(2));
+      for (final file in snapshots) {
+        expect(await file!.exists(), isTrue);
+      }
+      expect((await SnapshotService.readIndex()).length, 2);
+    });
+
+    test('cleanup preserves snapshots indexed after its retention scan',
+        () async {
+      await snapDir.create(recursive: true);
+      final now = DateTime.now();
+      final oldEntries = <SnapshotEntry>[];
+      for (var daysAgo = 5; daysAgo >= 2; daysAgo--) {
+        final timestamp = now.subtract(Duration(days: daysAgo));
+        final name =
+            'backup_${timestamp.toIso8601String().replaceAll(':', '-')}.zip';
+        await File(p.join(snapDir.path, name)).writeAsBytes([1]);
+        oldEntries.add(SnapshotEntry(
+          file: name,
+          sha256: 'old-$daysAgo',
+          createdAt: timestamp.toIso8601String(),
+          partVersions: const {},
+        ));
+      }
+      final indexFile =
+          File(p.join(snapDir.path, SnapshotService.manifestName));
+      await indexFile.writeAsString(jsonEncode({
+        'snapshots': oldEntries.map((entry) => entry.toJson()).toList(),
+      }));
+
+      final retentionScanned = Completer<void>();
+      final continueCleanup = Completer<void>();
+      SnapshotService.debugBeforeIndexCleanup = () async {
+        SnapshotService.debugBeforeIndexCleanup = null;
+        retentionScanned.complete();
+        await continueCleanup.future;
+      };
+
+      final cleanup = SnapshotService.cleanupOldSnapshots();
+      await retentionScanned.future;
+
+      SharedPreferences.setMockInitialValues({
+        'conversations': '[{"id":"indexed_during_cleanup"}]',
+      });
+      final snapshot = await SnapshotService.createSnapshot(force: true);
+      expect(snapshot, isNotNull);
+
+      continueCleanup.complete();
+      await cleanup;
+
+      final index = await SnapshotService.readIndex();
+      expect(index.map((entry) => entry.file),
+          contains(p.basename(snapshot!.path)));
+      expect(await snapshot.exists(), isTrue);
     });
   });
 }

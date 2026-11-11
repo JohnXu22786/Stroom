@@ -4806,7 +4806,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get providerCompressionAdpcm => 'ADPCM（约 4 倍压缩）';
 
   @override
-  String get providerCompressionFlac => 'FLAC（无损，约 2 倍）';
+  String get providerCompressionFlac => 'FLAC（无损，约 2 倍，推荐）';
 
   @override
   String get providerCompressionAdpcmDescription =>
@@ -5010,7 +5010,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get providerPreprocessNone => '无';
 
   @override
-  String get providerPreprocessResample => 'WAV 优化（16 kHz 单声道）';
+  String get providerPreprocessResample => 'WAV 优化（16 kHz 单声道，推荐）';
 
   @override
   String get providerPreprocessResampleHelp =>
@@ -15998,7 +15998,7 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get providerCompressionAdpcm => 'ADPCM（约 4 倍压缩）';
 
   @override
-  String get providerCompressionFlac => 'FLAC（无损，约 2 倍）';
+  String get providerCompressionFlac => 'FLAC（无损，约 2 倍，推荐）';
 
   @override
   String get providerCompressionAdpcmDescription =>
@@ -16202,7 +16202,7 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get providerPreprocessNone => '无';
 
   @override
-  String get providerPreprocessResample => 'WAV 优化（16 kHz 单声道）';
+  String get providerPreprocessResample => 'WAV 优化（16 kHz 单声道，推荐）';
 
   @override
   String get providerPreprocessResampleHelp =>

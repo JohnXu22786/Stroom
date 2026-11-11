@@ -8493,7 +8493,7 @@ abstract class AppLocalizations {
   /// No description provided for @providerCompressionFlac.
   ///
   /// In en, this message translates to:
-  /// **'FLAC (lossless, ~2x)'**
+  /// **'FLAC (lossless, ~2x, recommended)'**
   String get providerCompressionFlac;
 
   /// No description provided for @providerCompressionAdpcmDescription.
@@ -8859,7 +8859,7 @@ abstract class AppLocalizations {
   /// No description provided for @providerPreprocessResample.
   ///
   /// In en, this message translates to:
-  /// **'WAV optimization (16 kHz mono)'**
+  /// **'WAV optimization (16 kHz mono, recommended)'**
   String get providerPreprocessResample;
 
   /// No description provided for @providerPreprocessResampleHelp.
