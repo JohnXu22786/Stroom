@@ -658,7 +658,7 @@ void main() {
         error: 'Unexpected provider failure: Bearer $credential (HTTP 429)',
       );
 
-      final safeStepError = notifier.taskById(id)!.steps.single.error!;
+      final safeStepError = notifier.taskById(id)!.steps[0].error!;
       expect(safeStepError, contains(strings.bgTaskOcrErrorDetailsHidden));
       expect(safeStepError, contains('HTTP 429'));
       expect(safeStepError, isNot(contains(credential)));
