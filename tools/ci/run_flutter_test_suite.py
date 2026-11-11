@@ -187,6 +187,7 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
         "widgets/running_elapsed_label_test.dart",
     ),
     "application-shared": (
+        "l10n/**",
         "startup/**",
         "services/app_log_service_test.dart",
         "services/background_service_test.dart",
