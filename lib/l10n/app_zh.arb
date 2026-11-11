@@ -6153,6 +6153,50 @@
     }
   },
   "appLogCopyDone": "已复制全部日志内容",
+  "appLogSettings": "日志设置",
+  "appLogSettingsTitle": "应用日志设置",
+  "appLogStorageUsage": "{count} 个文件 · 已用 {size}",
+  "@appLogStorageUsage": {
+    "placeholders": {
+      "count": { "type": "int" },
+      "size": { "type": "String" }
+    }
+  },
+  "appLogRetentionDays": "保留期限",
+  "appLogDays": "{count} 天",
+  "@appLogDays": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "appLogMinimumLevel": "记录详细度",
+  "appLogStorageLimit": "日志空间上限",
+  "appLogUnlimited": "不限制",
+  "appLogSettingsHelp": "超出保留期限或空间上限的旧日志会自动清理；当前小时的日志文件会保留。",
+  "appLogSettingsSaved": "日志设置已保存",
+  "appLogSettingsError": "保存日志设置失败：{error}",
+  "@appLogSettingsError": {
+    "placeholders": { "error": { "type": "Object" } }
+  },
+  "appLogSave": "保存",
+  "appLogLevelDebug": "调试 · 最详细",
+  "appLogLevelInfo": "信息",
+  "appLogLevelWarning": "警告",
+  "appLogLevelError": "错误",
+  "appLogFilter": "筛选日志",
+  "appLogSearch": "关键词",
+  "appLogSource": "来源",
+  "appLogLevel": "级别",
+  "appLogAnyLevel": "全部级别",
+  "appLogFromTime": "开始时间",
+  "appLogUntilTime": "结束时间",
+  "appLogClearFilters": "清除筛选",
+  "appLogNoMatches": "没有符合筛选条件的日志",
+  "appLogFilteredLineCount": "显示 {visible} / {total} 行",
+  "@appLogFilteredLineCount": {
+    "placeholders": {
+      "visible": { "type": "int" },
+      "total": { "type": "int" }
+    }
+  },
   "iosContinuedTaskTitle": "Stroom 后台任务",
   "@iosContinuedTaskTitle": {
     "description": "Title shown in iOS continued-task system UI."
