@@ -62,6 +62,53 @@ class _FlacBitReader {
   );
 }
 
+({int partitionOrder, List<int> rawWidths, int frameEndBit})
+    _readFlacEscapeResidualLayout(Uint8List flac, int blockLength) {
+  const frameOffset = 42;
+  final bits = _FlacBitReader(flac, frameOffset * 8);
+
+  bits.read(16); // Sync code and blocking strategy.
+  final blockSizeCode = bits.read(4);
+  bits.read(12); // Sample rate, channel assignment, sample size, reserved.
+  bits.read(8); // Frame number zero.
+  if (blockSizeCode == 6) {
+    bits.read(8);
+  } else if (blockSizeCode == 7) {
+    bits.read(16);
+  }
+  bits.read(8); // Header CRC-8.
+
+  final subframeOrder = bits.read(6) & 0x7;
+  bits.read(1); // Wasted bits flag.
+  bits.read(subframeOrder * 16); // Warm-up samples.
+  expect(bits.read(2), 0, reason: 'encoder uses Rice4 residual coding');
+  final partitionOrder = bits.read(4);
+  final partitions = 1 << partitionOrder;
+  final partitionSamples = blockLength ~/ partitions;
+  final rawWidths = <int>[];
+  for (var partition = 0; partition < partitions; partition++) {
+    final count = partitionSamples - (partition == 0 ? subframeOrder : 0);
+    expect(bits.read(4), 15, reason: 'Rice4 escape marker must be 15');
+    final rawWidth = bits.read(5);
+    rawWidths.add(rawWidth);
+    expect(rawWidth, 16, reason: 'alternating S16 residuals need 16 bits');
+    for (var i = 0; i < count; i++) {
+      final raw = bits.read(rawWidth);
+      final residual = raw >= (1 << (rawWidth - 1))
+          ? raw - (1 << rawWidth)
+          : raw;
+      expect(residual, i.isEven ? 32767 : -32768);
+    }
+  }
+
+  final frameEndBit = ((bits.offset + 7) ~/ 8) * 8 + 16;
+  return (
+    partitionOrder: partitionOrder,
+    rawWidths: rawWidths,
+    frameEndBit: frameEndBit,
+  );
+}
+
 /// Generate a synthetic sine wave as Int16List.
 Int16List _sineWave(int samples, {double freq = 440, int sampleRate = 16000}) {
   final pcm = Int16List(samples);
@@ -361,6 +408,21 @@ void main() {
         expect(layout.frameEndBit, flac.length * 8,
             reason: 'partition residuals must end at the frame CRC');
       }
+    });
+
+    test('writes a valid Rice escape marker and raw residual width', () {
+      final pcm = Int16List(4096);
+      for (var i = 0; i < pcm.length; i++) {
+        pcm[i] = i.isEven ? 32767 : -32768;
+      }
+
+      final flac = encodeFlac(pcm, sampleRate: 16000);
+      final layout = _readFlacEscapeResidualLayout(flac, pcm.length);
+
+      expect(layout.partitionOrder, 2);
+      expect(layout.rawWidths, everyElement(16));
+      expect(layout.frameEndBit, flac.length * 8,
+          reason: 'escaped residuals must end exactly at the frame CRC');
     });
 
     test('encodes valid block-size fields for partial FLAC frames', () {
