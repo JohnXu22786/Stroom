@@ -11999,10 +11999,16 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String fileManagerDeleteEmptyFolderWithSubfoldersConfirm(
-    Object count,
+    num count,
     Object name,
   ) {
-    return '¿Eliminar la carpeta vacía “$name”? También se eliminarán sus $count subcarpetas.';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'También se eliminarán sus $count subcarpetas.',
+      one: 'También se eliminará su 1 subcarpeta.',
+    );
+    return '¿Eliminar la carpeta vacía “$name”? $_temp0';
   }
 }
 
@@ -24000,9 +24006,15 @@ class AppLocalizationsEsEs extends AppLocalizationsEs {
 
   @override
   String fileManagerDeleteEmptyFolderWithSubfoldersConfirm(
-    Object count,
+    num count,
     Object name,
   ) {
-    return '¿Eliminar la carpeta vacía “$name”? También se eliminarán sus $count subcarpetas.';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'También se eliminarán sus $count subcarpetas.',
+      one: 'También se eliminará su 1 subcarpeta.',
+    );
+    return '¿Eliminar la carpeta vacía “$name”? $_temp0';
   }
 }

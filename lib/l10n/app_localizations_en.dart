@@ -11804,10 +11804,16 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String fileManagerDeleteEmptyFolderWithSubfoldersConfirm(
-    Object count,
+    num count,
     Object name,
   ) {
-    return 'Delete empty folder “$name”? Its $count nested folders will also be deleted.';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Its $count nested folders will also be deleted.',
+      one: 'Its 1 nested folder will also be deleted.',
+    );
+    return 'Delete empty folder “$name”? $_temp0';
   }
 }
 
@@ -23610,9 +23616,15 @@ class AppLocalizationsEnUs extends AppLocalizationsEn {
 
   @override
   String fileManagerDeleteEmptyFolderWithSubfoldersConfirm(
-    Object count,
+    num count,
     Object name,
   ) {
-    return 'Delete empty folder “$name”? Its $count nested folders will also be deleted.';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Its $count nested folders will also be deleted.',
+      one: 'Its 1 nested folder will also be deleted.',
+    );
+    return 'Delete empty folder “$name”? $_temp0';
   }
 }

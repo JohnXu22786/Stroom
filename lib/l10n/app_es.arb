@@ -7013,5 +7013,5 @@
       }
     }
   },
-  "fileManagerDeleteEmptyFolderWithSubfoldersConfirm": "¿Eliminar la carpeta vacía “{name}”? También se eliminarán sus {count} subcarpetas."
+  "fileManagerDeleteEmptyFolderWithSubfoldersConfirm": "¿Eliminar la carpeta vacía “{name}”? {count, plural, one{También se eliminará su 1 subcarpeta.} other{También se eliminarán sus {count} subcarpetas.}}"
 }

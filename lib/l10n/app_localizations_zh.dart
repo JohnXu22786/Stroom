@@ -11187,7 +11187,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String fileManagerDeleteEmptyFolderWithSubfoldersConfirm(
-    Object count,
+    num count,
     Object name,
   ) {
     return '确定要删除空文件夹 “$name” 吗？其下的 $count 个子文件夹也将被删除。';
@@ -22376,7 +22376,7 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String fileManagerDeleteEmptyFolderWithSubfoldersConfirm(
-    Object count,
+    num count,
     Object name,
   ) {
     return '确定要删除空文件夹 “$name” 吗？其下的 $count 个子文件夹也将被删除。';

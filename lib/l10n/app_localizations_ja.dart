@@ -11503,7 +11503,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String fileManagerDeleteEmptyFolderWithSubfoldersConfirm(
-    Object count,
+    num count,
     Object name,
   ) {
     return '空のフォルダー「$name」を削除しますか? 配下の $count 個のサブフォルダーも削除されます。';
@@ -23008,7 +23008,7 @@ class AppLocalizationsJaJp extends AppLocalizationsJa {
 
   @override
   String fileManagerDeleteEmptyFolderWithSubfoldersConfirm(
-    Object count,
+    num count,
     Object name,
   ) {
     return '空のフォルダー「$name」を削除しますか? 配下の $count 個のサブフォルダーも削除されます。';

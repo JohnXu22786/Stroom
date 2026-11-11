@@ -19401,9 +19401,9 @@ abstract class AppLocalizations {
   /// No description provided for @fileManagerDeleteEmptyFolderWithSubfoldersConfirm.
   ///
   /// In en, this message translates to:
-  /// **'Delete empty folder “{name}”? Its {count} nested folders will also be deleted.'**
+  /// **'Delete empty folder “{name}”? {count, plural, one{Its 1 nested folder will also be deleted.} other{Its {count} nested folders will also be deleted.}}'**
   String fileManagerDeleteEmptyFolderWithSubfoldersConfirm(
-    Object count,
+    num count,
     Object name,
   );
 }
