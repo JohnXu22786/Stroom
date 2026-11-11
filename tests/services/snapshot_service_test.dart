@@ -219,6 +219,8 @@ void main() {
       final tmpFile =
           File(p.join(snapDir.path, 'backup_2026-01-01T00-00-00.zip.tmp'));
       await tmpFile.writeAsString('half-written');
+      await tmpFile
+          .setLastModified(DateTime.now().subtract(const Duration(days: 2)));
 
       // 残留 tmp 不算快照 → 1 小时规则不命中
       expect(await SnapshotService.hasSnapshotWithinHour(), isFalse,
@@ -229,14 +231,15 @@ void main() {
       expect(await tmpFile.exists(), isFalse, reason: 'cleanup 应清理 tmp 残留');
     });
 
-    test('cleanup waits for an active snapshot write before deleting tmp files',
-        () async {
+    test('cleanup preserves an active snapshot temporary file', () async {
       SharedPreferences.setMockInitialValues({
         'conversations': '[{"id":"concurrent_snapshot"}]',
       });
       final writeStarted = Completer<void>();
       final finishWrite = Completer<void>();
-      SnapshotService.debugAfterBackupCreated = (_) async {
+      SnapshotService.debugAfterBackupCreated = (file) async {
+        await file
+            .setLastModified(DateTime.now().subtract(const Duration(days: 2)));
         writeStarted.complete();
         await finishWrite.future;
       };
@@ -248,21 +251,43 @@ void main() {
           .singleWhere((file) => file.path.endsWith('.zip.tmp'));
       expect(await tmpFile.exists(), isTrue);
 
-      var cleanupFinished = false;
-      final cleanupFuture = SnapshotService.cleanupOldSnapshots().then((_) {
-        cleanupFinished = true;
-      });
-      await Future<void>.delayed(Duration.zero);
-      expect(cleanupFinished, isFalse,
-          reason: 'cleanup must wait while snapshot creation owns a temp file');
+      await SnapshotService.cleanupOldSnapshots();
       expect(await tmpFile.exists(), isTrue);
 
       finishWrite.complete();
       final snapshot = await snapshotFuture;
-      await cleanupFuture;
       expect(snapshot, isNotNull);
       expect(await snapshot!.exists(), isTrue);
       expect(await tmpFile.exists(), isFalse);
+    });
+
+    test('overlapping forced snapshots reserve distinct paths', () async {
+      SharedPreferences.setMockInitialValues({
+        'conversations': '[{"id":"concurrent_snapshot"}]',
+      });
+      final sameTimestamp = DateTime(2026, 1, 1);
+      SnapshotService.debugNow = () => sameTimestamp;
+      final bothWritesStarted = Completer<void>();
+      final finishWrites = Completer<void>();
+      var writeCount = 0;
+      SnapshotService.debugAfterBackupCreated = (file) async {
+        writeCount++;
+        if (writeCount == 2) bothWritesStarted.complete();
+        await finishWrites.future;
+      };
+
+      final firstFuture = SnapshotService.createSnapshot(force: true);
+      final secondFuture = SnapshotService.createSnapshot(force: true);
+      await bothWritesStarted.future;
+      finishWrites.complete();
+      final snapshots = await Future.wait([firstFuture, secondFuture]);
+
+      expect(snapshots, everyElement(isNotNull));
+      expect(snapshots.map((file) => file!.path).toSet(), hasLength(2));
+      for (final file in snapshots) {
+        expect(await file!.exists(), isTrue);
+      }
+      expect((await SnapshotService.readIndex()).length, 2);
     });
   });
 }

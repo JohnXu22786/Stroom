@@ -85,6 +85,7 @@ class SnapshotService {
 
   /// 1 小时规则：最近 1 小时内有快照则跳过（与旧自动备份一致）。
   static const Duration hourRule = Duration(hours: 1);
+  static const Duration _staleTempAge = Duration(hours: 24);
 
   /// 测试钩子：覆盖当前时间。
   @visibleForTesting
@@ -94,23 +95,10 @@ class SnapshotService {
   @visibleForTesting
   static Future<void> Function(File)? debugAfterBackupCreated;
 
-  // Snapshot creation and retention cleanup share the directory's temporary
-  // files. Queue both operations so cleanup cannot remove a file mid-write and
-  // concurrent forced snapshots cannot collide on their timestamped path.
-  static Future<void> _operationTail = Future<void>.value();
-
-  static Future<T> _withSnapshotOperation<T>(
-      Future<T> Function() operation) async {
-    final previous = _operationTail;
-    final finished = Completer<void>();
-    _operationTail = finished.future;
-    await previous;
-    try {
-      return await operation();
-    } finally {
-      finished.complete();
-    }
-  }
+  // Keep active paths registered so retention cleanup cannot remove them.
+  static final Set<String> _activeTemporaryPaths = {};
+  static final Set<String> _reservedSnapshotPaths = {};
+  static Future<void> _indexUpdateTail = Future<void>.value();
 
   static DateTime _now() => debugNow?.call() ?? DateTime.now();
 
@@ -238,11 +226,10 @@ class SnapshotService {
   /// [force] 为 true 时无视 1 小时规则（迁移前快照）。
   /// 返回快照文件；1 小时规则命中时返回 null（不算失败）；
   /// 创建失败返回 null 并记日志。
-  static Future<File?> createSnapshot({bool force = false}) =>
-      _withSnapshotOperation(() => _createSnapshot(force: force));
-
-  static Future<File?> _createSnapshot({required bool force}) async {
+  static Future<File?> createSnapshot({bool force = false}) async {
     if (kIsWeb) return null;
+    String? tmpPath;
+    String? reservedZipPath;
     try {
       if (!force && await hasSnapshotWithinHour()) {
         debugPrint('[SnapshotService] 最近 1 小时内有快照，跳过本次');
@@ -250,10 +237,11 @@ class SnapshotService {
       }
 
       final dir = await snapshotsDir;
-      final timestamp = _now().toIso8601String().replaceAll(':', '-');
-      final zipName = 'backup_$timestamp.zip';
-      final tmpPath = p.join(dir.path, '$zipName.tmp');
-      final zipPath = p.join(dir.path, zipName);
+      final paths = await _reserveSnapshotPaths(dir, _now());
+      final zipName = paths.zipName;
+      tmpPath = paths.tmpPath;
+      reservedZipPath = paths.zipPath;
+      final zipPath = paths.zipPath;
 
       // 复用备份构建链路（结构化 selection，后台 isolate 构建）
       await BackupService.createBackup(
@@ -274,18 +262,67 @@ class SnapshotService {
         createdAt: _now().toIso8601String(),
         partVersions: partVersions,
       );
-      final index = await readIndex();
-      index.removeWhere((e) => e.file == zipName);
-      index.add(entry);
-      await _writeIndex(index);
+      await _withIndexUpdate((index) {
+        index.removeWhere((e) => e.file == zipName);
+        index.add(entry);
+      });
 
-      await _cleanupOldSnapshots();
+      await cleanupOldSnapshots();
       await AppLogService.info('SnapshotService', '结构化快照完成: $zipName');
       return File(zipPath);
     } catch (e) {
       debugPrint('[SnapshotService] 创建快照失败: $e');
       await AppLogService.error('SnapshotService', '创建快照失败', e);
       return null;
+    } finally {
+      if (tmpPath != null) _activeTemporaryPaths.remove(tmpPath);
+      if (reservedZipPath != null) {
+        _reservedSnapshotPaths.remove(reservedZipPath);
+      }
+    }
+  }
+
+  static Future<({String zipName, String zipPath, String tmpPath})>
+      _reserveSnapshotPaths(Directory dir, DateTime timestamp) async {
+    while (true) {
+      final timestampText = timestamp.toIso8601String().replaceAll(':', '-');
+      final zipName = 'backup_$timestampText.zip';
+      final zipPath = p.join(dir.path, zipName);
+      final tmpPath = p.join(dir.path, '$zipName.tmp');
+      if (_reservedSnapshotPaths.contains(zipPath)) {
+        timestamp = timestamp.add(const Duration(microseconds: 1));
+        continue;
+      }
+
+      _reservedSnapshotPaths.add(zipPath);
+      _activeTemporaryPaths.add(tmpPath);
+      try {
+        if (!await File(zipPath).exists() && !await File(tmpPath).exists()) {
+          return (zipName: zipName, zipPath: zipPath, tmpPath: tmpPath);
+        }
+      } catch (_) {
+        _reservedSnapshotPaths.remove(zipPath);
+        _activeTemporaryPaths.remove(tmpPath);
+        rethrow;
+      }
+      _reservedSnapshotPaths.remove(zipPath);
+      _activeTemporaryPaths.remove(tmpPath);
+      timestamp = timestamp.add(const Duration(microseconds: 1));
+    }
+  }
+
+  static Future<void> _withIndexUpdate(
+      void Function(List<SnapshotEntry>) update) async {
+    final previous = _indexUpdateTail;
+    final finished = Completer<void>();
+    _indexUpdateTail = finished.future;
+    await previous;
+    try {
+      final index = await readIndex();
+      update(index);
+      await _writeIndex(index);
+    } finally {
+      finished.complete();
     }
   }
 
@@ -328,11 +365,8 @@ class SnapshotService {
 
   /// 清理超出保留策略的旧快照（策略与旧 AutoBackups 一致）。
   ///
-  /// 同时清理崩溃残留的 `*.zip.tmp` 写入中文件。
-  static Future<void> cleanupOldSnapshots() =>
-      _withSnapshotOperation(_cleanupOldSnapshots);
-
-  static Future<void> _cleanupOldSnapshots() async {
+  /// 同时清理超过 24 小时且不再活动的 `*.zip.tmp` 崩溃残留文件。
+  static Future<void> cleanupOldSnapshots() async {
     try {
       final dir = await snapshotsDir;
       if (!await dir.exists()) return;
@@ -342,8 +376,15 @@ class SnapshotService {
           .whereType<File>()
           .where((f) => f.path.endsWith('.tmp'))
           .toList();
+      final staleCutoff = DateTime.now().subtract(_staleTempAge);
       for (final f in tmpLeftovers) {
+        if (_activeTemporaryPaths.contains(f.path)) continue;
         try {
+          final modified = await f.lastModified();
+          if (!modified.isBefore(staleCutoff)) {
+            continue;
+          }
+          if (_activeTemporaryPaths.contains(f.path)) continue;
           await f.delete();
           debugPrint('[SnapshotService] 清理残留 tmp: ${f.path}');
         } catch (e) {
@@ -406,7 +447,8 @@ class SnapshotService {
       }
 
       for (final info in infos) {
-        if (!keep.contains(info.path)) {
+        if (!keep.contains(info.path) &&
+            !_reservedSnapshotPaths.contains(info.path)) {
           try {
             await File(info.path).delete();
             debugPrint('[SnapshotService] 清理旧快照: ${info.path}');
@@ -416,11 +458,13 @@ class SnapshotService {
         }
       }
       // 同步索引
-      final index = await readIndex();
-      final keptNames =
-          keep.map((path) => path.split(Platform.pathSeparator).last).toSet();
-      index.removeWhere((e) => !keptNames.contains(e.file));
-      await _writeIndex(index);
+      final keptNames = {
+        ...keep.map((path) => path.split(Platform.pathSeparator).last),
+        ..._reservedSnapshotPaths
+            .map((path) => path.split(Platform.pathSeparator).last),
+      };
+      await _withIndexUpdate(
+          (index) => index.removeWhere((e) => !keptNames.contains(e.file)));
     } catch (e) {
       debugPrint('[SnapshotService] 清理旧快照失败: $e');
     }
