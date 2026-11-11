@@ -1673,7 +1673,9 @@ void main() {
     expect(await outsideFile.readAsBytes(), [7, 8, 9]);
   });
 
-  test('non-audio storage names cannot escape their managed directory', () async {
+  test(
+    'non-audio storage names cannot escape their managed directory',
+    () async {
     final originalPathProvider = PathProviderPlatform.instance;
     final directory = await Directory.systemTemp.createTemp(
       'image-path-traversal-test-',
@@ -1706,7 +1708,8 @@ void main() {
     );
     await expectLater(ImageManifest.addRecord(record), throwsArgumentError);
     expect(await outsideFile.readAsBytes(), [7, 8, 9]);
-  });
+    },
+  );
 
   group('Web manifest read failures', () {
     test(
