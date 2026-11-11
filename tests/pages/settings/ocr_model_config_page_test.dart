@@ -872,7 +872,11 @@ void main() {
             typeConfig: {'requestSizeBudgetBytes': testCase.bytes},
           );
 
-          await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
+          await _pumpConfigPage(
+            tester,
+            model: model,
+            onSaved: (m) => saved = m,
+          );
           final budgetField = find.byKey(
             const Key('ocr_model_request_size_budget_mib'),
           );
@@ -882,7 +886,12 @@ void main() {
             testCase.text,
           );
 
-          await _enterField(tester, 0, 'Edited OCR model');
+          final nameField = find.byWidgetPredicate(
+            (widget) =>
+                widget is TextField && widget.controller?.text == model.name,
+          );
+          await tester.enterText(nameField, 'Edited OCR model');
+          await tester.pump();
           await tester.tap(find.text('保存'));
           await tester.pumpAndSettle();
 
