@@ -19442,6 +19442,12 @@ abstract class AppLocalizations {
     num count,
     Object name,
   );
+
+  /// No description provided for @providerMaxUploadSizePositive.
+  ///
+  /// In en, this message translates to:
+  /// **'Maximum upload size must be a positive number.'**
+  String get providerMaxUploadSizePositive;
 }
 
 class _AppLocalizationsDelegate

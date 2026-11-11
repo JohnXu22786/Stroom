@@ -12023,6 +12023,10 @@ class AppLocalizationsEs extends AppLocalizations {
     );
     return '¿Eliminar la carpeta vacía “$name”? $_temp0';
   }
+
+  @override
+  String get providerMaxUploadSizePositive =>
+      'El tamaño máximo de carga debe ser un número positivo.';
 }
 
 /// The translations for Spanish Castilian, as used in Spain (`es_ES`).
@@ -24043,4 +24047,8 @@ class AppLocalizationsEsEs extends AppLocalizationsEs {
     );
     return '¿Eliminar la carpeta vacía “$name”? $_temp0';
   }
+
+  @override
+  String get providerMaxUploadSizePositive =>
+      'El tamaño máximo de carga debe ser un número positivo.';
 }

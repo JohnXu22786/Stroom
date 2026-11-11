@@ -11520,6 +11520,9 @@ class AppLocalizationsJa extends AppLocalizations {
   ) {
     return '空のフォルダー「$name」を削除しますか? 配下の $count 個のサブフォルダーも削除されます。';
   }
+
+  @override
+  String get providerMaxUploadSizePositive => '最大アップロードサイズは正の数である必要があります。';
 }
 
 /// The translations for Japanese, as used in Japan (`ja_JP`).
@@ -23037,4 +23040,7 @@ class AppLocalizationsJaJp extends AppLocalizationsJa {
   ) {
     return '空のフォルダー「$name」を削除しますか? 配下の $count 個のサブフォルダーも削除されます。';
   }
+
+  @override
+  String get providerMaxUploadSizePositive => '最大アップロードサイズは正の数である必要があります。';
 }

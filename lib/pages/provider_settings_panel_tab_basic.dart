@@ -283,7 +283,7 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
                     ),
                     textAlign: TextAlign.center,
                     style: const TextStyle(fontSize: 13),
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       isDense: true,
                       contentPadding: EdgeInsets.symmetric(
                         horizontal: 8,
@@ -291,12 +291,19 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
                       ),
                       border: OutlineInputBorder(),
                       suffixText: 'MB',
+                      errorText: _maxFileSizeError,
                     ),
                     onChanged: (v) {
-                      final parsed = double.tryParse(v);
-                      if (parsed != null && parsed > 0) {
-                        setState(() => _maxFileSizeMb = parsed);
-                      }
+                      final parsed = double.tryParse(v.trim());
+                      setState(() {
+                        if (parsed != null && parsed.isFinite && parsed > 0) {
+                          _maxFileSizeMb = parsed;
+                          _maxFileSizeError = null;
+                        } else {
+                          _maxFileSizeError = AppLocalizations.of(context)!
+                              .providerMaxUploadSizePositive;
+                        }
+                      });
                     },
                   ),
                 ),

@@ -7017,5 +7017,6 @@
       }
     }
   },
-  "fileManagerDeleteEmptyFolderWithSubfoldersConfirm": "空のフォルダー「{name}」を削除しますか? 配下の {count} 個のサブフォルダーも削除されます。"
+  "fileManagerDeleteEmptyFolderWithSubfoldersConfirm": "空のフォルダー「{name}」を削除しますか? 配下の {count} 個のサブフォルダーも削除されます。",
+  "providerMaxUploadSizePositive": "最大アップロードサイズは正の数である必要があります。"
 }
