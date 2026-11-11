@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:archive/archive.dart';
@@ -140,6 +141,142 @@ void main() {
         expect(cards, hasLength(1));
         expect(cards.single['nid'], notes.single['id']);
         expect(notes.single['id'], isNot(42));
+      } finally {
+        await target.close();
+      }
+    } finally {
+      PathProviderPlatform.instance = previous;
+      await documents.delete(recursive: true);
+    }
+  });
+
+  test(
+    'imports missing note type definitions and keeps notes mapped to them',
+    () async {
+      final documents = await Directory.systemTemp.createTemp(
+        'stroom_anki_apkg_import_note_type_test_',
+      );
+      final previous = PathProviderPlatform.instance;
+      PathProviderPlatform.instance = _DocumentsPathProvider(documents.path);
+      final sourcePath = '${documents.path}/source.anki2';
+      final targetPath = '${documents.path}/collection.anki2';
+
+      try {
+        await _createCollection(
+          sourcePath,
+          includeNote: true,
+          includeCard: true,
+          noteModelId: 200,
+          models: {
+            '100': _modelJson(
+              100,
+              'Existing target type',
+              did: 2,
+              templateDid: 2,
+            ),
+            '200': _modelJson(
+              200,
+              'Imported custom type',
+              did: 2,
+              templateDid: 2,
+            ),
+          },
+          decks: {
+            '2': {'id': 2, 'name': 'Imported deck'},
+          },
+        );
+        await _createCollection(
+          targetPath,
+          models: {
+            '100': Map.fromEntries(
+              _modelJson(
+                100,
+                'Existing target type',
+                did: 100,
+                templateDid: 100,
+              ).entries.toList().reversed,
+            ),
+          },
+          decks: {
+            '100': {'id': 100, 'name': 'Imported deck'},
+          },
+        );
+        final packagePath = await _packageCollection(documents, sourcePath);
+
+        await AnkiApkgImporter.import(packagePath);
+
+        final target = await sqflite.openDatabase(targetPath, readOnly: true);
+        try {
+          final collection = (await target.query('col')).single;
+          final models = Map<String, dynamic>.from(
+            jsonDecode(collection['models'] as String) as Map,
+          );
+          final notes = await target.query('notes');
+          final cards = await target.query('cards');
+          expect(models, contains('200'));
+          expect(models, hasLength(2));
+          expect(models['200']['name'], 'Imported custom type');
+          expect(models['200']['did'], 100);
+          expect(models['200']['tmpls'].single['did'], 100);
+          expect(notes.single['mid'], 200);
+          expect(
+            models.containsKey((notes.single['mid'] as int).toString()),
+            isTrue,
+          );
+          expect(cards.single['nid'], notes.single['id']);
+          expect(cards.single['ord'], 0);
+        } finally {
+          await target.close();
+        }
+      } finally {
+        PathProviderPlatform.instance = previous;
+        await documents.delete(recursive: true);
+      }
+    },
+  );
+
+  test('remaps imported notes when a note type ID collides', () async {
+    final documents = await Directory.systemTemp.createTemp(
+      'stroom_anki_apkg_import_note_type_collision_test_',
+    );
+    final previous = PathProviderPlatform.instance;
+    PathProviderPlatform.instance = _DocumentsPathProvider(documents.path);
+    final sourcePath = '${documents.path}/source.anki2';
+    final targetPath = '${documents.path}/collection.anki2';
+
+    try {
+      await _createCollection(
+        sourcePath,
+        includeNote: true,
+        includeCard: true,
+        noteModelId: 200,
+        models: {'200': _modelJson(200, 'Imported package type')},
+      );
+      await _createCollection(
+        targetPath,
+        models: {'200': _modelJson(200, 'Existing target type')},
+      );
+      final packagePath = await _packageCollection(documents, sourcePath);
+
+      await AnkiApkgImporter.import(packagePath);
+
+      final target = await sqflite.openDatabase(targetPath, readOnly: true);
+      try {
+        final collection = (await target.query('col')).single;
+        final models = Map<String, dynamic>.from(
+          jsonDecode(collection['models'] as String) as Map,
+        );
+        final note = (await target.query('notes')).single;
+        final card = (await target.query('cards')).single;
+        final mappedModelId = note['mid'] as int;
+        expect(mappedModelId, isNot(200));
+        expect(models['200']['name'], 'Existing target type');
+        expect(
+          models[mappedModelId.toString()]['name'],
+          'Imported package type',
+        );
+        expect(card['nid'], note['id']);
+        expect(card['ord'], 0);
       } finally {
         await target.close();
       }
@@ -441,15 +578,23 @@ Future<void> _createCollection(
   bool includeNote = false,
   bool includeCard = false,
   int noteId = 42,
+  int noteModelId = 1,
+  Map<String, dynamic>? models,
+  Map<String, dynamic> decks = const {},
 }) async {
+  final collectionModels = models ?? {'1': _modelJson(1, 'Basic')};
   final db = await sqflite.openDatabase(
     path,
     version: 1,
     onCreate: (db, _) async {
       await db.execute(
-        'CREATE TABLE col (id INTEGER PRIMARY KEY, decks TEXT, mod INTEGER, dty INTEGER)',
+        'CREATE TABLE col (id INTEGER PRIMARY KEY, decks TEXT, models TEXT, mod INTEGER, dty INTEGER)',
       );
-      await db.insert('col', {'id': 1, 'decks': '{}'});
+      await db.insert('col', {
+        'id': 1,
+        'decks': jsonEncode(decks),
+        'models': jsonEncode(collectionModels),
+      });
       await db.execute(
         'CREATE TABLE notes (id INTEGER, guid TEXT, mid INTEGER, mod INTEGER, usn INTEGER, tags TEXT, flds TEXT, sfld TEXT, csum INTEGER, flags INTEGER, data TEXT)',
       );
@@ -460,7 +605,7 @@ Future<void> _createCollection(
         await db.insert('notes', {
           'id': noteId,
           'guid': 'note-guid',
-          'mid': 1,
+          'mid': noteModelId,
           'mod': 0,
           'usn': 0,
           'tags': '',
@@ -524,3 +669,37 @@ class _DocumentsPathProvider extends PathProviderPlatform {
   @override
   Future<String?> getApplicationDocumentsPath() async => path;
 }
+
+Map<String, dynamic> _modelJson(
+  int id,
+  String name, {
+  int did = 1,
+  int? templateDid,
+}) => {
+  'id': id,
+  'name': name,
+  'type': 0,
+  'mod': 1,
+  'usn': -1,
+  'sortf': 0,
+  'did': did,
+  'flds': [
+    {'name': 'Front', 'ord': 0},
+    {'name': 'Back', 'ord': 1},
+  ],
+  'tmpls': [
+    {
+      'name': 'Card 1',
+      'ord': 0,
+      'qfmt': '{{Front}}',
+      'afmt': '{{Back}}',
+      'did': ?templateDid,
+    },
+  ],
+  'css': '',
+  'req': [],
+  'tags': [],
+  'latexPre': '',
+  'latexPost': '',
+  'latex': 'dvipng',
+};

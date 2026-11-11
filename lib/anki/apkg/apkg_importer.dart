@@ -154,6 +154,12 @@ class AnkiApkgImporter {
             jsonDecode(srcCol.first['decks'] as String) as Map<String, dynamic>;
         final tgtDecks =
             jsonDecode(tgtCol.first['decks'] as String) as Map<String, dynamic>;
+        final srcModels = jsonDecode(
+          srcCol.first['models'] as String,
+        ) as Map<String, dynamic>;
+        final tgtModels = jsonDecode(
+          tgtCol.first['models'] as String,
+        ) as Map<String, dynamic>;
 
         final deckMap = <int, int>{}; // old ID → new ID
         for (final entry in srcDecks.entries) {
@@ -180,15 +186,42 @@ class AnkiApkgImporter {
           decksImported++;
         }
 
+        // Preserve package note type definitions, remapping IDs that collide
+        // with a different target definition. Note type deck references use
+        // the same mapping as the imported decks.
+        final modelMap = <int, int>{};
+        for (final entry in srcModels.entries) {
+          final sourceId = int.parse(entry.key);
+          final sourceModel = Map<String, dynamic>.from(entry.value as Map);
+          _remapModelDecks(sourceModel, deckMap);
+          final existingModel = tgtModels[entry.key];
+          var targetId = sourceId;
+          if (existingModel != null &&
+              !_sameModelDefinition(
+                sourceModel,
+                Map<String, dynamic>.from(existingModel as Map),
+              )) {
+            do {
+              targetId = ++newId;
+            } while (tgtModels.containsKey(targetId.toString()));
+          }
+          modelMap[sourceId] = targetId;
+          if (existingModel != null && targetId == sourceId) continue;
+
+          final model = sourceModel
+            ..['id'] = targetId
+            ..['mod'] = nowSec
+            ..['usn'] = -1;
+          tgtModels[targetId.toString()] = model;
+        }
+
         // Write back merged decks
-        await txn.update(
-            'col',
-            {
-              'decks': jsonEncode(tgtDecks),
-              'mod': now,
-              'dty': 1,
-            },
-            where: 'id = 1');
+        await txn.update('col', {
+          'decks': jsonEncode(tgtDecks),
+          'models': jsonEncode(tgtModels),
+          'mod': now,
+          'dty': 1,
+        }, where: 'id = 1');
 
         // We also need to update the decks in the col row's conf activeDecks list
         // but for simplicity, we'll just merge and leave the active deck as-is
@@ -226,10 +259,15 @@ class AnkiApkgImporter {
 
           final id = ++newId;
           noteMap[sourceId] = id;
+          final sourceModelId = note['mid'] as int;
+          final targetModelId = modelMap[sourceModelId];
+          if (targetModelId == null) {
+            throw AnkiApkgException.unexpectedError(tmpDbPath);
+          }
           await txn.insert('notes', {
             'id': id,
             'guid': guid,
-            'mid': note['mid'],
+            'mid': targetModelId,
             'mod': nowSec,
             'usn': -1,
             'tags': note['tags'] ?? '',
@@ -329,6 +367,61 @@ class AnkiApkgImporter {
         }
       }
     }
+  }
+
+  static void _remapModelDecks(
+    Map<String, dynamic> model,
+    Map<int, int> deckMap,
+  ) {
+    final did = model['did'];
+    if (did is int) model['did'] = deckMap[did] ?? did;
+    final templates = model['tmpls'];
+    if (templates is! List) return;
+    for (var index = 0; index < templates.length; index++) {
+      final template = templates[index];
+      if (template is! Map) continue;
+      final templateData = Map<String, dynamic>.from(template);
+      final templateDid = templateData['did'];
+      if (templateDid is int) {
+        templateData['did'] = deckMap[templateDid] ?? templateDid;
+      }
+      templates[index] = templateData;
+    }
+  }
+
+  static bool _sameModelDefinition(
+    Map<String, dynamic> left,
+    Map<String, dynamic> right,
+  ) {
+    final leftDefinition = Map<String, dynamic>.from(left)
+      ..remove('id')
+      ..remove('mod')
+      ..remove('usn');
+    final rightDefinition = Map<String, dynamic>.from(right)
+      ..remove('id')
+      ..remove('mod')
+      ..remove('usn');
+    return _sameJsonValue(leftDefinition, rightDefinition);
+  }
+
+  static bool _sameJsonValue(Object? left, Object? right) {
+    if (left is Map && right is Map) {
+      if (left.length != right.length) return false;
+      for (final key in left.keys) {
+        if (!right.containsKey(key) || !_sameJsonValue(left[key], right[key])) {
+          return false;
+        }
+      }
+      return true;
+    }
+    if (left is List && right is List) {
+      if (left.length != right.length) return false;
+      for (var index = 0; index < left.length; index++) {
+        if (!_sameJsonValue(left[index], right[index])) return false;
+      }
+      return true;
+    }
+    return left == right;
   }
 
   static bool _hasEndOfCentralDirectory(List<int> bytes) {
