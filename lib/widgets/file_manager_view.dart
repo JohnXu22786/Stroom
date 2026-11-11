@@ -2819,9 +2819,9 @@ class _FileManagerViewState<T extends FileRecord>
         : descendants.isNotEmpty
             ? AppLocalizations.of(context)!
                 .fileManagerDeleteEmptyFolderWithSubfoldersConfirm(
-                  descendants.length,
-                  folderName,
-                )
+                descendants.length,
+                folderName,
+              )
             : AppLocalizations.of(context)!
                 .fileManagerDeleteEmptyFolderConfirm(folderName);
 
