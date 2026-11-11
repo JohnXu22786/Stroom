@@ -53,6 +53,8 @@ class OcrDiagnosticSnapshot {
     'La imagen está dañada o no se puede decodificar. Selecciónelo nuevamente o conviértalo a PNG, JPEG o WebP e inténtelo nuevamente.',
     'La resolución de la imagen es demasiado grande. OCR admite hasta 50 millones de píxeles por imagen. Cambie su tamaño e inténtelo de nuevo.',
     'El PNG necesario para corregir la orientación de esta imagen excedería el límite de tamaño de la solicitud de OCR. Cambie el tamaño de la imagen e inténtelo de nuevo.',
+    'No se pudo encontrar el archivo de imagen. Seleccione la imagen nuevamente.',
+    'No se pudo leer el archivo de imagen. Verifique el acceso al archivo e inténtelo nuevamente.',
     'No se pudo corregir la orientación de la imagen. Conviértelo a PNG, JPEG o WebP e inténtalo de nuevo.',
     '画像は空です。もう一度選択してください。',
     'この画像形式はサポートされていません。 PNG、JPEG、または WebP に変換して、再試行してください。',
@@ -61,6 +63,8 @@ class OcrDiagnosticSnapshot {
     '画像の解像度が大きすぎます。 OCR は、画像あたり最大 5,000 万ピクセルをサポートします。サイズを変更して再試行してください。',
     'この画像の方向を修正するために必要な PNG は、OCR リクエストのサイズ制限を超えます。画像のサイズを変更して再試行してください。',
     '画像の向きを補正できませんでした。 PNG、JPEG、または WebP に変換して、再試行してください。',
+    '画像ファイルが見つかりませんでした。再度画像を選択してください。',
+    '画像ファイルを読み取れませんでした。ファイルアクセスを確認して、再試行してください。',
     'OCR request failed',
     'OCR失败',
     '上传超时',
@@ -539,6 +543,12 @@ class OcrDiagnosticSnapshot {
           ).hasMatch(candidate) ||
           RegExp(
             r'^图片超过(?:OCR 请求大小预算（[\d.]+ MiB）|任务流图片输入上限（[\d.]+ MiB）)，请缩小图片后重试。$',
+          ).hasMatch(candidate) ||
+          RegExp(
+            r'^La imagen supera (?:Presupuesto de tamaño de solicitud de OCR \([\d.]+ MiB\)|el límite de entrada de imagen de flujo de tareas \([\d.]+ MiB\))\. Elija una imagen más pequeña e inténtelo de nuevo\.$',
+          ).hasMatch(candidate) ||
+          RegExp(
+            r'^画像は(?:OCR リクエスト サイズの予算 \([\d.]+ MiB\)|タスク フロー イメージの入力制限 \([\d.]+ MiB\))を超えています。より小さい画像を選択して、もう一度試してください。$',
           ).hasMatch(candidate) ||
           RegExp(
             r'^HTTP\s+[1-5]\d{2}$',
