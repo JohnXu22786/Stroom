@@ -11,7 +11,7 @@ from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import Mock
+from unittest.mock import MagicMock, Mock
 
 from evaluate import (
     EvaluationError,
@@ -5126,6 +5126,37 @@ class EvaluateTests(unittest.TestCase):
             _read_fixture_png(image_path, "oversized")
 
         image_path.open.assert_not_called()
+
+    def test_fixture_png_growth_after_stat_is_bounded_and_rejected(self):
+        with TemporaryDirectory() as directory:
+            fixture_path = Path(directory) / "growing.png"
+            fixture_path.write_bytes(b"x" * MAX_PNG_ENCODED_BYTES)
+
+            def stat_then_grow():
+                before_growth = fixture_path.stat()
+                with fixture_path.open("ab") as growing_file:
+                    growing_file.write(b"y" * 4096)
+                return before_growth
+
+            with fixture_path.open("rb") as fixture_file:
+                image_file = Mock(wraps=fixture_file)
+                image_context = MagicMock()
+                image_context.__enter__.return_value = image_file
+                image_path = Mock(spec=Path)
+                image_path.stat.side_effect = stat_then_grow
+                image_path.open.return_value = image_context
+
+                with self.assertRaisesRegex(
+                    EvaluationError,
+                    "growing: PNG exceeds the maximum encoded fixture size",
+                ):
+                    _read_fixture_png(image_path, "growing")
+
+                image_path.stat.assert_called_once_with()
+                image_path.open.assert_called_once_with("rb")
+                image_file.read.assert_called_once_with(MAX_PNG_ENCODED_BYTES + 1)
+                self.assertEqual(fixture_file.tell(), MAX_PNG_ENCODED_BYTES + 1)
+                image_context.__exit__.assert_called_once_with(None, None, None)
 
     def test_fixture_verification_reports_self_referential_symlink_as_evaluation_error(self):
         with TemporaryDirectory() as directory:
