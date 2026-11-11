@@ -4,6 +4,64 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/utils/audio_codecs.dart';
 
+/// Read big-endian bits from a FLAC frame for structural assertions.
+class _FlacBitReader {
+  _FlacBitReader(this.bytes, this.offset);
+
+  final Uint8List bytes;
+  int offset;
+
+  int read(int count) {
+    var value = 0;
+    for (var i = 0; i < count; i++) {
+      value = (value << 1) | ((bytes[offset >> 3] >> (7 - (offset & 7))) & 1);
+      offset++;
+    }
+    return value;
+  }
+}
+
+({int partitionOrder, List<int> residualCounts, int frameEndBit})
+    _readZeroFlacFrameResidualLayout(Uint8List flac, int blockLength) {
+  const frameOffset = 42; // fLaC marker plus the 34-byte STREAMINFO block.
+  final bits = _FlacBitReader(flac, frameOffset * 8);
+
+  bits.read(16); // Sync code and blocking strategy.
+  final blockSizeCode = bits.read(4);
+  bits.read(12); // Sample rate, channel assignment, sample size, reserved.
+  bits.read(8); // Frame number zero.
+  if (blockSizeCode == 6) {
+    bits.read(8);
+  } else if (blockSizeCode == 7) {
+    bits.read(16);
+  }
+  bits.read(8); // Header CRC-8.
+
+  final subframeOrder = bits.read(6) & 0x7;
+  bits.read(1); // Wasted bits flag.
+  bits.read(subframeOrder * 16); // Warm-up samples.
+  expect(bits.read(2), 0, reason: 'encoder uses Rice4 residual coding');
+  final partitionOrder = bits.read(4);
+  final partitions = 1 << partitionOrder;
+  final partitionSamples = blockLength ~/ partitions;
+  final residualCounts = <int>[];
+  for (var partition = 0; partition < partitions; partition++) {
+    final count = partitionSamples - (partition == 0 ? subframeOrder : 0);
+    residualCounts.add(count);
+    expect(bits.read(4), 0, reason: 'zero residuals use Rice parameter zero');
+    for (var i = 0; i < count; i++) {
+      expect(bits.read(1), 0, reason: 'zero residual uses one zero stop bit');
+    }
+  }
+
+  final frameEndBit = ((bits.offset + 7) ~/ 8) * 8 + 16; // Padding and CRC-16.
+  return (
+    partitionOrder: partitionOrder,
+    residualCounts: residualCounts,
+    frameEndBit: frameEndBit,
+  );
+}
+
 /// Generate a synthetic sine wave as Int16List.
 Int16List _sineWave(int samples, {double freq = 440, int sampleRate = 16000}) {
   final pcm = Int16List(samples);
@@ -271,6 +329,36 @@ void main() {
       final pcm = _sineWave(1024);
       final flac = encodeFlac(pcm, sampleRate: 8000);
       expect(flac.isNotEmpty, true);
+    });
+
+    test('partitions partial FLAC frame residuals by the declared block size', () {
+      for (final blockLength in [200, 257, 1025, 4095, 4096]) {
+        final pcm = Int16List(blockLength)..fillRange(0, blockLength, 1000);
+        final flac = encodeFlac(pcm, sampleRate: 16000);
+        final layout = _readZeroFlacFrameResidualLayout(flac, blockLength);
+        final expectedOrder = blockLength % 4 == 0
+            ? 2
+            : blockLength % 2 == 0
+                ? 1
+                : 0;
+        final partitions = 1 << expectedOrder;
+        final expectedPartitionSamples = blockLength ~/ partitions;
+
+        expect(layout.partitionOrder, expectedOrder,
+            reason: '$blockLength samples must use a divisible partition order');
+        expect(layout.residualCounts, hasLength(partitions));
+        expect(
+          layout.residualCounts.first,
+          expectedPartitionSamples - 1,
+          reason: 'the first partition excludes predictor warm-up samples',
+        );
+        expect(
+          layout.residualCounts.skip(1),
+          everyElement(expectedPartitionSamples),
+        );
+        expect(layout.frameEndBit, flac.length * 8,
+            reason: 'partition residuals must end at the frame CRC');
+      }
     });
 
     test('encodes valid block-size fields for partial FLAC frames', () {

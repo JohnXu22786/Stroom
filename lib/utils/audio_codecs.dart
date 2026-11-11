@@ -615,16 +615,28 @@ int _estimateRiceBits(List<int> residuals) {
 
 /// Write residuals using Rice coding.
 void _writeRiceResiduals(_BitWriter bits, List<int> residuals, int order) {
-  // Partition residuals into groups of ~128 samples
-  const partitionOrder = 2; // 2^2 = 4 partitions per block
-  final partitionSize = residuals.length >> partitionOrder;
+  // Keep the existing four partitions when the block permits them, and lower
+  // the order for partial blocks whose size is not divisible by that count.
+  final blockLength = residuals.length + order;
+  var partitionOrder = 2;
+  while (partitionOrder > 0) {
+    final partitionCount = 1 << partitionOrder;
+    final partitionSize = blockLength ~/ partitionCount;
+    if (blockLength % partitionCount == 0 && partitionSize >= order) break;
+    partitionOrder--;
+  }
 
-  for (int p = 0; p < (1 << partitionOrder); p++) {
-    final start = p * partitionSize;
-    final end = p == (1 << partitionOrder) - 1
-        ? residuals.length
-        : start + partitionSize;
-    if (start >= residuals.length) break;
+  final partitionCount = 1 << partitionOrder;
+  final partitionSize = blockLength ~/ partitionCount;
+  // Residual coding method 0 selects 4-bit Rice parameters.
+  bits.write(0, 2);
+  bits.write(partitionOrder, 4);
+  var start = 0;
+  for (int p = 0; p < partitionCount; p++) {
+    // FLAC's first partition omits the predictor warm-up samples; all later
+    // partitions contain the full block-derived partition size.
+    final partitionResidualCount = partitionSize - (p == 0 ? order : 0);
+    final end = start + partitionResidualCount;
 
     // Find best Rice parameter for this partition
     final n = end - start;
@@ -668,6 +680,7 @@ void _writeRiceResiduals(_BitWriter bits, List<int> residuals, int order) {
         bits.write(rem, k);
       }
     }
+    start = end;
   }
 }
 
