@@ -98,7 +98,8 @@ class SnapshotService {
   // Keep active paths registered so retention cleanup cannot remove them.
   static final Set<String> _activeTemporaryPaths = {};
   static final Set<String> _reservedSnapshotPaths = {};
-  static Future<void> _indexUpdateTail = Future<void>.value();
+  static bool _indexUpdateBusy = false;
+  static final List<Completer<void>> _indexUpdateWaiters = [];
 
   static DateTime _now() => debugNow?.call() ?? DateTime.now();
 
@@ -319,11 +320,14 @@ class SnapshotService {
 
   static Future<void> _withIndexUpdate(
       void Function(List<SnapshotEntry>) update) async {
-    final previous = _indexUpdateTail;
-    final finished = Completer<void>();
-    _indexUpdateTail = finished.future;
-    debugPrint('[SnapshotService diagnostic] index lock waiting');
-    await previous;
+    if (_indexUpdateBusy) {
+      final waiter = Completer<void>();
+      _indexUpdateWaiters.add(waiter);
+      debugPrint('[SnapshotService diagnostic] index lock waiting');
+      await waiter.future;
+    } else {
+      _indexUpdateBusy = true;
+    }
     debugPrint('[SnapshotService diagnostic] index lock acquired');
     try {
       final index = await readIndex();
@@ -332,7 +336,11 @@ class SnapshotService {
       await _writeIndex(index);
       debugPrint('[SnapshotService diagnostic] index write returned');
     } finally {
-      finished.complete();
+      if (_indexUpdateWaiters.isNotEmpty) {
+        _indexUpdateWaiters.removeAt(0).complete();
+      } else {
+        _indexUpdateBusy = false;
+      }
     }
   }
 
