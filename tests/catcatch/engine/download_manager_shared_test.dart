@@ -6,6 +6,39 @@ import 'package:stroom/catcatch/config/default_rules.dart';
 import 'package:stroom/catcatch/engine/download_manager.dart';
 
 void main() {
+  test(
+    'propagates a failed response stream instead of returning a temp path',
+    () async {
+      final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+      final serverDone = server.listen((socket) async {
+        socket.write(
+          'HTTP/1.1 200 OK\r\n'
+          'Content-Length: 100\r\n'
+          'Connection: close\r\n\r\n'
+          'partial',
+        );
+        await socket.flush();
+        await socket.close();
+      });
+      final directory = await Directory.systemTemp.createTemp('failed-stream-');
+      final url = 'http://${server.address.address}:${server.port}/file';
+      try {
+        await expectLater(
+          DownloadManager.downloadFile(
+            url: url,
+            saveDir: directory.path,
+            fileName: 'download.bin',
+          ),
+          throwsA(anything),
+        );
+      } finally {
+        await serverDone.cancel();
+        await server.close();
+        await directory.delete(recursive: true);
+      }
+    },
+  );
+
   test('restarts a resumed download when the server ignores Range', () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     String? requestedRange;
