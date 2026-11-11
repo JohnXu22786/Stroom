@@ -32,6 +32,7 @@ void main() {
   tearDown(() async {
     SnapshotService.debugNow = null;
     SnapshotService.debugAfterBackupCreated = null;
+    SnapshotService.debugBeforeIndexCleanup = null;
     try {
       if (await snapDir.exists()) {
         await snapDir.delete(recursive: true);
@@ -288,6 +289,55 @@ void main() {
         expect(await file!.exists(), isTrue);
       }
       expect((await SnapshotService.readIndex()).length, 2);
+    });
+
+    test('cleanup preserves snapshots indexed after its retention scan',
+        () async {
+      await snapDir.create(recursive: true);
+      final now = DateTime.now();
+      final oldEntries = <SnapshotEntry>[];
+      for (var daysAgo = 5; daysAgo >= 2; daysAgo--) {
+        final timestamp = now.subtract(Duration(days: daysAgo));
+        final name =
+            'backup_${timestamp.toIso8601String().replaceAll(':', '-')}.zip';
+        await File(p.join(snapDir.path, name)).writeAsBytes([1]);
+        oldEntries.add(SnapshotEntry(
+          file: name,
+          sha256: 'old-$daysAgo',
+          createdAt: timestamp.toIso8601String(),
+          partVersions: const {},
+        ));
+      }
+      final indexFile =
+          File(p.join(snapDir.path, SnapshotService.manifestName));
+      await indexFile.writeAsString(jsonEncode({
+        'snapshots': oldEntries.map((entry) => entry.toJson()).toList(),
+      }));
+
+      final retentionScanned = Completer<void>();
+      final continueCleanup = Completer<void>();
+      SnapshotService.debugBeforeIndexCleanup = () async {
+        SnapshotService.debugBeforeIndexCleanup = null;
+        retentionScanned.complete();
+        await continueCleanup.future;
+      };
+
+      final cleanup = SnapshotService.cleanupOldSnapshots();
+      await retentionScanned.future;
+
+      SharedPreferences.setMockInitialValues({
+        'conversations': '[{"id":"indexed_during_cleanup"}]',
+      });
+      final snapshot = await SnapshotService.createSnapshot(force: true);
+      expect(snapshot, isNotNull);
+
+      continueCleanup.complete();
+      await cleanup;
+
+      final index = await SnapshotService.readIndex();
+      expect(index.map((entry) => entry.file),
+          contains(p.basename(snapshot!.path)));
+      expect(await snapshot.exists(), isTrue);
     });
   });
 }

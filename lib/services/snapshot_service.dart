@@ -95,6 +95,9 @@ class SnapshotService {
   @visibleForTesting
   static Future<void> Function(File)? debugAfterBackupCreated;
 
+  @visibleForTesting
+  static Future<void> Function()? debugBeforeIndexCleanup;
+
   // Keep active paths registered so retention cleanup cannot remove them.
   static final Set<String> _activeTemporaryPaths = {};
   static final Set<String> _reservedSnapshotPaths = {};
@@ -465,14 +468,26 @@ class SnapshotService {
           }
         }
       }
-      // 同步索引
+      // Preserve entries added after this retention scan when their archive
+      // still exists. Snapshot creation may finish while cleanup is running.
+      final scannedNames = infos
+          .map((info) => info.path.split(Platform.pathSeparator).last)
+          .toSet();
       final keptNames = {
         ...keep.map((path) => path.split(Platform.pathSeparator).last),
         ..._reservedSnapshotPaths
             .map((path) => path.split(Platform.pathSeparator).last),
       };
-      await _withIndexUpdate(
-          (index) => index.removeWhere((e) => !keptNames.contains(e.file)));
+      await debugBeforeIndexCleanup?.call();
+      await _withIndexUpdate((index) {
+        index.removeWhere((entry) {
+          if (keptNames.contains(entry.file)) return false;
+          if (scannedNames.contains(entry.file)) return true;
+          final path = p.join(dir.path, entry.file);
+          if (_reservedSnapshotPaths.contains(path)) return false;
+          return !File(path).existsSync();
+        });
+      });
     } catch (e) {
       debugPrint('[SnapshotService] 清理旧快照失败: $e');
     }
