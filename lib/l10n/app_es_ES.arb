@@ -2732,7 +2732,7 @@
   "bgTaskOcrResultIncomplete": "El OCR devolvió un resultado incompleto (finish_reason={finishReason})",
   "ocrResultPageHeading": "Imagen {index}",
   "ocrResultPageHeadingWithName": "Imagen {index}: {name}",
-  "ocrPartialResultSuffix": "(resultado parcial)",
+  "ocrPartialResultSuffix": " (resultado parcial)",
   "bgTaskOcrPagesIncomplete": "Algunas imágenes no fueron reconocidas completamente: {details}",
   "bgTaskOcrPageIncomplete": "Imagen {index}: resultado incompleto",
   "bgTaskOcrPageFailed": "Imagen {index}: error de reconocimiento",

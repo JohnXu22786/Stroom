@@ -10116,7 +10116,7 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get ocrPartialResultSuffix => '(resultado parcial)';
+  String get ocrPartialResultSuffix => ' (resultado parcial)';
 
   @override
   String bgTaskOcrPagesIncomplete(String details) {
@@ -22236,7 +22236,7 @@ class AppLocalizationsEsEs extends AppLocalizationsEs {
   }
 
   @override
-  String get ocrPartialResultSuffix => '(resultado parcial)';
+  String get ocrPartialResultSuffix => ' (resultado parcial)';
 
   @override
   String bgTaskOcrPagesIncomplete(String details) {
