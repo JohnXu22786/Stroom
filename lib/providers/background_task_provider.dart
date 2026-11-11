@@ -712,16 +712,23 @@ BackgroundTask _localizeRestoredBackgroundTask(
   BackgroundTask task,
   AppLocalizations strings,
 ) {
-  final error = _localizeStoredBackgroundError(task.error, strings);
+  final canRelocalizeErrors = !task.hasOcrErrorLocalizationCredentialCollision;
+  final error = canRelocalizeErrors
+      ? _localizeStoredBackgroundError(task.error, strings)
+      : task.error;
   var changed = error != task.error;
   final steps = task.steps.map((step) {
     final label = _localizeStoredBackgroundStep(step.label, strings);
-    final stepError = _localizeStoredBackgroundError(step.error, strings);
+    final stepError = canRelocalizeErrors
+        ? _localizeStoredBackgroundError(step.error, strings)
+        : step.error;
     if (label != step.label || stepError != step.error) changed = true;
     return step.copyWith(label: label, error: stepError);
   }).toList(growable: false);
   final outcomes = task.ocrPageOutcomes.map((outcome) {
-    final outcomeError = _localizeStoredBackgroundError(outcome.error, strings);
+    final outcomeError = canRelocalizeErrors
+        ? _localizeStoredBackgroundError(outcome.error, strings)
+        : outcome.error;
     if (outcomeError != outcome.error) changed = true;
     return OcrPageOutcome(
       imageIndex: outcome.imageIndex,
@@ -1040,6 +1047,21 @@ bool _isSafeOcrModelId(String value, Iterable<String> credentialValues) =>
 
 Iterable<String> _legacyOcrCredentialValues(Map<String, dynamic>? rawRequest) =>
     OcrDiagnosticSnapshot.credentialValuesFromRequest(rawRequest);
+
+bool _hasOcrErrorLocalizationCredentialCollision(
+  Iterable<String> credentialValues,
+) {
+  final values = credentialValues.where((value) => value.isNotEmpty).toList();
+  if (values.isEmpty) return false;
+  return AppLocalizations.supportedLocales.any((locale) {
+    final strings = lookupAppLocalizations(locale);
+    return [
+      '${strings.unifiedTaskOcrFailed}: ',
+      strings.bgTaskOcrErrorDetailsHidden,
+      strings.bgTaskErrorDetailsHidden,
+    ].any((label) => _legacyOcrTextContainsCredential(label, values));
+  });
+}
 
 bool _legacyOcrIsOrdinaryTerminalReadCarefullyPrompt(
   String text,
@@ -4286,6 +4308,7 @@ class BackgroundTask {
   final Map<String, dynamic>?
       rawResponse; // Raw response data for error diagnostics
   final List<String> _ocrDiagnosticCredentialValues;
+  final bool hasOcrErrorLocalizationCredentialCollision;
   final Map<String, dynamic>?
       retryData; // Retry data to pre-populate form when retrying
   final List<OcrPageOutcome> ocrPageOutcomes;
@@ -4312,6 +4335,7 @@ class BackgroundTask {
     List<OcrPageOutcome> ocrPageOutcomes = const [],
     Iterable<String> ocrDiagnosticCredentialValues = const [],
     Iterable<String> ocrCredentialValuesForSanitization = const [],
+    bool hasOcrErrorLocalizationCredentialCollision = false,
   }) : this._(
           id: id,
           type: type,
@@ -4335,6 +4359,8 @@ class BackgroundTask {
           ocrDiagnosticCredentialValues: ocrDiagnosticCredentialValues,
           ocrCredentialValuesForSanitization:
               ocrCredentialValuesForSanitization,
+          hasOcrErrorLocalizationCredentialCollision:
+              hasOcrErrorLocalizationCredentialCollision,
         );
 
   BackgroundTask._({
@@ -4360,6 +4386,7 @@ class BackgroundTask {
     List<OcrPageOutcome> ocrPageOutcomes = const [],
     Iterable<String> ocrDiagnosticCredentialValues = const [],
     Iterable<String> ocrCredentialValuesForSanitization = const [],
+    bool hasOcrErrorLocalizationCredentialCollision = false,
   })  : error = type == BackgroundTaskType.ocr
             ? _sanitizeOcrTaskError(
                 error,
@@ -4394,6 +4421,18 @@ class BackgroundTask {
                 ...ocrDiagnosticCredentialValues,
               })
             : const [],
+        hasOcrErrorLocalizationCredentialCollision =
+            type == BackgroundTaskType.ocr &&
+                (hasOcrErrorLocalizationCredentialCollision ||
+                    _hasOcrErrorLocalizationCredentialCollision(
+                      [
+                        ..._legacyOcrCredentialValues(rawRequest),
+                        ..._combinedOcrCredentialValues(
+                          ocrDiagnosticCredentialValues,
+                          ocrCredentialValuesForSanitization,
+                        ),
+                      ],
+                    )),
         rawRequest = type == BackgroundTaskType.ocr
             ? _sanitizeOcrTaskRequest(
                 rawRequest,
@@ -4497,6 +4536,8 @@ class BackgroundTask {
       ocrPageOutcomes: ocrPageOutcomes ?? this.ocrPageOutcomes,
       ocrDiagnosticCredentialValues: _ocrDiagnosticCredentialValues,
       ocrCredentialValuesForSanitization: ocrCredentialValuesForSanitization,
+      hasOcrErrorLocalizationCredentialCollision:
+          hasOcrErrorLocalizationCredentialCollision,
       retryData: clearRetryData ? null : (retryData ?? this.retryData),
       retryDataAlreadySanitized: retryData == null &&
           rawRequest == null &&
@@ -4518,6 +4559,8 @@ class BackgroundTask {
         'partialSaveRequested': partialSaveRequested,
         'resultSavedAsPartial': resultSavedAsPartial,
         'error': error,
+        if (hasOcrErrorLocalizationCredentialCollision)
+          'hasOcrErrorLocalizationCredentialCollision': true,
         'createdAt': createdAt.toIso8601String(),
         'completedAt': completedAt?.toIso8601String(),
         'statusChangedAt': statusChangedAt?.toIso8601String(),
@@ -4575,6 +4618,8 @@ class BackgroundTask {
       retryDataAlreadySanitized: true,
       ocrPageOutcomes: _ocrPageOutcomesFromTaskMap(map['ocrPageOutcomes']),
       ocrCredentialValuesForSanitization: retryCredentialValues,
+      hasOcrErrorLocalizationCredentialCollision:
+          map['hasOcrErrorLocalizationCredentialCollision'] as bool? ?? false,
     );
   }
 }

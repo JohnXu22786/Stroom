@@ -357,9 +357,7 @@ void main() {
         );
         notifier.failTask(
           id,
-          error:
-              '${strings.unifiedTaskOcrFailed}: OCR error details were hidden（HTTP 429）',
-          ocrCredentialValuesForSanitization: ['OCR'],
+          error: '${strings.unifiedTaskOcrFailed}: 错误详情已隐藏（HTTP 429）',
         );
 
         expect(
@@ -378,6 +376,62 @@ void main() {
             restored.taskById(id)!.error,
             '${strings.unifiedTaskOcrFailed}: ${strings.bgTaskErrorDetailsHidden}（HTTP 429）',
           );
+        } finally {
+          restored.dispose();
+          await restored.pendingPersistence;
+          notifier.dispose();
+          await notifier.pendingPersistence;
+        }
+      },
+    );
+
+    test(
+      'restoring OCR error summaries cannot introduce another locale credential',
+      () async {
+        var strings = lookupAppLocalizations(const Locale('en', 'US'));
+        final spanishOcrHiddenLabel = lookupAppLocalizations(
+          const Locale('es'),
+        ).bgTaskOcrErrorDetailsHidden;
+        final notifier = BackgroundTaskNotifier(
+          localizationsResolver: () => strings,
+        );
+        final id = notifier.addTask(
+          type: BackgroundTaskType.ocr,
+          title: 'OCR',
+        );
+        notifier.failTask(
+          id,
+          error:
+              '${strings.unifiedTaskOcrFailed}: OCR error details were hidden（HTTP 429）',
+          ocrCredentialValuesForSanitization: [spanishOcrHiddenLabel],
+        );
+
+        final safeEnglishError = notifier.taskById(id)!.error!;
+        expect(safeEnglishError, contains('HTTP 429'));
+        expect(safeEnglishError, isNot(contains(spanishOcrHiddenLabel)));
+        expect(
+          notifier.taskById(id)!.hasOcrErrorLocalizationCredentialCollision,
+          isTrue,
+        );
+        await notifier.pendingPersistence;
+        final persistedRows = jsonDecode(
+          await _tasksFileIn(testDir.path).readAsString(),
+        ) as List<dynamic>;
+        final persistedTask = persistedRows
+            .map((row) => Map<String, dynamic>.from(row as Map))
+            .singleWhere((row) => row['id'] == id);
+        expect(persistedTask['hasOcrErrorLocalizationCredentialCollision'],
+            isTrue);
+
+        strings = lookupAppLocalizations(const Locale('es'));
+        final restored = BackgroundTaskNotifier(
+          localizationsResolver: () => strings,
+        );
+        try {
+          expect(await restored.restoreFromPersistence(), isTrue);
+          final restoredError = restored.taskById(id)!.error!;
+          expect(restoredError, safeEnglishError);
+          expect(restoredError, isNot(contains(spanishOcrHiddenLabel)));
         } finally {
           restored.dispose();
           await restored.pendingPersistence;
