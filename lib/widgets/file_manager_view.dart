@@ -2100,6 +2100,7 @@ class _FileManagerViewState<T extends FileRecord>
     // Export files
     if (adjustedFileIds.isNotEmpty && widget.onExportFiles != null) {
       chosenDir = await widget.onExportFiles!(adjustedFileIds, '');
+      if (chosenDir == null) return;
     }
 
     // Export folders — prefer the batch callback, fall back to per-folder
