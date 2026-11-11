@@ -42,6 +42,8 @@ Future<ProviderConfigItem?> _openAndSave(
   await tester.pumpAndSettle();
   await tester.tap(find.text('Open provider settings'));
   await tester.pumpAndSettle();
+  await tester.tap(find.text('Parameter settings'));
+  await tester.pumpAndSettle();
 
   final sizeField = find.byWidgetPredicate(
     (widget) => widget is TextField && widget.decoration?.suffixText == 'MB',
