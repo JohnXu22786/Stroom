@@ -242,6 +242,41 @@ void main() {
       final flac = encodeFlac(pcm, sampleRate: 8000);
       expect(flac.isNotEmpty, true);
     });
+
+    test('encodes valid block-size fields for partial FLAC frames', () {
+      for (final (blockLength, expectedCode) in [
+        (200, 6),
+        (257, 7),
+        (1024, 10),
+        (4095, 7),
+        (4096, 12),
+      ]) {
+        final flac = encodeFlac(Int16List(blockLength), sampleRate: 16000);
+        var frameOffset = -1;
+        for (var i = 42; i < flac.length - 1; i++) {
+          if (flac[i] == 0xFF && (flac[i + 1] & 0xFC) == 0xF8) {
+            frameOffset = i;
+            break;
+          }
+        }
+        expect(frameOffset, greaterThanOrEqualTo(42),
+            reason: 'encoded output must contain a FLAC frame sync');
+
+        final code = (flac[frameOffset + 2] >> 4) & 0x0F;
+
+        expect(code, expectedCode,
+            reason: '$blockLength samples must use a valid FLAC block-size code');
+
+        final decodedBlockLength = switch (code) {
+          6 => flac[frameOffset + 5] + 1,
+          7 => ((flac[frameOffset + 5] << 8) | flac[frameOffset + 6]) + 1,
+          10 => 1024,
+          12 => 4096,
+          _ => fail('Unexpected block-size code $code'),
+        };
+        expect(decodedBlockLength, blockLength);
+      }
+    });
   });
 
   group('compressPcm', () {
