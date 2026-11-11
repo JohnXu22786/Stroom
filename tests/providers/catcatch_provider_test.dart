@@ -52,6 +52,9 @@ class _RetryProgressFile implements File {
   Future<bool> exists() => file.exists();
 
   @override
+  Future<String> resolveSymbolicLinks() => file.resolveSymbolicLinks();
+
+  @override
   Future<FileSystemEntity> delete({bool recursive = false}) async {
     deleteAttempts++;
     if (deleteAttempts == 1) {
