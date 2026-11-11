@@ -54,12 +54,11 @@ void main() {
       expect(find.text('Fallback method'), findsOneWidget);
       expect(find.text('Preprocessing method'), findsOneWidget);
       expect(find.text('Compression method'), findsOneWidget);
-      expect(find.byType(DropdownButton<String>), findsNWidgets(5));
+      expect(find.byType(DropdownButton<String>), findsNWidgets(4));
       expect(tester.takeException(), isNull, reason: 'Dialog width: $width');
 
       await tester.pageBack();
       await tester.pumpAndSettle();
     }
-
   });
 }
