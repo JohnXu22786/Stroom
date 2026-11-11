@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/catcatch/config/default_rules.dart';
 import 'package:stroom/catcatch/engine/download_manager.dart';
@@ -42,8 +43,9 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 50));
       final range = request.headers.value(HttpHeaders.rangeHeader);
       if (range != null) {
-        final startByte =
-            int.parse(RegExp(r'bytes=(\d+)-').firstMatch(range)![1]!);
+        final startByte = int.parse(
+          RegExp(r'bytes=(\d+)-').firstMatch(range)![1]!,
+        );
         request.response.statusCode = HttpStatus.partialContent;
         request.response.write(contents.substring(startByte));
       } else {
@@ -149,8 +151,9 @@ void main() {
       request.response.write(request.uri.path);
       await request.response.close();
     });
-    final directory =
-        await Directory.systemTemp.createTemp('hls-segment-headers-test');
+    final directory = await Directory.systemTemp.createTemp(
+      'hls-segment-headers-test',
+    );
     final origin = 'http://${server.address.address}:${server.port}';
     try {
       await DownloadManager.downloadSegmentsAndMerge(
@@ -209,4 +212,88 @@ void main() {
       }
     },
   );
+
+  test('isolates concurrent playlists with the same output filename', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final serverDone = server.listen((request) async {
+      final payload = request.uri.pathSegments.last;
+      await Future<void>.delayed(
+        Duration(milliseconds: payload.startsWith('first') ? 25 : 5),
+      );
+      request.response.write(payload);
+      await request.response.close();
+    });
+    final directory = await Directory.systemTemp.createTemp('same-playlist-');
+    final origin = 'http://${server.address.address}:${server.port}';
+    try {
+      final results = await Future.wait([
+        DownloadManager.downloadSegmentsAndMerge(
+          segmentUrls: ['$origin/first-a.ts', '$origin/first-b.ts'],
+          outputPath: '${directory.path}/same_merged.ts',
+          taskId: 'first-playlist-task',
+        ),
+        DownloadManager.downloadSegmentsAndMerge(
+          segmentUrls: ['$origin/second-a.ts', '$origin/second-b.ts'],
+          outputPath: '${directory.path}/same_merged.ts',
+          taskId: 'second-playlist-task',
+        ),
+      ]);
+
+      expect(results.toSet(), hasLength(2));
+      final contents = await Future.wait(
+        results.map((path) => File(path).readAsString()),
+      );
+      expect(contents.toSet(), {
+        'first-a.tsfirst-b.ts',
+        'second-a.tssecond-b.ts',
+      });
+      expect(
+        Directory(directory.path)
+            .listSync()
+            .whereType<Directory>()
+            .where((entry) => entry.path.endsWith('_parts')),
+        isEmpty,
+      );
+    } finally {
+      await serverDone.cancel();
+      await server.close(force: true);
+      await directory.delete(recursive: true);
+    }
+  });
+
+  test('releases a playlist output reservation when cancelled', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final serverDone = server.listen((request) async {
+      request.response.write('replacement segment');
+      await request.response.close();
+    });
+    final directory = await Directory.systemTemp.createTemp('cancel-playlist-');
+    final outputPath = '${directory.path}/same_merged.ts';
+    final origin = 'http://${server.address.address}:${server.port}';
+    try {
+      final cancelToken = CancelToken()..cancel('cancel playlist');
+      await expectLater(
+        DownloadManager.downloadSegmentsAndMerge(
+          segmentUrls: ['$origin/cancelled.ts'],
+          outputPath: outputPath,
+          cancelToken: cancelToken,
+          taskId: 'cancelled-playlist-task',
+        ),
+        throwsA(anything),
+      );
+
+      final replacementPath = await DownloadManager.downloadSegmentsAndMerge(
+        segmentUrls: ['$origin/replacement.ts'],
+        outputPath: outputPath,
+        taskId: 'replacement-playlist-task',
+      );
+
+      expect(replacementPath, outputPath);
+      expect(await File(replacementPath).readAsString(), 'replacement segment');
+    } finally {
+      await serverDone.cancel();
+      await server.close(force: true);
+      await directory.delete(recursive: true);
+    }
+  });
 }
