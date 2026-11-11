@@ -137,6 +137,13 @@ OPAQUE_CREDENTIAL_PATTERNS = (
         r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b"
     ),
 )
+OPAQUE_CREDENTIAL_IDENTIFIER_PATTERNS = tuple(
+    re.compile(
+        pattern.pattern.removeprefix(r"\b").removesuffix(r"\b"),
+        pattern.flags,
+    )
+    for pattern in OPAQUE_CREDENTIAL_PATTERNS
+)
 PREDICTION_FIELDS = {
     "fixture_id",
     "text",
@@ -173,6 +180,79 @@ def _validate_unicode_scalar_text(value: str, fixture_id: str, field: str) -> No
         ) from error
 
 
+def _safe_validation_identifier(value: Any) -> str:
+    """Keep benign identifiers useful in errors without echoing credential-like text."""
+    if not isinstance(value, str):
+        return f"<{type(value).__name__}>"
+    if _is_credential_like_identifier(value) or _contains_credential_like_value(value):
+        return "[redacted]"
+    return value
+
+
+def _is_credential_like_identifier(value: str) -> bool:
+    """Recognize credential terms as whole identifier components, not substrings."""
+    word_boundaries = re.sub(
+        r"(?<=[A-Z])(?=[A-Z][a-z])|(?<=[a-z0-9])(?=[A-Z])", " ", value
+    )
+    parts = [part.lower() for part in re.findall(r"[A-Za-z0-9]+", word_boundaries)]
+    if parts and parts[0] == "author" and len(parts) > 1:
+        parts = parts[1:]
+    credential_terms = SECRET_SETTING_KEYS | {
+        "auth",
+        "cookie",
+        "privatekey",
+        "apikey",
+        "accesskey",
+        "authorization",
+        "credential",
+        "credentials",
+        "password",
+    }
+    normalized = "".join(part for part in parts if not part.isdigit())
+    contains_opaque_credential = any(
+        pattern.search(value) for pattern in OPAQUE_CREDENTIAL_IDENTIFIER_PATTERNS
+    )
+    compound_key = re.fullmatch(
+        r"(?:access|api|client|openai|private|secret|service|session|signing|stripe)keys?\d*",
+        normalized,
+    )
+    key_qualifiers = {
+        "access",
+        "api",
+        "client",
+        "openai",
+        "private",
+        "secret",
+        "service",
+        "session",
+        "signing",
+        "stripe",
+    }
+    qualified_key_component = any(
+        parts[index] in key_qualifiers and parts[index + 1] in {"key", "keys"}
+        for index in range(len(parts) - 1)
+    )
+    return (
+        compound_key is not None
+        or qualified_key_component
+        or normalized in credential_terms
+        or contains_opaque_credential
+        or any(
+            re.sub(r"\d+$", "", part) in credential_terms
+            or (
+                re.sub(r"\d+$", "", part).endswith("s")
+                and re.sub(r"\d+$", "", part)[:-1] in credential_terms
+            )
+            or any(
+                marker not in {"auth", "key"}
+                and re.sub(r"s?\d*$", "", part).endswith(marker)
+                for marker in credential_terms
+            )
+            for part in parts
+        )
+    )
+
+
 def levenshtein_distance(left: str, right: str) -> int:
     """Return code-point Levenshtein distance using two working rows."""
     if len(left) < len(right):
@@ -205,60 +285,69 @@ def _validated_fixtures(manifest: dict[str, Any]) -> list[dict[str, Any]]:
         fixture_id = fixture.get("id")
         if not isinstance(fixture_id, str) or not fixture_id.strip():
             raise EvaluationError("each fixture needs a non-empty string id")
+        display_fixture_id = _safe_validation_identifier(fixture_id)
         if fixture_id in seen:
-            raise EvaluationError(f"duplicate fixture id: {fixture_id}")
+            raise EvaluationError(
+                f"duplicate fixture id: {display_fixture_id}"
+            )
         seen.add(fixture_id)
         if not isinstance(fixture.get("gold_text"), str):
-            raise EvaluationError(f"{fixture_id}: gold_text must be a string")
-        _validate_unicode_scalar_text(fixture["gold_text"], fixture_id, "gold_text")
+            raise EvaluationError(f"{display_fixture_id}: gold_text must be a string")
+        _validate_unicode_scalar_text(
+            fixture["gold_text"], display_fixture_id, "gold_text"
+        )
         categories = fixture.get("categories")
         if (
             not isinstance(categories, list)
             or not categories
             or any(not isinstance(category, str) for category in categories)
         ):
-            raise EvaluationError(f"{fixture_id}: categories must be strings")
+            raise EvaluationError(f"{display_fixture_id}: categories must be strings")
         for field in ("table_text", "formula_text"):
             if field in fixture and not isinstance(fixture[field], str):
-                raise EvaluationError(f"{fixture_id}: {field} must be a string")
+                raise EvaluationError(f"{display_fixture_id}: {field} must be a string")
             if field in fixture:
-                _validate_unicode_scalar_text(fixture[field], fixture_id, field)
+                _validate_unicode_scalar_text(
+                    fixture[field], display_fixture_id, field
+                )
             if field in fixture and not normalize_text(fixture[field]):
-                raise EvaluationError(f"{fixture_id}: {field} must not be empty")
+                raise EvaluationError(f"{display_fixture_id}: {field} must not be empty")
         reading_order = fixture.get("reading_order", [])
         if not isinstance(reading_order, list) or any(
             not isinstance(anchor, str)
             for anchor in reading_order
         ):
             raise EvaluationError(
-                f"{fixture_id}: reading_order must contain non-empty strings"
+                f"{display_fixture_id}: reading_order must contain non-empty strings"
             )
         for index, anchor in enumerate(reading_order):
             _validate_unicode_scalar_text(
-                anchor, fixture_id, f"reading_order[{index}]"
+                anchor, display_fixture_id, f"reading_order[{index}]"
             )
         if any(not normalize_text(anchor) for anchor in reading_order):
             raise EvaluationError(
-                f"{fixture_id}: reading_order must contain non-empty strings"
+                f"{display_fixture_id}: reading_order must contain non-empty strings"
             )
         normalized_anchors = [normalize_text(anchor) for anchor in reading_order]
         if len(set(normalized_anchors)) != len(normalized_anchors):
-            raise EvaluationError(f"{fixture_id}: reading_order anchors must be unique")
+            raise EvaluationError(
+                f"{display_fixture_id}: reading_order anchors must be unique"
+            )
         normalized_gold = normalize_text(fixture["gold_text"])
         if not normalized_gold and "blank" not in categories:
-            raise EvaluationError(f"{fixture_id}: gold_text must not be empty")
+            raise EvaluationError(f"{display_fixture_id}: gold_text must not be empty")
         if normalized_gold and "blank" in categories:
             raise EvaluationError(
-                f"{fixture_id}: blank fixture needs empty gold_text"
+                f"{display_fixture_id}: blank fixture needs empty gold_text"
             )
         if any(anchor not in normalized_gold for anchor in normalized_anchors):
             raise EvaluationError(
-                f"{fixture_id}: every reading_order anchor must occur in gold_text"
+                f"{display_fixture_id}: every reading_order anchor must occur in gold_text"
             )
         for field in ("table_text", "formula_text"):
             if field in fixture and normalize_text(fixture[field]) not in normalized_gold:
                 raise EvaluationError(
-                    f"{fixture_id}: {field} must occur in gold_text"
+                    f"{display_fixture_id}: {field} must occur in gold_text"
                 )
         if "table_text" in fixture:
             table_column_counts = None
@@ -281,7 +370,7 @@ def _validated_fixtures(manifest: dict[str, Any]) -> list[dict[str, Any]]:
                         table_column_counts &= possible_counts
             if table_column_counts == set():
                 raise EvaluationError(
-                    f"{fixture_id}: table_text rows must have consistent columns"
+                    f"{display_fixture_id}: table_text rows must have consistent columns"
                 )
     return fixtures
 
@@ -430,24 +519,40 @@ def _validated_run_and_predictions(
             raise EvaluationError("each prediction must be an object")
         unknown = set(prediction) - PREDICTION_FIELDS
         if unknown:
+            safe_unknown = sorted(
+                _safe_validation_identifier(field) for field in unknown
+            )
             raise EvaluationError(
-                f"prediction contains unsupported fields: {sorted(unknown)}"
+                "prediction contains unsupported fields "
+                "(credential-like field names redacted): "
+                f"{safe_unknown}"
             )
         fixture_id = prediction.get("fixture_id")
         if not isinstance(fixture_id, str) or fixture_id not in fixture_ids:
-            raise EvaluationError(f"unknown fixture_id: {fixture_id!r}")
+            safe_fixture_id = (
+                _safe_validation_identifier(fixture_id)
+                if isinstance(fixture_id, str)
+                else "<invalid>"
+            )
+            raise EvaluationError(f"unknown fixture_id: {safe_fixture_id!r}")
         if fixture_id in by_id:
-            raise EvaluationError(f"duplicate prediction for fixture: {fixture_id}")
+            raise EvaluationError(
+                "duplicate prediction for fixture: "
+                f"{_safe_validation_identifier(fixture_id)}"
+            )
+        display_fixture_id = _safe_validation_identifier(fixture_id)
 
         text = prediction.get("text")
         if text is not None and not isinstance(text, str):
-            raise EvaluationError(f"{fixture_id}: text must be a string or null")
+            raise EvaluationError(
+                f"{display_fixture_id}: text must be a string or null"
+            )
         if text is not None:
             try:
                 text.encode("utf-8")
             except UnicodeEncodeError as error:
                 raise EvaluationError(
-                    f"{fixture_id}: text must contain valid Unicode scalar values"
+                    f"{display_fixture_id}: text must contain valid Unicode scalar values"
                 ) from error
         elapsed_ms = prediction.get("elapsed_ms")
         if elapsed_ms is not None:
@@ -455,7 +560,7 @@ def _validated_run_and_predictions(
                 elapsed_ms, (int, float)
             ):
                 raise EvaluationError(
-                    f"{fixture_id}: elapsed_ms must be a finite non-negative number"
+                    f"{display_fixture_id}: elapsed_ms must be a finite non-negative number"
                 )
             try:
                 is_finite_elapsed = math.isfinite(elapsed_ms)
@@ -463,7 +568,7 @@ def _validated_run_and_predictions(
                 is_finite_elapsed = False
             if not is_finite_elapsed or elapsed_ms < 0:
                 raise EvaluationError(
-                    f"{fixture_id}: elapsed_ms must be a finite non-negative number"
+                    f"{display_fixture_id}: elapsed_ms must be a finite non-negative number"
                 )
         returned_tokens = prediction.get("returned_tokens")
         if returned_tokens is not None and (
@@ -472,7 +577,7 @@ def _validated_run_and_predictions(
             or returned_tokens < 0
         ):
             raise EvaluationError(
-                f"{fixture_id}: returned_tokens must be a non-negative integer"
+                f"{display_fixture_id}: returned_tokens must be a non-negative integer"
             )
         by_id[fixture_id] = {
             "text": text,
@@ -2527,29 +2632,42 @@ def verify_fixtures(
     root = manifest_path.resolve().parent
     for fixture in fixtures:
         fixture_id = fixture["id"]
+        display_fixture_id = _safe_validation_identifier(fixture_id)
         image = fixture.get("image")
         digest = fixture.get("sha256")
         if not isinstance(image, str) or not isinstance(digest, str):
-            raise EvaluationError(f"{fixture_id}: image and sha256 are required")
-        image_path = _resolve_fixture_image_path(manifest_path, image, fixture_id)
+            raise EvaluationError(
+                f"{display_fixture_id}: image and sha256 are required"
+            )
+        image_path = _resolve_fixture_image_path(
+            manifest_path, image, display_fixture_id
+        )
         if not image_path.is_relative_to(root):
-            raise EvaluationError(f"{fixture_id}: image path escapes fixture root")
+            raise EvaluationError(
+                f"{display_fixture_id}: image path escapes fixture root"
+            )
         _reject_output_input_collision(
             output_path, [("fixture image", image_path)]
         )
-        image_bytes = _read_fixture_png(image_path, fixture_id, image)
-        _validate_png(image_bytes, fixture_id)
+        image_bytes = _read_fixture_png(image_path, display_fixture_id, image)
+        _validate_png(image_bytes, display_fixture_id)
         actual_digest = hashlib.sha256(image_bytes).hexdigest()
         if actual_digest != digest:
-            raise EvaluationError(f"{fixture_id}: PNG SHA-256 does not match")
+            raise EvaluationError(f"{display_fixture_id}: PNG SHA-256 does not match")
         if "blank" in fixture["categories"] and normalize_text(
             fixture["gold_text"]
         ):
-            raise EvaluationError(f"{fixture_id}: blank fixture needs empty gold_text")
+            raise EvaluationError(
+                f"{display_fixture_id}: blank fixture needs empty gold_text"
+            )
         if "table" in fixture["categories"] and "table_text" not in fixture:
-            raise EvaluationError(f"{fixture_id}: table fixture needs table_text")
+            raise EvaluationError(
+                f"{display_fixture_id}: table fixture needs table_text"
+            )
         if "formula" in fixture["categories"] and "formula_text" not in fixture:
-            raise EvaluationError(f"{fixture_id}: formula fixture needs formula_text")
+            raise EvaluationError(
+                f"{display_fixture_id}: formula fixture needs formula_text"
+            )
 
     return {
         "fixture_count": len(fixtures),
@@ -2663,7 +2781,9 @@ def main(argv: list[str] | None = None) -> int:
                         (
                             "fixture image",
                             _resolve_fixture_image_path(
-                                args.manifest, image, fixture["id"]
+                                args.manifest,
+                                image,
+                                _safe_validation_identifier(fixture["id"]),
                             ),
                         )
                     )

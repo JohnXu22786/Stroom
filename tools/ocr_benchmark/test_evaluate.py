@@ -1192,6 +1192,273 @@ class EvaluateTests(unittest.TestCase):
         self.assertNotIn(secret_value, stderr.getvalue())
         self.assertIn("credential-like field name", stderr.getvalue())
 
+    def test_unsupported_prediction_field_is_redacted_from_cli_error(self):
+        secret_value = "sk-test-12345678901234567890"
+        secret_field = f"token={secret_value}"
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest_path = root / "manifest.json"
+            predictions_path = root / "predictions.json"
+            manifest_path.write_text(json.dumps(small_manifest()), encoding="utf-8")
+            input_data = predictions(
+                [{"fixture_id": "ordered-lines", "text": "AB", secret_field: 1}]
+            )
+            predictions_path.write_text(json.dumps(input_data), encoding="utf-8")
+
+            stderr = StringIO()
+            with redirect_stderr(stderr):
+                exit_code = main(
+                    [
+                        "--manifest",
+                        str(manifest_path),
+                        "--predictions",
+                        str(predictions_path),
+                    ]
+                )
+
+        self.assertEqual(exit_code, 2)
+        self.assertNotIn(secret_field, stderr.getvalue())
+        self.assertNotIn(secret_value, stderr.getvalue())
+        self.assertIn("unsupported fields", stderr.getvalue())
+        self.assertIn("credential-like field name", stderr.getvalue())
+        with self.assertRaisesRegex(
+            EvaluationError, "prediction contains unsupported fields.*author-1"
+        ):
+            evaluate_predictions(
+                small_manifest(),
+                predictions([{"fixture_id": "ordered-lines", "author-1": 1}]),
+            )
+        with self.assertRaisesRegex(
+            EvaluationError, "prediction contains unsupported fields.*<int>"
+        ):
+            evaluate_predictions(
+                small_manifest(),
+                predictions([{"fixture_id": "ordered-lines", 1: "unsupported"}]),
+            )
+
+    def test_credential_like_fixture_ids_are_redacted_but_benign_ids_remain(self):
+        secret_value = "sk-test-12345678901234567890"
+        secret_id = f"fixture-{secret_value}"
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest_path = root / "manifest.json"
+            predictions_path = root / "predictions.json"
+            manifest = {
+                "fixtures": [
+                    {"id": "safe-id", "gold_text": "x", "categories": ["english"]}
+                ]
+            }
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            predictions_path.write_text(
+                json.dumps(predictions([{"fixture_id": secret_id, "text": "x"}])),
+                encoding="utf-8",
+            )
+
+            stderr = StringIO()
+            with redirect_stderr(stderr):
+                exit_code = main(
+                    [
+                        "--manifest",
+                        str(manifest_path),
+                        "--predictions",
+                        str(predictions_path),
+                    ]
+                )
+
+        self.assertEqual(exit_code, 2)
+        self.assertNotIn(secret_id, stderr.getvalue())
+        self.assertNotIn(secret_value, stderr.getvalue())
+        self.assertIn("unknown fixture_id: '[redacted]'", stderr.getvalue())
+
+        manifest["fixtures"][0]["id"] = secret_id
+        accepted = evaluate_predictions(
+            manifest,
+            predictions([{"fixture_id": secret_id, "text": "x"}]),
+        )
+        self.assertEqual(accepted["run"]["model_id"], "offline-evaluator-test")
+
+        with self.assertRaisesRegex(
+            EvaluationError, "\\[redacted\\]: text must be a string or null"
+        ):
+            evaluate_predictions(
+                manifest,
+                predictions([{"fixture_id": secret_id, "text": 1}]),
+            )
+
+        author_manifest = {
+            "fixtures": [
+                {"id": "author-1", "gold_text": "x", "categories": ["english"]}
+            ]
+        }
+        with self.assertRaisesRegex(
+            EvaluationError, "author-1: text must be a string or null"
+        ):
+            evaluate_predictions(
+                author_manifest,
+                predictions([{"fixture_id": "author-1", "text": 1}]),
+            )
+
+        manifest["fixtures"].append(
+            {"id": secret_id, "gold_text": "y", "categories": ["english"]}
+        )
+        with self.assertRaisesRegex(
+            EvaluationError, "duplicate fixture id: \\[redacted\\]"
+        ):
+            evaluate_predictions(manifest, predictions([]))
+
+        manifest = {
+            "fixtures": [
+                {"id": secret_id, "gold_text": "x", "categories": []}
+            ]
+        }
+        with self.assertRaisesRegex(
+            EvaluationError, "\\[redacted\\]: categories must be strings"
+        ):
+            evaluate_predictions(manifest, predictions([]))
+
+        manifest = {
+            "fixtures": [
+                {"id": "clientsecret-1", "gold_text": "x", "categories": ["english"]}
+            ]
+        }
+        with self.assertRaisesRegex(
+            EvaluationError, "\\[redacted\\]: text must be a string or null"
+        ):
+            evaluate_predictions(
+                manifest,
+                predictions([{"fixture_id": "clientsecret-1", "text": 1}]),
+            )
+
+        manifest["fixtures"][0]["id"] = "clientSecret1"
+        with self.assertRaisesRegex(
+            EvaluationError, "\\[redacted\\]: text must be a string or null"
+        ):
+            evaluate_predictions(
+                manifest,
+                predictions([{"fixture_id": "clientSecret1", "text": 1}]),
+            )
+
+        manifest["fixtures"][0]["id"] = "apiKey-1"
+        with self.assertRaisesRegex(
+            EvaluationError, "\\[redacted\\]: text must be a string or null"
+        ):
+            evaluate_predictions(
+                manifest,
+                predictions([{"fixture_id": "apiKey-1", "text": 1}]),
+            )
+
+        for credential_id in (
+            "clientSecrets",
+            "apiKeys",
+            "author-1-apiKey-1",
+            "provider-apiKey-prod",
+            "api-keys-prod",
+            "apiKeys-prod",
+        ):
+            with self.subTest(credential_id=credential_id):
+                manifest["fixtures"][0]["id"] = credential_id
+                with self.assertRaisesRegex(
+                    EvaluationError,
+                    "\\[redacted\\]: text must be a string or null",
+                ):
+                    evaluate_predictions(
+                        manifest,
+                        predictions([{"fixture_id": credential_id, "text": 1}]),
+                    )
+
+        for credential_id in ("key1", "keys", "auth1"):
+            with self.subTest(credential_id=credential_id):
+                manifest["fixtures"][0]["id"] = credential_id
+                with self.assertRaisesRegex(
+                    EvaluationError,
+                    "\\[redacted\\]: text must be a string or null",
+                ):
+                    evaluate_predictions(
+                        manifest,
+                        predictions([{"fixture_id": credential_id, "text": 1}]),
+                    )
+
+        opaque_credential_id = f"fixture_{secret_value}_tail"
+        manifest["fixtures"][0]["id"] = "safe-id"
+        with self.assertRaisesRegex(
+            EvaluationError, "unknown fixture_id: '\\[redacted\\]'"
+        ):
+            evaluate_predictions(
+                manifest,
+                predictions([{"fixture_id": opaque_credential_id, "text": "x"}]),
+            )
+
+        manifest = {
+            "fixtures": [
+                {"id": "safe-id", "gold_text": "x", "categories": ["english"]},
+                {"id": "safe-id", "gold_text": "y", "categories": ["english"]},
+            ]
+        }
+        with self.assertRaisesRegex(EvaluationError, "duplicate fixture id: safe-id"):
+            evaluate_predictions(manifest, predictions([]))
+
+        with self.assertRaisesRegex(
+            EvaluationError, "unknown fixture_id: 'safe-missing'"
+        ):
+            evaluate_predictions(
+                {
+                    "fixtures": [
+                        {"id": "safe-id", "gold_text": "x", "categories": ["english"]}
+                    ]
+                },
+                predictions([{"fixture_id": "safe-missing", "text": "x"}]),
+            )
+        with self.assertRaisesRegex(
+            EvaluationError, "duplicate prediction for fixture: safe-id"
+        ):
+            evaluate_predictions(
+                {
+                    "fixtures": [
+                        {"id": "safe-id", "gold_text": "x", "categories": ["english"]}
+                    ]
+                },
+                predictions(
+                    [
+                        {"fixture_id": "safe-id", "text": "x"},
+                        {"fixture_id": "safe-id", "text": "x"},
+                    ]
+                ),
+            )
+
+    def test_benign_fixture_ids_are_preserved_in_validation_diagnostics(self):
+        manifest = {
+            "fixtures": [
+                {"id": "secretary-1", "gold_text": "x", "categories": ["english"]}
+            ]
+        }
+        with self.assertRaisesRegex(
+            EvaluationError, "secretary-1: text must be a string or null"
+        ):
+            evaluate_predictions(
+                manifest,
+                predictions([{"fixture_id": "secretary-1", "text": 1}]),
+            )
+
+        manifest["fixtures"][0]["id"] = "monkey"
+        with self.assertRaisesRegex(
+            EvaluationError, "monkey: text must be a string or null"
+        ):
+            evaluate_predictions(
+                manifest,
+                predictions([{"fixture_id": "monkey", "text": 1}]),
+            )
+
+        manifest = {
+            "fixtures": [
+                {"id": "authentication", "gold_text": "x", "categories": ["english"]},
+                {"id": "authentication", "gold_text": "y", "categories": ["english"]},
+            ]
+        }
+        with self.assertRaisesRegex(
+            EvaluationError, "duplicate fixture id: authentication"
+        ):
+            evaluate_predictions(manifest, predictions([]))
+
     def test_safe_run_settings_are_retained(self):
         input_data = predictions([])
         input_data["run"]["settings"] = {
