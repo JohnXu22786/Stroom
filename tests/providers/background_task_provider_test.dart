@@ -640,6 +640,33 @@ void main() {
       notifier.dispose();
     });
 
+    test('OCR step error sanitization uses the selected locale', () {
+      const credential = 'sk-proj-provider-error-secret-7f31';
+      final strings = lookupAppLocalizations(const Locale('de'));
+      final notifier = BackgroundTaskNotifier(
+        localizationsResolver: () => strings,
+      );
+      final id = notifier.addTask(
+        type: BackgroundTaskType.ocr,
+        title: 'OCR',
+      );
+
+      notifier.updateStep(
+        id,
+        0,
+        failed: true,
+        error: 'Unexpected provider failure: Bearer $credential (HTTP 429)',
+      );
+
+      final safeStepError = notifier.taskById(id)!.steps.single.error!;
+      expect(safeStepError, contains(strings.bgTaskOcrErrorDetailsHidden));
+      expect(safeStepError, contains('HTTP 429'));
+      expect(safeStepError, isNot(contains(credential)));
+      expect(safeStepError, isNot(contains('Unexpected provider failure')));
+
+      notifier.dispose();
+    });
+
     test(
       'completeTask updates task status to completed (keeps task visible)',
       () {

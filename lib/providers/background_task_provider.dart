@@ -5292,6 +5292,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     String? label,
     AppLocalizations? localizations,
   }) {
+    final errorLocalizations = localizations ?? this.localizations;
     state = state.map((t) {
       if (t.id != taskId) return t;
       final steps = [...t.steps];
@@ -5313,7 +5314,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         error: error,
         label: label,
       );
-      return t.copyWith(steps: steps, localizations: localizations);
+      return t.copyWith(steps: steps, localizations: errorLocalizations);
     }).toList();
     _persistTasks();
     _syncIosContinuedTask();
