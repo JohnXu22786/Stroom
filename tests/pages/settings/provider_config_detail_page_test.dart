@@ -143,7 +143,8 @@ void main() {
       await tester.pumpAndSettle();
 
       final compressionDropdown = tester
-          .widgetList<DropdownButton<String>>(find.byType(DropdownButton<String>))
+          .widgetList<DropdownButton<String>>(
+              find.byType(DropdownButton<String>))
           .where((dropdown) => dropdown.value == 'flac');
       expect(
         compressionDropdown,
