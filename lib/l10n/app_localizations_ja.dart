@@ -11500,6 +11500,14 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get languageNameJapanese => '日本語';
+
+  @override
+  String fileManagerDeleteEmptyFolderWithSubfoldersConfirm(
+    num count,
+    Object name,
+  ) {
+    return '空のフォルダー「$name」を削除しますか? 配下の $count 個のサブフォルダーも削除されます。';
+  }
 }
 
 /// The translations for Japanese, as used in Japan (`ja_JP`).
@@ -22997,4 +23005,12 @@ class AppLocalizationsJaJp extends AppLocalizationsJa {
 
   @override
   String get languageNameJapanese => '日本語';
+
+  @override
+  String fileManagerDeleteEmptyFolderWithSubfoldersConfirm(
+    num count,
+    Object name,
+  ) {
+    return '空のフォルダー「$name」を削除しますか? 配下の $count 個のサブフォルダーも削除されます。';
+  }
 }

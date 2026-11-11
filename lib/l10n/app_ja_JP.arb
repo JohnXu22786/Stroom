@@ -7012,5 +7012,6 @@
         "type": "int"
       }
     }
-  }
+  },
+  "fileManagerDeleteEmptyFolderWithSubfoldersConfirm": "空のフォルダー「{name}」を削除しますか? 配下の {count} 個のサブフォルダーも削除されます。"
 }

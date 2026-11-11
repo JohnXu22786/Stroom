@@ -145,9 +145,12 @@ final fileManagerNavManifestBridge = ManifestBridge(
 
 /// Simple helper from file_manager_view_test.dart — wraps a widget in
 /// MaterialApp + Scaffold.
-Widget _buildTestApp(Widget body) {
+Widget _buildTestApp(
+  Widget body, {
+  Locale locale = const Locale('zh', 'CN'),
+}) {
   return MaterialApp(
-    locale: const Locale('zh', 'CN'),
+    locale: locale,
     supportedLocales: AppLocalizations.supportedLocales,
     home: Scaffold(body: body),
     localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -1519,6 +1522,75 @@ void main() {
           of: find.byType(FolderPickerDialog),
           matching: matching,
         );
+
+    testWidgets(
+      'empty folder deletion warns that nested folders will also be deleted',
+      (tester) async {
+        final deletedFolders = <String>[];
+        await tester.pumpWidget(
+          _buildTestApp(
+            buildBatchFM(
+              records: const [],
+              folders: {'a', 'a/b', 'a/b/c'},
+              onDeleteFolder: (name) async => deletedFolders.add(name),
+            ),
+          ),
+        );
+
+        await tester.tap(find.byKey(const Key('fm_folder_popup_a')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('fm_folder_menu_delete')));
+        await tester.pumpAndSettle();
+
+        expect(find.textContaining('2 个子文件夹'), findsOneWidget);
+        expect(deletedFolders, isEmpty);
+
+        await tester.tap(find.byKey(const Key('fm_delete_folder_confirm_btn')));
+        await tester.pumpAndSettle();
+
+        expect(deletedFolders, ['a']);
+      },
+    );
+
+    testWidgets(
+      'empty folder deletion warning pluralizes English descendant counts',
+      (tester) async {
+        final scenarios = [
+          (
+            folders: {'a', 'a/b'},
+            warning: '1 nested folder will also be deleted'
+          ),
+          (
+            folders: {'a', 'a/b', 'a/b/c'},
+            warning: '2 nested folders will also be deleted',
+          ),
+        ];
+
+        for (final scenario in scenarios) {
+          await tester.pumpWidget(
+            _buildTestApp(
+              buildBatchFM(
+                records: const [],
+                folders: scenario.folders,
+              ),
+              locale: const Locale('en', 'US'),
+            ),
+          );
+
+          await tester.tap(find.byKey(const Key('fm_folder_popup_a')));
+          await tester.pumpAndSettle();
+          await tester.tap(find.byKey(const Key('fm_folder_menu_delete')));
+          await tester.pumpAndSettle();
+
+          expect(find.textContaining(scenario.warning), findsOneWidget);
+
+          await tester.tap(
+            find.byKey(const Key('fm_delete_folder_cancel_btn')),
+          );
+          await tester.pumpAndSettle();
+        }
+      },
+    );
 
     testWidgets(
       'single-file move allows same name with a different format',

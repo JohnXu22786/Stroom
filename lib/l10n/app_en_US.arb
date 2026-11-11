@@ -7012,5 +7012,6 @@
   },
   "ankiSyncStatusMediaSanityCheckFailed": "Media sync verification failed. Retry the sync.",
   "languageNameSpanish": "Spanish",
-  "languageNameJapanese": "Japanese"
+  "languageNameJapanese": "Japanese",
+  "fileManagerDeleteEmptyFolderWithSubfoldersConfirm": "Delete empty folder “{name}”? {count, plural, one{Its 1 nested folder will also be deleted.} other{Its {count} nested folders will also be deleted.}}"
 }
