@@ -249,7 +249,7 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
     }
     if (_pendingSelectionReads.containsKey(key)) {
       if (widget.config.multiSelect) {
-        _pendingSelectionReads.remove(key);
+        setState(() => _pendingSelectionReads.remove(key));
       }
       return;
     }
@@ -261,12 +261,12 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
     final readFile = widget.config.readFile;
     if (readFile != null) {
       final readToken = ++_nextSelectionReadToken;
-      _pendingSelectionReads[key] = readToken;
+      setState(() => _pendingSelectionReads[key] = readToken);
       try {
         readData = await readFile(record);
       } catch (_) {}
       if (!mounted || _pendingSelectionReads[key] != readToken) return;
-      _pendingSelectionReads.remove(key);
+      setState(() => _pendingSelectionReads.remove(key));
       if (readData == null || readData.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -414,13 +414,17 @@ class _AppMediaPickerDialogState<T> extends State<_AppMediaPickerDialog<T>> {
                   ),
                   child: FilledButton.icon(
                     key: const Key('media_picker_confirm_btn'),
-                    onPressed: _resultDelivered
+                    onPressed:
+                        _resultDelivered || _pendingSelectionReads.isNotEmpty
                         ? null
                         : () async {
                             // Guard re-entrancy synchronously BEFORE the
                             // await: a second tap while the resolver runs
                             // must not re-enter and double-pop.
-                            if (_resultDelivered) return;
+                            if (_resultDelivered ||
+                                _pendingSelectionReads.isNotEmpty) {
+                              return;
+                            }
                             _resultDelivered = true;
                             // Path resolution (onRecordsPicked) runs before
                             // the pop; a throwing resolver must not leave
