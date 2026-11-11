@@ -4925,7 +4925,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get providerCompressionAdpcm => 'ADPCM(약 4배 압축)';
 
   @override
-  String get providerCompressionFlac => 'FLAC(무손실, 약 2배 압축)';
+  String get providerCompressionFlac => 'FLAC(무손실, 약 2배 압축, 권장)';
 
   @override
   String get providerCompressionAdpcmDescription =>
@@ -5133,7 +5133,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get providerPreprocessNone => '없음';
 
   @override
-  String get providerPreprocessResample => 'WAV 최적화(16kHz 모노)';
+  String get providerPreprocessResample => 'WAV 최적화(16kHz 모노, 권장)';
 
   @override
   String get providerPreprocessResampleHelp =>
@@ -16423,7 +16423,7 @@ class AppLocalizationsKoKr extends AppLocalizationsKo {
   String get providerCompressionAdpcm => 'ADPCM(약 4배 압축)';
 
   @override
-  String get providerCompressionFlac => 'FLAC(무손실, 약 2배 압축)';
+  String get providerCompressionFlac => 'FLAC(무손실, 약 2배 압축, 권장)';
 
   @override
   String get providerCompressionAdpcmDescription =>
@@ -16631,7 +16631,7 @@ class AppLocalizationsKoKr extends AppLocalizationsKo {
   String get providerPreprocessNone => '없음';
 
   @override
-  String get providerPreprocessResample => 'WAV 최적화(16kHz 모노)';
+  String get providerPreprocessResample => 'WAV 최적화(16kHz 모노, 권장)';
 
   @override
   String get providerPreprocessResampleHelp =>
