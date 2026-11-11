@@ -717,14 +717,12 @@ extension _ChatPageUiExt on _ChatPageState {
               ),
             ),
           ),
-          // ── 临时对话开关（搜索按钮左侧）──
-          // 图标为虚线框对话气泡风格：开启后气泡内带打勾
-          // （原生 Material 图标组：chat_bubble_outline ↔ mark_chat_read_outlined）。
+          // Temporary conversation control (left of search).
           IconButton(
             icon: Icon(
               isTemporary
-                  ? Icons.mark_chat_read_outlined
-                  : Icons.chat_bubble_outline,
+                  ? Icons.timer
+                  : Icons.timer_outlined,
               color: isTemporary ? cs.primary : null,
             ),
             tooltip: isTemporary

@@ -20,6 +20,7 @@ class TopicItem extends StatelessWidget {
   final VoidCallback onRename;
   final VoidCallback onAutoRename;
   final VoidCallback onSelectionToggle;
+  final VoidCallback? onTemporaryToggle;
 
   const TopicItem({
     super.key,
@@ -36,6 +37,7 @@ class TopicItem extends StatelessWidget {
     required this.onRename,
     required this.onAutoRename,
     required this.onSelectionToggle,
+    this.onTemporaryToggle,
   });
 
   @override
@@ -219,6 +221,9 @@ class TopicItem extends StatelessWidget {
                           case 'pin':
                             onPinToggle();
                             break;
+                          case 'toggle_temporary':
+                            onTemporaryToggle?.call();
+                            break;
                           case 'delete':
                             onDelete();
                             break;
@@ -246,6 +251,17 @@ class TopicItem extends StatelessWidget {
                                 : AppLocalizations.of(context)!.topicItemPin,
                           ),
                         ),
+                        if (onTemporaryToggle != null)
+                          PopupMenuItem(
+                            value: 'toggle_temporary',
+                            child: Text(
+                              topic.isTemporary
+                                  ? AppLocalizations.of(context)!
+                                      .conversationCloseTemporary
+                                  : AppLocalizations.of(context)!
+                                      .conversationTemporary,
+                            ),
+                          ),
                         const PopupMenuDivider(),
                         PopupMenuItem(
                           value: 'delete',

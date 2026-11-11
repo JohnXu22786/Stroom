@@ -53,28 +53,28 @@ void main() {
     await tester.pumpAndSettle();
 
     // 关闭态：空心气泡图标、无打勾、无倒计时胶囊。
-    expect(find.byIcon(Icons.chat_bubble_outline), findsOneWidget);
-    expect(find.byIcon(Icons.mark_chat_read_outlined), findsNothing);
+    expect(find.byIcon(Icons.timer_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.timer), findsNothing);
     expect(find.byType(TemporaryCountdownCapsule), findsNothing);
 
     // 点击按钮开启。
-    await tester.tap(find.byIcon(Icons.chat_bubble_outline));
+    await tester.tap(find.byIcon(Icons.timer_outlined));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
     // 开启态：气泡 + 打勾图标、标题前出现倒计时胶囊。
-    expect(find.byIcon(Icons.mark_chat_read_outlined), findsOneWidget);
-    expect(find.byIcon(Icons.chat_bubble_outline), findsNothing);
+    expect(find.byIcon(Icons.timer), findsOneWidget);
+    expect(find.byIcon(Icons.timer_outlined), findsNothing);
     expect(find.byType(TemporaryCountdownCapsule), findsOneWidget);
     expect(find.text('60:00'), findsOneWidget);
 
     // 再点一次关闭。
-    await tester.tap(find.byIcon(Icons.mark_chat_read_outlined));
+    await tester.tap(find.byIcon(Icons.timer));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
-    expect(find.byIcon(Icons.chat_bubble_outline), findsOneWidget);
-    expect(find.byIcon(Icons.mark_chat_read_outlined), findsNothing);
+    expect(find.byIcon(Icons.timer_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.timer), findsNothing);
     expect(find.byType(TemporaryCountdownCapsule), findsNothing);
 
     // 卸载页面释放 notifier 的周期性临时对话计时器。
@@ -92,10 +92,10 @@ void main() {
     await tester.pumpAndSettle();
 
     final button = tester.widget<IconButton>(
-      find.widgetWithIcon(IconButton, Icons.chat_bubble_outline),
+      find.widgetWithIcon(IconButton, Icons.timer_outlined),
     );
     expect(button.onPressed, isNull);
-    expect(find.byIcon(Icons.mark_chat_read_outlined), findsNothing);
+    expect(find.byIcon(Icons.timer), findsNothing);
     expect(find.byType(TemporaryCountdownCapsule), findsNothing);
   });
 }

@@ -662,6 +662,9 @@ class _TopicSelectionPageState extends ConsumerState<TopicSelectionPage> {
                                   },
                                   onSelectionToggle: () =>
                                       _toggleSelection(topic.id),
+                                  onTemporaryToggle: () => ref
+                                      .read(conversationsProvider.notifier)
+                                      .toggleTemporary(topic.id),
                                 );
                                 // When NOT in selection mode, wrap in long-press drag listener
                                 if (!_selectionMode) {
