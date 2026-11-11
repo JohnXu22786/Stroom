@@ -514,10 +514,9 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
     if (_isSafeTaskId(task.id)) {
       final catcatchDir = p.join(appDir, 'catcatch');
       final progressDir = p.join(appDir, 'catcatch', '.progress');
-      final progressPath =
-          p.join(progressDir, '${task.id}_dl_progress.json');
+      final progressPath = p.join(progressDir, '${task.id}_dl_progress.json');
       if (await _isCanonicalPathWithin(
-          progressPath, progressDir, catcatchDir)) {
+          progressPath, progressDir, catcatchDir, appDir)) {
         await _deleteFileBestEffort(File(progressPath),
             shouldDelete: () => !currentRemainingTasks()
                 .any((current) => current.id == task.id));
@@ -533,9 +532,9 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
       final downloadsDir = p.join(catcatchDir, 'downloads');
       final convertedDir = p.join(catcatchDir, 'converted');
       if (await _isCanonicalPathWithin(
-              downloadedFilePath, downloadsDir, catcatchDir) ||
+              downloadedFilePath, downloadsDir, catcatchDir, appDir) ||
           await _isCanonicalPathWithin(
-              downloadedFilePath, convertedDir, catcatchDir)) {
+              downloadedFilePath, convertedDir, catcatchDir, appDir)) {
         await _deleteFileBestEffort(File(downloadedFilePath),
             shouldDelete: () => !isInUse(downloadedFilePath));
       }
@@ -548,11 +547,10 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
     final downloadsDir = p.join(catcatchDir, 'downloads');
     final convertedDir = p.join(catcatchDir, 'converted');
     for (final artifact in _mediaDerivedArtifacts(task, appDir)) {
-      final managedDir = p.isWithin(convertedDir, artifact.path)
-          ? convertedDir
-          : downloadsDir;
+      final managedDir =
+          p.isWithin(convertedDir, artifact.path) ? convertedDir : downloadsDir;
       if (!await _isCanonicalPathWithin(
-          artifact.path, managedDir, catcatchDir)) {
+          artifact.path, managedDir, catcatchDir, appDir)) {
         continue;
       }
       bool shouldDelete() => !isInUse(artifact.path);
@@ -568,19 +566,26 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
       p.normalize(p.absolute(path));
 
   static bool _isSafeTaskId(String id) =>
-      RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(id);
+      id.isNotEmpty &&
+      id != '.' &&
+      id != '..' &&
+      RegExp(r'^[A-Za-z0-9._-]+$').hasMatch(id);
 
   /// Checks a path after resolving existing symlinks in its path components.
   /// Missing leaf paths are resolved against their nearest existing parent.
   static Future<bool> _isCanonicalPathWithin(
-      String path, String root, String managedRoot) async {
+      String path, String root, String managedRoot, String appRoot) async {
     final canonicalPath = await _canonicalizePath(path);
     final canonicalRoot = await _canonicalizePath(root);
     final canonicalManagedRoot = await _canonicalizePath(managedRoot);
+    final canonicalAppRoot = await _canonicalizePath(appRoot);
     return canonicalPath != null &&
         canonicalRoot != null &&
         canonicalManagedRoot != null &&
-        p.isWithin(canonicalManagedRoot, canonicalRoot) &&
+        canonicalAppRoot != null &&
+        p.equals(canonicalManagedRoot, p.join(canonicalAppRoot, 'catcatch')) &&
+        p.equals(canonicalRoot,
+            p.join(canonicalManagedRoot, p.basename(p.normalize(root)))) &&
         p.isWithin(canonicalRoot, canonicalPath);
   }
 
