@@ -1,0 +1,64 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/l10n/app_localizations.dart';
+import 'package:stroom/pages/provider_settings_panel.dart';
+import 'package:stroom/providers/provider_config.dart';
+
+void main() {
+  testWidgets('ASR setting labels and dropdowns fit narrow and wide dialogs', (
+    tester,
+  ) async {
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    for (final width in [800.0, 1100.0]) {
+      tester.view.physicalSize = Size(width, 2400);
+      tester.view.devicePixelRatio = 1;
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('en'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          theme: ThemeData(
+            dialogTheme: const DialogThemeData(
+              constraints: BoxConstraints(maxWidth: 1200),
+            ),
+          ),
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => Center(
+                child: ElevatedButton(
+                  onPressed: () => showProviderSettingsPanel(
+                    context: context,
+                    config: ProviderConfigItem(
+                      providerName: 'ASR provider',
+                      host: 'https://api.example.com',
+                      key: 'test-key',
+                    ),
+                    providerType: 'asr',
+                  ),
+                  child: const Text('Open provider settings'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Open provider settings'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Parameter settings'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Fallback method'), findsOneWidget);
+      expect(find.text('Preprocessing method'), findsOneWidget);
+      expect(find.text('Compression method'), findsOneWidget);
+      expect(find.byType(DropdownButton<String>), findsNWidgets(4));
+      expect(tester.takeException(), isNull, reason: 'Dialog width: $width');
+
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+    }
+  });
+}
