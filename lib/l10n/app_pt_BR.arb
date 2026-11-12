@@ -2411,7 +2411,7 @@
   "providerFallbackStrategy": "Estratégia alternativa",
   "providerFallbackMethod": "Método alternativo",
   "providerPreprocessing": "Pré-processamento de áudio",
-  "providerPreprocessingHelp": "Reduz o tamanho do arquivo de áudio sem afetar a precisão da transcrição.",
+  "providerPreprocessingHelp": "Reduz o tamanho do arquivo de áudio, mas a reamostragem pode alterar o áudio e afetar a precisão da transcrição.",
   "providerPreprocessingMethod": "Método de pré-processamento",
   "@providerParamNameInvalid": {
     "placeholders": {
@@ -2489,8 +2489,8 @@
   "providerFallbackAllHelp": "Primeiro, tente Base64 respeitando o limite do corpo da solicitação. Depois, se ativada, comprima o WAV completo; se ainda exceder o limite e a segmentação estiver ativada, divida o PCM de origem em segmentos e codifique cada um. Somente WAV PCM.",
   "providerFallbackRejectHelp": "Rejeite o arquivo se exceder o limite; não tente uma alternativa.",
   "providerPreprocessNone": "Nenhum",
-  "providerPreprocessResample": "Otimização WAV (16 kHz mono)",
-  "providerPreprocessResampleHelp": "Reamostra para 16 kHz e converte para mono. Reduz o tamanho em cerca de 4–6x, com pouco efeito na precisão da transcrição.",
+  "providerPreprocessResample": "Reamostragem WAV (mono 16 kHz)",
+  "providerPreprocessResampleHelp": "Reamostra para 16 kHz e converte para mono; isso pode alterar o áudio.",
   "providerPreprocessNoneHelp": "Sem pré-processamento; enviar como está.",
   "assistantDefaultsScopeHelp": "O modelo e as ferramentas padrão se aplicam somente a novas conversas criadas com este assistente. As conversas existentes mantêm suas próprias configurações. O truncamento das saídas das ferramentas se aplica a todas as conversas.",
   "assistantDefaultModelTitle": "Modelo padrão",

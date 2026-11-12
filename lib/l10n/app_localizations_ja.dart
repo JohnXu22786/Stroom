@@ -5080,7 +5080,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get providerPreprocessingHelp =>
-      '文字起こしの精度に影響を与えることなく、音声ファイルのサイズを削減します。';
+      '音声ファイルのサイズを削減しますが、リサンプリングによって音声が変化し、文字起こしの精度に影響する場合があります。';
 
   @override
   String get providerPreprocessingMethod => '前処理方法';
@@ -5137,11 +5137,11 @@ class AppLocalizationsJa extends AppLocalizations {
   String get providerPreprocessNone => 'なし';
 
   @override
-  String get providerPreprocessResample => 'WAVの最適化（16kHzモノラル、推奨）';
+  String get providerPreprocessResample => 'WAVのリサンプリング（16kHzモノラル）';
 
   @override
   String get providerPreprocessResampleHelp =>
-      '16 kHz にリサンプルし、モノラルにミックスします。転写精度にほとんど影響を与えずに、サイズを約 4 ～ 6 倍縮小します。';
+      '16 kHz にリサンプルしてモノラルに変換します。音声が変化する場合があります。';
 
   @override
   String get providerPreprocessNoneHelp => '前処理は必要ありません。そのまま送信します。';
@@ -16696,7 +16696,7 @@ class AppLocalizationsJaJp extends AppLocalizationsJa {
 
   @override
   String get providerPreprocessingHelp =>
-      '文字起こしの精度に影響を与えることなく、音声ファイルのサイズを削減します。';
+      '音声ファイルのサイズを削減しますが、リサンプリングによって音声が変化し、文字起こしの精度に影響する場合があります。';
 
   @override
   String get providerPreprocessingMethod => '前処理方法';
@@ -16753,11 +16753,11 @@ class AppLocalizationsJaJp extends AppLocalizationsJa {
   String get providerPreprocessNone => 'なし';
 
   @override
-  String get providerPreprocessResample => 'WAVの最適化（16kHzモノラル、推奨）';
+  String get providerPreprocessResample => 'WAVのリサンプリング（16kHzモノラル）';
 
   @override
   String get providerPreprocessResampleHelp =>
-      '16 kHz にリサンプルし、モノラルにミックスします。転写精度にほとんど影響を与えずに、サイズを約 4 ～ 6 倍縮小します。';
+      '16 kHz にリサンプルしてモノラルに変換します。音声が変化する場合があります。';
 
   @override
   String get providerPreprocessNoneHelp => '前処理は必要ありません。そのまま送信します。';

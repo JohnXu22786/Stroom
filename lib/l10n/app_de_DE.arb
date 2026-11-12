@@ -2409,7 +2409,7 @@
   "providerFallbackStrategy": "Rückfallstrategie",
   "providerFallbackMethod": "Rückfallmethode",
   "providerPreprocessing": "Audio-Vorverarbeitung",
-  "providerPreprocessingHelp": "Verringert die Größe der Audiodatei, ohne die Transkriptionsgenauigkeit zu beeinträchtigen.",
+  "providerPreprocessingHelp": "Verringert die Größe der Audiodatei, aber das Resampling kann das Audio verändern und die Transkriptionsgenauigkeit beeinträchtigen.",
   "providerPreprocessingMethod": "Vorverarbeitungsmethode",
   "@providerParamNameInvalid": {
     "placeholders": {
@@ -2487,8 +2487,8 @@
   "providerFallbackAllHelp": "Zuerst Base64 versuchen, sofern der Anfrageinhalt das Limit einhält. Anschließend wird, falls aktiviert, die gesamte WAV-Datei komprimiert. Überschreitet sie das Limit weiterhin und ist Segmentierung aktiviert, wird das Quell-PCM aufgeteilt und jedes Segment kodiert. Nur PCM-WAV.",
   "providerFallbackRejectHelp": "Datei ablehnen, wenn sie das Limit überschreitet; keine Rückfallmethode versuchen.",
   "providerPreprocessNone": "Keine",
-  "providerPreprocessResample": "WAV-Optimierung (16 kHz, Mono, empfohlen)",
-  "providerPreprocessResampleHelp": "Wandelt die Abtastrate in 16 kHz um und mischt das Audio auf Mono herunter. Verringert die Größe etwa um das 4- bis 6-Fache bei geringem Einfluss auf die Transkriptionsgenauigkeit.",
+  "providerPreprocessResample": "WAV-Resampling (16 kHz, Mono)",
+  "providerPreprocessResampleHelp": "Wandelt die Abtastrate in 16 kHz um und mischt auf Mono herunter; dadurch kann sich das Audio verändern.",
   "providerPreprocessNoneHelp": "Keine Vorverarbeitung; unverändert senden.",
   "assistantDefaultsScopeHelp": "Standardmodell und Werkzeuge gelten nur für neue Gespräche, die mit diesem Assistenten erstellt werden. Bestehende Gespräche behalten ihre eigenen Einstellungen. Die Kürzung von Werkzeugausgaben gilt für alle Gespräche.",
   "assistantDefaultModelTitle": "Standardmodell",

@@ -5080,7 +5080,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get providerPreprocessingHelp =>
-      '전사 정확도에 영향을 거의 주지 않으면서 오디오 파일 크기를 줄입니다.';
+      '오디오 파일 크기를 줄이지만, 리샘플링으로 오디오가 변경되어 전사 정확도에 영향을 줄 수 있습니다.';
 
   @override
   String get providerPreprocessingMethod => '전처리 방식';
@@ -5136,11 +5136,11 @@ class AppLocalizationsKo extends AppLocalizations {
   String get providerPreprocessNone => '없음';
 
   @override
-  String get providerPreprocessResample => 'WAV 최적화(16kHz 모노, 권장)';
+  String get providerPreprocessResample => 'WAV 리샘플링(16kHz 모노)';
 
   @override
   String get providerPreprocessResampleHelp =>
-      '16kHz로 리샘플링하고 모노로 믹스합니다. 전사 정확도에 미치는 영향은 적으면서 크기를 약 4~6배 줄입니다.';
+      '16kHz로 리샘플링하고 모노로 믹스합니다. 오디오가 변경될 수 있습니다.';
 
   @override
   String get providerPreprocessNoneHelp => '전처리 없이 원본 그대로 전송합니다.';
@@ -16686,7 +16686,7 @@ class AppLocalizationsKoKr extends AppLocalizationsKo {
 
   @override
   String get providerPreprocessingHelp =>
-      '전사 정확도에 영향을 거의 주지 않으면서 오디오 파일 크기를 줄입니다.';
+      '오디오 파일 크기를 줄이지만, 리샘플링으로 오디오가 변경되어 전사 정확도에 영향을 줄 수 있습니다.';
 
   @override
   String get providerPreprocessingMethod => '전처리 방식';
@@ -16742,11 +16742,11 @@ class AppLocalizationsKoKr extends AppLocalizationsKo {
   String get providerPreprocessNone => '없음';
 
   @override
-  String get providerPreprocessResample => 'WAV 최적화(16kHz 모노, 권장)';
+  String get providerPreprocessResample => 'WAV 리샘플링(16kHz 모노)';
 
   @override
   String get providerPreprocessResampleHelp =>
-      '16kHz로 리샘플링하고 모노로 믹스합니다. 전사 정확도에 미치는 영향은 적으면서 크기를 약 4~6배 줄입니다.';
+      '16kHz로 리샘플링하고 모노로 믹스합니다. 오디오가 변경될 수 있습니다.';
 
   @override
   String get providerPreprocessNoneHelp => '전처리 없이 원본 그대로 전송합니다.';

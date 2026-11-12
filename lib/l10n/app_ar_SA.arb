@@ -2411,7 +2411,7 @@
   "providerFallbackStrategy": "استراتيجية الرجوع الاحتياطي",
   "providerFallbackMethod": "طريقة الرجوع الاحتياطي",
   "providerPreprocessing": "المعالجة المسبقة للصوت",
-  "providerPreprocessingHelp": "تقلل حجم الملف الصوتي من دون التأثير في دقة التفريغ النصي.",
+  "providerPreprocessingHelp": "تقلل حجم الملف الصوتي، لكن إعادة أخذ العينات قد تغيّر الصوت وتؤثر في دقة التفريغ النصي.",
   "providerPreprocessingMethod": "طريقة المعالجة المسبقة",
   "@providerParamNameInvalid": {
     "placeholders": {
@@ -2489,8 +2489,8 @@
   "providerFallbackAllHelp": "جرّب أولًا Base64 ضمن حد نص الطلب. ثم اضغط ملف WAV بالكامل إن كان ذلك مفعّلًا؛ وإذا ظل حجمه يتجاوز الحد وكان التقسيم مفعّلًا، فاقسم مصدر PCM ورمّز كل مقطع. يقتصر على WAV بنظام PCM.",
   "providerFallbackRejectHelp": "ارفض الملف إذا تجاوز الحد؛ ولا تجرّب أي طريقة رجوع احتياطي.",
   "providerPreprocessNone": "لا شيء",
-  "providerPreprocessResample": "تحسين WAV (16 kHz أحادي القناة، موصى به)",
-  "providerPreprocessResampleHelp": "يعيد أخذ العينات إلى 16 kHz ويمزج الصوت إلى قناة واحدة. يقلل الحجم بنحو 4–6 أضعاف مع تأثير ضئيل في دقة التفريغ النصي.",
+  "providerPreprocessResample": "إعادة أخذ عينات WAV (16 kHz أحادي القناة)",
+  "providerPreprocessResampleHelp": "يعيد أخذ العينات إلى 16 kHz ويمزج الصوت إلى قناة واحدة؛ قد يؤدي ذلك إلى تغيير الصوت.",
   "providerPreprocessNoneHelp": "دون معالجة مسبقة؛ يُرسل كما هو.",
   "assistantDefaultsScopeHelp": "ينطبق النموذج والأدوات الافتراضيان على المحادثات الجديدة التي تُنشأ ضمن هذا المساعد فقط. تحتفظ المحادثات الموجودة بإعداداتها. ويسري اقتطاع مخرجات الأدوات على جميع المحادثات.",
   "assistantDefaultModelTitle": "النموذج الافتراضي",
