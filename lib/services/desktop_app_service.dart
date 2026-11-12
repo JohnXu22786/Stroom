@@ -1,3 +1,6 @@
+Warning: truncated output (original token count: 6028)
+Total output lines: 599
+
 import 'dart:async';
 import 'dart:io' show exit;
 
@@ -58,6 +61,10 @@ class _LegacyDesktopTrayAdapter implements DesktopTrayAdapter {
 
 /// Operations the desktop service needs from the legacy window API.
 /// Keeping this boundary injectable lets tests avoid native FFI calls.
+abstract interface class DesktopWindowListener {
+  void onWindowClose();
+}
+
 @visibleForTesting
 abstract interface class DesktopWindowManagerAdapter {
   Future<void> ensureInitialized();
@@ -67,12 +74,14 @@ abstract interface class DesktopWindowManagerAdapter {
   Future<void> show();
   Future<void> focus();
   Future<void> destroy();
-  void addListener(window_api.WindowListener listener);
-  void removeListener(window_api.WindowListener listener);
+  void addListener(DesktopWindowListener listener);
+  void removeListener(DesktopWindowListener listener);
 }
 
 class _LegacyDesktopWindowManagerAdapter
     implements DesktopWindowManagerAdapter {
+  final _listeners = <DesktopWindowListener, _WindowManagerListenerBridge>{};
+
   @override
   Future<void> ensureInitialized() =>
       window_api.windowManager.ensureInitialized();
@@ -97,12 +106,28 @@ class _LegacyDesktopWindowManagerAdapter
   Future<void> destroy() => window_api.windowManager.destroy();
 
   @override
-  void addListener(window_api.WindowListener listener) =>
-      window_api.windowManager.addListener(listener);
+  void addListener(DesktopWindowListener listener) {
+    final bridge = _listeners.putIfAbsent(
+      listener,
+      () => _WindowManagerListenerBridge(listener),
+    );
+    window_api.windowManager.addListener(bridge);
+  }
 
   @override
-  void removeListener(window_api.WindowListener listener) =>
-      window_api.windowManager.removeListener(listener);
+  void removeListener(DesktopWindowListener listener) {
+    final bridge = _listeners.remove(listener);
+    if (bridge != null) window_api.windowManager.removeListener(bridge);
+  }
+}
+
+class _WindowManagerListenerBridge extends window_api.WindowListener {
+  _WindowManagerListenerBridge(this.listener);
+
+  final DesktopWindowListener listener;
+
+  @override
+  void onWindowClose() => listener.onWindowClose();
 }
 
 // ====================================================================
@@ -129,7 +154,7 @@ class _LegacyDesktopWindowManagerAdapter
 // ====================================================================
 
 /// 桌面端窗口管理 + 系统托盘驻留服务（单例）。
-class DesktopAppService extends window_api.WindowListener with TrayListener {
+class DesktopAppService with TrayListener implements DesktopWindowListener {
   DesktopAppService._();
 
   /// The shared instance.
@@ -286,8 +311,7 @@ class DesktopAppService extends window_api.WindowListener with TrayListener {
             )
             .timeout(_trayTimeout);
         // setToolTip 在 Linux 插件上未实现（会抛 MissingPluginException），
-        // 单独捕获，避免拖垮整个托盘注册流程；同样受超时保护
-        // （DBus/appindicator 挂起时不能无限期停留在无监听的拦截状态）。
+        // 单独捕获，避免拖垮整个托盘注册流程；同…28 tokens truncated…
         try {
           await _trayAdapter
               .setToolTip(
