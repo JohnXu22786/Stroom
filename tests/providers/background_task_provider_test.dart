@@ -26488,6 +26488,151 @@ void main() {
     );
 
     test(
+      'partial restore omits unknown provider diagnostics from skipped OCR rows',
+      () async {
+        WebFileStore.enableTestMode();
+        const skippedTaskId = 'skipped-ocr-provider-diagnostic';
+        final imageBytes = Uint8List.fromList([0x89, 0x50, 0x4e, 0x47]);
+        final retryData = await OcrRetryStorage.cacheSnapshot(
+          taskId: skippedTaskId,
+          snapshot: OcrRetrySnapshot.capture(
+            images: [OcrRetryImage(bytes: imageBytes, format: 'png')],
+          ),
+        );
+        final cacheReference = ((retryData['images'] as List).single
+            as Map)['storageRef'] as String;
+        const providerDiagnostic = 'unclassified provider response detail';
+        final unknownCacheReference = 'ocr_retry_cache/${'a' * 64}.bin';
+        final providerError = '$providerDiagnostic $unknownCacheReference';
+        final skippedRow = <String, dynamic>{
+          'id': skippedTaskId,
+          'type': 'ocr',
+          'title': 'Malformed OCR row with provider diagnostic',
+          'status': 'not-a-task-status',
+          'createdAt': DateTime.utc(2026).toIso8601String(),
+          'steps': <dynamic>[],
+          'retryData': retryData,
+          'extensionData': {
+            'preserve': [1, 'two', true],
+          },
+          'providerError': providerError,
+        };
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(jsonEncode([skippedRow]));
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          expect(await notifier.restoreFromPersistence(), isFalse);
+          notifier.addTask(
+            type: BackgroundTaskType.asr,
+            title: 'Trigger sanitized partial snapshot',
+            startImmediately: false,
+            taskId: 'sanitize-provider-diagnostic-trigger',
+          );
+          await notifier.pendingPersistence;
+
+          final rows = jsonDecode(await file.readAsString()) as List;
+          final savedSkippedRow = rows.whereType<Map>().singleWhere(
+                (row) => row['id'] == skippedTaskId,
+              );
+          expect(savedSkippedRow['title'], skippedRow['title']);
+          expect(savedSkippedRow['type'], 'ocr');
+          expect(savedSkippedRow['extensionData'], skippedRow['extensionData']);
+          expect(savedSkippedRow, isNot(contains('providerError')));
+          expect(
+            jsonEncode(savedSkippedRow),
+            isNot(contains(providerDiagnostic)),
+          );
+          expect(
+            jsonEncode(savedSkippedRow),
+            isNot(contains(unknownCacheReference)),
+          );
+          expect(savedSkippedRow['retryData'], retryData);
+          expect(
+            await notifier.ocrCacheReferencesForCleanup(),
+            isNull,
+          );
+          final ownershipMarker = rows.whereType<Map>().singleWhere(
+                (row) => row['_unrestoredTaskRecord'] == true,
+              );
+          expect(ownershipMarker['ocrCacheOwnershipKnown'], isFalse);
+          expect(
+            ((savedSkippedRow['retryData'] as Map)['images'] as List)
+                .single['storageRef'],
+            cacheReference,
+          );
+          expect(await OcrRetryStorage.read(cacheReference), imageBytes);
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+          WebFileStore.disableTestMode();
+        }
+      },
+    );
+
+    test(
+      'partial restore tracks cache references in preserved OCR extensions',
+      () async {
+        WebFileStore.enableTestMode();
+        const skippedTaskId = 'skipped-ocr-extension-cache-owner';
+        final imageBytes = Uint8List.fromList([0x89, 0x50, 0x4e, 0x47]);
+        final retryData = await OcrRetryStorage.cacheSnapshot(
+          taskId: skippedTaskId,
+          snapshot: OcrRetrySnapshot.capture(
+            images: [OcrRetryImage(bytes: imageBytes, format: 'png')],
+          ),
+        );
+        final retryCacheReference = ((retryData['images'] as List).single
+            as Map)['storageRef'] as String;
+        final extensionCacheReference = 'ocr_retry_cache/${'b' * 64}.bin';
+        final skippedRow = <String, dynamic>{
+          'id': skippedTaskId,
+          'type': 'ocr',
+          'title': 'Malformed OCR row with cache extension',
+          'status': 'not-a-task-status',
+          'createdAt': DateTime.utc(2026).toIso8601String(),
+          'steps': <dynamic>[],
+          'retryData': retryData,
+          'extensionData': {'cacheReference': extensionCacheReference},
+        };
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(jsonEncode([skippedRow]));
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          expect(await notifier.restoreFromPersistence(), isFalse);
+          notifier.addTask(
+            type: BackgroundTaskType.asr,
+            title: 'Trigger safe extension partial snapshot',
+            startImmediately: false,
+            taskId: 'safe-extension-cache-trigger',
+          );
+          await notifier.pendingPersistence;
+
+          final rows = jsonDecode(await file.readAsString()) as List;
+          final savedSkippedRow = rows.whereType<Map>().singleWhere(
+                (row) => row['id'] == skippedTaskId,
+              );
+          expect(
+            savedSkippedRow['extensionData'],
+            skippedRow['extensionData'],
+          );
+          expect(
+            await notifier.ocrCacheReferencesForCleanup(),
+            containsAll([retryCacheReference, extensionCacheReference]),
+          );
+          expect(await OcrRetryStorage.read(retryCacheReference), imageBytes);
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+          WebFileStore.disableTestMode();
+        }
+      },
+    );
+
+    test(
       'partial restore preserves safe page outcomes in skipped OCR rows',
       () async {
         final skippedRow = <String, dynamic>{
