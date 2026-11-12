@@ -76,6 +76,103 @@ Future<void> _simulateSystemBack(WidgetTester tester) async {
 void main() {
   group('OcrModelConfigPage built-in OpenAI-compatible params', () {
     testWidgets(
+      'repairs an enabled temperature value outside the slider range',
+      (tester) async {
+        ModelConfig? saved;
+        final model = ModelConfig(
+          name: 'OCR模型',
+          modelId: 'qwen-vl-ocr',
+          typeConfig: {'enableTemperature': true, 'temperature': 3.0},
+        );
+
+        await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
+
+        await _scrollTo(tester, find.text('温度'));
+        expect(
+          find.text(
+            'Stored temperature is outside 0–2. Adjust the slider or turn it off before saving.',
+          ),
+          findsOneWidget,
+        );
+        final slider = find.byType(Slider).first;
+        expect(tester.widget<Slider>(slider).value, 2.0);
+        await tester.drag(slider, const Offset(-60, 0));
+        await tester.pumpAndSettle();
+        final repairedValue = tester.widget<Slider>(slider).value;
+        expect(repairedValue, inInclusiveRange(0.0, 2.0));
+        expect(repairedValue, lessThan(2.0));
+
+        await tester.tap(find.text('保存'));
+        await tester.pumpAndSettle();
+
+        expect(saved!.typeConfig['temperature'], repairedValue);
+      },
+    );
+
+    testWidgets(
+      'repairs an enabled top-P value outside the slider range',
+      (tester) async {
+        ModelConfig? saved;
+        final model = ModelConfig(
+          name: 'OCR模型',
+          modelId: 'qwen-vl-ocr',
+          typeConfig: {'enableTopP': true, 'topP': -0.5},
+        );
+
+        await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
+
+        await _scrollTo(tester, find.text('Top P'));
+        expect(
+          find.text(
+            'Stored top-P is outside 0–1. Adjust the slider or turn it off before saving.',
+          ),
+          findsOneWidget,
+        );
+        final slider = find.byType(Slider).last;
+        expect(tester.widget<Slider>(slider).value, 0.0);
+        await tester.drag(slider, const Offset(60, 0));
+        await tester.pumpAndSettle();
+        final repairedValue = tester.widget<Slider>(slider).value;
+        expect(repairedValue, inInclusiveRange(0.0, 1.0));
+        expect(repairedValue, greaterThan(0.0));
+
+        await tester.tap(find.text('保存'));
+        await tester.pumpAndSettle();
+
+        expect(saved!.typeConfig['topP'], repairedValue);
+      },
+    );
+
+    testWidgets(
+      'repairs a nonnumeric stored sampling value without crashing',
+      (tester) async {
+        ModelConfig? saved;
+        final model = ModelConfig(
+          name: 'OCR模型',
+          modelId: 'qwen-vl-ocr',
+          typeConfig: {'enableTemperature': true, 'temperature': 'legacy'},
+        );
+
+        await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
+
+        await _scrollTo(tester, find.text('温度'));
+        final slider = find.byType(Slider).first;
+        expect(tester.widget<Slider>(slider).value, 0.0);
+        await tester.drag(slider, const Offset(60, 0));
+        await tester.pumpAndSettle();
+        expect(
+          tester.widget<Slider>(slider).value,
+          inInclusiveRange(0.0, 2.0),
+        );
+
+        await tester.tap(find.text('保存'));
+        await tester.pumpAndSettle();
+
+        expect(saved!.typeConfig['temperature'], isA<double>());
+      },
+    );
+
+    testWidgets(
       'system Back prompts after a text edit and cancel keeps the edit',
       (tester) async {
         final model = ModelConfig(
