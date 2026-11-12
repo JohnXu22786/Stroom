@@ -557,7 +557,8 @@ void main() {
   test('incomplete OCR failure is localized in English', () async {
     await expectIncompleteOcrLocalization(
       localizations: AppLocalizationsEn(),
-      expectedError: 'OCR returned an incomplete result (finish_reason=unknown)',
+      expectedError:
+          'OCR returned an incomplete result (finish_reason=unknown)',
     );
   });
 
