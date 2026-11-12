@@ -382,6 +382,25 @@ void main() {
       expect(totalSamples, pcm.length);
     });
 
+    test('marks unknown frame-size bounds as zero for both encoder paths',
+        () async {
+      final pcm = Int16List(200);
+      final outputs = [
+        encodeFlac(pcm),
+        await encodeFlacWithEventLoopYield(pcm),
+      ];
+
+      for (final flac in outputs) {
+        final minFrameSize =
+            (flac[12] << 16) | (flac[13] << 8) | flac[14];
+        final maxFrameSize =
+            (flac[15] << 16) | (flac[16] << 8) | flac[17];
+
+        expect(minFrameSize, 0);
+        expect(maxFrameSize, 0);
+      }
+    });
+
     test('STREAMINFO block-size bounds match all encoded frame lengths', () {
       for (final (sampleCount, expectedFrameSizes) in [
         (200, [200]),
