@@ -1105,6 +1105,52 @@ class EvaluateTests(unittest.TestCase):
         self.assertIn("JSON nesting exceeds parser limit", stderr.getvalue())
         self.assertNotIn("Traceback", stderr.getvalue())
 
+    def test_cli_reports_oversized_integer_in_fixture_manifest_without_traceback(self):
+        with TemporaryDirectory() as directory:
+            manifest_path = Path(directory) / "manifest.json"
+            valid_manifest = json.dumps(small_manifest())
+            manifest_path.write_text(
+                valid_manifest[:-1] + ',"oversized":' + "9" * 5000 + "}",
+                encoding="utf-8",
+            )
+
+            stderr = StringIO()
+            with redirect_stderr(stderr):
+                exit_code = main(
+                    ["--manifest", str(manifest_path), "--verify-fixtures"]
+                )
+
+        self.assertEqual(exit_code, 2)
+        self.assertIn("evaluation error: cannot read fixture manifest", stderr.getvalue())
+        self.assertNotIn("Traceback", stderr.getvalue())
+
+    def test_cli_reports_oversized_integer_in_predictions_without_traceback(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest_path = root / "manifest.json"
+            predictions_path = root / "predictions.json"
+            manifest_path.write_text(json.dumps(small_manifest()), encoding="utf-8")
+            valid_predictions = json.dumps(predictions([]))
+            predictions_path.write_text(
+                valid_predictions[:-1] + ',"oversized":' + "9" * 5000 + "}",
+                encoding="utf-8",
+            )
+
+            stderr = StringIO()
+            with redirect_stderr(stderr):
+                exit_code = main(
+                    [
+                        "--manifest",
+                        str(manifest_path),
+                        "--predictions",
+                        str(predictions_path),
+                    ]
+                )
+
+        self.assertEqual(exit_code, 2)
+        self.assertIn("evaluation error: cannot read", stderr.getvalue())
+        self.assertNotIn("Traceback", stderr.getvalue())
+
     def test_cli_reports_invalid_utf8_fixture_manifest_without_traceback(self):
         with TemporaryDirectory() as directory:
             manifest_path = Path(directory) / "manifest.json"
