@@ -183,45 +183,30 @@ class _HomeOverflowMarqueeState extends State<_HomeOverflowMarquee>
     TextStyle textStyle,
     Locale? locale,
   ) {
-    if (width <= 0) return 0;
+    if (width <= 0 || widget.maxLines == null) return 0;
     final text = TextSpan(text: widget.text, style: textStyle);
-    if (widget.maxLines != null) {
-      final constrainedPainter = TextPainter(
-        text: text,
-        textDirection: direction,
-        textScaler: scaler,
-        locale: locale,
-        textAlign: widget.textAlign ?? TextAlign.start,
-        maxLines: widget.maxLines,
-        ellipsis: widget.overflow == TextOverflow.ellipsis ? '…' : null,
-      )..layout(maxWidth: width);
-      if (!constrainedPainter.didExceedMaxLines) return 0;
-
-      final naturalPainter = TextPainter(
-        text: text,
-        textDirection: direction,
-        textScaler: scaler,
-        locale: locale,
-        textAlign: widget.textAlign ?? TextAlign.start,
-        maxLines: widget.maxLines,
-      )..layout();
-      return (naturalPainter.width - width)
-          .clamp(0.0, double.infinity)
-          .toDouble();
-    }
-
-    final wrappedPainter = TextPainter(
+    final constrainedPainter = TextPainter(
       text: text,
       textDirection: direction,
       textScaler: scaler,
       locale: locale,
       textAlign: widget.textAlign ?? TextAlign.start,
+      maxLines: widget.maxLines,
+      ellipsis: widget.overflow == TextOverflow.ellipsis ? '…' : null,
     )..layout(maxWidth: width);
-    double overflow = 0;
-    for (final line in wrappedPainter.computeLineMetrics()) {
-      overflow = math.max(overflow, line.width - width).toDouble();
-    }
-    return overflow.clamp(0.0, double.infinity).toDouble();
+    if (!constrainedPainter.didExceedMaxLines) return 0;
+
+    final naturalPainter = TextPainter(
+      text: text,
+      textDirection: direction,
+      textScaler: scaler,
+      locale: locale,
+      textAlign: widget.textAlign ?? TextAlign.start,
+      maxLines: widget.maxLines,
+    )..layout();
+    return (naturalPainter.width - width)
+        .clamp(0.0, double.infinity)
+        .toDouble();
   }
 
   Widget _buildOriginalText() => Text(
