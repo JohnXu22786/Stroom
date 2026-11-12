@@ -357,7 +357,7 @@ Future<String> executeOcrBlock({
         }
         bgNotifier.setResult(taskId, ocrResult.text, isComplete: false);
         final error = strings.bgTaskOcrResultIncomplete(
-          ocrResult.finishReason ?? 'null',
+          'unknown',
         );
         bgNotifier.updateStep(
           taskId,
