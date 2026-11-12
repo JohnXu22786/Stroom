@@ -117,6 +117,15 @@ class _LegacyDesktopWindowManagerAdapter
   }
 }
 
+class _WindowManagerListenerBridge extends window_api.WindowListener {
+  _WindowManagerListenerBridge(this.listener);
+
+  final DesktopWindowListener listener;
+
+  @override
+  void onWindowClose() => listener.onWindowClose();
+}
+
 // ====================================================================
 // DesktopAppService — 桌面端窗口与系统托盘驻留服务
 // ====================================================================
